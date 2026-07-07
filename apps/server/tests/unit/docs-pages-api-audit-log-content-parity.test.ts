@@ -19,6 +19,7 @@ function read(p: string): string {
 }
 
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/api/audit-log.md');
+const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-audit.ts');
 
 describe('W768 docs /api/audit-log content parity', () => {
   it('api/audit-log.md file exists', () => {
@@ -143,12 +144,17 @@ describe('W768 docs /api/audit-log content parity', () => {
     }
   });
 
-  it('CRITICAL account.login payload method 5-enum pinned — password/magic_link/password_reset/mfa_totp/mfa_recovery. Matches W755 audit-log V-399 payloadHint().', () => {
+  it("CRITICAL account.login payload method 3-enum pinned — password/mfa_totp/mfa_recovery, plus the oauth_callback variant. S36 2026-07-07 (fable-truth-audit): the old 5-enum was FALSE — auth-flows.ts only ever emits method 'password' (:821) or 'mfa_totp'/'mfa_recovery' (:935); magic-link consume emits NO account.login row, password-reset confirm emits account.password_changed {via:'password_reset'}, and the OAuth callback emits account.login with {kind:'oauth_callback', provider, session_id} and no method field.", () => {
     const p = read(PAGE);
 
+    expect(p).toMatch(/`payload\.method` ∈ \{`password`, `mfa_totp`, `mfa_recovery`\}/);
     expect(p).toMatch(
-      /`payload\.method` ∈ \{`password`, `magic_link`, `password_reset`, `mfa_totp`, `mfa_recovery`\}/,
+      /OAuth sign-ins land a variant payload `\{ kind: "oauth_callback", provider, session_id \}` with no `method` field\./,
     );
+    expect(p).toMatch(/Magic-link sign-ins emit no `account\.login` row/);
+    // Negative pins — the retired fictional method values must not come back.
+    expect(p).not.toMatch(/`payload\.method` ∈ \{[^}]*`magic_link`/);
+    expect(p).not.toMatch(/`payload\.method` ∈ \{[^}]*`password_reset`/);
   });
 
   it("CRITICAL profile.created 3-creation-paths framing pinned. The 'direct create' / clone ('cloned_from: profile_<uuid>') / restore ('restored_from_snapshot: psnap_<uuid>') 3-row split + 'profile_/psnap_ prefix asymmetry' note is the canonical reference.", () => {
@@ -215,7 +221,7 @@ describe('W768 docs /api/audit-log content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Consumers should default-handle unknown payload shapes gracefully;\s*\n?new fields are additive\./,
+      /Consumers should default-handle unknown payload\s+shapes\s+gracefully;\s+new fields are additive\./,
     );
   });
 
@@ -227,11 +233,19 @@ describe('W768 docs /api/audit-log content parity', () => {
     );
   });
 
-  it('CRITICAL export response headers pinned — Content-Type csv|json + Content-Disposition attachment; filename="audit-log.{ext}". Matches W755 dashboard /audit-log filename extraction.', () => {
+  it('CRITICAL export response headers pinned — Content-Type csv|json + Content-Disposition attachment; filename="driftstack-audit-log-<YYYY-MM-DD>.{ext}". S36 2026-07-07 (fable-truth-audit): the route builds filenameBase = `driftstack-audit-log-${new Date().toISOString().slice(0, 10)}` (routes/account-audit.ts:192); the old "audit-log.{ext}" claim never matched.', () => {
     const p = read(PAGE);
+    const route = read(ROUTE);
 
     expect(p).toMatch(/`Content-Type` — `text\/csv` or `application\/json`/);
-    expect(p).toMatch(/`Content-Disposition` — `attachment; filename="audit-log\.\{ext\}"`/);
+    expect(p).toMatch(
+      /`Content-Disposition` —\s*\n?\s*`attachment; filename="driftstack-audit-log-<YYYY-MM-DD>\.\{ext\}"`/,
+    );
+    // Cross-source: the server really builds that filename base.
+    expect(route).toMatch(
+      /filenameBase = `driftstack-audit-log-\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\}`/,
+    );
+    expect(p).not.toMatch(/filename="audit-log\.\{ext\}"/);
   });
 
   it("CRITICAL 10,000-row cap framing pinned. Matches W755 dashboard /audit-log 'Exports cap at 10,000 rows per file' framing.", () => {
@@ -281,18 +295,19 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).toMatch(/client\.AuditLog\.Export\(ctx\)/);
   });
 
-  it("CRITICAL account_owner-scope + X-Driftstack-Account team-RBAC honored framing pinned. The audit read service (account-audit.ts) gates list() on the account_owner scope — a bare read key is NOT sufficient, so the doc must say account_owner (not the previous overstated 'with read scope'). The 'X-Driftstack-Account header is honored for team scopes: a member with read access on the team owner sees the OWNER's audit log' wording matches W766 /api/team header-honoring endpoint list.", () => {
+  it("CRITICAL read:audit-scope + X-Driftstack-Account team-RBAC honored framing pinned. S36 2026-07-07 (fable-truth-audit): V-553.B-21 WIDENED the audit read gate from the old hard account_owner requirement to the granular read:audit scope (services/account-audit.ts list() → throwIfMissingScope(ctx, 'read:audit')), which a bare broad `read` key satisfies via the V-481 broad-satisfies-granular rule — the doc's old 'a bare read key is not sufficient' claim described retired behavior. The 'X-Driftstack-Account header is honored for team scopes' wording matches W766 /api/team header-honoring endpoint list.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Both endpoints require a customer bearer \(API key OR web session\)\s*\n?with the `account_owner` scope/,
+      /Both endpoints require a customer bearer \(API key OR web session\)\s*\n?with the granular `read:audit` scope\. A broad `read` key — or an\s*\n?`account_owner` key — satisfies it/,
     );
     expect(p).toMatch(
-      /The\s*\n?X-Driftstack-Account header is honored for team scopes: a member with\s*\n?read access on the team owner sees the OWNER's audit log when the\s*\n?header is set\./,
+      /The\s*\n?X-Driftstack-Account header is honored for team scopes: a member with\s*\n?read access on the team owner sees the OWNER's audit log when the\s*\n?header is set/,
     );
-    // Drift sentinel — the overstated "with read scope" API-key claim
-    // MUST NOT come back (the service requires account_owner).
-    expect(p).not.toMatch(/with `read` scope\b/);
+    // Drift sentinels — neither the retired hard-account_owner claim nor
+    // the pre-V-481 'read key is not sufficient' claim may come back.
+    expect(p).not.toMatch(/with the `account_owner` scope/);
+    expect(p).not.toMatch(/a bare `read` key is not sufficient/);
   });
 
   it("CRITICAL 3-error-row table pinned — 401/403/400. The 403 'X-Driftstack-Account points at an account the caller isn't a member of' is the load-bearing team-RBAC error framing.", () => {

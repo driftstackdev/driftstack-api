@@ -41,14 +41,18 @@ describe('Arc 6 docs.pagination — pagination reference parity', () => {
     expect(body).toMatch(/opaque/);
   });
 
-  it('canonical drive-to-completion loop in all 3 SDKs (TS / Python / Go)', () => {
+  it('canonical drive-to-completion loop in all 3 SDKs (TS / Python / Go). S36 2026-07-07 (fable-truth-audit): the Go example now compiles against the real SDK — query type is *ListAuditLogQuery (ListAuditOpts never existed), List takes a pointer, and AuditLogListPage.NextCursor is *string so the loop nil-checks + derefs it.', () => {
     expect(body).toMatch(/### TypeScript/);
     expect(body).toMatch(/### Python/);
     expect(body).toMatch(/### Go/);
     // Each must check next_cursor for null and break.
     expect(body).toMatch(/if \(!page\.next_cursor\) break;/);
     expect(body).toMatch(/if not page\.next_cursor:/);
-    expect(body).toMatch(/page\.NextCursor == ""/);
+    expect(body).toMatch(/&driftstack\.ListAuditLogQuery\{/);
+    expect(body).toMatch(/if page\.NextCursor == nil \|\| \*page\.NextCursor == ""/);
+    expect(body).toMatch(/cursor = \*page\.NextCursor/);
+    // Negative pin — the fictional type must not come back.
+    expect(body).not.toMatch(/ListAuditOpts/);
   });
 
   it('rejects offset/page-number pagination explicitly (stability rationale)', () => {

@@ -254,7 +254,9 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`session\.completed` — session destroyed cleanly \(customer-driven destroy or clean idle-timeout shutdown\)\./,
+      // S36 2026-07-07 (fable-truth-audit) — the idle-timeout clause was the retired fiction;
+      // the real second path is the free-tier duration cap.
+      /`session\.completed` — session destroyed cleanly \(customer-driven destroy, or the free-tier duration cap\)\./,
     );
     expect(p).toMatch(/`session\.failed` — session terminated due to a runtime \/ driver error\./);
     expect(p).toMatch(
@@ -262,15 +264,15 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL sessions-not-resumable-after-destroy framing pinned. The 'A session destroyed by idle-timeout requires a fresh sessions.create(); sessions are not resumable after destroy. Plan your workflow to either keep a session alive with periodic activity or to recreate cleanly when a long pause is expected' wording is the load-bearing customer-architecture guidance.", () => {
+  // S36 2026-07-07 (fable-truth-audit) — the idle-timeout reference + keep-alive advice were
+  // the retired fiction; the not-resumable contract is what matters.
+  it('CRITICAL sessions-not-resumable-after-destroy framing pinned (S36: idle-timeout wording retired).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /A session destroyed by idle-timeout requires a fresh `sessions\.create\(\)`; sessions are not resumable after destroy\./,
+      /A destroyed session requires a fresh `sessions\.create\(\)`; sessions are not resumable after destroy\./,
     );
-    expect(p).toMatch(
-      /Plan your workflow to either keep a session alive with periodic activity or to recreate cleanly when a long pause is expected\./,
-    );
+    expect(p).toMatch(/Plan your workflow to recreate cleanly when a long pause is expected\./);
   });
 
   it("CRITICAL session-level quotas-not-customer-facing framing pinned. The 'Fleet-level enforcement runs internally; tier concurrent caps are the only customer-visible meter' wording matches W769 + ADR-004 pricing.", () => {

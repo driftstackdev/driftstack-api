@@ -222,7 +222,7 @@ moves to `[LIVE]`.
 
 ```json
 {
-  "id": "wev_<uuid>",
+  "id": "<uuid>",
   "type": "session.egress_capability_changed",
   "created_at": "2026-05-18T12:00:00Z",
   "data": {
@@ -328,8 +328,12 @@ not be persisted, so the **next restore of this profile will be
 stale**. The failure is terminal: the harness's internal upload retry
 is already exhausted before this event is emitted, and there is no
 later retry path. `reason` is one of `serialize_failed`, `seal_failed`,
-`too_large` (the sealed store exceeded the 256 MiB cap), or
-`upload_failed`. Subscribable so customers relying on persisted profile
+`too_large` (the sealed store exceeded the 256 MiB cap),
+`upload_failed`, or `degenerate_dump` (the dump was empty/malformed
+and would have clobbered a known-good prior store — the prior is
+preserved, so this one is reassuring rather than data loss). An
+unrecognized future harness reason is folded into `upload_failed`
+rather than dropping the event. Subscribable so customers relying on persisted profile
 state can alert on it. In the enum (migration 0073); the relay emitter
 is wired and fires once the fleet control plane is live (gated behind
 `FLEET_CONTROL_PLANE_ENABLED`).
@@ -355,10 +359,12 @@ across TS / Python / Go.
 
 ### `session.created` [PLANNED]
 
-Fires when a session transitions `creating` → `ready`. Useful for
-async-job customers who want to know "the session is now usable"
-without polling. Distinct from the API-call response on
-`POST /v1/sessions` (which returns at the `creating` state).
+Fires when a session transitions `creating` → `ready`. Distinct
+from the API-call response on `POST /v1/sessions`, which blocks
+through driver dispatch and returns the session already at `ready`
+— the caller doesn't need this event, but a non-calling consumer
+(a separate alerting or provisioning pipeline) could observe
+session readiness without polling.
 
 ### `session.destroyed` [PLANNED]
 

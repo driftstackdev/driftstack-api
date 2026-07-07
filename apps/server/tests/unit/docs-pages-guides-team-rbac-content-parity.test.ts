@@ -201,15 +201,17 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     );
   });
 
-  it("CRITICAL multiple-admins + owner-implicitly-admin framing pinned. The 'A team can have any number of admin-role members' + 'The owner is always implicitly \"admin\" on their own team (no separate membership row)' wording explains the role-hierarchy.", () => {
+  it("CRITICAL multiple-admins + owner-only-invites + owner-implicitly-admin framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'subsequent admins can be invited by any existing admin' claim was IMPOSSIBLE via the API — POST /v1/team/invites requires the account_owner scope and hardcodes ownerAccountId = the caller's own account (routes/team.ts), and no /v1/team/* route reads X-Driftstack-Account; an admin calling invite would create invites for THEIR OWN team.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /A team can have any number of `admin`-role members\. The first admin\s*\n?is invited by the original owner; subsequent admins can be invited\s*\n?by any existing admin \(or the owner\)\./,
+      /A team can have any number of `admin`-role members, but every one\s*\n?of them is invited by the \*\*owner\*\* — `POST \/v1\/team\/invites`\s*\n?requires the `account_owner` scope and always creates invites for\s*\n?the caller's own team/,
     );
     expect(p).toMatch(
-      /The owner is always\s*\n?implicitly "admin" on their own team \(no separate membership row\)\./,
+      /The owner\s*\n?is always implicitly "admin" on their own team \(no separate\s*\n?membership row\)\./,
     );
+    // Negative pin — the impossible any-admin-can-invite claim must not return.
+    expect(p).not.toMatch(/can be invited\s*\n?by any existing admin/);
   });
 
   it('CRITICAL read-only-collaborator 2-use-case framing pinned. Auditors/compliance + junior teammates. Drift to a different rationale would lose the load-bearing customer-use-case framing.', () => {

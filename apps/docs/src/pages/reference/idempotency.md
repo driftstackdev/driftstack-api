@@ -107,13 +107,23 @@ clean replay.
 
 ## Lifetime
 
-Idempotency-key records are retained **24 hours** by default. Retries
-within the window return the cached response; retries after it are
-treated as a fresh request (and may mint a duplicate resource if you
-expected the key to still gate it).
+Idempotency-key records live as long as the resource row they
+protect — **there is no 24-hour expiry** on either endpoint that
+wires idempotency today:
 
-The 24-hour window matches Stripe's policy and is documented per
-endpoint in the OpenAPI spec.
+- **Crypto checkout** keys are enforced by a permanent unique
+  index on the orders table (`INSERT … ON CONFLICT DO NOTHING`,
+  then select-and-replay), so a same-key retry replays the
+  original order no matter how much later it arrives. A 24-hour
+  in-memory cache exists purely as a same-process fast-path; the
+  database is the cross-instance source of truth.
+- **Agent-session** keys live in a partial unique index on the
+  session row and replay for as long as the row exists.
+
+Practical upshot: never reuse an idempotency key for a NEW logical
+request — mint a fresh UUID per logical operation. A reused key
+returns the original cached response instead of creating a new
+resource.
 
 ## Examples
 
@@ -193,14 +203,14 @@ curl -X POST https://api.driftstack.dev/v1/agent-sessions \
   they protected (e.g. `agent_sessions.idempotency_key` is a
   partial-unique-indexed column on the table itself). There's no
   separate idempotency-key table — the resource row IS the cache.
-- **TTL enforcement.** There is no scheduled key-expiry job. Behaviour
-  differs by subsystem: crypto-order keys are held in an in-memory cache
-  with a 24-hour TTL and pruned lazily — an entry is dropped the next
-  time the cache is consulted after its cutoff, so a key stops replaying
-  ~24h after first use. Resource-backed keys (e.g.
-  `agent_sessions.idempotency_key`) have no TTL: the value lives in the
-  partial-unique index for the lifetime of the row, so those keys replay
-  for as long as the resource exists.
+- **TTL enforcement.** There is no scheduled key-expiry job and no
+  effective TTL. Crypto-order keys are backed by a permanent unique
+  index on the order row — the 24-hour in-memory cache is only a
+  same-process fast-path, and after a restart (or on another
+  instance) the database still replays the key. Resource-backed
+  keys (e.g. `agent_sessions.idempotency_key`) live in the
+  partial-unique index for the lifetime of the row. Both kinds
+  replay for as long as the protected resource exists.
 - **Replay observability.** Audit-log entries are written for the
   first request but NOT the replays. This intentionally mirrors
   Stripe — the original is the operationally-significant action; the

@@ -46,11 +46,11 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).not.toMatch(/\*\*Effective date:\*\* 2026-05-05 \(V-177\)/);
   });
 
-  it('CRITICAL 3-SDK applies-to set pinned — @driftstack/sdk (TS) + driftstack (Python) + sdk-go (Go). Matches W775 SDK landing-page card set.', () => {
+  it('CRITICAL 3-SDK applies-to set pinned — @driftstack/sdk (TS) + driftstack-sdk (Python dist name) + sdk-go (Go). S36 2026-07-07 (fable-truth-audit): the Python PyPI distribution is `driftstack-sdk` (packages/sdk-python/pyproject.toml name), `driftstack` is only the import name — pinning `driftstack` targets a different (potentially squatted) PyPI package. Matches installation.md + sdk/index.astro which state the correct dist name.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack` \(Python\),/,
+      /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack-sdk`\s*\n?\(Python — that's the PyPI distribution name; the import name is\s*\n?`driftstack`\),/,
     );
     expect(p).toMatch(/`github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go` \(Go\)/);
   });
@@ -159,16 +159,20 @@ describe('W777 docs /sdk/versioning content parity', () => {
     );
   });
 
-  it('CRITICAL 3-language version-pinning recommendations pinned. TS caret ^0.1.5 (pre-1.0 minor pin) + Python PEP 440 (>=0.1.5,<0.2 or ~=0.1.5) + Go go.mod v0.1.5 + go get -u.', () => {
+  it('CRITICAL 3-language version-pinning recommendations pinned. TS caret ^0.1.5 (pre-1.0 minor pin) + Python PEP 440 on the REAL dist name driftstack-sdk (S36 2026-07-07 fable-truth-audit: pinning `driftstack` would target a different PyPI package) + Go go.mod v0.1.5 + go get -u.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/"@driftstack\/sdk": "\^0\.1\.5"`/);
-    expect(p).toMatch(/`driftstack>=0\.1\.5,<0\.2`/);
-    expect(p).toMatch(/`driftstack~=0\.1\.5`/);
+    expect(p).toMatch(/`driftstack-sdk>=0\.1\.5,<0\.2`/);
+    expect(p).toMatch(/`driftstack-sdk~=0\.1\.5`/);
     expect(p).toMatch(/PEP 440 compatible-release/);
+    expect(p).toMatch(/pip install driftstack-sdk/);
     expect(p).toMatch(/`go\.mod` with `github\.com\/driftstackdev\/driftstack-api\//);
     expect(p).toMatch(/packages\/sdk-go v0\.1\.5`/);
     expect(p).toMatch(/Bump via `go get -u`\./);
+    // Negative pin — the bare-import-name pin advice must not come back.
+    expect(p).not.toMatch(/`driftstack>=0\.1\.5/);
+    expect(p).not.toMatch(/`driftstack~=0\.1\.5`/);
   });
 
   it('CRITICAL production-pin-exact-versions framing pinned. The \'Production deployments SHOULD pin exact versions ("@driftstack/sdk": "0.1.5") and bump deliberately. Driftstack\\\'s own integration tests pin exact versions via lockfiles\' wording matches dependency-stability best-practice.', () => {

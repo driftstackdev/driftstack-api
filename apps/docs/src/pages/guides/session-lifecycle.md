@@ -150,7 +150,7 @@ The SDKs map these to typed error classes — catch `RateLimitError`, `Concurren
 
 If you've configured a webhook endpoint, terminal session events fire on the bus:
 
-- `session.completed` — session destroyed cleanly (customer-driven destroy or clean idle-timeout shutdown).
+- `session.completed` — session destroyed cleanly (customer-driven destroy, or the free-tier duration cap).
 - `session.failed` — session terminated due to a runtime / driver error.
 - `session.egress_capability_changed` — Arc 5 EGRESS eg.7.e — the session's egress capability state changed (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.
 - `session.challenge_detected` — W393 — the in-session harness flagged a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.
@@ -160,7 +160,7 @@ Intermediate state transitions (e.g. a hypothetical `session.created`) are not o
 
 ## Notes
 
-- A session destroyed by idle-timeout requires a fresh `sessions.create()`; sessions are not resumable after destroy. Plan your workflow to either keep a session alive with periodic activity or to recreate cleanly when a long pause is expected.
+- A destroyed session requires a fresh `sessions.create()`; sessions are not resumable after destroy. Plan your workflow to recreate cleanly when a long pause is expected.
 - Session-level resource quotas (per-session bandwidth, memory) are not customer-facing today. Fleet-level enforcement runs internally; tier concurrent caps are the only customer-visible meter.
 
 ## Next steps

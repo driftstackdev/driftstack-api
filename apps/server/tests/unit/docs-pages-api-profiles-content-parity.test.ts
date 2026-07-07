@@ -136,12 +136,13 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
-  it("CRITICAL snapshots-are-immutable framing pinned. The 'Snapshots are immutable point-in-time copies of a profile' wording matches W756 dashboard /snapshots immutable framing.", () => {
+  it("CRITICAL snapshots-are-immutable-METADATA framing pinned. S36 2026-07-07 (fable-truth-audit): 'copies' → 'metadata records' — v1 snapshots capture archetype/name/description only, never browser state (services/profile-snapshots.ts stateBlob {}), so the section now says so and points at /api/profile-snapshots for the full contract.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Snapshots are immutable point-in-time copies of a profile\. The\s*\n?parent profile keeps evolving — its archetype, name, description,/,
+      /Snapshots are immutable point-in-time metadata records of a\s*\n?profile\. The parent profile keeps evolving — its archetype, name,\s*\n?description,/,
     );
+    expect(p).toMatch(/Browser state \(cookies, logins\)\s*\n?is NOT captured at v1/);
   });
 
   it("CRITICAL snapshot-id prefix 'psnap_' pinned. Drift to a different prefix would break SDK type discriminators.", () => {
@@ -178,12 +179,14 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
-  it("CRITICAL snapshot-orphans-on-parent-delete framing pinned. The 'Deleting the parent profile sets the snapshot\\'s parent_profile_id to null but does NOT delete the snapshot — the captured parent_archetype + parent_name + state remain restorable' wording matches W756 dashboard '(parent profile deleted)' inline indicator.", () => {
+  it("CRITICAL snapshot-orphans-on-parent-delete framing pinned. S36 2026-07-07 (fable-truth-audit): '+ state remain restorable' → '+ description remain restorable' — no state is ever captured at v1 (stateBlob always {}), so only archetype/name/description survive into a restore. Matches W756 dashboard '(parent profile deleted)' inline indicator.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Deleting the parent profile sets\s*\n?the snapshot's `parent_profile_id` to `null` but does NOT delete\s*\n?the snapshot — the captured `parent_archetype` \+ `parent_name` \+\s*\n?state remain restorable\./,
+      /Deleting the parent profile sets\s*\n?the snapshot's `parent_profile_id` to `null` but does NOT delete\s*\n?the snapshot — the captured `parent_archetype` \+ `parent_name` \+\s*\n?description remain restorable\./,
     );
+    // Negative pin — the retired restorable-state fiction must not come back.
+    expect(p).not.toMatch(/\+\s*\n?state remain restorable/);
   });
 
   it("CRITICAL snapshots have no automatic lifecycle pinned. The 'Snapshots have no automatic lifecycle. Capture as many as you want; they sit until you delete them' wording is the load-bearing no-TTL framing.", () => {

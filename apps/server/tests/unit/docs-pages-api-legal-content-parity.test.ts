@@ -162,7 +162,7 @@ describe('W773 docs /api/legal content parity', () => {
     );
   });
 
-  it('CRITICAL scope-required per-endpoint pinned. The two GET endpoints (GET /v1/legal/documents + GET /v1/legal/required) are auth-only — their handlers use requireAuth with no requireScope (legal.ts) — so the doc must NOT overstate a read/account_owner scope. POST /v1/legal/accept requires write|account_owner. Drift would let SDK consumers send wrong-scoped requests.', () => {
+  it("CRITICAL scope-required per-endpoint pinned. The two GET endpoints (GET /v1/legal/documents + GET /v1/legal/required) are auth-only — their handlers use requireAuth with no requireScope (legal.ts) — so the doc must NOT overstate a read/account_owner scope. S36 2026-07-07 (fable-truth-audit): POST /v1/legal/accept requires the account_owner scope (legal.ts:93 requireScope('account_owner')) and hasScope does NOT let a broad `write` key satisfy account_owner (only exact match or the V-174 admin alias) — the old 'write or account_owner' claim would 403 a write-scoped key.", () => {
     const p = read(PAGE);
 
     const authOnlyMatches = (
@@ -171,10 +171,12 @@ describe('W773 docs /api/legal content parity', () => {
       ) ?? []
     ).length;
     expect(authOnlyMatches).toBeGreaterThanOrEqual(2);
-    expect(p).toMatch(/Required scope: `write` or `account_owner`\./);
-    // Drift sentinel — the GET endpoints must not re-acquire the
-    // overstated read/account_owner scope claim.
+    expect(p).toMatch(
+      /Required scope: `account_owner` \(the route gates acceptance on\s*\n?`account_owner` — a broad `write` key is not sufficient\)\./,
+    );
+    // Drift sentinels — neither overstated scope claim may come back.
     expect(p).not.toMatch(/Required scope: `read` or `account_owner`\./);
+    expect(p).not.toMatch(/Required scope: `write` or `account_owner`\./);
   });
 
   it('CRITICAL Source-of-truth pointers pinned — routes/legal.ts + services/legal.ts + db/legal-repo.ts + services/legal-catalog.ts. Drift would lose the canonical impl pointers.', () => {

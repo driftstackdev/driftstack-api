@@ -72,8 +72,9 @@ async function main() {
     const state = await client.sessions.getState(session.id);
     console.log('url:', state.url, 'title:', state.title);
   } finally {
-    // Always destroy — concurrent slot stays held until you do or
-    // the per-tier idle timeout fires.
+    // Always destroy — the concurrent slot stays held until you do.
+    // There is no idle timeout on any tier; the only auto-destroy is
+    // the free tier's 20-minute duration cap.
     await client.sessions.destroy(session.id);
   }
 }
@@ -202,7 +203,7 @@ The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) — states,
-  idle timeouts, reconnect semantics.
+  the free-tier 20-minute duration cap, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent
   identity slots that survive across sessions.
 - [Agent sessions](/api/agent-sessions/) — natural-language

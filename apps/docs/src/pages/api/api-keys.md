@@ -150,14 +150,16 @@ key instead.
 
 ## Scopes
 
-| Scope                       | Capability                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| `read`                      | Read-only access (list sessions, recordings, profiles, usage).                   |
-| `write`                     | Read + write (create/destroy sessions, profiles, etc.).                          |
-| `account_owner`             | Self-service mutations (create/rotate/revoke API keys, billing portal redirect). |
-| `gui_control`               | Reserved for the GUI Client; do not request manually.                            |
-| `driftstack_internal_admin` | Internal Driftstack staff scope; never granted to customer accounts.             |
+| Scope                       | Capability                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `read`                      | Read-only access (list sessions, recordings, profiles, usage).                                    |
+| `write`                     | Mutations (create/destroy sessions, profiles, etc.). Does NOT include read — pair it with `read`. |
+| `account_owner`             | Self-service mutations (create/rotate/revoke API keys, billing portal redirect).                  |
+| `gui_control`               | Reserved for the GUI Client; do not request manually.                                             |
+| `driftstack_internal_admin` | Internal Driftstack staff scope; never granted to customer accounts.                              |
 
-The `read` + `write` combination is the default for new keys. Issue
+There is no default scope set — `scopes` is required on create
+(at least one entry; omitting it is a `400`). Most application
+keys should request `read` + `write` together. Issue
 `account_owner` only to keys used by the dashboard or operator
 tooling — application keys do not need it.

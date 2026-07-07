@@ -104,11 +104,15 @@ for programmatic consumers.
 ## Auth + scoping
 
 All `/v1/billing/*` endpoints are bearer-authenticated and scoped
-to the calling account. They do NOT honor the team-RBAC
-`X-Driftstack-Account` header — billing is always per-account, not
-per-team-context. Team owners manage their own billing; team
-members never see the owner's billing state.
+to the calling account, with one read exception: `GET /v1/billing`
+honors the team-RBAC `X-Driftstack-Account` header, so a team
+member acting as the owner reads the OWNER's subscription state
+(tier, status, period end) — the same act-as behavior as
+`GET /v1/usage`. The mutation endpoints (checkout-session,
+portal-session, billing-portal) do NOT honor the header — only the
+owner manages the owner's billing.
 
-Read endpoints (GET) accept a bearer with `read` scope; mutation
-endpoints (checkout, manage-portal) require the `admin:billing`
-scope (a broad `admin` or `account_owner` key also satisfies it).
+Reading billing state (`GET /v1/billing`) requires no specific
+API-key scope beyond a valid bearer; mutation endpoints (checkout,
+manage-portal) require the `admin:billing` scope (a broad `admin`
+or `account_owner` key also satisfies it).

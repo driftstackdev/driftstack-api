@@ -109,29 +109,51 @@ describe('W776 docs /sdk/error-handling content parity', () => {
     expect(p).not.toMatch(/instanceof QuotaExceededError/);
   });
 
-  it('CRITICAL 3-AuthError-slug aggregation pinned — invalid-key/expired-key/revoked-key all map to AuthError. Drift would let SDK consumers fail to consolidate auth-style retry/re-mint logic.', () => {
+  it("CRITICAL bad-key slug mapping pinned — invalid-key/expired-key/revoked-key map to the TYPED classes, not AuthError. S36 2026-07-07 (fable-truth-audit): the old all-map-to-AuthError rows were FALSE for TS and Go — TS TYPE_TO_CTOR maps them to InvalidKeyError/ExpiredKeyError/RevokedKeyError which extend DriftstackError directly (NOT AuthError; sdk-typescript/src/errors.ts), and Go builds typed errors that only match ErrAuth via the errors.Is sentinel. Python alone subclasses AuthError. The doc's catching-the-auth-category note carries the per-language truth.", () => {
     const p = read(PAGE);
 
-    // All 3 invalid/expired/revoked map to AuthError.
-    for (const slug of ['invalid-key', 'expired-key', 'revoked-key']) {
-      expect(p, `${slug} → AuthError`).toMatch(new RegExp(`\\| \`${slug}\`\\s+\\| \`AuthError\``));
+    // unauthorized is the ONLY slug that maps to AuthError itself.
+    expect(p).toMatch(
+      /\| `unauthorized`\s+\| `AuthError`\s+\| `AuthError`\s+\| `\*AuthError` \(`ErrAuth`\)/,
+    );
+    for (const cls of ['InvalidKeyError', 'ExpiredKeyError', 'RevokedKeyError']) {
+      const slug = cls
+        .replace('Error', '')
+        .replace(/([a-z])([A-Z])/g, '$1-$2')
+        .toLowerCase();
+      expect(p, `${slug} → ${cls}`).toMatch(
+        new RegExp(`\\| \`${slug}\`\\s+\\| \`${cls}\`\\s+\\| \`${cls}\``),
+      );
     }
+    expect(p).toMatch(
+      // Wrap-tolerant: prettier reflows this blockquote freely.
+      /In[\s>]+TypeScript they extend `DriftstackError` directly — an[\s>]+`instanceof AuthError` check matches ONLY the `unauthorized`[\s>]+type/,
+    );
+    // Negative pin — the false TS AuthError mapping must not come back.
+    expect(p).not.toMatch(/\| `invalid-key`\s+\| `AuthError`/);
   });
 
-  it("CRITICAL Retryable column pinned — only rate-limited + transport are yes. The 'Auth errors aren\\'t retried because retrying with the same bad key won\\'t help. Validation errors aren\\'t retried because the client request is wrong. Concurrency / quota errors aren\\'t retried because retrying without freeing capacity will keep failing' wording is the load-bearing retry-classifier rationale.", () => {
+  it("CRITICAL Retryable column pinned — rate-limited + internal + transport are yes. S36 2026-07-07 (fable-truth-audit): InternalError (5xx `internal`) IS auto-retried by the built-in loop in all three SDKs (TS retry.ts isRetryable kind 'internal'; Python retry.py retryable_errors tuple; Go errors.go IsRetryable) — the old only-transport+rate-limit claim contradicted every SDK and reference/errors.md's own table. The other 5xx typed errors (DriverError 502 / DriverNotIntegratedError 503 / SessionTimeoutError 504) stay terminal.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
       /\| `rate-limited`\s+\| `RateLimitError`\s+\| `RateLimitError`\s+\| `\*RateLimitError`\s+\| yes\s+\|/,
     );
     expect(p).toMatch(
+      /\| `internal`\s+\| `InternalError`\s+\| `InternalError`\s+\| `\*InternalError` \(`ErrInternal`\)\s+\| yes\s+\|/,
+    );
+    expect(p).toMatch(
       /\| `TransportError`\s+\| `TransportError`\s+\| `\*TransportError`\s+\| yes\s+\|/,
     );
+    expect(p).toMatch(/- `InternalError` \(the 5xx `internal` problem type\)\./);
     expect(p).toMatch(
       /Auth errors aren't retried\s*\n?because retrying with the same bad key won't help\. Validation\s*\n?errors aren't retried because the client request is wrong\./,
     );
     expect(p).toMatch(
       /Concurrency \/ quota errors aren't retried because retrying without\s*\n?freeing capacity will keep failing\./,
+    );
+    expect(p).toMatch(
+      /The other 5xx-status typed\s*\n?errors \(`DriverError` 502, `DriverNotIntegratedError` 503,\s*\n?`SessionTimeoutError` 504\) are treated as terminal and are NOT\s*\n?auto-retried\./,
     );
   });
 
@@ -143,11 +165,11 @@ describe('W776 docs /sdk/error-handling content parity', () => {
     );
   });
 
-  it("CRITICAL default-retry-policy framing pinned. The 'The default retry policy (3 retries, exponential backoff with full jitter, honours Retry-After) handles TransportError + RateLimitError automatically. Other typed errors propagate immediately so your code can route them' wording is the load-bearing default-behavior contract.", () => {
+  it('CRITICAL default-retry-policy framing pinned. S36 2026-07-07 (fable-truth-audit): the default retry loop handles TransportError + RateLimitError + InternalError (5xx internal) in all three SDKs; the old two-class claim under-stated the real retryable set.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The default retry policy \(3 retries, exponential backoff with full\s*\n?jitter, honours `Retry-After`\) handles `TransportError` \+\s*\n?`RateLimitError` automatically\./,
+      /The default retry policy \(3 retries, exponential backoff with full\s*\n?jitter, honours `Retry-After`\) handles `TransportError`,\s*\n?`RateLimitError`, and `InternalError` \(5xx `internal`\)\s*\n?automatically\./,
     );
     expect(p).toMatch(
       /Other typed errors propagate\s*\n?immediately so your code can route them\./,
@@ -238,19 +260,23 @@ describe('W776 docs /sdk/error-handling content parity', () => {
     expect(p).toMatch(/errors\.Is\(err, driftstack\.ErrAuth\)/);
   });
 
-  it("CRITICAL DriftstackError base-class framing pinned. The 'All extend DriftstackError (TS) / DriftstackError (Python) / *DriftstackError (Go base struct embedded in every typed error)' wording explains the cross-language inheritance/embedding model.", () => {
+  it("CRITICAL base-class framing pinned. S36 2026-07-07 (fable-truth-audit): the old '*DriftstackError (Go base struct embedded in every typed error)' claim was FALSE — sdk-go exports NO DriftstackError type; the embedded base is the unexported apiError (errors.go), so Go callers match categories via the exported sentinels with errors.Is. TS + Python really do extend DriftstackError.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /All extend `DriftstackError` \(TS\) \/ `DriftstackError` \(Python\) \/\s*\n?`\*DriftstackError` \(Go base struct embedded in every typed error\)\./,
+      /All extend `DriftstackError` in TypeScript and Python\. Go exports\s*\n?no base error type — every typed error embeds an unexported base\s*\n?struct/,
     );
+    // Negative pin — the nonexistent Go export must not come back.
+    expect(p).not.toMatch(/`\*DriftstackError`/);
   });
 
   it('CRITICAL 3-language try/catch idiomatic patterns pinned. TS uses instanceof + if-else chain; Python uses except-Class-as-e; Go uses errors.As pattern. The 3 idiomatic patterns demonstrate the cross-language consistency.', () => {
     const p = read(PAGE);
 
-    // TS instanceof.
-    expect(p).toMatch(/if \(err instanceof AuthError\)/);
+    // TS instanceof. (S36 2026-07-07: the auth arm now checks the three
+    // bad-key classes explicitly — in TS they do NOT extend AuthError.)
+    expect(p).toMatch(/err instanceof AuthError \|\| \/\/ unauthorized/);
+    expect(p).toMatch(/err instanceof InvalidKeyError \|\|/);
     expect(p).toMatch(/if \(err instanceof ConcurrencyLimitError\)/);
 
     // Python except.

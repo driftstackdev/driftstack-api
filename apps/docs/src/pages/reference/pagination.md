@@ -95,11 +95,11 @@ def list_all_audit_entries(client: Driftstack) -> list:
 ### Go
 
 ```go
-func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]any, error) {
-    var out []any
+func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]driftstack.AuditLogEntry, error) {
+    var out []driftstack.AuditLogEntry
     var cursor string
     for {
-        page, err := c.AuditLog.List(ctx, driftstack.ListAuditOpts{
+        page, err := c.AuditLog.List(ctx, &driftstack.ListAuditLogQuery{
             Limit:  100,
             Cursor: cursor,
         })
@@ -107,10 +107,11 @@ func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]any, erro
             return nil, err
         }
         out = append(out, page.Data...)
-        if page.NextCursor == "" {
+        // NextCursor is *string — nil means no more pages.
+        if page.NextCursor == nil || *page.NextCursor == "" {
             break
         }
-        cursor = page.NextCursor
+        cursor = *page.NextCursor
     }
     return out, nil
 }

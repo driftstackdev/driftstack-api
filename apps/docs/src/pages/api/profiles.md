@@ -339,10 +339,14 @@ is honored — admin members can import on the owner's account.
 
 ## Snapshots
 
-Snapshots are immutable point-in-time copies of a profile. The
-parent profile keeps evolving — its archetype, name, description,
-and underlying browser state mutate as you use it. The snapshot is
-frozen the moment you capture it.
+Snapshots are immutable point-in-time metadata records of a
+profile. The parent profile keeps evolving — its archetype, name,
+description, and underlying browser state mutate as you use it.
+The snapshot's recorded metadata (archetype, name, description) is
+frozen the moment you capture it. Browser state (cookies, logins)
+is NOT captured at v1 — see
+[/api/profile-snapshots](/api/profile-snapshots) for the full
+contract.
 
 **Capture**
 
@@ -390,7 +394,7 @@ Snapshots have no automatic lifecycle. Capture as many as you want;
 they sit until you delete them. Deleting the parent profile sets
 the snapshot's `parent_profile_id` to `null` but does NOT delete
 the snapshot — the captured `parent_archetype` + `parent_name` +
-state remain restorable.
+description remain restorable.
 
 ## Delete (recycle bin)
 

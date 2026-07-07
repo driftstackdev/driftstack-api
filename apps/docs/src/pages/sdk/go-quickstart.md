@@ -241,7 +241,7 @@ through the schema unchanged but the harness decoder drops them.
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) —
-  states, idle timeouts, reconnect semantics.
+  states, the free-tier 20-minute duration cap, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent
   identity slots that survive across sessions.
 - [Agent sessions](/api/agent-sessions/) — natural-language

@@ -144,13 +144,21 @@ describe('W762 docs /api/api-keys content parity', () => {
     expect(p).toMatch(/Internal Driftstack staff scope; never granted to customer accounts\./);
   });
 
-  it("CRITICAL read+write default + account_owner-only-for-dashboard framing pinned. The 'Issue account_owner only to keys used by the dashboard or operator tooling — application keys do not need it' wording is the load-bearing least-privilege framing.", () => {
+  it("CRITICAL no-default-scopes + account_owner-only-for-dashboard framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'read + write is the default for new keys' claim was FALSE — CreateApiKeyRequestSchema requires scopes: z.array(...).min(1) (packages/api-types/src/api-keys.ts) and no code path fills in a default; omitting scopes is a 400. Also pins the write-scope row's does-NOT-include-read truth (hasScope never lets `write` satisfy `read`/`read:X`).", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/The `read` \+ `write` combination is the default for new keys\./);
+    expect(p).toMatch(
+      /There is no default scope set — `scopes` is required on create\s*\n?\(at least one entry; omitting it is a `400`\)\./,
+    );
+    expect(p).toMatch(/Most application\s*\n?keys should request `read` \+ `write` together\./);
+    expect(p).toMatch(
+      /Mutations \(create\/destroy sessions, profiles, etc\.\)\. Does NOT include read — pair it with `read`\./,
+    );
     expect(p).toMatch(
       /Issue\s*\n?`account_owner` only to keys used by the dashboard or operator\s*\n?tooling — application keys do not need it\./,
     );
+    // Negative pin — the fictional default must not come back.
+    expect(p).not.toMatch(/is the default for new keys/);
   });
 
   it('CRITICAL 4-endpoint canonical action set pinned — POST/GET/POST-rotate/DELETE. Drift would let SDK URL generation diverge.', () => {

@@ -23,26 +23,40 @@ Server problem-type URIs live under the stable
 `PROBLEM_TYPES` in `@driftstack/api-types`. Dispatch on the slug,
 not on HTTP status.
 
-| Server problem-type slug              | TS class                       | Python exception               | Go type                         | Retryable |
-| ------------------------------------- | ------------------------------ | ------------------------------ | ------------------------------- | --------- |
-| `invalid-key`                         | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
-| `expired-key`                         | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
-| `revoked-key`                         | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
-| `forbidden`                           | `ForbiddenError`               | `ForbiddenError`               | `*ForbiddenError`               | no        |
-| `validation-failed`                   | `ValidationError`              | `ValidationError`              | `*ValidationError`              | no        |
-| `not-found`                           | `NotFoundError`                | `NotFoundError`                | `*NotFoundError`                | no        |
-| `conflict`                            | `ConflictError`                | `ConflictError`                | `*ConflictError`                | no        |
-| `rate-limited`                        | `RateLimitError`               | `RateLimitError`               | `*RateLimitError`               | yes       |
-| `concurrency-limit`                   | `ConcurrencyLimitError`        | `ConcurrencyLimitError`        | `*ConcurrencyLimitError`        | no        |
-| `tier-limit`                          | `TierLimitError`               | `QuotaExceededError`           | `*QuotaExceededError`           | no        |
-| `legal-acceptance-required`           | `LegalAcceptanceRequiredError` | `LegalAcceptanceRequiredError` | `*LegalAcceptanceRequiredError` | no        |
-| `driver-not-integrated`               | `DriverNotIntegratedError`     | `DriverError`                  | `*DriverError`                  | no        |
-| `session-timeout`                     | `SessionTimeoutError`          | `SessionTimeoutError`          | `*SessionTimeoutError`          | no        |
-| `session-destroyed`                   | `SessionDestroyedError`        | `SessionDestroyedError`        | `*SessionDestroyedError`        | no        |
-| transport (network / parse / timeout) | `TransportError`               | `TransportError`               | `*TransportError`               | yes       |
+| Server problem-type slug              | TS class                       | Python exception               | Go type                                              | Retryable |
+| ------------------------------------- | ------------------------------ | ------------------------------ | ---------------------------------------------------- | --------- |
+| `unauthorized`                        | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)                             | no        |
+| `invalid-key`                         | `InvalidKeyError`              | `InvalidKeyError`              | `*InvalidKeyError` (`ErrInvalidKey`, also `ErrAuth`) | no        |
+| `expired-key`                         | `ExpiredKeyError`              | `ExpiredKeyError`              | `*ExpiredKeyError` (`ErrExpiredKey`, also `ErrAuth`) | no        |
+| `revoked-key`                         | `RevokedKeyError`              | `RevokedKeyError`              | `*RevokedKeyError` (`ErrRevokedKey`, also `ErrAuth`) | no        |
+| `forbidden`                           | `ForbiddenError`               | `ForbiddenError`               | `*ForbiddenError`                                    | no        |
+| `validation-failed`                   | `ValidationError`              | `ValidationError`              | `*ValidationError`                                   | no        |
+| `not-found`                           | `NotFoundError`                | `NotFoundError`                | `*NotFoundError`                                     | no        |
+| `conflict`                            | `ConflictError`                | `ConflictError`                | `*ConflictError`                                     | no        |
+| `rate-limited`                        | `RateLimitError`               | `RateLimitError`               | `*RateLimitError`                                    | yes       |
+| `concurrency-limit`                   | `ConcurrencyLimitError`        | `ConcurrencyLimitError`        | `*ConcurrencyLimitError`                             | no        |
+| `tier-limit`                          | `TierLimitError`               | `QuotaExceededError`           | `*QuotaExceededError`                                | no        |
+| `legal-acceptance-required`           | `LegalAcceptanceRequiredError` | `LegalAcceptanceRequiredError` | `*LegalAcceptanceRequiredError`                      | no        |
+| `driver-not-integrated`               | `DriverNotIntegratedError`     | `DriverError`                  | `*DriverError`                                       | no        |
+| `session-timeout`                     | `SessionTimeoutError`          | `SessionTimeoutError`          | `*SessionTimeoutError`                               | no        |
+| `session-destroyed`                   | `SessionDestroyedError`        | `SessionDestroyedError`        | `*SessionDestroyedError`                             | no        |
+| `internal`                            | `InternalError`                | `InternalError`                | `*InternalError` (`ErrInternal`)                     | yes       |
+| transport (network / parse / timeout) | `TransportError`               | `TransportError`               | `*TransportError`                                    | yes       |
 
-All extend `DriftstackError` (TS) / `DriftstackError` (Python) /
-`*DriftstackError` (Go base struct embedded in every typed error).
+All extend `DriftstackError` in TypeScript and Python. Go exports
+no base error type — every typed error embeds an unexported base
+struct, so match a category with `errors.Is` against the exported
+sentinels (`ErrAuth`, `ErrTransport`, …) or pull the concrete type
+with `errors.As`, as the Go example below shows.
+
+> **Catching the auth category:** the languages differ. In Python
+> `InvalidKeyError` / `ExpiredKeyError` / `RevokedKeyError`
+> subclass `AuthError`, so `except AuthError` catches all four. In
+> TypeScript they extend `DriftstackError` directly — an
+> `instanceof AuthError` check matches ONLY the `unauthorized`
+> type, so check the key-specific classes explicitly. In Go, `errors.Is(err, ErrAuth)`
+> matches the whole category; `errors.As(err, &auth *AuthError)`
+> does not match the key-specific types.
 
 > **Naming note:** for the `tier-limit` problem type the TypeScript SDK
 > exports `TierLimitError` (the original name, shipped since 0.1.x),
@@ -57,6 +71,9 @@ import {
   Driftstack,
   DriftstackError,
   AuthError,
+  InvalidKeyError,
+  ExpiredKeyError,
+  RevokedKeyError,
   RateLimitError,
   ConcurrencyLimitError,
   TierLimitError,
@@ -69,8 +86,14 @@ try {
   const session = await client.sessions.create();
   // ...
 } catch (err) {
-  if (err instanceof AuthError) {
-    // re-mint key + retry, or surface to ops
+  if (
+    err instanceof AuthError || // unauthorized
+    err instanceof InvalidKeyError ||
+    err instanceof ExpiredKeyError ||
+    err instanceof RevokedKeyError
+  ) {
+    // re-mint key + retry, or surface to ops. NOTE: in TS the three
+    // bad-key classes do NOT extend AuthError — check them explicitly.
   } else if (err instanceof ConcurrencyLimitError) {
     console.warn(`at concurrent ceiling: ${err.currentSessions}/${err.limit}`);
   } else if (err instanceof TierLimitError) {
@@ -89,8 +112,9 @@ try {
 ```
 
 The default retry policy (3 retries, exponential backoff with full
-jitter, honours `Retry-After`) handles `TransportError` +
-`RateLimitError` automatically. Other typed errors propagate
+jitter, honours `Retry-After`) handles `TransportError`,
+`RateLimitError`, and `InternalError` (5xx `internal`)
+automatically. Other typed errors propagate
 immediately so your code can route them.
 
 ## Python
@@ -141,7 +165,9 @@ session, err := client.Sessions.Create(ctx, nil)
 if err != nil {
     var auth *driftstack.AuthError
     if errors.As(err, &auth) {
-        // re-mint key + retry
+        // matches ONLY the `unauthorized` problem type — for the whole
+        // auth category (incl. invalid/expired/revoked key) use the
+        // errors.Is(err, driftstack.ErrAuth) sentinel below.
     }
 
     var rl *driftstack.RateLimitError
@@ -174,12 +200,16 @@ Retryable errors by default:
 - `TransportError` (network / timeout / response parse failure).
 - `RateLimitError` (HTTP 429). Honours the server's
   `retry-after-seconds` value when present.
+- `InternalError` (the 5xx `internal` problem type).
 
 Non-retryable: every other typed error. Auth errors aren't retried
 because retrying with the same bad key won't help. Validation
 errors aren't retried because the client request is wrong.
 Concurrency / quota errors aren't retried because retrying without
-freeing capacity will keep failing.
+freeing capacity will keep failing. The other 5xx-status typed
+errors (`DriverError` 502, `DriverNotIntegratedError` 503,
+`SessionTimeoutError` 504) are treated as terminal and are NOT
+auto-retried.
 
 Override via constructor options:
 

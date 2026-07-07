@@ -13,9 +13,10 @@ not the pricing meter. Pricing is concurrent-only per ADR-004.
 
 ## Four bucket keys
 
-Every authenticated request consumes from one or more buckets:
+Every authenticated request consumes from exactly one bucket:
 
-- **`global`** — every authenticated `/v1/*` call.
+- **`global`** — every authenticated `/v1/*` call that doesn't
+  have a dedicated bucket below.
 - **`sessions:create`** — `POST /v1/sessions` only. Lower cap
   because session creation is the most expensive op in the
   system (driver allocation, archetype hydration, fingerprint
@@ -29,9 +30,10 @@ Every authenticated request consumes from one or more buckets:
   high-frequency live input (≤120Hz `mouseMove` / `touchMove`); isolated so an
   input stream can't drain the `global` cap.
 
-A `POST /v1/sessions` consumes from BOTH `global` and
-`sessions:create`. A `POST /v1/agent-sessions/:id/message`
-consumes from `agent_sessions:message` only — hitting any cap
+Each call drains exactly one bucket: a `POST /v1/sessions`
+consumes from `sessions:create` only (never `global`), and a
+`POST /v1/agent-sessions/:id/message` consumes from
+`agent_sessions:message` only — hitting the bucket's cap
 returns 429.
 
 ## Per-tier defaults
@@ -73,7 +75,7 @@ The API returns HTTP 429 with an RFC 9457 problem-details body
 
 The standard `Retry-After` HTTP header carries the same value as
 `retry_after_seconds`. SDK clients honour it automatically with
-exponential backoff capped at 30s.
+exponential backoff capped at 10s.
 
 ## Per-account overrides
 

@@ -1,29 +1,38 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Profile snapshots
-description: Capture, list, and restore immutable point-in-time copies of saved profiles. Frozen snapshots survive while the source profile keeps evolving.
+description: Capture, list, and restore immutable point-in-time metadata records of saved profiles. Frozen snapshots survive while the source profile keeps evolving.
 ---
 
 # Profile snapshots
 
 A **profile snapshot** is an immutable
-point-in-time copy of a saved profile. Snapshots let you freeze a
-known-good profile state — for example, after a successful
-account-creation flow or before a risky session — so you can
-restore it later if the live profile drifts.
+point-in-time record of a saved profile's **metadata** — its
+archetype, name, and description, frozen as they were at capture
+time. Snapshots stay meaningful even after the source profile is
+renamed, re-archetyped, or deleted.
+
+**What a snapshot does NOT capture at v1: browser state.**
+Cookies, `localStorage`, IndexedDB, and logins are not copied into
+the snapshot, and restoring one does not bring them back. The
+snapshot's state field is reserved for a future driver integration
+and is empty today. To keep evolving browser state, keep the live
+profile itself.
 
 The snapshot model is deliberately separate from the live profile
 model:
 
 - **Profiles** evolve: every session you run against a profile
   may mutate cookies, `localStorage`, IndexedDB, etc.
-- **Snapshots** are frozen: capture an evolving profile into a
-  named snapshot, and the snapshot's contents remain unchanged
-  even as the source profile keeps changing.
+- **Snapshots** are frozen metadata: capture an evolving profile into a
+  named snapshot, and the snapshot's recorded archetype / name /
+  description remain unchanged even as the source profile keeps
+  changing.
 
-Restoring a snapshot creates a **new profile row** populated from
-the snapshot's frozen state — the source profile is untouched and
-the new profile starts evolving from there.
+Restoring a snapshot creates a **new profile row** carrying the
+snapshot's frozen archetype + description — the source profile is
+untouched, and the new profile starts with fresh (empty) browser
+state.
 
 Snapshots are captured and restored in the Driftstack desktop app
 (the profiles hub). The endpoints below are the API equivalents.
@@ -32,7 +41,8 @@ Snapshots are captured and restored in the Driftstack desktop app
 
 `POST /v1/profiles/:id/snapshots`
 
-Captures the current state of profile `:id` as a new snapshot.
+Captures profile `:id`'s current metadata (archetype, name,
+description) as a new snapshot. No browser state is captured.
 
 Request:
 
@@ -43,7 +53,7 @@ Request:
 }
 ```
 
-Response (201):
+Response (200):
 
 ```json
 {
@@ -161,9 +171,10 @@ Required scope: `read` or `read:profiles`.
 
 `POST /v1/profile-snapshots/:id/restore`
 
-Creates a new profile populated from the snapshot's frozen state.
-The source profile is untouched; the new profile starts evolving
-from the snapshot point.
+Creates a new profile carrying the snapshot's frozen metadata —
+archetype and description — under the name you supply. The source
+profile is untouched. The new profile starts with fresh (empty)
+browser state: restore does not bring back cookies or logins.
 
 Request:
 
@@ -240,8 +251,10 @@ profile first or upgrade tier.
 
 ## Storage characteristics
 
-Snapshots are stored separately from live profiles in the
-underlying driver-managed storage layer. Each snapshot freezes the
+Snapshots are plain metadata rows stored separately from live profiles —
+at v1 no browser-state payload is stored anywhere (the state
+field exists in the schema for a future driver integration and is
+always empty today). Each snapshot freezes the
 source profile's archetype + name (`parent_archetype` /
 `parent_name`) at capture time, so a snapshot stays meaningful even
 after the parent profile is renamed, re-archetyped, or deleted.

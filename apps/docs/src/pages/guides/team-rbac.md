@@ -186,10 +186,14 @@ that via their own channels).
 
 ### Multiple admins on a team
 
-A team can have any number of `admin`-role members. The first admin
-is invited by the original owner; subsequent admins can be invited
-by any existing admin (or the owner). The owner is always
-implicitly "admin" on their own team (no separate membership row).
+A team can have any number of `admin`-role members, but every one
+of them is invited by the **owner** — `POST /v1/team/invites`
+requires the `account_owner` scope and always creates invites for
+the caller's own team (as noted above, `/v1/team/*` never honors
+`X-Driftstack-Account`, so an admin calling invite would be
+inviting people to their _own_ team, not the owner's). The owner
+is always implicitly "admin" on their own team (no separate
+membership row).
 
 ### Read-only collaborators
 

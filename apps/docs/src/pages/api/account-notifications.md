@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Account notifications (SSE)
-description: Real-time per-account event stream — cost-threshold alerts, incidents, high-severity audit events, and session errors.
+description: Real-time per-account event stream — cost-threshold alerts, high-severity audit events, and session errors.
 ---
 
 # Account notifications
@@ -35,8 +35,8 @@ discriminator and the `data:` line as a JSON-encoded payload.
 event: cost.threshold_alert
 data: {"kind":"cost.threshold_alert","accountId":"acc_...","severity":"warn",…}
 
-event: incident.broadcast
-data: {"kind":"incident.broadcast","accountId":"acc_...","severity":"major",…}
+event: session.errored
+data: {"kind":"session.errored","accountId":"acc_...","errorClass":"driver_error",…}
 ```
 
 Subscribers can either:
@@ -71,7 +71,11 @@ in either direction).
 
 ### `incident.broadcast`
 
-Fires when a customer-visible incident is opened or status-changed.
+**Declared, not yet firing.** This kind exists in the stream's type
+union for incident fan-out, but no publisher emits it today —
+subscribers will not receive `incident.broadcast` frames until one
+ships. For incident visibility now, use the
+[status endpoints](/api/status/). The declared shape:
 
 | field        | type                             | notes          |
 | ------------ | -------------------------------- | -------------- |
@@ -131,31 +135,33 @@ authenticated read. Opening additional subscribers on the same
 account works but offers no benefit (every subscriber sees every
 event).
 
-## Customer example (TypeScript / desktop GUI)
+## Customer example (TypeScript)
+
+The stream is plain SSE — no SDK helper is needed. In a browser (or
+any runtime with `EventSource`), pass the token via `?ds_token=`
+since `EventSource` can't set headers:
 
 ```ts
-import { subscribeNotifications } from '@driftstack/gui-client/lib/notifications';
+const es = new EventSource(
+  `https://api.driftstack.dev/v1/account/me/notifications?ds_token=${KEY}`,
+);
 
-const close = subscribeNotifications({
-  url: 'https://api.driftstack.dev/v1/account/me/notifications',
-  onEvent: (event) => {
-    switch (event.kind) {
-      case 'cost.threshold_alert':
-        showToast(`Cost ${event.severity}: $${event.totalCents / 100}`);
-        break;
-      case 'incident.broadcast':
-        showBanner(event.title);
-        break;
-      // …
-    }
-  },
-  onState: (state) => {
-    setBadge(state === 'open' ? 'live' : state);
-  },
+es.addEventListener('cost.threshold_alert', (e) => {
+  const event = JSON.parse(e.data);
+  showToast(`Cost ${event.severity}: $${event.totalCents / 100}`);
 });
+
+es.addEventListener('session.errored', (e) => {
+  const event = JSON.parse(e.data);
+  showBanner(`Session ${event.sessionId} errored: ${event.errorClass}`);
+});
+
 // later, on app teardown:
-close();
+es.close();
 ```
+
+Server-side runtimes that can set headers should send
+`Authorization: Bearer <token>` instead of the query-string token.
 
 Full design notes live at
 `docs/internal/driftstack-telemetry-event-schema-for-gui-panel.md`

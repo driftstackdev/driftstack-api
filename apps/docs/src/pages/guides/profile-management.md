@@ -8,7 +8,7 @@ description: Persistent profiles in Driftstack — create, list, reuse across se
 
 A **profile** is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the WebKit-fork's stealth state survive between session lifetimes when a session binds to a profile.
 
-If a session doesn't bind a profile, it starts ephemeral — fresh cookies, fresh storage, no continuity. That's the right choice for one-shot fetches. For workflows that need login state, multi-step flows, or returning-visitor signals, bind a profile (note: programmatic binding via the SDK is planned — see "Bind a session to a profile" below).
+If a session doesn't bind a profile, it starts ephemeral — fresh cookies, fresh storage, no continuity. That's the right choice for one-shot fetches. For workflows that need login state, multi-step flows, or returning-visitor signals, bind a profile — pass `profile_id` on `sessions.create()`, or call `profiles.launch()` (see "Bind a session to a profile" below).
 
 ## Tier limits
 
@@ -86,7 +86,7 @@ const { data, has_more, next_cursor } = await client.profiles.list({ limit: 50 }
 for (const p of data) console.log(p.name, p.last_used_at);
 ```
 
-The `last_used_at` field updates every time a session binds to the profile (once binding lands; see "Bind a session to a profile" below). Sort by it client-side to find recently active profiles.
+The `last_used_at` field updates every time a session binds to the profile — both on `POST /v1/sessions` with a `profile_id` and on `POST /v1/profiles/:id/launch`. Sort by it client-side to find recently active profiles.
 
 ## Get one profile
 
@@ -126,7 +126,7 @@ Returns the freshly-minted session (same shape as `sessions.create`). The dashbo
 
 `profiles.launch()` does not support customer-configurable egress yet — there's no `proxy` field to set, since `/v1/sessions`' execution backend has no driver-layer proxy plumbing today. If you need customer-controlled egress today, use `client.agentSessions.create({ proxy_id })` instead, which dispatches to the real device fleet and routes traffic through one of your saved account proxies.
 
-Profile-bound sessions inherit the profile's storage state on launch and write new state back on clean destroy (or clean idle-timeout). Without a `profile_id`, sessions start ephemeral.
+Profile-bound sessions inherit the profile's storage state on launch and write new state back on clean destroy. (There is no idle timeout on any tier — the only auto-destroy is the free tier's 20-minute duration cap.) Without a `profile_id`, sessions start ephemeral.
 
 ## Delete a profile
 

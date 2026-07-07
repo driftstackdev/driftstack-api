@@ -7,9 +7,11 @@ description: Full reference of API key scopes — broad, granular, and the broad
 # API key scopes
 
 Every Driftstack API key carries a set of
-scopes. Each `/v1/*` endpoint declares the scope it requires,
-and the request is allowed only if the key's scope set
-satisfies that requirement.
+scopes. Endpoints that declare a required scope allow the
+request only if the key's scope set satisfies it. A few
+endpoints require no specific scope beyond a valid key — their
+docs pages say so explicitly (`GET /v1/billing` and the
+`GET /v1/legal/*` reads are examples).
 
 ## Scope categories
 
@@ -30,27 +32,27 @@ There are three categories of scopes, in order of breadth:
 
 ## Full scope list
 
-| Scope                       | Category        | Grants                                                                                                                                  |
-| --------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`                      | broad           | All read-side operations across every resource the customer owns.                                                                       |
-| `write`                     | broad           | All read + state-mutating operations except destructive admin actions.                                                                  |
-| `admin`                     | broad (legacy)  | Pre-alias. Treated as satisfying both `account_owner` + `driftstack_internal_admin`.                                                    |
-| `account_owner`             | account-control | Mint API keys, revoke API keys, manage subscription, `/v1/account/*`. Customer dashboard scope.                                         |
-| `driftstack_internal_admin` | account-control | `/v1/admin/*` — list all accounts, suspend account, change tier, force-actions. Driftstack staff.                                       |
-| `gui_control`               | special         | Manual-control plane (`tap_at`, `type_focused`). Self-hosted GUI workflow only (locked-decision L-001).                                 |
-| `read:sessions`             | granular        | Read sessions endpoints only.                                                                                                           |
-| `write:sessions`            | granular        | Read + create + delete sessions.                                                                                                        |
-| `read:profiles`             | granular        | Read profiles endpoints only.                                                                                                           |
-| `write:profiles`            | granular        | Read + create + delete profiles.                                                                                                        |
-| `admin:profiles`            | granular        | All admin operations on profiles.                                                                                                       |
-| `read:webhooks`             | granular        | Read webhook endpoints only.                                                                                                            |
-| `write:webhooks`            | granular        | Read webhook endpoints. Endpoint management (create / update / delete / rotate-secret / send-test) requires `account_owner` — see note. |
-| `admin:webhooks`            | granular        | Reserved. Webhook endpoint management is account-control-level and requires `account_owner`, not this granular scope.                   |
-| `read:api-keys`             | granular        | Read API keys list / metadata only.                                                                                                     |
-| `admin:api-keys`            | granular        | Reserved. API-key management (mint / rotate / revoke) is account-control-level and requires `account_owner`, not this granular scope.   |
-| `read:billing`              | granular        | Read billing state + invoice / subscription metadata only.                                                                              |
-| `admin:billing`             | granular        | All admin operations on billing (start trial, change subscription, manage portal).                                                      |
-| `read:audit`                | granular        | Read account audit log only.                                                                                                            |
+| Scope                       | Category        | Grants                                                                                                                                                                                       |
+| --------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`                      | broad           | All read-side operations across every resource the customer owns.                                                                                                                            |
+| `write`                     | broad           | All state-mutating operations except destructive admin actions. Does NOT include read — pair with `read`.                                                                                    |
+| `admin`                     | broad (legacy)  | Pre-alias. Treated as satisfying both `account_owner` + `driftstack_internal_admin`.                                                                                                         |
+| `account_owner`             | account-control | Mint API keys, revoke API keys, manage subscription, `/v1/account/*`. Customer dashboard scope.                                                                                              |
+| `driftstack_internal_admin` | account-control | `/v1/admin/*` — list all accounts, suspend account, change tier, force-actions. Driftstack staff.                                                                                            |
+| `gui_control`               | special         | Manual-control plane (`tap_at`, `type_focused`). Self-hosted GUI workflow only (locked-decision L-001).                                                                                      |
+| `read:sessions`             | granular        | Read sessions endpoints only.                                                                                                                                                                |
+| `write:sessions`            | granular        | Create + drive + delete sessions. Does not include read — pair with `read:sessions` to list/get.                                                                                             |
+| `read:profiles`             | granular        | Read profiles endpoints only.                                                                                                                                                                |
+| `write:profiles`            | granular        | Create + edit + delete profiles (and their snapshots). Does not include read — pair with `read:profiles`.                                                                                    |
+| `admin:profiles`            | granular        | All admin operations on profiles.                                                                                                                                                            |
+| `read:webhooks`             | granular        | Read webhook endpoints only.                                                                                                                                                                 |
+| `write:webhooks`            | granular        | Declared but enforced on no route today — reads require `read:webhooks`, and endpoint management (create / update / delete / rotate-secret / send-test) requires `account_owner` — see note. |
+| `admin:webhooks`            | granular        | Reserved. Webhook endpoint management is account-control-level and requires `account_owner`, not this granular scope.                                                                        |
+| `read:api-keys`             | granular        | Read API keys list / metadata only.                                                                                                                                                          |
+| `admin:api-keys`            | granular        | Reserved. API-key management (mint / rotate / revoke) is account-control-level and requires `account_owner`, not this granular scope.                                                        |
+| `read:billing`              | granular        | Declared but enforced on no route today — `GET /v1/billing` requires no scope beyond a valid key, so this scope does not restrict billing reads. Grantable for forward-compat.               |
+| `admin:billing`             | granular        | All admin operations on billing (start trial, change subscription, manage portal).                                                                                                           |
+| `read:audit`                | granular        | Read account audit log only.                                                                                                                                                                 |
 
 > **Note — webhook + API-key management are account-control operations.**
 > Creating, updating, deleting, or rotating webhook endpoints — and minting
@@ -88,7 +90,7 @@ ever read sessions, not profiles or webhooks.
 ```text
 key with: read              → can do: read, plus every read:* (read:sessions, read:profiles, read:webhooks, read:api-keys, read:billing, read:audit)
 key with: read:sessions     → can do: read:sessions  (only)
-key with: write             → can do: read, write, plus any read:*/write:*
+key with: write             → can do: write, plus every write:* — but NO read:* (writes never imply reads)
 key with: account_owner     → can do: read, write, plus any read:*/write:*/admin:*
 ```
 

@@ -154,16 +154,27 @@ describe('W765 docs /api/billing content parity', () => {
     );
   });
 
-  it("CRITICAL billing-never-honors-X-Driftstack-Account team-RBAC framing pinned. The 'All /v1/billing/* endpoints are bearer-authenticated and scoped to the calling account. They do NOT honor the team-RBAC X-Driftstack-Account header — billing is always per-account, not per-team-context' wording is the load-bearing isolation framing. Team owners manage their own billing.", () => {
+  it("CRITICAL billing act-as framing pinned — GET /v1/billing DOES honor X-Driftstack-Account (V-326c), mutations do NOT. S36 2026-07-07 (fable-truth-audit): the old blanket 'they do NOT honor the header / team members never see the owner's billing state' claim was FALSE — routes/billing.ts GET /v1/billing calls resolveEffectiveAccount(readEffectiveAccountHeader(req)) and returns the OWNER's subscription state to an acting-as team member; only checkout-session / portal-session / billing-portal ignore the header.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /All `\/v1\/billing\/\*` endpoints are bearer-authenticated and scoped\s*\n?to the calling account\. They do NOT honor the team-RBAC\s*\n?`X-Driftstack-Account` header — billing is always per-account, not\s*\n?per-team-context\. Team owners manage their own billing; team\s*\n?members never see the owner's billing state\./,
+      /with one read exception: `GET \/v1\/billing`\s*\n?honors the team-RBAC `X-Driftstack-Account` header, so a team\s*\n?member acting as the owner reads the OWNER's subscription state/,
+    );
+    expect(p).toMatch(
+      /The mutation endpoints \(checkout-session,\s*\n?portal-session, billing-portal\) do NOT honor the header — only the\s*\n?owner manages the owner's billing\./,
+    );
+    // GET /v1/billing has no requireScope preHandler (V-481 residual —
+    // read:billing exists in the schema enum but is enforced nowhere).
+    expect(p).toMatch(
+      /Reading billing state \(`GET \/v1\/billing`\) requires no specific\s*\n?API-key scope beyond a valid bearer/,
     );
     // Mutation endpoints require admin:billing (broad admin / account_owner satisfy).
     expect(p).toMatch(
-      /mutation\s*\n?endpoints \(checkout, manage-portal\) require the `admin:billing`\s*\n?scope \(a broad `admin` or `account_owner` key also satisfies it\)\./,
+      /mutation endpoints \(checkout,\s*\n?manage-portal\) require the `admin:billing` scope \(a broad `admin`\s*\n?or `account_owner` key also satisfies it\)\./,
     );
+    // Negative pin — the retired blanket no-act-as claim must not come back.
+    expect(p).not.toMatch(/billing is always per-account/);
+    expect(p).not.toMatch(/members never see the owner's billing state/);
   });
 
   it('CRITICAL 3-endpoint canonical action set pinned — GET /v1/billing + POST /v1/billing/checkout-session + POST /v1/billing/portal-session (trial-pack endpoint retired 2026-05-27).', () => {

@@ -148,18 +148,24 @@ describe('W786 docs reference/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL 3 bucket-key framing pinned — global + sessions:create + agent_sessions:message. The 'A POST /v1/sessions consumes from BOTH global and sessions:create. A POST /v1/agent-sessions/:id/message consumes from agent_sessions:message only — hitting any cap returns 429' wording explains the triple-bucket model. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket.", () => {
+  it("CRITICAL bucket-key framing pinned — global + sessions:create + agent_sessions:message, each call drains exactly ONE bucket. S36 2026-07-07 (fable-truth-audit): the old 'consumes from BOTH global and sessions:create' wording was FALSE — every route registers a single app.rateLimit(bucket) preHandler and rateLimitConsume takes one bucketKey (routes/sessions.ts, services/rate-limit.ts); no app-level hook also charges `global`.", () => {
     const p = read(RL);
 
-    expect(p).toMatch(/\*\*`global`\*\* — every authenticated `\/v1\/\*` call\./);
+    expect(p).toMatch(
+      /\*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*\n?\s*have a dedicated bucket below\./,
+    );
     expect(p).toMatch(/\*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
     expect(p).toMatch(
       /\*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
     );
-    expect(p).toMatch(/A `POST \/v1\/sessions` consumes from BOTH `global` and/);
     expect(p).toMatch(
-      /A `POST \/v1\/agent-sessions\/:id\/message`\s*\n?consumes from `agent_sessions:message` only — hitting any cap\s*\n?returns 429\./,
+      /Each call drains exactly one bucket: a `POST \/v1\/sessions`\s*\n?consumes from `sessions:create` only \(never `global`\)/,
     );
+    expect(p).toMatch(
+      /`POST \/v1\/agent-sessions\/:id\/message` consumes from\s*\n?`agent_sessions:message` only — hitting the bucket's cap\s*\n?returns 429\./,
+    );
+    // Negative pin — the retired dual-bucket fiction must not come back.
+    expect(p).not.toMatch(/consumes from BOTH/i);
   });
 
   it('CRITICAL 8-tier rate-limit table pinned. Drift to per-tier capacity/refill values would mismatch TIER_RATE_LIMIT_DEFAULTS server-side enforcement.', () => {
@@ -183,7 +189,7 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).toMatch(/\| `enterprise`\s+\| 60,000\s+\| 1,000\s+\| 600\s+\| 10/);
   });
 
-  it("CRITICAL 429 response shape + Retry-After header framing pinned. The 'SDK clients honour it automatically with exponential backoff capped at 30s' wording matches W776 default-retry-policy.", () => {
+  it("CRITICAL 429 response shape + Retry-After header framing pinned. S36 2026-07-07 (fable-truth-audit): 'capped at 10s' — the real default cap in all three SDKs (TS maxDelayMs 10_000, Python max_delay_ms 10_000, Go MaxDelay 10s); the old 30s claim matched no SDK.", () => {
     const p = read(RL);
 
     expect(p).toMatch(/"type": "https:\/\/errors\.driftstack\.dev\/rate-limited"/);
@@ -192,8 +198,9 @@ describe('W786 docs reference/ triplet content parity', () => {
       /The standard `Retry-After` HTTP header carries the same value as\s*\n?`retry_after_seconds`\./,
     );
     expect(p).toMatch(
-      /SDK clients honour it automatically with\s*\n?exponential backoff capped at 30s\./,
+      /SDK clients honour it automatically with\s*\n?exponential backoff capped at 10s\./,
     );
+    expect(p).not.toMatch(/capped at 30s/);
   });
 
   it("CRITICAL per-account-overrides framing pinned. The '/v1/admin/rate-limit-overrides + support@driftstack.dev workload-shape email' wording explains the escalation path.", () => {
@@ -304,15 +311,19 @@ describe('W786 docs reference/ triplet content parity', () => {
     );
   });
 
-  it('CRITICAL 4-key-pattern ascii-table pinned. read / read:sessions / write / account_owner — each row demonstrates the implication chain.', () => {
+  it("CRITICAL 4-key-pattern ascii-table pinned. read / read:sessions / write / account_owner — each row demonstrates the implication chain. S36 2026-07-07 (fable-truth-audit): the write row's old 'can do: read, write' claim was FALSE — neither scope-predicate site (lib/errors-helpers.ts hasScope, services/auth.ts requireScope) lets `write` satisfy `read` or any `read:X`; only exact match, `read`, or `account_owner` do.", () => {
     const p = read(SCP);
 
     expect(p).toMatch(/key with: read\s+→ can do: read, plus every read:\*/);
     expect(p).toMatch(/key with: read:sessions\s+→ can do: read:sessions {2}\(only\)/);
-    expect(p).toMatch(/key with: write\s+→ can do: read, write, plus any read:\*\/write:\*/);
+    expect(p).toMatch(
+      /key with: write\s+→ can do: write, plus every write:\* — but NO read:\* \(writes never imply reads\)/,
+    );
     expect(p).toMatch(
       /key with: account_owner\s+→ can do: read, write, plus any read:\*\/write:\*\/admin:\*/,
     );
+    // Negative pin — write-implies-read must not come back.
+    expect(p).not.toMatch(/key with: write\s+→ can do: read/);
   });
 
   it("CRITICAL 403 RFC 9457 forbidden-shape framing pinned. The 'detail string names the exact scope required so you can mint a correctly-scoped replacement key' wording is the load-bearing error-recovery framing.", () => {

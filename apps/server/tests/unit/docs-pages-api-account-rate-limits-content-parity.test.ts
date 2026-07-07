@@ -87,16 +87,20 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     );
   });
 
-  it("CRITICAL bucket-reference 2-row table + 'BOTH buckets' framing pinned. The 'A POST /v1/sessions consumes from BOTH buckets — hitting either cap returns 429' wording matches W786 reference/rate-limits dual-bucket model.", () => {
+  it("CRITICAL bucket-reference table + single-bucket framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'consumes from BOTH buckets' wording was FALSE — POST /v1/sessions registers exactly one rate-limit preHandler, app.rateLimit('sessions:create') (routes/sessions.ts), and the middleware consumes only the single named bucket; `global` is never drained by session-create. Doc now states the each-call-drains-exactly-one-bucket reality.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\| `global`\s+\| Every authenticated `\/v1\/\*`\s+\| Coarse anti-abuse cap/);
+    expect(p).toMatch(
+      /\| `global`\s+\| Every authenticated `\/v1\/\*` without a dedicated bucket \| Coarse anti-abuse cap/,
+    );
     expect(p).toMatch(
       /\| `sessions:create`\s+\| `POST \/v1\/sessions` only\s+\| Lower cap because session creation is the most expensive op/,
     );
     expect(p).toMatch(
-      /A `POST \/v1\/sessions` consumes from BOTH buckets — hitting either\s*\n?cap returns 429\./,
+      /Each call drains exactly one bucket\. A `POST \/v1\/sessions` consumes\s*\n?only from `sessions:create` — it never touches `global` — and\s*\n?hitting that bucket's cap returns 429\./,
     );
+    // Negative pin — the retired dual-bucket fiction must not come back.
+    expect(p).not.toMatch(/consumes from BOTH/i);
   });
 
   it("CRITICAL admin-override 3-field shape pinned — capacity + refill_per_second + expires_at + reason (admin-only). The 'reason — admin-side audit string (not exposed on the customer endpoint)' wording is the load-bearing privacy boundary.", () => {
@@ -172,12 +176,13 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     expect(p).toMatch(/x-ratelimit-bucket/);
   });
 
-  it('CRITICAL Retry-After + exponential-backoff-capped-30s framing pinned. Matches W786 reference/rate-limits + W776 SDK default retry policy.', () => {
+  it('CRITICAL Retry-After + exponential-backoff-capped-10s framing pinned. S36 2026-07-07 (fable-truth-audit): all three SDKs cap retry backoff (incl. the honoured Retry-After hint) at 10 seconds — TS maxDelayMs: 10_000 (sdk-typescript/src/retry.ts), Python max_delay_ms 10_000 (retry.py), Go MaxDelay 10s (retry.go); the old 30s claim matched no SDK.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The `Retry-After` HTTP header carries the same value as\s*\n?`retry_after_seconds`\. SDK clients honour it automatically with\s*\n?exponential backoff capped at 30s/,
+      /The `Retry-After` HTTP header carries the same value as\s*\n?`retry_after_seconds`\. SDK clients honour it automatically with\s*\n?exponential backoff capped at 10s/,
     );
+    expect(p).not.toMatch(/capped at 30s/);
   });
 
   it('CRITICAL Source-of-truth pointers pinned — routes/account-rate-limits.ts + TIER_RATE_LIMIT_DEFAULTS + rate-limit-overrides-repo + admin-rate-limit-overrides route. Drift would lose canonical impl pointers.', () => {

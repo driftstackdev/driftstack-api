@@ -23,16 +23,18 @@ describe('docs api/profile-snapshots content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('title + description front-matter pinned', () => {
+  it('title + description front-matter pinned (S36 2026-07-07 fable-truth-audit: "copies" → "metadata records" — v1 snapshots are metadata-only, no browser state is captured)', () => {
     expect(body).toMatch(/title: Profile snapshots/);
-    expect(body).toMatch(/description: Capture, list, and restore immutable point-in-time copies/);
+    expect(body).toMatch(
+      /description: Capture, list, and restore immutable point-in-time metadata records/,
+    );
   });
 
-  it('snapshot-vs-profile immutability model pinned: profiles evolve, snapshots are frozen — the load-bearing mental model that justifies the separate resource type. Drift to claiming snapshots mutate would mislead customers into expecting Snapshots to track upstream profile changes', () => {
+  it('snapshot-vs-profile immutability model pinned: profiles evolve, snapshots are frozen metadata — the load-bearing mental model that justifies the separate resource type. Drift to claiming snapshots mutate would mislead customers into expecting Snapshots to track upstream profile changes', () => {
     expect(body).toMatch(/\*\*Profiles\*\* evolve/);
-    expect(body).toMatch(/\*\*Snapshots\*\* are frozen/);
+    expect(body).toMatch(/\*\*Snapshots\*\* are frozen metadata/);
     expect(body).toMatch(/Restoring a snapshot creates a \*\*new profile row\*\*/);
-    expect(body).toMatch(/source profile is untouched/);
+    expect(body).toMatch(/source profile is\s+untouched/);
   });
 
   it('5-endpoint surface pinned: capture / list-per-profile / list-all / get / restore / delete — drift to dropping the across-account list endpoint would force customers to iterate profiles to enumerate snapshots', () => {

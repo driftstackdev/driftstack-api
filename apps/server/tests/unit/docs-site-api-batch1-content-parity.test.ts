@@ -89,8 +89,10 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(body).toMatch(/^title: Profile snapshots$/m);
     expect(body).toMatch(/^# Profile snapshots$/m);
     expect(body).toMatch(/A \*\*profile snapshot\*\* is an immutable/);
-    expect(body).toMatch(/point-in-time copy of a saved profile\./);
-    expect(body).toMatch(/Snapshots let you freeze a/);
+    // S36 2026-07-07 (fable-truth-audit): "copy" → metadata record — v1
+    // snapshots capture archetype/name/description only, never browser state.
+    expect(body).toMatch(/point-in-time record of a saved profile's \*\*metadata\*\*/);
+    expect(body).toMatch(/\*\*What a snapshot does NOT capture at v1: browser state\.\*\*/);
     expect(existsSync(P('profile-snapshots.md'))).toBe(true);
     // Internal V-anchor must NOT bleed into customer-facing docs copy.
     expect(body).not.toMatch(/V-511 reference\./);

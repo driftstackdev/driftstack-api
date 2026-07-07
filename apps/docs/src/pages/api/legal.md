@@ -169,7 +169,8 @@ The acceptance row is append-only — there is no `DELETE` or
 `docs/legal/dpa.md` Art. 17 right-to-erasure procedure rather
 than this endpoint.
 
-Required scope: `write` or `account_owner`.
+Required scope: `account_owner` (the route gates acceptance on
+`account_owner` — a broad `write` key is not sufficient).
 
 ## Where the documents live
 

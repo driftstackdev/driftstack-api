@@ -59,8 +59,13 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     expect(body).toMatch(/per-account/i);
   });
 
-  it('documents the 24-hour retention window', () => {
-    expect(body).toMatch(/24\s*hour/i);
+  it("documents the real key lifetime — no 24-hour expiry; keys replay for the lifetime of the resource row. S36 2026-07-07 (fable-truth-audit): the old '24-hour retention' headline was FALSE for BOTH wired endpoints — crypto-checkout keys hit a permanent partial unique index (db/crypto-orders-repo.ts insertWithIdempotencyKey; the 24h in-memory cache is only a same-process fast-path) and agent-session keys live in the row's partial-unique index forever.", () => {
+    expect(body).toMatch(/\*\*there is no 24-hour expiry\*\*/);
+    expect(body).toMatch(/permanent unique\s*\n?\s*index on the orders table/);
+    expect(body).toMatch(/replay for as long as the protected resource exists\./);
+    // Negative pins — the fictional 24h retention window must not come back.
+    expect(body).not.toMatch(/retained \*\*24 hours\*\*/);
+    expect(body).not.toMatch(/stops replaying/);
   });
 
   it('documents the empty-string-treated-as-absent rule', () => {

@@ -53,12 +53,18 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/intentional anti-abuse caps \(runaway scripts, accidental DoS\),/);
     expect(body).toMatch(/not the pricing meter\. Pricing is concurrent-only per ADR-004\./);
     expect(body).toMatch(/^## Four bucket keys$/m);
-    expect(body).toMatch(/- \*\*`global`\*\* — every authenticated `\/v1\/\*` call\./);
+    // S36 2026-07-07 (fable-truth-audit): global is only drained by calls
+    // WITHOUT a dedicated bucket — each call consumes exactly one bucket.
+    expect(body).toMatch(
+      /- \*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*\n?\s*have a dedicated bucket below\./,
+    );
     expect(body).toMatch(/- \*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
     expect(body).toMatch(
       /- \*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
     );
-    expect(body).toMatch(/A `POST \/v1\/sessions` consumes from BOTH `global` and/);
+    expect(body).toMatch(
+      /Each call drains exactly one bucket: a `POST \/v1\/sessions`\s*\n?consumes from `sessions:create` only \(never `global`\)/,
+    );
     expect(body).toMatch(/\| `free`\s+\| 60\s+\| 1\s+\|/);
     expect(body).toMatch(/\| `api_starter`\s+\| 240\s+\| 4\s+\|/);
     expect(body).toMatch(/\| `api_builder`\s+\| 1,800\s+\| 30\s+\|/);

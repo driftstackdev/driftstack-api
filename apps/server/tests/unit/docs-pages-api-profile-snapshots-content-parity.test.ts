@@ -32,8 +32,11 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(
       /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Profile snapshots\n/,
     );
+    // S36 2026-07-07 (fable-truth-audit): "copies" → "metadata records" —
+    // v1 snapshots are metadata-only (services/profile-snapshots.ts header:
+    // captures land stateBlob {}; no browser state is stored or restored).
     expect(p).toMatch(
-      /description: Capture, list, and restore immutable point-in-time copies of saved profiles\. Frozen snapshots survive while the source profile keeps evolving\./,
+      /description: Capture, list, and restore immutable point-in-time metadata records of saved profiles\. Frozen snapshots survive while the source profile keeps evolving\./,
     );
   });
 
@@ -42,15 +45,24 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
 
     expect(p).toMatch(/\*\*Profiles\*\* evolve: every session you run against a profile/);
     expect(p).toMatch(/may mutate cookies, `localStorage`, IndexedDB, etc\./);
-    expect(p).toMatch(/\*\*Snapshots\*\* are frozen: capture an evolving profile into a/);
+    // S36 2026-07-07 (fable-truth-audit): "frozen" → "frozen metadata" —
+    // what's frozen is archetype/name/description, never browser state.
+    expect(p).toMatch(/\*\*Snapshots\*\* are frozen metadata: capture an evolving profile into a/);
+    // The metadata-only truth banner must stay present.
+    expect(p).toMatch(/\*\*What a snapshot does NOT capture at v1: browser state\.\*\*/);
+    expect(p).toMatch(
+      /Cookies, `localStorage`, IndexedDB, and logins are not copied into\s*\n?the snapshot, and restoring one does not bring them back\./,
+    );
   });
 
-  it("CRITICAL restore creates-NEW-profile-row framing pinned. The 'Restoring a snapshot creates a **new profile row** populated from the snapshot\\'s frozen state — the source profile is untouched and the new profile starts evolving from there' wording matches W756 dashboard /snapshots restore-form contract.", () => {
+  it("CRITICAL restore creates-NEW-profile-row framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'populated from the snapshot's frozen state' framing was FALSE — restore() creates a fresh profile carrying only the snapshot's parent archetype + description (services/profile-snapshots.ts restore(); capture() writes stateBlob: {}), so the doc now says frozen archetype + description and fresh empty browser state.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Restoring a snapshot creates a \*\*new profile row\*\* populated from\s*\n?the snapshot's frozen state — the source profile is untouched and\s*\n?the new profile starts evolving from there\./,
+      /Restoring a snapshot creates a \*\*new profile row\*\* carrying the\s*\n?snapshot's frozen archetype \+ description — the source profile is\s*\n?untouched, and the new profile starts with fresh \(empty\) browser\s*\n?state\./,
     );
+    // Negative pin — the retired frozen-STATE fiction must not come back.
+    expect(p).not.toMatch(/populated from\s*\n?the snapshot's frozen state/);
   });
 
   it('CRITICAL snapshots-surface cross-reference pinned: captured/restored in the Driftstack desktop app (2026-07-02 account-portal IA — the web /snapshots dashboard page was retired; drift back to an app.driftstack.dev/snapshots link would resurrect a 404).', () => {
@@ -116,7 +128,13 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`POST \/v1\/profile-snapshots\/:id\/restore`/);
-    expect(p).toMatch(/Creates a new profile populated from the snapshot's frozen state\./);
+    // S36 2026-07-07 (fable-truth-audit): metadata-only restore truth.
+    expect(p).toMatch(
+      /Creates a new profile carrying the snapshot's frozen metadata —\s*\n?archetype and description — under the name you supply\./,
+    );
+    expect(p).toMatch(
+      /The new profile starts with fresh \(empty\)\s*\n?browser state: restore does not bring back cookies or logins\./,
+    );
     expect(p).toMatch(/"id": "prof_<uuid>"/);
     expect(p).toMatch(/"archetype": "iphone17_ios18_7_safari26_4"/);
     expect(p).toMatch(/"last_used_at": null/);
@@ -186,14 +204,17 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(/There is no per-account snapshot quota at v1\./);
   });
 
-  it('CRITICAL storage-characteristics framing pinned: snapshots stored separately + frozen parent_archetype/parent_name + no per-account quota at v1. (Drops the stale `size_bytes` field claim — publicSnapshot does not return size_bytes; route + 3 SDKs confirm.)', () => {
+  it("CRITICAL storage-characteristics framing pinned: plain metadata rows + no browser-state payload stored at v1 + frozen parent_archetype/parent_name + no per-account quota. S36 2026-07-07 (fable-truth-audit): the old 'stored in the underlying driver-managed storage layer' claim was FALSE — snapshots are DB rows with an always-empty stateBlob jsonb column (db/schema.ts state_blob; services/profile-snapshots.ts capture() writes {}); nothing lives in a driver-managed layer. (Also keeps the earlier stale-size_bytes guard.)", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Snapshots are stored separately from live profiles/);
+    expect(p).toMatch(
+      /Snapshots are plain metadata rows stored separately from live profiles —\s*\n?at v1 no browser-state payload is stored anywhere/,
+    );
     expect(p).toMatch(/freezes the\s*\n?source profile's archetype \+ name/);
     expect(p).toMatch(/There is no per-account snapshot quota at v1\./);
-    // Guard against the stale size_bytes field claim returning.
+    // Guards against the stale claims returning.
     expect(p).not.toMatch(/`size_bytes`/);
+    expect(p).not.toMatch(/driver-managed storage layer/);
   });
 
   it('CRITICAL scope set — read|read:profiles + write|write:profiles framing pinned. The 2-shape (broad + granular) matches W750 dashboard /api-keys V-481 granular-scope picker.', () => {

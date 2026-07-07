@@ -106,8 +106,13 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(
       /\| transport \(network \/ parse \/ timeout\) \| `TransportError`\s+\| `TransportError`\s+\| `\*TransportError`\s+\| yes\s+\|/,
     );
-    expect(body).toMatch(/All extend `DriftstackError` \(TS\) \/ `DriftstackError` \(Python\) \//);
-    expect(body).toMatch(/`\*DriftstackError` \(Go base struct embedded in every typed error\)\./);
+    // S36 2026-07-07 (fable-truth-audit): Go exports no DriftstackError base
+    // type (the embedded base is the unexported apiError) — the doc now says
+    // so instead of naming a type customers can't reference.
+    expect(body).toMatch(/All extend `DriftstackError` in TypeScript and Python\./);
+    expect(body).toMatch(
+      /Go exports\s*\n?no base error type — every typed error embeds an unexported base\s*\n?struct/,
+    );
     expect(body).toMatch(/^## TypeScript$/m);
     expect(body).toMatch(/import \{/);
     expect(body).toMatch(/ {2}Driftstack,/);
@@ -115,8 +120,10 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/if \(err instanceof RateLimitError\) \{/);
     expect(body).toMatch(/await sleep\(\(err\.retryAfterSeconds \?\? 1\) \* 1000\);/);
     expect(body).toMatch(/The default retry policy \(3 retries, exponential backoff with full/);
-    expect(body).toMatch(/jitter, honours `Retry-After`\) handles `TransportError` \+/);
-    expect(body).toMatch(/`RateLimitError` automatically\./);
+    // S36 2026-07-07 (fable-truth-audit): InternalError joined the documented
+    // default-retryable set (it was always auto-retried by all three SDKs).
+    expect(body).toMatch(/jitter, honours `Retry-After`\) handles `TransportError`,/);
+    expect(body).toMatch(/`RateLimitError`, and `InternalError` \(5xx `internal`\)/);
     expect(body).toMatch(/^## Python$/m);
     expect(body).toMatch(/from driftstack import \(/);
     expect(existsSync(ERR)).toBe(true);

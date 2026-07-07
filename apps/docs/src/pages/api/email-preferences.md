@@ -83,7 +83,8 @@ Errors:
   `X-Driftstack-Account` requires `admin` role on that team;
   `member` is read-only on writes.
 
-Required scope: `write` or `account_owner`.
+Required scope: `account_owner` (the service gates this write on
+`account_owner` — a broad `write` key is not sufficient).
 
 ## Opt-outable categories
 

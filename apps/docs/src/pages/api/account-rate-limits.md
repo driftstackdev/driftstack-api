@@ -21,7 +21,8 @@ defaults table, see [/reference/rate-limits](/reference/rate-limits).
 
 Returns the rate-limit config that's actually being applied to
 this account. Four bucket keys exist: `global` (every
-authenticated `/v1/*` call), `sessions:create`
+authenticated `/v1/*` call that doesn't have a dedicated bucket
+below), `sessions:create`
 (`POST /v1/sessions` only — lower cap because session creation is
 expensive), `agent_sessions:message`
 (`POST /v1/agent-sessions/:id/message` — separate cap so an
@@ -93,15 +94,16 @@ valid key.
 
 ## Bucket reference
 
-| Bucket key                   | Consumed by                               | Why a separate bucket?                                                                                                    |
-| ---------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `global`                     | Every authenticated `/v1/*`               | Coarse anti-abuse cap — protects against runaway scripts                                                                  |
-| `sessions:create`            | `POST /v1/sessions` only                  | Lower cap because session creation is the most expensive op (driver allocation)                                           |
-| `agent_sessions:message`     | `POST /v1/agent-sessions/:id/message`     | Isolated from `global` so an LLM-driven message loop can't drain the global cap                                           |
-| `agent_sessions:input_event` | `POST /v1/agent-sessions/:id/input-event` | High-frequency live input (sized for ≤120Hz mouseMove / touchMove) — isolated so input streams can't drain the global cap |
+| Bucket key                   | Consumed by                                            | Why a separate bucket?                                                                                                    |
+| ---------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `global`                     | Every authenticated `/v1/*` without a dedicated bucket | Coarse anti-abuse cap — protects against runaway scripts                                                                  |
+| `sessions:create`            | `POST /v1/sessions` only                               | Lower cap because session creation is the most expensive op (driver allocation)                                           |
+| `agent_sessions:message`     | `POST /v1/agent-sessions/:id/message`                  | Isolated from `global` so an LLM-driven message loop can't drain the global cap                                           |
+| `agent_sessions:input_event` | `POST /v1/agent-sessions/:id/input-event`              | High-frequency live input (sized for ≤120Hz mouseMove / touchMove) — isolated so input streams can't drain the global cap |
 
-A `POST /v1/sessions` consumes from BOTH buckets — hitting either
-cap returns 429.
+Each call drains exactly one bucket. A `POST /v1/sessions` consumes
+only from `sessions:create` — it never touches `global` — and
+hitting that bucket's cap returns 429.
 
 ## Per-tier defaults
 
@@ -156,10 +158,9 @@ even after a hard error.
 | `x-ratelimit-remaining` | Tokens left in the bucket _after_ this call (integer, floor of fractional). |
 | `x-ratelimit-reset`     | Unix-seconds timestamp when the bucket refills to full capacity.            |
 
-A `POST /v1/sessions` consumes from both `global` and
-`sessions:create`. The headers reflect the more-constrained bucket —
-typically `sessions:create`, since its capacity is much lower than
-the global bucket.
+A `POST /v1/sessions` consumes only from `sessions:create` — the
+headers name that bucket in `x-ratelimit-bucket` because it is the
+one bucket the call drained.
 
 These headers are also surfaced on `429` responses; combine
 `x-ratelimit-remaining=0` + `Retry-After` to drive a back-off
@@ -193,7 +194,7 @@ emitted on every response, not just 429s.
 
 The `Retry-After` HTTP header carries the same value as
 `retry_after_seconds`. SDK clients honour it automatically with
-exponential backoff capped at 30s; see
+exponential backoff capped at 10s; see
 [/reference/errors](/reference/errors) for retry-loop examples.
 
 ## Source of truth
