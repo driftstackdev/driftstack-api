@@ -531,6 +531,26 @@ describe('ControlPlaneAgentExecutor — #140 observe() + extractPageText (read-a
     expect(await exec.observe('agt_1')).toBeNull();
   });
 
+  it('observe() times out on a hung box → null, NOT the full 30s dispatch budget (plan already succeeded)', async () => {
+    // The box never answers get_page_source (hung after the plan ran). With an
+    // injected instant sleep the read-back deadline wins the race → null, so the
+    // turn is not stretched. A late in-flight source is harmlessly discarded.
+    const dispatcher: IntentDispatcher = {
+      dispatch: () => new Promise<ParsedIntentResult>(() => {}), // never resolves
+    };
+    const calls: number[] = [];
+    const sleep = (ms: number): Promise<void> => {
+      calls.push(ms);
+      return Promise.resolve();
+    };
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      observeTimeoutMs: 10_000,
+      sleep,
+    });
+    expect(await exec.observe('agt_1')).toBeNull();
+    expect(calls).toContain(10_000); // the read-back deadline, not a 30s dispatch wait
+  });
+
   it('extractPageText handles the raw string + the common object shapes + empties', () => {
     expect(extractPageText('raw source')).toBe('raw source');
     expect(extractPageText({ source: 'via source' })).toBe('via source');

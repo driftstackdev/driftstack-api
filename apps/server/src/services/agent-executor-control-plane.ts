@@ -60,6 +60,10 @@ export interface AutoRetryOptions {
   /** Backoff between session-establish retries (ms). Default 1500 → 8×1500 = 12s
    *  covers the cold start. */
   sessionEstablishRetryDelayMs?: number;
+  /** #140 read-back deadline (ms). observe() dispatches get_page_source whose
+   *  own per-intent budget is the full 30s; this shorter cap bounds the latency a
+   *  hung/slow box can add to a turn whose plan ALREADY succeeded. Default 10000. */
+  observeTimeoutMs?: number;
   /** Injectable sleep so tests run instantly. Default: real setTimeout. */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -73,6 +77,12 @@ const DEFAULT_RETRY_DELAY_MS = 400;
 // without hanging a genuinely dead session too long.
 const DEFAULT_SESSION_ESTABLISH_MAX_RETRIES = 8;
 const DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS = 1500;
+// #140 read-back deadline. get_page_source on a healthy box returns in <2s; a
+// hung box would otherwise burn the full 30s dispatch budget AFTER the plan has
+// already succeeded + been recorded. 10s cleanly separates "alive but slow"
+// (returns well under) from "hung" (never returns) so the read-back degrades to
+// "no answer, plan result stands" fast instead of freezing the turn.
+const DEFAULT_OBSERVE_TIMEOUT_MS = 10_000;
 const EMPTY_APPROVED: ReadonlySet<string> = new Set<string>();
 
 export class ControlPlaneAgentExecutor implements AgentExecutor {
@@ -80,6 +90,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly retryDelayMs: number;
   private readonly sessionEstablishMaxRetries: number;
   private readonly sessionEstablishRetryDelayMs: number;
+  private readonly observeTimeoutMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(
@@ -98,6 +109,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       0,
       opts.sessionEstablishRetryDelayMs ?? DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS,
     );
+    this.observeTimeoutMs = Math.max(0, opts.observeTimeoutMs ?? DEFAULT_OBSERVE_TIMEOUT_MS);
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
@@ -172,9 +184,17 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     } catch {
       return null;
     }
-    const parsed = await this.dispatcher.dispatch(dispatch);
-    if (!parsed.success) return null;
-    return extractPageText(parsed.outputData);
+    // Bound the read-back latency: the plan already succeeded + was recorded, so
+    // a hung box must not stretch the turn to the full 30s dispatch budget. Race
+    // the dispatch against a shorter deadline; on timeout we return null (no
+    // answer, plan result stands). get_page_source is read-only, so a late
+    // in-flight response we've stopped awaiting is harmlessly dropped.
+    const observed = this.dispatcher
+      .dispatch(dispatch)
+      .then((parsed) => (parsed.success ? extractPageText(parsed.outputData) : null))
+      .catch(() => null);
+    const timedOut = this.sleep(this.observeTimeoutMs).then((): string | null => null);
+    return Promise.race([observed, timedOut]);
   }
 
   /**
