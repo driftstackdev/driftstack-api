@@ -11,7 +11,7 @@
 //   • Data-categories table 12 rows: account / API keys / sessions /
 //     profile metadata / profile state (encrypted file on disk, EU host) /
 //     recordings (R2 EU+US replication, presigned 1h TTL) / audit log /
-//     webhook deliveries (7-day retention) / Stripe (US, customer_id only) /
+//     webhook deliveries (90-day hot window; S39) / Stripe (US, customer_id only) /
 //     NowPayments (Estonia) / Redis Upstash EU + 5min TTL / Sentry EU /
 //     Postmark EU.
 //   • Never-leaves-EU 3-list: DB + cache + profile state AT REST (Neon EU,
@@ -62,13 +62,22 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     expect(body).not.toMatch(/non-EU PoPs/);
   });
 
-  it('Data-categories table 13-row framing pinned: Account row (MFA secret AES-256 + MFA_ENCRYPTION_KEY) + API keys hashed scrypt logN=15 + Sessions metadata + Profile metadata + Profile state blob WebKit driver layer EU host (per-profile encrypted file on disk) + Session recordings R2 EU+US replication (S3-SSE + 1h presigned TTL) + Audit log entries (tier-dependent retention) + Webhook deliveries (7-day retention) + Stripe (US, customer_id linkage, never see card numbers) + NowPayments (EU Estonia, payment_id + status only) + Cache Redis Upstash EU (≤5 min TTL) + Sentry EU (ingest.de.sentry.io, PII filter strips emails) + Postmark (EU sending region) — pinned so the 13-category storage map + key-engineering-claims (MFA-AES-256 + scrypt logN=15 + 1h-presigned-TTL + 7-day webhook retention + ≤5min cache TTL + PII-stripping-Sentry) all survive (drift on any row would create marketing↔sub-processor divergence)', () => {
+  it('Data-categories table 13-row framing pinned: Account row (MFA secret AES-256 + MFA_ENCRYPTION_KEY) + API keys hashed scrypt logN=15 + Sessions metadata + Profile metadata + Profile state blob WebKit driver layer EU host (per-profile encrypted file on disk) + Uploaded files (avatars + encrypted profile blobs) R2 EU+US replication (S3-SSE + 1h presigned TTL) + Audit log entries (90-day hot window) + Webhook deliveries (90-day hot window) (S39: recordings/tier-retention/7-day fictions retired) + Stripe (US, customer_id linkage, never see card numbers) + NowPayments (EU Estonia, payment_id + status only) + Cache Redis Upstash EU (≤5 min TTL) + Sentry EU (ingest.de.sentry.io, PII filter strips emails) + Postmark (EU sending region) — pinned so the 13-category storage map + key-engineering-claims (MFA-AES-256 + scrypt logN=15 + 1h-presigned-TTL + 90-day webhook hot window + ≤5min cache TTL + PII-stripping-Sentry) all survive (drift on any row would create marketing↔sub-processor divergence)', () => {
     expect(body).toMatch(/MFA secret AES-256 encrypted with <code>MFA_ENCRYPTION_KEY<\/code>/);
     expect(body).toMatch(/scrypt logN=15; plaintext never stored/);
     expect(body).toMatch(/Per-profile encrypted file on disk/);
+    // S39 2026-07-07 (fable-truth-audit follow-on) — three rows locked fictions: session
+    // recordings never shipped (row now names the real R2 objects:
+    // avatars + encrypted profile blobs), audit retention is a flat
+    // 90-day hot window (never tier-dependent), and no 7-day
+    // webhook-delivery prune exists (same 90-day window).
+    expect(body).toMatch(/Uploaded files \(avatars, encrypted profile blobs\)/);
     expect(body).toMatch(/Object-level S3-SSE; presigned URLs 1h TTL/);
-    expect(body).toMatch(/Append-only; tier-dependent retention/);
-    expect(body).toMatch(/Payload \+ response excerpt; 7-day retention/);
+    expect(body).toMatch(/Append-only; 90-day hot window/);
+    expect(body).toMatch(/Payload \+ response excerpt; 90-day hot window/);
+    expect(body).not.toMatch(/tier-dependent retention/);
+    expect(body).not.toMatch(/7-day retention/);
+    expect(body).not.toMatch(/Session recordings \(WebM\)/);
     expect(body).toMatch(
       /<td>We never see card numbers\. Stripe customer_id is the linkage\.<\/td>/,
     );
@@ -145,10 +154,14 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     expect(body).not.toMatch(/<h2>[^<]*\(V-298b\)[^<]*<\/h2>/);
   });
 
-  it("GDPR / DSAR / right-to-erasure 30-day-grace framing pinned: 'Customer accounts can be deleted on request. We hold a 30-day grace period for accidental delete recovery, after which the account row + all linked resources (sessions, profiles, recordings, audit log, webhook deliveries) are purged. Stripe + NowPayments customer references are removed from our side; their own retention policies govern what they keep beyond that.' + privacy@driftstack.dev DSAR channel — pinned so the 30-day-grace + 5-resource-purge (sessions/profiles/recordings/audit/webhooks) + Stripe-NowPayments-own-retention-policy + privacy@-DSAR commitments survive", () => {
+  it('GDPR / DSAR / right-to-erasure framing pinned: immediate deletion + privacy-policy purge schedule within 30 days + privacy@ DSAR channel (S39: undelete-grace + recordings fictions retired)', () => {
+    // S39 2026-07-07 (fable-truth-audit follow-on) — the old pin locked an undelete grace window
+    // (no restore flow exists; deletion is immediate) and listed
+    // never-shipped recordings among purged resources.
     expect(body).toMatch(
-      /Customer accounts can be deleted on request\. We hold a\s*\n?\s*30-day grace period for accidental delete recovery, after\s*\n?\s*which the account row \+ all linked resources \(sessions,\s*\n?\s*profiles, recordings, audit log, webhook deliveries\) are\s*\n?\s*purged\. Stripe \+ NowPayments customer references are removed\s*\n?\s*from our side; their own retention policies govern what they\s*\n?\s*keep beyond that\./,
+      /Customer accounts can be deleted on request\. Deletion takes\s*\n?\s*effect immediately[\s\S]{0,220}purged on the schedule in the\s*\n?\s*privacy policy, within 30 days\./,
     );
+    expect(body).not.toMatch(/grace period for accidental delete recovery/);
     expect(body).toMatch(/<a href="mailto:privacy@driftstack\.dev">privacy@driftstack\.dev<\/a>/);
   });
 

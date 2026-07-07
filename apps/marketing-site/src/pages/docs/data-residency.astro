@@ -63,20 +63,24 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <td>WebKit driver layer, EU host</td>
           <td>Per-profile encrypted file on disk</td>
         </tr>
+        {/* S39 2026-07-07 (fable-truth-audit follow-on) — the recordings row was fiction (the
+            feature has never shipped; recordingKey() has zero
+            callers). The real R2 file objects are avatars + the
+            encrypted profile blobs. */}
         <tr>
-          <td>Session recordings (WebM)</td>
+          <td>Uploaded files (avatars, encrypted profile blobs)</td>
           <td>R2 (Cloudflare, EU + US replication)</td>
           <td>Object-level S3-SSE; presigned URLs 1h TTL</td>
         </tr>
         <tr>
           <td>Audit log entries</td>
           <td>Postgres (Neon, EU)</td>
-          <td>Append-only; tier-dependent retention</td>
+          <td>Append-only; 90-day hot window</td>
         </tr>
         <tr>
           <td>Webhook deliveries</td>
           <td>Postgres (Neon, EU)</td>
-          <td>Payload + response excerpt; 7-day retention</td>
+          <td>Payload + response excerpt; 90-day hot window</td>
         </tr>
         <tr>
           <td>Stripe customer / payment data</td>
@@ -177,13 +181,18 @@ Authorization: Bearer ds_live_…
 
     <h2>GDPR / DSAR / right-to-erasure</h2>
     <p>
-      Customer accounts can be deleted on request. We hold a
-      30-day grace period for accidental delete recovery, after
-      which the account row + all linked resources (sessions,
-      profiles, recordings, audit log, webhook deliveries) are
-      purged. Stripe + NowPayments customer references are removed
-      from our side; their own retention policies govern what they
-      keep beyond that.
+      {/* S39 2026-07-07 (fable-truth-audit follow-on) — the old copy promised an undelete grace
+          window (no restore flow exists — deletion is immediate; the
+          30-day window is the privacy-policy secret-purge schedule)
+          and listed recordings among purged resources (never
+          shipped). */}
+      Customer accounts can be deleted on request. Deletion takes
+      effect immediately — sessions, API keys, and webhook endpoints
+      are revoked at once, and stored account data (profiles, audit
+      log, webhook deliveries) is purged on the schedule in the
+      privacy policy, within 30 days. Stripe + NowPayments customer
+      references are removed from our side; their own retention
+      policies govern what they keep beyond that.
     </p>
     <p>
       Data subject access requests:

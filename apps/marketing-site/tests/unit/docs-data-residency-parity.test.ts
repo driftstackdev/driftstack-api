@@ -72,8 +72,14 @@ describe('W342.A /docs/data-residency parity', () => {
     expect(body).toContain('compliance@driftstack.dev');
   });
 
-  it('declares the 30-day deletion grace period (matches GDPR right-to-erasure policy)', () => {
-    expect(body).toMatch(/30-day grace period/);
+  // S39 2026-07-07 (fable-truth-audit follow-on) — the old pin locked an undelete grace window;
+  // deletion is immediate and purge follows the privacy-policy
+  // schedule within 30 days (the 30 days is a purge deadline, not a
+  // recovery window).
+  it('declares immediate deletion + purge within 30 days (matches GDPR right-to-erasure policy)', () => {
+    expect(body).toMatch(/Deletion takes\s*\n?\s*effect immediately/);
+    expect(body).toMatch(/within 30 days/);
+    expect(body).not.toMatch(/grace period for accidental delete recovery/);
   });
 
   it('pins the EU-primary posture (Hetzner Falkenstein / Nuremberg)', () => {
