@@ -108,12 +108,14 @@ describe('W1023 routes/webhooks-stripe V-080 cross-source invariant', () => {
     expect(p).toMatch(/throw new BadRequestError\('Stripe event is missing required fields\.'\);/);
   });
 
-  it("CRITICAL always-200 framing — 'Always reply 200 to a verified, parseable event — even on duplicate or ignored. Stripe interprets non-2xx as a delivery failure and retries; we'd rather acknowledge and record than force a re-delivery loop on every ignored event-type'.", () => {
+  it("CRITICAL always-200 framing — 'Always reply 200 to a verified, parseable event that was processed — even on duplicate or ignored... the one exception is a transient infra error, which we deliberately let 500 (C5)'.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/webhooks-stripe.ts'));
-    expect(p).toMatch(/\/\/ Always reply 200 to a verified, parseable event — even on/);
-    expect(p).toMatch(/\/\/ duplicate or ignored\. Stripe interprets non-2xx as a delivery/);
-    expect(p).toMatch(/\/\/ failure and retries; we'd rather acknowledge and record than/);
-    expect(p).toMatch(/\/\/ force a re-delivery loop on every "ignored" event-type\./);
+    expect(p).toMatch(/\/\/ Always reply 200 to a verified, parseable event that was processed —/);
+    expect(p).toMatch(
+      /\/\/ even on duplicate or ignored\. Stripe interprets non-2xx as a delivery/,
+    );
+    expect(p).toMatch(/\/\/ failure and retries; we'd rather acknowledge and record than force a/);
+    expect(p).toMatch(/\/\/ transient infra error above, which we deliberately let 500 \(C5\)\./);
     expect(p).toMatch(/return reply\.code\(200\)\.send\(\{/);
     expect(p).toMatch(/received: true,/);
     expect(p).toMatch(/outcome,/);

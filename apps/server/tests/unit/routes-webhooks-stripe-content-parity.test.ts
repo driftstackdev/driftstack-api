@@ -96,10 +96,12 @@ describe('W411.B apps/server/src/routes/webhooks-stripe.ts content parity', () =
     );
   });
 
-  it('Dispatch: deps.service.handle(event, rawBody); always 200 on verified+parseable (even duplicate/ignored) with {received:true, outcome}', () => {
-    expect(body).toMatch(/const outcome = await deps\.service\.handle\(event, rawBody\);/);
+  it('Dispatch: deps.service.handle wrapped so a transient rethrow 500s (C5); else always 200 on verified+parseable with {received:true, outcome}', () => {
+    expect(body).toMatch(/outcome = await deps\.service\.handle\(event, rawBody\);/);
+    // C5 — a transient rethrow from handle() surfaces as a 500 so Stripe retries.
+    expect(body).toMatch(/bumpOutcome\('handler_transient_error'\);\s*\n?\s*throw err;/);
     expect(body).toMatch(
-      /\/\/ Always reply 200 to a verified, parseable event — even on\s*\n?\s*\/\/ duplicate or ignored\. Stripe interprets non-2xx as a delivery\s*\n?\s*\/\/ failure and retries; we'd rather acknowledge and record than\s*\n?\s*\/\/ force a re-delivery loop on every "ignored" event-type\./,
+      /\/\/ Always reply 200 to a verified, parseable event that was processed —[\s\S]+?even on duplicate or ignored\. Stripe interprets non-2xx as a delivery[\s\S]+?transient infra error above, which we deliberately let 500/,
     );
     expect(body).toMatch(
       /return reply\.code\(200\)\.send\(\{\s*\n?\s*received: true,\s*\n?\s*outcome,\s*\n?\s*\}\);/,
