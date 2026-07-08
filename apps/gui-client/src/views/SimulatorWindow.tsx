@@ -38,6 +38,7 @@ import {
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { exportCookies } from '../lib/cookie-export';
 import { parseCookies } from '../lib/cookie-import';
+import { startSimulatorCrashMarker } from '../lib/simulator-crash-marker';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
@@ -4685,6 +4686,24 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     refreshControl();
   }, [refreshControl, paneOpen]);
+  // #137 — crash breadcrumb for a simulator window that DIES without a clean close
+  // (native WKWebView crash / force-kill — the founder's "the window closes itself").
+  // A JS error paints the fatal overlay (window stays up) and an intentional close
+  // runs teardown, so a window that just vanishes died below the JS layer. We heartbeat
+  // a per-session marker while alive + clear it on teardown; the NEXT boot reports any
+  // marker that went stale (its window vanished) into the persisted dev log. pagehide
+  // is the belt for the window-close path where the React cleanup may not run before the
+  // webview tears down; startSimulatorCrashMarker's stop() is idempotent so both fire safely.
+  useEffect(() => {
+    if (sessionId === '') return;
+    const stop = startSimulatorCrashMarker(sessionId);
+    const onPageHide = (): void => stop();
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      stop();
+    };
+  }, [sessionId]);
   // Closing the simulator window is MODE-AWARE (founder 2026-06-18): in MANUAL
   // mode the human IS the session, so closing the phone ENDS it (the worker
   // tears down the browser/fork — "close the phone → it really stops"). In
