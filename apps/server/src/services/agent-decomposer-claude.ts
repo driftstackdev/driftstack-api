@@ -401,6 +401,21 @@ function parseAnthropicResponse(json: AnthropicResponseJson, model: AgentModel):
 
   if (kind === 'plan') {
     const intents = parseIntents(obj.intents);
+    // A plan with ZERO runnable intents (the model emitted none, or parseIntents
+    // dropped them all as unmappable — the #139 "responds without steps" class):
+    // surface a CLARIFY instead of an empty plan. An empty plan-executed renders as
+    // a bare "Plan" heading with no steps ("the agent did nothing", and it still
+    // bills the decompose call), so ask the customer to rephrase into a concrete step.
+    if (intents.length === 0) {
+      return {
+        kind: 'clarify',
+        clarifyingQuestion:
+          'I couldn’t turn that into browser actions to run. Try rephrasing it as a ' +
+          'concrete step — e.g. “go to example.com and take a screenshot.”',
+        tokensConsumed,
+        usage,
+      };
+    }
     return { kind: 'plan', intents, tokensConsumed, usage };
   }
   if (kind === 'clarify') {

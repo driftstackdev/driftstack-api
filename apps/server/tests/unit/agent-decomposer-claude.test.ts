@@ -145,6 +145,21 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.tokensConsumed).toBe(450);
     });
 
+    it('#139/#135 empty plan (no runnable intents) → CLARIFY, not an empty plan-executed', async () => {
+      // The model returns kind:'plan' but with zero mappable intents (empty array, or
+      // items that all fail to normalize). An empty plan-executed renders as a bare
+      // "Plan" heading ("the agent did nothing") and still bills the decompose call —
+      // so convert to a clarify that asks the customer to rephrase into a concrete step.
+      const { fetch } = sequenceFetch([
+        jsonResponse({ kind: 'plan', intents: [] }, { input_tokens: 200, output_tokens: 10 }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      expect(res.kind).toBe('clarify');
+      if (res.kind !== 'clarify') throw new Error('type narrow');
+      expect(res.clarifyingQuestion).toMatch(/rephrasing|browser actions/i);
+      expect(res.tokensConsumed).toBe(210); // the decompose LLM call is still billed
+    });
+
     it('#139 parses VERB-KEYED intents (the shape Opus 4.x actually emits) — must NOT collapse to empty', async () => {
       // Opus 4.x reliably returns `{ "navigate": { "url": … } }` rather than the
       // documented `{ "kind": "navigate", "url": … }`. Reproduced live on prod
