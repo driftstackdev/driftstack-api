@@ -100,13 +100,25 @@ export function registerStripeWebhookRoutes(
       throw new BadRequestError('Stripe event is missing required fields.');
     }
 
-    const outcome = await deps.service.handle(event, rawBody);
+    let outcome;
+    try {
+      outcome = await deps.service.handle(event, rawBody);
+    } catch (err) {
+      // C5 — handle() rethrows ONLY a transient infra error (a permanent
+      // handler error is swallowed + recorded inside dispatch). Let it surface
+      // as a 500 so Stripe re-delivers within its ~3-day retry window; no
+      // ledger row was written, so the retry cleanly re-processes the event
+      // and a paying customer isn't left un-upgraded by a one-second blip.
+      bumpOutcome('handler_transient_error');
+      throw err;
+    }
     bumpOutcome(classifyStripeDispatchOutcome(outcome));
 
-    // Always reply 200 to a verified, parseable event — even on
-    // duplicate or ignored. Stripe interprets non-2xx as a delivery
-    // failure and retries; we'd rather acknowledge and record than
-    // force a re-delivery loop on every "ignored" event-type.
+    // Always reply 200 to a verified, parseable event that was processed —
+    // even on duplicate or ignored. Stripe interprets non-2xx as a delivery
+    // failure and retries; we'd rather acknowledge and record than force a
+    // re-delivery loop on every "ignored" event-type. The one exception is a
+    // transient infra error above, which we deliberately let 500 (C5).
     return reply.code(200).send({
       received: true,
       outcome,

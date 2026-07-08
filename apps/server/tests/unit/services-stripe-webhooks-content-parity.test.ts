@@ -91,10 +91,13 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     );
   });
 
-  it('dispatch try/catch: handler throws → error:<short> outcome; ledger records with error marker; Stripe gets 200', () => {
+  it('dispatch try/catch: transient infra error rethrown (C5); permanent → error:<short> outcome recorded + 200', () => {
+    // C5 — the doc comment now describes the transient/permanent split.
     expect(body).toMatch(
-      /Route the event to its handler\. Returns `'handled' \| 'ignored' \|\s*\n?\s*\*\s*'error:<short>'`\. Errors from handlers are caught and surfaced as\s*\n?\s*\*\s*the `error:` outcome[\s\S]+?retrying via Stripe won't\s*\n?\s*\*\s*help if it's a code bug/,
+      /Route the event to its handler\. Returns `'handled' \| 'ignored' \|[\s\S]+?TRANSIENT infra errors[\s\S]+?are RE-THROWN[\s\S]+?PERMANENT errors are swallowed/,
     );
+    // Transient errors rethrow before the swallow; permanent still records error:.
+    expect(body).toMatch(/if \(isTransientInfraError\(err\)\) \{[\s\S]+?throw err;/);
     expect(body).toMatch(/return `error:\$\{code\}`;/);
   });
 

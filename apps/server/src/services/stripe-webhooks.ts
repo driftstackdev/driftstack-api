@@ -17,6 +17,7 @@
 
 import { createHash } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
+import { isTransientInfraError } from '../lib/transient-error.js';
 import type { Logger } from '../lib/logger.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
 import type { AuthCache } from './auth-cache.js';
@@ -277,11 +278,17 @@ export class StripeWebhooksService {
 
   /**
    * Route the event to its handler. Returns `'handled' | 'ignored' |
-   * 'error:<short>'`. Errors from handlers are caught and surfaced as
-   * the `error:` outcome — the ledger row gets written with the error
-   * marker, and Stripe gets a 200 from the route (the event was
-   * processed even if the handler failed; retrying via Stripe won't
-   * help if it's a code bug).
+   * 'error:<short>'`. Errors are split by cause (C5):
+   *   - TRANSIENT infra errors (Postgres connectivity/contention, network
+   *     timeouts) are RE-THROWN — no ledger row is written (recordEvent runs
+   *     after dispatch), the route returns non-2xx, and Stripe re-delivers
+   *     within its ~3-day window. Re-processing is idempotent (recency-guarded
+   *     upserts, FOR UPDATE tier writers, lifecycle no-op guard), so the retry
+   *     cleanly heals a paying customer left un-upgraded by a one-second blip.
+   *   - PERMANENT errors are swallowed and surfaced as the `error:` outcome —
+   *     the ledger row is written and Stripe gets a 200, because retrying a
+   *     deterministic code bug won't help and would risk a multi-day retry
+   *     storm / Stripe disabling the endpoint.
    */
   private async dispatch(event: StripeEvent): Promise<DispatchOutcome> {
     try {
@@ -340,6 +347,20 @@ export class StripeWebhooksService {
           return 'ignored';
       }
     } catch (err) {
+      // C5 — a transient infra failure must NOT be recorded as processed:
+      // rethrow so handle() never writes a ledger row and Stripe retries.
+      if (isTransientInfraError(err)) {
+        this.config.logger.warn(
+          {
+            component: 'stripe-webhooks',
+            eventId: event.id,
+            eventType: event.type,
+            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          },
+          'transient infra error handling Stripe event — rethrowing so Stripe retries',
+        );
+        throw err;
+      }
       const code = err instanceof Error ? err.name.toLowerCase() : 'unknown';
       this.config.logger.error(
         {
@@ -468,7 +489,18 @@ export class StripeWebhooksService {
           stripeEventId: event.id,
         });
       }
-    } else if (status === 'past_due' || status === 'unpaid') {
+    } else if (status === 'past_due' || status === 'unpaid' || status === 'paused') {
+      // C7 — `paused` (a trial that ended with no payment method attached,
+      // trial_settings end_behavior='pause') is downgraded alongside the
+      // dunning states: the customer has never paid and Stripe will never
+      // bill the paused sub, so it must not retain the trial-granted tier
+      // (an unbounded entitlement leak — paused subs persist indefinitely).
+      // Resuming emits status='active' and the branch above re-upgrades.
+      // pause_collection on a genuinely-paying sub keeps status='active' and
+      // is unaffected. downgradeAccountTierToBestRemaining excludes 'paused'
+      // from the remaining-active set, so the just-mirrored paused sub can't
+      // re-select itself and an account holding another active sub keeps it.
+      //
       // Dunning: Stripe keeps the subscription object alive (no
       // `customer.subscription.deleted` fires while it merely cycles
       // through past_due, and Stripe's "mark unpaid" dunning policy

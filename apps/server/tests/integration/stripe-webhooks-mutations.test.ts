@@ -930,7 +930,7 @@ describe('billing-edges audit — past_due/unpaid subscription status downgrades
     expect(subs[0]?.status).toBe('active');
   });
 
-  it('does not downgrade on incomplete/incomplete_expired/paused (only past_due/unpaid trigger the dunning downgrade)', async () => {
+  it('does not downgrade on incomplete/incomplete_expired (transitional, non-dunning statuses)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const subId = 'sub_other_status_001';
 
@@ -942,14 +942,126 @@ describe('billing-edges audit — past_due/unpaid subscription status downgrades
         stripeSubscriptionId: subId,
         stripeCustomerId: 'cus_test_default',
         priceId: 'price_api_builder_monthly',
-        status: 'paused',
+        status: 'incomplete',
         createdSec: T1,
       }),
     );
 
-    // Unchanged — 'paused' is neither an active-paying status nor a
-    // dunning-downgrade status; this test pins that the new branch is
-    // scoped to exactly past_due/unpaid and doesn't over-fire.
+    // Unchanged — 'incomplete' / 'incomplete_expired' are neither active-paying
+    // nor dunning/paused-downgrade statuses; pins that the downgrade branch is
+    // scoped and doesn't over-fire on transitional statuses.
     expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
+
+  it('C7 — downgrades the account when a trial-granted subscription moves to paused (trial ended, no payment method)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_paused_001';
+
+    // A trialing subscription grants the paid tier.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_paused_trial',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'trialing',
+        createdSec: T1,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+
+    // Trial ends with no payment method → Stripe pauses the sub. The customer
+    // has never paid and never will on this sub, so the tier must drop.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_paused',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'paused',
+        createdSec: T2,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
+    // The mirror keeps the REAL status (paused, not canceled), so a resume
+    // event arriving as 'active' re-upgrades via the branch above.
+    expect(fx.stripeWebhooksRepo.listSubscriptions()[0]?.status).toBe('paused');
+  });
+});
+
+describe('C5 — transient infra errors are retried, permanent errors are recorded', () => {
+  const T1 = 1_700_000_000; // event.created (unix seconds)
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('a transient error during handling → 500 + NO ledger row, and a Stripe re-delivery then heals', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const eventId = 'evt_c5_transient';
+    const realUpsert = fx.stripeWebhooksRepo.upsertSubscription.bind(fx.stripeWebhooksRepo);
+    let failNext = true;
+    fx.stripeWebhooksRepo.upsertSubscription = (args) => {
+      if (failNext) {
+        failNext = false;
+        const e = new Error('connection terminated unexpectedly') as Error & { code: string };
+        e.code = '08006'; // PG connection_exception — transient
+        return Promise.reject(e);
+      }
+      return realUpsert(args);
+    };
+
+    const evt = buildSubscriptionEvent({
+      eventId,
+      type: 'customer.subscription.created',
+      stripeSubscriptionId: 'sub_c5',
+      stripeCustomerId: 'cus_test_default',
+      priceId: 'price_api_builder_monthly',
+      status: 'active',
+      createdSec: T1,
+    });
+
+    const first = (await postEvent(fx, evt)) as { statusCode: number };
+    // Transient → 500 so Stripe retries; NO ledger row was written, so the
+    // event is NOT permanently consumed.
+    expect(first.statusCode).toBe(500);
+    expect(await fx.stripeWebhooksRepo.hasEvent(eventId)).toBe(false);
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
+
+    // Stripe re-delivers the SAME event → succeeds → tier applied (heal).
+    const retry = (await postEvent(fx, evt)) as { statusCode: number; body: { outcome: string } };
+    expect(retry.statusCode).toBe(200);
+    expect(retry.body.outcome).toBe('handled');
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
+
+  it('a permanent handler error → 200 + ledger row recorded (preserved swallow, no retry storm)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const eventId = 'evt_c5_permanent';
+    fx.stripeWebhooksRepo.upsertSubscription = () => {
+      throw new TypeError("cannot read properties of undefined (reading 'x')");
+    };
+
+    const res = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId,
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_c5_perm',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T1,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    // Permanent (a code bug) → recorded + 200 so Stripe stops retrying a
+    // doomed event; the ledger row is written.
+    expect(res.statusCode).toBe(200);
+    expect(res.body.outcome).toMatch(/^error:/);
+    expect(await fx.stripeWebhooksRepo.hasEvent(eventId)).toBe(true);
   });
 });
