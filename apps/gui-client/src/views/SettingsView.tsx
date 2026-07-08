@@ -154,9 +154,14 @@ export function SettingsView(): JSX.Element {
       pushToast({ title: 'Your Anthropic key is saved', tone: 'success' });
     } catch (err) {
       setByokSaveError(err instanceof Error ? err.message : 'Save failed — try again.');
-    } finally {
       setByokSaving(false);
+      return;
     }
+    setByokSaving(false);
+    // Auto-verify the just-saved key (mirrors the W577 api-key validate-after-save): this
+    // credential decides who AI usage bills to, so a typo must surface NOW, not read
+    // "saved" and only fail later when the user happens to click Test (audit 2026-07-08).
+    await handleTestByokKey();
   }
 
   async function handleTestByokKey(): Promise<void> {

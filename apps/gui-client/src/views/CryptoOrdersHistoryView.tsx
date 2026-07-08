@@ -27,6 +27,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { SkeletonRows } from '../components/Skeleton';
 import { formatCents, formatRelative } from '../lib/crypto-format';
 import { useCancelOrder } from '../lib/use-cancel-order';
 import { useCryptoOrdersList } from '../lib/use-crypto-orders-list';
@@ -190,6 +191,14 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
 
       {state.kind === 'error' && (
         <ErrorBanner message={state.message} onDismiss={() => void refetch()} />
+      )}
+
+      {/* First-load skeleton — the body previously had no `loading` branch, so it rendered
+          blank on open (read as "no orders" / broken on a slow link — audit 2026-07-08). */}
+      {state.kind === 'loading' && (
+        <div className="rounded-md border border-surface-divider bg-surface-inset p-4">
+          <SkeletonRows rows={5} label="Loading your crypto orders…" />
+        </div>
       )}
 
       {cancel.state.kind === 'failed' && (
