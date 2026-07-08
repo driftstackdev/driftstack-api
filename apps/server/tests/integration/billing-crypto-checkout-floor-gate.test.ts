@@ -154,6 +154,57 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     expect(secondBody.payment_address).toBe('0xORIGADDR');
   });
 
+  it('C7 — a replay whose bound payment is no longer waiting (expired/dead) is NOT re-surfaced as payable', async () => {
+    const createPayment = vi.fn(
+      (): Promise<CreatePaymentResult> =>
+        Promise.resolve({
+          paymentId: 'pay_c7',
+          payAddress: '0xLIVEADDR',
+          payCurrency: 'btc',
+          payAmount: 0.0012,
+          priceAmount: 79,
+          priceCurrency: 'usd',
+          paymentStatus: 'waiting',
+        }),
+    );
+    // By the time of the replay the bound payment has EXPIRED — its address
+    // is dead. NowPayments reports it as such.
+    const getPayment = vi.fn(() =>
+      Promise.resolve({
+        paymentStatus: 'expired',
+        payAddress: '0xDEADADDR',
+        payCurrency: 'btc',
+        payAmount: 0.0012,
+      }),
+    );
+    const client = { createPayment, getPayment } as unknown as NowPaymentsApiClient;
+    fx = await buildTestApp({ nowpaymentsClient: client });
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
+    const headers = { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': 'k-c7-dead' };
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(first.json<{ payment_address: string | null }>().payment_address).toBe('0xLIVEADDR');
+
+    const replay = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(replay.headers['idempotent-replayed']).toBe('1');
+    const body = replay.json<{ provider: string; payment_address: string | null }>();
+    // CRITICAL: the dead address must NOT be handed back — a customer paying
+    // it would lose the crypto (the expired payment can never reconcile).
+    expect(body.payment_address).toBeNull();
+    expect(body.provider).toBe('stub');
+    expect(createPayment).toHaveBeenCalledTimes(1); // never re-mints on replay
+  });
+
   it('CONCURRENT same-key checkouts never surface an orphaned mint — the loser echoes the BOUND payment (Fable comprehensive audit 2026-07-02)', async () => {
     // Two overlapping checkouts on one Idempotency-Key both read
     // order.payment_id === null and reach the mint branch (the sequential replay

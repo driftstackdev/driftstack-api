@@ -36,6 +36,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
+import { mapNowpaymentsStatus } from '../services/crypto-orders.js';
 import { ValidationError } from '../lib/errors.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import type { NowPaymentsApiClient } from '../lib/nowpayments-api.js';
@@ -285,23 +286,29 @@ export function registerCryptoCheckoutRoutes(
         deps.nowpaymentsIpnCallbackUrl !== undefined &&
         serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS &&
         replayed &&
+        order.status === 'pending' &&
         order.payment_id !== null
       ) {
-        // IDEMPOTENT REPLAY of an order that ALREADY minted a payment: do NOT
-        // call createPayment again. A second mint returns a NEW payment_id +
-        // pay_address, but recordPaymentId no-ops (the order stays bound to the
-        // FIRST payment_id), so the customer would pay the second address whose
-        // IPN then fails applyIpnStatus's payment_id-match guard and is rejected
-        // — the customer loses real crypto for no entitlement. Instead echo the
-        // ORIGINAL payment (bound to order.payment_id) so a retried checkout
-        // shows the same address. Best-effort: a lookup failure returns the stub
-        // posture (no wrong address surfaced).
+        // IDEMPOTENT REPLAY of an order that is STILL pending and already
+        // minted a payment: echo the ORIGINAL payment (never mint again — a
+        // second mint returns a NEW payment_id whose IPN fails
+        // applyIpnStatus's payment_id-match guard, so the customer would lose
+        // real crypto). C7 — only re-surface the address when the bound
+        // NowPayments payment is ITSELF still awaiting payment
+        // (mapNowpaymentsStatus → 'pending'); a swept / expired / finished
+        // payment must NOT be handed back as payable, or the customer pays a
+        // dead address and loses the crypto. A non-pending order (failed /
+        // cancelled / paid / confirming) skips this branch entirely and
+        // returns the stub posture so the frontend shows its real state.
+        // Best-effort: a lookup failure returns the stub posture.
         try {
           const existing = await deps.nowpayments.getPayment(order.payment_id);
-          provider = 'nowpayments';
-          paymentAddress = existing.payAddress;
-          payCurrency = existing.payCurrency;
-          payAmount = existing.payAmount;
+          if (mapNowpaymentsStatus(existing.paymentStatus) === 'pending') {
+            provider = 'nowpayments';
+            paymentAddress = existing.payAddress;
+            payCurrency = existing.payCurrency;
+            payAmount = existing.payAmount;
+          }
         } catch (err) {
           req.log.warn(
             {
@@ -320,6 +327,14 @@ export function registerCryptoCheckoutRoutes(
         // Fresh order, OR a replay whose original mint never bound a payment_id
         // (order.payment_id === null) → minting is safe: recordPaymentId binds
         // the first/only payment_id, so there is no mismatch.
+        //
+        // C8 (open, flagged): for a strictly SEQUENTIAL replay of an order
+        // whose original mint succeeded but whose recordPaymentId FAILED (so
+        // the customer saw address A but payment_id stayed null), this re-mints
+        // address B and orphans A — a fully-safe fix must re-read the order to
+        // tell that case apart from a concurrent replay whose winner is about
+        // to bind (which legitimately mints + echoes the bound address). Left
+        // as-is here so the concurrent path keeps surfacing a payable address.
         try {
           const payment = await deps.nowpayments.createPayment({
             priceAmount: order.price_cents / 100,
