@@ -97,8 +97,9 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     expect(body).toMatch(
       /async setPassword\(accountId: string, passwordHash: string\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ passwordHash, updatedAt: new Date\(\) \}\)\s*\n?\s*\.where\(eq\(accounts\.id, accountId\)\);\s*\n?\s*\}/,
     );
+    // C9 — markEmailVerified now returns the first-transition boolean.
     expect(body).toMatch(
-      /async markEmailVerified\(accountId: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ emailVerifiedAt: at, updatedAt: at \}\)\s*\n?\s*\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.emailVerifiedAt\)\)\);\s*\n?\s*\}/,
+      /async markEmailVerified\(accountId: string, at: Date\): Promise<boolean> \{[\s\S]*?\.set\(\{ emailVerifiedAt: at, updatedAt: at \}\)\s*\n?\s*\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.emailVerifiedAt\)\)\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);\s*\n?\s*return rows\.length > 0;/,
     );
   });
 

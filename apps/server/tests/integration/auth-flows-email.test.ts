@@ -14,6 +14,7 @@ import {
   type AuthFlowsRepo,
 } from '../../src/services/auth-flows.js';
 import { createEmailService, type PostmarkSendApi } from '../../src/services/email.js';
+import type { EmailPreferencesService } from '../../src/services/email-preferences.js';
 import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
 
 interface StubSendCall {
@@ -260,5 +261,114 @@ describe('AuthFlowsService signup — concurrent same-email race', () => {
         requestedFromIp: '127.0.0.1',
       }),
     ).rejects.toThrow('db exploded');
+  });
+});
+
+describe('C9 — signup-welcome fires once on first verify + honors opt-out', () => {
+  // The welcome send chains two awaits (shouldSend → sendSignupWelcome); drain
+  // generously so a would-be send definitely lands before we assert.
+  async function drain(): Promise<void> {
+    await new Promise((r) => setTimeout(r, 5));
+  }
+
+  it('the first verification sends exactly one welcome email', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const { client, calls } = makeStubPostmark();
+    const service = makeService(repo, client);
+    const signup = await service.signup({
+      email: 'welcome@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    calls.length = 0; // drop the signup-verification email
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: '127.0.0.1',
+      userAgent: 'test',
+    });
+    await drain();
+    expect(calls).toHaveLength(1); // the welcome
+  });
+
+  it('a re-verification via a second outstanding token mints a session but does NOT re-send the welcome', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const { client, calls } = makeStubPostmark();
+    const service = makeService(repo, client);
+    const signup = await service.signup({
+      email: 'reverify@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    // A second outstanding verify token — resend does NOT expire the first.
+    const resend = await service.resendSignupVerification({
+      email: 'reverify@driftstack.local',
+      requestedFromIp: null,
+    });
+    calls.length = 0;
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    await drain();
+    expect(calls).toHaveLength(1); // first verify → one welcome
+    calls.length = 0;
+    // The still-valid second token re-verifies: mints a session, no re-welcome.
+    const second = await service.verifyEmail({
+      token: resend.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    await drain();
+    expect(second.session).toBeDefined();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("honors the 'signup-welcome' opt-out (no welcome when preferences.shouldSend is false)", async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const { client, calls } = makeStubPostmark();
+    const logger = createTestLogger();
+    const email = createEmailService({
+      config: {
+        apiToken: 'stub-token',
+        from: 'noreply@driftstack.local',
+        replyTo: 'support@driftstack.local',
+      },
+      logger,
+      client,
+    });
+    const prefs = {
+      shouldSend: (_accountId: string, eventType: string): Promise<boolean> =>
+        Promise.resolve(eventType !== 'signup-welcome'),
+    } as unknown as EmailPreferencesService;
+    const service = new AuthFlowsService(
+      repo,
+      email,
+      logger,
+      {
+        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        exposeDebugToken: true,
+      },
+      null, // authCache
+      null, // accountAudit
+      null, // mfa
+      null, // mfaChallenges
+      prefs, // C9 — email preferences
+    );
+    const signup = await service.signup({
+      email: 'optout@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    calls.length = 0;
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    await drain();
+    expect(calls).toHaveLength(0); // opted out → no welcome
   });
 });

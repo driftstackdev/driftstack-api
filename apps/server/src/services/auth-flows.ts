@@ -20,6 +20,7 @@ import { maskEmail } from '../lib/redact-url.js';
 import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
 import type { AccountAuditService } from './account-audit.js';
+import type { EmailPreferencesService } from './email-preferences.js';
 import type { MfaService } from './mfa.js';
 import {
   type MfaChallengePayload,
@@ -116,7 +117,9 @@ export interface AuthFlowsRepo {
   /** Update password_hash. */
   setPassword(accountId: string, passwordHash: string): Promise<void>;
   /** Mark email as verified — idempotent (no-op if already verified). */
-  markEmailVerified(accountId: string, at: Date): Promise<void>;
+  /** C9 — returns true iff THIS call performed the null→verified transition
+   *  (so the caller can fire the one-time signup-welcome exactly once). */
+  markEmailVerified(accountId: string, at: Date): Promise<boolean>;
 
   /** Insert a single-use token of the given kind. */
   insertAuthToken(args: {
@@ -478,6 +481,12 @@ export class AuthFlowsService {
      * use consumption on /v1/auth/mfa/challenge.
      */
     private readonly mfaChallenges: MfaChallengeStore | null = null,
+    /**
+     * C9 (V-204) — optional email-preferences service. When wired, the
+     * signup-welcome send honors the customer's 'signup-welcome' opt-out.
+     * Tests that don't exercise preferences pass null (always sends).
+     */
+    private readonly emailPreferences: EmailPreferencesService | null = null,
   ) {}
 
   /**
@@ -735,7 +744,7 @@ export class AuthFlowsService {
       at: now,
     });
     if (!consumed) throw new AuthFlowError('invalid_auth_token');
-    await this.repo.markEmailVerified(row.accountId, now);
+    const firstVerification = await this.repo.markEmailVerified(row.accountId, now);
 
     const account = await this.requireAccount(row.accountId);
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
@@ -749,14 +758,27 @@ export class AuthFlowsService {
     // the dashboard origin from `verifyEmailUrl` (the verify link
     // already lives on the customer dashboard host). Fire-and-forget;
     // matches the email-service posture used elsewhere.
-    try {
-      const origin = new URL(this.config.verifyEmailUrl).origin;
-      void this.email.sendSignupWelcome({
-        to: account.email,
-        dashboardUrl: `${origin}/select-tier`,
+    //
+    // C9 — send ONLY on the first null→verified transition (a re-verification
+    // via a second outstanding token still mints a session but must not
+    // re-welcome), and honor the V-204 'signup-welcome' opt-out when the
+    // email-preferences service is wired.
+    if (firstVerification) {
+      void (async (): Promise<void> => {
+        if (
+          this.emailPreferences !== null &&
+          !(await this.emailPreferences.shouldSend(account.id, 'signup-welcome'))
+        ) {
+          return;
+        }
+        const origin = new URL(this.config.verifyEmailUrl).origin;
+        await this.email.sendSignupWelcome({
+          to: account.email,
+          dashboardUrl: `${origin}/select-tier`,
+        });
+      })().catch(() => {
+        /* fire-and-forget */
       });
-    } catch {
-      /* fire-and-forget */
     }
 
     return { account, session };

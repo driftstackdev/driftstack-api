@@ -152,11 +152,17 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
       .where(eq(accounts.id, accountId));
   }
 
-  async markEmailVerified(accountId: string, at: Date): Promise<void> {
-    await this.database.db
+  async markEmailVerified(accountId: string, at: Date): Promise<boolean> {
+    // C9 — atomic first-transition claim: the isNull(emailVerifiedAt) guard
+    // means a row is returned ONLY on the null→verified transition, so of
+    // several outstanding verify tokens exactly one is the "first" and gets to
+    // fire the one-time signup-welcome email.
+    const rows = await this.database.db
       .update(accounts)
       .set({ emailVerifiedAt: at, updatedAt: at })
-      .where(and(eq(accounts.id, accountId), isNull(accounts.emailVerifiedAt)));
+      .where(and(eq(accounts.id, accountId), isNull(accounts.emailVerifiedAt)))
+      .returning({ id: accounts.id });
+    return rows.length > 0;
   }
 
   async insertAuthToken(args: {

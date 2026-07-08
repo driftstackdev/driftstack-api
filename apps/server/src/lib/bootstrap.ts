@@ -1044,6 +1044,7 @@ export async function createProductionDeps(
     accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
     mfaService, // V-353d — branch login() on enrollment status
     mfaChallengeStore, // V-353d — short-lived challenge store
+    emailPreferencesService, // C9 — honor the 'signup-welcome' opt-out
   );
 
   // accountsAdminService — constructed here (not up near adminAuditService)

@@ -113,12 +113,12 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve();
   }
 
-  markEmailVerified(accountId: string, at: Date): Promise<void> {
+  markEmailVerified(accountId: string, at: Date): Promise<boolean> {
     const slot = this.accounts.get(accountId);
-    if (!slot) return Promise.resolve();
-    if (slot.account.emailVerifiedAt !== null) return Promise.resolve();
+    if (!slot) return Promise.resolve(false);
+    if (slot.account.emailVerifiedAt !== null) return Promise.resolve(false);
     slot.account = { ...slot.account, emailVerifiedAt: at };
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   insertAuthToken(args: {

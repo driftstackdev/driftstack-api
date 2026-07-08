@@ -113,8 +113,10 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
   it('CRITICAL markEmailVerified once-only guard — and(eq(id), isNull(emailVerifiedAt)) — prevents overwriting the verification timestamp. The IS-NULL guard preserves the original verification date.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-flows-repo.ts'));
     expect(p).toMatch(/\.set\(\{ emailVerifiedAt: at, updatedAt: at \}\)/);
+    // C9 — the guarded UPDATE now chains .returning({ id }) and returns the
+    // first-transition boolean (rows.length > 0), like consumeAuthToken.
     expect(p).toMatch(
-      /\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.emailVerifiedAt\)\)\);/,
+      /\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.emailVerifiedAt\)\)\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);\s*\n?\s*return rows\.length > 0;/,
     );
   });
 
