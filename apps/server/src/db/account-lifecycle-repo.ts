@@ -2,7 +2,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts } from './schema.js';
+import { accounts, billingEmailSends } from './schema.js';
 import type { AccountLifecycleRepo, AccountLifecycleRow } from '../services/account-lifecycle.js';
 
 export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo {
@@ -42,5 +42,26 @@ export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo {
       .where(and(eq(accounts.id, accountId), isNull(accounts.firstSuccessEmailSentAt)))
       .returning({ id: accounts.id });
     return result.length > 0;
+  }
+
+  async claimBillingEmail(args: {
+    stripeEventId: string;
+    kind: 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
+    accountId: string;
+    at: Date;
+  }): Promise<boolean> {
+    // C6 — INSERT ... ON CONFLICT (stripe_event_id, kind) DO NOTHING; the row
+    // is returned only when THIS insert won → this caller sends the email.
+    const rows = await this.database.db
+      .insert(billingEmailSends)
+      .values({
+        stripeEventId: args.stripeEventId,
+        kind: args.kind,
+        accountId: args.accountId,
+        claimedAt: args.at,
+      })
+      .onConflictDoNothing({ target: [billingEmailSends.stripeEventId, billingEmailSends.kind] })
+      .returning({ stripeEventId: billingEmailSends.stripeEventId });
+    return rows.length > 0;
   }
 }

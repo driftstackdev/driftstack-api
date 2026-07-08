@@ -879,6 +879,30 @@ export const processedStripeEvents = pgTable(
   ],
 );
 
+// C6 — per-billing-email dedup ledger. processed_stripe_events dedups a whole
+// event, but it is written AFTER the handler's side effects, so a crash
+// between a billing email send and that ledger write — or two concurrent
+// Stripe deliveries of the same event (at-least-once delivery) — could send
+// the SAME receipt / failure / renewal-reminder email twice. A claim-before-
+// send row keyed on (stripe_event_id, kind) makes each billing email fire at
+// most once (INSERT ... ON CONFLICT DO NOTHING; the winner sends). Append-only
+// + tiny; pruning is a future ops concern, not correctness.
+export const billingEmailSends = pgTable(
+  'billing_email_sends',
+  {
+    stripeEventId: text('stripe_event_id').notNull(),
+    /** 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder'. */
+    kind: text('kind').notNull(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    claimedAt: timestamp('claimed_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [primaryKey({ columns: [t.stripeEventId, t.kind] })],
+);
+
 // Long-lived browser session tokens — used by the customer dashboard
 // + admin panel (when those land). Distinct from API keys: API keys are
 // for code; web sessions are for humans in a browser. Same hash pattern

@@ -56,6 +56,22 @@ class TestRepo implements AccountLifecycleRepo {
     this.rows.set(accountId, { ...r, firstSuccessEmailSentAt: at });
     return Promise.resolve(true);
   }
+
+  private billingClaims = new Set<string>();
+  billingClaimCount = 0;
+
+  claimBillingEmail(args: {
+    stripeEventId: string;
+    kind: 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
+    accountId: string;
+    at: Date;
+  }): Promise<boolean> {
+    this.billingClaimCount += 1;
+    const key = `${args.stripeEventId}:${args.kind}`;
+    if (this.billingClaims.has(key)) return Promise.resolve(false);
+    this.billingClaims.add(key);
+    return Promise.resolve(true);
+  }
 }
 
 function build(opts: { firstFailureSent?: Date | null; shouldSend?: boolean } = {}): TestDeps {
@@ -258,5 +274,62 @@ describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () =>
       stripeEventId: 'evt_audit_fail',
     });
     expect(email.sendTierChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('C6 — billing emails claim before send (dedup across concurrent delivery / retry)', () => {
+  function billingService(): {
+    service: AccountLifecycleService;
+    repo: TestRepo;
+    email: { sendBillingRenewalReminder: ReturnType<typeof vi.fn> };
+  } {
+    const repo = new TestRepo();
+    repo.seed({
+      id: 'acc_c6',
+      email: 'c6@driftstack.local',
+      firstFailureEmailSentAt: null,
+      firstSuccessEmailSentAt: null,
+    });
+    const email = { sendBillingRenewalReminder: vi.fn().mockResolvedValue(undefined) };
+    const prefs = { shouldSend: vi.fn().mockResolvedValue(true) };
+    const service = new AccountLifecycleService(
+      repo,
+      email as unknown as EmailService,
+      prefs as unknown as EmailPreferencesService,
+      createTestLogger(),
+      {
+        docsBaseUrl: 'https://example.test/docs/',
+        billingPortalUrl: 'https://example.test/billing',
+        dashboardUrl: 'https://example.test',
+      },
+    );
+    return { service, repo, email };
+  }
+
+  const evt = (stripeEventId: string) =>
+    ({
+      kind: 'subscription.renewal_reminder',
+      amountCents: 4999,
+      currency: 'usd',
+      renewalDate: new Date('2026-08-01T00:00:00Z'),
+      stripeEventId,
+      stripeInvoiceId: 'in_c6',
+    }) as const;
+
+  it('two deliveries of the SAME event send exactly one email (both attempt the claim)', async () => {
+    const { service, repo, email } = billingService();
+    await service.emit('acc_c6', evt('evt_c6_dupe'));
+    await service.emit('acc_c6', evt('evt_c6_dupe')); // concurrent delivery / retry
+    expect(email.sendBillingRenewalReminder).toHaveBeenCalledTimes(1);
+    // Both deliveries reached the claim — the second was blocked BY the claim,
+    // not merely by the outer stripe-event ledger (which this path bypasses).
+    expect(repo.billingClaimCount).toBe(2);
+  });
+
+  it('different event ids for the same account each send (the claim is per event)', async () => {
+    const { service, email } = billingService();
+    await service.emit('acc_c6', evt('evt_c6_a'));
+    await service.emit('acc_c6', evt('evt_c6_b'));
+    expect(email.sendBillingRenewalReminder).toHaveBeenCalledTimes(2);
   });
 });

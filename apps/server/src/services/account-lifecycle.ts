@@ -52,6 +52,19 @@ export interface AccountLifecycleRepo {
    * `markFirstFailureEmailSent`, but for the first successful session.
    */
   markFirstSuccessEmailSent(accountId: string, at: Date): Promise<boolean>;
+  /**
+   * C6 — claim the right to send ONE billing email for a given Stripe event.
+   * INSERT ... ON CONFLICT DO NOTHING on (stripeEventId, kind); returns true
+   * iff THIS caller inserted the row (won the claim → send the email), false
+   * if the (event, kind) pair was already claimed by a concurrent Stripe
+   * delivery or a post-crash retry (→ skip the send, no duplicate email).
+   */
+  claimBillingEmail(args: {
+    stripeEventId: string;
+    kind: 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
+    accountId: string;
+    at: Date;
+  }): Promise<boolean>;
 }
 
 export type LifecycleEvent =
@@ -356,11 +369,10 @@ export class AccountLifecycleService {
    * V-327 — fires on Stripe `invoice.upcoming` webhook (~7 days before
    * renewal). Email-only — no audit row (the upcoming-charge isn't a
    * state change, just a heads-up). Honors the
-   * `billing-renewal-reminder` opt-out. The dispatcher does NOT dedupe
-   * by stripeEventId; Stripe redelivers events only on handler failure
-   * (non-2xx response), and our handler returns 'handled' synchronously
-   * after the email enqueue. A duplicate email costs less than the
-   * dedup-table machinery, so we accept the worst-case noise.
+   * `billing-renewal-reminder` opt-out. C6 — claims a per-(event, kind)
+   * dedup row before sending so a concurrent Stripe delivery or a
+   * post-crash retry (the processed_stripe_events ledger is written only
+   * AFTER this handler runs) cannot send a second reminder.
    */
   private async handleRenewalReminder(
     accountId: string,
@@ -378,6 +390,16 @@ export class AccountLifecycleService {
     const account = await this.repo.findForLifecycle(accountId);
     if (account === null) return;
 
+    // C6 — claim after the opt-out + account checks (don't burn a claim on an
+    // opted-out or missing account), immediately before the send.
+    const won = await this.repo.claimBillingEmail({
+      stripeEventId: event.stripeEventId,
+      kind: 'billing-renewal-reminder',
+      accountId,
+      at: new Date(),
+    });
+    if (!won) return;
+
     const amountFormatted = formatCents(event.amountCents, event.currency);
 
     await this.email.sendBillingRenewalReminder({
@@ -391,10 +413,10 @@ export class AccountLifecycleService {
   /**
    * S44 2026-07-07 (founder-approved; TD-001 revival) — Driftstack-
    * branded receipt on Stripe `invoice.payment_succeeded`. Honors the
-   * V-204 `billing-receipt` opt-out. No per-event dedup table: the
-   * Stripe event ledger already short-circuits duplicate event ids
-   * before the handler dispatches this event (same reasoning as
-   * handleRenewalReminder above).
+   * V-204 `billing-receipt` opt-out. C6 — claims a per-(event, kind)
+   * dedup row before sending; the processed_stripe_events ledger dedups
+   * whole events but is written only AFTER this handler, so a concurrent
+   * delivery or a post-crash retry would otherwise re-send the receipt.
    */
   private async handlePaymentSucceeded(
     accountId: string,
@@ -413,6 +435,15 @@ export class AccountLifecycleService {
 
     const account = await this.repo.findForLifecycle(accountId);
     if (account === null) return;
+
+    // C6 — claim before the send (after opt-out + account checks).
+    const won = await this.repo.claimBillingEmail({
+      stripeEventId: event.stripeEventId,
+      kind: 'billing-receipt',
+      accountId,
+      at: new Date(),
+    });
+    if (!won) return;
 
     // Billing-period string for the template ("for the <period>
     // period"). Falls back to the charge date when the invoice payload
@@ -451,6 +482,16 @@ export class AccountLifecycleService {
   ): Promise<void> {
     const account = await this.repo.findForLifecycle(accountId);
     if (account === null) return;
+
+    // C6 — claim before the send so a concurrent delivery / post-crash retry
+    // doesn't re-send the failure notice.
+    const won = await this.repo.claimBillingEmail({
+      stripeEventId: event.stripeEventId,
+      kind: 'billing-failure',
+      accountId,
+      at: new Date(),
+    });
+    if (!won) return;
 
     await this.email.sendBillingFailure({
       to: account.email,

@@ -15,6 +15,8 @@ interface InMemoryRow {
 
 export class InMemoryAccountLifecycleRepo implements AccountLifecycleRepo {
   private readonly rows = new Map<string, InMemoryRow>();
+  /** C6 — claimed (stripeEventId:kind) pairs; mirrors the DB composite PK. */
+  private readonly billingClaims = new Set<string>();
 
   /** Test seam — seed an account row into the lifecycle view. */
   upsert(row: {
@@ -54,6 +56,18 @@ export class InMemoryAccountLifecycleRepo implements AccountLifecycleRepo {
     if (!r) return Promise.resolve(false);
     if (r.firstSuccessEmailSentAt !== null) return Promise.resolve(false);
     this.rows.set(accountId, { ...r, firstSuccessEmailSentAt: at });
+    return Promise.resolve(true);
+  }
+
+  claimBillingEmail(args: {
+    stripeEventId: string;
+    kind: 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
+    accountId: string;
+    at: Date;
+  }): Promise<boolean> {
+    const key = `${args.stripeEventId}:${args.kind}`;
+    if (this.billingClaims.has(key)) return Promise.resolve(false);
+    this.billingClaims.add(key);
     return Promise.resolve(true);
   }
 }

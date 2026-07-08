@@ -37,7 +37,7 @@ describe('W441.B apps/server/src/db/account-lifecycle-repo.ts content parity', (
   it('imports: and/eq/isNull from drizzle-orm; Database type; accounts schema; AccountLifecycleRepo/Row from services', () => {
     expect(body).toMatch(/import \{ and, eq, isNull \} from 'drizzle-orm';/);
     expect(body).toMatch(/import type \{ Database \} from '\.\/client\.js';/);
-    expect(body).toMatch(/import \{ accounts \} from '\.\/schema\.js';/);
+    expect(body).toMatch(/import \{ accounts, billingEmailSends \} from '\.\/schema\.js';/);
     expect(body).toMatch(
       /import type \{ AccountLifecycleRepo, AccountLifecycleRow \} from '\.\.\/services\/account-lifecycle\.js';/,
     );

@@ -163,12 +163,16 @@ describe('W406.C apps/server/src/services/account-lifecycle.ts content parity', 
     expect(body).toMatch(/fromTier: event\.fromTier \?\? 'unknown',/);
   });
 
-  it("V-327 handleRenewalReminder: NO dedup by stripeEventId (cost-tradeoff); opt-out via 'billing-renewal-reminder'", () => {
+  it("V-327 handleRenewalReminder: C6 claim-before-send dedup; opt-out via 'billing-renewal-reminder'", () => {
+    // C6 — the renewal reminder now claims a per-(event, kind) dedup row.
     expect(body).toMatch(
-      /V-327 — fires on Stripe `invoice\.upcoming` webhook \(~7 days before\s*\n?\s*\*\s*renewal\)\. Email-only — no audit row[\s\S]+?The dispatcher does NOT dedupe\s*\n?\s*\*\s*by stripeEventId; Stripe redelivers events only on handler failure\s*\n?\s*\*\s*\(non-2xx response\), and our handler returns 'handled' synchronously\s*\n?\s*\*\s*after the email enqueue\. A duplicate email costs less than the\s*\n?\s*\*\s*dedup-table machinery, so we accept the worst-case noise\./,
+      /V-327 — fires on Stripe `invoice\.upcoming` webhook \(~7 days before\s*\n?\s*\*\s*renewal\)\. Email-only — no audit row[\s\S]+?C6 — claims a per-\(event, kind\)\s*\n?\s*\*\s*dedup row before sending/,
     );
     expect(body).toMatch(
       /const allowed = await this\.emailPreferences\.shouldSend\(accountId, 'billing-renewal-reminder'\);/,
+    );
+    expect(body).toMatch(
+      /const won = await this\.repo\.claimBillingEmail\(\{[\s\S]+?kind: 'billing-renewal-reminder',[\s\S]+?\}\);\s*\n?\s*if \(!won\) return;/,
     );
   });
 
