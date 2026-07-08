@@ -62,11 +62,24 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
         if (hydrated) full = hydrated;
       }
       if (full.frames.length === 0) {
-        pushToast({
-          title: 'Nothing to export',
-          body: 'This recording has no frames yet.',
-          tone: 'warn',
-        });
+        // Distinguish a genuinely-empty recording from a hydration FAILURE: a
+        // persisted recording that LISTS frames (frameCount > 0) but still has none
+        // after a hydrate attempt couldn't be READ from disk (missing / corrupt
+        // ndjson). Reporting "nothing to export" there would wrongly tell the user
+        // their recording is empty — surface the real cause instead (founder-hit sweep).
+        if (rec.frameCount > 0) {
+          pushToast({
+            title: 'Couldn’t load the recording',
+            body: 'Its frames couldn’t be read from disk — the file may be missing or damaged.',
+            tone: 'error',
+          });
+        } else {
+          pushToast({
+            title: 'Nothing to export',
+            body: 'This recording has no frames yet.',
+            tone: 'warn',
+          });
+        }
         return;
       }
       const now = new Date();
