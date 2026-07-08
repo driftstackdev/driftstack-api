@@ -224,7 +224,11 @@ describe('SimulatorWindow — Recording pane (SLICE 3)', () => {
       expect(b).not.toBeNull();
       return b as HTMLButtonElement;
     });
-    fireEvent.click(deleteBtn);
+    // Delete is a two-step confirm (audit 2026-07-08, permanent + dense list): the first
+    // click arms (× → "Delete?"), a second click actually deletes.
+    fireEvent.click(deleteBtn); // arm
+    await waitFor(() => expect(deleteBtn.textContent).toContain('Delete?'));
+    fireEvent.click(deleteBtn); // confirm
     await waitFor(() => {
       pane = container.querySelector('[data-component="drawer-recording"]') as HTMLElement;
       expect(pane.textContent).toContain('No recordings yet.');

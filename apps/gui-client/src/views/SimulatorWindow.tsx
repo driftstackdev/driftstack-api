@@ -2389,6 +2389,26 @@ export function SimulatorWindow(): JSX.Element {
         window.setTimeout(() => setNotice(null), 4000);
       });
   }
+  // Two-step confirm for the recording delete — it's PERMANENT (no recycle bin) and the ×
+  // sits in a dense list where a mis-click silently destroyed a capture; a failure was also
+  // swallowed with no feedback (audit 2026-07-08). First click arms (× → "Delete?"), a second
+  // click within 4s deletes and surfaces any failure.
+  const [confirmingDeleteRecId, setConfirmingDeleteRecId] = useState<string | null>(null);
+  const deleteRecTimerRef = useRef<number | null>(null);
+  const onDeleteRecording = (id: string): void => {
+    if (confirmingDeleteRecId !== id) {
+      setConfirmingDeleteRecId(id);
+      if (deleteRecTimerRef.current !== null) window.clearTimeout(deleteRecTimerRef.current);
+      deleteRecTimerRef.current = window.setTimeout(() => setConfirmingDeleteRecId(null), 4000);
+      return;
+    }
+    if (deleteRecTimerRef.current !== null) window.clearTimeout(deleteRecTimerRef.current);
+    setConfirmingDeleteRecId(null);
+    void deleteRecording(id).catch(() => {
+      setNotice("Couldn't delete the recording.");
+      window.setTimeout(() => setNotice(null), 4000);
+    });
+  };
   // Stop the capture loop if the window unmounts mid-recording.
   useEffect(() => {
     return () => {
@@ -4949,8 +4969,27 @@ export function SimulatorWindow(): JSX.Element {
   // success the window closes (the session is gone — nothing left to show);
   // a failure surfaces a notice and leaves the window open. `controlBusy`
   // gates it so a double-click can't double-DELETE.
+  // Two-step confirm for the destructive End-session (provider-free — the Simulator window
+  // has no ConfirmProvider). First click ARMS + asks; a second click within 4s ends. Ending
+  // tears down the worker browser + fork with NO undo, and this rail icon sits next to
+  // everyday controls, so a stray single click must not kill a live session (audit 2026-07-08,
+  // mirrors RecordingsView's permanent-delete two-step).
+  const [endArmed, setEndArmed] = useState(false);
+  const endArmTimerRef = useRef<number | null>(null);
   const onEndSession = (): void => {
     if (sessionId === '' || controlBusy) return;
+    if (!endArmed) {
+      setEndArmed(true);
+      setNotice('Click End again to end the session — this stops the device (no undo).');
+      if (endArmTimerRef.current !== null) window.clearTimeout(endArmTimerRef.current);
+      endArmTimerRef.current = window.setTimeout(() => {
+        setEndArmed(false);
+        setNotice(null);
+      }, 4000);
+      return;
+    }
+    if (endArmTimerRef.current !== null) window.clearTimeout(endArmTimerRef.current);
+    setEndArmed(false);
     setControlBusy(true);
     // The session is ending either way — drop its persisted control key so the
     // 24h credential doesn't linger in localStorage + entries don't accumulate.
@@ -6007,11 +6046,19 @@ export function SimulatorWindow(): JSX.Element {
                     <button
                       type="button"
                       data-component="sim-rail-end"
-                      aria-label="End session"
-                      title="End the session — stops the worker and tears down the browser"
+                      aria-label={endArmed ? 'Confirm — end session' : 'End session'}
+                      title={
+                        endArmed
+                          ? 'Click again to end the session (no undo)'
+                          : 'End the session — stops the worker and tears down the browser'
+                      }
                       disabled={controlBusy}
                       onClick={onEndSession}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50"
+                      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:opacity-50 ${
+                        endArmed
+                          ? 'bg-red-500/30 text-red-200 ring-1 ring-red-400/70'
+                          : 'text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                      }`}
                     >
                       <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
                     </button>
@@ -6777,11 +6824,19 @@ export function SimulatorWindow(): JSX.Element {
                                       <button
                                         type="button"
                                         aria-label={`Delete ${r.label ?? 'recording'}`}
-                                        title="Delete this recording"
-                                        onClick={() => void deleteRecording(r.id).catch(() => {})}
-                                        className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/60 transition-colors hover:bg-red-500/20 hover:text-red-300"
+                                        title={
+                                          confirmingDeleteRecId === r.id
+                                            ? 'Click again to permanently delete'
+                                            : 'Delete this recording'
+                                        }
+                                        onClick={() => onDeleteRecording(r.id)}
+                                        className={`shrink-0 rounded border px-2 py-0.5 text-[11px] transition-colors ${
+                                          confirmingDeleteRecId === r.id
+                                            ? 'border-red-400/70 bg-red-500/30 text-red-200'
+                                            : 'border-white/15 bg-white/5 text-white/60 hover:bg-red-500/20 hover:text-red-300'
+                                        }`}
                                       >
-                                        ×
+                                        {confirmingDeleteRecId === r.id ? 'Delete?' : '×'}
                                       </button>
                                     </div>
                                   );
