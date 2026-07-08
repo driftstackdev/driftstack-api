@@ -23,9 +23,11 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(body).toMatch(/export interface UseInputCaptureOpts/);
   });
 
-  it('imports sendInputEvent + InputEvent + Room from the wrapper (no duplicates)', () => {
+  it('imports sendInputEvent + RoomEvent + InputEvent + Room from the wrapper (no duplicates)', () => {
+    // RoomEvent (a value, not a type) is used to subscribe to DCBufferStatusChanged for
+    // the reliable-channel backpressure shed (see livekit-input-capture-backpressure.test).
     expect(body).toMatch(
-      /import \{ sendInputEvent, type InputEvent, type Room \} from '\.\/livekit'/,
+      /import \{ sendInputEvent, RoomEvent, type InputEvent, type Room \} from '\.\/livekit'/,
     );
   });
 
