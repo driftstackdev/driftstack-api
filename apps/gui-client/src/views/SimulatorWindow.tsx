@@ -3327,6 +3327,22 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     resolveSwitchRef.current = resolveSwitch;
   }, [resolveSwitch]);
+  // #116 warm-tabs — cancel a tab's re-issue timer WITHOUT clearing the "switching…"
+  // affordance. Used on a COLD activate ack: the switch is acked (stop re-issuing) but
+  // the blank stays up until the target's `loaded` frame hides the re-navigation, so a
+  // cold switch never flashes the old/loading page. A WARM ack uses resolveSwitch (clears
+  // the blank immediately — the live view is already front).
+  const cancelActivationRetry = useCallback((tabId: string): void => {
+    const retry = activationRetryRef.current.get(tabId);
+    if (retry !== undefined) {
+      window.clearTimeout(retry.timer);
+      activationRetryRef.current.delete(tabId);
+    }
+  }, []);
+  const cancelActivationRetryRef = useRef(cancelActivationRetry);
+  useEffect(() => {
+    cancelActivationRetryRef.current = cancelActivationRetry;
+  }, [cancelActivationRetry]);
   // Cancel every pending switch re-issue timer + clear the affordance. Used when the
   // tab set is replaced (tabListRestore / relaunch) and on unmount so no orphan timer
   // re-sends an activateTab for a tab that no longer exists. Functionless on []-deps.
@@ -3501,6 +3517,12 @@ export function SimulatorWindow(): JSX.Element {
           // activateTabResult (doc-150 item 4) — the harness's reply to activateTab.
           requestId?: string;
           ok?: boolean;
+          // A3 warm-tabs (#116, harness wasWarm 13ad369ae) — true when the box brought
+          // the target tab's LIVE pre-warmed view to front (instant, no re-navigation);
+          // absent/false = a COLD switch (re-navigate). Drives whether the GUI drops the
+          // "switching…" blank on the ack (warm = instant, drop now) or keeps it until the
+          // target's `loaded` frame (cold = keep, so the re-nav doesn't flash the old page).
+          wasWarm?: boolean;
           // `error` is overloaded across frame types: a string on activateTabResult
           // (narrowed via typeof below) and a {kind,http_status,message} object on a
           // page_state{state:'errored'} frame (W616). Typed `unknown` so each path
@@ -3529,9 +3551,19 @@ export function SimulatorWindow(): JSX.Element {
             for (const [id, p] of pendingActivationsRef.current) {
               if (p.tabId === pending.tabId) pendingActivationsRef.current.delete(id);
             }
-            // ANY ack (ok or reject) resolves the switch — stop the re-issue-on-miss
-            // timer + clear the "switching…" affordance for this tab.
-            resolveSwitchRef.current(pending.tabId);
+            // #116 warm-tabs — the affordance-clear now depends on warm vs cold:
+            //  - WARM swap (wasWarm=true): the box brought the live tab to front INSTANTLY,
+            //    so drop the "switching…" blank now — the target is already showing.
+            //  - COLD success ack: the box RE-NAVIGATES, so clearing the blank on the ack
+            //    would flash the old/loading page — cancel only the re-issue timer and keep
+            //    the blank until the target's `loaded` frame hides the reload.
+            //  - ERROR ack (ok:false / error): clear here; the revert path below resets the
+            //    chrome for the tab we fall back to.
+            if (msg.wasWarm === true || msg.ok === false || typeof msg.error === 'string') {
+              resolveSwitchRef.current(pending.tabId);
+            } else {
+              cancelActivationRetryRef.current(pending.tabId);
+            }
           }
           // A superseded ack (the operator has since switched to a DIFFERENT tab, or a
           // sibling retry already resolved this one) must never yank the current tab.

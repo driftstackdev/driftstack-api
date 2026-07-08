@@ -848,7 +848,7 @@ describe('SimulatorWindow — page tab strip', () => {
     ).toBeNull();
   });
 
-  it('clears the "switching…" affordance when the harness ACKS the switch (activateTabResult ok)', async () => {
+  it('a WARM activateTabResult ack (wasWarm:true) clears the "switching…" affordance immediately (#116 warm-tabs — live view is already front)', async () => {
     const { container } = renderSim();
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
     sendActivateTab.mockClear();
@@ -857,11 +857,53 @@ describe('SimulatorWindow — page tab strip', () => {
     // Flush the sendActivateTab resolve so the pending record (req_1) is tracked.
     await Promise.resolve();
     await Promise.resolve();
-    // The harness ACKS the switch — the affordance clears.
+    // The harness ACKS a WARM swap — the target's live view is already front, so the
+    // affordance clears instantly (no re-navigation to wait on).
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: 'activateTabResult',
+            requestId: 'req_1',
+            ok: true,
+            wasWarm: true,
+          }),
+        ),
+      );
+    });
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+  });
+
+  it('a COLD activateTabResult ack KEEPS the "switching…" affordance until the target LOADS (#116 — a cold re-nav must not flash the old/loading page)', async () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    sendActivateTab.mockClear();
+    fireEvent.click(tabEls(container)[0]); // switch to tab1 → affordance on tab1
+    const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+    await Promise.resolve();
+    await Promise.resolve();
+    // A COLD ack (no wasWarm) — the box RE-NAVIGATES, so the affordance must STAY up so
+    // the reload never flashes the prior/loading page. Only the re-issue timer is cancelled.
     act(() => {
       dataHandler?.(
         new TextEncoder().encode(
           JSON.stringify({ type: 'activateTabResult', requestId: 'req_1', ok: true }),
+        ),
+      );
+    });
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true'); // still up
+    // The target tab's `loaded` page_state (tabId-tagged, #63) then hides the reload →
+    // the affordance clears.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({
+            state: 'loaded',
+            tabId: tab1Id,
+            url: 'https://loaded.example/',
+            title: 'Loaded',
+          }),
         ),
       );
     });
