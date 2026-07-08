@@ -38,6 +38,7 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
   const checkout = useCryptoCheckout();
   const orderId = checkout.state.kind === 'ready' ? checkout.state.order.order_id : null;
   const order = useCryptoOrder(orderId, { pollIntervalMs: 5_000 });
+  const [copied, setCopied] = useState(false);
 
   const onStart = (): void => {
     if (quote.state.kind !== 'ready') return;
@@ -50,6 +51,20 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
 
   const onReset = (): void => {
     checkout.reset();
+  };
+
+  const copyAddress = (addr: string): void => {
+    // The payment address is the highest-stakes copy in the app — a truncated hand-select
+    // loses funds. Give one-click copy + a transient confirm (audit 2026-07-08).
+    void navigator.clipboard.writeText(addr).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      },
+      () => {
+        /* clipboard blocked in a locked-down WebView — the address stays selectable */
+      },
+    );
   };
 
   return (
@@ -111,32 +126,55 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
         {checkout.state.kind === 'error' && (
           <ErrorBanner message={checkout.state.message} onDismiss={onReset} />
         )}
-        {checkout.state.kind === 'ready' && (
-          <div className="flex flex-col gap-2 text-sm">
-            <div>
-              Order id: <span className="font-mono text-xs">{checkout.state.order.order_id}</span>
-            </div>
-            {checkout.state.replayed && (
-              <div
-                role="status"
-                className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary"
-              >
-                Restored from your earlier attempt (no duplicate order minted).
+        {checkout.state.kind === 'ready' &&
+          (() => {
+            const { order, replayed } = checkout.state;
+            const addr = order.payment_address;
+            return (
+              <div className="flex flex-col gap-2 text-sm">
+                <div>
+                  Order id: <span className="font-mono text-xs">{order.order_id}</span>
+                </div>
+                {replayed && (
+                  <div
+                    role="status"
+                    className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary"
+                  >
+                    Restored from your earlier attempt (no duplicate order minted).
+                  </div>
+                )}
+                {addr !== null && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-ink-secondary">Send to:</span>
+                    <span className="min-w-0 flex-1 break-all font-mono text-xs">{addr}</span>
+                    <button
+                      type="button"
+                      aria-label="Copy payment address"
+                      onClick={() => copyAddress(addr)}
+                      className="shrink-0 rounded border border-surface-divider bg-surface-inset px-2 py-0.5 text-xs text-ink-secondary transition-colors hover:text-ink-primary"
+                    >
+                      {copied ? 'Copied ✓' : 'Copy'}
+                    </button>
+                  </div>
+                )}
+                {order.provider === 'stub' && (
+                  <div className="text-ink-secondary">
+                    Payment provider is in stub mode. Contact support to receive a real payment
+                    address.
+                  </div>
+                )}
+                {/* Don't dead-end after minting: the product select locks once an order exists,
+                    so offer a way back to idle to buy a different tier / retry (audit 2026-07-08). */}
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className="mt-1 self-start rounded border border-surface-divider px-2 py-0.5 text-xs text-ink-secondary transition-colors hover:text-ink-primary"
+                >
+                  Start another checkout
+                </button>
               </div>
-            )}
-            {checkout.state.order.payment_address !== null && (
-              <div>
-                Send to:{' '}
-                <span className="font-mono text-xs">{checkout.state.order.payment_address}</span>
-              </div>
-            )}
-            {checkout.state.order.provider === 'stub' && (
-              <div className="text-ink-secondary">
-                Payment provider is in stub mode. Contact support to receive a real payment address.
-              </div>
-            )}
-          </div>
-        )}
+            );
+          })()}
       </section>
 
       {/* Step 3: live order status (polls until terminal) */}

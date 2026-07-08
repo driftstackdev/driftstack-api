@@ -28,6 +28,7 @@ import { DEFAULT_SETTINGS, rememberedKeyFor } from '../lib/settings';
 import { normalizeNavigateUrl } from '../lib/address-bar';
 import { useConfirm } from '../components/ConfirmProvider';
 import { maskApiKey } from '../components/ApiKeyMaskedSpan';
+import { SettingsAccountCard } from '../components/SettingsAccountCard';
 import { useToasts } from '../lib/toasts';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
@@ -494,6 +495,11 @@ export function SettingsView(): JSX.Element {
           </div>
         </div>
       </header>
+
+      {/* Account identity + tier + billing link — previously the card existed but was never
+          mounted, so nowhere in the desktop app showed who you're signed in as or your plan
+          (audit 2026-07-08). Only once a key is configured (it self-fetches /v1/account/me). */}
+      {!isFirstRun && <SettingsAccountCard />}
 
       {isFirstRun && (
         <Panel className="border-accent/40 bg-accent-subtle">
