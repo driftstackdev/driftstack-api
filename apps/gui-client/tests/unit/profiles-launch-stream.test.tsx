@@ -95,8 +95,18 @@ vi.mock('../../src/lib/proxies', () => ({
   addProxy: vi.fn(() => Promise.resolve({ id: 'p_new' })),
   removeProxy: vi.fn(() => Promise.resolve()),
   updateProxy: vi.fn(() => Promise.resolve({})),
+  setProxyServerId: vi.fn(() => Promise.resolve()),
   validateDraft: () => ({ ok: true, errors: {} }),
   testProxy: vi.fn(() => Promise.resolve({ reachable: true })),
+}));
+
+// ensureServerProxy syncs the picked proxy to an account_proxies row before launch;
+// mock it to SUCCEED so the launch proceeds. (Launch now FAILS CLOSED on a sync
+// error to avoid egressing through the default IP — GUI founder-hit sweep — so an
+// unmocked account-proxies fetch would abort the launch instead of falling back.)
+vi.mock('../../src/lib/account-proxies', () => ({
+  createProxy: vi.fn(() => Promise.resolve({ id: 'aprx_1' })),
+  updateProxy: vi.fn(() => Promise.resolve({ id: 'aprx_1' })),
 }));
 
 // Stub the LiveKit-connecting panel (used by the separate simulator window).
@@ -142,6 +152,10 @@ describe('ProfilesView launch → stream', () => {
     expect(agentCreate).toHaveBeenCalledWith(
       {
         profile_id: 'prof_1',
+        // The profile's bound proxy (p1) is synced to an account_proxies row
+        // (aprx_1) and passed as proxy_id so the session egresses through it — launch
+        // now FAILS CLOSED rather than omitting proxy_id on a sync error (sweep).
+        proxy_id: 'aprx_1',
         mode: 'manual',
         initial_url: 'https://driftstack.dev/',
       },

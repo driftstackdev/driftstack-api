@@ -895,7 +895,10 @@ export function SettingsView(): JSX.Element {
               <input
                 type="checkbox"
                 checked={bundledLlmConsentDraft}
-                onChange={(e) => setBundledLlmConsentDraft(e.target.checked)}
+                onChange={(e) => {
+                  setBundledLlmConsentDraft(e.target.checked);
+                  setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit
+                }}
                 className="mt-0.5"
               />
               <span className="text-sm text-ink-secondary">
@@ -911,7 +914,10 @@ export function SettingsView(): JSX.Element {
                   min="0"
                   step="0.01"
                   value={bundledLlmCapDraft}
-                  onChange={(e) => setBundledLlmCapDraft(e.target.value)}
+                  onChange={(e) => {
+                    setBundledLlmCapDraft(e.target.value);
+                    setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit
+                  }}
                   className="form-input mono w-24"
                 />
               </div>

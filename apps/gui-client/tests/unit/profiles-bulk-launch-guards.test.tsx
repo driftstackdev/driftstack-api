@@ -157,8 +157,16 @@ vi.mock('../../src/lib/proxies', () => ({
   addProxy: vi.fn(() => Promise.resolve({ id: 'p_new' })),
   removeProxy: vi.fn(() => Promise.resolve()),
   updateProxy: vi.fn(() => Promise.resolve({})),
+  setProxyServerId: vi.fn(() => Promise.resolve()),
   validateDraft: () => ({ ok: true, errors: {} }),
   testProxy: vi.fn(() => Promise.resolve({ reachable: true })),
+}));
+
+// Launch now FAILS CLOSED on a proxy account-sync error (GUI founder-hit sweep) —
+// mock the sync to SUCCEED so the guard tests exercise the launch path, not the abort.
+vi.mock('../../src/lib/account-proxies', () => ({
+  createProxy: vi.fn(() => Promise.resolve({ id: 'aprx_1' })),
+  updateProxy: vi.fn(() => Promise.resolve({ id: 'aprx_1' })),
 }));
 
 vi.mock('../../src/components/AgentSessionPanel', () => ({

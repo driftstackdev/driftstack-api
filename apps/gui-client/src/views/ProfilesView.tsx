@@ -1617,14 +1617,35 @@ export function ProfilesView({
       // ARC A — sync the picked proxy to the account (server-side, encrypted)
       // so the dispatch routes egress through it. ensureServerProxy creates or
       // refreshes the account_proxies row + caches its id locally; we pass that
-      // id as proxy_id. Best-effort: a sync failure (offline / SSRF-rejected
-      // host / unauth) falls back to launching without proxy_id rather than
-      // blocking — the session still runs (operator-default egress).
+      // id as proxy_id.
+      //
+      // FAIL CLOSED on a sync failure (founder-hit sweep 2026-07-08): this profile
+      // has a proxy BOUND (pickProxy returned it), so if ensureServerProxy THROWS
+      // (SSRF-rejected host / 4xx / offline blip) we must NOT fall back to launching
+      // without proxy_id — the server treats an absent proxy_id as operator-default
+      // egress, so the session would leak out through Driftstack's shared/datacenter
+      // IP instead of the user's configured proxy. That is an egress-identity LEAK —
+      // the exact thing an anti-detect tool must never do — and the server's own
+      // fail-closed guard only covers a present-but-UNRESOLVABLE proxy_id, not an
+      // OMITTED one, so the GUI must not omit it. Abort + tell the customer instead
+      // of the old silent console.warn proxy-less fallback. (ensureServerProxy
+      // returns undefined only for the no-API-key case, which fails at create anyway.)
       let proxyIdForLaunch: string | undefined;
       try {
         proxyIdForLaunch = await ensureServerProxy(proxy);
       } catch (err) {
-        console.warn('proxy account-sync failed; launching without proxy_id', err);
+        console.warn('proxy account-sync failed; aborting launch to avoid an egress leak', err);
+        const leakMsg =
+          `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
+          `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
+          `proxy. Check the proxy and try again.`;
+        if (opts.skipProxyDownConfirm) {
+          // Bulk launch — don't stack a modal per profile; surface via the error banner.
+          setState((s) => ({ ...s, error: leakMsg }));
+        } else {
+          await confirm(leakMsg, { confirmLabel: 'OK' });
+        }
+        return; // finally resets busyId; NO proxy-less create body is built
       }
       // Attach THIS profile so the session restores/persists its saved browser
       // identity (file 57). Pass the canonical prof_<uuid> id as-is — the create
@@ -3580,7 +3601,13 @@ function CreateProfileModal({
         );
       }
       // Bind the chosen proxy to the new profile. null = use the first-available
-      // proxy at Launch time.
+      // proxy at Launch time. BEST-EFFORT by design (the profile is already created +
+      // billed; a bind failure must not force a re-create) — the customer can set the
+      // proxy from the profile's row afterward. NOTE (founder-hit sweep, #3, deferred):
+      // an EXPLICIT proxy choice that silently fails to persist means launch falls back
+      // to proxies[0] (a DIFFERENT proxy than picked) — the proper fix is a NON-blocking
+      // post-create warning surfaced to the parent (needs onCreated plumbing), not a
+      // modal-blocking error that fights the best-effort contract this flow guarantees.
       await setDefaultProxy(profileId, resolvedProxyId).catch((err: unknown) => {
         console.warn('[profiles] setDefaultProxy failed (profile created):', err);
       });
