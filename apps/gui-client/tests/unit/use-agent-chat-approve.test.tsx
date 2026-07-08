@@ -111,6 +111,73 @@ describe('useAgentChat approve()', () => {
     expect(result.current.pendingConfirmation).toBeNull();
   });
 
+  it('accumulates approvals across successive halts (a 2-consequential-action plan must not loop)', async () => {
+    // The server re-decomposes on each message and reads approvals ONLY from that
+    // message. If approve() sent just the latest approval, a plan that halts on
+    // action A then action B would re-halt on A forever after B is approved. Each
+    // approve must re-send ALL approvals gathered so far.
+    const PAY_INTENT = { kind: 'interact', action: 'tap', value: 'Confirm payment' } as const;
+    const HALT_B: AgentMessageResponse = {
+      kind: 'plan-executed',
+      session: SESSION,
+      intents: [PAY_INTENT],
+      results: [
+        {
+          kind: 'confirmation_required',
+          intent: PAY_INTENT,
+          category: 'payment',
+          matchedText: 'confirm payment',
+        },
+      ],
+      ok: false,
+    };
+    message.mockResolvedValueOnce(HALT).mockResolvedValueOnce(HALT_B).mockResolvedValueOnce(DONE);
+    const { result } = renderHook(() => useAgentChat());
+
+    await act(async () => {
+      await result.current.send('place my order then pay');
+    });
+    expect(result.current.pendingConfirmation?.matchedText).toBe('place order');
+
+    await act(async () => {
+      await result.current.approve(); // approve action A → server halts on action B
+    });
+    expect(result.current.pendingConfirmation?.matchedText).toBe('confirm payment');
+
+    await act(async () => {
+      await result.current.approve(); // approve action B → completes
+    });
+
+    // The 3rd message carries BOTH approvals (accumulated), not just the latest.
+    expect(message).toHaveBeenCalledTimes(3);
+    expect(message.mock.calls[1]?.[2]).toEqual({
+      approveConsequentialActions: [{ category: 'purchase', matchedText: 'place order' }],
+    });
+    expect(message.mock.calls[2]?.[2]).toEqual({
+      approveConsequentialActions: [
+        { category: 'purchase', matchedText: 'place order' },
+        { category: 'payment', matchedText: 'confirm payment' },
+      ],
+    });
+    expect(result.current.pendingConfirmation).toBeNull();
+  });
+
+  it('a fresh send() resets the accumulated approvals (a new task does not carry the last one)', async () => {
+    message.mockResolvedValueOnce(HALT).mockResolvedValueOnce(DONE).mockResolvedValueOnce(DONE);
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.send('place my order');
+    });
+    await act(async () => {
+      await result.current.approve(); // accumulates the purchase approval
+    });
+    // A brand-new task — its message must NOT carry the previous approval.
+    await act(async () => {
+      await result.current.send('just take a screenshot');
+    });
+    expect(message.mock.calls[2]?.[2]).toEqual({});
+  });
+
   it('send() still appends a user bubble (default unchanged)', async () => {
     message.mockResolvedValueOnce(DONE);
     const { result } = renderHook(() => useAgentChat());

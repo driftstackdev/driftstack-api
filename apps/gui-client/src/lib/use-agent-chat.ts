@@ -231,6 +231,17 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // persisted to chat history by the view's turns-change effect. Set when a user
   // bubble is appended, cleared when the turn completes/rolls back.
   const inFlightUserTurnIdRef = useRef<number | null>(null);
+  // Consequential-action approvals ACCUMULATED across successive halts of the SAME
+  // logical task. The server re-decomposes on every message and builds its approved
+  // set purely from THAT message's approve_consequential_actions (stateless — it does
+  // not persist prior approvals). A plan with 2+ consequential actions halts on each
+  // in turn; if approve() sent only the LATEST approval, the server would re-halt on an
+  // already-approved earlier action → an infinite approve loop that never completes (and
+  // re-bills each turn). So approve() appends to this list and re-sends ALL of them.
+  // Reset on a genuinely-new user message (a fresh task) + on reset()/restore().
+  const approvedActionsRef = useRef<
+    Array<{ category: ConsequentialActionCategory; matchedText: string }>
+  >([]);
   // Soft cancel — Stop bumps this; an in-flight post that captured an older
   // generation discards its result on resolve. (UI stop; the server turn may
   // still complete — a true network/turn abort is a follow-up.)
@@ -293,6 +304,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       const gen = cancelGenRef.current;
       let appendedUserTurnId: number | null = null;
       if (options?.appendUserTurn !== false) {
+        // A genuinely-new user message starts a FRESH task — drop any consequential
+        // approvals accumulated for the previous one (approve() re-sends with
+        // appendUserTurn:false, so it never clears these).
+        approvedActionsRef.current = [];
         // Append the user turn immediately for responsiveness.
         appendedUserTurnId = nextId();
         const uid = appendedUserTurnId;
@@ -431,10 +446,18 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const approve = useCallback(async (): Promise<void> => {
     if (pendingConfirmation === null || lastUserMessage === null) return;
     setResolvedTurnId(pendingConfirmation.turnId);
+    // Accumulate this approval on top of any earlier ones for the same task (dedup by
+    // category+matchedText) and re-send ALL of them — otherwise a plan with 2+
+    // consequential actions loops: the server, re-decomposing from only the latest
+    // approval, re-halts on an already-approved earlier action forever.
+    const { category, matchedText } = pendingConfirmation;
+    const already = approvedActionsRef.current.some(
+      (a) => a.category === category && a.matchedText === matchedText,
+    );
+    if (!already)
+      approvedActionsRef.current = [...approvedActionsRef.current, { category, matchedText }];
     await post(lastUserMessage, {
-      approvals: [
-        { category: pendingConfirmation.category, matchedText: pendingConfirmation.matchedText },
-      ],
+      approvals: approvedActionsRef.current,
       appendUserTurn: false,
     });
   }, [pendingConfirmation, lastUserMessage, post]);
@@ -471,6 +494,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     setError(null);
     setResolvedTurnId(null);
     setDeniedTurnIds(new Set());
+    approvedActionsRef.current = [];
     setLastUserMessage(null);
     setRestoredHistoryCount(0);
   }, [closeServerSession, clearProfileBinding]);
@@ -493,6 +517,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       setSession(null);
       setError(null);
       setResolvedTurnId(null);
+      approvedActionsRef.current = [];
       setLastUserMessage(null);
       // Mark every restored turn as history the (absent) live session won't
       // remember, so the view can draw the honest "continuing starts a new
