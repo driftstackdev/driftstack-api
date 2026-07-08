@@ -30,6 +30,7 @@ const chatState: UseAgentChatResult = {
   sending: false,
   error: null,
   pendingConfirmation: null,
+  deniedTurnIds: new Set<number>(),
   send: vi.fn(() => Promise.resolve(true)),
   approve: vi.fn(() => Promise.resolve()),
   deny: vi.fn(),

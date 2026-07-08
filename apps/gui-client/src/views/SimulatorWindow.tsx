@@ -2510,6 +2510,16 @@ export function SimulatorWindow(): JSX.Element {
     }
     const FREEZE_AFTER_MS = 4000;
     const tick = (): void => {
+      // The session has terminally ended (worker reaped / closed) — the "Session ended"
+      // overlay is the truth. LiveKit's signal socket can linger 'connected' for a few
+      // seconds after the last frame, and this effect's dep array is [room, connState]
+      // (no sessionEnded), so without this per-tick ref check the detector would fire
+      // "Video frozen" OVER the ended overlay in that window (the resubscribe-recovery
+      // driver already has this short-circuit; the detector lacked it).
+      if (sessionEndedRef.current !== null) {
+        setVideoFrozen(false);
+        return;
+      }
       const now = Date.now();
       const el = videoElRef.current;
       // currentTime advancement (rVFC-independent fallback). Treat a change of >1ms as
@@ -3904,6 +3914,21 @@ export function SimulatorWindow(): JSX.Element {
                 : (ps.error ?? {})
               : null,
           );
+          // #135 — clear the soft load-stall advisory from the POLL too. A3's timeout
+          // stall arrives ONLY over the data channel (publishPageStateToRoom), so the
+          // poll never SETS pageLoadStalled — but the terminal 'loaded'/'errored' that
+          // supersedes it may reach the GUI only via the poll if the data-channel frame
+          // was dropped/coalesced, which would otherwise latch the banner over a loaded
+          // page forever. Defer to a fresher data-channel frame (which already cleared
+          // it in its else-branch) and only clear for the current nav target reaching a
+          // terminal state.
+          if (
+            !liveFrameFresh &&
+            pollNavTargetOk &&
+            (ps.state === 'loaded' || ps.state === 'errored')
+          ) {
+            setPageLoadStalled(null);
+          }
           const loading = ps.state === 'loading';
           // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
           // navigate yet) kill the optimistic spinner. Within the grace window after
@@ -5566,7 +5591,7 @@ export function SimulatorWindow(): JSX.Element {
                   <div
                     role="status"
                     data-component="page-load-stalled-banner"
-                    className="absolute left-1/2 top-20 z-20 flex max-w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2.5 rounded-lg bg-black/85 px-3.5 py-2 text-[12px] font-medium leading-snug text-white shadow-lg ring-1 ring-amber-400/40 backdrop-blur"
+                    className="absolute left-1/2 top-28 z-20 flex max-w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2.5 rounded-lg bg-black/85 px-3.5 py-2 text-[12px] font-medium leading-snug text-white shadow-lg ring-1 ring-amber-400/40 backdrop-blur"
                   >
                     <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
                     <span className="min-w-0">{pageLoadStalled.message}</span>

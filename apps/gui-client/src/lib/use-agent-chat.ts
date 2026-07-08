@@ -137,6 +137,8 @@ export interface UseAgentChatResult {
   error: ChatError | null;
   /** The consequential action the last turn halted on (Approve/Deny), or null. */
   pendingConfirmation: PendingConfirmation | null;
+  /** Turn ids the customer DENIED — the transcript marks their paused step as skipped. */
+  deniedTurnIds: ReadonlySet<number>;
   /** Resolves true when the turn succeeded, false on error — lets the caller
    *  restore the draft for a retry instead of losing the typed message. */
   send: (userMessage: string) => Promise<boolean>;
@@ -207,6 +209,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // The turn id whose confirmation the customer already approved/denied — hides
   // the gate so it doesn't re-prompt for an action they've already resolved.
   const [resolvedTurnId, setResolvedTurnId] = useState<number | null>(null);
+  // Turn ids the customer explicitly DENIED (a subset of resolved) — the transcript
+  // marks their paused ⏸ consequential step as denied/skipped rather than stuck-waiting.
+  const [deniedTurnIds, setDeniedTurnIds] = useState<ReadonlySet<number>>(() => new Set());
   // Leading turns that came from a restore and aren't backed by a live server
   // session (see restore()). Drives the view's honest "continuing starts a new
   // session" divider. Cleared once a fresh session is created on the next send.
@@ -437,8 +442,17 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const deny = useCallback((): void => {
     if (pendingConfirmation === null) return;
     // Leave the plan halted; just dismiss the gate. The customer can type a new
-    // instruction. (No dispatch — the consequential action never runs.)
-    setResolvedTurnId(pendingConfirmation.turnId);
+    // instruction. (No dispatch — the consequential action never runs.) Record the
+    // turn as DENIED (distinct from resolvedTurnId, which approve() also sets) so the
+    // transcript renders its paused ⏸ step as "denied — skipped" instead of leaving it
+    // looking like it is still awaiting a decision that will never come.
+    const turnId = pendingConfirmation.turnId;
+    setResolvedTurnId(turnId);
+    setDeniedTurnIds((prev) => {
+      const next = new Set(prev);
+      next.add(turnId);
+      return next;
+    });
   }, [pendingConfirmation]);
 
   const reset = useCallback((): void => {
@@ -456,6 +470,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     setSession(null);
     setError(null);
     setResolvedTurnId(null);
+    setDeniedTurnIds(new Set());
     setLastUserMessage(null);
     setRestoredHistoryCount(0);
   }, [closeServerSession, clearProfileBinding]);
@@ -496,6 +511,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     sending,
     error,
     pendingConfirmation,
+    deniedTurnIds,
     send,
     approve,
     deny,

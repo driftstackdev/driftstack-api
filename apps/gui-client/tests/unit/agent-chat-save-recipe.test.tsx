@@ -83,6 +83,7 @@ function baseChat(overrides: Partial<UseAgentChatResult> = {}): UseAgentChatResu
     sending: false,
     error: null,
     pendingConfirmation: null,
+    deniedTurnIds: new Set<number>(),
     send: vi.fn(() => Promise.resolve()),
     approve: vi.fn(() => Promise.resolve()),
     deny: vi.fn(),

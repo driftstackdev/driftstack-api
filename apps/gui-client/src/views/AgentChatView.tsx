@@ -584,7 +584,7 @@ export function AgentChatView({
             <ol className="mx-auto flex max-w-3xl flex-col gap-3">
               {chat.turns.map((turn, i) => (
                 <Fragment key={turn.id}>
-                  <TurnRow turn={turn} />
+                  <TurnRow turn={turn} denied={chat.deniedTurnIds.has(turn.id)} />
                   {/* Honest history boundary: the turns above were restored from
                       saved history and are NOT in a live agent session. Continuing
                       the chat starts a fresh session that won't remember them — so
@@ -1241,7 +1241,7 @@ function RestoredHistoryDivider(): JSX.Element {
   );
 }
 
-function TurnRow({ turn }: { turn: ChatTurn }): JSX.Element {
+function TurnRow({ turn, denied }: { turn: ChatTurn; denied: boolean }): JSX.Element {
   if (turn.role === 'user') {
     return (
       <li className="flex justify-end">
@@ -1254,23 +1254,45 @@ function TurnRow({ turn }: { turn: ChatTurn }): JSX.Element {
   return (
     <li className="flex justify-start">
       <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2">
-        {turn.response !== undefined && <AgentResponseBody response={turn.response} />}
+        {turn.response !== undefined && (
+          <AgentResponseBody response={turn.response} denied={denied} />
+        )}
       </div>
     </li>
   );
 }
 
-function AgentResponseBody({ response }: { response: AgentMessageResponse }): JSX.Element {
+function AgentResponseBody({
+  response,
+  denied,
+}: {
+  response: AgentMessageResponse;
+  denied: boolean;
+}): JSX.Element {
   switch (response.kind) {
     case 'plan-executed':
       return (
         <div className="flex flex-col gap-1.5">
-          <p className="section-label">Plan</p>
-          <ol className="flex flex-col gap-1">
-            {response.results.map((r, i) => (
-              <PlanStep key={i} result={r} />
-            ))}
-          </ol>
+          {response.results.length === 0 ? (
+            // A plan that executed ZERO steps — the decomposer produced no runnable
+            // browser actions for this request (the #139 "responds without steps" /
+            // "it did nothing" class). Render an honest, actionable message instead of a
+            // bare empty "Plan" heading, which reads as a silent bug (server also now
+            // converts an empty plan to a clarify, so this is defence-in-depth).
+            <p className="text-sm text-ink-primary">
+              I couldn’t turn that into browser actions to run. Try rephrasing it as a concrete step
+              — e.g. “go to example.com and take a screenshot.”
+            </p>
+          ) : (
+            <>
+              <p className="section-label">Plan</p>
+              <ol className="flex flex-col gap-1">
+                {response.results.map((r, i) => (
+                  <PlanStep key={i} result={r} denied={denied} />
+                ))}
+              </ol>
+            </>
+          )}
           {response.usage !== undefined && <UsageBadge usage={response.usage} />}
         </div>
       );
@@ -1293,8 +1315,8 @@ function AgentResponseBody({ response }: { response: AgentMessageResponse }): JS
   }
 }
 
-function PlanStep({ result }: { result: AgentIntentResult }): JSX.Element {
-  const { glyph, cls, text } = describeResult(result);
+function PlanStep({ result, denied }: { result: AgentIntentResult; denied: boolean }): JSX.Element {
+  const { glyph, cls, text } = describeResult(result, denied);
   // doc-132 §5.3 — the server's structured diagnosis (optional; older servers
   // omit it). Only the retryable hint is surfaced as a chip: the category's
   // human framing already lives in the reason text, but "worth retrying" vs
@@ -1317,7 +1339,10 @@ function PlanStep({ result }: { result: AgentIntentResult }): JSX.Element {
   );
 }
 
-function describeResult(result: AgentIntentResult): { glyph: string; cls: string; text: string } {
+function describeResult(
+  result: AgentIntentResult,
+  denied: boolean,
+): { glyph: string; cls: string; text: string } {
   switch (result.kind) {
     case 'success':
       return { glyph: '✓', cls: 'text-status-ready', text: result.summary };
@@ -1328,11 +1353,20 @@ function describeResult(result: AgentIntentResult): { glyph: string; cls: string
         text: `${intentLabel(result.intent)} — ${result.reason}`,
       };
     case 'confirmation_required':
-      return {
-        glyph: '⏸',
-        cls: 'text-status-busy',
-        text: `${intentLabel(result.intent)} — confirmation required (“${result.matchedText}”)`,
-      };
+      // Once the customer has DENIED this turn, the paused step is resolved — show it
+      // as skipped/denied (muted) rather than the ⏸ busy framing, which reads as still
+      // waiting for a decision that will never come (#135 GUI sweep).
+      return denied
+        ? {
+            glyph: '🚫',
+            cls: 'text-ink-muted',
+            text: `${intentLabel(result.intent)} — denied, skipped (“${result.matchedText}”)`,
+          }
+        : {
+            glyph: '⏸',
+            cls: 'text-status-busy',
+            text: `${intentLabel(result.intent)} — confirmation required (“${result.matchedText}”)`,
+          };
   }
 }
 

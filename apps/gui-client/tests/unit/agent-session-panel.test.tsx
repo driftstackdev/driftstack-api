@@ -224,7 +224,7 @@ describe('AgentSessionPanel overlay UX', () => {
       });
       const overlay = container.querySelector('[data-overlay="publisher-state"]');
       expect(overlay?.getAttribute('data-state')).toBe('none');
-      expect(overlay?.textContent).toMatch(/couldn’t start the session/i);
+      expect(overlay?.textContent).toMatch(/couldn’t show the live view/i);
       const retry = container.querySelector('[data-action="retry-launch"]');
       expect(retry).not.toBeNull();
       // Retry re-runs the connect effect (new Room + a fresh attempt).
