@@ -64,23 +64,31 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
   });
 
-  it('REDIS_KEY_PREFIX cli-auth:code: + TTL_SECONDS = 5 * 60 constants pinned', () => {
+  it('REDIS_KEY_PREFIX cli-auth:code: + TTL_SECONDS = 5 * 60 + BIND_TTL_SECONDS = 2 * 60 constants pinned', () => {
     expect(body).toMatch(/const REDIS_KEY_PREFIX = 'cli-auth:code:';/);
     expect(body).toMatch(/const TTL_SECONDS = 5 \* 60;/);
+    // D1 — shorter post-bind window while the (encrypted) key waits in Redis.
+    expect(body).toMatch(/const BIND_TTL_SECONDS = 2 \* 60;/);
   });
 
-  it('CliAuthorizeStore: 3-method KV contract (get/setEx/del)', () => {
+  it('CliAuthorizeStore: 4-method KV contract (get/setEx/del/getDel)', () => {
     expect(body).toMatch(/export interface CliAuthorizeStore \{/);
     expect(body).toMatch(/get\(key: string\): Promise<string \| null>;/);
     expect(body).toMatch(/setEx\(key: string, value: string, ttlSeconds: number\): Promise<void>;/);
     expect(body).toMatch(/del\(key: string\): Promise<void>;/);
+    // C2 — atomic read-and-delete backs the one-shot exchange claim.
+    expect(body).toMatch(/getDel\(key: string\): Promise<string \| null>;/);
   });
 
-  it('RedisStore: ioredis SET EX wrapper + del passthrough', () => {
+  it('RedisStore: ioredis SET EX wrapper + del passthrough + getDel via version-independent Lua get+del', () => {
     expect(body).toMatch(/class RedisStore implements CliAuthorizeStore \{/);
     expect(body).toMatch(/return this\.redis\.get\(key\);/);
     expect(body).toMatch(/await this\.redis\.set\(key, value, 'EX', ttlSeconds\);/);
     expect(body).toMatch(/await this\.redis\.del\(key\);/);
+    // C2 — Lua EVAL (not GETDEL) so we never depend on Redis >= 6.2.
+    expect(body).toMatch(/const result = await this\.redis\.eval\(/);
+    expect(body).toMatch(/redis\.call\('get', KEYS\[1\]\)/);
+    expect(body).toMatch(/if v then redis\.call\('del', KEYS\[1\]\)/);
   });
 
   it('InMemoryCliAuthorizeStore: Map<key, {value, expiresAt}> + self-eviction on get', () => {
@@ -94,17 +102,23 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(
       /this\.entries\.set\(key, \{ value, expiresAt: Date\.now\(\) \+ ttlSeconds \* 1000 \}\);/,
     );
+    // C2 — atomic getDel: read, delete, then TTL-check (no await between
+    // read and delete, so concurrent callers can't both see a value).
+    expect(body).toMatch(
+      /const entry = this\.entries\.get\(key\);\s*\n?\s*if \(!entry\) return null;\s*\n?\s*this\.entries\.delete\(key\);/,
+    );
   });
 
-  it('CliCodeStatus 2-literal union + StoredCode 6 fields with bound-only plaintext+account_id', () => {
+  it('CliCodeStatus 2-literal union + StoredCode 7 fields with bound-only secret_blob + encrypted flag + account_id', () => {
     expect(body).toMatch(/export type CliCodeStatus = 'pending' \| 'bound';/);
     expect(body).toMatch(/interface StoredCode \{/);
     expect(body).toMatch(/state: string;/);
     expect(body).toMatch(/status: CliCodeStatus;/);
     expect(body).toMatch(/client_label: string \| null;/);
-    expect(body).toMatch(
-      /\/\*\* Set when status='bound'\. Plaintext API key the CLI \/ GUI receives\. \*\/\s*\n?\s*plaintext: string \| null;/,
-    );
+    // D1 — the minted key is stored as an encrypted base64 blob (not
+    // plaintext); `encrypted` disambiguates the no-key fallback.
+    expect(body).toMatch(/secret_blob: string \| null;/);
+    expect(body).toMatch(/encrypted: boolean;/);
     expect(body).toMatch(
       /\/\*\* Set when status='bound'\. \*\/\s*\n?\s*account_id: string \| null;/,
     );
@@ -158,23 +172,28 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
       /if \(stored\.status === 'bound'\) \{\s*\n?\s*throw new CliAuthorizeError\(\s*\n?\s*'already_bound',\s*\n?\s*'Authorization code has already been bound to an account\.',\s*\n?\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ Reset TTL so the GUI has the full 5 minutes from bind time to\s*\n?\s*\/\/ poll exchange — covers the case where the user took 4:30 to log\s*\n?\s*\/\/ in \+ click Authorize, then the GUI polls 30s later only to find\s*\n?\s*\/\/ an expired code\./,
+      /\/\/ Reset the TTL from bind time so the GUI has the full post-bind\s*\n?\s*\/\/ window to poll exchange even if the user took ~4:30 to log in and\s*\n?\s*\/\/ click Authorize\. The post-bind window \(D1\) is deliberately shorter\s*\n?\s*\/\/ than the pre-bind one — the client is now actively polling\./,
     );
   });
 
-  it('exchange: raw=null → expired; state mismatch throws; pending short-circuit; bound deletes BEFORE returning (no leak on JSON.stringify failure)', () => {
+  it('exchange: raw=null → expired; pending short-circuit; bound uses atomic getDel claim + D1 decrypt (no leak, no double-deliver)', () => {
     expect(body).toMatch(
       /if \(raw === null\) \{\s*\n?\s*\/\/ Either never existed OR Redis evicted on TTL — treat both as\s*\n?\s*\/\/ expired from the CLI \/ GUI's perspective\.\s*\n?\s*return \{ status: 'expired' \};/,
     );
     expect(body).toMatch(
       /if \(stored\.status === 'pending'\) \{\s*\n?\s*return \{ status: 'pending' \};\s*\n?\s*\}/,
     );
+    // C2 — atomic getDel claim replaced the non-atomic store.del: exactly
+    // one concurrent bound poll wins; the loser sees null → expired.
     expect(body).toMatch(
-      /\/\/ One-shot: delete the entry so subsequent calls return expired\.\s*\n?\s*\/\/ Done before returning so an exception during JSON\.stringify on\s*\n?\s*\/\/ the response side can't leak a re-deliverable plaintext\./,
+      /const claimedRaw = await this\.store\.getDel\(this\.key\(input\.code\)\);/,
     );
-    expect(body).toMatch(/await this\.store\.del\(this\.key\(input\.code\)\);/);
+    expect(body).toMatch(/if \(claimedRaw === null\) \{\s*\n?\s*return \{ status: 'expired' \};/);
+    // D1 — decrypt the at-rest blob only at delivery; decrypt failure → expired.
+    expect(body).toMatch(/if \(claimed\.encrypted\) \{/);
+    expect(body).toMatch(/apiKey = decryptPlatformSecret\(/);
     expect(body).toMatch(
-      /return \{\s*\n?\s*status: 'bound',\s*\n?\s*api_key: stored\.plaintext,\s*\n?\s*account_id: stored\.account_id,\s*\n?\s*\};/,
+      /return \{\s*\n?\s*status: 'bound',\s*\n?\s*api_key: apiKey,\s*\n?\s*account_id: claimed\.account_id,\s*\n?\s*\};/,
     );
   });
 
@@ -194,6 +213,10 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(/import \{ randomBytes, timingSafeEqual \} from 'node:crypto';/);
     expect(body).toMatch(/import type \{ Redis \} from 'ioredis';/);
     expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
+    // D1 — at-rest encryption of the minted key uses the shared platform-secret envelope.
+    expect(body).toMatch(
+      /import \{[\s\S]*?decryptPlatformSecret,[\s\S]*?encryptPlatformSecret,?[\s\S]*?\} from '\.\.\/lib\/platform-secret-encryption\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {

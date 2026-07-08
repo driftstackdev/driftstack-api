@@ -1111,6 +1111,11 @@ export async function createProductionDeps(
   const cliAuthorizeService = new CliAuthorizeService({
     redis,
     dashboardOrigin: config.dashboardOrigin,
+    // D1 — encrypt the minted key at rest in Redis under the shared
+    // MFA_ENCRYPTION_KEY envelope (same as MFA / BYOK / platform
+    // secrets). Optional: when unset the service stores plaintext so a
+    // misconfigured deploy degrades rather than breaking desktop login.
+    secretEncryptionKeyBase64: config.mfaEncryptionKey ?? undefined,
   });
 
   // V-080: inbound Stripe webhook handler. Optional — only wired when

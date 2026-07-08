@@ -17,9 +17,17 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import type { ApiKeyScope } from '@driftstack/api-types';
+import { decryptPlatformSecret, encryptPlatformSecret } from '../lib/platform-secret-encryption.js';
 
 const REDIS_KEY_PREFIX = 'cli-auth:code:';
+// Pre-bind window: the user may take up to ~5 min to open the browser,
+// log in, and click Authorize, so the code lives 5 min from initiate.
 const TTL_SECONDS = 5 * 60;
+// Post-bind window (D1): once the key is minted the CLI / GUI is
+// actively polling and collects within seconds. A tighter 2-minute
+// ceiling caps how long the (encrypted) API key sits in Redis while
+// still comfortably covering a slow poll loop.
+const BIND_TTL_SECONDS = 2 * 60;
 
 /**
  * Minimal KV-store contract the service needs. Production wires the
@@ -29,6 +37,15 @@ export interface CliAuthorizeStore {
   get(key: string): Promise<string | null>;
   setEx(key: string, value: string, ttlSeconds: number): Promise<void>;
   del(key: string): Promise<void>;
+  /**
+   * C2 — atomic read-and-delete. Returns the value and removes the key
+   * in a single indivisible step so that of two concurrent exchange
+   * polls on the same bound code, exactly ONE observes the plaintext;
+   * the loser sees `null`. A non-atomic get-then-del would let both
+   * polls read `bound` before either deletes and double-deliver the
+   * one-shot key.
+   */
+  getDel(key: string): Promise<string | null>;
 }
 
 class RedisStore implements CliAuthorizeStore {
@@ -41,6 +58,18 @@ class RedisStore implements CliAuthorizeStore {
   }
   async del(key: string): Promise<void> {
     await this.redis.del(key);
+  }
+  async getDel(key: string): Promise<string | null> {
+    // GETDEL is a single Redis command but requires server >= 6.2. A
+    // Lua EVAL of get+del is equally atomic (Redis runs the script
+    // indivisibly) and works on every server version, so we never
+    // depend on the deployed Redis version here.
+    const result = await this.redis.eval(
+      "local v = redis.call('get', KEYS[1]); if v then redis.call('del', KEYS[1]) end; return v",
+      1,
+      key,
+    );
+    return (result as string | null) ?? null;
   }
 }
 
@@ -65,6 +94,17 @@ export class InMemoryCliAuthorizeStore implements CliAuthorizeStore {
   async del(key: string): Promise<void> {
     this.entries.delete(key);
   }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getDel(key: string): Promise<string | null> {
+    // Atomic by construction: Node is single-threaded and there is no
+    // await between the read and the delete, so two concurrent callers
+    // cannot both observe a non-null value.
+    const entry = this.entries.get(key);
+    if (!entry) return null;
+    this.entries.delete(key);
+    if (entry.expiresAt <= Date.now()) return null;
+    return entry.value;
+  }
 }
 
 export type CliCodeStatus = 'pending' | 'bound';
@@ -73,8 +113,18 @@ interface StoredCode {
   state: string;
   status: CliCodeStatus;
   client_label: string | null;
-  /** Set when status='bound'. Plaintext API key the CLI / GUI receives. */
-  plaintext: string | null;
+  /**
+   * Set when status='bound'. The minted API key held for the CLI / GUI's
+   * next exchange poll. When `encrypted` is true this is base64 of the
+   * AES-256-GCM `[IV|tag|ciphertext]` blob (D1 — the plaintext key never
+   * sits in Redis at rest); when false it is the raw plaintext (only when
+   * no encryption key is configured — a degraded, availability-first
+   * fallback so a missing key can never break desktop sign-in).
+   */
+  secret_blob: string | null;
+  /** D1 — whether `secret_blob` is an encrypted blob (true) or raw
+   *  plaintext (false, the no-key fallback). */
+  encrypted: boolean;
   /** Set when status='bound'. */
   account_id: string | null;
   created_at: number;
@@ -89,6 +139,15 @@ export interface CliAuthorizeServiceOptions {
    *  screen — defaults to `/cli/authorize` so the URL becomes
    *  `${dashboardOrigin}/cli/authorize?code=…&state=…`. */
   dashboardPath?: string;
+  /**
+   * D1 — base64 32-byte key used to encrypt the minted API key while it
+   * waits in Redis for the CLI / GUI's exchange poll. Wired from
+   * MFA_ENCRYPTION_KEY (the same envelope as MFA / BYOK / platform
+   * secrets). Optional: when absent the key is stored as plaintext (a
+   * degraded fallback) so a misconfigured deploy never breaks desktop
+   * sign-in.
+   */
+  secretEncryptionKeyBase64?: string;
 }
 
 export interface InitiateInput {
@@ -145,6 +204,7 @@ export class CliAuthorizeService {
   private readonly store: CliAuthorizeStore;
   private readonly dashboardOrigin: string;
   private readonly dashboardPath: string;
+  private readonly secretEncryptionKey: string | null;
 
   constructor(opts: CliAuthorizeServiceOptions) {
     if (opts.store !== undefined) {
@@ -156,6 +216,7 @@ export class CliAuthorizeService {
     }
     this.dashboardOrigin = opts.dashboardOrigin.replace(/\/+$/, '');
     this.dashboardPath = opts.dashboardPath ?? '/cli/authorize';
+    this.secretEncryptionKey = opts.secretEncryptionKeyBase64 ?? null;
   }
 
   async initiate(input: InitiateInput): Promise<InitiateResult> {
@@ -166,7 +227,8 @@ export class CliAuthorizeService {
       state: input.state,
       status: 'pending',
       client_label: input.client_label ?? null,
-      plaintext: null,
+      secret_blob: null,
+      encrypted: false,
       account_id: null,
       created_at: Date.now(),
     };
@@ -200,21 +262,31 @@ export class CliAuthorizeService {
       );
     }
 
+    // D1 — encrypt the minted key for at-rest storage in Redis when an
+    // encryption key is configured (production always is, via
+    // MFA_ENCRYPTION_KEY). Fall back to plaintext only when no key is
+    // wired, so a misconfigured deploy degrades rather than breaking
+    // desktop sign-in.
+    const encrypt = this.secretEncryptionKey !== null;
+    const secretBlob = encrypt
+      ? encryptPlatformSecret(input.api_key_plaintext, this.secretEncryptionKey).toString('base64')
+      : input.api_key_plaintext;
     const updated: StoredCode = {
       ...stored,
       status: 'bound',
-      plaintext: input.api_key_plaintext,
+      secret_blob: secretBlob,
+      encrypted: encrypt,
       account_id: input.account_id,
     };
-    // Reset TTL so the GUI has the full 5 minutes from bind time to
-    // poll exchange — covers the case where the user took 4:30 to log
-    // in + click Authorize, then the GUI polls 30s later only to find
-    // an expired code.
-    await this.store.setEx(this.key(input.code), JSON.stringify(updated), TTL_SECONDS);
+    // Reset the TTL from bind time so the GUI has the full post-bind
+    // window to poll exchange even if the user took ~4:30 to log in and
+    // click Authorize. The post-bind window (D1) is deliberately shorter
+    // than the pre-bind one — the client is now actively polling.
+    await this.store.setEx(this.key(input.code), JSON.stringify(updated), BIND_TTL_SECONDS);
 
     return {
       account_id: input.account_id,
-      expires_at: new Date(Date.now() + TTL_SECONDS * 1000),
+      expires_at: new Date(Date.now() + BIND_TTL_SECONDS * 1000),
     };
   }
 
@@ -236,20 +308,50 @@ export class CliAuthorizeService {
     }
 
     if (stored.status === 'bound') {
-      // One-shot: delete the entry so subsequent calls return expired.
-      // Done before returning so an exception during JSON.stringify on
-      // the response side can't leak a re-deliverable plaintext.
-      if (stored.plaintext === null || stored.account_id === null) {
+      if (stored.secret_blob === null || stored.account_id === null) {
         throw new CliAuthorizeError(
           'invalid_code',
-          'Internal: bound code missing plaintext or account_id.',
+          'Internal: bound code missing secret or account_id.',
         );
       }
-      await this.store.del(this.key(input.code));
+      // C2 — atomic one-shot claim. getDel removes the entry and returns
+      // its value indivisibly, so of two concurrent bound polls exactly
+      // one wins; the loser sees `null` and gets `expired` (no
+      // double-delivery of the one-shot key). Delete-before-return also
+      // means a later exception can't leak a re-deliverable secret.
+      const claimedRaw = await this.store.getDel(this.key(input.code));
+      if (claimedRaw === null) {
+        return { status: 'expired' };
+      }
+      const claimed = JSON.parse(claimedRaw) as StoredCode;
+      if (claimed.secret_blob === null || claimed.account_id === null) {
+        throw new CliAuthorizeError(
+          'invalid_code',
+          'Internal: bound code missing secret or account_id.',
+        );
+      }
+      // D1 — recover the plaintext from the at-rest blob only at the
+      // moment of delivery. A decrypt failure (e.g. the key rotated out
+      // from under a bound code) surfaces as expired rather than a 500,
+      // so the CLI simply restarts the flow.
+      let apiKey: string;
+      if (claimed.encrypted) {
+        if (this.secretEncryptionKey === null) return { status: 'expired' };
+        try {
+          apiKey = decryptPlatformSecret(
+            Buffer.from(claimed.secret_blob, 'base64'),
+            this.secretEncryptionKey,
+          );
+        } catch {
+          return { status: 'expired' };
+        }
+      } else {
+        apiKey = claimed.secret_blob;
+      }
       return {
         status: 'bound',
-        api_key: stored.plaintext,
-        account_id: stored.account_id,
+        api_key: apiKey,
+        account_id: claimed.account_id,
       };
     }
 

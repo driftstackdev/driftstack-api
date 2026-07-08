@@ -11,12 +11,15 @@
 //     account and deletes (one-shot — second call returns expired),
 //     invalid_code if a bound entry is missing plaintext (defensive)
 
+import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   CliAuthorizeError,
   CliAuthorizeService,
   InMemoryCliAuthorizeStore,
 } from '../../src/services/cli-authorize.js';
+
+const STATE = 'st_' + 'a'.repeat(20);
 
 function makeSvc(overrides: { dashboardOrigin?: string } = {}): {
   svc: CliAuthorizeService;
@@ -156,5 +159,76 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
     // Second call should return expired since the entry was deleted.
     const second = await svc.exchange({ code, state: 's' });
     expect(second.status).toBe('expired');
+  });
+});
+
+describe('V-266 D1 — encryption of the minted key at rest', () => {
+  const ENC_KEY = randomBytes(32).toString('base64');
+
+  it('does NOT store the plaintext key in the KV blob, and round-trips it back on exchange', async () => {
+    const store = new InMemoryCliAuthorizeStore();
+    const svc = new CliAuthorizeService({
+      store,
+      dashboardOrigin: 'https://app.driftstack.dev',
+      secretEncryptionKeyBase64: ENC_KEY,
+    });
+    const { code } = await svc.initiate({ state: STATE });
+    await svc.bind({
+      code,
+      state: STATE,
+      account_id: 'acc_enc',
+      api_key_plaintext: 'ds_live_secret_at_rest',
+      scopes: ['read'],
+    });
+    // The blob that actually sits in Redis must not contain the plaintext.
+    const rawStored = await store.get(`cli-auth:code:${code}`);
+    expect(rawStored).not.toBeNull();
+    expect(rawStored ?? '').not.toContain('ds_live_secret_at_rest');
+    expect(rawStored ?? '').toContain('"encrypted":true');
+    // Exchange decrypts and hands back the original plaintext.
+    const ex = await svc.exchange({ code, state: STATE });
+    expect(ex.status).toBe('bound');
+    if (ex.status === 'bound') expect(ex.api_key).toBe('ds_live_secret_at_rest');
+  });
+
+  it('falls back to plaintext storage when no encryption key is configured (availability-first)', async () => {
+    const store = new InMemoryCliAuthorizeStore();
+    const svc = new CliAuthorizeService({ store, dashboardOrigin: 'https://app.driftstack.dev' });
+    const { code } = await svc.initiate({ state: STATE });
+    await svc.bind({
+      code,
+      state: STATE,
+      account_id: 'acc_plain',
+      api_key_plaintext: 'ds_live_plain_fallback',
+      scopes: ['read'],
+    });
+    const rawStored = await store.get(`cli-auth:code:${code}`);
+    expect(rawStored ?? '').toContain('"encrypted":false');
+    const ex = await svc.exchange({ code, state: STATE });
+    if (ex.status === 'bound') expect(ex.api_key).toBe('ds_live_plain_fallback');
+  });
+});
+
+describe('V-266 C2 — atomic one-shot exchange (no double-delivery under concurrency)', () => {
+  it('two overlapping exchanges on one bound code deliver the key exactly once', async () => {
+    const store = new InMemoryCliAuthorizeStore();
+    const svc = new CliAuthorizeService({ store, dashboardOrigin: 'https://app.driftstack.dev' });
+    const { code } = await svc.initiate({ state: STATE });
+    await svc.bind({
+      code,
+      state: STATE,
+      account_id: 'acc_race',
+      api_key_plaintext: 'ds_live_race',
+      scopes: ['read'],
+    });
+    const [a, b] = await Promise.all([
+      svc.exchange({ code, state: STATE }),
+      svc.exchange({ code, state: STATE }),
+    ]);
+    // Exactly one poll observes 'bound'; the other loses the atomic claim
+    // and gets 'expired' — never two deliveries of the one-shot key.
+    expect([a.status, b.status].sort()).toEqual(['bound', 'expired']);
+    const bound = [a, b].find((r) => r.status === 'bound');
+    if (bound && bound.status === 'bound') expect(bound.api_key).toBe('ds_live_race');
   });
 });

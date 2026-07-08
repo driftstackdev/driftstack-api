@@ -33,13 +33,15 @@
 //   CliAuthorizeError 5-code union — 'invalid_code' | 'state_mismatch'
 //     | 'already_bound' | 'not_found' | 'expired'.
 //
-//   StoredCode (6-field shape): state + status + client_label
-//     (nullable) + plaintext (nullable, bound-only) + account_id
-//     (nullable, bound-only) + created_at.
+//   StoredCode (7-field shape): state + status + client_label
+//     (nullable) + secret_blob (nullable, bound-only, encrypted at rest
+//     per D1) + encrypted flag + account_id (nullable, bound-only) +
+//     created_at.
 //
 //   2 store impls — RedisStore + InMemoryCliAuthorizeStore.
 //
-//   CliAuthorizeStore 3-method interface: get + setEx + del.
+//   CliAuthorizeStore 4-method interface: get + setEx + del + getDel
+//     (atomic one-shot claim, C2).
 //
 // stays in lockstep across apps/server/src/services/cli-authorize.ts.
 
@@ -136,26 +138,27 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
 
   // ─── StoredCode 6-field shape ────────────────────────────────
 
-  it("CRITICAL StoredCode has 6 fields — state + status + client_label (nullable) + plaintext (nullable, bound-only) + account_id (nullable, bound-only) + created_at. The 6-field JSON shape is what's serialised to Redis.", () => {
+  it("CRITICAL StoredCode has 7 fields — state + status + client_label (nullable) + secret_blob (nullable, bound-only, encrypted at rest per D1) + encrypted flag + account_id (nullable, bound-only) + created_at. The JSON shape is what's serialised to Redis.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/interface StoredCode \{/);
     expect(p).toMatch(/state: string;/);
     expect(p).toMatch(/status: CliCodeStatus;/);
     expect(p).toMatch(/client_label: string \| null;/);
-    expect(p).toMatch(/Set when status='bound'\. Plaintext API key the CLI \/ GUI receives\./);
-    expect(p).toMatch(/plaintext: string \| null;/);
+    expect(p).toMatch(/secret_blob: string \| null;/);
+    expect(p).toMatch(/encrypted: boolean;/);
     expect(p).toMatch(/account_id: string \| null;/);
     expect(p).toMatch(/created_at: number;/);
   });
 
-  // ─── CliAuthorizeStore 3-method interface ────────────────────
+  // ─── CliAuthorizeStore 4-method interface ────────────────────
 
-  it('CRITICAL CliAuthorizeStore has 3 methods — get + setEx + del. The 3-method interface is the V-266 KV-store contract; tests pass InMemoryCliAuthorizeStore.', () => {
+  it('CRITICAL CliAuthorizeStore has 4 methods — get + setEx + del + getDel (atomic one-shot claim, C2). The KV-store contract; tests pass InMemoryCliAuthorizeStore.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/export interface CliAuthorizeStore \{/);
     expect(p).toMatch(/get\(key: string\): Promise<string \| null>;/);
     expect(p).toMatch(/setEx\(key: string, value: string, ttlSeconds: number\): Promise<void>;/);
     expect(p).toMatch(/del\(key: string\): Promise<void>;/);
+    expect(p).toMatch(/getDel\(key: string\): Promise<string \| null>;/);
   });
 
   // ─── 2 store impls ───────────────────────────────────────────
@@ -184,6 +187,15 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     await store.setEx('k', 'v', 60);
     expect(await store.get('k')).toBe('v');
     await store.del('k');
+    expect(await store.get('k')).toBeNull();
+  });
+
+  it('CRITICAL InMemoryCliAuthorizeStore getDel returns the value once then null — the atomic one-shot claim (C2) that stops double-delivery of a bound key.', async () => {
+    const store = new InMemoryCliAuthorizeStore();
+    await store.setEx('k', 'v', 60);
+    expect(await store.getDel('k')).toBe('v');
+    // A second claim on the same key sees null (already removed).
+    expect(await store.getDel('k')).toBeNull();
     expect(await store.get('k')).toBeNull();
   });
 
