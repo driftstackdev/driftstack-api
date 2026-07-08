@@ -134,11 +134,20 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(
       /function isApiKeyShape\(plaintext: string\): boolean \{\s*\n?\s*return plaintext\.startsWith\('ds_'\);\s*\n?\s*\}/,
     );
+    // C4 — a ds_-shaped token with no matching API-key prefix falls through
+    // to the web-session path instead of failing (chance ds_ session token).
+    expect(body).toMatch(
+      /const viaApiKey = await slowPathApiKey\(repo, plaintext, sha, cache, now, \{\s*\n?\s*fallThroughOnPrefixMiss: true,\s*\n?\s*\}\);\s*\n?\s*if \(viaApiKey !== null\) return viaApiKey;/,
+    );
   });
 
   it('slowPathApiKey: 5-failure-mode cascade (InvalidKey × 3 + RevokedKey + ExpiredKey + Forbidden suspended + deleted=InvalidKey)', () => {
     expect(body).toMatch(/const apiKey = await repo\.findApiKeyByPrefix\(prefix\);/);
-    expect(body).toMatch(/if \(!apiKey\) throw new InvalidKeyError\(\);/);
+    // C4 — prefix miss returns null (dispatcher falls through to the web
+    // session) when the caller allows it, else throws InvalidKeyError.
+    expect(body).toMatch(
+      /if \(!apiKey\) \{\s*\n?[\s\S]*?if \(opts\.fallThroughOnPrefixMiss\) return null;\s*\n?\s*throw new InvalidKeyError\(\);\s*\n?\s*\}/,
+    );
     expect(body).toMatch(/const matches = await verifyApiKey\(plaintext, apiKey\.keyHash\);/);
     expect(body).toMatch(/if \(!matches\) throw new InvalidKeyError\(\);/);
     expect(body).toMatch(/if \(apiKey\.revokedAt !== null\) throw new RevokedKeyError\(\);/);

@@ -312,10 +312,22 @@ export async function authenticate(
   //   - everything else → V-168 web session path (sha256 lookup against
   //     `web_sessions` row).
   // Both paths converge on the same AccountContext + cache write.
-  const innerSlowPath = async (): Promise<AccountContext> =>
-    isApiKeyShape(plaintext)
-      ? slowPathApiKey(repo, plaintext, sha, cache, now)
-      : slowPathWebSession(repo, plaintext, sha, cache, now, staffEmails);
+  //
+  // A web-session token is URL-safe-base64 random bytes, so ~1 in 262k of
+  // them begin with `ds_` by chance and route to the API-key path. When no
+  // API key carries that prefix we fall through to the web-session path
+  // rather than failing — otherwise that unlucky session could never
+  // authenticate (a silent, permanent session break).
+  const innerSlowPath = async (): Promise<AccountContext> => {
+    if (isApiKeyShape(plaintext)) {
+      const viaApiKey = await slowPathApiKey(repo, plaintext, sha, cache, now, {
+        fallThroughOnPrefixMiss: true,
+      });
+      if (viaApiKey !== null) return viaApiKey;
+      // ds_-shaped but no API key with this prefix — try the web session.
+    }
+    return slowPathWebSession(repo, plaintext, sha, cache, now, staffEmails);
+  };
 
   // Record the unambiguous "invalid credential" outcome in the negative
   // cache so repeats of the SAME bogus token skip the prefix lookup +
@@ -353,10 +365,20 @@ async function slowPathApiKey(
   sha: string,
   cache: AuthCache | null,
   now: Date,
-): Promise<AccountContext> {
+  opts: { fallThroughOnPrefixMiss?: boolean } = {},
+): Promise<AccountContext | null> {
   const prefix = keyPrefixFromPlaintext(plaintext);
   const apiKey = await repo.findApiKeyByPrefix(prefix);
-  if (!apiKey) throw new InvalidKeyError();
+  if (!apiKey) {
+    // No API key carries this prefix. Normally an invalid credential, but
+    // when the caller allows it we return null so the dispatcher can try
+    // the web-session path (covers a session token that begins with `ds_`
+    // by chance). A scrypt MISMATCH below still throws — that means a real
+    // key with this prefix exists and its secret is wrong, which is a bad
+    // API key, never a web-session token.
+    if (opts.fallThroughOnPrefixMiss) return null;
+    throw new InvalidKeyError();
+  }
 
   const matches = await verifyApiKey(plaintext, apiKey.keyHash);
   if (!matches) throw new InvalidKeyError();
