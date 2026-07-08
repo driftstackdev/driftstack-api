@@ -3201,6 +3201,19 @@ export function SimulatorWindow(): JSX.Element {
   // LiveSessionView already shows this overlay; the standalone Simulator (the
   // surface used daily) did not — this closes that gap with the same per-kind copy.
   const [pageError, setPageError] = useState<PageErrorInfo | null>(null);
+  // #135 — a SOFT load-stall advisory, distinct from BOTH the W2845 renderer-freeze
+  // badge (pageStalled → "page unresponsive") and the W616 hard nav-failure overlay
+  // (pageError → "Page failed to load"). A3's nav-stall timer (box 5eeaf794a) emits a
+  // page_state{state:'stalled', error:{kind:'timeout', message}} when a main-frame nav
+  // hasn't committed/finished within ~40s: the page is STILL TRYING, just slow — NOT a
+  // freeze and NOT a terminal error. We surface a gentle "taking longer than usual —
+  // Retry" banner (the founder's "it just stops loading, stays on the same site" report),
+  // and per A3's contract a later 'loaded' clears it while an 'errored' upgrades it to the
+  // hard overlay. The timeout `error.kind` is what distinguishes it from the freeze stall
+  // (which carries no error), so the two don't collide on the shared 'stalled' state.
+  const [pageLoadStalled, setPageLoadStalled] = useState<{ url: string; message: string } | null>(
+    null,
+  );
   // #72 — has the CURRENT navigation already reached a painted 'loaded' state? The box
   // emits page_state{state:'errored'} for a navigation failure, but a LATE 'errored'
   // frame that arrives AFTER the page already loaded+painted is a SUB-RESOURCE / late
@@ -3400,6 +3413,7 @@ export function SimulatorWindow(): JSX.Element {
   const resetPageChromeForSwitch = useCallback((): void => {
     setPageError(null);
     setPageStalled(false);
+    setPageLoadStalled(null); // #135 — don't bleed a load-stall advisory across tabs
     setPageLoading(false);
     setLoadProgress(null);
     // #72 — a switched-to / freshly-opened tab is a new navigation; until IT reaches
@@ -3640,15 +3654,26 @@ export function SimulatorWindow(): JSX.Element {
           // live push for the page it's actually showing.
           writeTabPageState({ tabId: msg.tabId, url: msg.url, title: msg.title }, true);
         }
-        // A3 W2845 — a 'stalled' frame surfaces the frozen-renderer badge; any
+        // #135 — a page_state{state:'stalled'} is OVERLOADED: A3's NAV-stall timer
+        // (box 5eeaf794a) tags a slow-LOAD stall with error.kind==='timeout', while the
+        // W2845 renderer-FREEZE stall carries no error. Split them: the timeout variant
+        // is the soft "taking longer to load — Retry" advisory (pageLoadStalled, handled
+        // once navTargetOk is known below), NOT the "page unresponsive" freeze badge.
+        const stallErr =
+          typeof msg.error === 'object' && msg.error !== null
+            ? (msg.error as { kind?: string; message?: string })
+            : null;
+        const isLoadTimeoutStall = msg.state === 'stalled' && stallErr?.kind === 'timeout';
+        // A3 W2845 — a FREEZE 'stalled' frame surfaces the frozen-renderer badge; any
         // other harness state clears it (the page is responsive again). #4 —
         // applyStalledState stamps the frame time so the TTL sweep can self-clear a
-        // stale latch (the store re-applies a one-time stall forever otherwise).
+        // stale latch (the store re-applies a one-time stall forever otherwise). The
+        // load-timeout stall is EXCLUDED here (it is not a freeze) → no "unresponsive".
         if (isHarnessState) {
           // Stamp the live-source time FIRST so a near-simultaneous poll defers to this
           // authoritative frame (the poll's un-TTL'd store can lag behind a recovery).
           lastDataChannelStateAtRef.current = Date.now();
-          applyStalledState(msg.state === 'stalled');
+          applyStalledState(msg.state === 'stalled' && !isLoadTimeoutStall);
         }
         // #72 + #135 — track when the CURRENT navigation reaches 'loaded'. navTargetOk
         // gates on the frame's url matching the current nav target so a STALE 'loaded'
@@ -3682,6 +3707,24 @@ export function SimulatorWindow(): JSX.Element {
             // through the proxy, OR a late post-load sub-resource error (#72) → clear/
             // never show the hard error (keep the page that already opened).
             setPageError(null);
+          }
+        }
+        // #135 — the soft load-stall advisory (A3's timeout-tagged 'stalled'). Show it
+        // ONLY for the CURRENT nav target that has not yet painted 'loaded' (a late stall
+        // after load, or one for a page already left, is ignored). ANY other harness state
+        // — a real 'loaded'/'errored'/fresh 'loading', or the freeze stall — supersedes it,
+        // matching A3's "a later loaded clears it, errored upgrades it" contract.
+        if (isHarnessState) {
+          if (isLoadTimeoutStall && navTargetOk && !pageReachedLoadedRef.current) {
+            setPageLoadStalled({
+              url: typeof msg.url === 'string' ? msg.url : '',
+              message:
+                typeof stallErr?.message === 'string' && stallErr.message.length > 0
+                  ? stallErr.message
+                  : 'This page is taking longer than usual to load.',
+            });
+          } else {
+            setPageLoadStalled(null);
           }
         }
         // #135 — the box committing to a 'loading' of a url IS the current nav target
@@ -4458,6 +4501,7 @@ export function SimulatorWindow(): JSX.Element {
     // per-session reset so a previous session's "stalled" overlay can't persist
     // over a NEW session's live frame after an in-place session swap.
     setPageStalled(false);
+    setPageLoadStalled(null); // #135 — drop a prior session's load-stall advisory too
     // Clear any page-navigation error so a prior session's error overlay can't
     // persist over the new session's first frame (mirrors the pageStalled reset).
     setPageError(null);
@@ -5184,6 +5228,9 @@ export function SimulatorWindow(): JSX.Element {
     // An operator navigate optimistically clears the frozen-renderer badge — the
     // page is being driven again; the box re-asserts 'stalled' if it's still frozen.
     setPageStalled(false);
+    // #135 — same for the load-stall advisory: a fresh navigate (incl. our own Retry)
+    // supersedes it; the box re-emits the timeout stall if THIS load also runs long.
+    setPageLoadStalled(null);
     // W616 — a fresh navigate clears any stale page-error overlay; the box
     // re-asserts 'errored' if THIS navigation also fails.
     setPageError(null);
@@ -5507,6 +5554,32 @@ export function SimulatorWindow(): JSX.Element {
                         Try again
                       </button>
                     )}
+                  </div>
+                )}
+                {/* #135 — SOFT load-stall advisory (A3 box 5eeaf794a: a main-frame nav
+                  that hasn't finished in ~40s). NON-blocking — the page is still trying,
+                  so a gentle top banner with a Retry, NOT the full-screen "failed" overlay.
+                  Suppressed while the hard error overlay is up (an 'errored' frame
+                  supersedes the advisory); a later 'loaded'/navigate clears it. Directly
+                  answers the founder's "it just stops loading, stays on the same site." */}
+                {pageLoadStalled !== null && pageError === null && (
+                  <div
+                    role="status"
+                    data-component="page-load-stalled-banner"
+                    className="absolute left-1/2 top-20 z-20 flex max-w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2.5 rounded-lg bg-black/85 px-3.5 py-2 text-[12px] font-medium leading-snug text-white shadow-lg ring-1 ring-amber-400/40 backdrop-blur"
+                  >
+                    <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
+                    <span className="min-w-0">{pageLoadStalled.message}</span>
+                    <button
+                      type="button"
+                      data-action="retry-stalled-navigate"
+                      onClick={() =>
+                        onNavigate(pageLoadStalled.url !== '' ? pageLoadStalled.url : liveUrl)
+                      }
+                      className="ml-1 shrink-0 rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-white/20"
+                    >
+                      Retry
+                    </button>
                   </div>
                 )}
                 {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC
