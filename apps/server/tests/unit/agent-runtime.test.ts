@@ -710,6 +710,82 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
       expect(second.executor.ok).toBe(true);
     }
   });
+
+  it('#130 — approving a halted consequential action RESUMES the reviewed plan (no re-decompose ⇒ no double-charge, no drift)', async () => {
+    // Count decompose() calls: the fix must run the LLM decompose EXACTLY ONCE
+    // across the halt + approval. A 2nd call on the approval turn would (a) charge a
+    // 2nd flat $0.10 bundled row (the cost row is gated on a decompose producing
+    // usage) + burn 2x the token budget for ONE task, and (b) risk the
+    // non-deterministic re-plan drifting from the plan the customer actually reviewed.
+    const calls = { n: 0 };
+    const decomposer = {
+      decompose: (_args: DecomposeArgs) => {
+        calls.n += 1;
+        return Promise.resolve({
+          kind: 'plan' as const,
+          intents: [{ kind: 'interact' as const, action: 'tap' as const, selector: 'Buy Now' }],
+          tokensConsumed: 50,
+        });
+      },
+    };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    // Turn 1: the task decomposes once → the executor halts awaiting confirmation.
+    const first = await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'buy the thing' });
+    expect(first.kind).toBe('plan-executed');
+    expect(calls.n).toBe(1);
+    // Turn 2: the approval RESUMES the stored plan from the transcript — decompose is
+    // NOT called again (calls stays 1), yet the approved action still dispatches.
+    const second = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'yes, proceed',
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'Buy Now')]),
+    });
+    expect(second.kind).toBe('plan-executed');
+    if (second.kind === 'plan-executed') {
+      expect(second.executor.awaitingConfirmation).toBeUndefined();
+      expect(second.executor.ok).toBe(true);
+    }
+    expect(calls.n).toBe(1); // the #130 fix: NO re-decompose (⇒ no 2nd charge) on approval
+  });
+
+  it('#130 — a fresh task carrying approvedConsequentialActions but NO prior plan falls back to a normal decompose', async () => {
+    // Guard the fallback: if approvedConsequentialActions is set but the transcript
+    // has no plan to resume (unexpected client / fresh session), we must NOT silently
+    // no-op — we decompose normally.
+    const calls = { n: 0 };
+    const decomposer = {
+      decompose: (_args: DecomposeArgs) => {
+        calls.n += 1;
+        return Promise.resolve({
+          kind: 'clarify' as const,
+          clarifyingQuestion: '?',
+          tokensConsumed: 5,
+        });
+      },
+    };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const res = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'do a thing',
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'X')]),
+    });
+    expect(res.kind).toBe('clarify');
+    expect(calls.n).toBe(1); // fell through to a real decompose (no plan to resume)
+  });
 });
 
 describe('W589 task-refusal start-gate wiring', () => {

@@ -11,7 +11,12 @@
 // a real backend. Each can be swapped (Deterministic→Claude;
 // Stub→Wired; InMemory→Drizzle) without changing the runtime.
 
-import type { AgentDecomposer, DecomposeResult, DecomposeUsage } from './agent-decomposer.js';
+import type {
+  AgentDecomposer,
+  DecomposeResult,
+  DecomposeUsage,
+  TranscriptEntry,
+} from './agent-decomposer.js';
 import type { AgentExecutor, ExecutorRunResult } from './agent-executor.js';
 import { runResultToTranscriptEntry, sanitizeTranscriptText } from './agent-executor.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from './agent-sessions.js';
@@ -203,6 +208,30 @@ const READ_INTENT_RE =
 // the read-back: the customer still gets the plan result, no overspend.
 const READBACK_MIN_BUDGET_TOKENS = 6_000;
 
+// #130 — reconstruct the plan the customer is APPROVING from the transcript so a
+// consequential-approval turn re-runs the reviewed plan instead of re-decomposing.
+// Re-decomposing on approval would (a) charge a SECOND flat $0.10 bundled row + burn
+// 2x the token budget for ONE logical task, and (b) let the non-deterministic re-plan
+// DRIFT from what the customer reviewed (a same-phrase/different-target action could
+// be greenlit without re-review — the known v1.1 gate limitation, now live-reachable).
+// Plan turns persist their structured `intents` on the transcript entry (see the
+// plan-path `planEntry`), and the just-appended approval user-turn carries none, so
+// the LAST entry with non-empty `intents` is exactly the halted plan. Returned as a
+// plan-kind result with tokensConsumed 0 and NO usage, so the runtime writes no cost
+// row + no token debit (the resume is free). Returns null when there is no prior plan
+// (fresh session / corrupt transcript) → the caller falls back to a normal decompose.
+function reconstructHaltedPlan(
+  transcript: ReadonlyArray<TranscriptEntry>,
+): Extract<DecomposeResult, { kind: 'plan' }> | null {
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const intents = transcript[i]?.intents;
+    if (intents !== undefined && intents.length > 0) {
+      return { kind: 'plan', intents, tokensConsumed: 0 };
+    }
+  }
+  return null;
+}
+
 function delay(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve) => {
@@ -349,8 +378,21 @@ export class AgentRuntime {
     // existing `refuse` path. Empty/omitted patterns ⇒ no-op (allows all), so
     // this is inert until the founder/AUP curated list is supplied as data.
     const refusal = screenTaskForRefusal(args.userMessage, this.deps.refusalPatterns ?? []);
+    // #130 — consequential-approval RESUME (see reconstructHaltedPlan). When the
+    // customer approves a halted consequential action the gui-client re-sends the same
+    // message WITH the approved signatures; re-running the LLM decompose here would
+    // double-charge the flat bundled row + burn 2x budget for ONE task AND risk the
+    // re-plan drifting from what was reviewed. Instead re-run the reviewed plan from
+    // the transcript. No LLM call ⇒ no usage row (skips the charge) ⇒ no drift. Falls
+    // back to a normal decompose when there is no prior plan to resume.
+    const resumePlan =
+      args.approvedConsequentialActions !== undefined && args.approvedConsequentialActions.size > 0
+        ? reconstructHaltedPlan(sessionWithUser.transcript)
+        : null;
     let decomposed: DecomposeResult;
-    if (refusal.refuse) {
+    if (resumePlan !== null) {
+      decomposed = resumePlan;
+    } else if (refusal.refuse) {
       // (the canonical decompose-total metric is bumped once below, labelled
       // result_kind:'refuse' — no separate inc here to avoid double-counting.)
       decomposed = {
@@ -439,11 +481,14 @@ export class AgentRuntime {
     // Arc 7 obs.3 — bump the driftstack_agent_decompose_total counter
     // labelled by result-kind. Best-effort: a stray bug here must not
     // break the turn. (See METRIC_NAMES.agentDecomposeTotal for the
-    // catalog entry.)
-    try {
-      this.deps.metrics?.inc(METRIC_NAMES.agentDecomposeTotal, { result_kind: decomposed.kind });
-    } catch {
-      // Swallow; metrics are best-effort.
+    // catalog entry.) #130 — skip on a consequential-approval RESUME: no
+    // decompose() ran, so counting it would inflate the plan bucket.
+    if (resumePlan === null) {
+      try {
+        this.deps.metrics?.inc(METRIC_NAMES.agentDecomposeTotal, { result_kind: decomposed.kind });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
     }
 
     // Q.3 — atomic session close on budget exhaustion. Two paths trip:
