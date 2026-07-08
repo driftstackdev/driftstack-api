@@ -44,7 +44,7 @@
 
 import { useEffect, useRef } from 'react';
 import { type CanonicalModifier } from '@driftstack/sdk';
-import { sendInputEvent, type InputEvent, type Room } from './livekit';
+import { sendInputEvent, RoomEvent, type InputEvent, type Room } from './livekit';
 
 export interface UseInputCaptureOpts {
   /** The LiveKit room — null when not connected. Capture is a
@@ -376,6 +376,30 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     const logical = { width: logicalW, height: logicalH };
 
     let warnedPublishFailure = false;
+
+    // Reliable-channel BACKPRESSURE guard (founder 2026-07-08: "fast scrolling/
+    // tapping → then it becomes unresponsive"). livekit's publishData does NOT drop
+    // on the reliable DataChannel — it BLOCKS (`waitForBufferStatusLow`) once the
+    // channel's bufferedAmount exceeds ~64KB. On a slow/lossy link (the founder's
+    // ~620ms-RTT proxy) the ORDERED reliable channel stalls under packet loss, and
+    // since taps, scroll re-centre/reversal legs, `navigate` and `activateTab` ALL
+    // ride it, they queue head-of-line: input goes dead, then replays in a jarring
+    // flurry when the link recovers (and a delayed touchEnd strands a finger "down",
+    // freezing the page). We watch the reliable buffer status and, WHILE CONGESTED,
+    // shed the high-frequency SCROLL flood at its source (see onWheel) so the backlog
+    // DRAINS instead of growing — a stale mid-scroll position is worthless to replay.
+    // On a healthy link this flag never leaves `false` (livekit only emits on a
+    // threshold crossing, and it starts "low"), so behavior is byte-identical to
+    // before; it only changes the actual failure case.
+    let reliableCongested = false;
+    const onDCBufferStatus = (isLow: boolean, kind: number): void => {
+      // DataChannelKind.RELIABLE === 0 (livekit-client internal enum, stable). The
+      // lossy channel already self-drops under congestion, so we gate only on
+      // reliable; if livekit ever renumbered the enum the flag simply never trips and
+      // we degrade safely to the prior (no-backpressure) behavior.
+      if (kind === 0) reliableCongested = !isLow;
+    };
+
     const send = (event: InputEvent, reliable: boolean): void => {
       lastSend.current = sendInputEvent(room, event, { reliable }).catch((err: unknown) => {
         // Swallow per-event (a rejected move must not throw into the UI), but
@@ -861,6 +885,16 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // it releases, so a click-drag + trackpad scroll can't put a SECOND concurrent
       // touch on the wire (the device reads two touchIds as a pinch/multi-touch).
       if (active.current !== null) return;
+      // BACKPRESSURE shed (see reliableCongested): while the reliable channel is
+      // backed up, DROP incoming wheel events so we don't pile seconds of stale
+      // scroll onto a stalled ORDERED channel — that backlog is exactly what makes
+      // taps + navigation go unresponsive, and it replays in a jarring flurry once
+      // the link recovers. Dropping mid-stall scroll is harmless: the video is frozen
+      // during the stall anyway, and this self-heals the instant the buffer drains
+      // (the flag clears on the next DCBufferStatusChanged). An in-flight wheelDrag is
+      // lifted cleanly by its WHEEL_IDLE_MS idle-end touchEnd (one essential message),
+      // so no finger is left pressed.
+      if (reliableCongested) return;
       const p = pointerToViewport(e, video, logical);
       if (p === null) return;
       wheelCursorX = clampX(p.x);
@@ -941,6 +975,15 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
 
     video.addEventListener('mousedown', onMouseDown);
     video.addEventListener('wheel', onWheel, { passive: true });
+    // Track reliable-channel congestion so the wheel path can shed the scroll flood
+    // while the link is backed up (see reliableCongested). Guarded: a stubbed Room in
+    // unit tests has no `.on`, and it's absent-safe (the flag just stays false).
+    if (typeof (room as unknown as { on?: unknown }).on === 'function') {
+      (room as { on: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).on(
+        RoomEvent.DCBufferStatusChanged,
+        onDCBufferStatus,
+      );
+    }
     // Move + release on WINDOW, not just the video: the streamed phone is small
     // (~330px wide), so a drag easily wanders off it. onMouseMove no-ops unless a
     // gesture is active, so a window listener keeps a drag scrolling once it leaves
@@ -968,6 +1011,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     return () => {
       video.removeEventListener('mousedown', onMouseDown);
       video.removeEventListener('wheel', onWheel);
+      if (typeof (room as unknown as { off?: unknown }).off === 'function') {
+        (room as { off: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).off(
+          RoomEvent.DCBufferStatusChanged,
+          onDCBufferStatus,
+        );
+      }
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', finishGesture);
       window.removeEventListener('pointerup', finishGesture);
