@@ -123,7 +123,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('login: 4-failure-mode cascade (invalid_credentials × 2 + account_suspended + email_not_verified) + V-353d branch returns mfa_required with challenge_token', () => {
     expect(body).toMatch(
-      /if \(account === null \|\| account\.passwordHash === null\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
+      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
     );
     expect(body).toMatch(
       /if \(account\.status !== 'active'\) \{\s*\n?\s*throw new AuthFlowError\('account_suspended'\);/,
@@ -148,9 +148,11 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
   // AFTER the real verifyPassword (authenticate before authorize), so a
   // wrong-password probe can't distinguish account state by error or timing.
   it('login is timing-safe against user enumeration (dummy-verify on no-account + authenticate-before-state-check)', () => {
-    // (1) throwaway scrypt verify on the no-account / null-password branch.
+    // (1) throwaway scrypt verify on the no-account / password-less branch —
+    // null AND the empty-string OAuth sentinel (C3), else an IdP-only account
+    // returns fast and is enumerable.
     expect(body).toMatch(
-      /if \(account === null \|\| account\.passwordHash === null\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
+      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
     );
     // dummyPasswordHash lazily computes one fixed scrypt hash, then reuses it.
     expect(body).toMatch(/dummyPasswordHashPromise \?\?= hashPassword\(/);

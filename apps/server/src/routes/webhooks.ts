@@ -252,11 +252,15 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const deliveryId = uuidFromPrefixedId(request.params.deliveryId, 'wdl');
-      // S32 2026-07-07 (fable-frontend-audit) — honour team act-as like every other
-      // delivery surface on this page.
-      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      // S32 2026-07-07 honoured team act-as here, but replay RE-FIRES the
+      // delivery — a write — so it takes the same admin-only-on-team gate as
+      // create/update/delete/rotate (effectiveAccountIdForWrite throws for a
+      // member role), NOT the read-only act-as of listDeliveries. Without it a
+      // non-admin team member could replay the owner's deliveries. (Fable
+      // audit-2 2026-07-08, C5.)
+      const eff = effectiveAccountIdForWrite(request, ctx);
       const updated = await service.replayDeliveryAsCustomer(ctx, deliveryId, {
-        ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
+        ...(eff !== undefined ? { effectiveAccountId: eff } : {}),
       });
       return reply.code(200).send(publicDelivery(updated));
     },

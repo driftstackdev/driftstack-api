@@ -23,6 +23,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleCryptoOrdersRepo } from '../../src/db/crypto-orders-repo.js';
+import type { CryptoOrder } from '../../src/services/crypto-orders.js';
 import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -102,6 +103,62 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
       // Only the 3 pending-and-old orders, oldest createdAt first.
       expect(ours.map((r) => r.order_id)).toEqual([oldA, oldB, oldC]);
+    });
+  },
+);
+
+// Fable audit-2 2026-07-08 (C6) — the idempotency_key unique index is PARTIAL
+// (WHERE idempotency_key IS NOT NULL). insertWithIdempotencyKey's ON CONFLICT
+// must carry that same predicate or real Postgres raises 42P10 and EVERY
+// idempotent crypto checkout 500s. This only reproduces against real Postgres
+// (pglite/in-memory twins don't enforce partial-index arbiter matching), so it
+// lives in the real-PG integration block alongside the sweep test.
+describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+  'DrizzleCryptoOrdersRepo.insertWithIdempotencyKey (partial-index ON CONFLICT against real Postgres — C6)',
+  () => {
+    function makeOrder(orderId: string): CryptoOrder {
+      const now = Date.UTC(2026, 0, 1, 12, 0, 0);
+      return {
+        order_id: orderId,
+        account_id: null,
+        product: 'solo_manual',
+        price_cents: 7900,
+        price_currency: 'EUR',
+        payment_id: null,
+        pay_amount: null,
+        pay_currency: null,
+        status: 'pending',
+        customer_note: null,
+        internal_note: null,
+        events: [],
+        created_at: now,
+        updated_at: now,
+      };
+    }
+
+    it('inserts with an Idempotency-Key without a 42P10, then replays the SAME stored order on a same-key retry', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleCryptoOrdersRepo({ client, db, close: async () => {} });
+
+      const prefix = `idem_${randomUUID().slice(0, 8)}_`;
+      seededPrefixes.push(prefix);
+      const key = `${prefix}scoped_key`;
+
+      // Before the C6 fix this call threw 42P10 (ON CONFLICT with no predicate
+      // against the partial unique index) — a hard 500 on every keyed checkout.
+      const first = await repo.insertWithIdempotencyKey(makeOrder(`${prefix}first`), key);
+      expect(first.replayed).toBe(false);
+      expect(first.order.order_id).toBe(`${prefix}first`);
+
+      // A retry with the SAME scoped key but a fresh envelope must REPLAY the
+      // stored order (the ON CONFLICT DO NOTHING → SELECT path), never mint a
+      // second row.
+      const retry = await repo.insertWithIdempotencyKey(makeOrder(`${prefix}second`), key);
+      expect(retry.replayed).toBe(true);
+      expect(retry.order.order_id).toBe(`${prefix}first`);
     });
   },
 );

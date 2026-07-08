@@ -135,6 +135,62 @@ describe('POST /v1/webhook-deliveries/:deliveryId/replay', () => {
     expect(res.json<{ status: string }>().status).toBe('pending');
   });
 
+  // Fable audit-2 2026-07-08 (C5) — replay RE-FIRES the delivery, so it is a
+  // WRITE and takes the admin-only-on-team gate (same as create/update/delete/
+  // rotate). A non-admin member acting-as the owner must be refused, even
+  // though the delivery is team-visible to them for reads.
+  it('403 when a NON-ADMIN team member replays the owner account delivery (C5 — replay is admin-only on team)', async () => {
+    fx = await buildTestApp();
+    const OWNER_ACCOUNT_ID = '00000000-0000-4000-8000-000000000a01';
+    const MEMBERSHIP_ID = '00000000-0000-4000-8000-00000000c001';
+    const actAs = { 'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}` };
+
+    // Set up the owner's endpoint + a delivery as an ADMIN member first
+    // (create + list are the only way to obtain a real delivery id), then
+    // downgrade the caller to a plain member for the replay attempt.
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: MEMBERSHIP_ID, ownerAccountId: OWNER_ACCOUNT_ID, role: 'admin' },
+    ]);
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}`, ...actAs },
+      payload: {
+        url: 'https://example.test/owner-webhook',
+        events: ['session.completed'],
+        description: 'owner endpoint',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const endpointId = created.json<{ id: string }>().id;
+    await fx.webhooksService.enqueueEvent(OWNER_ACCOUNT_ID, 'session.completed', {
+      id: 'ses_owner',
+      status: 'completed',
+    });
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/${endpointId}/deliveries`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, ...actAs },
+    });
+    expect(list.statusCode).toBe(200);
+    const deliveryId = list.json<{ data: { id: string }[] }>().data[0]!.id;
+
+    // Downgrade the caller to a NON-admin member and invalidate the auth cache
+    // (memberships ride the cached AccountContext, like tier).
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: MEMBERSHIP_ID, ownerAccountId: OWNER_ACCOUNT_ID, role: 'member' },
+    ]);
+    await fx.authCache.invalidateAccount(fx.accountId);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhook-deliveries/${deliveryId}/replay`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}`, ...actAs },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('admin role');
+  });
+
   it('404 when delivery does not exist', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

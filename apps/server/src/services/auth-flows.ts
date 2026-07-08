@@ -771,7 +771,13 @@ export class AuthFlowsService {
     // user-enumeration side-channel (CWE-208). A non-existent / password-less
     // account runs a throwaway scrypt verify against a dummy hash so it can't
     // be told apart from a real wrong-password attempt by latency.
-    if (account === null || account.passwordHash === null) {
+    // Fable audit-2 2026-07-08 (C3) — OAuth/IdP-created accounts carry the
+    // EMPTY-STRING password sentinel (createFromIdp writes passwordHash: ''),
+    // not null. verifyPassword('') fails FAST in its catch (unparseable hash,
+    // zero scrypt work), so without the '' check here an OAuth-only account
+    // returns ~instantly while a real password account takes ~scrypt-time —
+    // re-opening the exact enumeration channel this branch exists to close.
+    if (account === null || account.passwordHash === null || account.passwordHash === '') {
       await verifyPassword(args.password, await dummyPasswordHash());
       throw new AuthFlowError('invalid_credentials');
     }

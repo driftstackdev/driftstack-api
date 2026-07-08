@@ -121,7 +121,17 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
         createdAt: new Date(order.created_at),
         updatedAt: new Date(order.updated_at),
       })
-      .onConflictDoNothing({ target: cryptoOrders.idempotencyKey })
+      // The unique index on idempotency_key is PARTIAL (WHERE idempotency_key
+      // IS NOT NULL — see schema.ts crypto_orders_idempotency_key_unique), so
+      // Postgres only matches this ON CONFLICT when the arbiter carries the
+      // SAME predicate. Without the `where`, real Postgres raises 42P10 ("no
+      // unique or exclusion constraint matching the ON CONFLICT specification")
+      // and every idempotent crypto checkout 500s. (Fable audit-2 2026-07-08,
+      // C6 — invisible to the pglite/in-memory tests, only real PG enforces it.)
+      .onConflictDoNothing({
+        target: cryptoOrders.idempotencyKey,
+        where: sql`${cryptoOrders.idempotencyKey} IS NOT NULL`,
+      })
       .returning();
     if (inserted[0] !== undefined) {
       return { order: rowToEnvelope(inserted[0]), replayed: false };
