@@ -8,9 +8,18 @@ import { DevLogPanel } from './components/DevLogPanel';
 import { installLogCapture } from './lib/log-buffer';
 import './styles/index.css';
 
+// The floating-iPhone simulator opens as a separate Tauri window pointed at
+// `?window=simulator` (bare device, no app chrome). Computed up front so the log
+// mirror is per-window from the very first line (#137).
+const isSimulatorWindow =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('window') === 'simulator';
+
 // GUI W232 item (d) — capture console.* + uncaught errors into the in-app dev
 // log buffer from the very first line, so startup logs are retained. Idempotent.
-installLogCapture();
+// #137 — the simulator mirrors to its OWN dev-log-simulator.txt so a simulator
+// self-close leaves a crash trail the main window can't overwrite.
+installLogCapture(isSimulatorWindow ? '-simulator' : '');
 
 // ── Fail-visible bootstrap (architectural: the app must NEVER silently
 // fail to open). Any startup, render, or async error renders a VISIBLE,
@@ -113,7 +122,8 @@ try {
   if (!root) throw new Error('#root element missing from index.html');
   // The floating-iPhone simulator opens as a separate Tauri window pointed at
   // `?window=simulator` — that window renders ONLY the device (no app chrome).
-  const isSimulator = new URLSearchParams(window.location.search).get('window') === 'simulator';
+  // Reuses the value computed up front for the per-window log mirror (#137).
+  const isSimulator = isSimulatorWindow;
   if (isSimulator) {
     // The window is `transparent: true` — make the webview see-through so only
     // the device frame paints (the body otherwise fills it with bg-surface-base).

@@ -72,10 +72,13 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     );
   });
 
-  it('Dev-log capture wired (GUI W232 d): imports installLogCapture + DevLogPanel, calls installLogCapture() at module top (so startup logs are retained), renders <DevLogPanel /> — pinned so the in-app log view + console/error capture cannot silently regress', () => {
+  it('Dev-log capture wired (GUI W232 d): imports installLogCapture + DevLogPanel, calls installLogCapture at module top (so startup logs are retained) with a PER-WINDOW file tag so the simulator crash trail cannot clobber the main window (#137), renders <DevLogPanel /> — pinned so the in-app log view + console/error capture cannot silently regress', () => {
     expect(body).toMatch(/import \{ DevLogPanel \} from '\.\/components\/DevLogPanel';/);
     expect(body).toMatch(/import \{ installLogCapture \} from '\.\/lib\/log-buffer';/);
-    expect(body).toMatch(/installLogCapture\(\);/);
+    // #137 — the simulator window mirrors to its own dev-log-simulator.txt so a
+    // self-close leaves a crash trail the main window can't overwrite. Pin the
+    // per-window tag call so this can't silently regress back to a shared file.
+    expect(body).toMatch(/installLogCapture\(isSimulatorWindow \? '-simulator' : ''\);/);
   });
 
   it('Fail-visible architecture pinned: renderFatalError + RootErrorBoundary + global error/unhandledrejection handlers + createRoot try/catch + the four error codes — pinned so no drift can re-introduce a silent blank/flicker on a startup, render, or async failure', () => {

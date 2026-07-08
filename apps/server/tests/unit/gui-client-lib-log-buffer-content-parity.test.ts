@@ -41,20 +41,28 @@ describe('gui-client lib/log-buffer content parity', () => {
     expect(body).toMatch(/window\.addEventListener\('unhandledrejection',/);
   });
 
-  it('Best-effort file mirror (the release-paint diagnostic): writes the buffer to the IN-SCOPE recordings/dev-log.txt under AppData, debounced ≤1/s, wrapped so a missing fs scope / non-Tauri context can never break logging — pinned so the on-disk copy stays available when the WKWebView runs but does not composite (b)', () => {
+  it('Best-effort file mirror (the release-paint diagnostic): writes the buffer to the IN-SCOPE recordings/dev-log.txt under AppData (per-window default), debounced ≤1/s for non-errors but flushed immediately on an ERROR, wrapped so a missing fs scope / non-Tauri context can never break logging — pinned so the on-disk copy stays available when the WKWebView runs but does not composite (b) + the crash trail cannot be lost in the debounce window (#137)', () => {
     expect(body).toMatch(
       /import \{ BaseDirectory, mkdir, writeTextFile \} from '@tauri-apps\/plugin-fs';/,
     );
-    // Path must stay inside the granted fs:scope ($APPDATA/recordings/**).
-    expect(body).toMatch(/const LOG_FILE = 'recordings\/dev-log\.txt';/);
+    // Path must stay inside the granted fs:scope ($APPDATA/recordings/**). The
+    // default is dev-log.txt; installLogCapture(fileTag) can point a window (the
+    // simulator) at its own file, so the binding is a `let` not a `const` (#137).
+    expect(body).toMatch(/let logFile = 'recordings\/dev-log\.txt';/);
+    expect(body).toMatch(/logFile = `recordings\/dev-log\$\{fileTag\}\.txt`;/);
     expect(body).toMatch(
-      /await writeTextFile\(LOG_FILE, formatLogEntries\(\) \+ '\\n', \{ baseDir: BaseDirectory\.AppData \}\);/,
+      /await writeTextFile\(logFile, formatLogEntries\(\) \+ '\\n', \{ baseDir: BaseDirectory\.AppData \}\);/,
     );
     // Best-effort: persistNow must swallow all errors (no throw can escape).
     expect(body).toMatch(/async function persistNow\(\): Promise<void> \{\s*\n?\s*try \{/);
     // Debounced: at most one write per second.
     expect(body).toMatch(/if \(persistTimer !== null\) return;/);
     expect(body).toMatch(/\}, 1000\);/);
+    // #137 — an ERROR flushes immediately (cancelling any pending debounce) so the
+    // last log before a crash reaches disk; non-errors stay debounced. Pinned so
+    // the crash trail can't silently regress to a debounced-only write.
+    expect(body).toMatch(/if \(level === 'error'\) \{/);
+    expect(body).toMatch(/void persistNow\(\);/);
   });
 
   it('Public surface pinned: record / getLogEntries / clearLogEntries / subscribeLogs / formatLogEntries / installLogCapture', () => {

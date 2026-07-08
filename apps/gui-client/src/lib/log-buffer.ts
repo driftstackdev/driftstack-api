@@ -32,7 +32,13 @@ const MAX_ENTRIES = 500;
 // in-app panel can't be seen, but the operator can still read this file. The
 // path is the proven recordings fs pattern. Best-effort throughout.
 const LOG_DIR = 'recordings';
-const LOG_FILE = 'recordings/dev-log.txt';
+// #137 — the mirror file is per-WINDOW: the floating simulator opens as its own
+// Tauri webview (a separate JS context with its OWN log buffer), and if it wrote
+// to the same dev-log.txt as the main window each would clobber the other's full-
+// buffer overwrite — so a simulator self-close could lose its crash trail under
+// the main window's next write. installLogCapture(fileTag) points the simulator
+// at dev-log-simulator.txt so each window's log survives independently.
+let logFile = 'recordings/dev-log.txt';
 
 const entries: LogEntry[] = [];
 let nextId = 1;
@@ -47,7 +53,7 @@ async function persistNow(): Promise<void> {
       await mkdir(LOG_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
       dirEnsured = true;
     }
-    await writeTextFile(LOG_FILE, formatLogEntries() + '\n', { baseDir: BaseDirectory.AppData });
+    await writeTextFile(logFile, formatLogEntries() + '\n', { baseDir: BaseDirectory.AppData });
   } catch {
     // Best-effort: a missing fs permission / scope, or a non-Tauri context,
     // must NEVER break logging or the app. The in-memory buffer + panel still
@@ -82,7 +88,20 @@ export function record(level: LogLevel, args: readonly unknown[]): void {
   entries.push({ id: nextId++, ts: Date.now(), level, text });
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
   for (const fn of listeners) fn();
-  schedulePersist();
+  // #137 — flush an ERROR to disk IMMEDIATELY rather than on the 1s debounce: the
+  // whole point of the mirror is the crash case, and if the WKWebView dies (or the
+  // window self-closes) inside that 1s window the last error — the one naming why —
+  // never reaches the file. Cancel any pending debounced write first so the forced
+  // flush doesn't race a duplicate. Non-error entries stay debounced (coalesced).
+  if (level === 'error') {
+    if (persistTimer !== null) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+    void persistNow();
+  } else {
+    schedulePersist();
+  }
 }
 
 /** Snapshot of the current entries (oldest → newest). */
@@ -112,10 +131,14 @@ export function formatLogEntries(): string {
 }
 
 /** Patch console.* + window error listeners to mirror into the buffer.
- *  Idempotent; the original console behaviour is preserved. Call once, early. */
-export function installLogCapture(): void {
+ *  Idempotent; the original console behaviour is preserved. Call once, early.
+ *  `fileTag` (#137) suffixes the on-disk mirror so each Tauri window keeps its own
+ *  crash trail — the simulator passes '-simulator' (→ dev-log-simulator.txt) so it
+ *  never clobbers, or is clobbered by, the main window's dev-log.txt. */
+export function installLogCapture(fileTag = ''): void {
   if (installed) return;
   installed = true;
+  if (fileTag !== '') logFile = `recordings/dev-log${fileTag}.txt`;
 
   const levels: LogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
   for (const level of levels) {
