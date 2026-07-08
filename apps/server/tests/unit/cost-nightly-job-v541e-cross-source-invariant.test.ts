@@ -115,10 +115,10 @@ describe('W928 V-541.E cost-nightly-job cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL dispatcher.evaluate args — accountIds: ids + billingCycle: billingCycleFromDate(tickStart). The billing-cycle is derived from the tick wall-clock — drift would put alerts in the wrong cycle bucket.', () => {
+  it('CRITICAL dispatcher.evaluate args — accountIds: ids + billingCycle: billingCycleFromDate(cycleAnchorForTick(tickStart)). C12: the cycle is anchored to the just-ended day so a month-end run evaluates the completed cycle, not the empty new one.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cost-nightly-job.ts'));
     expect(p).toMatch(/accountIds: ids,/);
-    expect(p).toMatch(/billingCycle: billingCycleFromDate\(tickStart\),/);
+    expect(p).toMatch(/billingCycle: billingCycleFromDate\(cycleAnchorForTick\(tickStart\)\),/);
   });
 
   // ─── Info log fields ─────────────────────────────────────────

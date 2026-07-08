@@ -89,7 +89,7 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
     expect(body).toMatch(/const tickStart = new Date\(now\(\)\);/);
     expect(body).toMatch(/const ids = await opts\.accounts\.listAllAccountIds\(\);/);
     expect(body).toMatch(
-      /const result = await opts\.dispatcher\.evaluate\(\{\s*\n?\s*accountIds: ids,\s*\n?\s*billingCycle: billingCycleFromDate\(tickStart\),\s*\n?\s*\}\);/,
+      /const result = await opts\.dispatcher\.evaluate\(\{\s*\n?\s*accountIds: ids,[\s\S]*?billingCycle: billingCycleFromDate\(cycleAnchorForTick\(tickStart\)\),\s*\n?\s*\}\);/,
     );
     // W378 — log now also carries alerts_errored (+ alert_errors when >0) so a
     // per-account-isolated send failure surfaces here instead of killing the chain.

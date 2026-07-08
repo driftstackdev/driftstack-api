@@ -3,10 +3,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   COST_NIGHTLY_JOB_TYPE,
+  cycleAnchorForTick,
   enqueueNextNightlyRun,
   nextMidnightUtc,
   registerCostNightlyJob,
 } from '../../src/services/cost-nightly-job.js';
+import { billingCycleFromDate } from '../../src/services/cost-monitoring.js';
 import {
   CostAlertDispatcher,
   type AlertSink,
@@ -369,5 +371,48 @@ describe('V-541.E registerCostNightlyJob — re-arm survives an in-flight job', 
   it('re-arms a SECOND nightly job even while the current job is in-flight (zero-accounts branch)', async () => {
     const fake = await runReArmScenario([]);
     expect(fake.pendingOfType(COST_NIGHTLY_JOB_TYPE)).toBe(2);
+  });
+});
+
+describe('C12 — cycleAnchorForTick evaluates the day that just ended', () => {
+  const cycle = (iso: string): string => billingCycleFromDate(cycleAnchorForTick(new Date(iso)));
+
+  it('month rollover: a run at 00:00 on the 1st evaluates the PREVIOUS month', () => {
+    expect(cycle('2026-08-01T00:00:00.000Z')).toBe('2026-07');
+  });
+  it('a late tick minutes after midnight still evaluates the previous month on the 1st', () => {
+    expect(cycle('2026-08-01T00:07:33.000Z')).toBe('2026-07');
+  });
+  it('mid-month is unchanged (same YYYY-MM as the tick)', () => {
+    expect(cycle('2026-07-15T00:00:00.000Z')).toBe('2026-07');
+  });
+  it('year rollover Dec→Jan resolves to the previous December', () => {
+    expect(cycle('2027-01-01T00:00:00.000Z')).toBe('2026-12');
+  });
+  it('a leap-day tick stays within the same month', () => {
+    expect(cycle('2028-02-29T00:00:00.000Z')).toBe('2028-02');
+  });
+  it('the anchor is the last instant of the previous UTC day', () => {
+    expect(cycleAnchorForTick(new Date('2026-08-01T00:00:00.000Z')).toISOString()).toBe(
+      '2026-07-31T23:59:59.999Z',
+    );
+  });
+});
+
+describe('C12 — the nightly handler evaluates the just-ended cycle', () => {
+  it('a month-rollover tick passes the previous month to dispatcher.evaluate', async () => {
+    const stack = makeStack(new Map([['a', { ...EMPTY_USAGE, sessionMinutes: 10 }]]), ['a']);
+    const spy = vi.spyOn(stack.dispatcher, 'evaluate');
+    registerCostNightlyJob({
+      scheduledJobs: stack.scheduledJobs,
+      service: makeStackService(stack),
+      dispatcher: stack.dispatcher,
+      accounts: stack.accounts,
+      logger: stack.logger,
+      nowFn: () => new Date('2026-08-01T00:05:00Z').getTime(),
+    });
+    await invokeHandler(stack.scheduledJobs, COST_NIGHTLY_JOB_TYPE, FAKE_JOB);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]?.[0].billingCycle).toBe('2026-07');
   });
 });

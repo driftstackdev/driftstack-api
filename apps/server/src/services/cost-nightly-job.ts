@@ -22,6 +22,26 @@ import type { Logger } from '../lib/logger.js';
 
 export const COST_NIGHTLY_JOB_TYPE = 'cost.recompute_nightly';
 
+/**
+ * C12 — the billing cycle a nightly tick should evaluate. The nightly run
+ * fires just after midnight to recompute the day that just ended, so it must
+ * evaluate the cycle of the PREVIOUS instant, not of `tick` itself: on the
+ * 1st of a month `billingCycleFromDate(tick)` returns the just-started (empty)
+ * cycle and the previous month's LAST day is never evaluated — a threshold
+ * crossing on month-end could never alert.
+ *
+ * Anchor = the last instant of the previous UTC day (day-floor minus 1 ms).
+ * Mid-month this is the same YYYY-MM as the tick (behaviour unchanged); on the
+ * 1st it resolves to the previous month, so that run evaluates the full prior
+ * cycle including its final day. We deliberately do NOT use the tick itself
+ * (misses the last day) nor `job.runAt` (retries reschedule run_at to
+ * now+backoff, so it isn't reliably midnight).
+ */
+export function cycleAnchorForTick(tick: Date): Date {
+  const dayStartMs = Date.UTC(tick.getUTCFullYear(), tick.getUTCMonth(), tick.getUTCDate());
+  return new Date(dayStartMs - 1);
+}
+
 export interface AccountIdProvider {
   /** Return the full set of account ids to evaluate in this tick. */
   listAllAccountIds(): Promise<readonly string[]>;
@@ -58,7 +78,9 @@ export function registerCostNightlyJob(opts: RegisterCostNightlyJobOpts): void {
     }
     const result = await opts.dispatcher.evaluate({
       accountIds: ids,
-      billingCycle: billingCycleFromDate(tickStart),
+      // C12 — evaluate the cycle of the day that just ended, so a month-end
+      // threshold crossing is caught (see cycleAnchorForTick).
+      billingCycle: billingCycleFromDate(cycleAnchorForTick(tickStart)),
     });
     opts.logger.info?.(
       {
