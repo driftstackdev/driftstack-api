@@ -62,6 +62,17 @@ export interface ApiKeyRow {
   lastUsedAt: Date | null;
   revokedAt: Date | null;
   expiresAt: Date | null;
+  /**
+   * C1 — how the key was provisioned. `null`/absent = ordinary key
+   * (every pre-existing key + all dashboard/staff web sessions).
+   * `'cli_device'` = minted by the CLI/GUI device-code flow; the
+   * device-key deny-gate bars these from account-takeover operations.
+   * Optional so existing test fixtures that hand-build an ApiKeyRow keep
+   * compiling; every production row flows through toApiKeyRow, which
+   * always sets it from the DB column. A missing value is read as
+   * "ordinary key" everywhere (fail-open — never wrongly restricts).
+   */
+  provenance?: string | null;
   createdAt: Date;
 }
 
@@ -499,6 +510,9 @@ async function slowPathWebSession(
     lastUsedAt: session.lastUsedAt,
     revokedAt: session.revokedAt,
     expiresAt: session.expiresAt,
+    // C1 — web sessions are never device-provisioned, so the deny-gate
+    // never treats a dashboard/staff session as a restricted device key.
+    provenance: null,
     createdAt: session.createdAt,
   };
 

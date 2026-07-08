@@ -91,9 +91,13 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
       /app\.post\(\s*\n?\s*'\/v1\/auth\/cli-authorize\/bind',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(/const scopes = parsed\.data\.scopes \?\? DEFAULT_SCOPES;/);
+    // C1 — the minted device key is stamped provenance:'cli_device' so the
+    // deny-gate bars it from account-takeover operations.
     expect(body).toMatch(
-      /const created = await apiKeysService\.create\(ctx, \{\s*\n?\s*name: DEFAULT_KEY_NAME,\s*\n?\s*scopes,\s*\n?\s*expiresAt: null,\s*\n?\s*\}\);/,
+      /const created = await apiKeysService\.create\(ctx, \{\s*\n?\s*name: DEFAULT_KEY_NAME,\s*\n?\s*scopes,\s*\n?\s*expiresAt: null,[\s\S]*?provenance: 'cli_device',\s*\n?\s*\}\);/,
     );
+    // C1 — bind requires an interactive web session (no API-key-authed bind).
+    expect(body).toMatch(/if \(ctx\.webSession === null\) \{/);
     expect(body).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
     expect(body).toMatch(/api_key_plaintext: created\.plaintext,/);
   });
@@ -152,7 +156,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
       /import \{ CliAuthorizeError, type CliAuthorizeService \} from '\.\.\/services\/cli-authorize\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ForbiddenError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ AUTH_IP_LIMITS, ipRateLimit \} from '\.\.\/middleware\/ip-rate-limit\.js';/,

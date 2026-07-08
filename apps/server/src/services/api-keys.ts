@@ -44,6 +44,9 @@ export interface NewApiKeyInput {
   keyPrefix: string;
   keyHash: string;
   expiresAt: Date | null;
+  /** C1 — provisioning origin. Omit / null for an ordinary key;
+   *  `'cli_device'` for a CLI/GUI device-code key (deny-gated). */
+  provenance?: string | null;
 }
 
 export interface ApiKeysRepo {
@@ -75,6 +78,9 @@ export interface CreateApiKeyServiceInput {
   name: string;
   scopes: ApiKeyScope[];
   expiresAt: Date | null;
+  /** C1 — set to `'cli_device'` by the cli-authorize bind flow so the
+   *  minted key is deny-gated from account-takeover operations. */
+  provenance?: 'cli_device';
 }
 
 export interface CreatedApiKey {
@@ -117,6 +123,22 @@ export interface CustomerAuditEmitter {
   }) => Promise<unknown>;
 }
 
+/**
+ * C1 — device-provisioned keys (minted by the cli-authorize device-code
+ * flow, provenance='cli_device') are barred from the account-takeover
+ * key operations even though they carry account_owner. This is the
+ * service-level chokepoint: POST /v1/api-keys, rotate, and DELETE enforce
+ * account_owner here rather than via a requireScope preHandler, so this
+ * guard complements the central device-key deny-gate for those routes.
+ * A phished device key therefore cannot mint a fresh persistent
+ * credential that would survive revoking the device key.
+ */
+function assertNotDeviceKey(ctx: AccountContext, action: string): void {
+  if (ctx.apiKey.provenance === 'cli_device') {
+    throw new ForbiddenError(`Device-provisioned keys cannot ${action}. Use a dashboard session.`);
+  }
+}
+
 export class ApiKeysService {
   constructor(
     private readonly repo: ApiKeysRepo,
@@ -132,6 +154,7 @@ export class ApiKeysService {
     opts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {},
   ): Promise<CreatedApiKey> {
     throwIfMissingScope(ctx, 'account_owner');
+    assertNotDeviceKey(ctx, 'mint API keys');
 
     // V-174 privilege de-escalation. The account_owner gate above lets a
     // customer dashboard session mint keys, but a caller must not be able
@@ -192,6 +215,7 @@ export class ApiKeysService {
       keyPrefix,
       keyHash,
       expiresAt: input.expiresAt,
+      provenance: input.provenance ?? null,
     });
 
     // V-216 — record customer-facing audit entry. Best-effort; never
@@ -274,6 +298,7 @@ export class ApiKeysService {
     gracePeriodEndsAt: Date;
   }> {
     throwIfMissingScope(ctx, 'account_owner');
+    assertNotDeviceKey(ctx, 'rotate API keys');
 
     // V-326e6 — when team-scoped, rotate a key on the OWNER's
     // account. Route layer enforces 'admin' team role.
@@ -369,6 +394,7 @@ export class ApiKeysService {
     opts: { effectiveAccountId?: string } = {},
   ): Promise<void> {
     throwIfMissingScope(ctx, 'account_owner');
+    assertNotDeviceKey(ctx, 'revoke API keys');
 
     // V-326e6 — when team-scoped, revoke a key on the OWNER's
     // account. Route layer enforces 'admin' team role.

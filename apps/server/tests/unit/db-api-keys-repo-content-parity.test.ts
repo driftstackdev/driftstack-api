@@ -46,9 +46,9 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     expect(body).toMatch(/import \{ apiKeys \} from '\.\/schema\.js';/);
   });
 
-  it("insertApiKey: 6-field values (accountId + name + scopes + keyPrefix + keyHash + expiresAt); returning(); throws 'insertApiKey returned no row'", () => {
+  it("insertApiKey: 7-field values (accountId + name + scopes + keyPrefix + keyHash + expiresAt + provenance); returning(); throws 'insertApiKey returned no row'", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*name: input\.name,\s*\n?\s*scopes: input\.scopes,\s*\n?\s*keyPrefix: input\.keyPrefix,\s*\n?\s*keyHash: input\.keyHash,\s*\n?\s*expiresAt: input\.expiresAt,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(!row\) throw new Error\('insertApiKey returned no row'\);/,
+      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*name: input\.name,\s*\n?\s*scopes: input\.scopes,\s*\n?\s*keyPrefix: input\.keyPrefix,\s*\n?\s*keyHash: input\.keyHash,\s*\n?\s*expiresAt: input\.expiresAt,\s*\n?\s*provenance: input\.provenance \?\? null,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(!row\) throw new Error\('insertApiKey returned no row'\);/,
     );
   });
 
@@ -96,9 +96,9 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     );
   });
 
-  it('toApiKeyRow: 10-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + createdAt)', () => {
+  it('toApiKeyRow: 11-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + provenance + createdAt)', () => {
     expect(body).toMatch(
-      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*name: r\.name,\s*\n?\s*keyPrefix: r\.keyPrefix,\s*\n?\s*keyHash: r\.keyHash,\s*\n?\s*scopes: r\.scopes,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*revokedAt: r\.revokedAt,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*name: r\.name,\s*\n?\s*keyPrefix: r\.keyPrefix,\s*\n?\s*keyHash: r\.keyHash,\s*\n?\s*scopes: r\.scopes,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*revokedAt: r\.revokedAt,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*provenance: r\.provenance,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 

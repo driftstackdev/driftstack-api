@@ -50,6 +50,7 @@ function makeKey(overrides: Partial<ApiKeyRow> = {}): ApiKeyRow {
     lastUsedAt: null,
     revokedAt: null,
     expiresAt: null,
+    provenance: null,
     createdAt: new Date(),
     ...overrides,
   };
@@ -62,6 +63,18 @@ function ctxWith(
   return {
     account: makeAccount(accountOverrides),
     apiKey: makeKey({ scopes }),
+    rateLimitOverrides: {},
+    teams: [],
+  } as unknown as AccountContext;
+}
+
+/** C1 — a caller whose own key was minted by the cli-authorize device
+ *  flow (provenance='cli_device'). Even with account_owner it must be
+ *  barred from key mint/rotate/revoke at the service chokepoint. */
+function deviceCtx(scopes: ApiKeyScope[]): AccountContext {
+  return {
+    account: makeAccount(),
+    apiKey: makeKey({ scopes, provenance: 'cli_device' }),
     rateLimitOverrides: {},
     teams: [],
   } as unknown as AccountContext;
@@ -94,6 +107,7 @@ function makeRepo(initial: ApiKeyRow[] = []): {
         lastUsedAt: null,
         revokedAt: null,
         expiresAt: input.expiresAt,
+        provenance: input.provenance ?? null,
         createdAt: new Date(),
       };
       state.rows.push(row);
@@ -393,5 +407,31 @@ describe('V-553.B-20 ApiKeysService.revoke', () => {
     expect(hookCalls[0]?.eventType).toBe('api_key.revoked');
     expect(auditCalls[0]?.action).toBe('api_key.revoked');
     expect(auditCalls[0]?.targetResourceId).toBe('key_k_x');
+  });
+});
+
+describe('C1 — device-provisioned caller barred from key operations (service chokepoint)', () => {
+  it('create() rejects a cli_device caller even holding account_owner', async () => {
+    const { repo } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    await expect(
+      svc.create(deviceCtx(['account_owner']), { name: 'x', scopes: ['read'], expiresAt: null }),
+    ).rejects.toThrow(/[Dd]evice-provisioned/);
+  });
+
+  it('rotate() rejects a cli_device caller', async () => {
+    const { repo } = makeRepo([makeKey({ id: 'k_old', accountId: 'acc_1' })]);
+    const svc = new ApiKeysService(repo);
+    await expect(svc.rotate(deviceCtx(['account_owner']), 'k_old')).rejects.toThrow(
+      /[Dd]evice-provisioned/,
+    );
+  });
+
+  it('revoke() rejects a cli_device caller', async () => {
+    const { repo } = makeRepo([makeKey({ id: 'k_x', accountId: 'acc_1' })]);
+    const svc = new ApiKeysService(repo);
+    await expect(svc.revoke(deviceCtx(['account_owner']), 'k_x')).rejects.toThrow(
+      /[Dd]evice-provisioned/,
+    );
   });
 });

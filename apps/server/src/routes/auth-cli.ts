@@ -17,7 +17,7 @@ import {
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { ApiKeysService } from '../services/api-keys.js';
 import { CliAuthorizeError, type CliAuthorizeService } from '../services/cli-authorize.js';
-import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 
@@ -74,6 +74,15 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
     async (req) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      // C1 — bind must be driven by an interactive dashboard web session,
+      // never an API key. Otherwise the public /initiate + an API-key-authed
+      // /bind + /exchange is a self-mint laundering path: any key could mint
+      // a fresh key for itself, and a device key could mint a sibling that
+      // dodges its own deny-gate. The dashboard consent page authenticates
+      // /bind with the web-session bearer, so this never affects real users.
+      if (ctx.webSession === null) {
+        throw new ForbiddenError('Authorizing a device requires an interactive dashboard session.');
+      }
       const parsed = CliAuthorizeBindRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -82,6 +91,10 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
         name: DEFAULT_KEY_NAME,
         scopes,
         expiresAt: null,
+        // C1 — mark the minted key so the device-key deny-gate bars it
+        // from account-takeover operations (mint/rotate/revoke keys, MFA,
+        // team, Stripe billing, webhook writes, BYOK, web-session nuke).
+        provenance: 'cli_device',
       });
 
       try {

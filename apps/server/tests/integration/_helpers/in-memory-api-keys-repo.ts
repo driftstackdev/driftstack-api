@@ -33,6 +33,10 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
       lastUsedAt: null,
       revokedAt: null,
       expiresAt: input.expiresAt,
+      // C1 — carry provenance so a cli_device key minted through this repo
+      // authenticates (via the mirrored auth repo) with the marker set,
+      // mirroring the production api_keys column.
+      provenance: input.provenance ?? null,
       createdAt: new Date(),
     };
     this.byId.set(row.id, row);

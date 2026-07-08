@@ -84,6 +84,11 @@ interface SerializedApiKey {
   lastUsedAt: string | null;
   revokedAt: string | null;
   expiresAt: string | null;
+  /** C1 — optional. Pre-C1 cache entries lack this field; deserialize
+   *  defaults it to null (ordinary key) so a missing value fails OPEN —
+   *  a serialization miss degrades to unrestricted rather than wrongly
+   *  bricking the live client with a device-key restriction. */
+  provenance?: string | null;
   createdAt: string;
 }
 
@@ -172,6 +177,7 @@ function serialize(ctx: AccountContext): SerializedContext {
       lastUsedAt: ctx.apiKey.lastUsedAt ? ctx.apiKey.lastUsedAt.toISOString() : null,
       revokedAt: ctx.apiKey.revokedAt ? ctx.apiKey.revokedAt.toISOString() : null,
       expiresAt: ctx.apiKey.expiresAt ? ctx.apiKey.expiresAt.toISOString() : null,
+      provenance: ctx.apiKey.provenance,
       createdAt: ctx.apiKey.createdAt.toISOString(),
     },
     rateLimitOverrides: overrides,
@@ -231,6 +237,9 @@ function deserialize(s: SerializedContext): AccountContext {
       lastUsedAt: s.apiKey.lastUsedAt ? new Date(s.apiKey.lastUsedAt) : null,
       revokedAt: s.apiKey.revokedAt ? new Date(s.apiKey.revokedAt) : null,
       expiresAt: s.apiKey.expiresAt ? new Date(s.apiKey.expiresAt) : null,
+      // C1 — fail OPEN: a missing provenance (pre-C1 entry or a
+      // serialization miss) is treated as an ordinary, unrestricted key.
+      provenance: s.apiKey.provenance ?? null,
       createdAt: new Date(s.apiKey.createdAt),
     },
     rateLimitOverrides: overrides,

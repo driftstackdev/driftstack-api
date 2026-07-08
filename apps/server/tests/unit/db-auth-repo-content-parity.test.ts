@@ -114,9 +114,9 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
     );
   });
 
-  it('toApiKeyRow: 10-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + createdAt)', () => {
+  it('toApiKeyRow: 11-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + provenance + createdAt)', () => {
     expect(body).toMatch(
-      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*name: r\.name,\s*\n?\s*keyPrefix: r\.keyPrefix,\s*\n?\s*keyHash: r\.keyHash,\s*\n?\s*scopes: r\.scopes,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*revokedAt: r\.revokedAt,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*name: r\.name,\s*\n?\s*keyPrefix: r\.keyPrefix,\s*\n?\s*keyHash: r\.keyHash,\s*\n?\s*scopes: r\.scopes,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*revokedAt: r\.revokedAt,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*provenance: r\.provenance,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 

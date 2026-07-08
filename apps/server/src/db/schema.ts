@@ -1004,6 +1004,14 @@ export const apiKeys = pgTable(
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
+    // C1 — how this key was provisioned. NULL (the default for every
+    // existing row) = an ordinary key. `'cli_device'` = minted by the
+    // CLI/GUI device-code (cli-authorize) flow; such keys are barred
+    // from account-takeover operations (mint/rotate/revoke keys, MFA,
+    // team, Stripe billing, webhook writes, BYOK, web-session nuke) by
+    // the device-key deny-gate, so a phished device key cannot establish
+    // persistence or drain the account.
+    provenance: text('provenance'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

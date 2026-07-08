@@ -20,6 +20,7 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
         keyPrefix: input.keyPrefix,
         keyHash: input.keyHash,
         expiresAt: input.expiresAt,
+        provenance: input.provenance ?? null,
       })
       .returning();
     if (!row) throw new Error('insertApiKey returned no row');
@@ -113,6 +114,7 @@ function toApiKeyRow(r: typeof apiKeys.$inferSelect): ApiKeyRow {
     lastUsedAt: r.lastUsedAt,
     revokedAt: r.revokedAt,
     expiresAt: r.expiresAt,
+    provenance: r.provenance,
     createdAt: r.createdAt,
   };
 }

@@ -92,6 +92,7 @@ import { registerAccountNotificationsRoutes } from '../routes/account-notificati
 import { corsOriginMatchers } from './cors-allow.js';
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import authPlugin from '../middleware/auth.js';
+import { registerDeviceKeyDenyGate } from '../middleware/device-key-deny.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -945,6 +946,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     store: deps.rateLimitStore,
     ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
   });
+
+  // C1 — device-key deny-gate. A global preHandler that bars a
+  // cli-authorize device-provisioned key from the account-takeover /
+  // persistence / exfil routes (mint/rotate/revoke keys, MFA, team,
+  // Stripe billing, webhook writes, BYOK, web-session nuke). Registered
+  // after the auth plugin so it can lazy-auth via app.requireAuth.
+  registerDeviceKeyDenyGate(app);
 
   registerErrorHandler(app);
 

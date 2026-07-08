@@ -1,0 +1,11 @@
+-- C1 — CLI device-code phishing hardening. Records how an API key was
+-- provisioned so the device-key deny-gate can bar keys minted by the
+-- CLI/GUI device-code (cli-authorize) flow from account-takeover
+-- operations (mint/rotate/revoke API keys, MFA changes, team management,
+-- Stripe billing, webhook writes, BYOK, web-session revocation).
+--
+-- NULL (backfilled onto every existing row) = an ordinary key, fully
+-- unrestricted. 'cli_device' = a device-provisioned key. Additive,
+-- nullable, no table rewrite; the deny-gate only ever fires on the
+-- explicit 'cli_device' value so pre-existing keys are unaffected.
+ALTER TABLE "api_keys" ADD COLUMN "provenance" text;
