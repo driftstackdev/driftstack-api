@@ -11,6 +11,14 @@
 // All routes are scoped to the calling account. Cross-account
 // id lookups return 404 (not 403) — we don't leak the existence of
 // orders that belong to other accounts.
+//
+// #122 read:billing floor (2026-07-08) — all 5 GETs (list / single /
+// receipt / receipt.txt / receipt.pdf) require the read:billing scope; a
+// broad `read` or `account_owner` key satisfies it via V-481, so the
+// dashboard + GUI device keys are unaffected and only a genuinely narrow
+// non-billing key is refused. The 2 mutations (PATCH note / cancel) keep
+// admin:billing (W496). Completes the S46 read:billing floor for the
+// crypto-order read family.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -106,7 +114,7 @@ export function registerCustomerCryptoOrdersRoutes(
     };
   }>(
     '/v1/billing/crypto-orders',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (
       req: FastifyRequest<{
         Querystring: {
@@ -169,7 +177,7 @@ export function registerCustomerCryptoOrdersRoutes(
 
   app.get<{ Params: { order_id: string } }>(
     '/v1/billing/crypto-orders/:order_id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
       const ctx = requireCtx(req);
       const params = parseOrThrow(GetParams, req.params);
@@ -222,7 +230,7 @@ export function registerCustomerCryptoOrdersRoutes(
   // PDF" / "Email me" affordances on `status === 'paid'`.
   app.get<{ Params: { order_id: string } }>(
     '/v1/billing/crypto-orders/:order_id/receipt',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
       const ctx = requireCtx(req);
       const params = parseOrThrow(GetParams, req.params);
@@ -242,7 +250,7 @@ export function registerCustomerCryptoOrdersRoutes(
   // an extra jq step. Identical access semantics as the JSON variant.
   app.get<{ Params: { order_id: string } }>(
     '/v1/billing/crypto-orders/:order_id/receipt.txt',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
       const ctx = requireCtx(req);
       const params = parseOrThrow(GetParams, req.params);
@@ -275,7 +283,7 @@ export function registerCustomerCryptoOrdersRoutes(
   // GET triggers a download with a meaningful filename.
   app.get<{ Params: { order_id: string } }>(
     '/v1/billing/crypto-orders/:order_id/receipt.pdf',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
       const ctx = requireCtx(req);
       const params = parseOrThrow(GetParams, req.params);

@@ -118,3 +118,11 @@ Reading billing state (`GET /v1/billing`) requires the
 write-only key is refused with 403; mutation endpoints (checkout,
 manage-portal) require the `admin:billing` scope (a broad `admin`
 or `account_owner` key also satisfies it).
+
+The `read:billing` floor also covers the rest of the billing read
+family: the crypto-order reads (`GET /v1/billing/crypto-orders`, its
+single-order lookup, and the `receipt`, `receipt.txt`, and `receipt.pdf`
+variants) and the cost breakdown (`GET /v1/account/cost`). A broad
+`read` or `account_owner` key satisfies all of them; a narrow
+non-billing key is refused with a 403 that names the required
+`read:billing` scope.

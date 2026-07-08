@@ -60,8 +60,10 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).toMatch(/const now = deps\.nowFn \?\? Date\.now;/);
   });
 
-  it("Auth posture: requireAuth + rateLimit('global') preHandler", () => {
-    expect(body).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/);
+  it("Auth posture: requireAuth + read:billing scope + rateLimit('global') preHandler (#122)", () => {
+    expect(body).toMatch(
+      /\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:billing'\), app\.rateLimit\('global'\)\] \},/,
+    );
   });
 
   it('Account id pinned to ctx.account.id; billing_cycle fallback via billingCycleFromDate(new Date(now()))', () => {

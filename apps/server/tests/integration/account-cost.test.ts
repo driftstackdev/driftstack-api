@@ -116,3 +116,32 @@ describe('V-541.D GET /v1/account/cost', () => {
     expect(body.thresholds).toBeUndefined();
   });
 });
+
+describe('#122 — read:billing floor on GET /v1/account/cost', () => {
+  const get = (fxArg: TestAppFixture) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url: '/v1/account/cost?billing_cycle=2026-05',
+      headers: { authorization: `Bearer ${fxArg.plaintext}` },
+    });
+
+  it('403 for a write-only key, naming the required scope', async () => {
+    fx = await buildTestApp({ scopes: ['write'] });
+    const res = await get(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:billing');
+  });
+
+  it('200 for a granular read:billing key (zero-usage synthesized branch)', async () => {
+    fx = await buildTestApp({ scopes: ['read:billing'] });
+    expect((await get(fx)).statusCode).toBe(200);
+  });
+
+  it('200 for a broad read key (V-481) and an account_owner key', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    expect((await get(fx)).statusCode).toBe(200);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    expect((await get(fx)).statusCode).toBe(200);
+  });
+});

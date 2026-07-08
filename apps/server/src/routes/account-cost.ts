@@ -4,6 +4,10 @@
 // Scoped to the calling account via requireAuth — the service is
 // reused from the admin path (V-541.B) but the account id is pinned
 // to ctx.account.id, not pulled from a URL param.
+//
+// #122 read:billing floor (2026-07-08) — the cost breakdown is billing
+// data, so this read requires read:billing (a broad `read` / account_owner
+// key satisfies it via V-481; a narrow non-billing key is refused).
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -31,7 +35,7 @@ export function registerAccountCostRoutes(
 
   app.get<{ Querystring: { billing_cycle?: string } }>(
     '/v1/account/cost',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

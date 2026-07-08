@@ -952,3 +952,37 @@ describe('V-666.Q PATCH /v1/billing/crypto-orders/:order_id (customer_note)', ()
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('#122 — read:billing floor on the crypto-order reads', () => {
+  const get = (fxArg: TestAppFixture, url: string) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${fxArg.plaintext}` },
+    });
+
+  it('403 for a write-only key on the list AND a receipt, with the required scope named', async () => {
+    fx = await buildTestApp({ scopes: ['write'] });
+    const list = await get(fx, '/v1/billing/crypto-orders');
+    expect(list.statusCode).toBe(403);
+    expect(list.json<{ detail: string }>().detail).toContain('read:billing');
+    // The scope check runs in the preHandler, before any order lookup.
+    const receipt = await get(fx, '/v1/billing/crypto-orders/ord_missing/receipt.txt');
+    expect(receipt.statusCode).toBe(403);
+  });
+
+  it('200 for a granular read:billing key on the list', async () => {
+    fx = await buildTestApp({ scopes: ['read:billing'] });
+    expect((await get(fx, '/v1/billing/crypto-orders')).statusCode).toBe(200);
+  });
+
+  it('200 for a broad read key (V-481 broad-satisfies-granular) — dashboard/GUI keep working', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    expect((await get(fx, '/v1/billing/crypto-orders')).statusCode).toBe(200);
+  });
+
+  it('200 for an account_owner key', async () => {
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    expect((await get(fx, '/v1/billing/crypto-orders')).statusCode).toBe(200);
+  });
+});

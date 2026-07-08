@@ -215,9 +215,14 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
     );
   });
 
-  it("Auth posture (W496): requireAuth + rateLimit('global') on the 5 read/receipt routes; the 2 mutations (PATCH order-note + POST cancel) add requireScope('admin:billing')", () => {
+  it("Auth posture (W496 + #122): the 5 read/receipt GETs add requireScope('read:billing'); the 2 mutations (PATCH order-note + POST cancel) add requireScope('admin:billing')", () => {
+    // #122 read:billing floor — no route is plain requireAuth+rateLimit now.
     const plain = body.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/g);
-    expect(plain?.length).toBe(5);
+    expect(plain).toBeNull();
+    const readBilling = body.match(
+      /preHandler: \[app\.requireAuth, app\.requireScope\('read:billing'\), app\.rateLimit\('global'\)\] \},/g,
+    );
+    expect(readBilling?.length).toBe(5);
     const gated = body.match(
       /preHandler: \[app\.requireAuth, app\.requireScope\('admin:billing'\), app\.rateLimit\('global'\)\] \},/g,
     );
