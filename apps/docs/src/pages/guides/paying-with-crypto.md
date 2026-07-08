@@ -152,14 +152,30 @@ same rule: the tier purchase is activated on the `paid` transition,
 not before.
 
 Activation applies your account's tier automatically on that `paid`
-transition, and it is **upgrade-only**: if your account already sits
-on a higher tier by the time the order settles (say a card
-subscription started after you minted the order), the paid order
-never downgrades you — the payment is still recorded on the order and
-support reconciles it with you. Paying for the tier you already hold
-changes nothing (no duplicate emails). Each activation is written to
-your [audit log](/api/audit-log/) as a `subscription.tier_changed`
-entry carrying the `order_id`.
+transition. A crypto payment is a **one-time payment for one month**:
+it entitles the purchased tier for a fixed **31-day term** from the
+payment, and the tier lapses when that term ends unless you buy again.
+There is no auto-charge and no stored payment method — renewing is
+always a fresh order you choose to open.
+
+A few rules make this predictable:
+
+- **Upgrade-only apply.** If your account already sits on a higher tier
+  when the order settles (say a card subscription started after you
+  minted the order), the paid order never downgrades you. The
+  entitlement is still recorded — it acts as a **floor**: if the higher
+  rail later lapses, your account falls back to this crypto-paid tier
+  (not straight to free) until its 31-day term ends.
+- **Re-buying the tier you already hold extends it.** A same-tier
+  purchase **stacks** onto your running term — the new 31 days begin
+  when the current entitlement would have ended, so no paid day is lost
+  and there is no duplicate email.
+- **When a term ends**, your account is recomputed to the best coverage
+  you still have — a live card subscription, another still-valid crypto
+  entitlement, or the free tier — never stranded below what you paid for.
+
+Each real tier change is written to your [audit log](/api/audit-log/)
+as a `subscription.tier_changed` entry carrying the `order_id`.
 
 ## The order lifecycle
 

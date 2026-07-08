@@ -2392,3 +2392,46 @@ export const cryptoOrders = pgTable(
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
   }),
 );
+
+// Audit-1 C1 — persisted crypto tier entitlement with a term. Crypto tier
+// activation used to write only accounts.tier (no mirror row, no expiry), so a
+// routine Stripe reconcile (which computes the tier from the Stripe
+// subscriptions table only) silently wiped a non-refundable crypto-paid tier.
+// One row per paid crypto order records what tier it entitles and until when
+// (31 days from the paid instant, stacking for a same-tier re-purchase). The
+// Stripe reconcile now floors against the highest-ranked UNEXPIRED entitlement,
+// and a sweeper downgrades when the last one lapses. orderId is the idempotency
+// arbiter (one entitlement per order); no FK to crypto_orders (mirrors that
+// table's deliberately loose coupling — orders survive an account purge,
+// entitlements cascade with the account).
+export const cryptoEntitlements = pgTable(
+  'crypto_entitlements',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    orderId: text('order_id').notNull(),
+    tier: accountTier('tier').notNull(),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    /** null until the sweeper has processed this entitlement's expiry. */
+    expiredProcessedAt: timestamp('expired_processed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('crypto_entitlements_order_id_unique').on(t.orderId),
+    index('crypto_entitlements_account_idx').on(t.accountId),
+    // Sweeper hot path — only rows not yet expiry-processed.
+    index('crypto_entitlements_expiry_sweep_idx')
+      .on(t.expiresAt)
+      .where(sql`${t.expiredProcessedAt} IS NULL`),
+  ],
+);

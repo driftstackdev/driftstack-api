@@ -10,6 +10,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AccountTier } from '@driftstack/api-types';
 import {
+  CRYPTO_ENTITLEMENT_TERM_DAYS,
   CryptoTierActivationService,
   isCryptoTierUpgrade,
   tierActivationRank,
@@ -95,7 +96,7 @@ describe('S41 isCryptoTierUpgrade decision table', () => {
   }
 });
 
-describe('S41 CryptoTierActivationService', () => {
+describe('C1 CryptoTierActivationService (entitlement-backed)', () => {
   const intent = {
     account_id: 'acc_1',
     order_id: 'ord_1',
@@ -103,10 +104,19 @@ describe('S41 CryptoTierActivationService', () => {
     payment_id: 'pay_1',
     paid_at: '2026-07-07T10:00:00.000Z',
   };
+  const START = new Date('2026-07-07T10:00:00.000Z');
+  const EXPIRES = new Date('2026-08-07T10:00:00.000Z');
 
-  function makeDeps(repoResult: { previousTier: AccountTier | null; applied: boolean }) {
+  function makeDeps(repoResult: {
+    previousTier: AccountTier | null;
+    applied: boolean;
+    entitlementInserted: boolean;
+    startsAt?: Date;
+    expiresAt?: Date;
+  }) {
+    const full = { startsAt: START, expiresAt: EXPIRES, ...repoResult };
     const repo = {
-      setAccountTierIfUpgrade: vi.fn().mockResolvedValue(repoResult),
+      activateCryptoEntitlement: vi.fn().mockResolvedValue(full),
     };
     const emit = vi.fn().mockResolvedValue(undefined);
     const lifecycle = { emit } as unknown as AccountLifecycleService;
@@ -117,13 +127,15 @@ describe('S41 CryptoTierActivationService', () => {
     return { repo, emit, invalidateAccount, logger, service };
   }
 
-  it('applied → invalidates the auth cache + emits subscription.tier_changed with the crypto cross-reference', async () => {
-    const d = makeDeps({ previousTier: 'free', applied: true });
+  it('upgrade applied → records the entitlement, invalidates cache, emits tier_changed with the crypto cross-reference', async () => {
+    const d = makeDeps({ previousTier: 'free', applied: true, entitlementInserted: true });
     await d.service.activateTierForPaidOrder(intent);
-    expect(d.repo.setAccountTierIfUpgrade).toHaveBeenCalledWith({
+    expect(d.repo.activateCryptoEntitlement).toHaveBeenCalledWith({
       accountId: 'acc_1',
+      orderId: 'ord_1',
       tier: 'api_builder',
-      at: new Date('2026-07-07T10:00:00.000Z'),
+      paidAt: START,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
     });
     expect(d.invalidateAccount).toHaveBeenCalledWith('acc_1');
     expect(d.emit).toHaveBeenCalledTimes(1);
@@ -131,34 +143,49 @@ describe('S41 CryptoTierActivationService', () => {
       kind: 'subscription.tier_changed',
       fromTier: 'free',
       toTier: 'api_builder',
-      effectiveAt: new Date('2026-07-07T10:00:00.000Z'),
+      effectiveAt: START,
       cryptoOrderId: 'ord_1',
       cryptoPaymentId: 'pay_1',
     });
+    const [obj] = d.logger.infos.at(-1) as [Record<string, unknown>];
+    expect(obj.event).toBe('crypto_paid_tier_activated');
+    expect(obj.expires_at).toBe(EXPIRES.toISOString());
   });
 
-  it('would-downgrade skip → no cache invalidation, no lifecycle emit, loud structured warn', async () => {
-    const d = makeDeps({ previousTier: 'api_scale', applied: false });
+  it('replay (order already recorded) → no cache invalidation, no emit, replay info log', async () => {
+    const d = makeDeps({ previousTier: 'api_builder', applied: false, entitlementInserted: false });
+    await d.service.activateTierForPaidOrder(intent);
+    expect(d.invalidateAccount).not.toHaveBeenCalled();
+    expect(d.emit).not.toHaveBeenCalled();
+    expect(d.logger.errors.length).toBe(0);
+    const [obj] = d.logger.infos.at(-1) as [Record<string, unknown>];
+    expect(obj.event).toBe('crypto_paid_tier_activation_replay');
+  });
+
+  it('same-tier re-purchase (entitlement extended, tier unchanged) → no emit, extended info log', async () => {
+    const d = makeDeps({ previousTier: 'api_builder', applied: false, entitlementInserted: true });
+    await d.service.activateTierForPaidOrder(intent);
+    expect(d.emit).not.toHaveBeenCalled();
+    expect(d.logger.warns.length).toBe(0);
+    const [obj] = d.logger.infos.at(-1) as [Record<string, unknown>];
+    expect(obj.event).toBe('crypto_paid_tier_activation_extended');
+    expect(obj.expires_at).toBe(EXPIRES.toISOString());
+  });
+
+  it('lower-tier purchase while holding a higher tier → entitlement recorded as a floor, no emit, info (not warn)', async () => {
+    const d = makeDeps({ previousTier: 'api_scale', applied: false, entitlementInserted: true });
     await d.service.activateTierForPaidOrder({ ...intent, product: 'solo_manual' });
     expect(d.invalidateAccount).not.toHaveBeenCalled();
     expect(d.emit).not.toHaveBeenCalled();
-    expect(d.logger.warns.length).toBe(1);
-    const [obj] = d.logger.warns[0] as [Record<string, unknown>];
-    expect(obj.event).toBe('crypto_paid_tier_activation_skipped_no_downgrade');
+    expect(d.logger.warns.length).toBe(0);
+    const [obj] = d.logger.infos.at(-1) as [Record<string, unknown>];
+    expect(obj.event).toBe('crypto_paid_tier_activation_recorded_below_current');
     expect(obj.current_tier).toBe('api_scale');
     expect(obj.purchased_tier).toBe('solo_manual');
   });
 
-  it('same-tier no-op → no emit, no warn (info only)', async () => {
-    const d = makeDeps({ previousTier: 'api_builder', applied: false });
-    await d.service.activateTierForPaidOrder(intent);
-    expect(d.emit).not.toHaveBeenCalled();
-    expect(d.logger.warns.length).toBe(0);
-    expect(d.logger.errors.length).toBe(0);
-  });
-
-  it('account not found → integrity-alarm error log, no emit', async () => {
-    const d = makeDeps({ previousTier: null, applied: false });
+  it('account not found → integrity-alarm error log, no emit (no entitlement recorded)', async () => {
+    const d = makeDeps({ previousTier: null, applied: false, entitlementInserted: false });
     await d.service.activateTierForPaidOrder(intent);
     expect(d.emit).not.toHaveBeenCalled();
     expect(d.logger.errors.length).toBe(1);
@@ -168,9 +195,9 @@ describe('S41 CryptoTierActivationService', () => {
 
   it('non-activatable product (legacy/ops-seeded) → repo NEVER called + integrity-alarm error log', async () => {
     for (const product of ['trial_pack', 'free', 'enterprise', 'not-a-tier']) {
-      const d = makeDeps({ previousTier: 'free', applied: true });
+      const d = makeDeps({ previousTier: 'free', applied: true, entitlementInserted: true });
       await d.service.activateTierForPaidOrder({ ...intent, product });
-      expect(d.repo.setAccountTierIfUpgrade).not.toHaveBeenCalled();
+      expect(d.repo.activateCryptoEntitlement).not.toHaveBeenCalled();
       expect(d.emit).not.toHaveBeenCalled();
       expect(d.logger.errors.length).toBe(1);
       const [obj] = d.logger.errors[0] as [Record<string, unknown>];
@@ -178,17 +205,17 @@ describe('S41 CryptoTierActivationService', () => {
     }
   });
 
-  it('malformed paid_at falls back to now() — the tier write never gets an Invalid Date', async () => {
-    const d = makeDeps({ previousTier: 'free', applied: true });
+  it('malformed paid_at falls back to now() — the entitlement write never gets an Invalid Date', async () => {
+    const d = makeDeps({ previousTier: 'free', applied: true, entitlementInserted: true });
     const before = Date.now();
     await d.service.activateTierForPaidOrder({ ...intent, paid_at: 'garbage' });
-    const arg = d.repo.setAccountTierIfUpgrade.mock.calls[0]![0] as { at: Date };
-    expect(Number.isNaN(arg.at.getTime())).toBe(false);
-    expect(arg.at.getTime()).toBeGreaterThanOrEqual(before);
+    const arg = d.repo.activateCryptoEntitlement.mock.calls[0]![0] as { paidAt: Date };
+    expect(Number.isNaN(arg.paidAt.getTime())).toBe(false);
+    expect(arg.paidAt.getTime()).toBeGreaterThanOrEqual(before);
   });
 
   it('auth-cache failure never blocks activation (lifecycle still emits)', async () => {
-    const d = makeDeps({ previousTier: 'free', applied: true });
+    const d = makeDeps({ previousTier: 'free', applied: true, entitlementInserted: true });
     d.invalidateAccount.mockRejectedValueOnce(new Error('redis down'));
     await d.service.activateTierForPaidOrder(intent);
     expect(d.emit).toHaveBeenCalledTimes(1);

@@ -43,14 +43,16 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
     );
   });
 
-  it('imports: eq/sql from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + processedStripeEvents + subscriptions schemas', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, inArray, sql \} from 'drizzle-orm';/);
+  it('imports: and/desc/eq/gt/inArray/isNull/lte/sql from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + cryptoEntitlements + processedStripeEvents + subscriptions schemas', () => {
+    expect(body).toMatch(
+      /import \{ and, desc, eq, gt, inArray, isNull, lte, sql \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     expect(body).toMatch(
       /import type \{ StripeWebhooksRepo \} from '\.\.\/services\/stripe-webhooks\.js';/,
     );
     expect(body).toMatch(
-      /import \{ accounts, processedStripeEvents, subscriptions \} from '\.\/schema\.js';/,
+      /import \{ accounts, cryptoEntitlements, processedStripeEvents, subscriptions \} from '\.\/schema\.js';/,
     );
   });
 

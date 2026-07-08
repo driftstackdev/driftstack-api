@@ -145,6 +145,13 @@ export interface StripeWebhooksRepo {
    * whichever single subscription's event was processed last silently strands a
    * paying customer on the free tier. Returns the previous + applied tier so the
    * caller can gate the cache-invalidate + tier_changed emit on a real change.
+   *
+   * C1 — the applied tier ALSO floors against the highest-ranked UNEXPIRED
+   * crypto entitlement (crypto_entitlements.expires_at > at): a Stripe
+   * cancel/past_due never downgrades below a still-valid non-refundable
+   * crypto-paid tier. With no entitlement rows this is byte-identical to the
+   * pure-Stripe computation (the crypto side is a rank comparison bolted on
+   * after the unchanged Stripe candidate selection).
    */
   downgradeAccountTierToBestRemaining(args: {
     accountId: string;
@@ -167,11 +174,52 @@ export interface StripeWebhooksRepo {
    * (unchanged → no emit). Single-active-subscription accounts are unaffected:
    * the best-active tier is exactly the event's tier, identical to the prior
    * unconditional setAccountTier.
+   *
+   * C1 — the rank loop also includes the account's UNEXPIRED crypto entitlement
+   * tiers, so a routine active/trialing upsert on a LOWER Stripe sub never wipes
+   * a still-valid higher crypto-paid tier. With no entitlement rows the result
+   * is byte-identical to the pure-Stripe computation.
    */
   setAccountTierToBestActive(args: {
     accountId: string;
     at: Date;
   }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier | null }>;
+  /**
+   * C1 — record (or extend) the crypto tier entitlement for a paid order in one
+   * locked transaction, then apply accounts.tier if the entitlement is an
+   * upgrade (the existing compare-gated setAccountTierIfUpgrade semantics).
+   * Idempotent on orderId: a replay returns the ORIGINAL grant's window and
+   * inserts nothing. A same-tier re-purchase STACKS (startsAt = max(paidAt, the
+   * account's latest unexpired same-tier expiry)) instead of being a paid-for-
+   * nothing no-op. `applied` reflects the tier write (gate cache-invalidate +
+   * emit on it); `entitlementInserted` is false on a replay.
+   */
+  activateCryptoEntitlement(args: {
+    accountId: string;
+    orderId: string;
+    tier: AccountTier;
+    paidAt: Date;
+    termDays: number;
+  }): Promise<{
+    previousTier: AccountTier | null;
+    applied: boolean;
+    entitlementInserted: boolean;
+    startsAt: Date;
+    expiresAt: Date;
+  }>;
+  /**
+   * C1 — sweeper read: entitlements past expiry that the sweeper hasn't yet
+   * processed (expired_processed_at IS NULL). Ordered by expires_at, capped.
+   */
+  listExpiredUnprocessedCryptoEntitlements(args: {
+    asOf: Date;
+    limit: number;
+  }): Promise<
+    Array<{ id: string; accountId: string; orderId: string; tier: AccountTier; expiresAt: Date }>
+  >;
+  /** C1 — mark the given entitlement rows expiry-processed (sweeper, after the
+   *  downgrade recompute). Idempotent (last write wins). */
+  markCryptoEntitlementsProcessed(args: { ids: string[]; at: Date }): Promise<void>;
 }
 
 export type DispatchOutcome = 'handled' | 'ignored' | `error:${string}`;

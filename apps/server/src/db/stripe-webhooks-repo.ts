@@ -2,12 +2,12 @@
 // ledger + subscription mirror writes + account tier / trial-pack
 // mutations triggered by inbound Stripe events.
 
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
 import { isCryptoTierUpgrade, tierActivationRank } from '../services/crypto-tier-activation.js';
 import type { Database } from './client.js';
-import { accounts, processedStripeEvents, subscriptions } from './schema.js';
+import { accounts, cryptoEntitlements, processedStripeEvents, subscriptions } from './schema.js';
 
 export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
   constructor(private readonly database: Database) {}
@@ -228,7 +228,24 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         )
         .orderBy(desc(subscriptions.updatedAt))
         .limit(1);
-      const appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+      const stripeCandidate = remaining[0]?.tier ?? args.fallbackTier;
+      // C1 — floor against the highest-ranked UNEXPIRED crypto entitlement, so a
+      // Stripe cancel/past_due never wipes a still-valid crypto-paid tier. With
+      // no entitlement rows this loop is a no-op and appliedTier === the Stripe
+      // candidate (byte-identical to the prior behaviour).
+      const entRows = await tx
+        .select({ tier: cryptoEntitlements.tier })
+        .from(cryptoEntitlements)
+        .where(
+          and(
+            eq(cryptoEntitlements.accountId, args.accountId),
+            gt(cryptoEntitlements.expiresAt, args.at),
+          ),
+        );
+      let appliedTier = stripeCandidate;
+      for (const r of entRows) {
+        if (tierActivationRank(r.tier) > tierActivationRank(appliedTier)) appliedTier = r.tier;
+      }
       await tx
         .update(accounts)
         .set({ tier: appliedTier, updatedAt: args.at })
@@ -280,6 +297,23 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
           appliedTier = row.tier;
         }
       }
+      // C1 — also rank in the account's UNEXPIRED crypto entitlements, so an
+      // active/trialing upsert on a LOWER Stripe sub never wipes a higher
+      // crypto-paid tier. No rows → the loop is a no-op (identical to before).
+      const entRows = await tx
+        .select({ tier: cryptoEntitlements.tier })
+        .from(cryptoEntitlements)
+        .where(
+          and(
+            eq(cryptoEntitlements.accountId, args.accountId),
+            gt(cryptoEntitlements.expiresAt, args.at),
+          ),
+        );
+      for (const r of entRows) {
+        if (appliedTier === null || tierActivationRank(r.tier) > tierActivationRank(appliedTier)) {
+          appliedTier = r.tier;
+        }
+      }
       if (appliedTier === null) return { previousTier, appliedTier: previousTier };
       await tx
         .update(accounts)
@@ -287,6 +321,139 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         .where(eq(accounts.id, args.accountId));
       return { previousTier, appliedTier };
     });
+  }
+
+  async activateCryptoEntitlement(args: {
+    accountId: string;
+    orderId: string;
+    tier: AccountTier;
+    paidAt: Date;
+    termDays: number;
+  }): Promise<{
+    previousTier: AccountTier | null;
+    applied: boolean;
+    entitlementInserted: boolean;
+    startsAt: Date;
+    expiresAt: Date;
+  }> {
+    // C1 — one locked transaction. Lock the accounts row FIRST (same lock order
+    // as every sibling tier writer → no deadlock pair with a concurrent Stripe
+    // event). Stack a same-tier re-purchase off the account's latest unexpired
+    // same-tier expiry; insert idempotently on order_id (a replay returns the
+    // ORIGINAL grant verbatim, no double-extend); then apply accounts.tier if
+    // it's an upgrade (the compare-gated setAccountTierIfUpgrade semantics).
+    return this.database.db.transaction(async (tx) => {
+      const before = await tx
+        .select({ tier: accounts.tier })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .for('update')
+        .limit(1);
+      const previousTier = before[0]?.tier ?? null;
+      if (previousTier === null) {
+        // Account gone — an entitlement can't FK-reference a missing account,
+        // so skip the insert cleanly (the caller alarms on the missing account).
+        return {
+          previousTier: null,
+          applied: false,
+          entitlementInserted: false,
+          startsAt: args.paidAt,
+          expiresAt: new Date(args.paidAt.getTime() + args.termDays * 24 * 60 * 60 * 1000),
+        };
+      }
+
+      const sameTier = await tx
+        .select({ expiresAt: cryptoEntitlements.expiresAt })
+        .from(cryptoEntitlements)
+        .where(
+          and(
+            eq(cryptoEntitlements.accountId, args.accountId),
+            eq(cryptoEntitlements.tier, args.tier),
+            gt(cryptoEntitlements.expiresAt, args.paidAt),
+          ),
+        )
+        .orderBy(desc(cryptoEntitlements.expiresAt))
+        .limit(1);
+      const stackFrom = sameTier[0]?.expiresAt ?? null;
+      const startsAt =
+        stackFrom !== null && stackFrom.getTime() > args.paidAt.getTime() ? stackFrom : args.paidAt;
+      const expiresAt = new Date(startsAt.getTime() + args.termDays * 24 * 60 * 60 * 1000);
+
+      const inserted = await tx
+        .insert(cryptoEntitlements)
+        .values({
+          accountId: args.accountId,
+          orderId: args.orderId,
+          tier: args.tier,
+          startsAt,
+          expiresAt,
+        })
+        .onConflictDoNothing({ target: cryptoEntitlements.orderId })
+        .returning({ id: cryptoEntitlements.id });
+
+      if (inserted.length === 0) {
+        // Replay — return the ORIGINAL grant's window; the original activation
+        // already applied any tier change, so apply nothing now.
+        const existing = await tx
+          .select({
+            startsAt: cryptoEntitlements.startsAt,
+            expiresAt: cryptoEntitlements.expiresAt,
+          })
+          .from(cryptoEntitlements)
+          .where(eq(cryptoEntitlements.orderId, args.orderId))
+          .limit(1);
+        return {
+          previousTier,
+          applied: false,
+          entitlementInserted: false,
+          startsAt: existing[0]?.startsAt ?? startsAt,
+          expiresAt: existing[0]?.expiresAt ?? expiresAt,
+        };
+      }
+
+      let applied = false;
+      if (previousTier !== null && isCryptoTierUpgrade(previousTier, args.tier)) {
+        await tx
+          .update(accounts)
+          .set({ tier: args.tier, updatedAt: args.paidAt })
+          .where(eq(accounts.id, args.accountId));
+        applied = true;
+      }
+      return { previousTier, applied, entitlementInserted: true, startsAt, expiresAt };
+    });
+  }
+
+  async listExpiredUnprocessedCryptoEntitlements(args: {
+    asOf: Date;
+    limit: number;
+  }): Promise<
+    Array<{ id: string; accountId: string; orderId: string; tier: AccountTier; expiresAt: Date }>
+  > {
+    return this.database.db
+      .select({
+        id: cryptoEntitlements.id,
+        accountId: cryptoEntitlements.accountId,
+        orderId: cryptoEntitlements.orderId,
+        tier: cryptoEntitlements.tier,
+        expiresAt: cryptoEntitlements.expiresAt,
+      })
+      .from(cryptoEntitlements)
+      .where(
+        and(
+          lte(cryptoEntitlements.expiresAt, args.asOf),
+          isNull(cryptoEntitlements.expiredProcessedAt),
+        ),
+      )
+      .orderBy(cryptoEntitlements.expiresAt)
+      .limit(args.limit);
+  }
+
+  async markCryptoEntitlementsProcessed(args: { ids: string[]; at: Date }): Promise<void> {
+    if (args.ids.length === 0) return;
+    await this.database.db
+      .update(cryptoEntitlements)
+      .set({ expiredProcessedAt: args.at, updatedAt: args.at })
+      .where(inArray(cryptoEntitlements.id, args.ids));
   }
 }
 

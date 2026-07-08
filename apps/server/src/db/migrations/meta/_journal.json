@@ -701,6 +701,13 @@
       "when": 1780360800000,
       "tag": "0099_billing_email_dedup",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1780364400000,
+      "tag": "0100_crypto_entitlements",
+      "breakpoints": true
     }
   ]
 }

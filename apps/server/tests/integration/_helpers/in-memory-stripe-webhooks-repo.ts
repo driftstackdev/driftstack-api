@@ -44,10 +44,25 @@ interface AccountFacet {
   tier: AccountTier;
 }
 
+// C1 — crypto entitlement mirror (crypto_entitlements). One row per paid order,
+// unique on orderId; unexpired rows (expiresAt > now) floor the account tier.
+interface CryptoEntitlementRow {
+  id: string;
+  accountId: string;
+  orderId: string;
+  tier: AccountTier;
+  startsAt: Date;
+  expiresAt: Date;
+  expiredProcessedAt: Date | null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
   private readonly events = new Map<string, LedgerRow>();
   private readonly subs = new Map<string, SubscriptionMirrorRow>();
   private readonly accounts = new Map<string, AccountFacet>();
+  private readonly entitlements = new Map<string, CryptoEntitlementRow>();
 
   /** Test seam: register account ↔ Stripe customer link. */
   registerAccount(args: {
@@ -204,7 +219,13 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         (s) => s.accountId === args.accountId && (s.status === 'active' || s.status === 'trialing'),
       )
       .sort((x, y) => y.updatedAt.getTime() - x.updatedAt.getTime());
-    const appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+    // C1 — floor against the highest-ranked UNEXPIRED crypto entitlement (mirrors
+    // the Drizzle gt(expiresAt, at) union). No rows → byte-identical to before.
+    let appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+    for (const e of this.entitlements.values()) {
+      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= args.at.getTime()) continue;
+      if (tierActivationRank(e.tier) > tierActivationRank(appliedTier)) appliedTier = e.tier;
+    }
     this.accounts.set(args.accountId, { ...a, tier: appliedTier });
     return Promise.resolve({ previousTier, appliedTier });
   }
@@ -229,8 +250,132 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         appliedTier = row.tier;
       }
     }
+    // C1 — also rank in UNEXPIRED crypto entitlements (mirrors the Drizzle union),
+    // so a LOWER active/trialing upsert never wipes a higher crypto-paid tier.
+    for (const e of this.entitlements.values()) {
+      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= args.at.getTime()) continue;
+      if (appliedTier === null || tierActivationRank(e.tier) > tierActivationRank(appliedTier)) {
+        appliedTier = e.tier;
+      }
+    }
     if (appliedTier === null) return Promise.resolve({ previousTier, appliedTier: previousTier });
     this.accounts.set(args.accountId, { ...a, tier: appliedTier });
     return Promise.resolve({ previousTier, appliedTier });
+  }
+
+  activateCryptoEntitlement(args: {
+    accountId: string;
+    orderId: string;
+    tier: AccountTier;
+    paidAt: Date;
+    termDays: number;
+  }): Promise<{
+    previousTier: AccountTier | null;
+    applied: boolean;
+    entitlementInserted: boolean;
+    startsAt: Date;
+    expiresAt: Date;
+  }> {
+    // C1 — mirrors DrizzleStripeWebhooksRepo.activateCryptoEntitlement: account
+    // lock, same-tier stacking, idempotent insert on orderId, compare-gated apply.
+    const a = this.accounts.get(args.accountId);
+    if (!a) {
+      // Account gone — no FK target; skip the insert (the caller alarms).
+      return Promise.resolve({
+        previousTier: null,
+        applied: false,
+        entitlementInserted: false,
+        startsAt: args.paidAt,
+        expiresAt: new Date(args.paidAt.getTime() + args.termDays * DAY_MS),
+      });
+    }
+    const previousTier = a.tier;
+
+    // Replay — an entitlement already exists for this order. Return the ORIGINAL
+    // grant's window; the original activation already applied any tier change.
+    const existing = Array.from(this.entitlements.values()).find((e) => e.orderId === args.orderId);
+    if (existing) {
+      return Promise.resolve({
+        previousTier,
+        applied: false,
+        entitlementInserted: false,
+        startsAt: existing.startsAt,
+        expiresAt: existing.expiresAt,
+      });
+    }
+
+    // Stack a same-tier re-purchase off the account's latest unexpired same-tier
+    // expiry (expiresAt > paidAt), else start at paidAt.
+    let stackFrom: Date | null = null;
+    for (const e of this.entitlements.values()) {
+      if (
+        e.accountId === args.accountId &&
+        e.tier === args.tier &&
+        e.expiresAt.getTime() > args.paidAt.getTime() &&
+        (stackFrom === null || e.expiresAt.getTime() > stackFrom.getTime())
+      ) {
+        stackFrom = e.expiresAt;
+      }
+    }
+    const startsAt =
+      stackFrom !== null && stackFrom.getTime() > args.paidAt.getTime() ? stackFrom : args.paidAt;
+    const expiresAt = new Date(startsAt.getTime() + args.termDays * DAY_MS);
+
+    const id = randomUUID();
+    this.entitlements.set(id, {
+      id,
+      accountId: args.accountId,
+      orderId: args.orderId,
+      tier: args.tier,
+      startsAt,
+      expiresAt,
+      expiredProcessedAt: null,
+    });
+
+    let applied = false;
+    if (isCryptoTierUpgrade(previousTier, args.tier)) {
+      this.accounts.set(args.accountId, { ...a, tier: args.tier });
+      applied = true;
+    }
+    return Promise.resolve({
+      previousTier,
+      applied,
+      entitlementInserted: true,
+      startsAt,
+      expiresAt,
+    });
+  }
+
+  listExpiredUnprocessedCryptoEntitlements(args: {
+    asOf: Date;
+    limit: number;
+  }): Promise<
+    Array<{ id: string; accountId: string; orderId: string; tier: AccountTier; expiresAt: Date }>
+  > {
+    const rows = Array.from(this.entitlements.values())
+      .filter((e) => e.expiresAt.getTime() <= args.asOf.getTime() && e.expiredProcessedAt === null)
+      .sort((x, y) => x.expiresAt.getTime() - y.expiresAt.getTime())
+      .slice(0, args.limit)
+      .map((e) => ({
+        id: e.id,
+        accountId: e.accountId,
+        orderId: e.orderId,
+        tier: e.tier,
+        expiresAt: e.expiresAt,
+      }));
+    return Promise.resolve(rows);
+  }
+
+  markCryptoEntitlementsProcessed(args: { ids: string[]; at: Date }): Promise<void> {
+    for (const id of args.ids) {
+      const e = this.entitlements.get(id);
+      if (e) this.entitlements.set(id, { ...e, expiredProcessedAt: args.at });
+    }
+    return Promise.resolve();
+  }
+
+  /** Test inspection — list all crypto entitlement rows. */
+  listCryptoEntitlements(): CryptoEntitlementRow[] {
+    return Array.from(this.entitlements.values());
   }
 }

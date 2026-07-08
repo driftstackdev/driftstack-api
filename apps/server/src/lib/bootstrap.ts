@@ -161,6 +161,11 @@ import {
   registerSessionDurationSweepJob,
 } from '../services/session-duration-sweeper.js';
 import {
+  CryptoEntitlementExpirySweeperService,
+  enqueueNextCryptoEntitlementExpirySweep,
+  registerCryptoEntitlementExpirySweepJob,
+} from '../services/crypto-entitlement-expiry-sweeper.js';
+import {
   enqueueNextScheduledJobsPrune,
   registerScheduledJobsPruneJob,
 } from '../services/scheduled-jobs-prune-sweeper.js';
@@ -1147,6 +1152,29 @@ export async function createProductionDeps(
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
     authCache, // invalidate the cached AccountContext on a Stripe-driven tier change (rate-limit tier freshness)
   );
+
+  // C1 — crypto entitlement expiry sweep. A crypto tier payment grants the
+  // tier for a fixed 31-day window (crypto_entitlements); when the last
+  // unexpired entitlement for an account lapses, the account must fall back to
+  // its best remaining entitlement (a live Stripe sub / another valid crypto
+  // entitlement / free) — the mirror of Stripe's cancel-driven downgrade. Every
+  // 15 min the sweeper recomputes each newly-expired account's tier via the
+  // SAME downgradeAccountTierToBestRemaining path Stripe uses. Wired
+  // UNCONDITIONALLY (not behind the crypto/IPN config gate): backfilled
+  // entitlements can exist and must expire even in a deploy where the live IPN
+  // intake path is currently unconfigured. With an empty entitlements table the
+  // sweep is a no-op every tick. Re-arms itself; dedup on (job_type, NULL).
+  const cryptoEntitlementExpirySweeper = new CryptoEntitlementExpirySweeperService({
+    repo: stripeWebhooksRepo,
+    logger,
+    accountLifecycle: accountLifecycleService,
+    authCache,
+  });
+  registerCryptoEntitlementExpirySweepJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: cryptoEntitlementExpirySweeper,
+  });
+  await enqueueNextCryptoEntitlementExpirySweep({ scheduledJobs: scheduledJobsService });
 
   // V-081: Profiles service.
   // V-225 — accountAudit wired for profile.{created,deleted}.

@@ -60,7 +60,16 @@ import type { StripeWebhooksRepo } from './stripe-webhooks.js';
  * and the in-memory test twin stay compile-time-parity). Pick (not a
  * re-declared interface) so the two can never drift.
  */
-export type CryptoTierActivationRepo = Pick<StripeWebhooksRepo, 'setAccountTierIfUpgrade'>;
+export type CryptoTierActivationRepo = Pick<StripeWebhooksRepo, 'activateCryptoEntitlement'>;
+
+/**
+ * C1 — how long a one-time crypto payment of a monthly price entitles the tier.
+ * A crypto payment covers exactly TIER_MONTHLY_PRICE_CENTS (one month); 31 days
+ * is ≥ every calendar month, so a non-refundable payment is never customer-
+ * hostile at a month boundary. Fixed-length (not calendar arithmetic) for
+ * auditability. A same-tier re-purchase STACKS onto the running expiry.
+ */
+export const CRYPTO_ENTITLEMENT_TERM_DAYS = 31;
 
 /**
  * S41 — total order over tiers used by the upgrade-only rule. Ranks by
@@ -139,16 +148,53 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
     const parsedAt = new Date(intent.paid_at);
     const effectiveAt = Number.isNaN(parsedAt.getTime()) ? new Date() : parsedAt;
 
-    // Atomic decide-and-write: the upgrade-only compare runs INSIDE the same
-    // FOR UPDATE transaction as the tier write (see
-    // DrizzleStripeWebhooksRepo.setAccountTierIfUpgrade), so a concurrent
-    // Stripe-driven tier change and this activation serialize — no TOCTOU
-    // window in which a stale crypto order could clobber a fresher upgrade.
-    const { previousTier, applied } = await this.repo.setAccountTierIfUpgrade({
-      accountId: intent.account_id,
-      tier,
-      at: effectiveAt,
-    });
+    // C1 — record the crypto entitlement (with its 31-day term) AND apply the
+    // tier if it's an upgrade, in ONE FOR UPDATE transaction (see
+    // DrizzleStripeWebhooksRepo.activateCryptoEntitlement). Idempotent on
+    // order_id, so a replay never double-extends; a stale order can never
+    // clobber a fresher upgrade (the tier write is compare-gated).
+    const { previousTier, applied, entitlementInserted, startsAt, expiresAt } =
+      await this.repo.activateCryptoEntitlement({
+        accountId: intent.account_id,
+        orderId: intent.order_id,
+        tier,
+        paidAt: effectiveAt,
+        termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+      });
+
+    if (previousTier === null) {
+      // Order references an account we no longer track — should not happen
+      // (the order bound account_id at checkout); loud alarm for ops. No
+      // entitlement was recorded (can't FK a missing account).
+      this.logger.error(
+        {
+          component: 'crypto-tier-activation',
+          event: 'crypto_paid_tier_activation_account_missing',
+          account_id: intent.account_id,
+          order_id: intent.order_id,
+          product: tier,
+        },
+        'crypto order paid but the account was not found — tier NOT applied (integrity alarm)',
+      );
+      return;
+    }
+
+    if (!entitlementInserted) {
+      // Replay of an already-recorded order — idempotent no-op (no re-extend,
+      // no re-apply, no email). The original activation did all of it.
+      this.logger.info(
+        {
+          component: 'crypto-tier-activation',
+          event: 'crypto_paid_tier_activation_replay',
+          account_id: intent.account_id,
+          order_id: intent.order_id,
+          tier,
+          expires_at: expiresAt.toISOString(),
+        },
+        'crypto order paid — entitlement already recorded for this order (replay); no change',
+      );
+      return;
+    }
 
     if (applied) {
       // Real change — mirror StripeWebhooksService's fan-out order:
@@ -179,63 +225,50 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
           order_id: intent.order_id,
           from_tier: previousTier,
           to_tier: tier,
+          expires_at: expiresAt.toISOString(),
         },
         'crypto order paid — account tier activated',
       );
       return;
     }
 
-    if (previousTier === null) {
-      // Order references an account we no longer track — should not happen
-      // (the order bound account_id at checkout); loud alarm for ops.
-      this.logger.error(
-        {
-          component: 'crypto-tier-activation',
-          event: 'crypto_paid_tier_activation_account_missing',
-          account_id: intent.account_id,
-          order_id: intent.order_id,
-          product: tier,
-        },
-        'crypto order paid but the account was not found — tier NOT applied (integrity alarm)',
-      );
-      return;
-    }
-
+    // Entitlement was recorded but the account tier was NOT raised. Two cases,
+    // both now a real (deferred) grant rather than the old "no-op" / "reconcile"
+    // dead ends — the entitlement floors the tier until it expires.
     if (previousTier === tier) {
-      // Idempotent no-op: the account already holds the purchased tier
-      // (duplicate activation attempt, or a re-purchase of the current
-      // tier). No write, no audit row, no email — mirrors Stripe's
-      // previousTier !== tier emit gate.
+      // Same-tier re-purchase: the entitlement window was EXTENDED (stacked
+      // onto the running expiry). The account keeps the tier it already holds.
       this.logger.info(
         {
           component: 'crypto-tier-activation',
-          event: 'crypto_paid_tier_activation_noop',
+          event: 'crypto_paid_tier_activation_extended',
           account_id: intent.account_id,
           order_id: intent.order_id,
           tier,
+          starts_at: startsAt.toISOString(),
+          expires_at: expiresAt.toISOString(),
         },
-        'crypto order paid for the tier the account already holds — no-op',
+        'crypto order paid for the tier the account already holds — entitlement extended',
       );
       return;
     }
 
-    // No-downgrade skip: the account's current tier out-ranks the order's
-    // product (the tier changed after the order was minted — e.g. a Stripe
-    // subscription started — or the account is enterprise). Loud + audited
-    // in the ops sense (structured warn with every id needed to reconcile);
-    // no customer-audit row is written because no account state changed and
-    // no audit action exists for a skipped change (never invent enum values).
-    this.logger.warn(
+    // Lower-tier purchase while the account holds a higher tier (e.g. a Stripe
+    // sub started after the order was minted): the entitlement is RECORDED as a
+    // floor — if the higher rail later lapses, the reconcile drops to this tier
+    // (not straight to free) until the entitlement expires. No tier change now.
+    this.logger.info(
       {
         component: 'crypto-tier-activation',
-        event: 'crypto_paid_tier_activation_skipped_no_downgrade',
+        event: 'crypto_paid_tier_activation_recorded_below_current',
         account_id: intent.account_id,
         order_id: intent.order_id,
         payment_id: intent.payment_id,
         current_tier: previousTier,
         purchased_tier: tier,
+        expires_at: expiresAt.toISOString(),
       },
-      'crypto order paid for a LOWER tier than the account currently holds — skipped by the no-downgrade rule; reconcile with the customer (paid order recorded, tier unchanged)',
+      'crypto order paid for a LOWER tier than the account currently holds — entitlement recorded as the floor until it expires; account tier unchanged',
     );
   }
 }

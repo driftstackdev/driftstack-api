@@ -12,6 +12,15 @@ payment address per order; the customer sends crypto; NowPayments
 posts an IPN to Driftstack when the payment is confirmed on-chain;
 Driftstack activates the subscription tier.
 
+A crypto payment is a one-time payment covering one month: it entitles
+the purchased tier for a fixed **31-day term** and then lapses unless a
+new order is paid (there is no auto-charge and no stored payment
+method). Re-buying the same tier stacks onto the running term; when a
+term ends the account is recomputed to its best remaining coverage (a
+live card subscription, another still-valid crypto entitlement, or the
+free tier). See the [Paying with crypto](/guides/paying-with-crypto/)
+guide for the customer-facing walkthrough.
+
 Crypto checkout is enabled for paid tiers ($79/mo and above).
 NowPayments enforces an empirical USD-equivalent floor (~$19.16)
 below which payments are rejected as `amount_too_low`, and Driftstack
