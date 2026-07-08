@@ -3357,7 +3357,19 @@ export function SimulatorWindow(): JSX.Element {
       // are always authoritative.
       isAuthoritative: boolean,
     ): void => {
-      const frameTabId = typeof frame.tabId === 'string' && frame.tabId !== '' ? frame.tabId : null;
+      const rawFrameTabId =
+        typeof frame.tabId === 'string' && frame.tabId !== '' ? frame.tabId : null;
+      // Regression guard — the box's per-tab page_state TAGGING went live (#63). The
+      // box now stamps a tabId, but if that id doesn't correspond to a tab THIS window
+      // actually has (box↔GUI id-scheme skew, or a background renderer's id), routing
+      // the url/title to it matches NO tab and silently drops the update → the founder's
+      // "title/url stopped changing at all". Treat an UNRECOGNISED tabId as tabId-less:
+      // fall back to the active tab (the proven pre-tagging path) so url/title keep
+      // updating live. A tabId we DO recognise still routes exactly to that tab.
+      const frameTabId =
+        rawFrameTabId !== null && tabsRef.current.some((t) => t.id === rawFrameTabId)
+          ? rawFrameTabId
+          : null;
       const targetId = frameTabId ?? activeTabIdRef.current;
       // The box reported a page for this tab → the switch (if any) landed; clear the
       // "switching…" affordance + cancel its re-issue timer (instant-feedback path).

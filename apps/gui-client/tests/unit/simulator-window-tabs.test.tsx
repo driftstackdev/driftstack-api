@@ -762,6 +762,29 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(addressInput.value).toBe('two.example');
   });
 
+  it('(e) a page_state with an UNRECOGNISED tabId falls back to the active tab, never dropped (regression: #63 box tagging must not FREEZE url/title on a box↔GUI id skew)', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Active tab loads site A (establishes a known active tab + its stored url).
+    pushPageState({ state: 'loaded', url: 'https://active.example/', title: 'Active' });
+    const activeId = (lastTabListCall().tabs[0] as { id: string }).id;
+    // The box now stamps a tabId (#63), but sends one THIS window has no tab for —
+    // box-internal id / id-scheme skew. It must NOT be dropped (that froze the
+    // founder's url/title); fall back to the active tab so it keeps updating live.
+    pushPageState({
+      state: 'loaded',
+      tabId: 'box-internal-id-not-in-gui',
+      url: 'https://updated.example/',
+      title: 'Updated',
+    });
+    const byId = tabsById();
+    expect(byId.get(activeId)?.url).toBe('https://updated.example/');
+    expect(byId.get(activeId)?.title).toBe('Updated');
+    // The visible address bar (active tab) reflects the update (hostname collapse).
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(addressInput.value).toBe('updated.example');
+  });
+
   // ── Branded new-tab page (founder 2026-06-25) ─────────────────────────────────
 
   it('a new (+) tab reads as a clean "New Tab" — slashed url + box title chrome are hidden', () => {
