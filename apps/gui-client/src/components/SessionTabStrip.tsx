@@ -65,7 +65,11 @@ export function SessionTabStrip({
 
   useEffect(() => {
     void refresh();
-    const id = window.setInterval(() => void refresh(), LIST_POLL_INTERVAL_MS);
+    // Skip the poll while the window is hidden (audit 2026-07-08) — resumes on next visible tick.
+    const id = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void refresh();
+    }, LIST_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [refresh]);
 

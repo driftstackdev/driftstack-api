@@ -116,6 +116,8 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
     if (!hasPending) return;
     if (paginatedBeyondFirst) return;
     const id = setInterval(() => {
+      // Skip the pending-order poll while the window is hidden (audit 2026-07-08).
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       void refetch();
     }, pendingRefreshMs);
     return () => {

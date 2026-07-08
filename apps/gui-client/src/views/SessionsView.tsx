@@ -196,7 +196,13 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
   // background polls every 15s fetch silently — no UI flicker.
   useEffect(() => {
     void refresh(true);
-    const id = window.setInterval(() => void refresh(false), REFRESH_MS);
+    // Skip the background poll while the app window is hidden/minimized (no point hitting
+    // the control plane when nothing's on screen — audit 2026-07-08, pattern from
+    // recordings.tsx). The interval keeps ticking so it resumes on the next visible tick.
+    const id = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void refresh(false);
+    }, REFRESH_MS);
     return () => window.clearInterval(id);
   }, [refresh]);
 

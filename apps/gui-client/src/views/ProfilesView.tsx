@@ -851,7 +851,12 @@ export function ProfilesView({
 
   useEffect(() => {
     void refresh(true);
-    const id = window.setInterval(() => void refresh(false), REFRESH_MS);
+    // Skip the 15s background poll while the window is hidden (audit 2026-07-08) — the
+    // interval keeps ticking and resumes the fetch on the next visible tick.
+    const id = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void refresh(false);
+    }, REFRESH_MS);
     return () => window.clearInterval(id);
   }, [refresh]);
 
