@@ -4490,9 +4490,11 @@ export function SimulatorWindow(): JSX.Element {
     // clamp (the ripple is harmless pre-stream).
     if (isOffVideoSurface(e)) return;
     // Press feedback for the touch-point cursor — it shrinks/brightens on press,
-    // alongside the bloom ring below (resets on pointer up / leave).
-    setTouchPoint({ x, y });
-    setTouchPressed(true);
+    // alongside the bloom ring below (resets on pointer up / leave). Position + press
+    // are direct-DOM ref writes (no re-render); visibility flips only if not already shown.
+    positionDot(x, y);
+    setDotPressed(true);
+    if (!dotVisible) setDotVisible(true);
     const id = (tapIdRef.current += 1);
     setTaps((cur) => [...cur, { id, x, y }]);
     window.setTimeout(() => {
@@ -4505,8 +4507,32 @@ export function SimulatorWindow(): JSX.Element {
   // pointer-events-none (never intercepts the real tap) and pairs with the
   // press-time tap ripple above. The toolbar/bezel keep the normal arrow (you
   // need it for the window controls + dragging).
-  const [touchPoint, setTouchPoint] = useState<{ x: number; y: number } | null>(null);
-  const [touchPressed, setTouchPressed] = useState(false);
+  // PERF (audit 2026-07-08, founder "not smooth / laggy during fast interaction"): the
+  // dot's POSITION + PRESSED state are driven by DIRECT DOM writes through refs, NOT React
+  // state, so a pointer-move over the screen mutates ONE element's style instead of
+  // re-rendering this ~4500-line component 60-120×/sec. Only the dot's VISIBILITY is React
+  // state (`dotVisible`), and it flips just on the show/hide TRANSITIONS (enter / leave /
+  // crossing the off-surface boundary) — never per-move. So a continuous drag/hover inside
+  // the video surface causes ZERO re-renders, while the mount stays conditional (the dot is
+  // truly absent when hidden). On the hidden→shown re-render the element seeds its
+  // position/press from the refs (both set before the transition), and any later re-render
+  // for an unrelated reason re-derives the same position/press from those refs.
+  const [dotVisible, setDotVisible] = useState(false);
+  const touchDotRef = useRef<HTMLSpanElement | null>(null);
+  const dotPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dotPressedRef = useRef(false);
+  const positionDot = (x: number, y: number): void => {
+    dotPosRef.current = { x, y };
+    const d = touchDotRef.current;
+    if (d !== null) {
+      d.style.left = `${x}px`;
+      d.style.top = `${y}px`;
+    }
+  };
+  const setDotPressed = (pressed: boolean): void => {
+    dotPressedRef.current = pressed;
+    touchDotRef.current?.classList.toggle('ds-touch-dot--pressed', pressed);
+  };
   const moveTouchPoint = (e: ReactPointerEvent<HTMLDivElement>): void => {
     const host = screenHostRef.current;
     if (host === null) return;
@@ -4514,21 +4540,22 @@ export function SimulatorWindow(): JSX.Element {
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
     if (r.width === 0 || x < 0 || y < 0 || x > r.width || y > r.height) {
-      setTouchPoint(null);
+      if (dotVisible) setDotVisible(false);
       return;
     }
     // Hide the fingertip dot in the object-contain letterbox bars — the device receives
     // nothing there, so a touch cursor would falsely read as a live touch surface (same
     // surface test the wire uses). Keep the dot only where pointerToViewport is non-null.
     if (isOffVideoSurface(e)) {
-      setTouchPoint(null);
+      if (dotVisible) setDotVisible(false);
       return;
     }
-    setTouchPoint({ x, y });
+    positionDot(x, y); // direct DOM write — no re-render on a continuous move
+    if (!dotVisible) setDotVisible(true); // re-render ONLY on the hidden→shown transition
   };
   const hideTouchPoint = (): void => {
-    setTouchPoint(null);
-    setTouchPressed(false);
+    if (dotVisible) setDotVisible(false);
+    setDotPressed(false);
   };
   // Session control (founder 2026-06-18): Mode segmented control + contextual
   // takeover/handback + a "tell the agent" composer in the expandable panel.
@@ -5739,7 +5766,7 @@ export function SimulatorWindow(): JSX.Element {
                   onPointerMove={moveTouchPoint}
                   onPointerEnter={moveTouchPoint}
                   onPointerLeave={hideTouchPoint}
-                  onPointerUp={() => setTouchPressed(false)}
+                  onPointerUp={() => setDotPressed(false)}
                 >
                   <AgentSessionPanel
                     info={info}
@@ -5791,14 +5818,15 @@ export function SimulatorWindow(): JSX.Element {
                     pointer over the screen (the PC arrow is hidden via cursor-none
                     on the host). Shrinks + brightens on press. pointer-events-none
                     so it never intercepts the real tap. */}
-                  {touchPoint !== null && controlMode !== 'ai' && (
+                  {dotVisible && controlMode !== 'ai' && (
                     <span
+                      ref={touchDotRef}
                       data-component="touch-cursor"
                       aria-hidden="true"
                       className={`ds-touch-dot pointer-events-none absolute z-20 ${
-                        touchPressed ? 'ds-touch-dot--pressed' : ''
+                        dotPressedRef.current ? 'ds-touch-dot--pressed' : ''
                       }`}
-                      style={{ left: touchPoint.x, top: touchPoint.y }}
+                      style={{ left: dotPosRef.current.x, top: dotPosRef.current.y }}
                     />
                   )}
                   {/* iOS tap cursor — a ring that blooms at each tap point then
