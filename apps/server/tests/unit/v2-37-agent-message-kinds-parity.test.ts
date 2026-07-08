@@ -27,14 +27,18 @@ describe('v2-#37 AgentRuntime <-> SDK kind union parity', () => {
     const runtime = read(RUNTIME);
     const resource = read(TS_RESOURCE);
 
-    // RunTurnResult variants are declared as `kind: '<name>';`. The
-    // 'session-closed' variant is NOT surfaced to the SDK (route maps
-    // it to a 409 Conflict via the error path) — skip it.
+    // RunTurnResult variants are declared as `kind: '<name>';`. Two kinds the
+    // whole-file scan picks up are NOT runTurn RESULT kinds surfaced to the SDK:
+    //   - 'session-closed' — the route maps it to a 409 Conflict via the error path.
+    //   - 'plan' — a DecomposeResult kind constructed by reconstructHaltedPlan (#130
+    //     consequential-approval resume) + returned by the decomposer; runTurn surfaces
+    //     a plan as the 'plan-executed' result kind, never a bare 'plan'.
+    const NON_SDK_KINDS = new Set(['session-closed', 'plan']);
     const KIND_RE = /\bkind:\s*['"]([a-z][a-z-]+)['"]/g;
     const runtimeKinds = new Set<string>();
     let m: RegExpExecArray | null;
     while ((m = KIND_RE.exec(runtime)) !== null) {
-      if (m[1] && m[1] !== 'session-closed') runtimeKinds.add(m[1]);
+      if (m[1] && !NON_SDK_KINDS.has(m[1])) runtimeKinds.add(m[1]);
     }
     expect(runtimeKinds.size).toBeGreaterThan(0);
 
