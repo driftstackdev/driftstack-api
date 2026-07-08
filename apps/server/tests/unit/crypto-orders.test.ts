@@ -2770,3 +2770,76 @@ describe('V-666.AT order event log', () => {
     expect(events?.map((e) => `${e.source}:${e.status}`)).toEqual(['create:pending', 'ipn:paid']);
   });
 });
+
+describe('C3 — refund/failure IPN after paid raises an ops alarm (no auto-clawback)', () => {
+  it('logs ipn_refund_after_paid, leaves the order paid, and does not re-fire failed side-effects', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const errors: Array<{ obj: Record<string, unknown>; msg: string }> = [];
+    const failedWebhooks: string[] = [];
+    const svc = new CryptoOrdersService({
+      repo,
+      nowFn: () => 9_000,
+      logger: { error: (obj, msg) => errors.push({ obj, msg }) },
+      webhooks: {
+        enqueueEvent: (accountId, eventType) => {
+          if (eventType === 'crypto.order.failed') failedWebhooks.push(accountId);
+          return Promise.resolve(0);
+        },
+      },
+    });
+    await svc.create({
+      order_id: 'ord_refund',
+      account_id: 'acc_r',
+      product: 'solo_manual',
+      price_cents: 7900,
+      price_currency: 'USD',
+    });
+    // Drive to paid.
+    await svc.applyIpnStatus({
+      order_id: 'ord_refund',
+      payment_id: 'np1',
+      provider_status: 'finished',
+    });
+    // A refund IPN for the SAME payment arrives after paid.
+    const after = await svc.applyIpnStatus({
+      order_id: 'ord_refund',
+      payment_id: 'np1',
+      provider_status: 'refunded',
+    });
+
+    // The order stays paid — no automatic tier clawback.
+    expect(after?.status).toBe('paid');
+    // The integrity alarm fired with the reconciliation context.
+    const alarm = errors.find((e) => e.obj.event === 'ipn_refund_after_paid');
+    expect(alarm, 'ipn_refund_after_paid alarm must fire').toBeDefined();
+    expect(alarm?.obj.order_id).toBe('ord_refund');
+    expect(alarm?.obj.account_id).toBe('acc_r');
+    expect(alarm?.obj.provider_status).toBe('refunded');
+    // No failed side-effects re-fire (paid is terminal-forward).
+    expect(failedWebhooks).toEqual([]);
+  });
+
+  it('a refund on a PENDING order still transitions normally to failed (no alarm)', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const errors: Array<{ obj: Record<string, unknown> }> = [];
+    const svc = new CryptoOrdersService({
+      repo,
+      nowFn: () => 9_000,
+      logger: { error: (obj) => errors.push({ obj }) },
+    });
+    await svc.create({
+      order_id: 'ord_pending_refund',
+      account_id: 'acc_p',
+      product: 'solo_manual',
+      price_cents: 7900,
+      price_currency: 'USD',
+    });
+    const after = await svc.applyIpnStatus({
+      order_id: 'ord_pending_refund',
+      payment_id: 'np2',
+      provider_status: 'refunded',
+    });
+    expect(after?.status).toBe('failed');
+    expect(errors.find((e) => e.obj.event === 'ipn_refund_after_paid')).toBeUndefined();
+  });
+});

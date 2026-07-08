@@ -1499,6 +1499,34 @@ export class CryptoOrdersService {
       );
     }
 
+    // C3 — a refund/failure IPN for an ALREADY-PAID order. `paid` is
+    // terminal-forward, so the lock made no transition (outcome.order.status
+    // is still 'paid') and the activated tier is NOT auto-clawed-back: a
+    // correct clawback must recompute the account's best-remaining entitlement
+    // across any concurrent Stripe subscription AND other paid crypto orders,
+    // which this path has no view of, so a naive downgrade could strand a
+    // customer who still holds valid paid access. NowPayments refunds are
+    // founder-initiated from their dashboard (runbook-documented), so surface a
+    // loud ops alarm naming the manual admin change-tier remediation instead.
+    // Gating on mapped0 (not provider_status==='refunded') also catches an
+    // anomalous failed/expired-after-paid; provider_status is logged to
+    // distinguish. The payment_id-mismatch early-return above already excludes
+    // a refund for a DIFFERENT payment (which alarms separately).
+    if (mapped0 === 'failed' && outcome.order.status === 'paid') {
+      this.opts.logger?.error(
+        {
+          component: 'crypto-orders',
+          event: 'ipn_refund_after_paid',
+          order_id: args.order_id,
+          account_id: outcome.order.account_id,
+          product: outcome.order.product,
+          payment_id: outcome.order.payment_id,
+          provider_status: args.provider_status,
+        },
+        'crypto IPN reports refund/failure for an ALREADY-PAID order — order stays paid and the activated tier is NOT clawed back automatically; reconcile via admin change-tier (integrity alarm)',
+      );
+    }
+
     // Side-effects fire OUTSIDE the lock, gated on the atomic transition decision.
     if (outcome.fireFailed) {
       // V-666.AN — crypto.order.failed on the IPN-driven →failed transition.
