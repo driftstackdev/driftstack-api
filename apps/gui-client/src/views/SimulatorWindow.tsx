@@ -4265,12 +4265,19 @@ export function SimulatorWindow(): JSX.Element {
       // readAsDataURL → "data:<mime>;base64,<b64>"; take the part after the comma.
       const dataUrl = typeof reader.result === 'string' ? reader.result : '';
       const dataB64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      // Capture the session this upload is FOR: a standalone-window session swap can
+      // change `sessionId` in place during the (up to ~30s) request, so every result-write
+      // below is guarded on it still being current — else the OLD session's handle/note
+      // bleeds into the NEW session (audit 2026-07-08; same sessionIdRef guard the
+      // cookies/downloads polls already use).
+      const reqSessionId = sessionId;
       void uploadAgentSessionFile(
-        sessionId,
+        reqSessionId,
         { name: file.name, mime: file.type || 'application/octet-stream', dataB64 },
         controlAuth,
       )
         .then((res) => {
+          if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale result
           const h = res.handle;
           if (res.status === 'ok' && h !== null) {
             setFiles((prev) => [h, ...prev]);
@@ -4296,11 +4303,13 @@ export function SimulatorWindow(): JSX.Element {
           }
         })
         .catch(() => {
+          if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale note
           // Gated 503 / 404 / network — a transient reachability gap, not a missing
           // feature. Retry by picking the file again once the session is reachable.
           setUploadNote("Couldn't upload — the device isn't reachable right now.");
         })
         .finally(() => {
+          if (reqSessionId !== sessionIdRef.current) return; // new session owns its own uploading flag
           setUploading(false);
         });
     };
@@ -4408,8 +4417,13 @@ export function SimulatorWindow(): JSX.Element {
   const onDownloadFile = (name: string): void => {
     setDownloadingName(name);
     setDownloadsNote(null);
-    void fetchAgentSessionDownload(sessionId, name, controlAuth)
+    // Capture the session this fetch is FOR (session can swap in place during the up-to-30s
+    // hold); guard every result-write — including the disk save — on it still being current,
+    // so an old session's file/note never lands in a switched-to session (audit 2026-07-08).
+    const reqSessionId = sessionId;
+    void fetchAgentSessionDownload(reqSessionId, name, controlAuth)
       .then((res) => {
+        if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale result + save
         if (res.status === 'ok' && res.file !== null) {
           // base64 → bytes → Blob → the shared, Tauri-WKWebView-proven download helper.
           const f = res.file;
@@ -4457,9 +4471,11 @@ export function SimulatorWindow(): JSX.Element {
         }
       })
       .catch(() => {
+        if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale note
         setDownloadsNote("Couldn't fetch the file — the device isn't reachable right now.");
       })
       .finally(() => {
+        if (reqSessionId !== sessionIdRef.current) return; // new session owns its own Save-button state
         setDownloadingName(null);
       });
   };
@@ -4659,6 +4675,12 @@ export function SimulatorWindow(): JSX.Element {
     setDownloads(null);
     hasDownloadsRef.current = false;
     setDownloadsNote(null);
+    // Clear in-flight upload/download UI flags too (audit 2026-07-08): a swap while a
+    // fetch/upload is mid-hold would otherwise leave the new session's Save buttons
+    // disabled / the composer's "uploading" state stuck until the OLD request settles
+    // (the guarded .finally above no longer clears them for a swapped-away request).
+    setDownloadingName(null);
+    setUploading(false);
     // Reset the per-session TAB model + title to a clean single-seed state. The
     // in-place relaunch swaps sessionId WITHOUT remounting (to keep the Room), so
     // tabs/activeTabId/liveTitle would otherwise carry the OLD session's tabs into
