@@ -8,7 +8,7 @@
 // Mirrors SessionsView shape: 15-second poll (REFRESH_MS), inline error
 // banner, busy state per row.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   folderList,
   aggregateTags,
@@ -340,6 +340,11 @@ export function ProfilesView({
   // mirror the "what did I touch last" mental model that dominates
   // operator usage (show all, sort by recent use).
   const [searchQuery, setSearchQuery] = useState('');
+  // Perf (audit 2026-07-08): the search box drives the expensive filter+sort over ALL
+  // profiles (+ a full grid re-render). Defer the value the FILTER reads so typing stays
+  // instant (the input is still bound to the live `searchQuery`) while React can
+  // interrupt/deprioritize the heavy recompute — no per-keystroke jank on a big profile set.
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   // Fleet hub (2026-06-12, demo-concepts greenlight): grid/list toggle.
   // Grid is the DEFAULT (founder directive 2026-06-12 night arc) — the
   // visual workspace is the product; list remains a toggle for dense ops.
@@ -1278,7 +1283,7 @@ export function ProfilesView({
   // beats alpha for the operator workflow).
   const filteredProfiles = useMemo(() => {
     let list = state.profiles;
-    const q = searchQuery.trim().toLowerCase();
+    const q = deferredSearchQuery.trim().toLowerCase();
     if (q.length > 0) {
       list = list.filter((p) => {
         const meta = profilesMeta[p.id];
@@ -1347,7 +1352,7 @@ export function ProfilesView({
     tagFilter,
     profilesMeta,
     state.profiles,
-    searchQuery,
+    deferredSearchQuery,
     statusFilter,
     sortBy,
     sortDir,
@@ -2380,7 +2385,14 @@ export function ProfilesView({
             {
               id: 'launch',
               label: 'Launch a session',
-              done: (accountMe?.concurrent_session_active ?? 0) > 0 || activeSessions.length > 0,
+              // `concurrent_session_active` + `activeSessions` are DRIVER-only; a GUI
+              // launch binds an AGENT session (agt_…), so without activeAgentCount the
+              // guided first-run path (create → launch a profile) never checks this off
+              // and the checklist never completes/auto-hides (audit 2026-07-08).
+              done:
+                (accountMe?.concurrent_session_active ?? 0) > 0 ||
+                activeSessions.length > 0 ||
+                activeAgentCount > 0,
             },
           ]}
           onDismiss={() => {

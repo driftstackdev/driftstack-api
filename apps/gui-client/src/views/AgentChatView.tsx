@@ -12,7 +12,7 @@
 // fleet control plane). The banner reflects /version `agent_execution`: 'live'
 // when the fleet path is wired (prod), 'simulated' only on a stub deployment.
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, useEffect, useRef, useState } from 'react';
 import type {
   AgentIntent,
   AgentIntentResult,
@@ -1241,7 +1241,17 @@ function RestoredHistoryDivider(): JSX.Element {
   );
 }
 
-function TurnRow({ turn, denied }: { turn: ChatTurn; denied: boolean }): JSX.Element {
+// Memoized: the transcript is mapped in the same component that owns the composer
+// `draft` state, so without this EVERY keystroke re-rendered every turn row (input lag
+// in a long chat — audit 2026-07-08). Props are a stable turn ref + a boolean, so memo
+// bails on a keystroke and only the changed/added row re-renders.
+const TurnRow = memo(function TurnRow({
+  turn,
+  denied,
+}: {
+  turn: ChatTurn;
+  denied: boolean;
+}): JSX.Element {
   if (turn.role === 'user') {
     return (
       <li className="flex justify-end">
@@ -1260,7 +1270,7 @@ function TurnRow({ turn, denied }: { turn: ChatTurn; denied: boolean }): JSX.Ele
       </div>
     </li>
   );
-}
+});
 
 function AgentResponseBody({
   response,

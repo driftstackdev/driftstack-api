@@ -506,14 +506,21 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
               onStop={() => void handleCloseAgent(s.id)}
             />
           ))}
-          {state.sessions.map((s) => (
-            <SessionCard
-              key={s.id}
-              session={s}
-              busy={busyId === s.id}
-              onDestroy={() => void handleDestroy(s.id)}
-            />
-          ))}
+          {state.sessions
+            // The account-scoped list keeps a just-destroyed session until the next
+            // poll drops it; rendering it with a live Stop button while the header
+            // "running" count already excludes it read as a contradiction (audit
+            // 2026-07-08). Hide destroyed rows; errored stays (separately counted +
+            // still actionable to clean up).
+            .filter((s) => s.status !== 'destroyed')
+            .map((s) => (
+              <SessionCard
+                key={s.id}
+                session={s}
+                busy={busyId === s.id}
+                onDestroy={() => void handleDestroy(s.id)}
+              />
+            ))}
         </div>
       )}
     </div>
