@@ -3356,16 +3356,36 @@ export function SimulatorWindow(): JSX.Element {
       // are always authoritative.
       isAuthoritative: boolean,
     ): void => {
-      const targetId =
-        typeof frame.tabId === 'string' && frame.tabId !== ''
-          ? frame.tabId
-          : activeTabIdRef.current;
+      const frameTabId = typeof frame.tabId === 'string' && frame.tabId !== '' ? frame.tabId : null;
+      const targetId = frameTabId ?? activeTabIdRef.current;
       // The box reported a page for this tab → the switch (if any) landed; clear the
       // "switching…" affordance + cancel its re-issue timer (instant-feedback path).
       // Only on an authoritative frame: a stale in-grace tabId-less poll must keep the
       // retry net running until a genuine frame/ack for the switched page arrives.
       if (isAuthoritative) resolveSwitchRef.current(targetId);
+      // #116 — the founder's "tab switch blinks the new page then REVERTS to the old
+      // tab" + wrong url/title. On prod the box still emits page_state WITHOUT a tabId
+      // (per-tab tagging is A3's held fix), so a tabId-LESS frame that lands in the
+      // ~2.5s AFTER a switch may describe the PRIOR tab — writing its url/title onto the
+      // just-switched-to tab is exactly the revert.
+      const inSwitchGrace =
+        frameTabId === null && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
       setTabs((prev) => {
+        // Suppress ONLY the provably-stale case: an in-grace tabId-less frame whose url
+        // is ALREADY the stored url of a DIFFERENT (non-target) tab — that is the prior
+        // tab's lagging poll/reconcile, not a fresh load. A genuine first-load or in-tab
+        // navigation (url not held by any other tab) still writes through, so a newly
+        // opened/navigated tab updates its bar + label live. When it fires, drop the
+        // WHOLE frame (url AND title) — the switched-to tab keeps its own correct state
+        // until a tabId-matching or post-grace frame arrives.
+        if (
+          inSwitchGrace &&
+          typeof frame.url === 'string' &&
+          frame.url !== '' &&
+          prev.some((t) => t.id !== targetId && t.url === frame.url)
+        ) {
+          return prev;
+        }
         let changed = false;
         const next = prev.map((t) => {
           if (t.id !== targetId) return t;
