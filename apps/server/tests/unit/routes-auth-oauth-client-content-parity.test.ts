@@ -94,12 +94,13 @@ describe('routes/auth-oauth-client content parity', () => {
     );
   });
 
-  it("readPkceCookie HMAC + length + timingSafeEqual framing pinned: createHmac('sha256', secret).update(verifier).digest() + length-mismatch returns null + timingSafeEqual constant-time compare. + try/catch on Buffer.from(sig, 'base64url'). Drift to a non-constant-time compare would invite timing attacks against the verifier-signature check", () => {
+  it("readPkceCookie HMAC + length + timingSafeEqual framing pinned: D2 — HMAC over `${verifier}.${nonce}`, length-mismatch returns null + timingSafeEqual constant-time compare + try/catch on Buffer.from(sig, 'base64url'), returns {verifier, nonce}. Drift to a non-constant-time compare would invite timing attacks against the signature check", () => {
+    // D2 — the HMAC now covers the state nonce, and the cookie returns both.
     expect(body).toMatch(
-      /const expected = createHmac\('sha256', secret\)\.update\(verifier\)\.digest\(\);/,
+      /const expected = createHmac\('sha256', secret\)\.update\(`\$\{verifier\}\.\$\{nonce\}`\)\.digest\(\);/,
     );
     expect(body).toMatch(
-      /if \(received\.length !== expected\.length\) return null;\s*\n?\s*if \(!timingSafeEqual\(received, expected\)\) return null;\s*\n?\s*return verifier;/,
+      /if \(received\.length !== expected\.length\) return null;\s*\n?\s*if \(!timingSafeEqual\(received, expected\)\) return null;\s*\n?\s*return \{ verifier, nonce \};/,
     );
     expect(body).toMatch(
       /try \{\s*\n?\s*received = Buffer\.from\(sig, 'base64url'\);\s*\n?\s*\} catch \{\s*\n?\s*return null;\s*\n?\s*\}/,

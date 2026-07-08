@@ -145,11 +145,15 @@ export function registerOAuthClientRoutes(
     // PKCE verifier — 43..128 base64url chars (RFC 7636 §4.1).
     const verifier = randomBytes(48).toString('base64url'); // 64 chars
     const challenge = computeS256Challenge(verifier);
+    // D2 — one nonce binds the signed state to the browser cookie set below,
+    // so the callback can prove they came from the same /start.
+    const nonce = randomBytes(16).toString('hex');
     const state = signOauthClientState({
       provider,
       redirectTo: parsed.data.redirect_to,
       signingSecret: deps.signingSecret,
       nowMs: now(),
+      nonce,
     });
     const authorizeUrl = buildAuthorizeUrl({
       provider,
@@ -159,8 +163,8 @@ export function registerOAuthClientRoutes(
       codeChallenge: challenge,
     });
 
-    // Set the HTTP-only signed cookie carrying the verifier.
-    setPkceCookie(reply, verifier, deps.signingSecret);
+    // Set the HTTP-only signed cookie carrying the verifier + state nonce.
+    setPkceCookie(reply, verifier, nonce, deps.signingSecret);
 
     return reply.code(200).send({ authorize_url: authorizeUrl });
   });
@@ -196,13 +200,21 @@ export function registerOAuthClientRoutes(
       if (stateRes.kind !== 'ok') {
         throw new BadRequestError(`State token invalid: ${stateRes.kind}`);
       }
-      const { provider, redirectTo } = stateRes.payload;
+      const { provider, redirectTo, nonce: stateNonce } = stateRes.payload;
 
       // Read + verify the PKCE verifier cookie.
-      const verifier = readPkceCookie(req, deps.signingSecret);
-      if (verifier === null) {
+      const cookie = readPkceCookie(req, deps.signingSecret);
+      if (cookie === null) {
         throw new BadRequestError('PKCE verifier cookie missing or invalid.');
       }
+      // D2 — the state and this cookie must have been minted by the SAME
+      // /start. Rejects a login-CSRF that pairs an attacker-obtained valid
+      // state with the victim's (or any other) cookie, even for an IDP that
+      // ignores PKCE (GitHub OAuth Apps).
+      if (cookie.nonce !== stateNonce) {
+        throw new BadRequestError('State/cookie binding mismatch.');
+      }
+      const verifier = cookie.verifier;
       clearPkceCookie(reply);
 
       const creds = deps.providers[provider];
@@ -348,9 +360,15 @@ export function registerOAuthClientRoutes(
 
 // ─── cookie helpers ──────────────────────────────────────────────
 
-function setPkceCookie(reply: FastifyReply, verifier: string, secret: string): void {
-  const sig = createHmac('sha256', secret).update(verifier).digest('base64url');
-  const value = `${verifier}.${sig}`;
+function setPkceCookie(reply: FastifyReply, verifier: string, nonce: string, secret: string): void {
+  // D2 — sign over verifier AND the state nonce so the cookie is bound to the
+  // SAME /start that minted the state. This blocks pairing a valid state from
+  // one flow with the verifier cookie of another (login-CSRF) — a gap PKCE
+  // can't close for providers that ignore it (GitHub OAuth Apps). Signing over
+  // `${verifier}.${nonce}` also prevents swapping a valid verifier onto a
+  // different nonce.
+  const sig = createHmac('sha256', secret).update(`${verifier}.${nonce}`).digest('base64url');
+  const value = `${verifier}.${nonce}.${sig}`;
   reply.header(
     'set-cookie',
     `${COOKIE_NAME}=${value}; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=${COOKIE_TTL_SECONDS.toString()}`,
@@ -364,16 +382,21 @@ function clearPkceCookie(reply: FastifyReply): void {
   );
 }
 
-function readPkceCookie(req: FastifyRequest, secret: string): string | null {
+function readPkceCookie(
+  req: FastifyRequest,
+  secret: string,
+): { verifier: string; nonce: string } | null {
   const cookieHeader = req.headers.cookie;
   if (typeof cookieHeader !== 'string') return null;
   for (const part of cookieHeader.split(';')) {
     const [k, ...rest] = part.trim().split('=');
     if (k === COOKIE_NAME) {
       const value = rest.join('=');
-      const [verifier, sig] = value.split('.');
-      if (!verifier || !sig) return null;
-      const expected = createHmac('sha256', secret).update(verifier).digest();
+      // base64url verifier/sig and hex nonce contain no '.', so a 3-way split
+      // is unambiguous.
+      const [verifier, nonce, sig] = value.split('.');
+      if (!verifier || !nonce || !sig) return null;
+      const expected = createHmac('sha256', secret).update(`${verifier}.${nonce}`).digest();
       let received: Buffer;
       try {
         received = Buffer.from(sig, 'base64url');
@@ -382,7 +405,7 @@ function readPkceCookie(req: FastifyRequest, secret: string): string | null {
       }
       if (received.length !== expected.length) return null;
       if (!timingSafeEqual(received, expected)) return null;
-      return verifier;
+      return { verifier, nonce };
     }
   }
   return null;

@@ -80,10 +80,11 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
     expect(pkce).toBeDefined();
     expect(pkce).toMatch(/HttpOnly/i);
     expect(pkce).toMatch(/Path=\/v1\/auth\/oauth-client/);
-    // Cookie body is "<verifier>.<base64url(hmac)>" — both halves non-empty.
+    // D2 — cookie body is "<verifier>.<nonce>.<base64url(hmac)>"; all three non-empty.
     const body = String(pkce).split(';')[0]?.split('=')[1] ?? '';
-    const [verifier, sig] = body.split('.');
+    const [verifier, nonce, sig] = body.split('.');
     expect(verifier?.length ?? 0).toBeGreaterThan(40);
+    expect(nonce?.length ?? 0).toBeGreaterThan(20);
     expect(sig?.length ?? 0).toBeGreaterThan(20);
   });
 
@@ -287,5 +288,51 @@ describe('GET /v1/auth/oauth-client/callback — Path B SPA exchange', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json<{ detail?: string }>().detail).toContain('Missing code or state');
+  });
+});
+
+describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
+  async function startFlow(f: TestAppFixture): Promise<{ state: string; cookie: string }> {
+    const res = await f.app.inject({
+      method: 'POST',
+      url: '/v1/auth/oauth-client/start',
+      headers,
+      payload: { provider: 'github', redirect_to: 'https://app.driftstack.test/dashboard' },
+    });
+    const state = new URL(res.json<{ authorize_url: string }>().authorize_url).searchParams.get(
+      'state',
+    );
+    const setCookie = res.headers['set-cookie'];
+    const raw = (Array.isArray(setCookie) ? setCookie : [setCookie ?? '']).find((c) =>
+      String(c).startsWith('ds_oauth_pkce='),
+    );
+    return { state: state ?? '', cookie: String(raw).split(';')[0] ?? '' };
+  }
+
+  it("rejects a valid state paired with a DIFFERENT flow's cookie → 400 binding mismatch (before any IDP exchange)", async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const a = await startFlow(fx);
+    const b = await startFlow(fx);
+    // Attacker feeds flow B's (valid, signed) state with flow A's cookie.
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(b.state)}`,
+      headers: { cookie: a.cookie },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail?: string }>().detail).toContain('State/cookie binding mismatch');
+  });
+
+  it('a state+cookie from the SAME flow passes the binding check (fails later, not on the binding)', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const a = await startFlow(fx);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(a.state)}`,
+      headers: { cookie: a.cookie },
+    });
+    // The nonce binding matches, so we get PAST it (the flow then fails at the
+    // IDP token exchange, which is not exercised here) — never the mismatch 400.
+    expect(res.json<{ detail?: string }>().detail ?? '').not.toContain('State/cookie binding');
   });
 });
