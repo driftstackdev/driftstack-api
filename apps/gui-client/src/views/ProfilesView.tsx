@@ -3213,12 +3213,24 @@ export function ProfilesView({
           // Likewise, a profile created while filtered to a tag inherits that tag.
           initialTag={tagFilter ?? ''}
           onClose={() => setCreateOpen(false)}
-          onCreated={() => {
+          onCreated={(opts) => {
             setCreateOpen(false);
             void refresh(false);
             // V-239 — refresh the cap counter so the gate flips to
             // disabled if we just hit cap.
             void refreshAccountMe();
+            // #142 — the profile was created but an EXPLICIT proxy choice didn't
+            // persist, so at launch it would silently use the first proxy, not the
+            // one picked. Non-blocking warning (the create already completed) so the
+            // user re-binds from the row before launching.
+            if (opts?.proxyBindFailed === true) {
+              void confirm(
+                'The profile was created, but your proxy choice couldn’t be saved — set it ' +
+                  'from the profile’s row before launching, otherwise it will use your first ' +
+                  'proxy, not the one you picked.',
+                { confirmLabel: 'OK' },
+              );
+            }
             // #3 auto-test on create: a new profile launches through the first
             // available proxy — probe it now (if not already cached) so its
             // card shows egress without a manual Test. Best-effort, background.
@@ -3283,7 +3295,9 @@ function CreateProfileModal({
   initialTag,
 }: {
   onClose: () => void;
-  onCreated: () => void;
+  /** `proxyBindFailed` — an explicit proxy choice couldn't be saved (#142); the
+   *  parent surfaces a non-blocking warning so the user re-binds before launch. */
+  onCreated: (opts?: { proxyBindFailed?: boolean }) => void;
   /** Folder names for the Notes-tab picker (from the hub's organization map). */
   existingFolders: string[];
   /** Pre-selected folder — the one the user is currently viewing, so a profile
@@ -3602,16 +3616,17 @@ function CreateProfileModal({
       }
       // Bind the chosen proxy to the new profile. null = use the first-available
       // proxy at Launch time. BEST-EFFORT by design (the profile is already created +
-      // billed; a bind failure must not force a re-create) — the customer can set the
-      // proxy from the profile's row afterward. NOTE (founder-hit sweep, #3, deferred):
-      // an EXPLICIT proxy choice that silently fails to persist means launch falls back
-      // to proxies[0] (a DIFFERENT proxy than picked) — the proper fix is a NON-blocking
-      // post-create warning surfaced to the parent (needs onCreated plumbing), not a
-      // modal-blocking error that fights the best-effort contract this flow guarantees.
+      // billed; a bind failure must NOT force a re-create) — the create still completes.
+      // But (founder-hit sweep #3/#142) an EXPLICIT proxy choice that silently fails to
+      // persist means launch falls back to proxies[0] — a DIFFERENT proxy than picked —
+      // so flag it and let the PARENT surface a NON-blocking warning after the modal
+      // closes (keeps the best-effort contract; the customer re-binds from the row).
+      let explicitProxyBindFailed = false;
       await setDefaultProxy(profileId, resolvedProxyId).catch((err: unknown) => {
         console.warn('[profiles] setDefaultProxy failed (profile created):', err);
+        if (resolvedProxyId !== null) explicitProxyBindFailed = true;
       });
-      onCreated();
+      onCreated(explicitProxyBindFailed ? { proxyBindFailed: true } : undefined);
     } catch (err) {
       setError(friendlyError(err, settings.baseUrl));
       setSubmitting(false);
