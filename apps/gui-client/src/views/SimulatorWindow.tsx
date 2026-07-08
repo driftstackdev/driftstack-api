@@ -1898,13 +1898,20 @@ function CookiesPane({
     // (founder #3, 2026-06-30).
     const out = exportCookies(cookies, 'json');
     const n = cookies.length;
-    void downloadBlob(out.filename, new Blob([out.text], { type: out.mime })).then((ok) => {
-      setImportNote(
-        ok
-          ? `Exported ${n} cookie${n === 1 ? '' : 's'} to your Downloads folder (${out.filename}).`
-          : "Couldn't save the export — check the app's file-access permission.",
-      );
-    });
+    void downloadBlob(out.filename, new Blob([out.text], { type: out.mime }))
+      .then((ok) => {
+        setImportNote(
+          ok
+            ? `Exported ${n} cookie${n === 1 ? '' : 's'} to your Downloads folder (${out.filename}).`
+            : "Couldn't save the export — check the app's file-access permission.",
+        );
+      })
+      // A rejected fs write must NOT escalate to the global unhandledrejection handler,
+      // which blanks the whole simulator to a fatal overlay (the 2026-06-18 "undraggable
+      // black box → force-quit" class). Surface a soft note instead.
+      .catch(() => {
+        setImportNote("Couldn't save the export — check the app's file-access permission.");
+      });
   };
 
   // Import: read the chosen .json as text → JSON.parse → shape-validate an array of
@@ -2320,15 +2327,23 @@ export function SimulatorWindow(): JSX.Element {
       // masquerading as success (the saved file is blank); surface the honest result and
       // discard the empty recording so it doesn't litter the list.
       const idToStop = recordingId;
-      void stopRecording(idToStop).then((rec) => {
-        if (rec !== null && rec.frameCount === 0) {
-          void deleteRecording(idToStop);
-          setNotice('Recording was empty — no video was streaming');
-        } else {
-          setNotice('Recording saved');
-        }
-        window.setTimeout(() => setNotice(null), 4000);
-      });
+      void stopRecording(idToStop)
+        .then((rec) => {
+          if (rec !== null && rec.frameCount === 0) {
+            void deleteRecording(idToStop).catch(() => {});
+            setNotice('Recording was empty — no video was streaming');
+          } else {
+            setNotice('Recording saved');
+          }
+          window.setTimeout(() => setNotice(null), 4000);
+        })
+        // Never let a rejected recording-store write reach the global
+        // unhandledrejection handler (it blanks the app to a fatal overlay — the
+        // 2026-06-18 black-box class); report a soft note instead.
+        .catch(() => {
+          setNotice("Couldn't save the recording — check the app's file-access permission.");
+          window.setTimeout(() => setNotice(null), 4000);
+        });
       activeRecIdRef.current = null;
       return;
     }
@@ -2359,14 +2374,20 @@ export function SimulatorWindow(): JSX.Element {
     // forget gave NO confirmation on success and silently swallowed a failed write, so
     // Export read as "does nothing / is broken".
     const fn = recordingExportFilename(rec, now);
-    void downloadJson(fn, buildRecordingExport(rec, now)).then((ok) => {
-      setNotice(
-        ok
-          ? `Exported recording to your Downloads folder (${fn}).`
-          : "Couldn't save the export — check the app's file-access permission.",
-      );
-      window.setTimeout(() => setNotice(null), 4000);
-    });
+    void downloadJson(fn, buildRecordingExport(rec, now))
+      .then((ok) => {
+        setNotice(
+          ok
+            ? `Exported recording to your Downloads folder (${fn}).`
+            : "Couldn't save the export — check the app's file-access permission.",
+        );
+        window.setTimeout(() => setNotice(null), 4000);
+      })
+      // Guard the global unhandledrejection fatal-overlay (2026-06-18 black-box class).
+      .catch(() => {
+        setNotice("Couldn't save the export — check the app's file-access permission.");
+        window.setTimeout(() => setNotice(null), 4000);
+      });
   }
   // Stop the capture loop if the window unmounts mid-recording.
   useEffect(() => {
@@ -4600,7 +4621,7 @@ export function SimulatorWindow(): JSX.Element {
       recordTimerRef.current = null;
     }
     if (activeRecIdRef.current !== null) {
-      void stopRecording(activeRecIdRef.current);
+      void stopRecording(activeRecIdRef.current).catch(() => {}); // never escalate to the fatal overlay
       activeRecIdRef.current = null;
     }
     setControlMode(null);
@@ -5189,6 +5210,13 @@ export function SimulatorWindow(): JSX.Element {
           // Exhausted — give up softly. Clear the affordance + retry record; leave the
           // operator on the tab they tapped (a dropped ack ≠ a reject). A gentle toast.
           activationRetryRef.current.delete(ctx.tabId);
+          // Also drop this tab's now-orphaned pending-activation entries (keyed by
+          // requestId): we've stopped retrying, so their acks will never resolve, and
+          // otherwise only a relaunch/restore/unmount clears them — a slow bounded Map
+          // leak on a lossy channel (audit #4, 2026-07-08).
+          for (const [rid, p] of pendingActivationsRef.current) {
+            if (p.tabId === ctx.tabId) pendingActivationsRef.current.delete(rid);
+          }
           setSwitchingTabId((s) => (s === ctx.tabId ? null : s));
           setNotice('Still switching tabs…');
           window.setTimeout(() => setNotice(null), 3000);
@@ -5232,6 +5260,11 @@ export function SimulatorWindow(): JSX.Element {
         if (tid !== id) {
           window.clearTimeout(r.timer);
           activationRetryRef.current.delete(tid);
+          // Prune the superseded tab's pending-activation entries too (audit #4) — a late
+          // ack for a pruned requestId is a safe no-op (the ack handler guards on presence).
+          for (const [rid, p] of pendingActivationsRef.current) {
+            if (p.tabId === tid) pendingActivationsRef.current.delete(rid);
+          }
         }
       }
       // Mark the switch BEFORE flipping active so the ~2s poll's grace window is
@@ -6723,7 +6756,7 @@ export function SimulatorWindow(): JSX.Element {
                                         type="button"
                                         aria-label={`Delete ${r.label ?? 'recording'}`}
                                         title="Delete this recording"
-                                        onClick={() => void deleteRecording(r.id)}
+                                        onClick={() => void deleteRecording(r.id).catch(() => {})}
                                         className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/60 transition-colors hover:bg-red-500/20 hover:text-red-300"
                                       >
                                         ×
