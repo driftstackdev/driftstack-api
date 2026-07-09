@@ -1649,7 +1649,7 @@ function TabStrip({
                   e.stopPropagation();
                   onClose(t.id);
                 }}
-                className="shrink-0 rounded p-0.5 text-white/40 opacity-0 transition hover:bg-white/15 hover:text-white/90 focus:opacity-100 group-hover:opacity-100"
+                className="shrink-0 rounded p-0.5 text-white/40 opacity-40 transition hover:bg-white/15 hover:text-white/90 focus:opacity-100 group-hover:opacity-100"
               >
                 <svg
                   width="10"

@@ -50,6 +50,10 @@ export function ConnectionPill({ status, baseUrl, onClick }: Props): JSX.Element
       type="button"
       onClick={onClick}
       title={tooltip}
+      // The dot is aria-hidden and the detail lives only in the hover title,
+      // so expose both the state and the diagnostic (last-ok / error) to
+      // screen-reader + keyboard users who never see the tooltip.
+      aria-label={`Connection: ${LABEL[status.state]}. ${tooltip}`}
       className="flex items-center gap-1.5 rounded-full border border-surface-divider bg-surface-base/60 px-2.5 py-0.5 text-[11px] text-ink-secondary transition hover:border-status-error/40 hover:text-ink-primary"
     >
       <span
