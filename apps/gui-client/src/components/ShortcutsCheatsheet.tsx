@@ -5,8 +5,9 @@
 // shortcuts that actually exist (⌘K palette, ⌘⇧D theme, ⌘, settings, ⌘⇧L sign
 // out, Enter/⇧Enter in the AI composer) — no aspirational keys.
 
-import { useEffect } from 'react';
+import { useRef } from 'react';
 import type { ReactNode } from 'react';
+import { useFocusTrap } from '../lib/use-focus-trap';
 
 const isMac =
   typeof navigator !== 'undefined' &&
@@ -55,14 +56,10 @@ export function ShortcutsCheatsheet({
   open: boolean;
   onClose: () => void;
 }): JSX.Element | null {
-  useEffect(() => {
-    if (!open) return undefined;
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Focus-trap the dialog, close on Escape, and restore focus to the opener on
+  // close (was Escape-only, so keyboard focus leaked to the view behind it).
+  useFocusTrap(open, dialogRef, onClose);
 
   if (!open) return null;
   return (
@@ -74,6 +71,7 @@ export function ShortcutsCheatsheet({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Keyboard shortcuts"
