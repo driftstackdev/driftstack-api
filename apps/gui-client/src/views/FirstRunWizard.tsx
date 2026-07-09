@@ -145,6 +145,23 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
             />
           )}
           {step === 'profile' && <ProfileStep onSkip={finish} onCreated={finish} />}
+          {(step === 'mode' || step === 'apikey') && (
+            // Escape hatch: without this, a customer whose key/server won't
+            // validate is trapped on the sign-in step with no way into the app
+            // (onComplete was only reachable past validation). Skipping drops
+            // them into the shell (unconnected, everything shows "Not connected")
+            // where they can fix it in Settings; the wizard re-arms next launch
+            // while the key is still unset.
+            <div className="mt-6 text-center">
+              <button
+                type="button"
+                onClick={finish}
+                className="text-xs text-ink-muted underline-offset-2 hover:text-ink-secondary hover:underline"
+              >
+                Skip for now — set this up later in Settings
+              </button>
+            </div>
+          )}
         </div>
       </main>
     </div>
