@@ -180,6 +180,13 @@ export function SettingsView(): JSX.Element {
 
   async function handleClearByokKey(): Promise<void> {
     if (!client) return;
+    if (
+      !(await confirm(
+        'Clear your saved Anthropic key? Automations will fall back to platform billing (or stop if none is set). You can paste the key again anytime.',
+        { confirmLabel: 'Clear key' },
+      ))
+    )
+      return;
     setByokClearing(true);
     try {
       await client.account.clearByokAnthropicKey();

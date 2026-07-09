@@ -80,7 +80,7 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
 
   it("Auto-poll lifecycle: useEffect first-fetch with showLoading=true + setInterval background refresh(false) at REFRESH_MS + cleanup clearInterval — pinned so poll stops on unmount and doesn't chew API quota in background; 2026-05-20 d15460c7 — refresh accepts a showLoading param so the loading hint only flashes on the initial fetch, not every 15s background tick (customer reported 'the page keeps refreshing')", () => {
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);\s*\n?\s*const id = window\.setInterval\(\(\) => void refresh\(false\), REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
+      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);[\s\S]*?const id = window\.setInterval\(\(\) => \{[\s\S]*?void refresh\(false\);\s*\n?\s*\}, REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
     );
   });
 

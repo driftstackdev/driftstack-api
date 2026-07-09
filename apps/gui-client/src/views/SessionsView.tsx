@@ -291,6 +291,15 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
 
   async function handleDestroy(id: string): Promise<void> {
     if (!client) return;
+    // Stopping tears down a live (billed) browser immediately — confirm so a
+    // misclick in the dense session grid doesn't kill a running session.
+    if (
+      !(await confirm(
+        'Stop this session now? The live browser is torn down immediately and anything in progress is lost.',
+        { confirmLabel: 'Stop session' },
+      ))
+    )
+      return;
     setBusyId(id);
     try {
       await client.sessions.destroy(id);
@@ -310,6 +319,13 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
   // only from its Profiles row.
   async function handleCloseAgent(id: string): Promise<void> {
     if (!client) return;
+    if (
+      !(await confirm(
+        'Stop this running session now? The live browser is torn down immediately and anything in progress is lost.',
+        { confirmLabel: 'Stop session' },
+      ))
+    )
+      return;
     setBusyId(id);
     try {
       await client.agentSessions.close(id);
