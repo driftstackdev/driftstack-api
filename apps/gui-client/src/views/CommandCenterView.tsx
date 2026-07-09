@@ -20,10 +20,12 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { RelativeTime } from '../components/RelativeTime';
+import { OnboardingChecklist } from '../components/OnboardingChecklist';
+import { useOnboardingDismissed, buildOnboardingSteps } from '../lib/use-onboarding-steps';
 import { listProxies } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
 
-export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions';
+export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions' | 'settings';
 
 // Humanise an audit action key for the activity feed: 'profile.created' →
 // 'Profile created', 'api_key.rotated' → 'Api key rotated'. Pure + exported so
@@ -203,7 +205,8 @@ export function CommandCenterView({
    *  the cards fall back to the bare Profiles list. */
   onOpenProfile?: (profileId: string) => void;
 }): JSX.Element {
-  const { accountMe, client, refreshAccountMe, activeWorkspace } = useSettings();
+  const { settings, accountMe, client, refreshAccountMe, activeWorkspace } = useSettings();
+  const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } = useOnboardingDismissed();
   // Refresh accountMe when the home view mounts. The session-health rollup below
   // independently re-fetches on every mount, but accountMe (which drives the cap
   // alerts + the profile/Live-now KPIs) is otherwise only fetched on client change
@@ -434,6 +437,25 @@ export function CommandCenterView({
           </div>
         </div>
       </section>
+
+      {/* Get-set-up checklist — the same first-run guidance Profiles shows, now
+          also on the home so a new user sees the next step where they land (H2).
+          Shared derive + dismissal via use-onboarding-steps; auto-hides once all
+          three are done or the user dismisses it. */}
+      {!onboardingDismissed && (
+        <OnboardingChecklist
+          steps={buildOnboardingSteps(
+            {
+              apiKeyPresent: settings.apiKey !== null,
+              hasProfile: (accountMe?.profile_count ?? 0) > 0,
+              hasLiveSession:
+                (accountMe?.concurrent_session_active ?? 0) > 0 || (activeAgentCount ?? 0) > 0,
+            },
+            { goConnect: () => onNavigate('settings'), goProfile: () => onNavigate('profiles') },
+          )}
+          onDismiss={dismissOnboarding}
+        />
+      )}
 
       {/* Jump back in — recent profiles, most-recently-used first. Placed high
           because getting into a profile to launch it is the core action; each

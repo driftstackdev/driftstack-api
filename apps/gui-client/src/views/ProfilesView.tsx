@@ -42,6 +42,7 @@ import { useConfirm } from '../components/ConfirmProvider';
 import { PROFILE_ICONS } from '../lib/profile-icons';
 import { useFocusTrap } from '../lib/use-focus-trap';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
+import { useOnboardingDismissed, buildOnboardingSteps } from '../lib/use-onboarding-steps';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
@@ -401,13 +402,7 @@ export function ProfilesView({
   const confirm = useConfirm();
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
-  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
-    try {
-      return localStorage.getItem('ds_onboarding_dismissed') === '1';
-    } catch {
-      return false;
-    }
-  });
+  const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } = useOnboardingDismissed();
   // Night-arc D — privacy banner (hub demo). Claims limited to wording
   // already shipped on the production dashboard trust surface; the
   // demo's stronger phrasing stays gated on founder+legal sign-off.
@@ -2412,40 +2407,24 @@ export function ProfilesView({
       )}
       {!onboardingDismissed && (
         <OnboardingChecklist
-          steps={[
+          steps={buildOnboardingSteps(
             {
-              id: 'connect',
-              label: 'Connect your account',
-              done: settings.apiKey !== null,
-              go: onGoToSettings,
-            },
-            {
-              id: 'profile',
-              label: 'Create a profile',
-              done: (accountMe?.profile_count ?? 0) > 0 || state.profiles.length > 0,
-              go: () => setCreateOpen(true),
-            },
-            {
-              id: 'launch',
-              label: 'Launch a session',
+              apiKeyPresent: settings.apiKey !== null,
+              // profile_count is the server truth; state.profiles covers a
+              // just-created profile before accountMe re-fetches.
+              hasProfile: (accountMe?.profile_count ?? 0) > 0 || state.profiles.length > 0,
               // `concurrent_session_active` + `activeSessions` are DRIVER-only; a GUI
               // launch binds an AGENT session (agt_…), so without activeAgentCount the
               // guided first-run path (create → launch a profile) never checks this off
               // and the checklist never completes/auto-hides (audit 2026-07-08).
-              done:
+              hasLiveSession:
                 (accountMe?.concurrent_session_active ?? 0) > 0 ||
                 activeSessions.length > 0 ||
                 activeAgentCount > 0,
             },
-          ]}
-          onDismiss={() => {
-            try {
-              localStorage.setItem('ds_onboarding_dismissed', '1');
-            } catch {
-              /* storage unavailable — session-only dismissal */
-            }
-            setOnboardingDismissed(true);
-          }}
+            { goConnect: onGoToSettings, goProfile: () => setCreateOpen(true) },
+          )}
+          onDismiss={dismissOnboarding}
         />
       )}
       {/* S5 (GUI-rework 2026-06-14) — HERO strip (console.html): greeting +

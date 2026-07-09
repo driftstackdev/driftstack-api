@@ -14,8 +14,10 @@ import type { HomeNavTarget } from '../../src/views/CommandCenterView';
 let accountMe: unknown = null;
 let client: unknown = null;
 let activeWorkspace: string | null = null;
+let settingsApiKey: string | null = null;
 vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({
+    settings: { apiKey: settingsApiKey },
     accountMe,
     client,
     activeWorkspace,
@@ -169,6 +171,20 @@ describe('CommandCenterView', () => {
     accountMe = null;
     client = null;
     activeWorkspace = null;
+    settingsApiKey = null;
+  });
+
+  it('shows the onboarding checklist on home and routes its steps (H2)', () => {
+    // Not dismissed in this env (localStorage stub returns no flag), so the
+    // checklist renders; a fresh account leaves all three steps open.
+    accountMe = { ...ACC }; // fresh account: no profile, no live session
+    settingsApiKey = null; // not connected → all three steps open
+    const onNavigate = nav();
+    render(<CommandCenterView onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect your account' }));
+    expect(onNavigate).toHaveBeenCalledWith('settings');
+    fireEvent.click(screen.getByRole('button', { name: 'Create a profile' }));
+    expect(onNavigate).toHaveBeenCalledWith('profiles');
   });
 
   it('leads with Automate: the hero CTAs route to ai and recipes', () => {
