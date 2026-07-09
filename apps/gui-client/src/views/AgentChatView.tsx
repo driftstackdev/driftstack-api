@@ -737,7 +737,10 @@ export function AgentChatView({
           </div>
         )}
         {chat.error !== null && chat.error.kind === undefined && (
-          <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-2">
+          <div
+            role="alert"
+            className="border-t border-status-error/40 bg-status-error/10 px-4 py-2"
+          >
             <p className="mx-auto max-w-3xl text-sm text-status-error">{chat.error.message}</p>
           </div>
         )}
@@ -1482,10 +1485,20 @@ function UsageBadge({ usage }: { usage: AgentUsage }): JSX.Element {
 function TypingRow(): JSX.Element {
   return (
     <li className="flex justify-start">
-      <div className="flex items-center gap-1 rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2.5">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:150ms]" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:300ms]" />
+      <div
+        role="status"
+        aria-label="The agent is working…"
+        className="flex items-center gap-1 rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2.5"
+      >
+        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted" />
+        <span
+          aria-hidden="true"
+          className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:150ms]"
+        />
+        <span
+          aria-hidden="true"
+          className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:300ms]"
+        />
       </div>
     </li>
   );
