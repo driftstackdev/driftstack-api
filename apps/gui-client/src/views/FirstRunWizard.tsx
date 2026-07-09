@@ -47,6 +47,12 @@ const CLOUD_DEFAULT_URL = 'https://api.driftstack.dev';
 // never matched what `npm run dev` actually bound to.
 const SELF_HOSTED_DEFAULT_URL = 'http://localhost:3000';
 
+// How long to wait in the "waiting for browser confirmation" state before we
+// nudge the user toward the API-key paste fallback. A closed/lost OAuth tab
+// otherwise leaves them staring at an indefinite spinner with no way forward
+// unless they spot the small paste link (M10, first-run friendliness).
+const SIGN_IN_SLOW_MS = 40_000;
+
 export interface FirstRunWizardProps {
   /** Called when the wizard finishes (success or skip-to-app). */
   onComplete: () => void;
@@ -420,6 +426,9 @@ export function ApiKeyStep({
   onValidate: (override?: string) => void;
 }): JSX.Element {
   const [path, setPath] = useState<'browser' | 'paste'>('browser');
+  // Flips true after SIGN_IN_SLOW_MS in the "waiting" state so we can surface
+  // the paste fallback prominently (M10).
+  const [signInSlow, setSignInSlow] = useState(false);
 
   const {
     state: browserState,
@@ -441,6 +450,17 @@ export function ApiKeyStep({
       onValidate(issuedKey);
     },
   });
+
+  // Arm the "taking a while" nudge only while we're actually waiting on the
+  // browser tab; reset the moment we leave that state (success/error/cancel).
+  useEffect(() => {
+    if (browserState.kind !== 'waiting') {
+      setSignInSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setSignInSlow(true), SIGN_IN_SLOW_MS);
+    return () => clearTimeout(timer);
+  }, [browserState.kind]);
 
   return (
     <section>
@@ -470,8 +490,14 @@ export function ApiKeyStep({
           )}
 
           {browserState.kind === 'opening' && (
-            <div className="rounded-md border border-surface-divider bg-surface-raised p-4 text-sm text-ink-secondary">
-              Opening browser…
+            <div className="rounded-md border border-surface-divider bg-surface-raised p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-3 w-3 animate-pulse rounded-full bg-accent" aria-hidden="true" />
+                <p className="text-sm text-ink-secondary">Opening browser…</p>
+              </div>
+              <button type="button" className="btn-secondary mt-3" onClick={cancelBrowserSignIn}>
+                Cancel
+              </button>
             </div>
           )}
 
@@ -488,6 +514,24 @@ export function ApiKeyStep({
               <button type="button" className="btn-secondary mt-3" onClick={cancelBrowserSignIn}>
                 Cancel
               </button>
+              {signInSlow && (
+                <div className="mt-3 border-t border-surface-divider pt-3">
+                  <p className="text-xs text-ink-secondary">
+                    Taking longer than expected? If the browser tab didn’t open or you can’t finish
+                    there, you can paste an API key instead.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-secondary mt-2"
+                    onClick={() => {
+                      cancelBrowserSignIn();
+                      setPath('paste');
+                    }}
+                  >
+                    Paste an API key instead
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
