@@ -25,6 +25,22 @@ function buildBillingCycleOptions(now: Date): string[] {
   return out;
 }
 
+/**
+ * Human-readable label for a YYYY-MM billing-cycle code — e.g.
+ * '2026-07' → 'July 2026'. The <option> value stays the raw code
+ * (the hook + server expect YYYY-MM); only the visible label changes.
+ * Falls back to the raw code if it isn't a parseable YYYY-MM.
+ */
+function formatBillingCycleLabel(code: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(code);
+  if (m === null) return code;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return code;
+  const d = new Date(Date.UTC(year, month - 1, 1));
+  return d.toLocaleString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
 export interface BillingCostViewProps {
   /** Test seam — defaults to `new Date()`. */
   nowFn?: () => Date;
@@ -63,7 +79,7 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
           >
             {cycles.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {formatBillingCycleLabel(c)}
               </option>
             ))}
           </select>

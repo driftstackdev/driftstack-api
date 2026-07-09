@@ -70,7 +70,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     expect(body).toMatch(/<span className="text-xs text-ink-secondary">via \{e\.source\}<\/span>/);
   });
 
-  it("State-machine early returns: orderId === null → 'Pick an order to view its details.' empty state + loading|idle → 'Loading order…' + error → <ErrorBanner message + onDismiss={() => undefined}>; CryptoOrderDetailViewProps: orderId 'The order id to display. Pass null for the empty state.' nullable", () => {
+  it("State-machine early returns: orderId === null → 'Pick an order to view its details.' empty state + loading|idle → 'Loading order…' + error → <ErrorBanner message + onDismiss={() => void refetch()}> (Dismiss retries the order fetch rather than dead-ending on a stale error); CryptoOrderDetailViewProps: orderId 'The order id to display. Pass null for the empty state.' nullable", () => {
     expect(body).toMatch(
       /export interface CryptoOrderDetailViewProps \{\s*\n?\s*\/\*\* The order id to display\. Pass null for the empty state\. \*\/\s*\n?\s*orderId: string \| null;\s*\n?\s*\}/,
     );
@@ -81,7 +81,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
       /if \(state\.kind === 'loading' \|\| state\.kind === 'idle'\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-4 text-sm text-ink-secondary">\s*\n?\s*Loading order…\s*\n?\s*<\/div>\s*\n?\s*\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /if \(state\.kind === 'error'\) \{\s*\n?\s*return <ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => undefined\} \/>;\s*\n?\s*\}/,
+      /if \(state\.kind === 'error'\) \{\s*\n?\s*\/\/ Dismiss retries the order fetch rather than dead-ending on a stale error\.\s*\n?\s*return <ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => void refetch\(\)\} \/>;\s*\n?\s*\}/,
     );
   });
 

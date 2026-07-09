@@ -70,7 +70,7 @@ describe('W478.C apps/gui-client/src/views/BillingCostView.tsx content parity', 
       /<select\s*\n?\s*id="billing-cycle-picker"\s*\n?\s*value=\{selectedCycle\}\s*\n?\s*onChange=\{\(e\) => setSelectedCycle\(e\.target\.value\)\}/,
     );
     expect(body).toMatch(
-      /\{cycles\.map\(\(c\) => \(\s*\n?\s*<option key=\{c\} value=\{c\}>\s*\n?\s*\{c\}\s*\n?\s*<\/option>\s*\n?\s*\)\)\}/,
+      /\{cycles\.map\(\(c\) => \(\s*\n?\s*<option key=\{c\} value=\{c\}>\s*\n?\s*\{formatBillingCycleLabel\(c\)\}\s*\n?\s*<\/option>\s*\n?\s*\)\)\}/,
     );
   });
 

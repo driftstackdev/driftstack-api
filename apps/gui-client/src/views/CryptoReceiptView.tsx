@@ -12,8 +12,9 @@
 // rendered consistently with the rest of the V-534.* view family.
 
 import { useState } from 'react';
+import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
-import { formatCents } from '../lib/crypto-format';
+import { formatCents, formatProduct, formatTimestamp } from '../lib/crypto-format';
 import {
   formatReceiptForClipboard,
   useCryptoReceipt,
@@ -80,15 +81,17 @@ function ReceiptBody({ data }: { data: CryptoReceiptData }): JSX.Element {
         <dt className="text-ink-secondary">Order</dt>
         <dd className="font-mono text-xs">{data.order_id}</dd>
         <dt className="text-ink-secondary">Status</dt>
-        <dd>{data.status}</dd>
+        <dd>
+          <CryptoOrderStatusBadge status={data.status} size="sm" />
+        </dd>
         <dt className="text-ink-secondary">Product</dt>
-        <dd>{data.product}</dd>
+        <dd>{formatProduct(data.product)}</dd>
         <dt className="text-ink-secondary">Amount</dt>
         <dd>{formatCents(data.price_cents, data.price_currency)}</dd>
         {data.paid_at !== null && (
           <>
             <dt className="text-ink-secondary">Paid at</dt>
-            <dd>{data.paid_at}</dd>
+            <dd>{formatTimestamp(data.paid_at)}</dd>
           </>
         )}
         {data.payment_id !== null && (
@@ -98,14 +101,14 @@ function ReceiptBody({ data }: { data: CryptoReceiptData }): JSX.Element {
           </>
         )}
         <dt className="text-ink-secondary">Issued</dt>
-        <dd>{data.issued_at}</dd>
+        <dd>{formatTimestamp(data.issued_at)}</dd>
       </dl>
     </div>
   );
 }
 
 export function CryptoReceiptView(props: CryptoReceiptViewProps): JSX.Element {
-  const { state } = useCryptoReceipt(props.orderId);
+  const { state, refetch } = useCryptoReceipt(props.orderId);
 
   if (props.orderId === null) {
     return (
@@ -124,7 +127,8 @@ export function CryptoReceiptView(props: CryptoReceiptViewProps): JSX.Element {
   }
 
   if (state.kind === 'error') {
-    return <ErrorBanner message={state.message} onDismiss={() => undefined} />;
+    // Dismiss retries the receipt fetch instead of dead-ending the panel.
+    return <ErrorBanner message={state.message} onDismiss={() => void refetch()} />;
   }
 
   return <ReceiptBody data={state.data} />;

@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { CryptoOrderSummaryCard } from '../components/CryptoOrderSummaryCard';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { formatTimestamp } from '../lib/crypto-format';
 import { useCancelOrder } from '../lib/use-cancel-order';
 import { useCryptoOrder, type CryptoOrderEvent } from '../lib/use-crypto-order';
 import { CryptoReceiptView } from './CryptoReceiptView';
@@ -36,7 +37,7 @@ function EventsTimeline({ events }: { events: CryptoOrderEvent[] }): JSX.Element
             <CryptoOrderStatusBadge status={e.status} size="sm" />
             <span className="text-xs text-ink-secondary">via {e.source}</span>
           </span>
-          <span className="font-mono text-xs text-ink-secondary">{e.at}</span>
+          <span className="text-xs text-ink-secondary">{formatTimestamp(e.at)}</span>
         </li>
       ))}
     </ol>
@@ -83,7 +84,8 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
   }
 
   if (state.kind === 'error') {
-    return <ErrorBanner message={state.message} onDismiss={() => undefined} />;
+    // Dismiss retries the order fetch rather than dead-ending on a stale error.
+    return <ErrorBanner message={state.message} onDismiss={() => void refetch()} />;
   }
 
   const order = state.data;

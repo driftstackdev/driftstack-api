@@ -81,7 +81,7 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
       /<select\s*\n?\s*value=\{product\}\s*\n?\s*onChange=\{\(e\) => setProduct\(e\.target\.value\)\}\s*\n?\s*disabled=\{checkout\.state\.kind !== 'idle'\}/,
     );
     expect(body).toMatch(
-      /\{SUPPORTED_PRODUCTS\.map\(\(p\) => \(\s*\n?\s*<option key=\{p\} value=\{p\}>\s*\n?\s*\{p\}\s*\n?\s*<\/option>\s*\n?\s*\)\)\}/,
+      /\{SUPPORTED_PRODUCTS\.map\(\(p\) => \(\s*\n?\s*<option key=\{p\} value=\{p\}>\s*\n?\s*\{formatProduct\(p\)\}\s*\n?\s*<\/option>\s*\n?\s*\)\)\}/,
     );
     expect(body).toMatch(
       /\{quote\.state\.kind === 'loading' && \(\s*\n?\s*<span className="text-ink-secondary">Loading quote…<\/span>\s*\n?\s*\)\}\s*\n?\s*\{quote\.state\.kind === 'error' && \(\s*\n?\s*<ErrorBanner message=\{quote\.state\.message\} onDismiss=\{\(\) => void quote\.refetch\(\)\} \/>\s*\n?\s*\)\}\s*\n?\s*\{quote\.state\.kind === 'ready' && \(\s*\n?\s*<span>\s*\n?\s*Price:\{' '\}\s*\n?\s*<strong>\s*\n?\s*\{formatCents\(quote\.state\.data\.price_cents, quote\.state\.data\.price_currency\)\}\s*\n?\s*<\/strong>\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
@@ -95,20 +95,32 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
     expect(body).toMatch(
       /\{checkout\.state\.kind === 'error' && \(\s*\n?\s*<ErrorBanner message=\{checkout\.state\.message\} onDismiss=\{onReset\} \/>\s*\n?\s*\)\}/,
     );
+    // The ready branch destructures `const { order, replayed } = checkout.state;`
+    // (and `const addr = order.payment_address;`) so downstream JSX reads the
+    // locals rather than re-drilling checkout.state each time.
     expect(body).toMatch(
-      /\{checkout\.state\.replayed && \(\s*\n?\s*<div\s*\n?\s*role="status"\s*\n?\s*className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary"\s*\n?\s*>\s*\n?\s*Restored from your earlier attempt \(no duplicate order minted\)\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /const \{ order, replayed \} = checkout\.state;\s*\n?\s*const addr = order\.payment_address;/,
     );
     expect(body).toMatch(
-      /\{checkout\.state\.order\.payment_address !== null && \(\s*\n?\s*<div>\s*\n?\s*Send to:\{' '\}\s*\n?\s*<span className="font-mono text-xs">\{checkout\.state\.order\.payment_address\}<\/span>\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /\{replayed && \(\s*\n?\s*<div\s*\n?\s*role="status"\s*\n?\s*className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary"\s*\n?\s*>\s*\n?\s*Restored from your earlier attempt \(no duplicate order minted\)\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
     );
+    // Payment address row now carries a one-click Copy button (highest-stakes
+    // copy in the app — a truncated hand-select loses funds).
     expect(body).toMatch(
-      /\{checkout\.state\.order\.provider === 'stub' && \(\s*\n?\s*<div className="text-ink-secondary">\s*\n?\s*Payment provider is in stub mode\. Contact support to receive a real payment address\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /\{addr !== null && \(\s*\n?\s*<div className="flex items-center gap-2">\s*\n?\s*<span className="text-ink-secondary">Send to:<\/span>\s*\n?\s*<span className="min-w-0 flex-1 break-all font-mono text-xs">\{addr\}<\/span>/,
+    );
+    expect(body).toMatch(/aria-label="Copy payment address"/);
+    expect(body).toMatch(
+      /\{order\.provider === 'stub' && \(\s*\n?\s*<div className="text-ink-secondary">\s*\n?\s*Payment provider is in stub mode\. Contact support to receive a real payment\s*\n?\s*address\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
     );
   });
 
-  it("Step 3 live status section only renders when orderId !== null; CryptoOrderStatusBadge size='sm' on ready state; 'Loading…' on loading state; status-error message on error state", () => {
+  it("Step 3 live status section only renders when orderId !== null; CryptoOrderStatusBadge size='sm' on ready state; 'Loading…' on loading state; error state surfaces a dismissable ErrorBanner onDismiss={() => void order.refetch()} (Dismiss re-polls the order status rather than dead-ending on a stale error)", () => {
     expect(body).toMatch(
-      /\{orderId !== null && \(\s*\n?\s*<section className="rounded-md border border-surface-divider p-4">\s*\n?\s*<div className="flex items-center justify-between text-sm">\s*\n?\s*<span className="text-ink-secondary">Order status<\/span>\s*\n?\s*\{order\.state\.kind === 'ready' && \(\s*\n?\s*<CryptoOrderStatusBadge status=\{order\.state\.data\.status\} size="sm" \/>\s*\n?\s*\)\}\s*\n?\s*\{order\.state\.kind === 'loading' && <span className="text-ink-secondary">Loading…<\/span>\}\s*\n?\s*\{order\.state\.kind === 'error' && \(\s*\n?\s*<span className="text-status-error">\{order\.state\.message\}<\/span>\s*\n?\s*\)\}/,
+      /\{orderId !== null && \(\s*\n?\s*<section className="rounded-md border border-surface-divider p-4">\s*\n?\s*<div className="flex items-center justify-between text-sm">\s*\n?\s*<span className="text-ink-secondary">Order status<\/span>\s*\n?\s*\{order\.state\.kind === 'ready' && \(\s*\n?\s*<CryptoOrderStatusBadge status=\{order\.state\.data\.status\} size="sm" \/>\s*\n?\s*\)\}\s*\n?\s*\{order\.state\.kind === 'loading' && <span className="text-ink-secondary">Loading…<\/span>\}/,
+    );
+    expect(body).toMatch(
+      /\{order\.state\.kind === 'error' && \(\s*\n?\s*<div className="mt-2">[\s\S]*?<ErrorBanner message=\{order\.state\.message\} onDismiss=\{\(\) => void order\.refetch\(\)\} \/>\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
     );
   });
 

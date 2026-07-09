@@ -28,7 +28,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { SkeletonRows } from '../components/Skeleton';
-import { formatCents, formatRelative } from '../lib/crypto-format';
+import { formatCents, formatProduct, formatRelative } from '../lib/crypto-format';
 import { useCancelOrder } from '../lib/use-cancel-order';
 import { useCryptoOrdersList } from '../lib/use-crypto-orders-list';
 import { CryptoOrderDetailView } from './CryptoOrderDetailView';
@@ -273,7 +273,7 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
                         }`}
                       >
                         <td className="py-2 pr-4 font-mono text-xs">{o.order_id}</td>
-                        <td className="py-2 pr-4">{o.product}</td>
+                        <td className="py-2 pr-4">{formatProduct(o.product)}</td>
                         <td className="py-2 pr-4">
                           {formatCents(o.price_cents, o.price_currency)}
                         </td>

@@ -4,6 +4,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+import { formatTimestamp } from '../../src/lib/crypto-format';
+
 interface MockSettings {
   settings: { apiKey: string | null; baseUrl: string };
 }
@@ -221,7 +223,8 @@ describe('V-534.AD CryptoOrderDetailView', () => {
     const timeline = await waitFor(() => screen.getByLabelText('Order events timeline'));
     expect(timeline.textContent).toContain('via create');
     expect(timeline.textContent).toContain('via ipn');
-    expect(timeline.textContent).toContain('2026-05-11T09:00:00.000Z');
+    // Timestamps render via formatTimestamp (locale absolute time), not raw ISO.
+    expect(timeline.textContent).toContain(formatTimestamp('2026-05-11T09:00:00.000Z'));
   });
 
   it('V-534.BE hides the timeline section when events is absent on the wire', async () => {

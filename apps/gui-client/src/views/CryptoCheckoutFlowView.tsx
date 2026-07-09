@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
-import { formatCents } from '../lib/crypto-format';
+import { formatCents, formatProduct } from '../lib/crypto-format';
 import { useCryptoCheckout } from '../lib/use-crypto-checkout';
 import { useCryptoOrder } from '../lib/use-crypto-order';
 import { useCryptoQuote } from '../lib/use-crypto-quote';
@@ -85,7 +85,7 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
           >
             {SUPPORTED_PRODUCTS.map((p) => (
               <option key={p} value={p}>
-                {p}
+                {formatProduct(p)}
               </option>
             ))}
           </select>
@@ -186,10 +186,14 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
               <CryptoOrderStatusBadge status={order.state.data.status} size="sm" />
             )}
             {order.state.kind === 'loading' && <span className="text-ink-secondary">Loading…</span>}
-            {order.state.kind === 'error' && (
-              <span className="text-status-error">{order.state.message}</span>
-            )}
           </div>
+          {order.state.kind === 'error' && (
+            <div className="mt-2">
+              {/* Dismiss re-polls the order status rather than dead-ending on a stale
+                  error (a transient poll failure shouldn't strand the customer). */}
+              <ErrorBanner message={order.state.message} onDismiss={() => void order.refetch()} />
+            </div>
+          )}
         </section>
       )}
     </div>

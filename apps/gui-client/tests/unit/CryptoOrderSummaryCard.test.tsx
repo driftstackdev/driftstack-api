@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CryptoOrderSummaryCard } from '../../src/components/CryptoOrderSummaryCard';
+import { formatTimestamp } from '../../src/lib/crypto-format';
 import type { CryptoOrderData } from '../../src/lib/use-crypto-order';
 
 function makeOrder(overrides: Partial<CryptoOrderData> = {}): CryptoOrderData {
@@ -60,7 +61,8 @@ describe('V-534.BF CryptoOrderSummaryCard — expires_at countdown', () => {
       <CryptoOrderSummaryCard order={makeOrder({ expires_at: expiresAt })} nowFn={() => nowMs} />,
     );
     expect(screen.getByText('Pay by')).toBeTruthy();
-    expect(screen.getByText(expiresAt)).toBeTruthy();
+    // Pay-by timestamp renders via formatTimestamp (locale absolute time), not raw ISO.
+    expect(screen.getByText(formatTimestamp(expiresAt))).toBeTruthy();
     expect(screen.getByText(/45m remaining/i)).toBeTruthy();
   });
 

@@ -89,20 +89,20 @@ describe('W480.A apps/gui-client/src/views/CryptoReceiptView.tsx content parity'
     expect(body).toMatch(/\{copied \? 'Copied' : 'Copy to clipboard'\}/);
   });
 
-  it("PDF-failure surface: pdf.state.kind === 'failed' → ErrorBanner with `PDF download failed: ${pdf.state.message}` message + onDismiss=>pdf.reset() (retry-on-dismiss); dl rows: Order/Status/Product/Amount(formatCents)/paid_at conditional/payment_id conditional/Issued", () => {
+  it("PDF-failure surface: pdf.state.kind === 'failed' → ErrorBanner with `PDF download failed: ${pdf.state.message}` message + onDismiss=>pdf.reset() (retry-on-dismiss); dl rows: Order/Status/Product/Amount(formatCents)/paid_at conditional (formatTimestamp)/payment_id conditional/Issued", () => {
     expect(body).toMatch(
       /\{pdf\.state\.kind === 'failed' && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{`PDF download failed: \$\{pdf\.state\.message\}`\}\s*\n?\s*onDismiss=\{\(\) => pdf\.reset\(\)\}\s*\n?\s*\/>\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(/<dd>\{formatCents\(data\.price_cents, data\.price_currency\)\}<\/dd>/);
     expect(body).toMatch(
-      /\{data\.paid_at !== null && \(\s*\n?\s*<>\s*\n?\s*<dt className="text-ink-secondary">Paid at<\/dt>\s*\n?\s*<dd>\{data\.paid_at\}<\/dd>\s*\n?\s*<\/>\s*\n?\s*\)\}/,
+      /\{data\.paid_at !== null && \(\s*\n?\s*<>\s*\n?\s*<dt className="text-ink-secondary">Paid at<\/dt>\s*\n?\s*<dd>\{formatTimestamp\(data\.paid_at\)\}<\/dd>\s*\n?\s*<\/>\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(
       /\{data\.payment_id !== null && \(\s*\n?\s*<>\s*\n?\s*<dt className="text-ink-secondary">Payment id<\/dt>\s*\n?\s*<dd className="font-mono text-xs">\{data\.payment_id\}<\/dd>\s*\n?\s*<\/>\s*\n?\s*\)\}/,
     );
   });
 
-  it("4-state early returns at view level: orderId === null → 'Pick an order to view its receipt.' + loading|idle → 'Loading receipt…' + error → <ErrorBanner message + onDismiss={() => undefined}> + ready → <ReceiptBody data={state.data} />", () => {
+  it("4-state early returns at view level: orderId === null → 'Pick an order to view its receipt.' + loading|idle → 'Loading receipt…' + error → <ErrorBanner message + onDismiss={() => void refetch()}> (Dismiss retries the receipt fetch instead of dead-ending the panel) + ready → <ReceiptBody data={state.data} />", () => {
     expect(body).toMatch(
       /if \(props\.orderId === null\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-4 text-sm text-ink-secondary">\s*\n?\s*Pick an order to view its receipt\.\s*\n?\s*<\/div>\s*\n?\s*\);\s*\n?\s*\}/,
     );
@@ -110,7 +110,7 @@ describe('W480.A apps/gui-client/src/views/CryptoReceiptView.tsx content parity'
       /if \(state\.kind === 'loading' \|\| state\.kind === 'idle'\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded-md border border-surface-divider bg-surface-inset p-4 text-sm text-ink-secondary">\s*\n?\s*Loading receipt…\s*\n?\s*<\/div>\s*\n?\s*\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /if \(state\.kind === 'error'\) \{\s*\n?\s*return <ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => undefined\} \/>;\s*\n?\s*\}\s*\n?\s*return <ReceiptBody data=\{state\.data\} \/>;/,
+      /if \(state\.kind === 'error'\) \{\s*\n?\s*\/\/ Dismiss retries the receipt fetch instead of dead-ending the panel\.\s*\n?\s*return <ErrorBanner message=\{state\.message\} onDismiss=\{\(\) => void refetch\(\)\} \/>;\s*\n?\s*\}\s*\n?\s*return <ReceiptBody data=\{state\.data\} \/>;/,
     );
   });
 

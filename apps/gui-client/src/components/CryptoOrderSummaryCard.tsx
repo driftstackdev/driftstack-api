@@ -7,7 +7,7 @@
 // Callers compose this with cancel buttons / receipt panels around it.
 
 import { CryptoOrderStatusBadge } from './CryptoOrderStatusBadge';
-import { formatCents } from '../lib/crypto-format';
+import { formatCents, formatProduct, formatTimestamp } from '../lib/crypto-format';
 import type { CryptoOrderData } from '../lib/use-crypto-order';
 
 export interface CryptoOrderSummaryCardProps {
@@ -47,7 +47,7 @@ export function CryptoOrderSummaryCard(props: CryptoOrderSummaryCardProps): JSX.
       </header>
       <dl className="mt-4 grid grid-cols-2 gap-y-1 text-sm">
         <dt className="text-ink-secondary">Product</dt>
-        <dd>{order.product}</dd>
+        <dd>{formatProduct(order.product)}</dd>
         <dt className="text-ink-secondary">Amount</dt>
         <dd>{formatCents(order.price_cents, order.price_currency)}</dd>
         {order.payment_id !== null && (
@@ -57,14 +57,14 @@ export function CryptoOrderSummaryCard(props: CryptoOrderSummaryCardProps): JSX.
           </>
         )}
         <dt className="text-ink-secondary">Created</dt>
-        <dd>{order.created_at}</dd>
+        <dd>{formatTimestamp(order.created_at)}</dd>
         <dt className="text-ink-secondary">Updated</dt>
-        <dd>{order.updated_at}</dd>
+        <dd>{formatTimestamp(order.updated_at)}</dd>
         {showExpiry && (
           <>
             <dt className="text-ink-secondary">Pay by</dt>
             <dd>
-              <span className="font-mono text-xs">{order.expires_at}</span>{' '}
+              <span>{formatTimestamp(order.expires_at as string)}</span>{' '}
               <span className="text-xs text-ink-secondary">
                 ({describeExpiry(order.expires_at as string, (nowFn ?? Date.now)())})
               </span>

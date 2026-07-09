@@ -83,7 +83,7 @@ describe('W476.A apps/gui-client/src/components/CryptoOrderSummaryCard.tsx conte
       /\{order\.payment_id !== null && \(\s*\n?\s*<>\s*\n?\s*<dt className="text-ink-secondary">Payment id<\/dt>\s*\n?\s*<dd className="font-mono text-xs">\{order\.payment_id\}<\/dd>\s*\n?\s*<\/>\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(
-      /\{showExpiry && \(\s*\n?\s*<>\s*\n?\s*<dt className="text-ink-secondary">Pay by<\/dt>\s*\n?\s*<dd>\s*\n?\s*<span className="font-mono text-xs">\{order\.expires_at\}<\/span>\{' '\}\s*\n?\s*<span className="text-xs text-ink-secondary">\s*\n?\s*\(\{describeExpiry\(order\.expires_at as string, \(nowFn \?\? Date\.now\)\(\)\)\}\)\s*\n?\s*<\/span>\s*\n?\s*<\/dd>\s*\n?\s*<\/>\s*\n?\s*\)\}/,
+      /\{showExpiry && \(\s*\n?\s*<>\s*\n?\s*<dt className="text-ink-secondary">Pay by<\/dt>\s*\n?\s*<dd>\s*\n?\s*<span>\{formatTimestamp\(order\.expires_at as string\)\}<\/span>\{' '\}\s*\n?\s*<span className="text-xs text-ink-secondary">\s*\n?\s*\(\{describeExpiry\(order\.expires_at as string, \(nowFn \?\? Date\.now\)\(\)\)\}\)\s*\n?\s*<\/span>\s*\n?\s*<\/dd>\s*\n?\s*<\/>\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(/\{footer !== undefined && <div className="mt-4">\{footer\}<\/div>\}/);
   });
