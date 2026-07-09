@@ -48,9 +48,10 @@ interface SessionsState {
 
 export interface SessionsViewProps {
   onGoToSettings: () => void;
+  onGoToProxies: () => void;
 }
 
-export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element {
+export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe } = useSettings();
   const { push: pushToast } = useToasts();
   const confirm = useConfirm();
@@ -220,11 +221,17 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
       const saved = await listProxies();
       const first = saved[0];
       if (first === undefined) {
-        setState((s) => ({
-          ...s,
-          error:
-            'No saved proxies. Open the Proxies tab in the sidebar, add a SOCKS5 server, then come back to create a session. (This deployment requires every session to ship traffic through a proxy.)',
-        }));
+        // Setup step, not an error: this deployment routes every session through a
+        // proxy and none is saved yet. Offer a direct jump to Proxies instead of a
+        // red banner the user then has to act on manually (journey audit M9).
+        if (
+          await confirm(
+            "This deployment routes every session through a proxy, and you don't have one saved yet. Add a SOCKS5 server in Proxies, then come back to start a session.",
+            { confirmLabel: 'Open Proxies' },
+          )
+        ) {
+          onGoToProxies();
+        }
         return;
       }
       const proxy = toServerProxyEnvelope(first);

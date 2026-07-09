@@ -635,7 +635,12 @@ function CurrentView({
     case 'recipes':
       return <RecipesView />;
     case 'sessions':
-      return <SessionsView onGoToSettings={() => onNavigate({ kind: 'settings' })} />;
+      return (
+        <SessionsView
+          onGoToSettings={() => onNavigate({ kind: 'settings' })}
+          onGoToProxies={() => onNavigate({ kind: 'proxies' })}
+        />
+      );
     case 'settings':
       return <SettingsView />;
     case 'proxies':
