@@ -896,7 +896,32 @@ function LiveAutomationPanel({
   // switching chats. Bumping this re-runs the fetch on the Retry button.
   const [retryNonce, setRetryNonce] = useState(0);
 
+  // Only do the expensive work (livekit token fetch → room connect → 5s poll) when the
+  // pane is actually VISIBLE: at lg+ it's always the inline column; below lg it's hidden
+  // until opened. Without this, a narrow window with the pane closed kept a hidden WebRTC
+  // room + poll alive for the whole chat (audit 2026-07-08). matchMedia may be absent in a
+  // test/headless env → default to active so behavior is unchanged there.
+  const [isLg, setIsLg] = useState(
+    () =>
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function' ||
+      window.matchMedia('(min-width: 1024px)').matches,
+  );
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = (): void => setIsLg(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const active = isLg || open;
+
+  useEffect(() => {
+    // Pane not visible (narrow window, closed) → don't open a live stream nobody can see.
+    if (!active) {
+      setWatch({ kind: 'idle' });
+      return undefined;
+    }
     // No session dispatched yet → the placeholder ("Dispatch a task…").
     if (sessionId === null) {
       setWatch({ kind: 'idle' });
@@ -928,7 +953,7 @@ function LiveAutomationPanel({
     return () => {
       cancelled = true;
     };
-  }, [client, sessionId, retryNonce]);
+  }, [client, sessionId, retryNonce, active]);
 
   // finding #3 — react to the agent session ending. The token fetch above is
   // one-shot (it only re-runs on a sessionId/client/retry change), so a session
