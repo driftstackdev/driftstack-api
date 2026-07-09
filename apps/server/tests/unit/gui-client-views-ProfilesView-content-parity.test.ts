@@ -83,7 +83,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
 
   it('2026-05-20 — auto-poll lifecycle: useEffect runs refresh(true) initially (showLoading hint) + setInterval refresh(false) at REFRESH_MS (no flicker on background ticks); cleanup clearInterval keeps unchanged; client.profiles.iterate({ limit: 50 }) still caps per-poll in-memory accumulation', () => {
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);\s*\n?\s*const id = window\.setInterval\(\(\) => void refresh\(false\), REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
+      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);[\s\S]*?const id = window\.setInterval\(\(\) => \{[\s\S]*?void refresh\(false\);\s*\n?\s*\}, REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
     );
     expect(body).toMatch(
       /for await \(const profile of client\.profiles\.iterate\(\{ limit: 50 \}\)\)/,

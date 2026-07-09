@@ -40,6 +40,7 @@ import {
 import { downloadJson, timestampedFilename } from '../lib/download';
 import { useConfirm } from '../components/ConfirmProvider';
 import { PROFILE_ICONS } from '../lib/profile-icons';
+import { useFocusTrap } from '../lib/use-focus-trap';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
@@ -3350,6 +3351,10 @@ function CreateProfileModal({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [archetype, setArchetype] = useState(KNOWN_ARCHETYPES[0]?.id ?? '');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Trap focus in the modal + restore it to the opener on close (a11y). Escape /
+  // backdrop-close stay handled below; useFocusTrap adds only the missing pieces.
+  useFocusTrap(true, dialogRef);
   // Icon at create (founder 2026-06-16: "same for new Profile" — the icon
   // picker existed only for bulk-edit; offer it up-front too). Saved into
   // profilesMeta alongside folder/tags after create.
@@ -3674,6 +3679,7 @@ function CreateProfileModal({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       role="dialog"
       aria-modal="true"
@@ -4332,6 +4338,9 @@ function EditProfileModal({
 }): JSX.Element {
   const { client, settings } = useSettings();
   const [name, setName] = useState(profile.name);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Trap focus in the modal + restore it to the opener on close (a11y).
+  useFocusTrap(true, dialogRef);
   const [description, setDescription] = useState(profile.description ?? '');
   const [icon, setIcon] = useState(meta?.icon ?? '');
   const [folder, setFolder] = useState(meta?.folder ?? '');
@@ -4473,6 +4482,7 @@ function EditProfileModal({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       role="dialog"
       aria-modal="true"
@@ -4709,6 +4719,9 @@ function ImportProfileModal({
 }): JSX.Element {
   const [text, setText] = useState('');
   const [nameOverride, setNameOverride] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Trap focus in the modal + restore it to the opener on close (a11y).
+  useFocusTrap(true, dialogRef);
   const [fileName, setFileName] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -4723,6 +4736,7 @@ function ImportProfileModal({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       role="dialog"
       aria-modal="true"
