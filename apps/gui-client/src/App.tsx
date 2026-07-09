@@ -551,6 +551,26 @@ function Shell(): JSX.Element {
             </div>
           </div>
         ) : null}
+        {/* Finish-setup nudge — a customer who chose "Skip for now" in the wizard
+            lands here unconnected (apiKey null, wizard dismissed) with everything
+            reading "Not connected" and previously only a vanishing link back
+            (journey audit L2). Persistent (no dismiss) until they connect; the
+            button re-arms the wizard, which is still gated on apiKey === null. */}
+        {settings.apiKey === null ? (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 border-b border-accent/40 bg-accent/10 px-4 py-2 text-xs text-ink-primary"
+          >
+            <span>You’re not connected yet — finish setup to start launching iPhone sessions.</span>
+            <button
+              type="button"
+              className="rounded border border-accent/40 px-2 py-0.5 font-medium text-accent hover:bg-accent/15"
+              onClick={() => setWizardDismissed(false)}
+            >
+              Finish setup
+            </button>
+          </div>
+        ) : null}
         <div className="flex flex-1 overflow-hidden">
           <Sidebar
             current={sidebarSectionFor(view)}
