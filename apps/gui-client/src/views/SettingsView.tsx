@@ -18,6 +18,7 @@ import type {
   BundledLlmStatus,
   ByokAnthropicKeyMetadata,
 } from '@driftstack/sdk';
+import { DriftstackError } from '@driftstack/sdk';
 import { ConnectivityView } from './ConnectivityView';
 import { RelativeTime } from '../components/RelativeTime';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
@@ -69,7 +70,16 @@ export function SettingsView(): JSX.Element {
   // AI & billing — bundled-LLM consent/cap + BYOK Anthropic key. Loaded
   // straight from the server (not the local settings store) since both are
   // account-level, not per-install.
-  const [bundledLlm, setBundledLlm] = useState<BundledLlmSettings | null>(null);
+  // Held only to drive the consent/cap drafts + status below; the raw settings
+  // object itself isn't read directly (audit #15 load-state refactor).
+  const [, setBundledLlm] = useState<BundledLlmSettings | null>(null);
+  // Distinct load state so the "ask the owner" hint fires ONLY on a real 403,
+  // not while still loading or on a transient network/error (audit #15). The
+  // consent/cap/Save controls stay disabled until we know the account-level
+  // settings actually loaded.
+  const [bundledLlmLoad, setBundledLlmLoad] = useState<
+    'loading' | 'loaded' | 'forbidden' | 'error'
+  >('loading');
   const [bundledLlmStatus, setBundledLlmStatus] = useState<BundledLlmStatus | null>(null);
   const [bundledLlmConsentDraft, setBundledLlmConsentDraft] = useState(false);
   const [bundledLlmCapDraft, setBundledLlmCapDraft] = useState('0.00');
@@ -89,14 +99,23 @@ export function SettingsView(): JSX.Element {
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
+    setBundledLlmLoad('loading');
     void client.account.getBundledLlmSettings().then(
       (s) => {
         if (cancelled) return;
         setBundledLlm(s);
         setBundledLlmConsentDraft(s.consent);
         setBundledLlmCapDraft((s.monthly_cap_usd_cents / 100).toFixed(2));
+        setBundledLlmLoad('loaded');
       },
-      () => undefined,
+      (err: unknown) => {
+        if (cancelled) return;
+        // A real 403 means the caller isn't the account owner → show the
+        // "ask the owner" hint. Anything else is a transient/network failure.
+        setBundledLlmLoad(
+          err instanceof DriftstackError && err.status === 403 ? 'forbidden' : 'error',
+        );
+      },
     );
     void client.account.getBundledLlmStatus().then(
       (s) => {
@@ -183,7 +202,7 @@ export function SettingsView(): JSX.Element {
     if (
       !(await confirm(
         'Clear your saved Anthropic key? Automations will fall back to platform billing (or stop if none is set). You can paste the key again anytime.',
-        { confirmLabel: 'Clear key' },
+        { confirmLabel: 'Clear key', tone: 'danger' },
       ))
     )
       return;
@@ -684,7 +703,7 @@ export function SettingsView(): JSX.Element {
                 if (
                   await confirm(
                     'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.',
-                    { confirmLabel: 'Sign out' },
+                    { confirmLabel: 'Sign out', tone: 'danger' },
                   )
                 ) {
                   // Await the keychain write BEFORE clearing the draft — a
@@ -915,11 +934,12 @@ export function SettingsView(): JSX.Element {
               <input
                 type="checkbox"
                 checked={bundledLlmConsentDraft}
+                disabled={bundledLlmLoad !== 'loaded'}
                 onChange={(e) => {
                   setBundledLlmConsentDraft(e.target.checked);
                   setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit
                 }}
-                className="mt-0.5"
+                className="mt-0.5 disabled:opacity-50"
               />
               <span className="text-sm text-ink-secondary">
                 Let this deployment bill Claude usage to my account, up to a monthly limit.
@@ -934,17 +954,18 @@ export function SettingsView(): JSX.Element {
                   min="0"
                   step="0.01"
                   value={bundledLlmCapDraft}
+                  disabled={bundledLlmLoad !== 'loaded'}
                   onChange={(e) => {
                     setBundledLlmCapDraft(e.target.value);
                     setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit
                   }}
-                  className="form-input mono w-24"
+                  className="form-input mono w-24 disabled:opacity-50"
                 />
               </div>
               <button
                 type="button"
                 onClick={() => void handleSaveBundledLlm()}
-                disabled={bundledLlmSaving}
+                disabled={bundledLlmSaving || bundledLlmLoad !== 'loaded'}
                 aria-label="Save AI billing settings"
                 className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
               >
@@ -966,9 +987,14 @@ export function SettingsView(): JSX.Element {
                 {formatCentsAsUsd(bundledLlmStatus.remaining_cents)} left).
               </span>
             )}
-            {bundledLlm === null && (
+            {bundledLlmLoad === 'forbidden' && (
               <span className="mt-2 block text-2xs text-ink-muted">
                 Only the account owner can change this — ask them if this control is unavailable.
+              </span>
+            )}
+            {bundledLlmLoad === 'error' && (
+              <span role="alert" className="mt-2 block text-2xs text-status-error">
+                Couldn't load your AI billing settings — check your connection and reopen Settings.
               </span>
             )}
           </Field>

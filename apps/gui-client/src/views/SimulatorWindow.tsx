@@ -555,8 +555,21 @@ function formatStatusTime(d: Date): string {
 function useStatusClock(): string {
   const [time, setTime] = useState(() => formatStatusTime(new Date()));
   useEffect(() => {
-    const id = setInterval(() => setTime(formatStatusTime(new Date())), 15_000);
-    return () => clearInterval(id);
+    // Tick exactly on the minute boundary rather than on a fixed 15s interval — a
+    // free-running interval can land up to ~15s AFTER a rollover, so the displayed
+    // minute would lag behind the real clock. Re-arm from the next boundary each
+    // tick (self-correcting against drift). +50ms guards a slightly-early wake.
+    let id: number;
+    const schedule = (): void => {
+      const now = new Date();
+      const msToNextMinute = 60_000 - (now.getSeconds() * 1000 + now.getMilliseconds());
+      id = window.setTimeout(() => {
+        setTime(formatStatusTime(new Date()));
+        schedule();
+      }, msToNextMinute + 50);
+    };
+    schedule();
+    return () => window.clearTimeout(id);
   }, []);
   return time;
 }
@@ -1132,7 +1145,22 @@ function NavigateAddressBar({
           }}
           className="shrink-0 rounded p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
         >
-          ↻
+          {/* Stroked reload glyph — matches BrowserBar's chrome (audit #47: the two
+              address bars should share the same iconography, not cheap text glyphs). */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M23 4v6h-6" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
         </button>
         <input
           type="text"
@@ -1153,7 +1181,22 @@ function NavigateAddressBar({
           title={canNavigate ? 'Go to URL' : disabledTitle}
           className="shrink-0 rounded p-1 text-accent transition hover:bg-white/10 disabled:opacity-40"
         >
-          ⏎
+          {/* Stroked arrow glyph — replaces the ⏎ text char to match BrowserBar's
+              iconography (audit #47). */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
         </button>
       </form>
     </div>
@@ -1403,6 +1446,22 @@ function BrowserBar({
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
         </svg>
       </button>
+      {/* Connecting cue (audit #36) — while the device isn't live yet, the input's
+          placeholder is hidden behind the already-loaded resting URL, so a "still
+          connecting" state was invisible. An inline amber pulse dot + label makes it
+          legible even when a page is showing. */}
+      {!canNavigate && (
+        <span
+          data-component="simulator-address-bar-connecting"
+          className="inline-flex shrink-0 items-center gap-1 text-[10.5px] font-medium text-white/55"
+        >
+          <span
+            aria-hidden="true"
+            className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+          />
+          connecting…
+        </span>
+      )}
       <form
         className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md bg-black/30 px-2.5 ring-1 ring-white/10 transition focus-within:bg-black/40 focus-within:ring-white/25"
         onSubmit={(e) => {
@@ -1478,9 +1537,27 @@ function BrowserBar({
           }
           disabled={copyTarget === ''}
           onClick={copyUrl}
-          className="shrink-0 rounded p-0.5 text-white/35 transition hover:text-white/80 disabled:opacity-30"
+          className={`shrink-0 rounded p-0.5 transition disabled:opacity-30 ${
+            copyFailed ? 'text-status-error' : 'text-white/35 hover:text-white/80'
+          }`}
         >
-          {copied ? (
+          {copyFailed ? (
+            // Copy failed (clipboard blocked) — a visible x so the dead click reads as
+            // a failure, not a no-op (audit #44).
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          ) : copied ? (
             <svg
               width="13"
               height="13"
@@ -1597,6 +1674,19 @@ function TabStrip({
   onClose: (id: string) => void;
   onNew: () => void;
 }): JSX.Element {
+  // Roving-tabindex keyboard support (audit #18): each tab is a role="tab" in a
+  // role="tablist"; only the active tab is in the Tab order (tabIndex 0), the rest
+  // are -1 and reached via ← → (Home/End). Enter/Space activates the focused tab.
+  // Refs let arrow keys move DOM focus without a full controlled-focus state.
+  const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const focusTabAt = (index: number): void => {
+    if (tabs.length === 0) return;
+    const wrapped = ((index % tabs.length) + tabs.length) % tabs.length;
+    const target = tabs[wrapped];
+    if (target === undefined) return;
+    tabRefs.current[target.id]?.focus();
+    onActivate(target.id);
+  };
   const label = (t: SimTab): string => {
     const url = t.url.trim();
     // A blank/new tab always reads as "New Tab" — the box reports the branded page's
@@ -1616,20 +1706,48 @@ function TabStrip({
     <div
       data-component="simulator-tab-strip"
       data-no-drag
+      role="tablist"
+      aria-label="Open pages"
       className="relative flex h-8 w-full shrink-0 items-stretch gap-1 overflow-x-auto bg-[#17181d] px-1.5 py-1 ring-1 ring-white/[0.08] shadow-[inset_0_-1px_0_rgba(0,0,0,0.45)]"
     >
-      {tabs.map((t) => {
+      {tabs.map((t, i) => {
         const active = t.id === activeTabId;
         const switching = t.id === switchingTabId;
         return (
           <div
             key={t.id}
+            ref={(el) => {
+              tabRefs.current[t.id] = el;
+            }}
             data-component="simulator-tab"
             data-active={active ? 'true' : 'false'}
             data-switching={switching ? 'true' : 'false'}
+            role="tab"
+            aria-selected={active}
+            // Roving tabindex — only the active tab is Tab-reachable; arrows move
+            // within the strip (audit #18).
+            tabIndex={active ? 0 : -1}
             title={t.url || label(t)}
             onClick={() => onActivate(t.id)}
-            className={`group relative flex min-w-[88px] max-w-[160px] shrink-0 cursor-default items-center gap-1.5 overflow-hidden rounded-md px-2 text-[11px] leading-none transition ${
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onActivate(t.id);
+              } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                focusTabAt(i + 1);
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                focusTabAt(i - 1);
+              } else if (e.key === 'Home') {
+                e.preventDefault();
+                focusTabAt(0);
+              } else if (e.key === 'End') {
+                e.preventDefault();
+                focusTabAt(tabs.length - 1);
+              }
+            }}
+            className={`group relative flex min-w-[88px] max-w-[160px] shrink-0 cursor-default items-center gap-1.5 overflow-hidden rounded-md px-2 text-[11px] leading-none outline-none transition focus-visible:ring-2 focus-visible:ring-accent/70 ${
               active
                 ? 'bg-black/40 text-white/90 ring-1 ring-white/15'
                 : 'bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white/80'
@@ -6440,7 +6558,7 @@ export function SimulatorWindow(): JSX.Element {
                               </button>
                             </div>
 
-                            {/* 2-up stat tiles — Render fps + Latency (with sparkline). */}
+                            {/* 2-up stat tiles — Render fps + Latency (live number). */}
                             <div className="grid grid-cols-2 gap-2">
                               <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
                                 <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
@@ -6469,19 +6587,12 @@ export function SimulatorWindow(): JSX.Element {
                                         ms{rttFromLink ? ' (link)' : ''}
                                       </span>
                                     </div>
-                                    <svg
-                                      className="mt-1 h-[18px] w-full"
-                                      viewBox="0 0 100 22"
-                                      preserveAspectRatio="none"
-                                      aria-hidden="true"
-                                    >
-                                      <polyline
-                                        points="0,16 14,12 28,15 42,8 56,11 70,7 84,10 100,6"
-                                        fill="none"
-                                        stroke={rttHealthy ? '#34d399' : '#fbbf24'}
-                                        strokeWidth="1.5"
-                                      />
-                                    </svg>
+                                    {/* Audit #16: the old "sparkline" here was a static
+                                        hardcoded polyline — a fabricated shape, not real
+                                        RTT history — so it implied a trend that didn't
+                                        exist. Removed in favor of the honest live number
+                                        (a real history ring buffer is a separate, larger
+                                        change and was flagged, not hand-rolled). */}
                                   </>
                                 ) : (
                                   <div className="mt-0.5 text-[11px] text-white/50">measuring…</div>
@@ -6679,7 +6790,11 @@ export function SimulatorWindow(): JSX.Element {
                             ⬆
                           </span>
                           <span className="text-[11.5px] font-medium">
-                            {uploading ? 'Uploading…' : 'Drop a file or click to upload'}
+                            {sessionId === ''
+                              ? 'Waiting for the device…'
+                              : uploading
+                                ? 'Uploading…'
+                                : 'Drop a file or click to upload'}
                           </span>
                           <span className="text-[10px] text-white/35">
                             → feeds the page&apos;s file picker · max 64 MiB
@@ -6694,7 +6809,9 @@ export function SimulatorWindow(): JSX.Element {
 
                         {files.length === 0 ? (
                           <div className="font-mono text-[10px] text-white/40">
-                            no files uploaded
+                            {sessionId === ''
+                              ? 'Start the session to upload files into the device.'
+                              : 'no files uploaded'}
                           </div>
                         ) : (
                           <div className="max-h-48 space-y-2 overflow-y-auto pr-0.5">
@@ -6768,6 +6885,12 @@ export function SimulatorWindow(): JSX.Element {
                           )}
                         </div>
 
+                        {/* One-line caption (audit #37) — matches the Files pane's
+                            explanatory subtitle density so the pane isn't a bare list. */}
+                        <div className="text-[10px] text-white/35">
+                          Files the page saved · click Save to keep one on your machine
+                        </div>
+
                         {downloadsNote !== null && (
                           <div className="font-mono text-[10px] text-amber-300/80">
                             {downloadsNote}
@@ -6776,7 +6899,9 @@ export function SimulatorWindow(): JSX.Element {
 
                         {downloads === null || downloads.length === 0 ? (
                           <div className="font-mono text-[10px] text-white/40">
-                            no downloads yet
+                            {sessionId === ''
+                              ? 'Start the session to receive downloads from the device.'
+                              : 'no downloads yet'}
                           </div>
                         ) : (
                           <div className="max-h-48 space-y-2 overflow-y-auto pr-0.5">

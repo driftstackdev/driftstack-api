@@ -11,6 +11,13 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => useSettingsMock(),
 }));
 
+// The card now offers a click-to-copy account id, which pushes a toast — so it
+// depends on <ToastProvider>. Mock useToasts (mirrors the sibling views' tests)
+// so the card mounts without a provider tree.
+vi.mock('../../src/lib/toasts', () => ({
+  useToasts: () => ({ push: vi.fn() }),
+}));
+
 const { SettingsAccountCard } = await import('../../src/components/SettingsAccountCard');
 
 const ACCOUNT = {
@@ -45,7 +52,9 @@ describe('V-534.L SettingsAccountCard — fetch happy path', () => {
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     expect(screen.getByText('acc_test123')).toBeTruthy();
     expect(screen.getByText('user@example.com')).toBeTruthy();
-    expect(screen.getByText('solo_manual')).toBeTruthy();
+    // Tier is humanized ('solo_manual' → 'Solo Manual') so the card never shows
+    // a raw lowercase database slug to the customer.
+    expect(screen.getByText('Solo Manual')).toBeTruthy();
   });
 
   it('points the "Manage billing" link to the prod dashboard for prod baseUrls', () => {
@@ -96,7 +105,7 @@ describe('V-534.L SettingsAccountCard — failure paths', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/no api key/i));
   });
 
-  it('surfaces an HTTP error from /v1/account/me', async () => {
+  it('maps an HTTP 401 from /v1/account/me to plain-English guidance (not a raw "HTTP 401")', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -108,7 +117,11 @@ describe('V-534.L SettingsAccountCard — failure paths', () => {
       ),
     );
     render(<SettingsAccountCard />);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/401/));
+    // errorMessageForStatus(401) → actionable copy, and no bare "HTTP 401".
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/api key wasn't accepted/i),
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/HTTP 401/);
   });
 
   it('surfaces a network error', async () => {

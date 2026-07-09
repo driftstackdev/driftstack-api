@@ -1,5 +1,5 @@
 // V-334 — Sessions history view. Shows TERMINATED sessions
-// (destroyed + errored) with their lifetime + reason. Mirrors the
+// (destroyed + errored) with their lifetime + status. Mirrors the
 // SessionsView state-machine (poll-on-mount, refresh button) but
 // scoped to terminal-state sessions only.
 //
@@ -13,6 +13,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import { RelativeTime } from '../components/RelativeTime';
+import { SessionStatusBadge } from '../components/SessionStatusBadge';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 
@@ -43,12 +44,11 @@ export function SessionsHistoryView(): JSX.Element {
       const terminated = page.data.filter(
         (s) => s.status === 'destroyed' || s.status === 'errored',
       );
-      // Newest first.
-      terminated.sort((a, b) => {
-        const tA = a.destroyed_at ? new Date(a.destroyed_at).getTime() : 0;
-        const tB = b.destroyed_at ? new Date(b.destroyed_at).getTime() : 0;
-        return tB - tA;
-      });
+      // Newest first. Errored sessions often have no destroyed_at (the
+      // box never ran a clean teardown), so falling back to last_state_at
+      // then created_at keeps them interleaved by when they actually ended
+      // instead of dumping every reasonless error at the bottom (time 0).
+      terminated.sort((a, b) => endedAtMs(b) - endedAtMs(a));
       setState({
         sessions: terminated,
         refreshedAt: Date.now(),
@@ -96,8 +96,8 @@ export function SessionsHistoryView(): JSX.Element {
             )}
           </h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Sessions that have ended (destroyed or errored). Active sessions live under "Active" in
-            the sidebar.
+            Ended sessions (destroyed or errored) with their lifetime and final status. Active
+            sessions live under "Active" in the sidebar.
           </p>
           {state.refreshedAt !== null && (
             <p className="mt-1 text-2xs text-ink-muted">
@@ -150,30 +150,36 @@ export function SessionsHistoryView(): JSX.Element {
 
       {state.sessions.length > 0 && (
         <ul className="divide-y divide-surface-divider rounded border border-surface-divider bg-surface-raised">
-          {state.sessions.map((s) => (
-            <li key={s.id} className="flex items-center justify-between gap-4 px-5 py-3">
-              <div className="min-w-0">
-                <p className="mono text-sm text-ink-primary">{s.id}</p>
-                <p className="mt-1 text-2xs text-ink-muted">
-                  {s.archetype} · {fmtDuration(s.created_at, s.destroyed_at)} ·{' '}
-                  {s.destroyed_at ? (
-                    <RelativeTime iso={s.destroyed_at} tooltipPrefix="Ended" />
-                  ) : (
-                    '—'
+          {state.sessions.map((s) => {
+            // Errored sessions frequently lack a destroyed_at (no clean
+            // teardown); fall back to the last state transition so the row
+            // still shows *when* it ended rather than a bare em dash.
+            const endedIso = s.destroyed_at ?? s.last_state_at;
+            return (
+              <li key={s.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                <div className="min-w-0">
+                  <p className="mono text-sm text-ink-primary">{s.id}</p>
+                  <p className="mt-1 text-2xs text-ink-muted">
+                    {s.archetype} · {fmtDuration(s.created_at, endedIso)} ·{' '}
+                    {endedIso ? (
+                      <RelativeTime
+                        iso={endedIso}
+                        tooltipPrefix={s.destroyed_at ? 'Ended' : 'Last state (errored)'}
+                      />
+                    ) : (
+                      '—'
+                    )}
+                  </p>
+                  {s.status === 'errored' && (
+                    <p className="mt-0.5 text-2xs text-ink-muted italic">
+                      Reason not reported by the harness
+                    </p>
                   )}
-                </p>
-              </div>
-              <span
-                className={`rounded-full px-2 py-0.5 text-2xs font-medium uppercase tracking-wide ${
-                  s.status === 'errored'
-                    ? 'bg-status-error/20 text-status-error'
-                    : 'bg-surface-elevated text-ink-secondary'
-                }`}
-              >
-                {s.status}
-              </span>
-            </li>
-          ))}
+                </div>
+                <SessionStatusBadge status={s.status} size="sm" />
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -183,6 +189,17 @@ export function SessionsHistoryView(): JSX.Element {
 // Mirrors SessionsView.formatTime — wall-clock of the last refresh.
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString();
+}
+
+// The moment a terminated session actually ended, most-reliable first:
+// destroyed_at (clean teardown) → last_state_at (last transition an
+// errored session recorded) → created_at (only if both are missing).
+// Used so reasonless errors don't collapse to time 0 and sink to the
+// bottom of the newest-first list.
+function endedAtMs(s: Session): number {
+  const iso = s.destroyed_at ?? s.last_state_at ?? s.created_at;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
 }
 
 function fmtDuration(createdIso: string, destroyedIso: string | null): string {

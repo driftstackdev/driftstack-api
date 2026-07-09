@@ -188,7 +188,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                     aria-hidden="true"
                     className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy"
                   />
-                  {liveCount} recording
+                  {liveCount} live
                 </span>
               )}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-surface-divider bg-surface-raised px-2.5 py-1 text-2xs text-ink-secondary">
@@ -338,22 +338,34 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                   type="button"
                   className="btn-danger"
                   onClick={() => handleDelete(selected.id)}
-                  disabled={selected.endedAt === null || deletingId !== null}
+                  disabled={
+                    selected.endedAt === null ||
+                    deletingId !== null ||
+                    confirmingDeleteId === selected.id
+                  }
                   title={
                     selected.endedAt === null
                       ? 'Stop recording before deleting'
-                      : confirmingDeleteId === selected.id
-                        ? 'This permanently deletes the recording — click again to confirm'
-                        : undefined
+                      : 'This permanently deletes the recording'
                   }
                 >
-                  {deletingId !== null
-                    ? 'Deleting…'
-                    : confirmingDeleteId === selected.id
-                      ? 'Confirm delete?'
-                      : 'Delete'}
+                  {deletingId !== null ? 'Deleting…' : 'Delete'}
                 </button>
-                {confirmingDeleteId === selected.id && deletingId === null ? (
+              </div>
+              {/* Dedicated full-width confirm bar — recording delete is
+                  PERMANENT. Rendered BELOW the action row (not squeezed into
+                  the no-wrap button row, which overflowed the 288px rail with
+                  four buttons) so the confirm + cancel each get room. */}
+              {confirmingDeleteId === selected.id && deletingId === null ? (
+                <div className="flex items-center gap-2 rounded-lg border border-status-error/30 bg-status-error/10 px-3 py-2">
+                  <span className="min-w-0 flex-1 text-xs text-ink-primary">Confirm delete?</span>
+                  <button
+                    type="button"
+                    className="btn-danger"
+                    onClick={() => handleDelete(selected.id)}
+                  >
+                    Delete
+                  </button>
                   <button
                     type="button"
                     className="btn-secondary"
@@ -361,8 +373,8 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                   >
                     Cancel
                   </button>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </aside>
           )}
         </div>

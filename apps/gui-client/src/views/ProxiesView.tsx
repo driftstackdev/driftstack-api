@@ -43,6 +43,7 @@ import {
 } from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { useSettings } from '../lib/SettingsContext';
+import { useConfirm } from '../components/ConfirmProvider';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -88,6 +89,7 @@ const EMPTY_DRAFT: ProxyDraft = {
 
 export function ProxiesView(): JSX.Element {
   const { settings } = useSettings();
+  const confirm = useConfirm();
   const [state, setState] = useState<ListState>({
     proxies: [],
     loading: true,
@@ -195,6 +197,13 @@ export function ProxiesView(): JSX.Element {
   }
 
   async function handleRemove(id: string): Promise<void> {
+    if (
+      !(await confirm(
+        'Remove this proxy? Any profiles using it as a default will be unbound and must be re-bound before launching.',
+        { confirmLabel: 'Remove', tone: 'danger' },
+      ))
+    )
+      return;
     setBusyId(id);
     try {
       // Capture the server-side account_proxies id (set on first launch-sync)
@@ -385,7 +394,8 @@ export function ProxiesView(): JSX.Element {
                 <>
                   <b className="font-semibold text-status-ready">{healthy.length}</b> healthy
                   <span className="text-surface-divider">·</span>
-                  <b className="font-semibold text-ink-primary">{udpCapable.length}</b> full-stack
+                  <b className="font-semibold text-ink-primary">{udpCapable.length}</b> WebRTC +
+                  QUIC
                   <span className="text-surface-divider">·</span>
                   <span className="text-ink-muted">stored locally — never uploaded</span>
                 </>

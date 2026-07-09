@@ -214,17 +214,20 @@ export function RecordingPlayerView({
           >
             ← Recordings
           </button>
-          <h2 className="text-sm text-ink-primary">
+          <h2
+            className="truncate text-sm text-ink-primary"
+            title={`${recording.sessionId} · ${new Date(recording.startedAt).toLocaleString()}`}
+          >
             <span className="mono">{recording.sessionId}</span>{' '}
             <span className="text-ink-muted">·</span>{' '}
             <span className="text-ink-secondary">
               {new Date(recording.startedAt).toLocaleString()}
             </span>
           </h2>
-          <div className="flex items-center gap-3 text-2xs text-ink-muted">
-            <span className="mono">{recording.frames.length} frames</span>
+          <div className="flex min-w-0 items-center gap-3 text-2xs text-ink-muted">
+            <span className="mono truncate">{recording.frames.length} frames</span>
             <span>·</span>
-            <span className="mono">{formatBytes(recordingTotalBytes(recording))}</span>
+            <span className="mono truncate">{formatBytes(recordingTotalBytes(recording))}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -257,11 +260,33 @@ export function RecordingPlayerView({
         ) : currentFrame === null ? (
           <span className="section-label text-ink-muted">No frames captured</span>
         ) : (
-          <img
-            src={currentFrame.dataUrl}
-            alt={`recording frame at ${formatDuration(currentFrame.at - recording.startedAt)}`}
-            className="max-h-full max-w-full object-contain"
-          />
+          // The frame itself is the play/pause hit target — click anywhere on it
+          // (like a video player) and a center glyph surfaces the otherwise-hidden
+          // Space shortcut on hover/paused.
+          <button
+            type="button"
+            onClick={togglePlay}
+            aria-label={playing ? 'Pause playback' : 'Play recording'}
+            className="group relative flex h-full w-full items-center justify-center"
+          >
+            <img
+              src={currentFrame.dataUrl}
+              alt={`recording frame at ${formatDuration(currentFrame.at - recording.startedAt)}`}
+              className="max-h-full max-w-full object-contain"
+            />
+            <span
+              className={`pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 transition-opacity ${
+                playing ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
+              }`}
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-2xl text-white">
+                {playing ? '❚❚' : '▶'}
+              </span>
+              <span className="rounded bg-black/50 px-2 py-0.5 text-2xs text-white">
+                Space to play
+              </span>
+            </span>
+          </button>
         )}
       </div>
 

@@ -12,8 +12,9 @@
 // fixed, hand-authored age/warmth/price/signal set. "Buy" is intentionally
 // a disabled, explained affordance — never a fake success state.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
+import { useFocusTrap } from '../lib/use-focus-trap';
 import { ARCHETYPE_REGISTRY } from '@driftstack/sdk';
 
 type WarmthTier = 'cold' | 'warming' | 'aged' | 'trusted';
@@ -281,10 +282,11 @@ function ListingCard({
       <span className="text-xs text-ink-muted">{fmtAge(listing.ageDays)}</span>
       <ul className="flex flex-col gap-0.5 text-2xs text-ink-secondary">
         {listing.signals.slice(0, 2).map((s, i) => (
-          <li key={i} className="truncate">
-            · {s}
-          </li>
+          <li key={i}>· {s}</li>
         ))}
+        {listing.signals.length > 2 && (
+          <li className="text-ink-muted">+{listing.signals.length - 2} more</li>
+        )}
       </ul>
       <span className="mt-1 mono text-base font-medium text-ink-primary">
         {fmtPrice(listing.priceCents)}
@@ -301,12 +303,18 @@ function DetailModal({
   onClose: () => void;
 }): JSX.Element {
   const archetype = ARCHETYPE_REGISTRY.find((a) => a.id === listing.archetypeId);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Focus-trap the dialog, close on Escape, and restore focus to the opener on
+  // close — a keyboard user could otherwise tab out into the grid behind it and
+  // had no Escape affordance.
+  useFocusTrap(true, dialogRef, onClose);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Profile listing details"
@@ -320,11 +328,21 @@ function DetailModal({
             </h3>
             <p className="mt-0.5 text-xs text-ink-muted">{fmtAge(listing.ageDays)}</p>
           </div>
-          <span
-            className={`shrink-0 rounded-full border px-2 py-0.5 text-2xs font-medium ${WARMTH_CLASSES[listing.warmthTier]}`}
-          >
-            {WARMTH_LABEL[listing.warmthTier]}
-          </span>
+          <div className="flex shrink-0 items-start gap-2">
+            <span
+              className={`rounded-full border px-2 py-0.5 text-2xs font-medium ${WARMTH_CLASSES[listing.warmthTier]}`}
+            >
+              {WARMTH_LABEL[listing.warmthTier]}
+            </span>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+              className="-mr-1 -mt-1 rounded p-1 text-ink-muted hover:text-ink-primary"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <ul className="flex flex-col gap-1.5 rounded-md bg-surface-inset px-3 py-2.5 text-sm text-ink-secondary">
@@ -355,7 +373,7 @@ function DetailModal({
         <button
           type="button"
           onClick={onClose}
-          className="self-end text-xs text-ink-muted hover:text-ink-secondary"
+          className="self-end text-xs text-ink-secondary hover:text-ink-primary"
         >
           Close
         </button>

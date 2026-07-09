@@ -12,6 +12,18 @@ import type { ProxyConfig } from '../../src/lib/proxies';
 const removeProxy = vi.fn<(id: string) => Promise<void>>(() => Promise.resolve());
 const clearBindingsForProxy = vi.fn<(id: string) => Promise<string[]>>(() => Promise.resolve([]));
 
+// handleRemove is now gated behind a useConfirm() danger dialog. Mock the
+// confirm to auto-resolve true so the delete proceeds (mirrors the sibling
+// confirm-gated tests, e.g. sessions-view-consistency). The real dialog copy /
+// tone is covered by ConfirmProvider.test.tsx; here we exercise the
+// binding-clear path once the operator has confirmed.
+const confirmFn = vi.fn<(msg: string, opts?: unknown) => Promise<boolean>>(() =>
+  Promise.resolve(true),
+);
+vi.mock('../../src/components/ConfirmProvider', () => ({
+  useConfirm: () => confirmFn,
+}));
+
 let stored: ProxyConfig[] = [];
 
 vi.mock('../../src/lib/proxies', () => ({

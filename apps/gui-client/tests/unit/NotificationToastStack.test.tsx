@@ -72,11 +72,27 @@ describe('NotificationToastStack', () => {
     expect(toasts[1]?.textContent).toContain('Cost critical:');
   });
 
-  it("clicking Dismiss invokes the hook's dismiss callback", () => {
+  it("clicking a single toast's Dismiss invokes the hook's dismiss callback", () => {
     setHookState([baseEvent]);
     dismissMock.mockClear();
     render(<NotificationToastStack />);
-    fireEvent.click(screen.getByLabelText('Dismiss all notifications'));
+    // A single queued toast carries its own per-card Dismiss (the "Clear all"
+    // header only appears once >1 toast is queued).
+    fireEvent.click(screen.getByLabelText('Dismiss notification'));
+    expect(dismissMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces a "Clear all" header (with the count) when more than one toast is queued', () => {
+    setHookState([
+      { ...baseEvent, at: '2026-05-20T23:00:00.000Z' },
+      { ...baseEvent, severity: 'critical', at: '2026-05-20T22:00:00.000Z' },
+    ]);
+    dismissMock.mockClear();
+    render(<NotificationToastStack />);
+    expect(screen.getByText('2 notifications')).toBeTruthy();
+    // No per-card Dismiss when the "Clear all" header is present.
+    expect(screen.queryByLabelText('Dismiss notification')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Clear all notifications'));
     expect(dismissMock).toHaveBeenCalledTimes(1);
   });
 

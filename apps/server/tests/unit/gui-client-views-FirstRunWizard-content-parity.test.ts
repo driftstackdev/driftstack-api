@@ -165,11 +165,22 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).not.toMatch(/value: 'iphone15pro_ios17_5_safari17_5',/);
   });
 
-  it("ProfileStep: default archetype state = 'iphone17_ios18_7_safari26_4' + Skip-for-now path (onSkip) calls finish() to flip step to 'done' + onComplete — pinned so skipping the optional profile step still completes the wizard properly + name input maxLength=120 matches server schema bound", () => {
+  it("ProfileStep: default archetype state = 'iphone17_ios18_7_safari26_4' + Skip-for-now path (onSkip=completeSetup) flips step to 'done' — where the success screen's 'Go to Profiles' button calls onComplete — so skipping the optional profile step still lands on the 'You're all set' confirmation rather than dropping straight into the shell; the mode/apikey escape-hatch finish() just calls onComplete; name input maxLength=120 matches server schema bound", () => {
     expect(body).toMatch(/useState<ProfileArchetype>\('iphone17_ios18_7_safari26_4'\)/);
+    // completeSetup flips to the 'done' confirmation (profile created OR skipped).
     expect(body).toMatch(
-      /function finish\(\): void \{\s*\n?\s*setStep\('done'\);\s*\n?\s*onComplete\(\);\s*\n?\s*\}/,
+      /function completeSetup\(\): void \{\s*\n?\s*setStep\('done'\);\s*\n?\s*\}/,
     );
+    expect(body).toMatch(
+      /\{step === 'profile' && <ProfileStep onSkip=\{completeSetup\} onCreated=\{completeSetup\} \/>\}/,
+    );
+    // The done screen's primary CTA is now 'Go to Profiles' (was 'Get started'),
+    // wired straight to onComplete to hand off into the shell.
+    expect(body).toMatch(
+      /<button type="button" className="btn-primary mt-6" onClick=\{onComplete\}>\s*\n?\s*Go to Profiles\s*\n?\s*<\/button>/,
+    );
+    // The mode/apikey escape hatch simply completes without a 'done' detour.
+    expect(body).toMatch(/function finish\(\): void \{\s*\n?\s*onComplete\(\);\s*\n?\s*\}/);
     expect(body).toMatch(/maxLength=\{120\}/);
   });
 

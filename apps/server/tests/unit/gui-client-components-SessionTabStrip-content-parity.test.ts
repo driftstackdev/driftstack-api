@@ -24,11 +24,16 @@ describe('W609 apps/gui-client/src/components/SessionTabStrip.tsx content parity
     expect(body).toMatch(/CONCURRENT SESSIONS\. Each tab is its own iPhone/);
   });
 
-  it('Data source: client.sessions.list() polled every LIST_POLL_INTERVAL_MS = 10_000 + immediate fetch on mount; destroyed sessions filtered out; list failures tolerated (strip is navigation sugar — keep last-known tabs)', () => {
+  it('Data source: client.sessions.list() polled every LIST_POLL_INTERVAL_MS = 10_000 + immediate fetch on mount; destroyed sessions filtered out; list failures tolerated (strip is navigation sugar — keep last-known tabs); the poll is visibility-gated (skips a tick while the window is hidden, audit 2026-07-08)', () => {
     expect(body).toMatch(/const LIST_POLL_INTERVAL_MS = 10_000;/);
     expect(body).toMatch(/const page = await client\.sessions\.list\(\);/);
     expect(body).toMatch(/\.filter\(\(s\) => s\.status !== 'destroyed'\)/);
-    expect(body).toMatch(/window\.setInterval\(\(\) => void refresh\(\), LIST_POLL_INTERVAL_MS\);/);
+    // The interval body now skips the poll while the window is hidden, then
+    // still calls refresh() at LIST_POLL_INTERVAL_MS; cleaned up on unmount.
+    expect(body).toMatch(
+      /const id = window\.setInterval\(\(\) => \{\s*\n?\s*if \(typeof document !== 'undefined' && document\.visibilityState === 'hidden'\) return;\s*\n?\s*void refresh\(\);\s*\n?\s*\}, LIST_POLL_INTERVAL_MS\);/,
+    );
+    expect(body).toMatch(/return \(\) => window\.clearInterval\(id\);/);
   });
 
   it("Active tab ALWAYS renders, even before the first list response — the strip must never look like 'no tabs' while inside a session. Errored sessions render with a status dot (still switchable)", () => {

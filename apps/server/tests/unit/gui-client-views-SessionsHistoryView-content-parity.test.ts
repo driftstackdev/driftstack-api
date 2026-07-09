@@ -49,7 +49,7 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
 
   it("V-334 framing pinned: 'V-334 — Sessions history view. Shows TERMINATED sessions (destroyed + errored) with their lifetime + reason. Mirrors the SessionsView state-machine (poll-on-mount, refresh button) but scoped to terminal-state sessions only.' + 'Active sessions live in SessionsView; this is the post-mortem complement.'", () => {
     expect(body).toMatch(
-      /\/\/ V-334 — Sessions history view\. Shows TERMINATED sessions\s*\n?\s*\/\/ \(destroyed \+ errored\) with their lifetime \+ reason\. Mirrors the\s*\n?\s*\/\/ SessionsView state-machine \(poll-on-mount, refresh button\) but\s*\n?\s*\/\/ scoped to terminal-state sessions only\./,
+      /\/\/ V-334 — Sessions history view\. Shows TERMINATED sessions\s*\n?\s*\/\/ \(destroyed \+ errored\) with their lifetime \+ status\. Mirrors the\s*\n?\s*\/\/ SessionsView state-machine \(poll-on-mount, refresh button\) but\s*\n?\s*\/\/ scoped to terminal-state sessions only\./,
     );
     expect(body).toMatch(
       /\/\/ Useful for the founder running locally to verify session lifecycle\s*\n?\s*\/\/ \+ spot patterns in failures \(which archetype keeps erroring,\s*\n?\s*\/\/ which durations are abnormal\)\. Active sessions live in\s*\n?\s*\/\/ SessionsView; this is the post-mortem complement\./,
@@ -62,12 +62,16 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it("Terminal-only filter: page.data.filter(s.status === 'destroyed' || s.status === 'errored') — pinned so active sessions don't leak into post-mortem view; newest-first sort by destroyed_at getTime() with null→0 fallback (tA - tB inverted as tB - tA for descending)", () => {
+  it("Terminal-only filter: page.data.filter(s.status === 'destroyed' || s.status === 'errored') — pinned so active sessions don't leak into post-mortem view; newest-first sort by endedAtMs (destroyed_at ?? last_state_at ?? created_at) so reasonless errors interleave by when they actually ended instead of sinking to the bottom at time 0", () => {
     expect(body).toMatch(
       /const terminated = page\.data\.filter\(\s*\n?\s*\(s\) => s\.status === 'destroyed' \|\| s\.status === 'errored',\s*\n?\s*\);/,
     );
     expect(body).toMatch(
-      /\/\/ Newest first\.\s*\n?\s*terminated\.sort\(\(a, b\) => \{\s*\n?\s*const tA = a\.destroyed_at \? new Date\(a\.destroyed_at\)\.getTime\(\) : 0;\s*\n?\s*const tB = b\.destroyed_at \? new Date\(b\.destroyed_at\)\.getTime\(\) : 0;\s*\n?\s*return tB - tA;\s*\n?\s*\}\);/,
+      /\/\/ Newest first\. Errored sessions often have no destroyed_at \(the\s*\n?\s*\/\/ box never ran a clean teardown\), so falling back to last_state_at\s*\n?\s*\/\/ then created_at keeps them interleaved by when they actually ended\s*\n?\s*\/\/ instead of dumping every reasonless error at the bottom \(time 0\)\.\s*\n?\s*terminated\.sort\(\(a, b\) => endedAtMs\(b\) - endedAtMs\(a\)\);/,
+    );
+    // The endedAtMs helper drives that most-reliable-timestamp-first sort.
+    expect(body).toMatch(
+      /function endedAtMs\(s: Session\): number \{\s*\n?\s*const iso = s\.destroyed_at \?\? s\.last_state_at \?\? s\.created_at;\s*\n?\s*const ms = new Date\(iso\)\.getTime\(\);\s*\n?\s*return Number\.isNaN\(ms\) \? 0 : ms;\s*\n?\s*\}/,
     );
   });
 
@@ -86,7 +90,7 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
   it("Render: 'History' section-label + 'Past sessions' h2 + 'Sessions that have ended (destroyed or errored). Active sessions live under \"Active\" in the sidebar.' subline + Refresh button disabled while loading + ErrorBanner with onDismiss=clear error + empty-state <EmptyState title='No past sessions yet'> (W463 shared primitive, when error===null && !loading)", () => {
     expect(body).toMatch(/<h2[\s\S]*?Past sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(
-      /Sessions that have ended \(destroyed or errored\)\. Active sessions live under "Active" in\s*\n?\s*the sidebar\./,
+      /Ended sessions \(destroyed or errored\) with their lifetime and final status\. Active\s*\n?\s*sessions live under "Active" in the sidebar\./,
     );
     expect(body).toMatch(
       /\{state\.error !== null && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{state\.error\}\s*\n?\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}\s*\n?\s*\/>\s*\n?\s*\)\}/,
@@ -107,13 +111,24 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it("Per-row: id mono + archetype + fmtDuration(created_at, destroyed_at) + shared <RelativeTime iso={destroyed_at} tooltipPrefix='Ended'> (null → '—') + status pill: errored → status-error/20 / status-error else surface-elevated / ink-secondary", () => {
+  it("Per-row: id mono + archetype + fmtDuration(created_at, endedIso) + shared <RelativeTime iso={endedIso} tooltipPrefix={destroyed_at ? 'Ended' : 'Last state (errored)'}> (null → '—'), where endedIso = destroyed_at ?? last_state_at (errored sessions lack a clean-teardown destroyed_at); errored rows also show a 'Reason not reported by the harness' italic line; status rendered via the shared <SessionStatusBadge> (replacing the ad-hoc status-error/20 span pill)", () => {
+    // endedIso falls back to last_state_at so an errored (no destroyed_at)
+    // row still shows *when* it ended rather than a bare em dash.
+    expect(body).toMatch(/const endedIso = s\.destroyed_at \?\? s\.last_state_at;/);
     expect(body).toMatch(
-      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, s\.destroyed_at\)\} ·\{' '\}\s*\n?\s*\{s\.destroyed_at \? \(\s*\n?\s*<RelativeTime iso=\{s\.destroyed_at\} tooltipPrefix="Ended" \/>\s*\n?\s*\) : \(\s*\n?\s*'—'\s*\n?\s*\)\}/,
+      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, endedIso\)\} ·\{' '\}\s*\n?\s*\{endedIso \? \(\s*\n?\s*<RelativeTime\s*\n?\s*iso=\{endedIso\}\s*\n?\s*tooltipPrefix=\{s\.destroyed_at \? 'Ended' : 'Last state \(errored\)'\}\s*\n?\s*\/>\s*\n?\s*\) : \(\s*\n?\s*'—'\s*\n?\s*\)\}/,
     );
+    // Errored sessions surface a plain-language "no reason" note.
     expect(body).toMatch(
-      /className=\{`rounded-full px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide \$\{\s*\n?\s*s\.status === 'errored'\s*\n?\s*\? 'bg-status-error\/20 text-status-error'\s*\n?\s*: 'bg-surface-elevated text-ink-secondary'\s*\n?\s*\}`\}/,
+      /\{s\.status === 'errored' && \(\s*\n?\s*<p className="mt-0\.5 text-2xs text-ink-muted italic">\s*\n?\s*Reason not reported by the harness\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
     );
+    // The status pill is now the shared SessionStatusBadge component.
+    expect(body).toMatch(
+      /import \{ SessionStatusBadge \} from '\.\.\/components\/SessionStatusBadge';/,
+    );
+    expect(body).toMatch(/<SessionStatusBadge status=\{s\.status\} size="sm" \/>/);
+    // The old ad-hoc status-error/20 span pill is gone.
+    expect(body).not.toMatch(/bg-status-error\/20 text-status-error/);
   });
 
   it("fmtDuration piecewise: !destroyedIso → '—' / ms < 0 → '—' (negative-time guard for clock skew) / <1000 → `${ms}ms` (raw) / <60_000 → `${Math.round(ms/100)/10}s` (1 decimal) / <3_600_000 → `${Math.round(ms/6_000)/10}m` (1 decimal) / else `${Math.round(ms/360_000)/10}h` (1 decimal)", () => {

@@ -79,12 +79,26 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).not.toMatch(/Persistence to disk lands in a\s*\n?\s*follow-up\s*\n?\s*phase/);
   });
 
-  it("Live guard survives the gallery port: endedAt === null → 'live' badge with text-status-busy (card meta + rail Duration) + rail Delete disabled when live OR while a delete is in flight (deletingId guard, audit wiq542bfj — a fast double-click otherwise deleted a 2nd recording); the title is now a nested ternary — 'Stop recording before deleting' while live, else the click-again-to-confirm tooltip when this recording is the pending-confirm target, else undefined — pinned so operator can't delete a still-capturing recording (Tauri process couldn't release the buffer)", () => {
+  it("Live guard survives the gallery port: endedAt === null → 'live' badge with text-status-busy (card meta + rail Duration) + hero '{liveCount} live' pill; rail Delete disabled when live OR while a delete is in flight (deletingId guard, audit wiq542bfj — a fast double-click otherwise deleted a 2nd recording) OR while the confirm is armed for this recording; the delete confirmation is now a dedicated full-width confirm bar ('Confirm delete?' + Delete + Cancel) rendered BELOW the action row (the button no longer relabels) — pinned so operator can't delete a still-capturing recording (Tauri process couldn't release the buffer)", () => {
     expect(body).toMatch(/const live = r\.endedAt === null;/);
     expect(body).toContain('<span className="ml-1.5 text-status-busy">live</span>');
-    expect(body).toContain('disabled={selected.endedAt === null || deletingId !== null}');
+    // Hero live pill now reads "{liveCount} live".
+    expect(body).toMatch(/const liveCount = list\.filter\(\(r\) => r\.endedAt === null\)\.length;/);
+    expect(body).toMatch(/\{liveCount\} live/);
+    // Delete is disabled while live, while a delete is in flight, OR while the
+    // confirm bar is armed for this recording.
     expect(body).toMatch(
-      /title=\{\s*\n?\s*selected\.endedAt === null\s*\n?\s*\? 'Stop recording before deleting'\s*\n?\s*: confirmingDeleteId === selected\.id\s*\n?\s*\? 'This permanently deletes the recording — click again to confirm'\s*\n?\s*: undefined\s*\n?\s*\}/,
+      /disabled=\{\s*\n?\s*selected\.endedAt === null \|\|\s*\n?\s*deletingId !== null \|\|\s*\n?\s*confirmingDeleteId === selected\.id\s*\n?\s*\}/,
+    );
+    // The title is a simple 2-way ternary (the click-again-to-confirm tooltip
+    // moved out to the dedicated confirm bar below the action row).
+    expect(body).toMatch(
+      /title=\{\s*\n?\s*selected\.endedAt === null\s*\n?\s*\? 'Stop recording before deleting'\s*\n?\s*: 'This permanently deletes the recording'\s*\n?\s*\}/,
+    );
+    // Dedicated full-width confirm bar rendered BELOW the Open/Export/Delete row.
+    expect(body).toMatch(/\{confirmingDeleteId === selected\.id && deletingId === null \? \(/);
+    expect(body).toMatch(
+      /<span className="min-w-0 flex-1 text-xs text-ink-primary">Confirm delete\?<\/span>/,
     );
   });
 

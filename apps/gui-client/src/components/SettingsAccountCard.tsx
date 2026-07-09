@@ -8,10 +8,12 @@
 // The card has three observable states:
 //   - loading: account fetch in-flight
 //   - error: 401 / 403 / network — the card collapses to a small notice
+//     with plain-language guidance and a Retry button
 //   - ready: account id + tier rendered, billing link visible
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
+import { useToasts } from '../lib/toasts';
 
 interface AccountMeResponse {
   account: {
@@ -39,15 +41,43 @@ function dashboardUrlFor(baseUrl: string): string {
   return 'https://app.driftstack.dev';
 }
 
+/**
+ * Turn a raw tier slug ('self_hosted', 'pay-as-you-go') into a human
+ * label ('Self Hosted', 'Pay As You Go') so the card never shows a
+ * lowercase database value to the customer.
+ */
+function humanizeTier(tier: string): string {
+  return tier
+    .split(/[_-]+/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+/**
+ * Map a failed /v1/account/me fetch to plain, actionable copy. Raw
+ * 'HTTP 401' told the customer nothing; 401/403 almost always means the
+ * saved API key is wrong or lacks access.
+ */
+function errorMessageForStatus(status: number): string {
+  if (status === 401) return "Your API key wasn't accepted. Check the key above, then retry.";
+  if (status === 403) return "This API key doesn't have access to account info.";
+  return `Couldn't load account info (HTTP ${status.toString()}).`;
+}
+
 export function SettingsAccountCard(): JSX.Element | null {
   const { settings } = useSettings();
+  const { push: pushToast } = useToasts();
   const [state, setState] = useState<CardState>({ kind: 'loading' });
+  // Bumping the nonce re-runs the fetch effect — the Retry button's mechanism.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     if (!settings.apiKey) {
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
+    setState({ kind: 'loading' });
     let cancelled = false;
     void (async () => {
       try {
@@ -57,7 +87,7 @@ export function SettingsAccountCard(): JSX.Element | null {
         });
         if (cancelled) return;
         if (!res.ok) {
-          setState({ kind: 'error', message: `HTTP ${res.status.toString()}` });
+          setState({ kind: 'error', message: errorMessageForStatus(res.status) });
           return;
         }
         const body = (await res.json()) as AccountMeResponse;
@@ -73,14 +103,27 @@ export function SettingsAccountCard(): JSX.Element | null {
     return () => {
       cancelled = true;
     };
-  }, [settings.apiKey, settings.baseUrl]);
+  }, [settings.apiKey, settings.baseUrl, retryNonce]);
 
   const dashboardUrl = dashboardUrlFor(settings.baseUrl);
+
+  const handleCopyId = useCallback(
+    async (id: string): Promise<void> => {
+      try {
+        if (navigator.clipboard === undefined) throw new Error('clipboard unavailable');
+        await navigator.clipboard.writeText(id);
+        pushToast({ title: 'Copied', tone: 'success' });
+      } catch {
+        pushToast({ title: "Couldn't copy — clipboard blocked", tone: 'error' });
+      }
+    },
+    [pushToast],
+  );
 
   return (
     <section
       aria-label="Account info"
-      className="max-w-xl rounded border border-surface-divider bg-surface-raised px-4 py-3 space-y-2"
+      className="rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm space-y-2"
     >
       <header className="flex items-baseline justify-between">
         <span className="section-label">Account</span>
@@ -100,23 +143,39 @@ export function SettingsAccountCard(): JSX.Element | null {
         </p>
       )}
       {state.kind === 'error' && (
-        <p className="text-sm text-status-warning" role="alert">
-          {state.message}
-        </p>
+        <div className="flex items-start justify-between gap-3" role="alert">
+          <p className="text-sm text-status-warning">{state.message}</p>
+          <button
+            type="button"
+            className="btn-secondary shrink-0"
+            onClick={() => setRetryNonce((n) => n + 1)}
+          >
+            Retry
+          </button>
+        </div>
       )}
       {state.kind === 'ready' && (
         <dl className="space-y-1 text-sm">
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-ink-secondary">Account id</dt>
-            <dd className="font-mono text-ink-primary">{state.account.id}</dd>
+            <dt className="shrink-0 text-ink-secondary">Account id</dt>
+            <dd className="min-w-0">
+              <button
+                type="button"
+                onClick={() => void handleCopyId(state.account.id)}
+                title="Copy account id"
+                className="block w-full truncate text-right font-mono text-ink-primary underline decoration-dotted underline-offset-2 hover:text-accent"
+              >
+                {state.account.id}
+              </button>
+            </dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-ink-secondary">Email</dt>
-            <dd className="text-ink-primary">{state.account.email}</dd>
+            <dt className="shrink-0 text-ink-secondary">Email</dt>
+            <dd className="min-w-0 truncate text-right text-ink-primary">{state.account.email}</dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-ink-secondary">Tier</dt>
-            <dd className="text-ink-primary">{state.account.tier}</dd>
+            <dt className="shrink-0 text-ink-secondary">Tier</dt>
+            <dd className="text-ink-primary">{humanizeTier(state.account.tier)}</dd>
           </div>
         </dl>
       )}

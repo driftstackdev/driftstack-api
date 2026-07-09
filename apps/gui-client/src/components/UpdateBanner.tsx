@@ -35,7 +35,9 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
   return (
     <div
       role="status"
-      className="flex items-center justify-between gap-4 border-b border-status-error/30 bg-surface-raised px-4 py-2 text-sm"
+      className={`flex items-center justify-between gap-4 border-b bg-surface-raised px-4 py-2 text-sm ${
+        phase === 'error' ? 'border-status-error/30' : 'border-surface-divider'
+      }`}
     >
       <div className="min-w-0">
         {phase === 'error' ? (

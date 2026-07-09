@@ -169,7 +169,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
                 live iPhone session.
               </p>
               <button type="button" className="btn-primary mt-6" onClick={onComplete}>
-                Get started
+                Go to Profiles
               </button>
             </section>
           )}
@@ -617,7 +617,18 @@ export function ApiKeyStep({
 
       {path === 'paste' && (
         <>
-          <div className="mt-6">
+          {/* Wrap the paste controls in a form so Enter in the key field submits
+              (guarded identically to the footer button). The footer's primary
+              button lives outside this element and targets it via form="…". */}
+          <form
+            id="apikey-paste-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (validating || apiKey.trim().length === 0) return;
+              onValidate();
+            }}
+            className="mt-6"
+          >
             <label className="flex flex-col gap-1.5">
               <span className="section-label">API key</span>
               <input
@@ -642,7 +653,7 @@ export function ApiKeyStep({
                 Secret Service).
               </span>
             </label>
-          </div>
+          </form>
 
           {error !== null && (
             <p className="mt-4 whitespace-pre-line text-xs text-status-error" role="alert">
@@ -666,9 +677,9 @@ export function ApiKeyStep({
         </button>
         {path === 'paste' && (
           <button
-            type="button"
+            type="submit"
+            form="apikey-paste-form"
             className="btn-primary"
-            onClick={() => onValidate()}
             disabled={validating || apiKey.trim().length === 0}
           >
             {validating ? 'Validating…' : 'Validate + continue'}
@@ -756,7 +767,18 @@ export function ProfileStep({
         the customer dashboard + GUI both support it.
       </p>
 
-      <div className="mt-6">
+      {/* Wrap the name field in a form so Enter submits (guarded identically to
+          the footer button). The Create button lives outside and targets it via
+          form="…". */}
+      <form
+        id="first-profile-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (submitting || name.trim().length === 0) return;
+          void handleCreate();
+        }}
+        className="mt-6"
+      >
         <label className="flex flex-col gap-1.5">
           <span className="section-label">Profile name</span>
           <input
@@ -770,7 +792,7 @@ export function ProfileStep({
             autoFocus
           />
         </label>
-      </div>
+      </form>
 
       <fieldset className="mt-4">
         <legend className="section-label">Archetype</legend>
@@ -816,9 +838,9 @@ export function ProfileStep({
           Skip for now
         </button>
         <button
-          type="button"
+          type="submit"
+          form="first-profile-form"
           className="btn-primary"
-          onClick={() => void handleCreate()}
           disabled={submitting || name.trim().length === 0}
         >
           {submitting ? 'Creating…' : 'Create profile'}

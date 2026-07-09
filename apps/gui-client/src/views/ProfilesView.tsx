@@ -856,6 +856,18 @@ export function ProfilesView({
     return () => window.clearInterval(id);
   }, [refresh]);
 
+  // Auto-dismiss transient success notices (audit #41) — the notice banner is a
+  // confirmation of a completed action (folder moved, exported, cache cleared),
+  // so it clears itself after ~5s instead of lingering until manually dismissed.
+  // Errors stay sticky (they need action + live in the separate ErrorBanner).
+  useEffect(() => {
+    if (state.notice === null) return;
+    const id = window.setTimeout(() => {
+      setState((s) => ({ ...s, notice: null }));
+    }, 5000);
+    return () => window.clearTimeout(id);
+  }, [state.notice]);
+
   async function handleDelete(id: string): Promise<void> {
     // Don't delete a profile while ANY action is in flight (esp. a launch of this
     // profile): the grid card's Delete row only checked p.running, so a delete
@@ -2106,14 +2118,37 @@ export function ProfilesView({
     // running profiles spun up a SECOND billed session for each one already live
     // (double-billing + a duplicate fleet browser). Filter them out here so bulk
     // launch only creates sessions for idle profiles, matching the single-row path.
-    const targets = state.profiles.filter(
+    const idleTargets = state.profiles.filter(
       (p) => selectedIds.has(p.id) && boundSession(p.id) === null,
     );
+    if (idleTargets.length === 0) return;
+    // Bulk-cap trim (audit #5) — handleLaunch pre-gates atConcurrentCap, but that
+    // value is captured ONCE at this render and never refreshes across the awaited
+    // loop (accountMe only re-fetches after the batch), so a bulk launch of N idle
+    // profiles with headroom for only a few still fires all N creates and blows
+    // past the cap server-side. Trim up front to the remaining headroom so the
+    // batch stays within the cap; the server still enforces the true limit.
+    const headroom =
+      concurrentCap !== null && concurrentActive !== null
+        ? Math.max(0, concurrentCap - concurrentActive)
+        : null;
+    if (headroom === 0) {
+      setState((s) => ({ ...s, error: concurrentCapReason }));
+      return;
+    }
+    const trimmed = headroom !== null && idleTargets.length > headroom;
+    const targets = trimmed ? idleTargets.slice(0, headroom ?? undefined) : idleTargets;
     if (targets.length === 0) return;
     const ok = await confirm(
       `Launch ${targets.length.toString()} session${
         targets.length === 1 ? '' : 's'
-      }? Each selected profile opens its own browser session.`,
+      }? Each selected profile opens its own browser session.${
+        trimmed
+          ? ` (Limited to your remaining concurrent-session headroom — ${(
+              concurrentCap ?? 0
+            ).toString()} at a time on ${accountMe?.tier ?? 'this tier'}.)`
+          : ''
+      }`,
       { confirmLabel: 'Launch' },
     );
     if (!ok) return;
@@ -2565,7 +2600,10 @@ export function ProfilesView({
       {selectedIds.size > 0 && (
         <div
           data-component="bulk-bar"
-          className="animate-view-in fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-full border border-surface-divider bg-surface-elevated px-4 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
+          // rounded-2xl (not rounded-full) so the wrapped multi-row state at narrow
+          // widths reads as an intentional card rather than a mangled pill (audit #19);
+          // the bar holds 10+ controls and wraps once the viewport gets tight.
+          className="animate-view-in fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-2xl border border-surface-divider bg-surface-elevated px-4 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
         >
           <span className="text-xs font-semibold text-ink-primary">
             {selectedIds.size.toString()} selected
@@ -2748,6 +2786,9 @@ export function ProfilesView({
           </button>
           <p className="text-xs text-ink-muted">
             Sessions without a profile start ephemeral — fresh state every run.
+          </p>
+          <p className="text-xs text-ink-muted">
+            Sessions run through a proxy — add one in the Proxies tab first.
           </p>
         </div>
       ) : (

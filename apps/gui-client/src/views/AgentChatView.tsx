@@ -49,6 +49,13 @@ const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
   { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ];
 
+/** #31 — map a usage model id (e.g. `claude-opus-4-8`) to its human label
+ *  ("Opus 4.8") for the per-turn usage badge; falls back to the raw id for a
+ *  model not in the picker (older transcript / server-chosen model). */
+function modelLabel(id: string): string {
+  return MODELS.find((m) => m.id === id)?.label ?? id;
+}
+
 // ─── egress: resolve a profile's bound proxy → server proxy_id ─────
 //
 // Egress-leak fix. The AI-browser session-create only ever forwarded `profile_id`
@@ -174,6 +181,10 @@ export function AgentChatView({
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
+  // #20 — the composer textarea, so picking a template can focus it, drop the
+  // caret at the end, and grow it to fit the inserted prompt (mirrors the
+  // onChange auto-grow) instead of leaving a cramped, unfocused box.
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   // Bundled-LLM one-click consent CTA (error banner). Local, not part of the
   // chat hook — this is a settings mutation, not a chat turn.
   const [bundledLlmEnabling, setBundledLlmEnabling] = useState(false);
@@ -289,6 +300,16 @@ export function AgentChatView({
     ).then(setChats);
   }, [chat.turns, activeChatId, profileId, model]);
 
+  // #32 — an unsent draft must not bleed across chats. draft lives at this
+  // component (shared by every chat in the rail), so switching to another chat —
+  // or starting a new one — while the composer holds un-sent text carried that
+  // text into the other conversation. Clear it on any activeChatId change so each
+  // chat opens with an empty composer. (Runs once on mount too, where draft is
+  // already ''.) Not keyed on draft: this fires only on a chat switch.
+  useEffect(() => {
+    setDraft('');
+  }, [activeChatId]);
+
   // The rail's new/select/delete are LOCKED while a turn is in flight: switching
   // chats mid-send would otherwise strand (or, pre-fix, misattach) the in-flight
   // reply. The user hits Stop first. Mirrors the header New-chat button's guard.
@@ -322,6 +343,7 @@ export function AgentChatView({
       if (
         !(await confirm('Delete this saved chat? Its messages are removed for good.', {
           confirmLabel: 'Delete chat',
+          tone: 'danger',
         }))
       )
         return;
@@ -421,6 +443,23 @@ export function AgentChatView({
         );
       })
       .finally(() => setBundledLlmEnabling(false));
+  }
+
+  // #20 — filling the composer from a template should hand off to it: focus,
+  // caret at the end, and grow to fit (same cap as the onChange auto-grow) so the
+  // customer can immediately edit + send instead of a cramped, unfocused box.
+  function handlePickTemplate(text: string): void {
+    setDraft(text);
+    const el = composerRef.current;
+    if (el === null) return;
+    // Defer to after React commits the new value so scrollHeight reflects it.
+    requestAnimationFrame(() => {
+      el.focus();
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 288)}px`;
+    });
   }
 
   function submit(): void {
@@ -593,7 +632,7 @@ export function AgentChatView({
         {/* Transcript */}
         <div className="flex-1 overflow-auto px-4 py-4">
           {!started ? (
-            <EmptyState onPick={(t) => setDraft(t)} />
+            <EmptyState onPick={handlePickTemplate} />
           ) : (
             <ol
               className="mx-auto flex max-w-3xl flex-col gap-3"
@@ -756,6 +795,7 @@ export function AgentChatView({
         <div className="border-t border-surface-divider px-4 py-3">
           <div className="mx-auto flex max-w-3xl items-end gap-2">
             <textarea
+              ref={composerRef}
               aria-label="Message Driftstack AI"
               rows={3}
               value={draft}
@@ -804,10 +844,23 @@ export function AgentChatView({
               </button>
             )}
           </div>
-          <p className="mx-auto mt-1 max-w-3xl text-2xs text-ink-muted">
-            {aiReady
-              ? 'Enter to send · Shift+Enter for a new line'
-              : 'Not connected — add your API key in Settings to run automations.'}
+          <p className="mx-auto mt-1 flex max-w-3xl items-center gap-2 text-2xs text-ink-muted">
+            {aiReady ? (
+              'Enter to send · Shift+Enter for a new line'
+            ) : (
+              <>
+                <span>Not connected — add your API key in Settings to run automations.</span>
+                {onGoToSettings !== undefined && (
+                  <button
+                    type="button"
+                    onClick={onGoToSettings}
+                    className="btn-secondary px-2 py-0.5 text-2xs"
+                  >
+                    Open Settings
+                  </button>
+                )}
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -1483,7 +1536,7 @@ function UsageBadge({ usage }: { usage: AgentUsage }): JSX.Element {
   if (usage.cost_usd_cents !== undefined) parts.push(`$${(usage.cost_usd_cents / 100).toFixed(4)}`);
   const tokens = (usage.anthropic_input_tokens ?? 0) + (usage.anthropic_output_tokens ?? 0);
   if (tokens > 0) parts.push(`${tokens} tok`);
-  if (usage.model !== undefined) parts.push(usage.model);
+  if (usage.model !== undefined) parts.push(modelLabel(usage.model));
   // Nothing customer-meaningful to show (no cost/tokens/model) — render nothing
   // rather than leaking the internal decomposer_kind enum (journey audit L5).
   if (parts.length === 0) return <></>;

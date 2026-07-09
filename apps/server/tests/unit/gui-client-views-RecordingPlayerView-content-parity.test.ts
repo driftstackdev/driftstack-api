@@ -106,7 +106,7 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     );
   });
 
-  it("Frame display branch: hydrating → 'Loading frames…' / hydrateError !== null → 'Couldn't load frames' error state + message + 'Try again' (onClick=loadFrames) / currentFrame === null → 'No frames captured' / else <img src={currentFrame.dataUrl} … /> — pinned so a read FAILURE reads distinctly from a genuinely empty recording, with a retry", () => {
+  it("Frame display branch: hydrating → 'Loading frames…' / hydrateError !== null → 'Couldn't load frames' error state + message + 'Try again' (onClick=loadFrames) / currentFrame === null → 'No frames captured' / else the frame itself is a click-to-play <button onClick={togglePlay}> wrapping <img src={currentFrame.dataUrl}> with a center play/pause glyph + a hover-revealed 'Space to play' hint — pinned so a read FAILURE reads distinctly from a genuinely empty recording (with a retry) and the frame doubles as the play/pause hit target like a video player", () => {
     expect(body).toMatch(
       /\{hydrating \? \(\s*\n?\s*<span className="section-label text-ink-muted">Loading frames…<\/span>\s*\n?\s*\) : hydrateError !== null \? \(/,
     );
@@ -116,9 +116,16 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     expect(body).toMatch(
       /<button type="button" className="btn-secondary" onClick=\{loadFrames\}>\s*\n?\s*Try again\s*\n?\s*<\/button>/,
     );
+    // Empty-recording branch stays distinct from a hydrate failure.
     expect(body).toMatch(
-      /\) : currentFrame === null \? \(\s*\n?\s*<span className="section-label text-ink-muted">No frames captured<\/span>\s*\n?\s*\) : \(\s*\n?\s*<img\s*\n?\s*src=\{currentFrame\.dataUrl\}/,
+      /\) : currentFrame === null \? \(\s*\n?\s*<span className="section-label text-ink-muted">No frames captured<\/span>\s*\n?\s*\) : \(/,
     );
+    // The frame is now a play/pause button wrapping the img.
+    expect(body).toMatch(
+      /<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{togglePlay\}\s*\n?\s*aria-label=\{playing \? 'Pause playback' : 'Play recording'\}[\s\S]*?<img\s*\n?\s*src=\{currentFrame\.dataUrl\}/,
+    );
+    // …with the hover-revealed keyboard hint.
+    expect(body).toMatch(/Space to play/);
   });
 
   it('file exists at canonical path', () => {

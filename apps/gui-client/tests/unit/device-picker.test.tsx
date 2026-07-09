@@ -232,9 +232,12 @@ describe('DevicePicker', () => {
     );
   });
 
-  it('the footer "Use … →" action confirms the current selectable device', () => {
+  it('the footer shows a passive "Selected:" status for the current device (not a commit button)', () => {
     render(<Harness />);
-    expect(screen.getByRole('button', { name: /Use iPhone 17 Pro/ })).toBeEnabled();
+    // Demoted from a no-op "Use … →" button to a passive status line — the real
+    // create is the host modal's submit, so there is no commit-looking button here.
+    expect(screen.getByTestId('device-selected')).toHaveTextContent('Selected: iPhone 17 Pro');
+    expect(screen.queryByRole('button', { name: /Use iPhone 17 Pro/ })).toBeNull();
   });
 });
 

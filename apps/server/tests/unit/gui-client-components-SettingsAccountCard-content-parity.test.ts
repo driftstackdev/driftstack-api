@@ -47,7 +47,7 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
       /\/\/ Shows the connected account id \(read from \/v1\/account\/me\) plus a\s*\n?\s*\/\/ "Manage billing" link that opens the dashboard's billing page\.\s*\n?\s*\/\/ Stays a separate component so SettingsView's existing tests \(V-272\)\s*\n?\s*\/\/ don't churn — parent decides whether to mount it\./,
     );
     expect(body).toMatch(
-      /\/\/ The card has three observable states:\s*\n?\s*\/\/\s+- loading: account fetch in-flight\s*\n?\s*\/\/\s+- error: 401 \/ 403 \/ network — the card collapses to a small notice\s*\n?\s*\/\/\s+- ready: account id \+ tier rendered, billing link visible/,
+      /\/\/ The card has three observable states:\s*\n?\s*\/\/\s+- loading: account fetch in-flight\s*\n?\s*\/\/\s+- error: 401 \/ 403 \/ network — the card collapses to a small notice\s*\n?\s*\/\/\s+with plain-language guidance and a Retry button\s*\n?\s*\/\/\s+- ready: account id \+ tier rendered, billing link visible/,
     );
   });
 
@@ -69,21 +69,25 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
     );
   });
 
-  it("Effect: !settings.apiKey → setState error 'No API key configured.' early return; cancelled flag captures unmount; baseUrl trim trailing slashes + /v1/account/me GET with Bearer auth + 'application/json' Accept; !res.ok → 'HTTP ${status}' fallback; cancelled-check before each setState (no setState on unmounted component); cleanup returns () => { cancelled = true; }", () => {
+  it("Effect: !settings.apiKey → setState error 'No API key configured.' early return then setState loading; cancelled flag captures unmount; baseUrl trim trailing slashes + /v1/account/me GET with Bearer auth + 'application/json' Accept; !res.ok → errorMessageForStatus(res.status) (plain-English 401/403/network, not a raw 'HTTP ${status}'); cancelled-check before each setState (no setState on unmounted component); cleanup returns () => { cancelled = true; }; retryNonce added to the dep array so the Retry button re-runs the fetch", () => {
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*let cancelled = false;/,
+      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'loading' \}\);\s*\n?\s*let cancelled = false;/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*headers: \{ authorization: `Bearer \$\{settings\.apiKey \?\? ''\}`, accept: 'application\/json' \},\s*\n?\s*\}\);\s*\n?\s*if \(cancelled\) return;\s*\n?\s*if \(!res\.ok\) \{\s*\n?\s*setState\(\{ kind: 'error', message: `HTTP \$\{res\.status\.toString\(\)\}` \}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /const res = await fetch\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*headers: \{ authorization: `Bearer \$\{settings\.apiKey \?\? ''\}`, accept: 'application\/json' \},\s*\n?\s*\}\);\s*\n?\s*if \(cancelled\) return;\s*\n?\s*if \(!res\.ok\) \{\s*\n?\s*setState\(\{ kind: 'error', message: errorMessageForStatus\(res\.status\) \}\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /return \(\) => \{\s*\n?\s*cancelled = true;\s*\n?\s*\};\s*\n?\s*\}, \[settings\.apiKey, settings\.baseUrl\]\);/,
+      /return \(\) => \{\s*\n?\s*cancelled = true;\s*\n?\s*\};\s*\n?\s*\}, \[settings\.apiKey, settings\.baseUrl, retryNonce\]\);/,
+    );
+    // errorMessageForStatus maps 401/403/other into actionable copy — no bare "HTTP 401".
+    expect(body).toMatch(
+      /function errorMessageForStatus\(status: number\): string \{\s*\n?\s*if \(status === 401\) return "Your API key wasn't accepted\. Check the key above, then retry\.";\s*\n?\s*if \(status === 403\) return "This API key doesn't have access to account info\.";\s*\n?\s*return `Couldn't load account info \(HTTP \$\{status\.toString\(\)\}\)\.`;\s*\n?\s*\}/,
     );
   });
 
-  it("Render: <section aria-label='Account info'> + 'Manage billing →' anchor with `${dashboardUrl}/billing` href + target='_blank' + rel='noreferrer'; loading state role='status' + error state role='alert' + ready state dl with Account id (font-mono) + Email + Tier rows", () => {
+  it("Render: <section aria-label='Account info'> (Panel-idiom rounded-xl shadow-sm) + 'Manage billing →' anchor with `${dashboardUrl}/billing` href + target='_blank' + rel='noreferrer'; loading state role='status'; error state is now a role='alert' <div> with the mapped {state.message} + a Retry button (bumps retryNonce); ready state dl with a click-to-copy Account id <button title='Copy account id'> + Email + humanizeTier(tier) rows", () => {
     expect(body).toMatch(
-      /<section\s*\n?\s*aria-label="Account info"\s*\n?\s*className="max-w-xl rounded border border-surface-divider bg-surface-raised px-4 py-3 space-y-2"\s*\n?\s*>/,
+      /<section\s*\n?\s*aria-label="Account info"\s*\n?\s*className="rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm space-y-2"\s*\n?\s*>/,
     );
     expect(body).toMatch(
       /<a\s*\n?\s*href=\{`\$\{dashboardUrl\}\/billing`\}\s*\n?\s*target="_blank"\s*\n?\s*rel="noreferrer"\s*\n?\s*className="text-sm text-accent underline"\s*\n?\s*>\s*\n?\s*Manage billing →\s*\n?\s*<\/a>/,
@@ -91,11 +95,20 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
     expect(body).toMatch(
       /\{state\.kind === 'loading' && \(\s*\n?\s*<p className="text-sm text-ink-secondary" role="status">\s*\n?\s*Loading account…\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
     );
+    // Error state: a role='alert' DIV holding the mapped message + a Retry button.
     expect(body).toMatch(
-      /\{state\.kind === 'error' && \(\s*\n?\s*<p className="text-sm text-status-warning" role="alert">\s*\n?\s*\{state\.message\}\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
+      /\{state\.kind === 'error' && \(\s*\n?\s*<div className="flex items-start justify-between gap-3" role="alert">\s*\n?\s*<p className="text-sm text-status-warning">\{state\.message\}<\/p>\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*className="btn-secondary shrink-0"\s*\n?\s*onClick=\{\(\) => setRetryNonce\(\(n\) => n \+ 1\)\}\s*\n?\s*>\s*\n?\s*Retry\s*\n?\s*<\/button>/,
     );
-    expect(body).toMatch(/<dd className="font-mono text-ink-primary">\{state\.account\.id\}<\/dd>/);
-    expect(body).toMatch(/<dd className="text-ink-primary">\{state\.account\.tier\}<\/dd>/);
+    // Account id is a click-to-copy button (calls handleCopyId), not a bare <dd>.
+    expect(body).toMatch(
+      /<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{\(\) => void handleCopyId\(state\.account\.id\)\}\s*\n?\s*title="Copy account id"[\s\S]*?>\s*\n?\s*\{state\.account\.id\}\s*\n?\s*<\/button>/,
+    );
+    // Tier is humanized (slug → Title Case) before display.
+    expect(body).toMatch(
+      /<dd className="text-ink-primary">\{humanizeTier\(state\.account\.tier\)\}<\/dd>/,
+    );
+    // humanizeTier turns a 'self_hosted'/'pay-as-you-go' slug into a human label.
+    expect(body).toMatch(/function humanizeTier\(tier: string\): string \{/);
   });
 
   it('file exists at canonical path', () => {

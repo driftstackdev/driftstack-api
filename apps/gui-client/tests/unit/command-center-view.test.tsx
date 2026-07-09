@@ -234,7 +234,7 @@ describe('CommandCenterView', () => {
     expect(profilesTile?.getAttribute('title')).toMatch(/per your account/i);
   });
 
-  it('shows a cap alert when at the session limit, and Manage navigates', () => {
+  it('shows a cap alert when at the session limit, and its CTA navigates', () => {
     accountMe = {
       tier: 'starter',
       concurrent_session_active: 4,
@@ -245,7 +245,9 @@ describe('CommandCenterView', () => {
     const onNavigate = nav();
     render(<CommandCenterView onNavigate={onNavigate} />);
     expect(screen.getByText('At your session limit')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    // The at-limit session alert's CTA reads 'Stop a session' (the detail says
+    // "stop one to launch another"), not the neutral default 'Manage'.
+    fireEvent.click(screen.getByRole('button', { name: 'Stop a session' }));
     expect(onNavigate).toHaveBeenCalledWith('sessions');
   });
 

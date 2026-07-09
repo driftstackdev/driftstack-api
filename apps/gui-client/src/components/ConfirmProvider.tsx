@@ -21,6 +21,13 @@ import {
 export interface ConfirmOptions {
   /** Label for the affirmative button (default 'Confirm'). */
   confirmLabel?: string;
+  /**
+   * Visual + focus intent. 'danger' renders the affirmative button in the
+   * destructive style AND moves initial keyboard focus to Cancel, so a
+   * reflexive Enter cancels rather than executing the destructive action.
+   * Default 'default' preserves prior behavior (affirmative focused).
+   */
+  tone?: 'default' | 'danger';
 }
 
 type ConfirmFn = (message: string, opts?: ConfirmOptions) => Promise<boolean>;
@@ -28,6 +35,7 @@ type ConfirmFn = (message: string, opts?: ConfirmOptions) => Promise<boolean>;
 interface PendingConfirm {
   message: string;
   confirmLabel: string;
+  tone: 'default' | 'danger';
   resolve: (value: boolean) => void;
 }
 
@@ -51,7 +59,12 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
         // `await confirm(...)` hung forever and its caller's loading state never
         // cleared. Fail-safe to false (the dropped action does NOT proceed). (audit)
         if (current !== null) current.resolve(false);
-        return { message, confirmLabel: opts?.confirmLabel ?? 'Confirm', resolve };
+        return {
+          message,
+          confirmLabel: opts?.confirmLabel ?? 'Confirm',
+          tone: opts?.tone ?? 'default',
+          resolve,
+        };
       });
     });
   }, []);
@@ -65,6 +78,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const cancelBtnRef = useRef<HTMLButtonElement>(null);
 
   // Full WCAG 2.4.3 dialog focus management while the dialog is open
   // (mirrors the web DashboardLayout/AdminLayout branded modals): move
@@ -73,7 +87,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
   useEffect(() => {
     if (pending === null) return;
     const prevFocus = document.activeElement as HTMLElement | null;
-    confirmBtnRef.current?.focus();
+    // Destructive confirms focus Cancel so a reflexive Enter cancels rather
+    // than executing the delete/remove/sign-out; benign confirms keep the
+    // affirmative focused for a fast keyboard "yes".
+    if (pending.tone === 'danger') cancelBtnRef.current?.focus();
+    else confirmBtnRef.current?.focus();
     function onKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -109,21 +127,29 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
           ref={dialogRef}
           role="dialog"
           aria-modal="true"
+          aria-labelledby="confirm-dialog-message"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) settle(false);
           }}
         >
           <div className="w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl">
-            <p className="whitespace-pre-line text-sm text-ink-primary">{pending.message}</p>
+            <p id="confirm-dialog-message" className="whitespace-pre-line text-sm text-ink-primary">
+              {pending.message}
+            </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => settle(false)}>
+              <button
+                ref={cancelBtnRef}
+                type="button"
+                className="btn-secondary"
+                onClick={() => settle(false)}
+              >
                 Cancel
               </button>
               <button
                 ref={confirmBtnRef}
                 type="button"
-                className="btn-primary"
+                className={pending.tone === 'danger' ? 'btn-danger' : 'btn-primary'}
                 onClick={() => settle(true)}
               >
                 {pending.confirmLabel}

@@ -163,8 +163,16 @@ export function DevicePicker({
 
   // Filter axes derived from the catalog (data-driven, no hardcoded lists).
   const familyOptions = useMemo(() => orderedFamilies(devices), [devices]);
+  // Sort iOS versions NUMERICALLY by major then minor (mirrors the numeric
+  // approach orderedFamilies uses) — a lexicographic sort would place "18.10"
+  // before "18.7".
   const iosOptions = useMemo(
-    () => [...new Set(devices.map((d) => d.iosVersion))].sort(),
+    () =>
+      [...new Set(devices.map((d) => d.iosVersion))].sort((a, b) => {
+        const [amaj, amin] = a.split('.').map((n) => Number(n) || 0);
+        const [bmaj, bmin] = b.split('.').map((n) => Number(n) || 0);
+        return (amaj ?? 0) - (bmaj ?? 0) || (amin ?? 0) - (bmin ?? 0);
+      }),
     [devices],
   );
 
@@ -455,24 +463,19 @@ export function DevicePicker({
         )}
       </div>
 
-      {/* Footer action — mirrors the approved "Use <device> →" affordance.
-          It re-asserts the current selection (a no-op confirm) so the hero +
-          footer read as a single "this is your device" unit; the actual
-          create is the modal's submit button. */}
+      {/* Footer — a passive "Selected:" status line, NOT a commit action. The
+          actual create is the modal's own submit button; a button here that
+          only re-asserts the already-current selection was a no-op that read
+          like the commit action, so it's demoted to a plain status readout. */}
       <div className="flex items-center justify-between gap-3 border-t border-surface-divider px-3 py-2">
         <span className="text-2xs text-ink-muted">
           Type to search · ↑↓ to move · all are bit-exact verified
         </span>
-        <button
-          type="button"
-          disabled={disabled || selected?.selectable !== true}
-          onClick={() => {
-            if (selected?.selectable === true) onSelect(selected.id);
-          }}
-          className="btn-primary text-2xs disabled:cursor-not-allowed"
-        >
-          Use {selected?.device ?? 'device'} →
-        </button>
+        {selected?.selectable === true ? (
+          <span className="text-2xs text-ink-secondary" data-testid="device-selected">
+            Selected: <b className="text-ink-primary">{selected.device}</b>
+          </span>
+        ) : null}
       </div>
     </div>
   );

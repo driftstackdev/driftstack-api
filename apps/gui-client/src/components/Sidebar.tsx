@@ -41,9 +41,18 @@ interface SidebarProps {
   current: SidebarViewKind;
   onNavigate: (kind: SidebarViewKind) => void;
   onSignOut: () => void;
+  /** Open the ⌘K command palette. Optional so the Sidebar renders unchanged
+   *  anywhere a palette isn't wired (audit #42 — teaches the shortcut + gives
+   *  mouse users a click path to the otherwise-hidden palette). */
+  onOpenPalette?: () => void;
 }
 
-export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element {
+export function Sidebar({
+  current,
+  onNavigate,
+  onSignOut,
+  onOpenPalette,
+}: SidebarProps): JSX.Element {
   const { settings, client, accountMe, activeWorkspace, setActiveWorkspace } = useSettings();
   const { recordings } = useRecordings();
   const signedIn = settings.apiKey !== null;
@@ -121,7 +130,24 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
       className="flex w-56 flex-col border-r border-surface-divider
                  bg-surface-raised/95 backdrop-blur-sm"
     >
-      <nav aria-label="Primary" className="flex flex-col">
+      {onOpenPalette !== undefined && (
+        <button
+          type="button"
+          onClick={onOpenPalette}
+          className="mx-2 mt-2 flex items-center justify-between rounded-md border border-surface-divider bg-surface-inset px-2.5 py-1.5 text-xs text-ink-secondary transition-colors hover:bg-surface-divider hover:text-ink-primary"
+        >
+          <span className="flex items-center gap-2">
+            <IconSearch />
+            Search…
+          </span>
+          <span className="font-mono text-2xs text-ink-muted">⌘K</span>
+        </button>
+      )}
+      {/* Scroll the nav sections when the window is short so the mt-auto
+          account footer below stays pinned. min-h-0 is load-bearing: without
+          it this flex child keeps min-height:auto and refuses to shrink,
+          pushing the footer off-screen instead of letting the nav scroll. */}
+      <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <SidebarSection label="Home">
           <SidebarItem
             icon={<IconHome />}
@@ -425,6 +451,14 @@ const stroke = {
   strokeLinejoin: 'round' as const,
 };
 
+function IconSearch(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5 14 14" />
+    </svg>
+  );
+}
 function IconHome(): JSX.Element {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>

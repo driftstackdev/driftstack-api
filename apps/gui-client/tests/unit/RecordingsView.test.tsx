@@ -74,24 +74,28 @@ describe('RecordingsView — delete confirmation (permanent, no recycle bin)', (
   it('the first Delete click only ARMS the confirm; a second click actually deletes', () => {
     const view = renderView();
 
-    const del = view.getByRole('button', { name: /^Delete$/ });
-    fireEvent.click(del);
-    // Armed — not deleted yet.
+    // The action-row Delete arms the confirmation (it does not delete on the
+    // first click). Once armed it's disabled, so grab it up front.
+    fireEvent.click(view.getByRole('button', { name: /^Delete$/ }));
+    // Armed — not deleted yet; a dedicated full-width confirm bar appears BELOW
+    // the action row ("Confirm delete?" text + its own Delete + Cancel).
     expect(deleteRecording).not.toHaveBeenCalled();
-    expect(view.getByRole('button', { name: 'Confirm delete?' })).toBeTruthy();
+    const confirmBar = view.getByText('Confirm delete?').closest('div') as HTMLElement;
+    expect(confirmBar).toBeTruthy();
 
-    // Second click confirms.
-    fireEvent.click(view.getByRole('button', { name: 'Confirm delete?' }));
+    // The confirm bar's own Delete button actually deletes.
+    fireEvent.click(within(confirmBar).getByRole('button', { name: /^Delete$/ }));
     expect(deleteRecording).toHaveBeenCalledWith('rec_1');
   });
 
   it('Cancel disarms the confirm without deleting', () => {
     const view = renderView();
     fireEvent.click(view.getByRole('button', { name: /^Delete$/ }));
-    fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
+    const confirmBar = view.getByText('Confirm delete?').closest('div') as HTMLElement;
+    fireEvent.click(within(confirmBar).getByRole('button', { name: 'Cancel' }));
     expect(deleteRecording).not.toHaveBeenCalled();
-    // Back to the plain Delete label.
-    expect(view.getByRole('button', { name: /^Delete$/ })).toBeTruthy();
+    // The confirm bar is gone — no "Confirm delete?" prompt remains.
+    expect(view.queryByText('Confirm delete?')).toBeNull();
   });
 });
 

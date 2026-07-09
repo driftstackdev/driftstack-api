@@ -3,7 +3,8 @@
 // Mounts at the App.tsx shell level (above the view router so toasts
 // overlay any view). Stacks the most-recent events from
 // useNotifications() as oxblood-bordered cards in the top-right.
-// Customer-action: click "Dismiss" to clear the ring; click a card
+// Customer-action: click "Clear all" (header, shown when >1 queued) or a
+// single card's "Dismiss" to clear the ring; click a card
 // to navigate to the relevant surface (cost panel for cost.threshold_
 // alert, etc. — wired in a v0.2 follow-up once nav targets settle).
 //
@@ -32,6 +33,41 @@ function formatToastTime(at: string): string {
   const d = new Date(at);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
 }
+
+/** Visual tone for a toast, derived from kind + severity. Drives the card
+ *  border/accent so a benign 'recovered' or low-severity event doesn't read as
+ *  a red error like every other card. (audit #12) */
+type ToastTone = 'error' | 'warn' | 'success' | 'neutral';
+
+function toneOf(event: NotificationEvent): ToastTone {
+  switch (event.kind) {
+    case 'cost.threshold_alert':
+      return event.severity === 'resolved'
+        ? 'success'
+        : event.severity === 'critical'
+          ? 'error'
+          : 'warn';
+    case 'incident.broadcast':
+      return event.severity === 'outage'
+        ? 'error'
+        : event.severity === 'major'
+          ? 'warn'
+          : 'neutral';
+    case 'audit.high_severity':
+      return 'neutral';
+    case 'session.errored':
+      return 'error';
+  }
+}
+
+/** Static Tailwind class map for each tone — must be full literal class strings
+ *  so the Tailwind JIT can see them (dynamically-built names never compile). */
+const TONE_BORDER: Record<ToastTone, string> = {
+  error: 'border-status-error/40',
+  warn: 'border-status-busy/40',
+  success: 'border-status-ready/40',
+  neutral: 'border-status-idle/40',
+};
 
 function describe(event: NotificationEvent): { title: string; body: string } {
   switch (event.kind) {
@@ -113,23 +149,40 @@ export function NotificationToastStack(): JSX.Element | null {
           </button>
         </div>
       )}
+      {events.length > 1 && (
+        <div className="pointer-events-auto flex items-center justify-between px-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+            {events.length} notifications
+          </span>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="text-xs text-ink-muted hover:text-ink-primary"
+            aria-label="Clear all notifications"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
       {events.map((event, idx) => {
         const { title, body } = describe(event);
+        const tone = toneOf(event);
         return (
           <article
             key={`${event.kind}-${event.at}-${idx.toString()}`}
             data-testid="notification-toast"
             data-notification-kind={event.kind}
-            className="pointer-events-auto rounded border border-status-error/40 bg-surface-base/95 p-3 shadow-lg"
+            data-notification-tone={tone}
+            className={`pointer-events-auto rounded border ${TONE_BORDER[tone]} bg-surface-base/95 p-3 shadow-lg`}
           >
             <header className="flex items-start justify-between gap-2">
               <h3 className="text-sm font-medium text-ink-primary">{title}</h3>
-              {idx === 0 && (
+              {events.length === 1 && (
                 <button
                   type="button"
                   onClick={dismiss}
                   className="text-xs text-ink-muted hover:text-ink-primary"
-                  aria-label="Dismiss all notifications"
+                  aria-label="Dismiss notification"
                 >
                   Dismiss
                 </button>

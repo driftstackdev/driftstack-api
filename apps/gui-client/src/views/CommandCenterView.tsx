@@ -92,6 +92,11 @@ export interface CapAlert {
   title: string;
   detail: string;
   target: HomeNavTarget;
+  /** CTA label for the alert's action button. Absent → the button reads
+   *  'Manage' (the neutral default), so existing shape assertions still hold.
+   *  Set per-alert so the button verb matches the detail (e.g. "stop one to
+   *  launch another" pairs with 'Stop a session', not a generic 'Manage'). */
+  cta?: string;
 }
 
 interface CapAccount {
@@ -113,6 +118,7 @@ export function computeCapAlerts(account: CapAccount | null): CapAlert[] {
         title: 'At your session limit',
         detail: `${sa} / ${sc} concurrent sessions in use — stop one to launch another.`,
         target: 'sessions',
+        cta: 'Stop a session',
       });
     else if (sa / sc >= 0.8)
       alerts.push({
@@ -121,6 +127,7 @@ export function computeCapAlerts(account: CapAccount | null): CapAlert[] {
         title: 'Near your session limit',
         detail: `${sa} / ${sc} concurrent sessions in use.`,
         target: 'sessions',
+        cta: 'View sessions',
       });
   }
   const { profile_count: pc, profile_cap: pcap } = account;
@@ -132,6 +139,7 @@ export function computeCapAlerts(account: CapAccount | null): CapAlert[] {
         title: 'At your profile limit',
         detail: `${pc} / ${pcap} profiles created.`,
         target: 'profiles',
+        cta: 'View profiles',
       });
     else if (pc / pcap >= 0.8)
       alerts.push({
@@ -140,6 +148,7 @@ export function computeCapAlerts(account: CapAccount | null): CapAlert[] {
         title: 'Near your profile limit',
         detail: `${pc} / ${pcap} profiles created.`,
         target: 'profiles',
+        cta: 'View profiles',
       });
   }
   return alerts;
@@ -392,7 +401,7 @@ export function CommandCenterView({
                 className="btn-secondary shrink-0 px-3 py-1 text-xs"
                 onClick={() => onNavigate(a.target)}
               >
-                Manage
+                {a.cta ?? 'Manage'}
               </button>
             </div>
           ))}
@@ -465,10 +474,10 @@ export function CommandCenterView({
           <span className="section-label">Jump back in</span>
           <button
             type="button"
-            className="section-label text-accent hover:underline"
+            className="py-1 text-xs font-medium text-accent hover:underline"
             onClick={() => onNavigate('profiles')}
           >
-            all profiles
+            all profiles →
           </button>
         </div>
         {/* aria-live so SR users hear the loading → ready/error/empty transition. */}
@@ -538,10 +547,10 @@ export function CommandCenterView({
           <span className="section-label">Session health</span>
           <button
             type="button"
-            className="section-label text-accent hover:underline"
+            className="py-1 text-xs font-medium text-accent hover:underline"
             onClick={() => onNavigate('sessions')}
           >
-            view all
+            view all →
           </button>
         </div>
         {/* aria-live so SR users hear the loading → ready/error/empty transition. */}

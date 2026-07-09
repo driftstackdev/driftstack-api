@@ -576,6 +576,7 @@ function Shell(): JSX.Element {
             current={sidebarSectionFor(view)}
             onNavigate={(kind) => setView({ kind })}
             onSignOut={() => void handleSignOut()}
+            onOpenPalette={() => setPaletteOpen(true)}
           />
           {/* key by view.kind so switching views replays the fade-in (5→10
               G8 polish); same element + classes, so no layout-chain change. */}
