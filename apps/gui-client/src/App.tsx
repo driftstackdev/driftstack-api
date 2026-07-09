@@ -375,7 +375,18 @@ function Shell(): JSX.Element {
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
   useEffect(() => {
-    void checkForUpdate().then(setUpdate);
+    void checkForUpdate().then((u) => {
+      setUpdate(u);
+      // M16 — "Later" persists per-version so the banner doesn't re-nag on EVERY launch;
+      // a genuinely newer version (different string) still surfaces (audit 2026-07-08).
+      if (u !== null) {
+        try {
+          if (localStorage.getItem('ds_update_dismissed') === u.version) setUpdateDismissed(true);
+        } catch {
+          /* storage unavailable — fall back to session-only dismissal */
+        }
+      }
+    });
   }, []);
 
   // Global always-on deep-link listener (the dashboard's "Open in desktop
@@ -496,7 +507,17 @@ function Shell(): JSX.Element {
           }
         />
         {update && !updateDismissed ? (
-          <UpdateBanner update={update} onDismiss={() => setUpdateDismissed(true)} />
+          <UpdateBanner
+            update={update}
+            onDismiss={() => {
+              setUpdateDismissed(true);
+              try {
+                localStorage.setItem('ds_update_dismissed', update.version);
+              } catch {
+                /* storage unavailable — dismissal stays session-only */
+              }
+            }}
+          />
         ) : null}
         {/* Central re-auth prompt — a key that expired / was revoked mid-session
             makes every call 401; SettingsContext flips authExpired once (via the
