@@ -53,13 +53,21 @@ export function CommandPalette({
   const matches = useMemo(() => filterActions(actions, query), [actions, query]);
 
   // Reset + focus on every open; cursor clamps as the match list shrinks.
+  // (Tab-containment + Escape are handled on the input's onKeyDown — the palette
+  // deliberately CLOSES on Tab rather than trapping, so useFocusTrap isn't the
+  // right fit here; the only gap was restoring focus to the opener on close.)
   useEffect(() => {
     if (open) {
       setQuery('');
       setCursor(0);
+      const prevFocus = document.activeElement as HTMLElement | null;
       // focus after paint so the overlay exists
       const t = setTimeout(() => inputRef.current?.focus(), 0);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        // Return focus to whatever opened the palette (keyboard context was lost).
+        if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
+      };
     }
     return undefined;
   }, [open]);
