@@ -616,7 +616,11 @@ export function AgentChatView({
                     i === chat.restoredHistoryCount - 1 && <RestoredHistoryDivider />}
                 </Fragment>
               ))}
-              {chat.sending && <TypingRow />}
+              {chat.sending && (
+                <TypingRow
+                  label={chat.session === null ? 'Starting a session…' : 'Working on your request…'}
+                />
+              )}
             </ol>
           )}
         </div>
@@ -1485,23 +1489,23 @@ function UsageBadge({ usage }: { usage: AgentUsage }): JSX.Element {
   return <span className="mono text-2xs text-ink-muted">{parts.join(' · ')}</span>;
 }
 
-function TypingRow(): JSX.Element {
+function TypingRow({ label }: { label: string }): JSX.Element {
   return (
     <li className="flex justify-start">
       <div
         role="status"
-        aria-label="The agent is working…"
-        className="flex items-center gap-1 rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2.5"
+        aria-label={label}
+        className="flex items-center gap-2 rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2.5"
       >
-        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted" />
-        <span
-          aria-hidden="true"
-          className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:150ms]"
-        />
-        <span
-          aria-hidden="true"
-          className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:300ms]"
-        />
+        <span aria-hidden="true" className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:150ms]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:300ms]" />
+        </span>
+        {/* Coarse phase so a multi-second run isn't one opaque dot (journey H3):
+            "Starting a session…" while create() is in flight (no session yet),
+            "Working on your request…" once the message is running server-side. */}
+        <span className="text-xs text-ink-muted">{label}</span>
       </div>
     </li>
   );
