@@ -254,9 +254,21 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
                     return (
                       <tr
                         key={o.order_id}
+                        // a11y: the row opens the order detail — make it keyboard-operable
+                        // (a plain clickable <tr> is skipped by Tab and ignores Enter, so
+                        // the whole orders workflow was mouse-only). aria-pressed marks the
+                        // selected row; aria-selected isn't valid on a non-grid <tr>. (audit 2026-07-09)
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={isSelected}
                         onClick={() => setSelectedOrderId(o.order_id)}
-                        aria-selected={isSelected}
-                        className={`cursor-pointer border-t border-surface-divider hover:bg-surface-inset ${
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedOrderId(o.order_id);
+                          }
+                        }}
+                        className={`cursor-pointer border-t border-surface-divider hover:bg-surface-inset focus-visible:bg-surface-inset ${
                           isSelected ? 'bg-surface-inset' : ''
                         }`}
                       >

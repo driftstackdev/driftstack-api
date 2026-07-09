@@ -581,7 +581,14 @@ export function AgentChatView({
           {!started ? (
             <EmptyState onPick={(t) => setDraft(t)} />
           ) : (
-            <ol className="mx-auto flex max-w-3xl flex-col gap-3">
+            <ol
+              className="mx-auto flex max-w-3xl flex-col gap-3"
+              // a11y: announce streaming assistant replies to a screen reader — focus stays
+              // in the composer after Send, so without a live region the reply arrives
+              // silently and the chat is unusable without sight (audit 2026-07-09).
+              aria-live="polite"
+              aria-relevant="additions"
+            >
               {chat.turns.map((turn, i) => (
                 <Fragment key={turn.id}>
                   <TurnRow turn={turn} denied={chat.deniedTurnIds.has(turn.id)} />
@@ -602,7 +609,10 @@ export function AgentChatView({
 
         {/* Consequential-action confirmation gate */}
         {chat.pendingConfirmation !== null && (
-          <div className="border-t border-status-busy/40 bg-status-busy/10 px-4 py-3">
+          // a11y: announce the "confirm before continuing" gate — a screen-reader user on
+          // the composer must hear that the agent is waiting to run a consequential action
+          // (audit 2026-07-09), or they can't approve/deny something they never knew about.
+          <div role="alert" className="border-t border-status-busy/40 bg-status-busy/10 px-4 py-3">
             <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-ink-primary">Confirm before continuing</p>

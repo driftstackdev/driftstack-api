@@ -117,7 +117,12 @@ describe('W484.B apps/gui-client/src/views/CryptoOrdersAdminView.tsx content par
 
   it("Row-click delegation (V-534.AM): tr onClick=>setDetailOrder(o) + aria-selected={detailOrder?.order_id === o.order_id} + edit-note button stopPropagation so it doesn't trigger row-click; button label 'Edit note' / 'Add note' conditional on internal_note presence; CSV download button: disabled while downloading + aria-label='Download CSV of current filter'", () => {
     expect(body).toMatch(/onClick=\{\(\) => setDetailOrder\(o\)\}/);
-    expect(body).toMatch(/aria-selected=\{detailOrder\?\.order_id === o\.order_id\}/);
+    // a11y (audit 2026-07-09): the row is keyboard-operable — role="button" + tabIndex +
+    // onKeyDown(Enter/Space) — and marks the selected row with aria-pressed (aria-selected
+    // isn't valid on a non-grid <tr>).
+    expect(body).toMatch(/role="button"/);
+    expect(body).toMatch(/aria-pressed=\{detailOrder\?\.order_id === o\.order_id\}/);
+    expect(body).toMatch(/onKeyDown=\{\(e\) => \{/);
     expect(body).toMatch(
       /onClick=\{\(e\) => \{\s*\n?\s*e\.stopPropagation\(\);\s*\n?\s*setNoteTarget\(o\);\s*\n?\s*setNoteInput\(o\.internal_note \?\? ''\);\s*\n?\s*\}\}/,
     );

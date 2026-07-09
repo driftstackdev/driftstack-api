@@ -241,9 +241,19 @@ export function CryptoOrdersAdminView(): JSX.Element {
                 {state.data.orders.map((o) => (
                   <tr
                     key={o.order_id}
+                    // a11y: keyboard-operable row (opens order detail); aria-pressed marks
+                    // the selected one — a plain clickable <tr> was mouse-only (audit 2026-07-09).
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={detailOrder?.order_id === o.order_id}
                     onClick={() => setDetailOrder(o)}
-                    aria-selected={detailOrder?.order_id === o.order_id}
-                    className={`cursor-pointer border-t border-surface-divider hover:bg-surface-inset ${
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setDetailOrder(o);
+                      }
+                    }}
+                    className={`cursor-pointer border-t border-surface-divider hover:bg-surface-inset focus-visible:bg-surface-inset ${
                       detailOrder?.order_id === o.order_id ? 'bg-surface-inset' : ''
                     }`}
                   >

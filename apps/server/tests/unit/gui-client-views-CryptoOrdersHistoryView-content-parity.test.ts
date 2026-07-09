@@ -92,7 +92,9 @@ describe('W484.A apps/gui-client/src/views/CryptoOrdersHistoryView.tsx content p
       /\/\/ V-534\.BK — escape closes the cancel-confirm modal\.\s*\n?\s*useEffect\(\(\) => \{\s*\n?\s*if \(cancelConfirmFor === null\) return;\s*\n?\s*const onKey = \(e: KeyboardEvent\): void => \{\s*\n?\s*if \(e\.key === 'Escape'\) setCancelConfirmFor\(null\);\s*\n?\s*\};\s*\n?\s*window\.addEventListener\('keydown', onKey\);\s*\n?\s*keepBtnRef\.current\?\.focus\(\);/,
     );
     expect(body).toMatch(
-      /const paginatedBeyondFirst =\s*\n?\s*state\.kind === 'ready' && state\.data\.orders\.length > 50 && state\.data\.nextCursor !== null;\s*\n?\s*useEffect\(\(\) => \{\s*\n?\s*if \(!hasPending\) return;\s*\n?\s*if \(paginatedBeyondFirst\) return;\s*\n?\s*const id = setInterval\(\(\) => \{\s*\n?\s*void refetch\(\);\s*\n?\s*\}, pendingRefreshMs\);/,
+      // The setInterval body carries a document.visibilityState hidden-skip gate (perf
+      // audit d3dc52ea1) before `void refetch()`; allow any lines between `{` and it.
+      /const paginatedBeyondFirst =\s*\n?\s*state\.kind === 'ready' && state\.data\.orders\.length > 50 && state\.data\.nextCursor !== null;\s*\n?\s*useEffect\(\(\) => \{\s*\n?\s*if \(!hasPending\) return;\s*\n?\s*if \(paginatedBeyondFirst\) return;\s*\n?\s*const id = setInterval\(\(\) => \{[\s\S]*?void refetch\(\);\s*\n?\s*\}, pendingRefreshMs\);/,
     );
   });
 
