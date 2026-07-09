@@ -1884,6 +1884,21 @@ function CookiesPane({
   const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  // Cookie values are truncated to fit — track which one was just copied so the
+  // row can confirm it (the whole point of opening the panel is to read/copy a
+  // value, which was previously impossible: truncated + unselectable).
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const copyCookieValue = (key: string, value: string): void => {
+    const write = navigator.clipboard?.writeText(value);
+    if (write === undefined) return;
+    void write.then(
+      () => {
+        setCopiedKey(key);
+        window.setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1200);
+      },
+      () => undefined,
+    );
+  };
 
   const query = search.trim().toLowerCase();
   const groups = cookies === null ? [] : groupCookiesByDomain(cookies);
@@ -2176,7 +2191,17 @@ function CookiesPane({
                             <span className="shrink-0 font-semibold text-ink-secondary">
                               {c.name}
                             </span>
-                            <span className="min-w-0 flex-1 truncate text-white/40">{c.value}</span>
+                            <button
+                              type="button"
+                              title={c.value === '' ? '(empty)' : `${c.value}\n(click to copy)`}
+                              aria-label={`Copy value of ${c.name}`}
+                              onClick={() =>
+                                copyCookieValue(`${g.domain}|${c.name}|${ci}`, c.value)
+                              }
+                              className="min-w-0 flex-1 truncate text-left text-white/40 transition-colors hover:text-white/70"
+                            >
+                              {copiedKey === `${g.domain}|${c.name}|${ci}` ? 'Copied ✓' : c.value}
+                            </button>
                           </div>
                           <div className="mt-1 flex flex-wrap gap-1">
                             {c.secure === true && <CookieFlag kind="secure" label="🔒 Secure" />}
