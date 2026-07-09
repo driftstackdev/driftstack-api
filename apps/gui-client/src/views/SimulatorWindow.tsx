@@ -1899,6 +1899,10 @@ function CookiesPane({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [importing, setImporting] = useState(false);
   const [importNote, setImportNote] = useState<string | null>(null);
+  // Tone for the import/export note — success (green) vs failure (amber), which
+  // previously looked identical. Reset false on each new import; the two success
+  // paths flip it true (journey M4).
+  const [importOk, setImportOk] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   // Cookie values are truncated to fit — track which one was just copied so the
   // row can confirm it (the whole point of opening the panel is to read/copy a
@@ -1949,6 +1953,7 @@ function CookiesPane({
     const n = cookies.length;
     void downloadBlob(out.filename, new Blob([out.text], { type: out.mime }))
       .then((ok) => {
+        setImportOk(ok);
         setImportNote(
           ok
             ? `Exported ${n} cookie${n === 1 ? '' : 's'} to your Downloads folder (${out.filename}).`
@@ -1959,6 +1964,7 @@ function CookiesPane({
       // which blanks the whole simulator to a fatal overlay (the 2026-06-18 "undraggable
       // black box → force-quit" class). Surface a soft note instead.
       .catch(() => {
+        setImportOk(false);
         setImportNote("Couldn't save the export — check the app's file-access permission.");
       });
   };
@@ -1972,6 +1978,7 @@ function CookiesPane({
   const onImportFile = (file: File): void => {
     setImporting(true);
     setImportNote(null);
+    setImportOk(false);
     const reader = new FileReader();
     reader.onerror = (): void => {
       setImporting(false);
@@ -2005,6 +2012,7 @@ function CookiesPane({
       void setAgentSessionCookies(sessionId, validated, controlAuth)
         .then((res) => {
           if (res.status === 'ok') {
+            setImportOk(true);
             setImportNote(
               `Imported ${validated.length} cookie${validated.length === 1 ? '' : 's'}${fmtNote}.`,
             );
@@ -2114,7 +2122,9 @@ function CookiesPane({
       {importNote !== null && (
         <div
           data-component="simulator-cookies-import-note"
-          className="border-b border-white/10 px-3 py-1.5 font-mono text-[10px] text-amber-300/80"
+          className={`border-b border-white/10 px-3 py-1.5 font-mono text-[10px] ${
+            importOk ? 'text-emerald-300/90' : 'text-amber-300/80'
+          }`}
         >
           {importNote}
         </div>
