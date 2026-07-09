@@ -604,7 +604,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 p.onPrimary();
               }}
             >
-              {p.running ? 'Open session' : p.busy ? 'Launching…' : 'Launch'}
+              {p.running ? 'Open session' : p.busy ? 'Starting…' : 'Launch'}
             </button>
             <button
               type="button"

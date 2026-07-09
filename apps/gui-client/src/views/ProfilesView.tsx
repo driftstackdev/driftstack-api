@@ -1703,6 +1703,13 @@ export function ProfilesView({
       // instead of re-probing and creating a SECOND billed session. The SDK ONLY retries
       // a transient failure when a key is present (no key → maxAttempts:0), so this also
       // arms the retry path. crypto.randomUUID is available in the Tauri webview.
+      // Surface the ~10s pre-launch proxy probe as progress so the wait doesn't
+      // read as a hang (journey audit H1). Superseded by the success/error notice.
+      setState((s) => ({
+        ...s,
+        notice: 'Starting your session — this can take about 10 seconds while we check your proxy…',
+        error: null,
+      }));
       const idempotencyKey = crypto.randomUUID();
       const created = await client.agentSessions.create(createBody, { idempotencyKey });
       // BEST-EFFORT: the binding is a local Tauri store write; the session is
@@ -1766,6 +1773,14 @@ export function ProfilesView({
           setState((s) => ({
             ...s,
             error: `Couldn't open the simulator window: ${sim.reason ?? 'unknown'}. The session was stopped — try launching again.`,
+          }));
+        } else {
+          // Concrete success confirmation — the separate window appears, but a note
+          // in Profiles closes the loop (journey audit H1).
+          setState((s) => ({
+            ...s,
+            notice: 'Session launched — opening the live window.',
+            error: null,
           }));
         }
       } else {
