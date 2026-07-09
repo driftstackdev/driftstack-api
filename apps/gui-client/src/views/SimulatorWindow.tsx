@@ -5795,6 +5795,24 @@ export function SimulatorWindow(): JSX.Element {
                 className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
               >
                 <IosStatusBar />
+                {/* Cold-switch blank (W3020 + #116): while a tab switch is in flight
+                    (switchingTabId set) cover the video so the PREVIOUS tab's content
+                    doesn't bleed through during the re-navigation. On a WARM swap the
+                    wasWarm ack clears switchingTabId immediately (instant reveal); on a
+                    COLD switch it's held until the target's `loaded` frame. Without this
+                    the "switching…" state was only a tab-strip affordance and the old
+                    page stayed visible on screen (founder "keeps old content from the
+                    other tab"). z-10 so the notice/error overlays (z-20) still show. */}
+                {switchingTabId !== null && (
+                  <div
+                    data-component="simulator-switch-blank"
+                    aria-hidden="true"
+                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black"
+                  >
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-white/70" />
+                    <span className="text-[11px] font-medium text-white/45">Switching…</span>
+                  </div>
+                )}
                 {notice !== null && (
                   <div
                     role="status"
