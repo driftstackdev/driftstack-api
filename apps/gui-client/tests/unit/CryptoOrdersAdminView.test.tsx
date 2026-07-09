@@ -396,7 +396,9 @@ describe('V-534.AM CryptoOrdersAdminView — row click opens detail drawer', () 
     expect(row).not.toBeNull();
     fireEvent.click(row!);
     expect(screen.getByLabelText('Order detail for ord_open')).toBeTruthy();
-    expect(row?.getAttribute('aria-selected')).toBe('true');
+    // aria-pressed marks the picked row (role="button" toggle; aria-selected
+    // isn't valid on a non-grid <tr> — see the view's a11y note).
+    expect(row?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('clicking an action button does NOT open the drawer (stopPropagation)', async () => {

@@ -399,8 +399,9 @@ describe('V-534.AE CryptoOrdersHistoryView — row selection opens detail', () =
     await waitFor(() => {
       expect(detailCalls.length).toBeGreaterThan(0);
     });
-    // aria-selected reflects the picked row.
-    expect(row?.getAttribute('aria-selected')).toBe('true');
+    // aria-pressed reflects the picked row (the row is a role="button" toggle;
+    // aria-selected isn't valid on a non-grid <tr> — see the view's a11y note).
+    expect(row?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('clicking the Cancel button does NOT change the selected row', async () => {
@@ -438,8 +439,8 @@ describe('V-534.AE CryptoOrdersHistoryView — row selection opens detail', () =
     fireEvent.click(btn);
     // Row stays unselected (we stopped propagation on the cancel click).
     // V-534.BJ — the modal also contains the order_id text, so scope to <table>.
-    const tableRow = screen.getByRole('table').querySelector('tr[aria-selected]');
-    expect(tableRow?.getAttribute('aria-selected')).toBe('false');
+    const tableRow = screen.getByRole('table').querySelector('tr[aria-pressed]');
+    expect(tableRow?.getAttribute('aria-pressed')).toBe('false');
   });
 });
 
