@@ -616,7 +616,17 @@ export function AgentChatView({
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  onClick={chat.deny}
+                  onClick={() => {
+                    chat.deny();
+                    // Deny ends the task (the gated step won't run and nothing after it
+                    // continues); say so instead of leaving the user waiting on a
+                    // continuation that never comes (audit 2026-07-08).
+                    toasts.push({
+                      title: 'Task stopped',
+                      body: 'You denied a step — the task won’t continue. Send a new instruction to keep going.',
+                      tone: 'info',
+                    });
+                  }}
                   disabled={chat.sending}
                   className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
                 >
@@ -733,7 +743,16 @@ export function AgentChatView({
             {chat.sending ? (
               <button
                 type="button"
-                onClick={() => chat.cancel()}
+                onClick={() => {
+                  chat.cancel();
+                  // Stop is a UI-only stop — the server turn may still complete on the
+                  // device (audit 2026-07-08); say so instead of implying the agent halted.
+                  toasts.push({
+                    title: 'Stopped waiting',
+                    body: 'The task may still be finishing on the device.',
+                    tone: 'info',
+                  });
+                }}
                 title="Stop waiting for this reply"
                 className="shrink-0 rounded border border-surface-divider px-3 py-2 text-sm hover:bg-surface-elevated"
               >
