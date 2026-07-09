@@ -23,6 +23,7 @@ import type {
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import { useConfirm } from '../components/ConfirmProvider';
 import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
@@ -164,6 +165,7 @@ export function AgentChatView({
   const agentExecution = useConnectionStatus(settings.baseUrl).agentExecution;
   const actionsAreLive = agentExecution !== 'simulated';
   const toasts = useToasts();
+  const confirm = useConfirm();
   // AI-ready status surfaced before you send: the agent needs a connected API
   // key. (The server-side LLM config can't be probed from here; an API key is
   // the necessary + honest precondition the GUI can assert.)
@@ -315,8 +317,17 @@ export function AgentChatView({
   }
   function handleDeleteChat(id: string): void {
     if (chat.sending) return;
-    void deleteChat(id).then(setChats);
-    if (id === activeChatId) handleNewChat();
+    void (async () => {
+      // Deleting a saved chat is immediate + unrecoverable — confirm first.
+      if (
+        !(await confirm('Delete this saved chat? Its messages are removed for good.', {
+          confirmLabel: 'Delete chat',
+        }))
+      )
+        return;
+      await deleteChat(id).then(setChats);
+      if (id === activeChatId) handleNewChat();
+    })();
   }
 
   // Close the save dialog AND clear its draft, so reopening starts fresh
@@ -414,7 +425,10 @@ export function AgentChatView({
 
   function submit(): void {
     const text = draft.trim();
-    if (text.length === 0 || chat.sending) return;
+    // Don't fire a doomed request when there's no API key connected — it would
+    // dead-air then surface a server error. The Send button is disabled too;
+    // this also guards the Enter-to-send path.
+    if (text.length === 0 || chat.sending || !aiReady) return;
     setDraft('');
     // Retry-friendly: if the send fails, restore the draft so the user can
     // re-send without retyping (don't clobber a draft they've since started).
@@ -772,7 +786,8 @@ export function AgentChatView({
               <button
                 type="button"
                 onClick={submit}
-                disabled={draft.trim().length === 0}
+                disabled={draft.trim().length === 0 || !aiReady}
+                title={aiReady ? undefined : 'Connect your API key in Settings first'}
                 className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
               >
                 Send
@@ -780,7 +795,9 @@ export function AgentChatView({
             )}
           </div>
           <p className="mx-auto mt-1 max-w-3xl text-2xs text-ink-muted">
-            Enter to send · Shift+Enter for a new line
+            {aiReady
+              ? 'Enter to send · Shift+Enter for a new line'
+              : 'Not connected — add your API key in Settings to run automations.'}
           </p>
         </div>
       </div>
