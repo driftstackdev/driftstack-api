@@ -1827,9 +1827,13 @@ export function ProfilesView({
           .catch(() => undefined);
       }
     }
+    const n = selectedIds.size;
     setSelectedIds(new Set());
     setBulkFolder('');
     setBulkTag('');
+    // Confirm the bulk organize instead of just clearing the selection (audit 2026-07-08 —
+    // it read as "I clicked Apply and the bar just vanished"). Mirrors handleClone/Export.
+    setState((s) => ({ ...s, notice: `Updated ${String(n)} profile${n === 1 ? '' : 's'}.` }));
   }
 
   // 2026-06-19 (founder GUI-improvement audit) — handleBulkApply is additive
@@ -1852,8 +1856,13 @@ export function ProfilesView({
         void client.profiles.update(id, { folder: null }).catch(() => undefined);
       }
     }
+    const n = selectedIds.size;
     setSelectedIds(new Set());
     setBulkFolder('');
+    setState((s) => ({
+      ...s,
+      notice: `Cleared the folder on ${String(n)} profile${n === 1 ? '' : 's'}.`,
+    }));
   }
 
   // Remove the named tag from every selected profile (subtract via the new
@@ -1875,8 +1884,13 @@ export function ProfilesView({
         void client.profiles.update(id, { tags: saved.tags }).catch(() => undefined);
       }
     }
+    const n = selectedIds.size;
     setSelectedIds(new Set());
     setBulkTag('');
+    setState((s) => ({
+      ...s,
+      notice: `Removed "${tag}" from ${String(n)} profile${n === 1 ? '' : 's'}.`,
+    }));
   }
 
   // Set (or clear, with '') a chosen icon on every selected profile — applied
@@ -1901,7 +1915,15 @@ export function ProfilesView({
     }
     // Dismiss the selection like every other bulk action (Apply folder/tag, Clear
     // folder, Remove tag) — leaving it active here was inconsistent + surprising.
+    const n = selectedIds.size;
     setSelectedIds(new Set());
+    setState((s) => ({
+      ...s,
+      notice:
+        icon.length > 0
+          ? `Set the icon on ${String(n)} profile${n === 1 ? '' : 's'}.`
+          : `Cleared the icon on ${String(n)} profile${n === 1 ? '' : 's'}.`,
+    }));
   }
 
   // Bulk export — snapshot each selected profile via profiles.export (the v1
