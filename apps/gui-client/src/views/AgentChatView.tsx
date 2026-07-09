@@ -630,11 +630,14 @@ export function AgentChatView({
             <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-ink-primary">Confirm before continuing</p>
-                <p className="truncate text-xs text-ink-secondary">
+                <p className="text-xs text-ink-secondary [overflow-wrap:anywhere]">
                   The agent wants to perform a {categoryLabel(chat.pendingConfirmation.category)}:{' '}
                   <span className="font-medium text-ink-primary">
                     “{chat.pendingConfirmation.matchedText}”
                   </span>
+                </p>
+                <p className="mt-0.5 text-2xs text-ink-muted">
+                  Approve to let this step run, or Deny to stop the task here.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
