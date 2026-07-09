@@ -1059,9 +1059,13 @@ export function SessionControlSection({
 function NavigateAddressBar({
   canNavigate,
   onNavigate,
+  liveUrl,
 }: {
   canNavigate: boolean;
   onNavigate: (url: string) => void;
+  /** The page the device is currently on — so Reload works on a loaded page without
+   *  first typing (draftUrl starts empty). Mirrors BrowserBar's reload. */
+  liveUrl: string;
 }): JSX.Element {
   const [draftUrl, setDraftUrl] = useState('');
   // While the control channel is still connecting (the room can take up to ~30s
@@ -1104,7 +1108,11 @@ function NavigateAddressBar({
           aria-label="Reload"
           title={canNavigate ? 'Reload the current page' : disabledTitle}
           onClick={() => {
-            if (canNavigate && draftUrl.trim() !== '') onNavigate(draftUrl);
+            // Reload the page the device is ACTUALLY on (liveUrl), NOT the empty/half-typed
+            // draft — so ↻ works on a loaded page without first typing an address (audit
+            // 2026-07-08). Falls back to the draft when liveUrl isn't known yet.
+            const target = liveUrl.trim() !== '' ? liveUrl.trim() : draftUrl.trim();
+            if (canNavigate && target !== '') onNavigate(target);
           }}
           className="shrink-0 rounded p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
         >
@@ -6187,7 +6195,11 @@ export function SimulatorWindow(): JSX.Element {
                           Controls
                         </div>
                         {!browserMode && (
-                          <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />
+                          <NavigateAddressBar
+                            canNavigate={canNavigate}
+                            onNavigate={onNavigate}
+                            liveUrl={liveUrl}
+                          />
                         )}
                         <LabeledControl
                           label={browserMode ? 'Browser mode: on' : 'Browser mode'}
