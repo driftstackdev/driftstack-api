@@ -3318,6 +3318,9 @@ export function SimulatorWindow(): JSX.Element {
   // LiveSessionView already shows this overlay; the standalone Simulator (the
   // surface used daily) did not — this closes that gap with the same per-kind copy.
   const [pageError, setPageError] = useState<PageErrorInfo | null>(null);
+  // A failed navigate SEND (the data-channel publish rejected) — holds the url so
+  // the user gets a persistent Retry instead of a 3s toast that vanishes (M5).
+  const [navSendFailed, setNavSendFailed] = useState<string | null>(null);
   // #135 — a SOFT load-stall advisory, distinct from BOTH the W2845 renderer-freeze
   // badge (pageStalled → "page unresponsive") and the W616 hard nav-failure overlay
   // (pageError → "Page failed to load"). A3's nav-stall timer (box 5eeaf794a) emits a
@@ -5502,6 +5505,8 @@ export function SimulatorWindow(): JSX.Element {
       window.setTimeout(() => setNotice(null), 3000);
       return;
     }
+    // A fresh navigate supersedes a prior failed-send banner (incl. our own Retry).
+    setNavSendFailed(null);
     // First successful navigate: stop auto-opening the Controls pane on launch
     // (the Address bar has been discovered + used). See the activePane lazy init.
     try {
@@ -5542,8 +5547,9 @@ export function SimulatorWindow(): JSX.Element {
       loadWatchdogRef.current = null;
     }, 6000);
     void sendNavigate(room, url).catch(() => {
-      setNotice('Navigation could not be sent');
-      window.setTimeout(() => setNotice(null), 3000);
+      // Persistent + actionable rather than a 3s auto-toast — the send can fail on a
+      // congested/dropped data channel and the user should be able to Retry (M5).
+      setNavSendFailed(url);
       setPageLoading(false);
       clearLoadWatchdog();
     });
@@ -5785,6 +5791,29 @@ export function SimulatorWindow(): JSX.Element {
                     className="absolute left-1/2 top-12 z-20 max-w-[min(90%,26rem)] -translate-x-1/2 rounded-lg bg-black/90 px-3.5 py-2 text-center text-[13px] font-medium leading-snug text-white shadow-lg ring-1 ring-white/20 backdrop-blur"
                   >
                     {notice}
+                  </div>
+                )}
+                {navSendFailed !== null && (
+                  <div
+                    role="alert"
+                    className="absolute left-1/2 top-12 z-20 flex max-w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2 rounded-lg bg-black/90 px-3.5 py-2 text-[13px] font-medium leading-snug text-white shadow-lg ring-1 ring-status-error/50 backdrop-blur"
+                  >
+                    <span className="min-w-0 flex-1">Couldn&apos;t send that to the device.</span>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(navSendFailed)}
+                      className="shrink-0 rounded bg-white/15 px-2 py-0.5 text-xs hover:bg-white/25"
+                    >
+                      Retry
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Dismiss"
+                      onClick={() => setNavSendFailed(null)}
+                      className="shrink-0 text-white/50 hover:text-white/90"
+                    >
+                      ✕
+                    </button>
                   </div>
                 )}
                 {controlUnreachable && (
