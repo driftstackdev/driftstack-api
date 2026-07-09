@@ -95,8 +95,17 @@ export function FleetView(): JSX.Element {
     }
   }, []);
 
+  // "Ping all" fans out to every member. Track batch-in-flight so the button
+  // reflects progress (it was a dead-looking click on a slow/large fleet — the
+  // per-row 'pending' pills were the only signal, easy to miss up top).
+  const [pingingAll, setPingingAll] = useState(false);
   const pingAll = useCallback(async () => {
-    await Promise.all(members.map((m) => ping(m)));
+    setPingingAll(true);
+    try {
+      await Promise.all(members.map((m) => ping(m)));
+    } finally {
+      setPingingAll(false);
+    }
   }, [members, ping]);
 
   function startCreate(): void {
@@ -219,9 +228,10 @@ export function FleetView(): JSX.Element {
               type="button"
               className="btn-secondary"
               onClick={() => void pingAll()}
-              disabled={members.length === 0}
+              disabled={members.length === 0 || pingingAll}
+              aria-busy={pingingAll}
             >
-              Ping all
+              {pingingAll ? 'Pinging…' : 'Ping all'}
             </button>
             <button type="button" className="btn-primary" onClick={startCreate}>
               Add member

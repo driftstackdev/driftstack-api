@@ -75,13 +75,13 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
       /const refresh = useCallback\(async \(\) => \{\s*\n?\s*setLoadError\(null\);\s*\n?\s*try \{\s*\n?\s*const all = await listFleetMembers\(\);\s*\n?\s*setMembers\(all\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*setLoadError\(\s*\n?\s*err instanceof Error \? err\.message : 'Could not read the fleet registry from disk\.',\s*\n?\s*\);\s*\n?\s*\} finally \{\s*\n?\s*setLoading\(false\);\s*\n?\s*\}\s*\n?\s*\}, \[\]\);/,
     );
     expect(body).toMatch(
-      /const ping = useCallback\(async \(member: FleetMember\) => \{\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: 'pending' \}\)\);\s*\n?\s*const result = await pingFleetMember\(member\);\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: result \}\)\);\s*\n?\s*\}, \[\]\);/,
+      /const ping = useCallback\(async \(member: FleetMember\) => \{\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: 'pending' \}\)\);[\s\S]*?const result = await pingFleetMember\(member\);\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: result \}\)\);[\s\S]*?\}, \[\]\);/,
     );
   });
 
   it('Ping-all uses Promise.all (parallel pings, not sequential — fleet of 10 minis pings concurrently); sort = useMemo with label localeCompare ascending — pinned so the list stays alphabetically sortable and parallel-pinged', () => {
     expect(body).toMatch(
-      /const pingAll = useCallback\(async \(\) => \{\s*\n?\s*await Promise\.all\(members\.map\(\(m\) => ping\(m\)\)\);\s*\n?\s*\}, \[members, ping\]\);/,
+      /const pingAll = useCallback\(async \(\) => \{[\s\S]*?await Promise\.all\(members\.map\(\(m\) => ping\(m\)\)\);[\s\S]*?\}, \[members, ping\]\);/,
     );
     expect(body).toMatch(
       /const sorted = useMemo\(\s*\n?\s*\(\) => \[\.\.\.members\]\.sort\(\(a, b\) => a\.label\.localeCompare\(b\.label\)\),\s*\n?\s*\[members\],\s*\n?\s*\);/,
