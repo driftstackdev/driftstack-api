@@ -106,8 +106,14 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
   }
 
   function finish(): void {
-    setStep('done');
     onComplete();
+  }
+
+  // Success path (signed in; profile created or skipped): show the "you're all
+  // set" screen before handing off, so a first-time user gets a clear next step
+  // instead of dropping straight into the shell (journey audit L1).
+  function completeSetup(): void {
+    setStep('done');
   }
 
   return (
@@ -115,7 +121,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
       <TitleBar subtitle="setup" />
       <main className="flex flex-1 items-center justify-center overflow-auto p-8">
         <div className="w-full max-w-xl">
-          <Stepper current={step} />
+          {step !== 'done' && <Stepper current={step} />}
           {step === 'welcome' && <WelcomeStep onNext={() => setStep('mode')} />}
           {step === 'mode' && (
             <ModeStep
@@ -150,7 +156,23 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
               onValidate={(override) => void validateAndSave(override)}
             />
           )}
-          {step === 'profile' && <ProfileStep onSkip={finish} onCreated={finish} />}
+          {step === 'profile' && <ProfileStep onSkip={completeSetup} onCreated={completeSetup} />}
+          {step === 'done' && (
+            <section className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-status-success/15 text-2xl text-status-success">
+                ✓
+              </div>
+              <h2 className="mt-4 text-xl font-semibold text-ink-primary">You’re all set</h2>
+              <p className="mx-auto mt-2 max-w-sm text-sm text-ink-secondary">
+                Your account is connected. Head to{' '}
+                <span className="font-medium text-ink-primary">Profiles</span> to launch your first
+                live iPhone session.
+              </p>
+              <button type="button" className="btn-primary mt-6" onClick={onComplete}>
+                Get started
+              </button>
+            </section>
+          )}
           {(step === 'mode' || step === 'apikey') && (
             // Escape hatch: without this, a customer whose key/server won't
             // validate is trapped on the sign-in step with no way into the app
