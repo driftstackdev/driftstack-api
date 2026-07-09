@@ -303,14 +303,16 @@ export function SettingsView(): JSX.Element {
 
   // Copy the REAL API key (not the 12+4 masked display) so a customer can
   // paste it into a script / CI secret without re-minting. Clipboard writes
-  // can fail in locked-down WKWebView contexts — fail quietly, no toast.
+  // can fail in locked-down WKWebView contexts — surface that instead of
+  // leaving the customer to wonder whether the (invisible) key was copied.
   async function handleCopyKey(): Promise<void> {
     if (settings.apiKey === null) return;
     try {
+      if (navigator.clipboard === undefined) throw new Error('clipboard unavailable');
       await navigator.clipboard.writeText(settings.apiKey);
       pushToast({ title: 'Copied', tone: 'success' });
     } catch {
-      /* clipboard write can fail in locked-down envs; silent */
+      pushToast({ title: "Couldn't copy — clipboard blocked", tone: 'error' });
     }
   }
 

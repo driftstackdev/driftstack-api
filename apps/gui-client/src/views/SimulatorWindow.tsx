@@ -1251,20 +1251,28 @@ function BrowserBar({
   };
   // Copy the live URL to the clipboard (a browser-chrome affordance) with a brief
   // "Copied" confirmation. Mirrors the app's existing clipboard pattern
-  // (CryptoReceiptView) — silently no-ops in locked-down envs.
+  // (CryptoReceiptView). A locked-down WKWebView can leave navigator.clipboard
+  // undefined OR reject the write — surface either as a brief "Couldn't copy"
+  // on the button tooltip rather than a dead click.
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const flagCopyFailed = (): void => {
+    setCopyFailed(true);
+    window.setTimeout(() => setCopyFailed(false), 1600);
+  };
   const copyUrl = (): void => {
     const text = (liveUrl || draft).trim();
     if (text === '') return;
-    void navigator.clipboard?.writeText(text).then(
-      () => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1200);
-      },
-      () => {
-        /* clipboard blocked — silent */
-      },
-    );
+    const write = navigator.clipboard?.writeText(text);
+    if (write === undefined) {
+      flagCopyFailed();
+      return;
+    }
+    void write.then(() => {
+      setCopyFailed(false);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    }, flagCopyFailed);
   };
   const copyTarget = (liveUrl || draft).trim();
   // iOS-Safari address treatment: a closed padlock for https origins and, while
@@ -1448,8 +1456,10 @@ function BrowserBar({
         />
         <button
           type="button"
-          aria-label={copied ? 'Copied' : 'Copy URL'}
-          title={copied ? 'Copied' : 'Copy address'}
+          aria-label={copyFailed ? "Couldn't copy" : copied ? 'Copied' : 'Copy URL'}
+          title={
+            copyFailed ? "Couldn't copy — clipboard blocked" : copied ? 'Copied' : 'Copy address'
+          }
           disabled={copyTarget === ''}
           onClick={copyUrl}
           className="shrink-0 rounded p-0.5 text-white/35 transition hover:text-white/80 disabled:opacity-30"
@@ -2696,6 +2706,7 @@ export function SimulatorWindow(): JSX.Element {
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
   // clipboard write mirrors the address-bar copyUrl idiom (silent on failure).
   const [diagCopied, setDiagCopied] = useState(false);
+  const [diagCopyFailed, setDiagCopyFailed] = useState(false);
   const copyDiagnostics = (): void => {
     const text = formatSessionDiagnostics({
       sessionId,
@@ -2714,15 +2725,20 @@ export function SimulatorWindow(): JSX.Element {
       freezeCount: conn.freezeCount,
       build: typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev',
     });
-    void navigator.clipboard?.writeText(text).then(
-      () => {
-        setDiagCopied(true);
-        window.setTimeout(() => setDiagCopied(false), 1200);
-      },
-      () => {
-        /* clipboard blocked — silent */
-      },
-    );
+    const flagFailed = (): void => {
+      setDiagCopyFailed(true);
+      window.setTimeout(() => setDiagCopyFailed(false), 1600);
+    };
+    const write = navigator.clipboard?.writeText(text);
+    if (write === undefined) {
+      flagFailed();
+      return;
+    }
+    void write.then(() => {
+      setDiagCopyFailed(false);
+      setDiagCopied(true);
+      window.setTimeout(() => setDiagCopied(false), 1200);
+    }, flagFailed);
   };
   const [landscape, setLandscape] = useState(false);
   // On-screen iOS keyboard (founder 2026-06-25 "behave exactly like a real
@@ -6308,7 +6324,11 @@ export function SimulatorWindow(): JSX.Element {
                                 className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 transition-colors hover:bg-white/10"
                               >
                                 <span aria-hidden="true">⧉</span>
-                                {diagCopied ? 'Copied ✓' : 'Copy'}
+                                {diagCopyFailed
+                                  ? "Couldn't copy"
+                                  : diagCopied
+                                    ? 'Copied ✓'
+                                    : 'Copy'}
                               </button>
                             </div>
 
