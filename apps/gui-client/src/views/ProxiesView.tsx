@@ -342,6 +342,10 @@ export function ProxiesView(): JSX.Element {
     }
   }
 
+  // Only SOCKS5 proxies have an honest native probe (VPN/HTTP verify at launch). When
+  // NONE are probeable, "Test all" would flip on→off running zero probes with no feedback
+  // — a dead button (audit 2026-07-08); disable it with an explaining title instead.
+  const probeableCount = state.proxies.filter((p) => isSocks5Probeable(p.scheme)).length;
   const tested = state.proxies.filter((p) => testResults[p.id] !== undefined);
   const healthy = tested.filter((p) => {
     const r = testResults[p.id];
@@ -399,7 +403,12 @@ export function ProxiesView(): JSX.Element {
               type="button"
               className="btn-secondary"
               onClick={() => void handleTestAll()}
-              disabled={testingAll || testingId !== null}
+              disabled={testingAll || testingId !== null || probeableCount === 0}
+              title={
+                probeableCount === 0
+                  ? 'No SOCKS5 proxies to test — VPN/HTTP endpoints are verified at launch'
+                  : undefined
+              }
             >
               {testingAll ? 'Testing all…' : 'Test all'}
             </button>

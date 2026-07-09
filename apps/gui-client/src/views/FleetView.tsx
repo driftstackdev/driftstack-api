@@ -77,8 +77,22 @@ export function FleetView(): JSX.Element {
 
   const ping = useCallback(async (member: FleetMember) => {
     setPings((prev) => ({ ...prev, [member.id]: 'pending' }));
-    const result = await pingFleetMember(member);
-    setPings((prev) => ({ ...prev, [member.id]: result }));
+    try {
+      const result = await pingFleetMember(member);
+      setPings((prev) => ({ ...prev, [member.id]: result }));
+    } catch (err) {
+      // A THROWN ping (vs a resolved {ok:false}) would strand the row on "pending"
+      // forever and reject pingAll's Promise.all (audit 2026-07-08). Synthesize an
+      // unreachable result so the row resolves and "Ping all" can't fail the batch.
+      setPings((prev) => ({
+        ...prev,
+        [member.id]: {
+          ok: false,
+          durationMs: 0,
+          error: err instanceof Error ? err.message : 'Ping failed',
+        },
+      }));
+    }
   }, []);
 
   const pingAll = useCallback(async () => {

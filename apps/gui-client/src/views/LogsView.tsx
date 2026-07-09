@@ -97,9 +97,18 @@ export function LogsView(): JSX.Element {
   );
 
   function handleCopy(): void {
-    void navigator.clipboard.writeText(formatLogEntries());
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    // Only flip to "Copied" on a RESOLVED write — a locked-down WebView can reject
+    // clipboard access, and the old unconditional setCopied falsely showed success on a
+    // failed copy (audit 2026-07-08). On rejection we leave the label at "Copy".
+    void navigator.clipboard.writeText(formatLogEntries()).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+      },
+      () => {
+        /* clipboard denied — don't claim success */
+      },
+    );
   }
 
   return (
