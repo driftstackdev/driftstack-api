@@ -1422,7 +1422,7 @@ function PlanStep({ result, denied }: { result: AgentIntentResult; denied: boole
         {text}
         {retryable && (
           <span className="ml-1.5 rounded-full bg-status-busy/10 px-1.5 py-px text-2xs text-status-busy">
-            retryable
+            worth retrying
           </span>
         )}
       </span>
@@ -1484,8 +1484,9 @@ function UsageBadge({ usage }: { usage: AgentUsage }): JSX.Element {
   const tokens = (usage.anthropic_input_tokens ?? 0) + (usage.anthropic_output_tokens ?? 0);
   if (tokens > 0) parts.push(`${tokens} tok`);
   if (usage.model !== undefined) parts.push(usage.model);
-  if (parts.length === 0)
-    return <span className="mono text-2xs text-ink-muted">{usage.decomposer_kind}</span>;
+  // Nothing customer-meaningful to show (no cost/tokens/model) — render nothing
+  // rather than leaking the internal decomposer_kind enum (journey audit L5).
+  if (parts.length === 0) return <></>;
   return <span className="mono text-2xs text-ink-muted">{parts.join(' · ')}</span>;
 }
 
@@ -1555,6 +1556,9 @@ function BudgetMeter({ remaining, total }: { remaining: number; total: number })
           style={{ width: `${pct}%` }}
         />
       </span>
+      {/* Show the percentage inline — a bare bar with no number read as
+          meaningless (journey audit L5); the hover title keeps the exact ratio. */}
+      <span className="text-2xs tabular-nums text-ink-muted">{Math.round(pct)}%</span>
     </div>
   );
 }
