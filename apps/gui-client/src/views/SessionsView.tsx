@@ -498,10 +498,18 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
       )}
 
       {state.error !== null && (
-        <ErrorBanner
-          message={state.error}
-          onDismiss={() => setState((s) => ({ ...s, error: null }))}
-        />
+        // Sticky so a failed action (Stop/Destroy on a card the user has
+        // scrolled down to) stays visible instead of dropping into a banner
+        // that's scrolled off the top (journey audit M6). Kept inline rather
+        // than a toast per this view's debug-without-losing-context convention
+        // — sticky just pins the existing banner in view. bg-surface-base (the
+        // content-area colour) keeps scrolled cards from bleeding through.
+        <div className="sticky top-0 z-20 bg-surface-base py-1">
+          <ErrorBanner
+            message={state.error}
+            onDismiss={() => setState((s) => ({ ...s, error: null }))}
+          />
+        </div>
       )}
 
       {showSkeleton ? (
