@@ -133,7 +133,7 @@ export function RecipesView(): JSX.Element {
       <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
         <span className="section-label">Configure API access</span>
         <p className="max-w-md text-sm text-ink-secondary">
-          Set up your API key in Settings to browse recipes.
+          Set up your API key in Settings to browse saved tasks.
         </p>
       </div>
     );
@@ -171,12 +171,12 @@ export function RecipesView(): JSX.Element {
       )}
 
       {list.loading && list.recipes.length === 0 ? (
-        <SkeletonRows rows={6} label="Loading recipes" />
+        <SkeletonRows rows={6} label="Loading saved tasks" />
       ) : list.recipes.length === 0 && list.error === null ? (
         <EmptyState
           icon={SEARCH_ICON}
-          title="No recipes yet"
-          description="Recipes are saved from finished agent sessions. Once a session is snapshotted into a recipe, it shows up here ready to browse and replay."
+          title="No saved tasks yet"
+          description="Saved tasks come from finished AI chats. Once you save a chat as a task, it shows up here ready to browse and replay."
         />
       ) : (
         <div className="flex min-h-0 flex-1 gap-4">
@@ -185,14 +185,14 @@ export function RecipesView(): JSX.Element {
             <input
               type="search"
               className="form-input"
-              placeholder="Search recipes…"
+              placeholder="Search saved tasks…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              aria-label="Search recipes"
+              aria-label="Search saved tasks"
             />
             {filtered.length === 0 ? (
               <p className="rounded border border-surface-divider bg-surface-raised px-4 py-8 text-center text-sm text-ink-muted">
-                No recipes match &ldquo;{query.trim()}&rdquo;.
+                No saved tasks match &ldquo;{query.trim()}&rdquo;.
               </p>
             ) : (
               <ul className="min-h-0 flex-1 divide-y divide-surface-divider overflow-auto rounded border border-surface-divider bg-surface-raised">
@@ -232,7 +232,7 @@ export function RecipesView(): JSX.Element {
             {selectedId === null ? (
               <div className="flex h-full items-center justify-center px-8 py-16 text-center">
                 <p className="max-w-xs text-sm text-ink-muted">
-                  Select a recipe to view its details and replayable steps.
+                  Select a saved task to view its details and replayable steps.
                 </p>
               </div>
             ) : (
@@ -249,7 +249,7 @@ function DetailPanel({ state }: { state: DetailState }): JSX.Element {
   if (state.loading) {
     return (
       <div className="p-6">
-        <SkeletonRows rows={6} label="Loading recipe" />
+        <SkeletonRows rows={6} label="Loading saved task" />
       </div>
     );
   }
@@ -268,7 +268,7 @@ function DetailPanel({ state }: { state: DetailState }): JSX.Element {
   return (
     <div className="flex flex-col gap-5 p-6">
       <div className="flex flex-col gap-1">
-        <span className="section-label">Recipe</span>
+        <span className="section-label">Saved task</span>
         <h3 className="text-base font-medium text-ink-primary">{r.label}</h3>
         <p className="mono text-2xs text-ink-muted">{r.id}</p>
         {r.description !== null && r.description.length > 0 && (
@@ -301,7 +301,7 @@ function DetailPanel({ state }: { state: DetailState }): JSX.Element {
         <span className="section-label">Intent log</span>
         {r.intent_log.length === 0 ? (
           <p className="rounded border border-dashed border-surface-divider px-4 py-6 text-center text-sm text-ink-muted">
-            This recipe has no recorded steps.
+            This saved task has no recorded steps.
           </p>
         ) : (
           <ol className="flex flex-col divide-y divide-surface-divider rounded border border-surface-divider bg-surface-inset">

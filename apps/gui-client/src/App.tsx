@@ -100,10 +100,10 @@ export function buildPaletteActions(opts: {
     },
     {
       id: 'nav-recipes',
-      label: 'Go to Recipes',
+      label: 'Go to Saved tasks',
       kind: 'view',
       glyph: '❡',
-      keywords: ['nav', 'recipes', 'automation', 'flows'],
+      keywords: ['nav', 'saved', 'tasks', 'recipes', 'automation', 'flows'],
       run: () => setView({ kind: 'recipes' }),
     },
     {
