@@ -597,15 +597,19 @@ export function DeviceToolbar({
   deviceName,
   profileName,
   running,
+  connecting = false,
   keyboardVisible,
   onToggleKeyboard,
   inputEnabled = true,
 }: {
   deviceName: string;
   profileName: string;
-  /** True when a live agent session is bound to this window — drives the running
-   *  indicator. */
+  /** True when the live video is actually connected + publishing — drives the
+   *  green "Live" indicator (so it never lights before the stream arrives). */
   running: boolean;
+  /** True when a session is bound but the stream hasn't connected yet — drives an
+   *  amber "Connecting…" indicator in place of "Live". */
+  connecting?: boolean;
   /** On-screen iOS keyboard visibility + its toggle (founder 2026-06-25). */
   keyboardVisible: boolean;
   onToggleKeyboard: () => void;
@@ -678,10 +682,10 @@ export function DeviceToolbar({
           {/* Running indicator (founder Track A) — a live pulse so the window
               reads as a RUNNING session at a glance (today only the per-mode
               window-close existed; no inline running cue). */}
-          {running && (
+          {running ? (
             <span
               data-component="simulator-running-indicator"
-              title="Session is running"
+              title="Live video connected"
               className="mr-0.5 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-status-ready"
             >
               <span
@@ -690,7 +694,19 @@ export function DeviceToolbar({
               />
               Live
             </span>
-          )}
+          ) : connecting ? (
+            <span
+              data-component="simulator-connecting-indicator"
+              title="Connecting to the live video…"
+              className="mr-0.5 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-status-busy"
+            >
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy"
+              />
+              Connecting…
+            </span>
+          ) : null}
           {/* On-screen iOS keyboard toggle (founder 2026-06-25 "behave exactly
               like a real iPhone"). Manual v1 — auto-show-on-focus is deferred to
               A3's box-side focus signal (W2992). */}
@@ -5699,7 +5715,17 @@ export function SimulatorWindow(): JSX.Element {
             // until a fresh session swaps in), so gate on the sessionEnded latch too —
             // otherwise the toolbar reads "Live" while the screen says the session
             // stopped (the exact "running after the browser closed" confusion).
-            running={sessionId !== '' && sessionEnded === null}
+            running={
+              sessionId !== '' &&
+              sessionEnded === null &&
+              connState === 'connected' &&
+              publisherState === 'publishing'
+            }
+            connecting={
+              sessionId !== '' &&
+              sessionEnded === null &&
+              !(connState === 'connected' && publisherState === 'publishing')
+            }
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}
             inputEnabled={controlMode !== 'ai'}

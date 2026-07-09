@@ -380,16 +380,19 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(container.querySelector('[data-component="touch-cursor"]')).toBeNull();
   });
 
-  it('shows a running indicator in the toolbar when a session is bound (founder Track A)', () => {
+  it('shows a Connecting indicator on bind — not Live — until the stream connects (founder Track A)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_1');
     const { container } = render(
       <RecordingsProvider>
         <SimulatorWindow />
       </RecordingsProvider>,
     );
+    // A bound session whose video hasn't connected yet reads "Connecting…", never
+    // "Live" — the green badge must not lie before the stream actually arrives.
     expect(
-      container.querySelector('[data-component="simulator-running-indicator"]'),
+      container.querySelector('[data-component="simulator-connecting-indicator"]'),
     ).not.toBeNull();
+    expect(container.querySelector('[data-component="simulator-running-indicator"]')).toBeNull();
   });
 
   it('the always-docked rail exposes an explicit End session control (the true Stop, reachable even when collapsed)', () => {
