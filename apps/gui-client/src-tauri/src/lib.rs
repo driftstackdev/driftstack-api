@@ -985,22 +985,37 @@ fn run_socks5_probe(
 /// throws to the JS side — a failed probe is returned as a
 /// `reachable: false` result carrying the diagnostic in `message`.
 #[tauri::command]
-fn proxy_test(
+async fn proxy_test(
     host: String,
     port: u16,
     username: Option<String>,
     password: Option<String>,
 ) -> ProxyTestResult {
-    match run_socks5_probe(&host, port, username.as_deref(), password.as_deref()) {
-        Ok(result) => result,
-        Err(message) => ProxyTestResult {
-            reachable: false,
-            auth_ok: false,
-            udp_associate: false,
-            latency_ms: 0,
-            message,
-        },
-    }
+    // Run the blocking SOCKS5 probe on a dedicated blocking thread. A sync
+    // command runs on the main thread, so a slow/dead proxy (multi-second
+    // connect timeout inside run_socks5_probe) froze the ENTIRE WebView —
+    // rendering + input + the "Testing…" spinner all stalled until it returned.
+    // spawn_blocking keeps the UI (and the spinner) live while the probe runs.
+    tauri::async_runtime::spawn_blocking(move || {
+        match run_socks5_probe(&host, port, username.as_deref(), password.as_deref()) {
+            Ok(result) => result,
+            Err(message) => ProxyTestResult {
+                reachable: false,
+                auth_ok: false,
+                udp_associate: false,
+                latency_ms: 0,
+                message,
+            },
+        }
+    })
+    .await
+    .unwrap_or_else(|_| ProxyTestResult {
+        reachable: false,
+        auth_ok: false,
+        udp_associate: false,
+        latency_ms: 0,
+        message: "Proxy test could not be scheduled — please retry.".to_string(),
+    })
 }
 
 /// Result of a VPN-endpoint reachability pre-flight. A VPN endpoint is usually
@@ -1020,29 +1035,39 @@ struct EndpointResolveResult {
 /// Resolve a VPN endpoint host to confirm it's a valid, reachable hostname.
 /// Native so we can resolve arbitrary hosts the WebView sandbox can't.
 #[tauri::command]
-fn endpoint_resolve(host: String, port: u16) -> EndpointResolveResult {
-    match (host.as_str(), port).to_socket_addrs() {
-        Ok(mut addrs) => match addrs.next() {
-            Some(addr) => EndpointResolveResult {
-                resolved: true,
-                ip: addr.ip().to_string(),
-                message: format!(
-                    "Endpoint resolves to {} — tunnel verified at launch.",
-                    addr.ip()
-                ),
+async fn endpoint_resolve(host: String, port: u16) -> EndpointResolveResult {
+    // to_socket_addrs() is a blocking DNS lookup; keep it off the main thread so
+    // a slow resolver can't freeze the WebView (same class as proxy_test).
+    tauri::async_runtime::spawn_blocking(move || {
+        match (host.as_str(), port).to_socket_addrs() {
+            Ok(mut addrs) => match addrs.next() {
+                Some(addr) => EndpointResolveResult {
+                    resolved: true,
+                    ip: addr.ip().to_string(),
+                    message: format!(
+                        "Endpoint resolves to {} — tunnel verified at launch.",
+                        addr.ip()
+                    ),
+                },
+                None => EndpointResolveResult {
+                    resolved: false,
+                    ip: String::new(),
+                    message: "Host resolved to no addresses — check the endpoint.".into(),
+                },
             },
-            None => EndpointResolveResult {
+            Err(e) => EndpointResolveResult {
                 resolved: false,
                 ip: String::new(),
-                message: "Host resolved to no addresses — check the endpoint.".into(),
+                message: format!("Couldn't resolve the endpoint host: {e}"),
             },
-        },
-        Err(e) => EndpointResolveResult {
-            resolved: false,
-            ip: String::new(),
-            message: format!("Couldn't resolve the endpoint host: {e}"),
-        },
-    }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| EndpointResolveResult {
+        resolved: false,
+        ip: String::new(),
+        message: "Endpoint resolution could not be scheduled — please retry.".into(),
+    })
 }
 
 /// E-2 exit-geo probe (probe-backend design, build-order 2): fetch the
@@ -1109,46 +1134,54 @@ fn lumtest_geo(
 }
 
 #[tauri::command]
-fn proxy_exit_probe(
+async fn proxy_exit_probe(
     host: String,
     port: u16,
     username: Option<String>,
     password: Option<String>,
 ) -> Result<ProxyExitProbeResult, String> {
-    let auth = match (username.as_deref(), password.as_deref()) {
-        (Some(u), Some(p)) if !u.is_empty() => format!("{u}:{p}@"),
-        (Some(u), None) if !u.is_empty() => format!("{u}@"),
-        _ => String::new(),
-    };
-    let proxy_url = format!("socks5://{auth}{host}:{port}");
-    let proxy = ureq::Proxy::new(&proxy_url).map_err(|e| e.to_string())?;
-    let agent = ureq::AgentBuilder::new()
-        .proxy(proxy)
-        .timeout(std::time::Duration::from_secs(8))
-        .build();
-    let resp = agent
-        .get("https://api.driftstack.dev/v1/egress/echo")
-        .call()
-        .map_err(|e| e.to_string())?;
-    let body: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
-    let ip = body
-        .get("ip")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "echo response missing ip".to_string())?
-        .to_string();
-    let country = body
-        .get("country")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let (city, region, timezone, asn_org) = lumtest_geo(&agent);
-    Ok(ProxyExitProbeResult {
-        ip,
-        country,
-        city,
-        region,
-        timezone,
-        asn_org,
+    // Two blocking HTTP round-trips THROUGH the proxy (echo + lumtest geo) with
+    // an 8s timeout each — the worst offender for freezing the WebView when run
+    // on the main thread. Push the whole thing to a blocking thread so the UI
+    // (and the "Testing…" state) stays live while the exit is probed.
+    tauri::async_runtime::spawn_blocking(move || -> Result<ProxyExitProbeResult, String> {
+        let auth = match (username.as_deref(), password.as_deref()) {
+            (Some(u), Some(p)) if !u.is_empty() => format!("{u}:{p}@"),
+            (Some(u), None) if !u.is_empty() => format!("{u}@"),
+            _ => String::new(),
+        };
+        let proxy_url = format!("socks5://{auth}{host}:{port}");
+        let proxy = ureq::Proxy::new(&proxy_url).map_err(|e| e.to_string())?;
+        let agent = ureq::AgentBuilder::new()
+            .proxy(proxy)
+            .timeout(std::time::Duration::from_secs(8))
+            .build();
+        let resp = agent
+            .get("https://api.driftstack.dev/v1/egress/echo")
+            .call()
+            .map_err(|e| e.to_string())?;
+        let body: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+        let ip = body
+            .get("ip")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "echo response missing ip".to_string())?
+            .to_string();
+        let country = body
+            .get("country")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let (city, region, timezone, asn_org) = lumtest_geo(&agent);
+        Ok(ProxyExitProbeResult {
+            ip,
+            country,
+            city,
+            region,
+            timezone,
+            asn_org,
+        })
     })
+    .await
+    .map_err(|_| "Exit probe could not be scheduled — please retry.".to_string())?
 }
 
 #[cfg(test)]
