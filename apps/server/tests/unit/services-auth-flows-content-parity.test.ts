@@ -228,11 +228,16 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('refreshSession: rotate-on-refresh (revoke old + issue new); old plaintext now useless', () => {
+  it('refreshSession: rotate-on-refresh (revoke old + issue new + invalidateAccount so the rotated-out token cannot replay on the cache fast-path); old plaintext now useless', () => {
     expect(body).toMatch(
       /\/\/ Rotate: revoke the old row, issue a new one\. The plaintext returned\s*\n?\s*\/\/ is the new token; the old plaintext is now useless\./,
     );
     expect(body).toMatch(/await this\.repo\.revokeWebSession\(old\.id, now\);/);
+    // The rotated-out token must be evicted from the auth cache — the fast-path
+    // re-checks only expiresAt (not revokedAt), so without this the DB-revoked
+    // old token keeps authenticating for the 30s TTL. Same call every other
+    // revoke path makes; regression-pinned because the bug was test-invisible.
+    expect(body).toMatch(/await this\.authCache\.invalidateAccount\(old\.accountId\);/);
   });
 
   it('logout: idempotent on unknown/revoked token; V-168 authCache.invalidateAccount best-effort (cache TTLs out within 30s)', () => {
