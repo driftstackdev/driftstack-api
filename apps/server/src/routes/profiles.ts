@@ -513,7 +513,22 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       // Resolve the per-profile DEK (KMS→TMK→DEK, file 57). Null → profiles feature
       // inert (PROFILE_MASTER_KEY unset) or this profile has no stored DEK → nothing
       // we can open, so there's nothing to trim. NEVER log the DEK.
-      const dek = await service.getProfileDek({ profileId: id, accountId });
+      let dek: Awaited<ReturnType<typeof service.getProfileDek>>;
+      try {
+        dek = await service.getProfileDek({ profileId: id, accountId });
+      } catch (err) {
+        // A corrupt / rotated-but-not-rewrapped wrapped-DEK makes unwrapProfileDek
+        // throw. Don't surface a raw 500 — mirror the buildAssignProfileBlock catch
+        // below (graceful 'unavailable' + warn). NEVER log the DEK / key material.
+        req.log.warn(
+          { component: 'profile-trim', profileId: id, err },
+          'profile trim DEK resolution failed',
+        );
+        return {
+          status: 'unavailable' as const,
+          reason: 'could not resolve the profile encryption key',
+        };
+      }
       if (dek === null) {
         return {
           status: 'unavailable' as const,
@@ -557,7 +572,21 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       if (outcome.status === 'ok') {
         // Persist the new (smaller) sealed size so the storage meter + launch quota
         // gate reflect the reclaimed bytes immediately. Only on a confirmed ok.
-        await service.recordTrim({ profileId: id, accountId, newSizeBytes: outcome.newSizeBytes });
+        // The node already re-sealed + PUT the smaller blob — the trim SUCCEEDED.
+        // A failure to persist the new size must NOT surface as a 500 (the storage
+        // was reclaimed; only the meter row lags until the next size write). Swallow+warn.
+        try {
+          await service.recordTrim({
+            profileId: id,
+            accountId,
+            newSizeBytes: outcome.newSizeBytes,
+          });
+        } catch (err) {
+          req.log.warn(
+            { component: 'profile-trim', profileId: id, err },
+            'profile trim succeeded on the node but the size-meter DB update failed',
+          );
+        }
         return {
           status: 'ok' as const,
           size_bytes: outcome.newSizeBytes,
