@@ -496,13 +496,17 @@ export const SessionStatusSchema = z.object({
   sessionId: z.string().min(1),
   status: z.string().min(1),
   timestamp: z.string(),
-  detail: z.string().optional(),
+  // Bounded like every sibling `detail` in this file (.max(4096)) — a node
+  // (already JWT-authed) must not be able to inject an unbounded string here.
+  detail: z.string().max(4096).optional(),
   // A3 W2682 — clean snake_case close reason on a terminal frame (e.g.
   // idle_timeout / max_duration / browser_crashed). Optional: non-terminal
   // status frames omit it, and a provisioning-failure errored frame carries
   // `reason: nil` (cause in detail). The terminal-close consumer falls back to
-  // a synthesized `session-<status>` when absent.
-  reason: z.string().min(1).optional(),
+  // a synthesized `session-<status>` when absent. Bounded (.max(512), matching
+  // ControlCommandSchema.reason) — this value is persisted verbatim into the
+  // customer-facing `closed_reason`, so cap it as every sibling result field is.
+  reason: z.string().min(1).max(512).optional(),
 });
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 

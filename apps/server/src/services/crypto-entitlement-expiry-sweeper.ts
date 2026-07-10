@@ -80,55 +80,83 @@ export class CryptoEntitlementExpirySweeperService {
     }
 
     let downgraded = 0;
+    const failedAccounts = new Set<string>();
     for (const [accountId, group] of byAccount) {
-      // The union computation floors against UNEXPIRED entitlements only, so the
-      // just-expired rows are automatically excluded — the account drops to its
-      // best remaining Stripe sub / other valid entitlement / free.
-      const { previousTier, appliedTier } =
-        await this.deps.repo.downgradeAccountTierToBestRemaining({
-          accountId,
-          fallbackTier: 'free',
-          at: now,
-        });
-      if (previousTier !== appliedTier) {
-        downgraded += 1;
-        if (this.deps.authCache) {
-          try {
-            await this.deps.authCache.invalidateAccount(accountId);
-          } catch {
-            /* best-effort — the tier write is committed; cache TTLs out */
-          }
-        }
-        if (this.deps.accountLifecycle) {
-          await this.deps.accountLifecycle.emit(accountId, {
-            kind: 'subscription.tier_changed',
-            fromTier: previousTier,
-            toTier: appliedTier,
-            effectiveAt: now,
-            cryptoOrderId: group.orderId,
+      // Per-account isolation: one account's recompute/emit failure must not
+      // abort the whole tick or strand the OTHER accounts (and, crucially, must
+      // not mark the failed account's rows processed below). A failed account's
+      // rows are left unprocessed so the next tick re-lists and retries them —
+      // the same "will retry next tick" contract session-duration-sweeper uses.
+      try {
+        // The union computation floors against UNEXPIRED entitlements only, so
+        // the just-expired rows are automatically excluded — the account drops
+        // to its best remaining Stripe sub / other valid entitlement / free.
+        const { previousTier, appliedTier } =
+          await this.deps.repo.downgradeAccountTierToBestRemaining({
+            accountId,
+            fallbackTier: 'free',
+            at: now,
           });
+        if (previousTier !== appliedTier) {
+          downgraded += 1;
+          if (this.deps.authCache) {
+            try {
+              await this.deps.authCache.invalidateAccount(accountId);
+            } catch {
+              /* best-effort — the tier write is committed; cache TTLs out */
+            }
+          }
+          if (this.deps.accountLifecycle) {
+            await this.deps.accountLifecycle.emit(accountId, {
+              kind: 'subscription.tier_changed',
+              fromTier: previousTier,
+              toTier: appliedTier,
+              effectiveAt: now,
+              cryptoOrderId: group.orderId,
+            });
+          }
+          this.deps.logger.info(
+            {
+              component: 'crypto-entitlement-sweeper',
+              event: 'crypto_entitlement_expired_downgrade',
+              account_id: accountId,
+              order_id: group.orderId,
+              from_tier: previousTier,
+              to_tier: appliedTier,
+            },
+            'crypto entitlement expired — account tier recomputed to best remaining',
+          );
         }
-        this.deps.logger.info(
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        failedAccounts.add(accountId);
+        this.deps.logger.warn?.(
           {
             component: 'crypto-entitlement-sweeper',
-            event: 'crypto_entitlement_expired_downgrade',
+            event: 'crypto_entitlement_downgrade_failed',
             account_id: accountId,
             order_id: group.orderId,
-            from_tier: previousTier,
-            to_tier: appliedTier,
+            err: { message },
           },
-          'crypto entitlement expired — account tier recomputed to best remaining',
+          'crypto entitlement downgrade failed for account — will retry next tick',
         );
       }
     }
 
     // Mark AFTER the recompute so a crash before this replays an idempotent
-    // recompute rather than skipping the downgrade.
-    await this.deps.repo.markCryptoEntitlementsProcessed({
-      ids: rows.map((r) => r.id),
-      at: now,
-    });
-    return { processed: rows.length, downgraded };
+    // recompute rather than skipping the downgrade. Only mark rows whose account
+    // processed cleanly; a failed account's rows stay unprocessed and are
+    // re-listed next tick. The mark itself stays OUTSIDE the per-account guard
+    // so a mark failure still propagates (crash-idempotency: the whole batch
+    // replays next tick, not silently skipped).
+    const idsToMark = rows.filter((r) => !failedAccounts.has(r.accountId)).map((r) => r.id);
+    if (idsToMark.length > 0) {
+      await this.deps.repo.markCryptoEntitlementsProcessed({
+        ids: idsToMark,
+        at: now,
+      });
+    }
+    return { processed: idsToMark.length, downgraded };
   }
 }
 
@@ -137,6 +165,8 @@ export interface RegisterCryptoEntitlementExpirySweepJobOpts {
   sweeper: CryptoEntitlementExpirySweeperService;
   /** Test seam — defaults to Date.now. */
   nowFn?: () => number;
+  /** Best-effort — logs a swallowed tick failure (chain survival, see below). */
+  logger?: Logger;
 }
 
 /**
@@ -146,6 +176,16 @@ export interface RegisterCryptoEntitlementExpirySweepJobOpts {
  * duplicate and kill the chain). The single locked executor guarantees one
  * handler run → one next enqueue, so no fan-out risk. See
  * session-duration-sweeper for the full reasoning.
+ *
+ * Chain survival: the re-arm must run even if `tickOnce` throws. If it did not,
+ * a throw would leave no re-arm, the poller would retry the job, and once
+ * `maxAttempts` is exhausted the job is markFailed with NO pending sweep row —
+ * the self-re-arming chain is then dead until a process restart and NO crypto
+ * entitlement ever expires again (every lapsed customer keeps a paid tier for
+ * free). We therefore SWALLOW a tick failure (logging it) and re-arm exactly
+ * once. We must NOT re-throw-and-re-arm-in-`finally`: the poller would retry the
+ * same job and each attempt would re-arm → duplicate parallel chains (fan-out).
+ * The tick is idempotent — the next tick re-lists any rows this one missed.
  */
 export function registerCryptoEntitlementExpirySweepJob(
   opts: RegisterCryptoEntitlementExpirySweepJobOpts,
@@ -154,7 +194,19 @@ export function registerCryptoEntitlementExpirySweepJob(
   opts.scheduledJobs.register(
     CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_JOB_TYPE,
     async (_job: ScheduledJobRow) => {
-      await opts.sweeper.tickOnce(new Date(now()));
+      try {
+        await opts.sweeper.tickOnce(new Date(now()));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        opts.logger?.error?.(
+          {
+            component: 'crypto-entitlement-sweeper',
+            event: 'crypto_entitlement_sweep_tick_failed',
+            err: { message },
+          },
+          'crypto entitlement sweep tick failed — re-arming; rows retry next tick',
+        );
+      }
       await enqueueNextCryptoEntitlementExpirySweep({
         scheduledJobs: opts.scheduledJobs,
         nowFn: now,

@@ -232,6 +232,48 @@ describe('C1 CryptoEntitlementExpirySweeperService.tickOnce', () => {
     const r = await sweeper.tickOnce(NOW);
     expect(r.processed).toBe(2);
   });
+
+  it('one account failing is isolated — other accounts still downgrade+mark, the failed rows stay unprocessed (retry next tick), tick does not throw', async () => {
+    const repo = new InMemoryStripeWebhooksRepo();
+    repo.registerAccount({ accountId: 'acc_good', stripeCustomerId: null, tier: 'free' });
+    repo.registerAccount({ accountId: 'acc_fail', stripeCustomerId: null, tier: 'free' });
+    await repo.activateCryptoEntitlement({
+      accountId: 'acc_good',
+      orderId: 'ord_good',
+      tier: 'api_builder',
+      paidAt: LONG_AGO,
+      termDays: TERM_DAYS,
+    });
+    await repo.activateCryptoEntitlement({
+      accountId: 'acc_fail',
+      orderId: 'ord_fail',
+      tier: 'api_builder',
+      paidAt: LONG_AGO,
+      termDays: TERM_DAYS,
+    });
+    const { sweeper, emit } = makeSweeper(repo);
+    // One account's tier-changed emit throws (a transient downstream failure)
+    // — this happens INSIDE the per-account guard, so it must isolate to that
+    // account without aborting the tick or marking its rows processed.
+    emit.mockImplementation((accountId: string) =>
+      accountId === 'acc_fail' ? Promise.reject(new Error('emit boom')) : Promise.resolve(),
+    );
+
+    // Must NOT throw — the whole tick survives one account's failure.
+    const r = await sweeper.tickOnce(NOW);
+    // Only the clean account's row is marked processed; both were attempted.
+    expect(r.processed).toBe(1);
+    expect(emit).toHaveBeenCalledTimes(2);
+    expect(repo.readAccount('acc_good')?.tier).toBe('free');
+    // Exactly one row marked (acc_good); the failed account's row stays
+    // unprocessed and is re-listed next tick (idempotent recompute).
+    expect(repo.listCryptoEntitlements().filter((e) => e.expiredProcessedAt !== null)).toHaveLength(
+      1,
+    );
+    expect(repo.listCryptoEntitlements().filter((e) => e.expiredProcessedAt === null)).toHaveLength(
+      1,
+    );
+  });
 });
 
 describe('C1 crypto entitlement sweep scheduling (dedup rule)', () => {
@@ -280,5 +322,33 @@ describe('C1 crypto entitlement sweep scheduling (dedup rule)', () => {
     expect(reArm.runAt).toEqual(
       new Date(NOW.getTime() + CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_INTERVAL_MS),
     );
+  });
+
+  it('the re-arm survives a tickOnce failure (chain never dies) and does not fan out', async () => {
+    const f = fakeScheduledJobs();
+    // A tick that always throws (e.g. the DB list query fails) must not stop the
+    // self-re-arming chain: the handler swallows + re-arms exactly once. If it
+    // re-threw, the poller would retry to maxAttempts then markFailed with no
+    // pending sweep — the chain would die and no entitlement would ever expire.
+    // Captured mock (read off the variable, not the object → no-unbound-method).
+    const tickOnce = vi.fn().mockRejectedValue(new Error('db down'));
+    const sweeper = { tickOnce } as unknown as CryptoEntitlementExpirySweeperService;
+
+    registerCryptoEntitlementExpirySweepJob({
+      scheduledJobs: f.scheduledJobs as any,
+      sweeper,
+      nowFn: () => NOW.getTime(),
+      logger: makeLogger(),
+    });
+
+    // The handler must resolve (not reject) despite the failing tick.
+    await expect(f.invoke()).resolves.toBeUndefined();
+    // Exactly one re-arm enqueued → chain alive, no duplicate parallel chains.
+    expect(f.enqueues).toHaveLength(1);
+    expect(f.enqueues[0]).toMatchObject({
+      jobType: CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_JOB_TYPE,
+      dedup: false,
+    });
+    expect(tickOnce).toHaveBeenCalledTimes(1);
   });
 });

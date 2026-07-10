@@ -224,9 +224,11 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('sessionId: z.string().min(1),');
     expect(body).toContain('status: z.string().min(1),');
     expect(body).toContain('timestamp: z.string(),');
-    expect(body).toContain('detail: z.string().optional(),');
+    // Bounded like every sibling result field — a JWT-authed node must not inject
+    // an unbounded string that persists into the customer-facing close reason.
+    expect(body).toContain('detail: z.string().max(4096).optional(),');
     // A3 W2682 — the optional snake_case close reason on a terminal frame.
-    expect(body).toContain('reason: z.string().min(1).optional(),');
+    expect(body).toContain('reason: z.string().min(1).max(512).optional(),');
     // A3 W2682 terminal-status vocabulary — the EXACT close-on set (drift-guarded).
     expect(body).toMatch(
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
@@ -1022,6 +1024,24 @@ describe('harness-control-protocol behavioral contract', () => {
         reason: '',
       }).success,
     ).toBe(false);
+  });
+
+  it('SessionStatus reason/detail are bounded — an oversized value from a JWT-authed node (persisted verbatim into the customer-facing closed_reason) is rejected', () => {
+    const base = { type: 'sessionStatus', sessionId: 'agt_a', status: 'ended', timestamp: 't' };
+    // reason bounded at 512 (matches ControlCommandSchema.reason).
+    expect(HarnessOutboundSchema.safeParse({ ...base, reason: 'x'.repeat(512) }).success).toBe(
+      true,
+    );
+    expect(HarnessOutboundSchema.safeParse({ ...base, reason: 'x'.repeat(513) }).success).toBe(
+      false,
+    );
+    // detail bounded at 4096 (matches every sibling detail in this file).
+    expect(HarnessOutboundSchema.safeParse({ ...base, detail: 'x'.repeat(4096) }).success).toBe(
+      true,
+    );
+    expect(HarnessOutboundSchema.safeParse({ ...base, detail: 'x'.repeat(4097) }).success).toBe(
+      false,
+    );
   });
 
   it('profile-backed sessions (A3 W417): optional snake_case profile block; profile_id+dek required; blob fields optional; strict', () => {

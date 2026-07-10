@@ -1173,6 +1173,7 @@ export async function createProductionDeps(
   registerCryptoEntitlementExpirySweepJob({
     scheduledJobs: scheduledJobsService,
     sweeper: cryptoEntitlementExpirySweeper,
+    logger, // chain survival: a swallowed tick failure is logged, then re-armed
   });
   await enqueueNextCryptoEntitlementExpirySweep({ scheduledJobs: scheduledJobsService });
 
