@@ -255,4 +255,14 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     this.rows.delete(args.id);
     return Promise.resolve(true);
   }
+
+  // #158 — which of `ids` still have a row (any account, INCLUDING trashed).
+  // A trashed row stays in the map until purgeTrashed(Before) hard-deletes it,
+  // so this.rows.has() correctly counts trashed profiles as "existing" (their
+  // blob must survive) and only a hard-purged id is absent (a true orphan).
+  findExistingProfileIds(ids: string[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    for (const id of ids) if (this.rows.has(id)) found.add(id);
+    return Promise.resolve(found);
+  }
 }

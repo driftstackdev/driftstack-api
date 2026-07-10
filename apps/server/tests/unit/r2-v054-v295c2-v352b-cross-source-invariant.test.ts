@@ -111,7 +111,7 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
 
   // ─── R2 interface 6-method surface ───────────────────────────
 
-  it('CRITICAL R2 interface has 6 fields — headObject + putObject + deleteObject + presignPut + presignGet + readonly bucket. The surface is what services-under-r2 consume (deleteObject added 2026-06-25 for purged-profile sealed-blob cleanup).', () => {
+  it('CRITICAL R2 interface has 7 fields — headObject + putObject + deleteObject + presignPut + presignGet + listObjects + readonly bucket. The surface is what services-under-r2 consume (deleteObject added 2026-06-25 for purged-profile sealed-blob cleanup; listObjects added 2026-07-10 / #158 for the orphan-blob reaper).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/r2.ts'));
     expect(p).toMatch(/export interface R2 \{/);
     expect(p).toMatch(/headObject\(key: string\): Promise<\{ exists: boolean \}>;/);
@@ -119,6 +119,9 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
     expect(p).toMatch(/deleteObject\(key: string\): Promise<void>;/);
     expect(p).toMatch(/presignPut\(args: \{/);
     expect(p).toMatch(/presignGet\(args: \{/);
+    expect(p).toMatch(
+      /listObjects\(prefix: string\): Promise<Array<\{ key: string; lastModified: Date \| null \}>>;/,
+    );
     expect(p).toMatch(/readonly bucket: string;/);
   });
 
@@ -190,6 +193,7 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
       deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve('https://example.com/put'),
       presignGet: () => Promise.resolve('https://example.com/get'),
+      listObjects: () => Promise.resolve([]),
     };
     const check = r2ReadinessCheck(r2Stub);
     expect(check.name).toBe('r2');
@@ -209,6 +213,7 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
       deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve(''),
       presignGet: () => Promise.resolve(''),
+      listObjects: () => Promise.resolve([]),
     };
     const check = r2ReadinessCheck(r2Stub);
     await check.fn();
@@ -227,6 +232,7 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
       deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve(''),
       presignGet: () => Promise.resolve(''),
+      listObjects: () => Promise.resolve([]),
     };
     const check = r2ReadinessCheck(r2Stub, 'custom-health-key');
     await check.fn();

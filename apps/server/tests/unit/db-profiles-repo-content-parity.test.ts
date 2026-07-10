@@ -41,11 +41,12 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed ProfilesRepo \(V-081\)\./);
   });
 
-  it('imports: and/count/desc/eq/lt/or from drizzle-orm; 6 service types (ListProfilesArgs/Page + NewProfileInput + ProfileRecord + ProfileUpdates + ProfilesRepo); Database; profiles schema', () => {
+  it('imports: and/count/desc/eq/inArray/lt/or from drizzle-orm; 6 service types (ListProfilesArgs/Page + NewProfileInput + ProfileRecord + ProfileUpdates + ProfilesRepo); Database; profiles schema', () => {
     // doc-150 item 6 — `sql` joined the drizzle import for the
     // COALESCE(sum(...))::bigint storage-total aggregate in sumSizeBytesByAccount.
+    // #158 — `inArray` joined for findExistingProfileIds' WHERE id IN (...) batch.
     expect(body).toMatch(
-      /import \{ and, count, desc, eq, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
+      /import \{ and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import \{ isUniqueViolation \} from '\.\.\/lib\/pg-error\.js';/);
     expect(body).toMatch(

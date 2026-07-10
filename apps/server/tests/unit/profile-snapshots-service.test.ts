@@ -183,6 +183,8 @@ function makeRepos(
     restore: () => Promise.resolve('not_found' as const),
     purgeTrashedBefore: () => Promise.resolve([]),
     purgeTrashed: () => Promise.resolve(false),
+    findExistingProfileIds: (ids) =>
+      Promise.resolve(new Set(ids.filter((id) => profiles.some((p) => p.id === id)))),
     touch: () => Promise.resolve(),
     recordSave: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),

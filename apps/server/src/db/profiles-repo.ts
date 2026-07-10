@@ -1,6 +1,6 @@
 // Drizzle-backed ProfilesRepo (V-081).
 
-import { and, count, desc, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { StorageQuotaExceededError } from '../lib/errors.js';
 import type {
@@ -407,6 +407,21 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       .where(and(isNotNull(profiles.deletedAt), lt(profiles.deletedAt, cutoff)))
       .returning({ id: profiles.id });
     return result.map((r) => r.id);
+  }
+
+  // #158 — which of `ids` still have a profiles row. Deliberately NOT filtered
+  // by notDeleted or by account: a trashed (soft-deleted) profile still holds a
+  // row + wrapped DEK + sealed blob until the retention purge hard-deletes it,
+  // so its blob must survive; only a HARD-deleted row means the blob is a true
+  // orphan. Single WHERE id IN (...) select of just the id column. An empty
+  // input short-circuits (an empty IN () is a degenerate/invalid SQL clause).
+  async findExistingProfileIds(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set<string>();
+    const rows = await this.database.db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(inArray(profiles.id, ids));
+    return new Set(rows.map((r) => r.id));
   }
 
   // Anti-abuse companion (2026-06-17) — user-initiated permanent delete of ONE

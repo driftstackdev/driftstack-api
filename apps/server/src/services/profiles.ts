@@ -170,6 +170,17 @@ export interface ProfilesRepo {
    * profile-trash-purge sweep.
    */
   purgeTrashedBefore(cutoff: Date): Promise<string[]>;
+  /**
+   * #158 — which of `ids` still have a profiles row (ANY account), INCLUDING
+   * soft-deleted / trashed rows. Only a HARD-deleted (purged) profile is truly
+   * gone; a trashed profile still holds a row + DEK + sealed blob until purge,
+   * so its blob must NOT be reaped. Backs the R2 orphan-blob reaper (GDPR
+   * erasure backstop): a `profiles/<uuid>.sealed` object whose uuid is NOT in
+   * the returned set has no DB row at all and is a genuine orphan (the
+   * purge-vs-late-save-back race). Batched as a single `WHERE id IN (...)`
+   * select of the id column; the returned set is exactly the ids found.
+   */
+  findExistingProfileIds(ids: string[]): Promise<Set<string>>;
   /** Anti-abuse — user-initiated permanent delete of ONE trashed profile (frees
    *  a cap slot immediately). Owner-scoped + trashed-only; true if purged. */
   purgeTrashed(args: { id: string; accountId: string }): Promise<boolean>;

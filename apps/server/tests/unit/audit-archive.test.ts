@@ -37,6 +37,7 @@ function fakeR2(uploads: UploadedObject[]): R2 {
     deleteObject: () => Promise.resolve(),
     presignPut: () => Promise.resolve('https://presigned.test/put'),
     presignGet: () => Promise.resolve('https://presigned.test/get'),
+    listObjects: () => Promise.resolve([]),
   };
 }
 
@@ -252,6 +253,7 @@ describe('AuditArchiveService.archiveTable — R2 upload failure is data-loss-sa
       deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve('https://presigned.test/put'),
       presignGet: () => Promise.resolve('https://presigned.test/get'),
+      listObjects: () => Promise.resolve([]),
     };
     const svc = new AuditArchiveService({
       r2: throwingR2,
@@ -332,6 +334,7 @@ describe('AuditArchiveService.archiveAll — orchestrates five tables', () => {
       deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve('https://presigned.test/put'),
       presignGet: () => Promise.resolve('https://presigned.test/get'),
+      listObjects: () => Promise.resolve([]),
     };
     const svc = new AuditArchiveService({
       r2: flakyR2,

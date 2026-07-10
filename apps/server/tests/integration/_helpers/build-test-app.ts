@@ -614,6 +614,17 @@ function makeR2Fake(): { r2: R2; store: R2FakeStore } {
       const ttl = expiresIn ?? 900;
       return Promise.resolve(`https://r2-fake.test/${bucket}/${key}?ttl=${ttl}`);
     },
+    listObjects(prefix) {
+      // The fake store doesn't track lastModified; report null so the
+      // orphan-reaper never treats a fake object as reap-eligible (null =
+      // always-skip, its safest default). Dedicated reaper tests inject their
+      // own R2 fake with real timestamps.
+      const out: Array<{ key: string; lastModified: Date | null }> = [];
+      for (const key of objects.keys()) {
+        if (key.startsWith(prefix)) out.push({ key, lastModified: null });
+      }
+      return Promise.resolve(out);
+    },
   };
   return { r2, store: { objects, putCalls } };
 }

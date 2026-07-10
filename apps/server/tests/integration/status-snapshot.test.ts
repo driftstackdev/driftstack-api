@@ -39,6 +39,10 @@ function fakeR2(): R2 & { calls: PutCall[] } {
     async presignGet() {
       return 'http://test/get';
     },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async listObjects() {
+      return [];
+    },
   };
 }
 

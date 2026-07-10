@@ -22,6 +22,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
   type S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -63,6 +64,20 @@ export interface R2 {
    * object (recordings download in the GUI).
    */
   presignGet(args: { key: string; expiresIn?: number }): Promise<string>;
+  /**
+   * List every object under `prefix` (paginating internally), returning each
+   * key + its lastModified timestamp. Used by the profile-blob orphan reaper
+   * (GDPR erasure backstop, #158) to enumerate `profiles/*.sealed` objects and
+   * cross-check them against the DB.
+   *
+   * ⚠️ Requires the `s3:ListBucket` permission on the bucket — a scoped R2 token
+   * granted only object read/write (Get/Put/Delete) will make this throw
+   * `AccessDenied`. That may need an ops grant on the credentials. This method
+   * deliberately does NOT swallow that error: it lets it propagate so the caller
+   * (the reaper) can catch + log it once and no-op the pass rather than the
+   * failure being silently absorbed here.
+   */
+  listObjects(prefix: string): Promise<Array<{ key: string; lastModified: Date | null }>>;
   /** Bucket the client is configured against. */
   readonly bucket: string;
 }
@@ -147,6 +162,41 @@ function createR2ClientForBucket(config: R2Config, bucket: string): R2 {
     async presignGet({ key, expiresIn = 900 }) {
       const cmd = new GetObjectCommand({ Bucket: bucket, Key: key });
       return getSignedUrl(s3, cmd, { expiresIn });
+    },
+
+    async listObjects(prefix) {
+      // Paginate ListObjectsV2 via ContinuationToken until IsTruncated is false.
+      // Bounded defensively at ~50k keys so a pathological bucket can't make the
+      // reaper's pass run unbounded / OOM; if the cap is hit we stop + log (the
+      // profiles/ prefix should never approach this — one key per profile).
+      const MAX_KEYS = 50_000;
+      const out: Array<{ key: string; lastModified: Date | null }> = [];
+      let continuationToken: string | undefined;
+      // AccessDenied (missing s3:ListBucket) is NOT caught here — it propagates so
+      // the reaper catches + logs it once and no-ops the pass (see the interface
+      // JSDoc). Swallowing it here would hide a missing-permission from the caller.
+      do {
+        const resp = await s3.send(
+          new ListObjectsV2Command({
+            Bucket: bucket,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+          }),
+        );
+        for (const item of resp.Contents ?? []) {
+          if (item.Key === undefined) continue;
+          out.push({ key: item.Key, lastModified: item.LastModified ?? null });
+          if (out.length >= MAX_KEYS) break;
+        }
+        if (out.length >= MAX_KEYS) {
+          console.warn(
+            `[r2] listObjects('${prefix}') hit the ${MAX_KEYS.toString()}-key cap; results truncated`,
+          );
+          break;
+        }
+        continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
+      } while (continuationToken !== undefined);
+      return out;
     },
   };
 }

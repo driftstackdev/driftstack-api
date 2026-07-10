@@ -155,6 +155,7 @@ import {
   registerAgentSessionOrphanReapJob,
 } from '../services/agent-session-orphan-sweeper.js';
 import { WorkerDisconnectReaperService } from '../services/worker-disconnect-reaper.js';
+import { ProfileBlobOrphanSweeperService } from '../services/profile-blob-orphan-sweeper.js';
 import {
   SessionDurationSweeperService,
   enqueueNextSessionDurationSweep,
@@ -1231,6 +1232,24 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextAgentSessionOrphanReap({ scheduledJobs: scheduledJobsService });
+  // #158 — R2 orphaned profile sealed-blob reaper (GDPR erasure backstop). A
+  // purge can hard-delete a profile row + its R2 blob while a just-closed
+  // session's final save-back PUT is still in flight; the harness's direct PUT
+  // then recreates `profiles/<uuid>.sealed` with NO DB row — a permanent orphan
+  // no other sweep reaps. This 6h self-arming sweep lists profiles/*.sealed and
+  // deletes any object OLDER than a 2h grace (safely exceeds the max presigned
+  // save-back PUT TTL) whose uuid has no profiles row at all (trashed-inclusive
+  // existence check → a trashed profile's blob survives). Gated on R2 being
+  // configured; needs the s3:ListBucket permission — a missing grant makes each
+  // pass a logged no-op (never a crash). Uses the same profilesRepo wired above.
+  if (r2 !== null) {
+    const profileBlobOrphanSweeper = new ProfileBlobOrphanSweeperService({
+      r2,
+      profiles: profilesRepo,
+      logger,
+    });
+    profileBlobOrphanSweeper.start();
+  }
   // Profile-backed sessions (file 57): decode the master key once at boot (null
   // when PROFILE_MASTER_KEY unset → profiles created without a DEK; feature inert).
   const profileMasterKeyBuf =

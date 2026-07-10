@@ -62,7 +62,7 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     );
   });
 
-  it('R2 interface: 5 methods (incl. deleteObject) + readonly bucket', () => {
+  it('R2 interface: 6 methods (incl. deleteObject + #158 listObjects) + readonly bucket', () => {
     expect(body).toMatch(/export interface R2 \{/);
     expect(body).toMatch(/headObject\(key: string\): Promise<\{ exists: boolean \}>;/);
     expect(body).toMatch(
@@ -74,6 +74,10 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     );
     expect(body).toMatch(
       /presignGet\(args: \{ key: string; expiresIn\?: number \}\): Promise<string>;/,
+    );
+    // #158 — orphan-blob reaper enumeration surface (requires s3:ListBucket).
+    expect(body).toMatch(
+      /listObjects\(prefix: string\): Promise<Array<\{ key: string; lastModified: Date \| null \}>>;/,
     );
     expect(body).toMatch(/readonly bucket: string;/);
   });
@@ -153,9 +157,9 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     expect(body).toMatch(/return `avatars\/\$\{accountId\}\.\$\{ext\}`;/);
   });
 
-  it('imports: @aws-sdk/client-s3 (S3Client + 4 commands incl. DeleteObjectCommand) + @aws-sdk/s3-request-presigner', () => {
+  it('imports: @aws-sdk/client-s3 (S3Client + 5 commands incl. DeleteObjectCommand + #158 ListObjectsV2Command) + @aws-sdk/s3-request-presigner', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*S3Client,\s*\n?\s*HeadObjectCommand,\s*\n?\s*PutObjectCommand,\s*\n?\s*GetObjectCommand,\s*\n?\s*DeleteObjectCommand,\s*\n?\s*type S3ClientConfig,\s*\n?\s*\} from '@aws-sdk\/client-s3';/,
+      /import \{\s*\n?\s*S3Client,\s*\n?\s*HeadObjectCommand,\s*\n?\s*PutObjectCommand,\s*\n?\s*GetObjectCommand,\s*\n?\s*DeleteObjectCommand,\s*\n?\s*ListObjectsV2Command,\s*\n?\s*type S3ClientConfig,\s*\n?\s*\} from '@aws-sdk\/client-s3';/,
     );
     expect(body).toMatch(/import \{ getSignedUrl \} from '@aws-sdk\/s3-request-presigner';/);
   });

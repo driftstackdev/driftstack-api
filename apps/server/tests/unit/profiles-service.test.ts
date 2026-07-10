@@ -187,6 +187,8 @@ function makeRepo(
       rows.splice(i, 1);
       return Promise.resolve(true);
     },
+    findExistingProfileIds: (ids) =>
+      Promise.resolve(new Set(ids.filter((id) => rows.some((r) => r.id === id)))),
     touch: () => Promise.resolve(),
     recordSave: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),

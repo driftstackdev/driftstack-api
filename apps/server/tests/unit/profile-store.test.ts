@@ -25,6 +25,7 @@ function fakeR2(putObject: R2['putObject']): R2 {
     headObject: vi.fn(),
     presignPut: vi.fn(),
     presignGet: vi.fn(),
+    listObjects: vi.fn(),
   };
 }
 
