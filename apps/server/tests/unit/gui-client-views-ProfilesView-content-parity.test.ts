@@ -184,8 +184,18 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   });
 
   it("W624 stop-actually-stops: boundSession resolves the profile's session by KIND (agt_ → agent, else live driver session) so an agent-backed profile counts as running AND its Stop closes the right thing — handleStop calls agentSessions.close(agt_) / sessions.destroy(ses_). The founder-hit bug: launch-with-LiveKit bound an agt_ id that the driver-only lookup never matched, so the profile showed idle and Stop no-op'd (the agent session kept running).", () => {
+    // audit #4 perf refactor (behaviour byte-identical): the O(profiles ×
+    // sessions) per-call scan is now a `boundSessionByProfileId` useMemo that
+    // builds the by-kind index ONCE per relevant-input change (bindings +
+    // activeSessions + agentSessions + agentSessionsLoaded), and `boundSession`
+    // is a thin O(1) accessor reading `map.get(id) ?? null`. Both the index
+    // builder (where the KIND-resolution now lives) and the accessor are pinned.
     expect(body).toMatch(
-      /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{/,
+      /const boundSessionByProfileId = useMemo<\s*\n?\s*Map<string, \{ id: string; kind: 'agent' \| 'driver' \}>\s*\n?\s*>\(\(\) => \{/,
+    );
+    expect(body).toMatch(/\}, \[bindings, activeSessions, agentSessions, agentSessionsLoaded\]\);/);
+    expect(body).toMatch(
+      /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{\s*\n?\s*return boundSessionByProfileId\.get\(profileId\) \?\? null;\s*\n?\s*\}/,
     );
     // agt_ resolves to agent kind, but the binding now SELF-HEALS (founder
     // 2026-06-18 "always says open session even on long-expired/failed"): once
@@ -193,8 +203,16 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // only if it's still present AND not closed; before load it trusts the
     // binding so a transient fetch miss doesn't flip a live profile to idle.
     expect(body).toContain("if (sid.startsWith('agt_')) {");
-    expect(body).toContain("if (!agentSessionsLoaded) return { id: sid, kind: 'agent' };");
-    expect(body).toContain("if (live === undefined || live.status === 'closed') return null;");
+    // audit #4 perf refactor: the per-profile resolution now lives inside the
+    // `boundSessionByProfileId` useMemo builder (a Map indexed once per
+    // relevant-input change), so "count it running" is `out.set(...); continue`
+    // and "read idle" is `continue` — semantically identical to the old scan
+    // body's `return { id, kind }` / `return null`. Trust-the-binding before the
+    // first successful list fetch is preserved.
+    expect(body).toMatch(
+      /if \(!agentSessionsLoaded\) \{\s*\n?\s*out\.set\(binding\.profileId, \{ id: sid, kind: 'agent' \}\);\s*\n?\s*continue;\s*\n?\s*\}/,
+    );
+    expect(body).toContain("if (live === undefined || live.status === 'closed') continue;");
     // LIVENESS re-base (W2679, founder 2026-06-18): an active-but-DEAD session
     // (worker crashed / never came up) stays `active` for up to the 12h reaper
     // cap, so the list/status check alone isn't enough. The SERVER now re-bases
@@ -204,7 +222,13 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     //   • liveness PRESENT && fresh === false → stale beat → idle (null).
     //   • liveness PRESENT && fresh === true, or liveness ABSENT (unknown →
     //     trust the binding) → running. Never treat absent as dead.
-    expect(body).toContain('if (live.liveness !== undefined && !live.liveness.fresh) return null;');
+    // Stale-beat → idle: `continue` skips the profile in the Map builder (was
+    // `return null` in the old per-call scan); a fresh/absent beat falls through
+    // to `out.set(...)` = running, per the W2679 contract above.
+    expect(body).toContain('if (live.liveness !== undefined && !live.liveness.fresh) continue;');
+    expect(body).toMatch(
+      /if \(live\.liveness !== undefined && !live\.liveness\.fresh\) continue;\s*\n?\s*out\.set\(binding\.profileId, \{ id: sid, kind: 'agent' \}\);\s*\n?\s*continue;/,
+    );
     // The dead page-state probe heuristic must be fully removed.
     expect(body).not.toMatch(/SESSION_LIVENESS_GRACE_MS/);
     expect(body).not.toMatch(/sessionLiveness/);
@@ -216,9 +240,16 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toContain('...(s.liveness !== undefined ? { liveness: s.liveness } : {})');
     // The driver branch keeps the live-list cross-check but now also EXCLUDES
     // terminal driver sessions (destroyed/errored) so a dead session lingering
-    // in the list reads as idle instead of offering "Open session".
+    // in the list reads as idle instead of offering "Open session". audit #4
+    // pre-indexes this into a `liveDriverIds` Set built ONCE (the terminal-state
+    // exclusion is the Set-membership predicate), and the per-binding loop does
+    // an O(1) `has(sid)` check — semantically identical to the old per-call
+    // `activeSessions.some((s) => s.id === sid && !terminal)` scan.
     expect(body).toMatch(
-      /return activeSessions\.some\(\s*\n?\s*\(s\) => s\.id === sid && s\.status !== 'destroyed' && s\.status !== 'errored',\s*\n?\s*\)\s*\n?\s*\? \{ id: sid, kind: 'driver' \}\s*\n?\s*: null;/,
+      /const liveDriverIds = new Set<string>\(\);\s*\n?\s*for \(const s of activeSessions\) \{\s*\n?\s*if \(s\.status !== 'destroyed' && s\.status !== 'errored'\) liveDriverIds\.add\(s\.id\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(liveDriverIds\.has\(sid\)\) out\.set\(binding\.profileId, \{ id: sid, kind: 'driver' \}\);/,
     );
     // handleStop closes by kind (the actual fix for "destroy keeps running").
     expect(body).toMatch(

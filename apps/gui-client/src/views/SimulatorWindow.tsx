@@ -2605,15 +2605,12 @@ export function SimulatorWindow(): JSX.Element {
   // SLICE 3 — drive the Recording pane's live elapsed readout. The capture loop
   // re-renders via addFrame each second, but only when a frame is actually
   // grabbed (videoWidth>0). Tick a clock independently while recording so the
-  // elapsed time advances even before/while the stream warms up; the interval
-  // is armed only while a recording is active and torn down on stop/unmount.
+  // elapsed time advances even before/while the stream warms up. The interval
+  // and its 1Hz re-render are gated on the Recording pane being OPEN (the
+  // elapsed readout only renders inside activePane==='recording') so an
+  // off-screen REC counter doesn't re-render the whole monolith every second —
+  // the gated effect is declared below, after activePane / recordingPaneActive.
   const [recNow, setRecNow] = useState<number>(() => Date.now());
-  useEffect(() => {
-    if (recordingId === null) return;
-    setRecNow(Date.now());
-    const t = window.setInterval(() => setRecNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [recordingId]);
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
@@ -3006,6 +3003,22 @@ export function SimulatorWindow(): JSX.Element {
   // keeps the effect from re-arming when an UNRELATED pane switch happens.
   const cookiesPaneActive = activePane === 'cookies';
   const downloadsPaneActive = activePane === 'downloads';
+  const recordingPaneActive = activePane === 'recording';
+
+  // SLICE 3 (perf) — the live elapsed clock ticks (and forces a 1Hz re-render of
+  // this ~7000-line window) ONLY while a recording is active AND its pane is on
+  // screen. The elapsedMs readout renders exclusively inside activePane===
+  // 'recording', so a background REC counter has nothing to update — gating both
+  // conditions keeps the monolith from re-rendering every second behind a closed
+  // pane. On entering the pane (or starting a recording) recNow is reset to
+  // now() so the readout isn't stale from before the interval was armed. Placed
+  // here (after activePane) to avoid a TDZ on recordingPaneActive.
+  useEffect(() => {
+    if (recordingId === null || !recordingPaneActive) return;
+    setRecNow(Date.now());
+    const t = window.setInterval(() => setRecNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [recordingId, recordingPaneActive]);
 
   // Browser mode (founder 2026-06-21, greenlit) — a native GUI URL bar in the
   // toolbar instead of relying on the rendered iOS-Safari chrome (which the page

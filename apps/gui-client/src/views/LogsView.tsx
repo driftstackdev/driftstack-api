@@ -8,7 +8,7 @@
 // updates. No SDK / network — the data source is lib/log-buffer, not the
 // control plane, so this view works regardless of API connection state.
 
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import {
   clearLogEntries,
@@ -55,6 +55,31 @@ const LEVEL_PILL: Record<LogLevel, string> = {
   log: 'bg-surface-inset text-ink-muted',
   debug: 'bg-surface-inset text-ink-muted',
 };
+
+// A single log line, memoised on the immutable `entry`. The 500-entry ring
+// buffer appends in place and re-renders the whole list on every new line;
+// without this memo each append reconstructs all 500 <li> nodes. Entries are
+// immutable (stable `e.id`), so on an append only the new row renders and the
+// unchanged 499 hit the memo. `entry` is the sole prop — no inline handlers or
+// derived objects — so referential stability holds. `LEVEL_PILL` is a
+// module-level constant referenced directly, not a prop.
+const LogRow = memo(function LogRow({ entry }: { entry: LogEntry }): JSX.Element {
+  return (
+    <li className="flex items-start gap-3 px-4 py-2">
+      <span className="shrink-0 pt-0.5 text-ink-muted" title={new Date(entry.ts).toISOString()}>
+        {new Date(entry.ts).toLocaleTimeString()}
+      </span>
+      <span
+        className={`shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide ${LEVEL_PILL[entry.level]}`}
+      >
+        {entry.level}
+      </span>
+      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-ink-primary">
+        {entry.text}
+      </span>
+    </li>
+  );
+});
 
 export function LogsView(): JSX.Element {
   // The buffer mutates IN PLACE (getLogEntries returns the live array, not a
@@ -261,22 +286,7 @@ export function LogsView(): JSX.Element {
         >
           <ul className="divide-y divide-surface-divider mono text-xs">
             {filtered.map((e) => (
-              <li key={e.id} className="flex items-start gap-3 px-4 py-2">
-                <span
-                  className="shrink-0 pt-0.5 text-ink-muted"
-                  title={new Date(e.ts).toISOString()}
-                >
-                  {new Date(e.ts).toLocaleTimeString()}
-                </span>
-                <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide ${LEVEL_PILL[e.level]}`}
-                >
-                  {e.level}
-                </span>
-                <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-ink-primary">
-                  {e.text}
-                </span>
-              </li>
+              <LogRow key={e.id} entry={e} />
             ))}
           </ul>
         </div>

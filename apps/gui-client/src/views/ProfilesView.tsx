@@ -979,57 +979,97 @@ export function ProfilesView({
   // live list; agent sessions are treated as running from the binding (no
   // cheap list endpoint — and agentSessions.close is idempotent, so a Stop
   // on an already-reaped agent session is a harmless cleanup).
-  function boundSession(profileId: string): { id: string; kind: 'agent' | 'driver' } | null {
-    const binding = bindings.find((b) => b.profileId === profileId);
-    const sid = binding?.currentSessionId ?? null;
-    if (sid === null) return null;
-    if (sid.startsWith('agt_')) {
-      // Self-heal stale agent bindings to idle (founder 2026-06-18: "always says
-      // open session even on long-expired/failed sessions"). Once the live
-      // agent-session list has loaded, a bound session reads as running ONLY if
-      // it's still present AND not closed (expired/failed → closed or gone).
-      // Before the first successful list fetch, trust the binding so a transient
-      // fetch miss doesn't flip a genuinely-live session to idle.
-      if (!agentSessionsLoaded) return { id: sid, kind: 'agent' };
-      const live = agentSessions.find((s) => s.id === sid);
-      if (live === undefined || live.status === 'closed') return null;
-      // LIVENESS (W2679, founder 2026-06-18) — an `active`-but-DEAD session
-      // (worker crashed / never came up) stays `active` for up to the 12h reaper
-      // cap, so the list/status check above isn't enough. The server now re-bases
-      // the worker's liveness onto the fleet heartbeat and reports it inline on
-      // each list entry, replacing the old client-side page-state probe:
-      //   • liveness PRESENT && fresh === true → a recent beat trusts the worker
-      //     state (any state) → RUNNING.
-      //   • liveness PRESENT && fresh === false → the owning node's beat is stale
-      //     (worker silent) → treat as IDLE (return null) so the row shows Launch.
-      //   • liveness ABSENT (no fleet control plane / no beat yet) → UNKNOWN →
-      //     trust the binding (RUNNING), mirroring the agentSessionsLoaded
-      //     pattern, so a transient miss never flips a genuinely-running profile
-      //     to idle. NEVER treat absent as dead.
-      if (live.liveness !== undefined && !live.liveness.fresh) return null;
-      return { id: sid, kind: 'agent' };
+  // Perf (audit #4) — boundSession/boundSessionStartedAt were each doing a
+  // bindings.find + activeSessions/agentSessions scan on EVERY call, and both
+  // are invoked per-profile across the filter, comparator, grid, table, and
+  // liveCount paths → O(profiles × sessions) per render pass. Pre-index the
+  // bound session (and its start time) by profileId ONCE per relevant-input
+  // change so every call site is an O(1) Map read. Only profiles with a binding
+  // land in the map; a miss reads as idle (null), byte-identical to the old
+  // bindings.find(...) === undefined path. The per-profile decision logic is
+  // preserved verbatim below.
+  const boundSessionByProfileId = useMemo<
+    Map<string, { id: string; kind: 'agent' | 'driver' }>
+  >(() => {
+    // Index the session lists once so the per-binding resolution is O(1), not a
+    // fresh scan per profile.
+    const agentById = new Map<string, (typeof agentSessions)[number]>();
+    for (const s of agentSessions) agentById.set(s.id, s);
+    const liveDriverIds = new Set<string>();
+    for (const s of activeSessions) {
+      if (s.status !== 'destroyed' && s.status !== 'errored') liveDriverIds.add(s.id);
     }
-    // A driver session reads as running only if it's live AND not in a terminal
-    // state — an errored/destroyed session lingering in the list must read idle
-    // (otherwise the row offers "Open session" on a dead session).
-    return activeSessions.some(
-      (s) => s.id === sid && s.status !== 'destroyed' && s.status !== 'errored',
-    )
-      ? { id: sid, kind: 'driver' }
-      : null;
+    const out = new Map<string, { id: string; kind: 'agent' | 'driver' }>();
+    for (const binding of bindings) {
+      const sid = binding.currentSessionId ?? null;
+      if (sid === null) continue;
+      if (sid.startsWith('agt_')) {
+        // Self-heal stale agent bindings to idle (founder 2026-06-18: "always
+        // says open session even on long-expired/failed sessions"). Once the
+        // live agent-session list has loaded, a bound session reads as running
+        // ONLY if it's still present AND not closed (expired/failed → closed or
+        // gone). Before the first successful list fetch, trust the binding so a
+        // transient fetch miss doesn't flip a genuinely-live session to idle.
+        if (!agentSessionsLoaded) {
+          out.set(binding.profileId, { id: sid, kind: 'agent' });
+          continue;
+        }
+        const live = agentById.get(sid);
+        if (live === undefined || live.status === 'closed') continue;
+        // LIVENESS (W2679, founder 2026-06-18) — an `active`-but-DEAD session
+        // (worker crashed / never came up) stays `active` for up to the 12h
+        // reaper cap, so the list/status check above isn't enough. The server
+        // now re-bases the worker's liveness onto the fleet heartbeat and
+        // reports it inline on each list entry, replacing the old client-side
+        // page-state probe:
+        //   • liveness PRESENT && fresh === true → a recent beat trusts the
+        //     worker state (any state) → RUNNING.
+        //   • liveness PRESENT && fresh === false → the owning node's beat is
+        //     stale (worker silent) → treat as IDLE (skip) so the row shows
+        //     Launch.
+        //   • liveness ABSENT (no fleet control plane / no beat yet) → UNKNOWN →
+        //     trust the binding (RUNNING), mirroring the agentSessionsLoaded
+        //     pattern, so a transient miss never flips a genuinely-running
+        //     profile to idle. NEVER treat absent as dead.
+        if (live.liveness !== undefined && !live.liveness.fresh) continue;
+        out.set(binding.profileId, { id: sid, kind: 'agent' });
+        continue;
+      }
+      // A driver session reads as running only if it's live AND not in a
+      // terminal state — an errored/destroyed session lingering in the list must
+      // read idle (otherwise the row offers "Open session" on a dead session).
+      if (liveDriverIds.has(sid)) out.set(binding.profileId, { id: sid, kind: 'driver' });
+    }
+    return out;
+  }, [bindings, activeSessions, agentSessions, agentSessionsLoaded]);
+
+  // Worktimer — pre-index the ISO start time of each profile's bound running
+  // session so boundSessionStartedAt is an O(1) Map read too. Driver sessions
+  // carry created_at in activeSessions; agent sessions come from the separately-
+  // fetched agentSessions list (absent until/unless that fetch succeeds → the
+  // timer just doesn't show, never errors).
+  const boundStartedAtByProfileId = useMemo<Map<string, string>>(() => {
+    const driverStart = new Map<string, string>();
+    for (const s of activeSessions) driverStart.set(s.id, s.created_at);
+    const agentStart = new Map<string, string>();
+    for (const s of agentSessions) agentStart.set(s.id, s.created_at);
+    const out = new Map<string, string>();
+    for (const [profileId, bound] of boundSessionByProfileId) {
+      const started =
+        bound.kind === 'driver' ? driverStart.get(bound.id) : agentStart.get(bound.id);
+      if (started !== undefined) out.set(profileId, started);
+    }
+    return out;
+  }, [boundSessionByProfileId, activeSessions, agentSessions]);
+
+  /** Returns the currently-active session for a profile, or null when the
+   *  profile is idle — an O(1) read of the memoized index above. */
+  function boundSession(profileId: string): { id: string; kind: 'agent' | 'driver' } | null {
+    return boundSessionByProfileId.get(profileId) ?? null;
   }
 
-  // Worktimer — the ISO start time of a profile's bound running session, or
-  // null. Driver sessions carry created_at in activeSessions; agent sessions
-  // come from the separately-fetched agentSessions list (absent until/unless
-  // that fetch succeeds → the timer just doesn't show, never errors).
   function boundSessionStartedAt(profileId: string): string | null {
-    const bound = boundSession(profileId);
-    if (bound === null) return null;
-    if (bound.kind === 'driver') {
-      return activeSessions.find((s) => s.id === bound.id)?.created_at ?? null;
-    }
-    return agentSessions.find((s) => s.id === bound.id)?.created_at ?? null;
+    return boundStartedAtByProfileId.get(profileId) ?? null;
   }
 
   // W624 — re-open the live stream for an already-running agent session

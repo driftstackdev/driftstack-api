@@ -9,7 +9,15 @@
 // the same paused transition, so the toast copy stays truthful today
 // and gains meaning at go-live.
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 
 export interface Toast {
@@ -97,8 +105,10 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
     };
   }, []);
 
+  const value = useMemo(() => ({ push }), [push]);
+
   return (
-    <ToastContext.Provider value={{ push }}>
+    <ToastContext.Provider value={value}>
       {children}
       {toasts.length > 0 && (
         <div

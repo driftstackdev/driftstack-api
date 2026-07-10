@@ -12,7 +12,7 @@
 // fleet control plane). The banner reflects /version `agent_execution`: 'live'
 // when the fleet path is wired (prod), 'simulated' only on a stub deployment.
 
-import { Fragment, memo, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AgentIntent,
   AgentIntentResult,
@@ -209,6 +209,12 @@ export function AgentChatView({
   // as a slide-over so a narrow window can still open it (it used to vanish with
   // no affordance). Ignored at lg+ where the pane is a permanent column.
   const [liveOpen, setLiveOpen] = useState(false);
+  // Perf — stable onClose so the memoized LiveAutomationPanel (which owns a live
+  // WebRTC video subtree) doesn't reconcile on every composer keystroke. This
+  // component owns the composer `draft` state and re-renders ~10+/sec while the
+  // user types; without a stable handler an inline `() => setLiveOpen(false)`
+  // would defeat the panel's React.memo. setLiveOpen is a stable state setter → no deps.
+  const closeLiveView = useCallback(() => setLiveOpen(false), []);
 
   // Save-as-recipe — snapshot this chat's executed steps into a replayable
   // recipe. The SDK recipes.create has had zero GUI callers until now; this
@@ -878,7 +884,7 @@ export function AgentChatView({
       <LiveAutomationPanel
         sessionId={chat.session?.id ?? null}
         open={liveOpen}
-        onClose={() => setLiveOpen(false)}
+        onClose={closeLiveView}
       />
 
       {/* Save-as-recipe dialog */}
@@ -984,7 +990,12 @@ type WatchState =
  * / keystrokes on this video never reach the device. The agent is the sole
  * driver; the user only watches and cannot interfere by clicking the view.
  */
-function LiveAutomationPanel({
+// Perf — memoized so a composer-keystroke re-render of AgentChatView (which owns
+// the `draft` state and re-renders ~10+/sec while typing) does NOT reconcile this
+// live-video subtree (LiveKit room + poll + AgentSessionPanel). All three props
+// are referentially stable across such a parent render: `sessionId` and `open` are
+// primitives; `onClose` is a useCallback (closeLiveView) with no deps.
+const LiveAutomationPanel = memo(function LiveAutomationPanel({
   sessionId,
   open,
   onClose,
@@ -1195,7 +1206,7 @@ function LiveAutomationPanel({
       </div>
     </aside>
   );
-}
+});
 
 /** finding #2 — classify a live-view token-fetch failure into the right WATCH
  *  STATE, not just copy. The dominant failure here is the 503/DriverNotIntegrated a
