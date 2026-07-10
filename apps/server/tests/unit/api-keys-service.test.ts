@@ -135,6 +135,46 @@ function makeRepo(initial: ApiKeyRow[] = []): {
   return { repo, state };
 }
 
+/**
+ * A Postgres unique-violation error shaped like what postgres-js throws
+ * (SQLSTATE 23505 + constraint_name), so `isUniqueViolation(err,
+ * 'api_keys_prefix_unique')` in the service accepts it. Models the
+ * key_prefix birthday-collision on the `api_keys_prefix_unique` index.
+ */
+function prefixUniqueViolation(): Error {
+  return Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: '23505',
+    constraint_name: 'api_keys_prefix_unique',
+  });
+}
+
+/**
+ * Build a repo whose insertApiKey throws a `key_prefix` 23505 on its
+ * first `failTimes` calls, then succeeds. Records how many insert calls
+ * were made so a test can assert the retry loop actually re-minted.
+ */
+function makeRepoWithInsertFailures(
+  failTimes: number,
+  initial: ApiKeyRow[] = [],
+): {
+  repo: ApiKeysRepo;
+  state: { insertCalls: number };
+} {
+  const { repo: base } = makeRepo(initial);
+  const state = { insertCalls: 0 };
+  const repo: ApiKeysRepo = {
+    ...base,
+    insertApiKey: (input: NewApiKeyInput) => {
+      state.insertCalls += 1;
+      if (state.insertCalls <= failTimes) {
+        return Promise.reject(prefixUniqueViolation());
+      }
+      return base.insertApiKey(input);
+    },
+  };
+  return { repo, state };
+}
+
 function makeAudit(): {
   audit: CustomerAuditEmitter;
   calls: Array<{ action: string; accountId: string; targetResourceId?: string | null }>;
@@ -286,6 +326,36 @@ describe('V-553.B-20 ApiKeysService.create', () => {
     expect(result.plaintext).toMatch(/^ds_live_/);
     expect(state.rows[0]?.accountId).toBe('acc_owner');
   });
+
+  // key_prefix has a UNIQUE index; a rare (~40-bit birthday-bound) prefix
+  // collision throws SQLSTATE 23505 on insert. The mint must regenerate a
+  // fresh key and retry (bounded) rather than surface an opaque 500.
+  it('regenerates the key and retries on a key_prefix 23505, returning a key (no 500)', async () => {
+    const { repo, state } = makeRepoWithInsertFailures(1); // first insert collides, second succeeds
+    const svc = new ApiKeysService(repo);
+    const result = await svc.create(ctxWith(['account_owner'], { tier: 'solo_manual' }), {
+      name: 'mine',
+      scopes: ['read'],
+      expiresAt: null,
+    });
+    expect(result.plaintext).toMatch(/^ds_live_/);
+    expect(result.row.keyPrefix).toMatch(/^ds_live_/);
+    expect(state.insertCalls).toBe(2); // proves the collision was retried, not surfaced
+  });
+
+  it('rethrows the 23505 after exhausting the retry bound when every insert collides', async () => {
+    const { repo, state } = makeRepoWithInsertFailures(Number.POSITIVE_INFINITY);
+    const svc = new ApiKeysService(repo);
+    await expect(
+      svc.create(ctxWith(['account_owner'], { tier: 'solo_manual' }), {
+        name: 'mine',
+        scopes: ['read'],
+        expiresAt: null,
+      }),
+    ).rejects.toMatchObject({ code: '23505' });
+    // Bounded — it does not loop forever (MAX_KEY_MINT_ATTEMPTS = 3).
+    expect(state.insertCalls).toBe(3);
+  });
 });
 
 describe('V-553.B-20 ApiKeysService.list', () => {
@@ -368,6 +438,19 @@ describe('V-553.B-20 ApiKeysService.rotate', () => {
     const { repo } = makeRepo([makeKey({ id: 'k_old' })]);
     const svc = new ApiKeysService(repo);
     await expect(svc.rotate(ctxWith(['read']), 'k_old')).rejects.toThrow(/account_owner/);
+  });
+
+  // Same key_prefix 23505 birthday-collision guard as create() — rotation
+  // mints a brand-new key row, so it must regenerate + retry too.
+  it('regenerates the new key and retries on a key_prefix 23505 during rotation', async () => {
+    const { repo, state } = makeRepoWithInsertFailures(1, [
+      makeKey({ id: 'k_old', accountId: 'acc_1' }),
+    ]);
+    const svc = new ApiKeysService(repo);
+    const result = await svc.rotate(ctxWith(['account_owner']), 'k_old');
+    expect(result.newRow.id).not.toBe('k_old');
+    expect(result.plaintext).toMatch(/^ds_(live|test)_/);
+    expect(state.insertCalls).toBe(2); // first insert collided, second minted
   });
 });
 

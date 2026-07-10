@@ -161,6 +161,13 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
+/** Clamp `value` into `[lo, hi]`. Mirror of the helper in touch.ts. */
+function clip(value: number, lo: number, hi: number): number {
+  if (value < lo) return lo;
+  if (value > hi) return hi;
+  return value;
+}
+
 /**
  * Sample a dwell-time multiplier from the requested shape. Mean is 1.0
  * across all shapes; only the distribution shape differs.
@@ -321,12 +328,31 @@ export function generateRegionAwareTouchEvent(
     seed: `${seed}:region${regionIndex}`,
   });
 
+  // Clip the FINAL emitted coordinates to the real element bounds (opts.bounds),
+  // not the widened regionBounds. The Math.max(1, …) floor above can inflate a
+  // region past the element edge for sub-~2px targets (e.g. a 1px-wide element
+  // whose 0.36px region is floored to 1px): generateTouchEvent then clips only
+  // to that inflated region, so start/end/sample points can land OUTSIDE the
+  // element — the exact "touch off the targeted element" tell this module
+  // exists to avoid. For normal-size targets the region already sits fully
+  // inside the element, so this clip is a no-op and the region-aware jitter is
+  // preserved unchanged.
+  const xLo = opts.bounds.x;
+  const xHi = opts.bounds.x + opts.bounds.width;
+  const yLo = opts.bounds.y;
+  const yHi = opts.bounds.y + opts.bounds.height;
+  const clipToElement = (p: { x: number; y: number }): { x: number; y: number } => ({
+    x: clip(p.x, xLo, xHi),
+    y: clip(p.y, yLo, yHi),
+  });
+
   // Apply dwell-shape multiplier on top of V-530.A's per-class jitter.
   const dwellShape = DWELL_SHAPES[opts.elementClass];
   const dwellMultiplier = sampleDwellMultiplier(rng, dwellShape);
   const scaledDuration = Math.max(1, baseTouch.durationMs * dwellMultiplier);
   const scaledSamples = baseTouch.samples.map((s) => ({
     ...s,
+    ...clipToElement(s),
     tMs: s.tMs * dwellMultiplier,
   }));
 
@@ -335,6 +361,8 @@ export function generateRegionAwareTouchEvent(
     // Bounds stay the original element's bounds — the start/end coords
     // are inside the region but bounds describes the targeted element.
     bounds: opts.bounds,
+    start: clipToElement(baseTouch.start),
+    end: clipToElement(baseTouch.end),
     samples: scaledSamples,
     durationMs: scaledDuration,
     selectedRegionIndex: regionIndex,

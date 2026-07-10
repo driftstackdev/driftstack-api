@@ -108,6 +108,29 @@ describe('V-530.C region-aware touch generator — properties', () => {
     }
   });
 
+  it('tiny (<2px) target keeps every emitted point within opts.bounds (region-floor clip)', () => {
+    // A sub-~2px element: the Math.max(1, …) region-bounds floor inflates the
+    // region past the element edge, so the underlying generator (clipping only
+    // to the widened region) could emit start/end/sample coords OUTSIDE the
+    // element. Assert the FINAL emitted points are clipped to opts.bounds.
+    const tinyBounds: ElementBounds = { x: 300, y: 400, width: 1, height: 1 };
+    for (const klass of ALL_CLASSES) {
+      for (const seed of seeds(64, `tiny-${klass}`)) {
+        const ev = generateRegionAwareTouchEvent({
+          elementClass: klass,
+          bounds: tinyBounds,
+          seed,
+        });
+        for (const point of [ev.start, ev.end, ...ev.samples]) {
+          expect(point.x).toBeGreaterThanOrEqual(tinyBounds.x);
+          expect(point.x).toBeLessThanOrEqual(tinyBounds.x + tinyBounds.width);
+          expect(point.y).toBeGreaterThanOrEqual(tinyBounds.y);
+          expect(point.y).toBeLessThanOrEqual(tinyBounds.y + tinyBounds.height);
+        }
+      }
+    }
+  });
+
   it('selectedRegionIndex is a valid index into CLICK_REGIONS for that class', () => {
     for (const klass of ALL_CLASSES) {
       for (const seed of seeds(32, `rindex-${klass}`)) {

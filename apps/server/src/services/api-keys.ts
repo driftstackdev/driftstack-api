@@ -26,6 +26,21 @@ import {
   hasScope,
   requireScope as throwIfMissingScope,
 } from '../lib/errors-helpers.js';
+import { isUniqueViolation } from '../lib/pg-error.js';
+
+/**
+ * api_keys.key_prefix carries a UNIQUE index (`api_keys_prefix_unique`).
+ * The prefix is derived from a freshly-generated random key, so a
+ * collision is astronomically rare (~40-bit birthday bound) but not
+ * impossible — and when it happens Postgres raises SQLSTATE 23505 on the
+ * insert. Left uncaught, that surfaces as an opaque 500 on a perfectly
+ * valid mint/rotate request. Since the colliding value is one we generate
+ * (not caller-supplied), the correct response is to regenerate the key and
+ * retry, bounded, rather than translate the error — mirroring the
+ * regenerate-on-collision shape used elsewhere for control-plane-owned
+ * unique values.
+ */
+const MAX_KEY_MINT_ATTEMPTS = 3;
 
 /**
  * Gate interface for blocking API key issuance on pending legal
@@ -148,6 +163,46 @@ export class ApiKeysService {
     private readonly accountAudit: CustomerAuditEmitter | null = null,
   ) {}
 
+  /**
+   * Generate a fresh plaintext key + hash + prefix and insert the row,
+   * retrying on a `key_prefix` unique-violation (SQLSTATE 23505). The
+   * prefix is a random-derived value we own, so a collision is resolved
+   * by regenerating and re-inserting rather than by surfacing the DB
+   * error. Bounded to MAX_KEY_MINT_ATTEMPTS; if every attempt collides
+   * the last 23505 is rethrown (turns into a clean retryable error rather
+   * than an infinite loop). Any non-collision insert error propagates
+   * immediately.
+   *
+   * `insertFields` supplies the non-key columns (accountId, name, scopes,
+   * expiresAt, provenance); this method fills keyPrefix + keyHash.
+   */
+  private async mintAndInsertWithRetry(
+    env: 'test' | 'live',
+    insertFields: Omit<NewApiKeyInput, 'keyPrefix' | 'keyHash'>,
+  ): Promise<{ row: ApiKeyRow; plaintext: string }> {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < MAX_KEY_MINT_ATTEMPTS; attempt += 1) {
+      const plaintext = generateApiKey(env);
+      const keyHash = await hashApiKey(plaintext);
+      const keyPrefix = keyPrefixFromPlaintext(plaintext);
+      try {
+        const row = await this.repo.insertApiKey({ ...insertFields, keyPrefix, keyHash });
+        return { row, plaintext };
+      } catch (err) {
+        if (isUniqueViolation(err, 'api_keys_prefix_unique')) {
+          // Prefix collision — regenerate a fresh key and retry.
+          lastErr = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    // Exhausted the bound with a prefix collision every time. Astronomically
+    // unlikely; rethrow the last 23505 so the caller gets an error rather
+    // than a silently-wrong result.
+    throw lastErr;
+  }
+
   async create(
     ctx: AccountContext,
     input: CreateApiKeyServiceInput,
@@ -204,16 +259,13 @@ export class ApiKeysService {
     }
 
     const env = tier === 'free' ? 'test' : 'live';
-    const plaintext = generateApiKey(env);
-    const keyHash = await hashApiKey(plaintext);
-    const keyPrefix = keyPrefixFromPlaintext(plaintext);
-
-    const row = await this.repo.insertApiKey({
+    // Insert with a bounded regenerate-retry on a key_prefix collision
+    // (23505) so a rare prefix birthday-clash is resolved by minting a
+    // fresh key rather than surfacing an opaque 500.
+    const { row, plaintext } = await this.mintAndInsertWithRetry(env, {
       accountId,
       name: input.name,
       scopes: input.scopes,
-      keyPrefix,
-      keyHash,
       expiresAt: input.expiresAt,
       provenance: input.provenance ?? null,
     });
@@ -322,17 +374,14 @@ export class ApiKeysService {
       );
     }
 
-    // Mint the new key.
+    // Mint the new key. Bounded regenerate-retry on a key_prefix collision
+    // (23505) so a rare prefix birthday-clash doesn't fail rotation with an
+    // opaque 500 — the key is simply re-minted.
     const env = tier === 'free' ? 'test' : 'live';
-    const plaintext = generateApiKey(env);
-    const keyHash = await hashApiKey(plaintext);
-    const keyPrefix = keyPrefixFromPlaintext(plaintext);
-    const newRow = await this.repo.insertApiKey({
+    const { row: newRow, plaintext } = await this.mintAndInsertWithRetry(env, {
       accountId,
       name: opts.name ?? oldKey.name,
       scopes: oldKey.scopes,
-      keyPrefix,
-      keyHash,
       expiresAt: oldKey.expiresAt, // preserve original expiry (may be null)
     });
 

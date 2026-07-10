@@ -307,14 +307,27 @@ export function generateScrollVelocityProfile(
   // decayRate=0.1 is still ~4800 px/s at 5 s), which would otherwise read
   // as an unnatural abrupt mid-flight stop — a behavioural tell. When the
   // last sampled tick is still above the rest threshold, append a final
-  // tick AT rest (velocity 0) carrying the remaining coast distance:
-  //   ∫ v(τ)dτ from t_cut to ∞ = v(t_cut) / decayRate
-  // (the exact tail of the exponential), so the cumulative distance stays
-  // physically consistent and the profile always terminates at rest.
+  // tick AT rest (velocity 0) carrying the remaining coast distance.
+  //
+  // ⚠️ Off-by-one integral: the in-loop tick emitted at time t_cut already
+  // covers the interval [t_cut, t_cut + tickSec] (its deltaPx is
+  // ∫ v(τ)dτ from t_cut to t_cut + tickSec — see the loop body above). So
+  // the settling tail must resume at t_cut + tickSec, NOT at t_cut, or the
+  // interval [t_cut, t_cut + tickSec] is double-counted and totalDistancePx /
+  // cumulativePx are inflated by exactly that last in-loop tick's distance.
+  // The correct, NON-overlapping tail is:
+  //   ∫ v(τ)dτ from t_cut + tickSec to ∞ = v(t_cut + tickSec) / decayRate
+  //     = v(t_cut) * exp(-decayRate * tickSec) / decayRate
+  // Combined with the in-loop sum (which covers [0, t_cut + tickSec]) this
+  // yields the exact analytic total ∫ v(τ)dτ from 0 to ∞ = v0 / decayRate,
+  // with no overlap — so the emitted distance is exact, not merely smaller.
   const lastTick = ticks[ticks.length - 1];
   if (lastTick !== undefined && lastTick.velocityPxPerSec >= REST_VELOCITY_THRESHOLD_PX_PER_SEC) {
     // decayRate is floored to >= 0.1 above, so this division is always safe.
-    const tailDistanceAbs = lastTick.velocityPxPerSec / decayRate;
+    // Advance the tail's start bound by one tick (× exp(-decayRate * tickSec))
+    // so it begins exactly where the last in-loop tick's integral ended.
+    const velocityAfterLastTick = lastTick.velocityPxPerSec * Math.exp(-decayRate * tickSec);
+    const tailDistanceAbs = velocityAfterLastTick / decayRate;
     const tailDelta = sign * tailDistanceAbs;
     cumulativePx += tailDelta;
     ticks.push({

@@ -73,7 +73,9 @@ describe('W459.B packages/recapture-automation/src/mock.ts content parity', () =
     expect(body).toMatch(
       /getRun\(runId: string\): Promise<RecaptureRun \| null> \{\s*\n?\s*return Promise\.resolve\(this\.runs\.get\(runId\) \?\? null\);\s*\n?\s*\}/,
     );
-    expect(body).toMatch(/const limit = Math\.min\(opts\.limit \?\? 50, 200\);/);
+    // Clamped: capped at 200 AND floored at 1 (a negative/zero limit no longer
+    // yields a wrong-sized slice + a bogus non-null cursor).
+    expect(body).toMatch(/const limit = Math\.max\(1, Math\.min\(opts\.limit \?\? 50, 200\)\);/);
     expect(body).toMatch(
       /entries\.sort\(\(a, b\) => \{\s*\n?\s*if \(a\.createdAtMs !== b\.createdAtMs\) return b\.createdAtMs - a\.createdAtMs;\s*\n?\s*return a\.id\.localeCompare\(b\.id\);\s*\n?\s*\}\);/,
     );

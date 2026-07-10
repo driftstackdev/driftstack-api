@@ -127,6 +127,19 @@ describe('MockRecaptureService', () => {
     for (const id of ids2) expect(ids1.has(id)).toBe(false);
   });
 
+  it('clamps a negative limit to a correct page + correct (null-when-done) cursor', async () => {
+    const svc = new MockRecaptureService();
+    await svc.triggerRecapture({
+      trigger: 'manual_request',
+      archetypeId: 'arch_0',
+      baselineVersion: BASELINE,
+      targetVersion: BASELINE,
+    });
+    const page = await svc.listRuns({ limit: -1 });
+    expect(page.data).toHaveLength(1);
+    expect(page.nextCursor).toBeNull();
+  });
+
   it('terminates pagination when the cursor row is no longer in the filtered set (no infinite loop)', async () => {
     // Regression: when the cursor's row drops out of the filtered set (e.g.
     // its status changed between pages so it no longer matches a status

@@ -160,10 +160,15 @@ describe('W453.C packages/behavioural-simulation/src/dwell.ts content parity', (
 
   it("Dwell-multiplier application: durationMs scaled by multiplier (max(1, ...)); per-sample tMs scaled; bounds restored to original element's bounds in result framing pinned 'Bounds stay the original element's bounds — the start/end coords are inside the region but bounds describes the targeted element.'", () => {
     expect(body).toMatch(
-      /const scaledDuration = Math\.max\(1, baseTouch\.durationMs \* dwellMultiplier\);\s*\n?\s*const scaledSamples = baseTouch\.samples\.map\(\(s\) => \(\{\s*\n?\s*\.\.\.s,\s*\n?\s*tMs: s\.tMs \* dwellMultiplier,\s*\n?\s*\}\)\);/,
+      /const scaledDuration = Math\.max\(1, baseTouch\.durationMs \* dwellMultiplier\);\s*\n?\s*const scaledSamples = baseTouch\.samples\.map\(\(s\) => \(\{\s*\n?\s*\.\.\.s,\s*\n?\s*\.\.\.clipToElement\(s\),\s*\n?\s*tMs: s\.tMs \* dwellMultiplier,\s*\n?\s*\}\)\);/,
     );
     expect(body).toMatch(
       /\/\/ Bounds stay the original element's bounds — the start\/end coords\s*\n?\s*\/\/ are inside the region but bounds describes the targeted element\.\s*\n?\s*bounds: opts\.bounds,/,
+    );
+    // The emitted start/end/samples are CLIPPED to opts.bounds (the real element),
+    // not just the region-widened bounds — so a sub-2px target can't escape.
+    expect(body).toMatch(
+      /start: clipToElement\(baseTouch\.start\),\s*\n?\s*end: clipToElement\(baseTouch\.end\),/,
     );
     expect(body).toMatch(
       /return \{\s*\n?\s*\.\.\.baseTouch,[\s\S]*?samples: scaledSamples,\s*\n?\s*durationMs: scaledDuration,\s*\n?\s*selectedRegionIndex: regionIndex,\s*\n?\s*dwellShape,\s*\n?\s*dwellMultiplier,\s*\n?\s*\};/,

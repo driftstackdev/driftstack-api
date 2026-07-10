@@ -133,7 +133,10 @@ export class MockRecaptureService implements RecaptureService {
   }
 
   listRuns(opts: ListRunsOpts = {}): Promise<ListRunsPage> {
-    const limit = Math.min(opts.limit ?? 50, 200);
+    // Clamp to a sane range: a negative/zero limit would otherwise slice
+    // wrong (e.g. `slice(0, -1)` drops the last row) AND emit a bogus
+    // non-null nextCursor, and an oversized one blows the page cap.
+    const limit = Math.max(1, Math.min(opts.limit ?? 50, 200));
     let entries = Array.from(this.runs.values());
     if (opts.archetypeId !== undefined) {
       entries = entries.filter((r) => r.archetypeId === opts.archetypeId);

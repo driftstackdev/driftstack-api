@@ -406,6 +406,58 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     expect(profile.totalDistancePx).toBeCloseTo(Math.abs(last.cumulativePx), 9);
   });
 
+  it('settling tail is the EXACT analytic integral — no off-by-one tick overlap', () => {
+    // A flick whose decay is slow enough that the 5s MAX_DURATION cap truncates
+    // the loop BEFORE the rest threshold, so the settling tail runs. Explicit
+    // v0/decayRate + tickIntervalMs make the total analytically computable.
+    //
+    // The emitted total distance must equal the exact analytic integral of the
+    // whole decaying flick from t=0 to infinity:
+    //   ∫ v0·exp(-decay·τ) dτ, 0→∞ = v0 / decayRate
+    // The in-loop ticks integrate [0, t_cut + tickSec] and the settling tail
+    // must integrate [t_cut + tickSec, ∞) — with NO overlap. The prior bug
+    // started the tail at t_cut, double-counting the last in-loop tick's
+    // interval [t_cut, t_cut + tickSec] and inflating the total by exactly that
+    // tick's distance. Asserting EQUALITY with v0/decayRate (not just "< old
+    // value") proves the overlap is gone and the integral is exact.
+    const v0 = 8000;
+    const decayRate = 0.1;
+    const profile = generateScrollVelocityProfile({
+      direction: 'down',
+      elementClass: 'scroll-container',
+      initialVelocityPxPerSec: v0,
+      decayRate,
+      tickIntervalMs: 16,
+      seed: 'analytic-tail',
+    });
+    // Confirm the tail actually ran (loop truncated by MAX_DURATION, not rest):
+    // v(5s) = 8000·exp(-0.1·5) ≈ 4852 px/s, well above the 5 px/s rest threshold.
+    const last = profile.ticks[profile.ticks.length - 1];
+    expect(last.velocityPxPerSec).toBe(0); // appended settling tick is at rest
+    const secondToLast = profile.ticks[profile.ticks.length - 2];
+    expect(secondToLast.velocityPxPerSec).toBeGreaterThan(/* rest threshold */ 5);
+
+    // EXACT total: v0 / decayRate = 8000 / 0.1 = 80000 px. Telescoping the
+    // per-tick integrals + the corrected tail collapses to this closed form.
+    const expectedTotalPx = v0 / decayRate;
+    expect(profile.totalDistancePx).toBeCloseTo(expectedTotalPx, 6);
+    expect(profile.totalDistancePx).toBeCloseTo(Math.abs(last.cumulativePx), 9);
+
+    // Guard against the specific regression: the OLD (buggy) tail started at
+    // t_cut, so the total was inflated by exactly the last in-loop tick's
+    // distance (v0/decay · (exp(-decay·t_cut) − exp(-decay·(t_cut+tickSec)))).
+    // Recompute that overlap and assert the emitted total is NOT the old,
+    // inflated value — i.e. the correct total is strictly less by that amount.
+    const tickSec = 16 / 1000;
+    const tCutSec = secondToLast.tMs / 1000;
+    const lastInLoopTickDistance =
+      (v0 / decayRate) *
+      (Math.exp(-decayRate * tCutSec) - Math.exp(-decayRate * (tCutSec + tickSec)));
+    const oldBuggyTotal = expectedTotalPx + lastInLoopTickDistance;
+    expect(oldBuggyTotal - profile.totalDistancePx).toBeCloseTo(lastInLoopTickDistance, 6);
+    expect(profile.totalDistancePx).toBeLessThan(oldBuggyTotal);
+  });
+
   it('a high-v0 profile across element classes always ends at rest', () => {
     for (const klass of ALL_CLASSES) {
       const profile = generateScrollVelocityProfile({
