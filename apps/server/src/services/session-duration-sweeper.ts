@@ -174,14 +174,38 @@ export interface RegisterSessionDurationSweepJobOpts {
  * the bootstrap-on-restart enqueue would ever fire). Because a single locked
  * executor processes this job, one handler run produces exactly one next
  * enqueue, so skipping dedup here can't fan out into duplicate chains.
+ *
+ * Chain survival: the re-arm must run even if `tickOnce` throws. If it did
+ * not, a throw would leave no re-arm, the poller would retry the job, and once
+ * `maxAttempts` is exhausted the job is markFailed with NO pending sweep row —
+ * the self-re-arming chain is then dead until a process restart and NO free
+ * session over its cap is ever auto-destroyed again (every lapsed free session
+ * pins its fleet slot forever). We therefore SWALLOW a tick failure (logging
+ * it) and re-arm exactly once. We must NOT re-throw-and-re-arm-in-`finally`:
+ * the poller would retry the same job and each attempt would re-arm →
+ * duplicate parallel chains (fan-out). The tick is idempotent — the next tick
+ * re-lists any rows this one missed.
  */
 export function registerSessionDurationSweepJob(opts: RegisterSessionDurationSweepJobOpts): void {
   const now = opts.nowFn ?? Date.now;
   opts.scheduledJobs.register(SESSION_DURATION_SWEEP_JOB_TYPE, async (_job: ScheduledJobRow) => {
-    await opts.sweeper.tickOnce(new Date(now()));
+    try {
+      await opts.sweeper.tickOnce(new Date(now()));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      opts.logger.error?.(
+        {
+          component: 'session-duration-sweep',
+          event: 'session_duration_sweep_tick_failed',
+          err: { message },
+        },
+        'session-duration sweep tick failed — re-arming; rows retry next tick',
+      );
+    }
     // Re-arm path: dedup OFF — the in-flight (still-locked, not-yet-completed)
     // current job would otherwise be seen as a pending duplicate and block the
-    // re-enqueue, killing the chain. See JSDoc above.
+    // re-enqueue, killing the chain. See JSDoc above. This runs OUTSIDE the
+    // try above so a thrown tick still re-arms exactly once (chain survival).
     await enqueueNextSessionDurationSweep({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,

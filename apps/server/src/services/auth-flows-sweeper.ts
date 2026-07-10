@@ -84,8 +84,7 @@ export class AuthTokensSweeperService {
 /**
  * Wire the sweeper onto the ScheduledJobsService. Cadence: daily at
  * 03:00 UTC (low-traffic window; matches the audit-archive sweep
- * pattern). Re-arms itself after each successful run via
- * `enqueueNextAuthTokensSweep`.
+ * pattern). Re-arms itself after each run via `enqueueNextAuthTokensSweep`.
  *
  * The re-arm MUST enqueue with `dedup: false`. The poller
  * (scheduled-jobs.ts `runOne`) runs `await handler(job)` THEN
@@ -99,6 +98,18 @@ export class AuthTokensSweeperService {
  * single locked executor processes this job, one handler run produces
  * exactly one next enqueue, so skipping dedup here can't fan out into
  * duplicate chains. See `enqueueNextAuthTokensSweep` JSDoc.
+ *
+ * Chain survival: the re-arm must run even if `tickOnce` throws. If it did
+ * not, a throw would leave no re-arm, the poller would retry the job, and
+ * once `maxAttempts` is exhausted the job is markFailed with NO pending
+ * sweep row — the self-re-arming chain is then dead until a process restart
+ * and stale auth-flow tokens accumulate forever (the exact unbounded-row
+ * growth this sweeper exists to prevent). We therefore SWALLOW a tick
+ * failure (logging it) and re-arm exactly once. We must NOT
+ * re-throw-and-re-arm-in-`finally`: the poller would retry the same job and
+ * each attempt would re-arm → duplicate parallel chains (fan-out). The tick
+ * is idempotent (a DELETE of stale rows) — the next tick re-runs any kinds
+ * this one missed.
  */
 export interface RegisterAuthTokensSweepJobOpts {
   scheduledJobs: ScheduledJobsService;
@@ -111,21 +122,38 @@ export interface RegisterAuthTokensSweepJobOpts {
 export function registerAuthTokensSweepJob(opts: RegisterAuthTokensSweepJobOpts): void {
   const now = opts.nowFn ?? Date.now;
   opts.scheduledJobs.register(AUTH_TOKENS_SWEEP_JOB_TYPE, async (_job: ScheduledJobRow) => {
-    const tickStart = new Date(now());
-    const result = await opts.sweeper.tickOnce(tickStart);
-    opts.logger.info?.(
-      {
-        component: 'auth-tokens-sweep',
-        deleted_email_verify: result.deletedByKind.email_verify,
-        deleted_magic_link: result.deletedByKind.magic_link,
-        deleted_password_reset: result.deletedByKind.password_reset,
-        total_deleted: result.totalDeleted,
-      },
-      'auth-tokens sweep complete',
-    );
-    // Re-arm path: dedup OFF — the in-flight (still-locked, not-yet-completed)
-    // current job would otherwise be seen as a pending duplicate and block the
-    // re-enqueue, killing the chain. See JSDoc on RegisterAuthTokensSweepJobOpts.
+    try {
+      const result = await opts.sweeper.tickOnce(new Date(now()));
+      opts.logger.info?.(
+        {
+          component: 'auth-tokens-sweep',
+          deleted_email_verify: result.deletedByKind.email_verify,
+          deleted_magic_link: result.deletedByKind.magic_link,
+          deleted_password_reset: result.deletedByKind.password_reset,
+          total_deleted: result.totalDeleted,
+        },
+        'auth-tokens sweep complete',
+      );
+    } catch (err) {
+      // Swallow-not-rethrow: re-throwing would skip the re-arm below and, once
+      // the poller exhausts maxAttempts, kill the self-re-arming chain (see the
+      // "Chain survival" note on RegisterAuthTokensSweepJobOpts). Re-arming in a
+      // `finally` instead would let every poller retry re-arm → fan-out. We log
+      // and fall through to the single re-arm; the next tick re-runs the delete.
+      const message = err instanceof Error ? err.message : String(err);
+      opts.logger.error?.(
+        {
+          component: 'auth-tokens-sweep',
+          event: 'auth_tokens_sweep_tick_failed',
+          err: { message },
+        },
+        'auth-tokens sweep tick failed — re-arming; stale rows retry next tick',
+      );
+    }
+    // Re-arm path (ALWAYS runs, even after a swallowed tick failure): dedup OFF —
+    // the in-flight (still-locked, not-yet-completed) current job would otherwise
+    // be seen as a pending duplicate and block the re-enqueue, killing the chain.
+    // See JSDoc on RegisterAuthTokensSweepJobOpts.
     await enqueueNextAuthTokensSweep({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,

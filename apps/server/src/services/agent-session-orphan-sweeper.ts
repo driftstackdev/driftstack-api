@@ -104,19 +104,49 @@ export interface RegisterAgentSessionOrphanReapJobOpts {
   nowFn?: () => number;
 }
 
+/**
+ * Wire the reaper onto the ScheduledJobsService.
+ *
+ * Chain survival: the re-arm MUST run even if `tickOnce` throws. If it did not,
+ * a throw would leave no re-arm, the poller would retry the job, and once
+ * `maxAttempts` is exhausted the job is markFailed with NO pending reap row —
+ * the self-re-arming chain is then dead until a process restart and NO orphaned
+ * session is ever closed again (every worker that dies mid-session leaves a row
+ * stuck `active` forever, the exact "sessions still say open" symptom this
+ * backstop exists to cure). We therefore SWALLOW a tick failure (logging it) and
+ * re-arm exactly once. We must NOT re-throw-and-re-arm-in-`finally`: the poller
+ * would retry the same job and each attempt would re-arm → duplicate parallel
+ * chains (fan-out). The tick is idempotent (a bulk close by wall-clock cutoff) —
+ * the next tick re-reaps any rows this one missed.
+ *
+ * The re-arm enqueues with dedup OFF — the in-flight (still-locked,
+ * not-yet-completed) job would otherwise be seen as a pending duplicate and
+ * block the re-enqueue, killing the chain. See the profile-trash-purge JSDoc.
+ */
 export function registerAgentSessionOrphanReapJob(
   opts: RegisterAgentSessionOrphanReapJobOpts,
 ): void {
   const now = opts.nowFn ?? Date.now;
   opts.scheduledJobs.register(AGENT_SESSION_ORPHAN_REAP_JOB_TYPE, async (_job: ScheduledJobRow) => {
-    const result = await opts.sweeper.tickOnce(new Date(now()));
-    opts.logger.info?.(
-      { component: 'agent-session-orphan-reap', reaped: result.reaped },
-      'agent-session orphan reap sweep complete',
-    );
-    // Re-arm with dedup OFF — the in-flight (still-locked, not-yet-completed)
-    // job would otherwise be seen as a pending duplicate and block the
-    // re-enqueue, killing the chain. See the profile-trash-purge JSDoc.
+    try {
+      const result = await opts.sweeper.tickOnce(new Date(now()));
+      opts.logger.info?.(
+        { component: 'agent-session-orphan-reap', reaped: result.reaped },
+        'agent-session orphan reap sweep complete',
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      opts.logger.error?.(
+        {
+          component: 'agent-session-orphan-reap',
+          event: 'agent_session_orphan_reap_tick_failed',
+          err: { message },
+        },
+        'agent-session orphan reap tick failed — re-arming; rows retry next tick',
+      );
+    }
+    // Re-arm OUTSIDE the try so it ALWAYS runs — a swallowed tick failure above
+    // must never skip the re-arm (that is the chain-death this guard prevents).
     await enqueueNextAgentSessionOrphanReap({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,

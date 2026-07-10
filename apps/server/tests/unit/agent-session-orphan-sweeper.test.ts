@@ -6,7 +6,7 @@
 // (only `active` rows older than the cutoff are closed; recent + already-closed
 // rows are untouched).
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import {
@@ -14,8 +14,10 @@ import {
   AGENT_SESSION_ORPHAN_REAP_JOB_TYPE,
   enqueueNextAgentSessionOrphanReap,
   nextReapRunAt,
+  registerAgentSessionOrphanReapJob,
   resolveMaxLifetimeHours,
 } from '../../src/services/agent-session-orphan-sweeper.js';
+import type { Logger } from '../../src/lib/logger.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -141,6 +143,98 @@ describe('enqueueNextAgentSessionOrphanReap (bootstrap enqueue)', () => {
     expect(jobs[0]!.accountId).toBeNull();
     expect(jobs[0]!.runAt.toISOString()).toBe('2026-06-19T10:00:00.000Z');
     expect(jobs[0]!.dedupOnAccountAndType).toBe(true);
+  });
+});
+
+describe('agent-session orphan reap scheduling (chain survival + dedup rule)', () => {
+  function makeLogger(): Logger {
+    const noop = () => undefined;
+    return {
+      error: noop,
+      warn: noop,
+      info: noop,
+      debug: noop,
+      trace: noop,
+      fatal: noop,
+      child: function () {
+        return this;
+      },
+    } as unknown as Logger;
+  }
+
+  function fakeScheduledJobs() {
+    const enqueues: Array<{ jobType: string; dedup: boolean | undefined; runAt: Date }> = [];
+    let handler: ((job: unknown) => Promise<void>) | null = null;
+    const scheduledJobs = {
+      register: (_jobType: string, h: (job: unknown) => Promise<void>) => {
+        handler = h;
+      },
+      enqueue: (args: { jobType: string; dedupOnAccountAndType?: boolean; runAt: Date }) => {
+        enqueues.push({
+          jobType: args.jobType,
+          dedup: args.dedupOnAccountAndType,
+          runAt: args.runAt,
+        });
+        return Promise.resolve({ enqueued: true });
+      },
+    };
+    return { scheduledJobs, enqueues, invoke: () => handler!({}) };
+  }
+
+  it('the re-arm survives a tickOnce failure (chain never dies) and does not fan out', async () => {
+    const f = fakeScheduledJobs();
+    // A tick that always throws (e.g. reapOrphanedActiveBefore's DB statement
+    // fails) must not stop the self-re-arming chain: the handler swallows + re-arms
+    // exactly once. If it re-threw, the poller would retry to maxAttempts then
+    // markFailed with no pending reap — the chain would die and no orphaned
+    // session would ever close again. Captured mock (read off the local variable,
+    // not the object → no-unbound-method).
+    const tickOnce = vi.fn().mockRejectedValue(new Error('db down'));
+    const sweeper = { tickOnce } as unknown as AgentSessionOrphanSweeperService;
+
+    registerAgentSessionOrphanReapJob({
+      scheduledJobs: f.scheduledJobs as unknown as Parameters<
+        typeof registerAgentSessionOrphanReapJob
+      >[0]['scheduledJobs'],
+      sweeper,
+      logger: makeLogger(),
+      nowFn: () => new Date('2026-06-19T09:30:00.000Z').getTime(),
+    });
+
+    // The handler must resolve (not reject) despite the failing tick.
+    await expect(f.invoke()).resolves.toBeUndefined();
+    // Exactly one re-arm enqueued → chain alive, no duplicate parallel chains.
+    expect(f.enqueues).toHaveLength(1);
+    expect(f.enqueues[0]).toMatchObject({
+      jobType: AGENT_SESSION_ORPHAN_REAP_JOB_TYPE,
+      dedup: false,
+    });
+    expect(tickOnce).toHaveBeenCalledTimes(1);
+  });
+
+  it('on a clean tick, re-arms exactly once with dedup OFF', async () => {
+    const f = fakeScheduledJobs();
+    const tickOnce = vi.fn().mockResolvedValue({ reaped: 3 });
+    const sweeper = { tickOnce } as unknown as AgentSessionOrphanSweeperService;
+
+    registerAgentSessionOrphanReapJob({
+      scheduledJobs: f.scheduledJobs as unknown as Parameters<
+        typeof registerAgentSessionOrphanReapJob
+      >[0]['scheduledJobs'],
+      sweeper,
+      logger: makeLogger(),
+      nowFn: () => new Date('2026-06-19T09:30:00.000Z').getTime(),
+    });
+
+    await expect(f.invoke()).resolves.toBeUndefined();
+    expect(f.enqueues).toHaveLength(1);
+    expect(f.enqueues[0]).toMatchObject({
+      jobType: AGENT_SESSION_ORPHAN_REAP_JOB_TYPE,
+      dedup: false,
+    });
+    // Re-arm at the top of the next hour after 09:30.
+    expect(f.enqueues[0]!.runAt.toISOString()).toBe('2026-06-19T10:00:00.000Z');
+    expect(tickOnce).toHaveBeenCalledTimes(1);
   });
 });
 

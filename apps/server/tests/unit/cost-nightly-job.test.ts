@@ -374,6 +374,70 @@ describe('V-541.E registerCostNightlyJob — re-arm survives an in-flight job', 
   });
 });
 
+describe('V-541.E registerCostNightlyJob — re-arm survives a throwing tick (chain never dies)', () => {
+  // PINS THE CHAIN-SURVIVAL CONTRACT (same bug class as the crypto entitlement
+  // sweeper). If the tick's work throws (e.g. listAllAccountIds or
+  // dispatcher.evaluate fails), the handler must SWALLOW the error and still
+  // re-arm exactly once — otherwise the poller retries to maxAttempts, then
+  // markFailed leaves NO pending nightly row and cost alerting silently stops
+  // forever until a process restart. It must NOT re-throw-and-re-arm (fan-out).
+  // FAILS pre-fix (throw propagates, no re-arm); PASSES post-fix. Covers both
+  // the listAllAccountIds throw and the dispatcher.evaluate throw.
+  function makeThrowingStack(mode: 'accounts' | 'dispatcher'): {
+    fake: FakeScheduledJobs;
+    dispatcher: CostAlertDispatcher;
+    service: CostMonitoringService;
+    accounts: { listAllAccountIds: () => Promise<readonly string[]> };
+    logger: Logger;
+  } {
+    const service = new CostMonitoringService({
+      aggregator: { aggregateForAccount: () => Promise.resolve(EMPTY_USAGE) },
+      rates: RATES,
+      tierThresholds: { solo_manual: { softCents: 100, hardCents: 200 } },
+      resolveTier: () => Promise.resolve('solo_manual'),
+    });
+    const dispatcher = new CostAlertDispatcher({ service, sendAlert: () => Promise.resolve() });
+    if (mode === 'dispatcher') {
+      vi.spyOn(dispatcher, 'evaluate').mockRejectedValue(new Error('evaluate boom'));
+    }
+    const accounts = {
+      listAllAccountIds: (): Promise<readonly string[]> =>
+        mode === 'accounts' ? Promise.reject(new Error('list boom')) : Promise.resolve(['a', 'b']),
+    };
+    return { fake: new FakeScheduledJobs(), dispatcher, service, accounts, logger: makeLogger() };
+  }
+
+  async function runThrowingHandler(mode: 'accounts' | 'dispatcher'): Promise<FakeScheduledJobs> {
+    const stack = makeThrowingStack(mode);
+    registerCostNightlyJob({
+      scheduledJobs: stack.fake as unknown as ScheduledJobsService,
+      service: stack.service,
+      dispatcher: stack.dispatcher,
+      accounts: stack.accounts,
+      logger: stack.logger,
+      nowFn: () => new Date('2026-05-11T23:30:00Z').getTime(),
+    });
+    const handler = stack.fake.getHandler(COST_NIGHTLY_JOB_TYPE);
+    // The handler must RESOLVE (swallow) despite the throwing tick.
+    await expect(handler(FAKE_JOB)).resolves.toBeUndefined();
+    return stack.fake;
+  }
+
+  it('swallows a listAllAccountIds failure and re-arms exactly once (dedup:false)', async () => {
+    const fake = await runThrowingHandler('accounts');
+    expect(fake.pendingOfType(COST_NIGHTLY_JOB_TYPE)).toBe(1);
+    expect(fake.jobs).toHaveLength(1);
+    expect(fake.jobs[0]).toMatchObject({ jobType: COST_NIGHTLY_JOB_TYPE, accountId: null });
+  });
+
+  it('swallows a dispatcher.evaluate failure and re-arms exactly once (dedup:false)', async () => {
+    const fake = await runThrowingHandler('dispatcher');
+    expect(fake.pendingOfType(COST_NIGHTLY_JOB_TYPE)).toBe(1);
+    expect(fake.jobs).toHaveLength(1);
+    expect(fake.jobs[0]).toMatchObject({ jobType: COST_NIGHTLY_JOB_TYPE, accountId: null });
+  });
+});
+
 describe('C12 — cycleAnchorForTick evaluates the day that just ended', () => {
   const cycle = (iso: string): string => billingCycleFromDate(cycleAnchorForTick(new Date(iso)));
 

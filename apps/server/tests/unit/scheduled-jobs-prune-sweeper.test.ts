@@ -2,7 +2,7 @@
 // contract. Mirrors the session-duration-sweeper scheduling test (the re-arm
 // MUST survive an in-flight job via dedup:false, else the chain dies after one
 // run).
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type {
   EnqueueScheduledJobInput,
   ScheduledJobHandler,
@@ -28,7 +28,13 @@ const silentLogger = {
 
 class FakeScheduledJobs {
   handlers = new Map<string, ScheduledJobHandler>();
-  jobs: Array<{ jobType: string; accountId: string | null; runAt: Date; completed: boolean }> = [];
+  jobs: Array<{
+    jobType: string;
+    accountId: string | null;
+    runAt: Date;
+    dedup: boolean;
+    completed: boolean;
+  }> = [];
   register(jobType: string, handler: ScheduledJobHandler): void {
     this.handlers.set(jobType, handler);
   }
@@ -43,6 +49,7 @@ class FakeScheduledJobs {
       jobType: input.jobType,
       accountId: input.accountId,
       runAt: input.runAt,
+      dedup: input.dedupOnAccountAndType,
       completed: false,
     });
     return Promise.resolve({ enqueued: true });
@@ -115,5 +122,43 @@ describe('W441 scheduled_jobs prune sweeper', () => {
     expect(cutoffs[0]!.getTime()).toBe(NOW_MS - SCHEDULED_JOBS_PRUNE_RETENTION_MS);
     // re-armed a 2nd job despite the 1st still pending → chain survives.
     expect(scheduledJobs.pendingOfType(SCHEDULED_JOBS_PRUNE_JOB_TYPE)).toBe(2);
+  });
+
+  it('the re-arm survives a pruneFinished failure (chain never dies) and does not fan out', async () => {
+    const scheduledJobs = new FakeScheduledJobs();
+    // A prune that always throws (e.g. the DB delete fails) must not stop the
+    // self-re-arming chain: the handler swallows + re-arms exactly once. If it
+    // re-threw, the poller would retry to maxAttempts then markFailed with no
+    // pending prune — the chain would die and scheduled_jobs would grow forever.
+    // Captured mock (read off the local variable, not the object → no-unbound-
+    // method).
+    const pruneFinished = vi.fn().mockRejectedValue(new Error('db down'));
+    const repo = { pruneFinished } as unknown as ScheduledJobsRepo;
+    registerScheduledJobsPruneJob({
+      scheduledJobs: scheduledJobs as unknown as ScheduledJobsService,
+      repo,
+      logger: silentLogger,
+      nowFn: () => NOW_MS,
+    });
+    const handler = scheduledJobs.getHandler(SCHEDULED_JOBS_PRUNE_JOB_TYPE);
+
+    // The handler must resolve (not reject) despite the failing prune.
+    await expect(
+      handler({
+        id: 'job-1',
+        jobType: SCHEDULED_JOBS_PRUNE_JOB_TYPE,
+        accountId: null,
+        payload: {},
+        runAt: new Date(NOW_MS),
+        attempts: 1,
+        maxAttempts: 5,
+      }),
+    ).resolves.toBeUndefined();
+
+    // Exactly one re-arm enqueued → chain alive, no duplicate parallel chains.
+    expect(scheduledJobs.jobs).toHaveLength(1);
+    expect(scheduledJobs.jobs[0]!.jobType).toBe(SCHEDULED_JOBS_PRUNE_JOB_TYPE);
+    expect(scheduledJobs.jobs[0]!.dedup).toBe(false);
+    expect(pruneFinished).toHaveBeenCalledTimes(1);
   });
 });

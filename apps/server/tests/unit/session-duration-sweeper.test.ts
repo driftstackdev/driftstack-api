@@ -14,11 +14,12 @@
 // Time is driven by an injectable `nowFn` clock passed to tickOnce so no
 // real waits are needed.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   SESSION_DURATION_SWEEP_INTERVAL_MS,
   SESSION_DURATION_SWEEP_JOB_TYPE,
   SessionDurationSweeperService,
+  type DurationSweepTickResult,
   durationCutoffsFor,
   enqueueNextSessionDurationSweep,
   registerSessionDurationSweepJob,
@@ -343,5 +344,46 @@ describe('SessionDurationSweeperService — re-arm survives an in-flight job', (
     // (c) the chain re-armed: a SECOND sweep job exists despite the first
     //     still being in-flight.
     expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(2);
+  });
+
+  // PINS THE CHAIN-SURVIVES-A-THROWING-TICK CONTRACT. If tickOnce throws and
+  // the re-arm is skipped, the poller retries the job and, once maxAttempts is
+  // exhausted, markFailed leaves NO pending sweep row — the self-re-arming
+  // chain is dead until a process restart and free sessions over their cap are
+  // never auto-destroyed again. The handler MUST swallow the throw (log it) and
+  // re-arm exactly once. FAILS pre-fix (throw propagates out of the handler and
+  // no re-arm is enqueued); PASSES post-fix.
+  it('re-arms exactly once and does NOT reject when tickOnce throws', async () => {
+    const scheduledJobs = new FakeScheduledJobs() as unknown as ScheduledJobsService;
+    const fake = scheduledJobs as unknown as FakeScheduledJobs;
+
+    // Local vi.fn so we can assert call shape without referencing obj.method as
+    // a value (@typescript-eslint/unbound-method).
+    const tickOnce = vi.fn<() => Promise<DurationSweepTickResult>>(() =>
+      Promise.reject(new Error('boom: repo unavailable')),
+    );
+    const sweeper = { tickOnce } as unknown as SessionDurationSweeperService;
+
+    registerSessionDurationSweepJob({ scheduledJobs, sweeper, logger: silentLogger });
+
+    const handler = fake.getHandler(SESSION_DURATION_SWEEP_JOB_TYPE);
+
+    // The handler must RESOLVE even though tickOnce rejected (swallow-not-rethrow).
+    await expect(
+      handler({
+        id: 'job-throw',
+        jobType: SESSION_DURATION_SWEEP_JOB_TYPE,
+        accountId: null,
+        payload: {},
+        runAt: NOW,
+        attempts: 1,
+        maxAttempts: 5,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(tickOnce).toHaveBeenCalledTimes(1);
+    // Exactly one re-arm was enqueued (dedup:false) despite the throw — the
+    // chain survives. No bootstrap enqueue here, so exactly 1 pending.
+    expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(1);
   });
 });

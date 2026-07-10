@@ -3,7 +3,7 @@
 // Verifies the per-kind delete loop hits all three token tables with
 // the correct retention cutoffs.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AUTH_TOKENS_SWEEP_JOB_TYPE,
   AuthTokensSweeperService,
@@ -207,5 +207,47 @@ describe('AuthTokensSweeperService — re-arm survives an in-flight job', () => 
     // (c) the chain re-armed: a SECOND sweep job exists despite the first
     //     still being in-flight.
     expect(fake.pendingOfType(AUTH_TOKENS_SWEEP_JOB_TYPE)).toBe(2);
+  });
+
+  // PINS THE RE-ARM-SURVIVES-A-TICK-FAILURE CONTRACT (self-re-arming
+  // chain-death bug class). The poller runs `await handler(job)` then, on a
+  // throw, retries the job to maxAttempts and finally markFailed leaves NO
+  // pending sweep row — so if the handler re-threw instead of swallowing, the
+  // chain would DIE until a process restart and stale auth-flow tokens would
+  // accumulate forever. The handler must SWALLOW a tickOnce failure (log it)
+  // and re-arm exactly once (dedup:false) — never re-throw-and-re-arm-in-
+  // finally (the poller retry would re-arm each attempt → fan-out). FAILS
+  // pre-fix (throw skips the re-arm → 0 re-arms + handler rejects); PASSES
+  // post-fix (handler resolves + exactly one re-arm).
+  it('re-arms exactly once even when tickOnce throws (chain never dies, no fan-out)', async () => {
+    const scheduledJobs = new FakeScheduledJobs() as unknown as ScheduledJobsService;
+    const fake = scheduledJobs as unknown as FakeScheduledJobs;
+
+    // A tick that always rejects (e.g. the DELETE query fails). Captured in a
+    // LOCAL variable — read off the variable, not the object property, to avoid
+    // @typescript-eslint/unbound-method.
+    const tickOnce = vi.fn().mockRejectedValue(new Error('db down'));
+    const sweeper = { tickOnce } as unknown as AuthTokensSweeperService;
+
+    registerAuthTokensSweepJob({ scheduledJobs, sweeper, logger: silentLogger });
+
+    // No pending jobs yet — invoke the handler directly and assert it RESOLVES
+    // (does not reject) despite the failing tick.
+    const handler = fake.getHandler(AUTH_TOKENS_SWEEP_JOB_TYPE);
+    await expect(
+      handler({
+        id: 'job-1',
+        jobType: AUTH_TOKENS_SWEEP_JOB_TYPE,
+        accountId: null,
+        payload: {},
+        runAt: new Date('2026-05-20T03:00:00Z'),
+        attempts: 1,
+        maxAttempts: 5,
+      }),
+    ).resolves.toBeUndefined();
+
+    // Exactly one re-arm enqueued → chain alive, no duplicate parallel chains.
+    expect(tickOnce).toHaveBeenCalledTimes(1);
+    expect(fake.pendingOfType(AUTH_TOKENS_SWEEP_JOB_TYPE)).toBe(1);
   });
 });

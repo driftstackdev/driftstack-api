@@ -1,14 +1,16 @@
 // 2026-07-01 — account-deletion retention purge sweeper (GDPR Article 17
 // close-out). Mirrors profile-trash-purge-sweeper.test.ts's shape.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AccountDeletionPurgeRepo } from '../../src/services/account-deletion-purge-sweeper.js';
 import {
   AccountDeletionPurgeSweeperService,
+  registerAccountDeletionPurgeJob,
   nextAccountDeletionPurgeRunAt,
   ACCOUNT_DELETION_PURGE_JOB_TYPE,
 } from '../../src/services/account-deletion-purge-sweeper.js';
 import type { BYOKAnthropicService } from '../../src/services/byok-anthropic.js';
+import type { Logger } from '../../src/lib/logger.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -117,6 +119,80 @@ describe('nextAccountDeletionPurgeRunAt', () => {
 describe('job type', () => {
   it('is the stable account_deletion.purge identifier', () => {
     expect(ACCOUNT_DELETION_PURGE_JOB_TYPE).toBe('account_deletion.purge');
+  });
+});
+
+describe('account-deletion purge sweep scheduling (chain survival)', () => {
+  function fakeScheduledJobs() {
+    const enqueues: Array<{ jobType: string; dedup: boolean; runAt: Date }> = [];
+    let handler: ((job: unknown) => Promise<void>) | null = null;
+    const scheduledJobs = {
+      register: (_jobType: string, h: (job: unknown) => Promise<void>) => {
+        handler = h;
+      },
+      enqueue: (args: { jobType: string; dedupOnAccountAndType: boolean; runAt: Date }) => {
+        enqueues.push({
+          jobType: args.jobType,
+          dedup: args.dedupOnAccountAndType,
+          runAt: args.runAt,
+        });
+        return Promise.resolve({ enqueued: true });
+      },
+    };
+    return { scheduledJobs, enqueues, invoke: () => handler!({}) };
+  }
+
+  const NOW = new Date('2026-07-01T12:00:00.000Z');
+  const noopLogger = { info: () => {}, error: () => {} } as unknown as Logger;
+
+  it('the re-arm survives a tickOnce failure (chain never dies) and does not fan out', async () => {
+    const f = fakeScheduledJobs();
+    // A tick that always throws (e.g. the DB candidate query fails) must not stop
+    // the self-re-arming chain: the handler swallows + re-arms exactly once. If
+    // it re-threw, the poller would retry to maxAttempts then markFailed with no
+    // pending sweep — the chain would die and no deleted account's BYOK key would
+    // ever be purged again.
+    // Captured mock (read off the variable, not the object → no-unbound-method).
+    const tickOnce = vi.fn().mockRejectedValue(new Error('db down'));
+    const sweeper = { tickOnce } as unknown as AccountDeletionPurgeSweeperService;
+
+    registerAccountDeletionPurgeJob({
+      scheduledJobs: f.scheduledJobs as never,
+      sweeper,
+      logger: noopLogger,
+      nowFn: () => NOW.getTime(),
+    });
+
+    // The handler must resolve (not reject) despite the failing tick.
+    await expect(f.invoke()).resolves.toBeUndefined();
+    // Exactly one re-arm enqueued → chain alive, no duplicate parallel chains.
+    expect(f.enqueues).toHaveLength(1);
+    expect(f.enqueues[0]).toMatchObject({
+      jobType: ACCOUNT_DELETION_PURGE_JOB_TYPE,
+      dedup: false,
+    });
+    expect(tickOnce).toHaveBeenCalledTimes(1);
+  });
+
+  it('bootstrap-style handler re-arms with dedup OFF after a successful tick', async () => {
+    const f = fakeScheduledJobs();
+    const tickOnce = vi.fn().mockResolvedValue({ purged: 0 });
+    const sweeper = { tickOnce } as unknown as AccountDeletionPurgeSweeperService;
+
+    registerAccountDeletionPurgeJob({
+      scheduledJobs: f.scheduledJobs as never,
+      sweeper,
+      logger: noopLogger,
+      nowFn: () => NOW.getTime(),
+    });
+
+    await expect(f.invoke()).resolves.toBeUndefined();
+    expect(f.enqueues).toHaveLength(1);
+    expect(f.enqueues[0]).toMatchObject({
+      jobType: ACCOUNT_DELETION_PURGE_JOB_TYPE,
+      dedup: false,
+    });
+    expect(tickOnce).toHaveBeenCalledTimes(1);
   });
 });
 

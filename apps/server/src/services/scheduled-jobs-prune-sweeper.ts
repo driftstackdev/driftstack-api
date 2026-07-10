@@ -41,16 +41,39 @@ export interface RegisterScheduledJobsPruneJobOpts {
  * a pending duplicate, no-op, and the chain would die after one run. A single
  * locked executor processes this job, so one handler run → one next enqueue
  * (no fan-out).
+ *
+ * Chain survival: the re-arm must run even if the prune throws. If it did not,
+ * a throw would leave no re-arm, the poller would retry the job, and once
+ * `maxAttempts` is exhausted the job is markFailed with NO pending prune row —
+ * the self-re-arming chain is then dead until a process restart and
+ * scheduled_jobs storage grows unbounded forever. We therefore SWALLOW a prune
+ * failure (logging it) and re-arm exactly once. We must NOT re-throw-and-re-arm-
+ * in-`finally`: the poller would retry the same job and each attempt would
+ * re-arm → duplicate parallel chains (fan-out). The prune is idempotent — the
+ * next run re-deletes any rows this one missed (pruneFinished is a bounded
+ * delete-by-cutoff, so nothing is stranded).
  */
 export function registerScheduledJobsPruneJob(opts: RegisterScheduledJobsPruneJobOpts): void {
   const now = opts.nowFn ?? Date.now;
   opts.scheduledJobs.register(SCHEDULED_JOBS_PRUNE_JOB_TYPE, async (_job: ScheduledJobRow) => {
-    const cutoff = new Date(now() - SCHEDULED_JOBS_PRUNE_RETENTION_MS);
-    const deleted = await opts.repo.pruneFinished(cutoff);
-    if (deleted > 0) {
-      opts.logger.info(
-        { component: 'scheduled-jobs-prune', deleted, cutoff: cutoff.toISOString() },
-        'pruned finished scheduled_jobs',
+    try {
+      const cutoff = new Date(now() - SCHEDULED_JOBS_PRUNE_RETENTION_MS);
+      const deleted = await opts.repo.pruneFinished(cutoff);
+      if (deleted > 0) {
+        opts.logger.info(
+          { component: 'scheduled-jobs-prune', deleted, cutoff: cutoff.toISOString() },
+          'pruned finished scheduled_jobs',
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      opts.logger.error?.(
+        {
+          component: 'scheduled-jobs-prune',
+          event: 'scheduled_jobs_prune_failed',
+          err: { message },
+        },
+        'scheduled_jobs prune failed — re-arming; rows retry next run',
       );
     }
     await enqueueNextScheduledJobsPrune({

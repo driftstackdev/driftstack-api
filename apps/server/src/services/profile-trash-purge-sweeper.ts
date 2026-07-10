@@ -89,21 +89,48 @@ export interface RegisterProfileTrashPurgeJobOpts {
   nowFn?: () => number;
 }
 
+/**
+ * Wire the sweeper onto the ScheduledJobsService.
+ *
+ * Chain survival: the re-arm must run even if `tickOnce` throws. If it did not,
+ * a throw would leave no re-arm, the poller would retry the job, and once
+ * `maxAttempts` is exhausted the job is markFailed with NO pending purge row —
+ * the self-re-arming chain is then dead until a process restart and NO trashed
+ * profile is ever hard-deleted again (soft-deleted rows + their wrapped DEKs
+ * accumulate forever). We therefore SWALLOW a tick failure (logging it) and
+ * re-arm exactly once. We must NOT re-throw-and-re-arm-in-`finally`: the poller
+ * would retry the same job and each attempt would re-arm → duplicate parallel
+ * chains (fan-out). The tick is idempotent (purgeTrashedBefore re-lists any rows
+ * this one missed next run), so a swallowed failure loses nothing.
+ */
 export function registerProfileTrashPurgeJob(opts: RegisterProfileTrashPurgeJobOpts): void {
   const now = opts.nowFn ?? Date.now;
   opts.scheduledJobs.register(PROFILE_TRASH_PURGE_JOB_TYPE, async (_job: ScheduledJobRow) => {
-    const result = await opts.sweeper.tickOnce(new Date(now()));
-    opts.logger.info?.(
-      {
-        component: 'profile-trash-purge',
-        purged: result.purged,
-        blobsDeleted: result.blobsDeleted,
-      },
-      'profile-trash purge sweep complete',
-    );
+    try {
+      const result = await opts.sweeper.tickOnce(new Date(now()));
+      opts.logger.info?.(
+        {
+          component: 'profile-trash-purge',
+          purged: result.purged,
+          blobsDeleted: result.blobsDeleted,
+        },
+        'profile-trash purge sweep complete',
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      opts.logger.error?.(
+        {
+          component: 'profile-trash-purge',
+          event: 'profile_trash_purge_tick_failed',
+          err: { message },
+        },
+        'profile-trash purge tick failed — re-arming; rows retry next run',
+      );
+    }
     // Re-arm with dedup OFF — the in-flight (still-locked, not-yet-completed)
     // job would otherwise be seen as a pending duplicate and block the
-    // re-enqueue, killing the chain. See the auth-tokens-sweeper JSDoc.
+    // re-enqueue, killing the chain. See the auth-tokens-sweeper JSDoc. This
+    // runs OUTSIDE the try above so a tick failure never skips the re-arm.
     await enqueueNextProfileTrashPurge({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,

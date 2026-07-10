@@ -60,47 +60,86 @@ export interface RegisterCostNightlyJobOpts {
 /**
  * Wire the nightly-recompute handler onto the ScheduledJobsService.
  * Idempotent: re-registering replaces the previous handler.
+ *
+ * Chain survival: the re-arm must run even if the tick's work
+ * (`listAllAccountIds` / `dispatcher.evaluate`) throws. If it did not, a throw
+ * would leave no re-arm, the poller would retry the job, and once `maxAttempts`
+ * is exhausted the job is markFailed with NO pending nightly row — the
+ * self-re-arming chain is then dead until a process restart and cost alerting
+ * silently stops forever (no threshold crossing ever alerts again). We
+ * therefore SWALLOW a tick failure (logging it) and re-arm exactly once. We
+ * must NOT re-throw-and-re-arm-in-`finally`: the poller would retry the same
+ * job and each attempt would re-arm → duplicate parallel chains (fan-out). The
+ * tick is idempotent (a pure recompute of current DB state), so the next tick
+ * re-evaluates whatever this one missed.
  */
 export function registerCostNightlyJob(opts: RegisterCostNightlyJobOpts): void {
   const now = opts.nowFn ?? Date.now;
 
   opts.scheduledJobs.register(COST_NIGHTLY_JOB_TYPE, async (_job: ScheduledJobRow) => {
-    const tickStart = new Date(now());
-    const ids = await opts.accounts.listAllAccountIds();
-    if (ids.length === 0) {
-      opts.logger.debug?.({ component: 'cost-nightly' }, 'no accounts to evaluate');
-      // Even with zero accounts, re-enqueue tomorrow. Re-arm path: dedup OFF —
-      // the in-flight (still-locked, not-yet-completed) current job would
-      // otherwise be seen as a pending duplicate and block the re-enqueue,
-      // killing the chain. See enqueueNextNightlyRun JSDoc.
+    try {
+      const tickStart = new Date(now());
+      const ids = await opts.accounts.listAllAccountIds();
+      if (ids.length === 0) {
+        opts.logger.debug?.({ component: 'cost-nightly' }, 'no accounts to evaluate');
+        // Even with zero accounts, re-enqueue tomorrow. Re-arm path: dedup OFF —
+        // the in-flight (still-locked, not-yet-completed) current job would
+        // otherwise be seen as a pending duplicate and block the re-enqueue,
+        // killing the chain. See enqueueNextNightlyRun JSDoc.
+        await enqueueNextNightlyRun({
+          scheduledJobs: opts.scheduledJobs,
+          nowFn: now,
+          dedup: false,
+        });
+        return;
+      }
+      const result = await opts.dispatcher.evaluate({
+        accountIds: ids,
+        // C12 — evaluate the cycle of the day that just ended, so a month-end
+        // threshold crossing is caught (see cycleAnchorForTick).
+        billingCycle: billingCycleFromDate(cycleAnchorForTick(tickStart)),
+      });
+      opts.logger.info?.(
+        {
+          component: 'cost-nightly',
+          accounts: ids.length,
+          alerts_fired: result.alertsFired,
+          alerts_skipped: result.alertsSkipped,
+          // W378 — alert sends now fail per-account-isolated (evaluate no longer
+          // throws on a send error), so a channel outage surfaces here instead of
+          // killing the re-arm chain below. Non-zero → an alert sink is degraded.
+          alerts_errored: result.alertsErrored,
+          ...(result.alertsErrored > 0 ? { alert_errors: result.errors } : {}),
+        },
+        'cost nightly recompute complete',
+      );
+      // Re-arm the next run. Re-arm path: dedup OFF — the in-flight (still-
+      // locked, not-yet-completed) current job would otherwise be seen as a
+      // pending duplicate and block the re-enqueue, killing the chain. See
+      // enqueueNextNightlyRun JSDoc.
       await enqueueNextNightlyRun({ scheduledJobs: opts.scheduledJobs, nowFn: now, dedup: false });
-      return;
+    } catch (err) {
+      // Chain survival: SWALLOW a tick failure (do NOT re-throw) and re-arm
+      // exactly once here. If the work above throws (listAllAccountIds /
+      // dispatcher.evaluate) the in-branch re-arm never ran; without this catch
+      // the throw would propagate, the poller would retry to maxAttempts, then
+      // markFailed leaves NO pending nightly row → the self-re-arming chain is
+      // dead until a process restart and cost alerting silently stops forever.
+      // We must NOT re-throw-and-re-arm-in-`finally` (fan-out: every poller
+      // retry would re-arm → duplicate parallel chains). The tick is idempotent
+      // (a pure recompute of current DB state), so the next tick re-evaluates
+      // whatever this one missed.
+      const message = err instanceof Error ? err.message : String(err);
+      opts.logger.error?.(
+        {
+          component: 'cost-nightly',
+          event: 'cost_nightly_tick_failed',
+          err: { message },
+        },
+        'cost nightly recompute tick failed — re-arming; the next tick re-evaluates',
+      );
+      await enqueueNextNightlyRun({ scheduledJobs: opts.scheduledJobs, nowFn: now, dedup: false });
     }
-    const result = await opts.dispatcher.evaluate({
-      accountIds: ids,
-      // C12 — evaluate the cycle of the day that just ended, so a month-end
-      // threshold crossing is caught (see cycleAnchorForTick).
-      billingCycle: billingCycleFromDate(cycleAnchorForTick(tickStart)),
-    });
-    opts.logger.info?.(
-      {
-        component: 'cost-nightly',
-        accounts: ids.length,
-        alerts_fired: result.alertsFired,
-        alerts_skipped: result.alertsSkipped,
-        // W378 — alert sends now fail per-account-isolated (evaluate no longer
-        // throws on a send error), so a channel outage surfaces here instead of
-        // killing the re-arm chain below. Non-zero → an alert sink is degraded.
-        alerts_errored: result.alertsErrored,
-        ...(result.alertsErrored > 0 ? { alert_errors: result.errors } : {}),
-      },
-      'cost nightly recompute complete',
-    );
-    // Re-arm the next run. Re-arm path: dedup OFF — the in-flight (still-
-    // locked, not-yet-completed) current job would otherwise be seen as a
-    // pending duplicate and block the re-enqueue, killing the chain. See
-    // enqueueNextNightlyRun JSDoc.
-    await enqueueNextNightlyRun({ scheduledJobs: opts.scheduledJobs, nowFn: now, dedup: false });
   });
 }
 

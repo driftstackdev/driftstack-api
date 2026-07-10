@@ -1,9 +1,10 @@
 // L4b Step 4 — recycle-bin retention purge sweeper.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ProfilesRepo } from '../../src/services/profiles.js';
 import {
   ProfileTrashPurgeSweeperService,
+  registerProfileTrashPurgeJob,
   nextPurgeRunAt,
   PROFILE_TRASH_PURGE_JOB_TYPE,
 } from '../../src/services/profile-trash-purge-sweeper.js';
@@ -109,6 +110,62 @@ describe('nextPurgeRunAt', () => {
 describe('job type', () => {
   it('is the stable profile_trash.purge identifier', () => {
     expect(PROFILE_TRASH_PURGE_JOB_TYPE).toBe('profile_trash.purge');
+  });
+});
+
+describe('profile-trash purge scheduling (chain survival)', () => {
+  const NOW = new Date('2026-06-16T02:00:00.000Z');
+
+  function fakeScheduledJobs() {
+    const enqueues: Array<{ jobType: string; dedup: boolean; runAt: Date }> = [];
+    let handler: ((job: unknown) => Promise<void>) | null = null;
+    const scheduledJobs = {
+      register: (_jobType: string, h: (job: unknown) => Promise<void>) => {
+        handler = h;
+      },
+      enqueue: (args: { jobType: string; dedupOnAccountAndType: boolean; runAt: Date }) => {
+        enqueues.push({
+          jobType: args.jobType,
+          dedup: args.dedupOnAccountAndType,
+          runAt: args.runAt,
+        });
+        return Promise.resolve({ enqueued: true });
+      },
+    };
+    return { scheduledJobs, enqueues, invoke: () => handler!({}) };
+  }
+
+  function silentLogger() {
+    return { info: () => {}, error: () => {} } as never;
+  }
+
+  it('the re-arm survives a tickOnce failure (chain never dies) and does not fan out', async () => {
+    const f = fakeScheduledJobs();
+    // A tick that always throws (e.g. the DB purge query fails) must not stop the
+    // self-re-arming chain: the handler swallows + re-arms exactly once. If it
+    // re-threw, the poller would retry to maxAttempts then markFailed with no
+    // pending purge — the chain would die and no trashed profile would ever be
+    // hard-deleted again.
+    // Captured mock (read off the variable, not the object → no-unbound-method).
+    const tickOnce = vi.fn().mockRejectedValue(new Error('db down'));
+    const sweeper = { tickOnce } as unknown as ProfileTrashPurgeSweeperService;
+
+    registerProfileTrashPurgeJob({
+      scheduledJobs: f.scheduledJobs as never,
+      sweeper,
+      logger: silentLogger(),
+      nowFn: () => NOW.getTime(),
+    });
+
+    // The handler must resolve (not reject) despite the failing tick.
+    await expect(f.invoke()).resolves.toBeUndefined();
+    // Exactly one re-arm enqueued → chain alive, no duplicate parallel chains.
+    expect(f.enqueues).toHaveLength(1);
+    expect(f.enqueues[0]).toMatchObject({
+      jobType: PROFILE_TRASH_PURGE_JOB_TYPE,
+      dedup: false,
+    });
+    expect(tickOnce).toHaveBeenCalledTimes(1);
   });
 });
 
