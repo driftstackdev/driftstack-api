@@ -32,6 +32,9 @@ const EMPTY_CONN = {
 let mockConn: typeof EMPTY_CONN = { ...EMPTY_CONN };
 vi.mock('../../src/lib/livekit-connection-stats', () => ({
   useConnectionStats: () => mockConn,
+  // #60 transport telemetry is a side-effect-only hook (returns void); stub it as
+  // a no-op so SimulatorWindow renders without the real POST.
+  useTransportTelemetry: () => undefined,
   CONNECTION_STATS_INTERVAL_MS: 3000,
 }));
 

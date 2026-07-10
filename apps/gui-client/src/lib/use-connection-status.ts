@@ -70,7 +70,15 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
     });
 
     async function probe(): Promise<void> {
-      const trimmed = baseUrl.trim().replace(/\/+$/, '');
+      // Guard a missing/blank base URL: the host may not be resolved yet on the
+      // first render (or a caller may pass an empty value), and a bare
+      // `baseUrl.trim()` on undefined THROWS inside this fire-and-forget
+      // `void probe()` → an unhandled rejection (which, post-boot, the global
+      // handler now downgrades — but the probe should not throw in the first
+      // place). Treat "no host yet" as the benign not-yet-connected state (already
+      // set on mount above) and retry on the next interval tick once it's set.
+      const trimmed = (typeof baseUrl === 'string' ? baseUrl : '').trim().replace(/\/+$/, '');
+      if (trimmed === '') return;
       const controller = new AbortController();
       // Leak fix — abort any still-in-flight probe (e.g. a stalled body read)
       // before we orphan its controller by reassigning abortRef.

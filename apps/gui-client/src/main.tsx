@@ -6,6 +6,7 @@ import { RecordingsProvider } from './lib/recordings';
 import { ConfirmProvider } from './components/ConfirmProvider';
 import { DevLogPanel } from './components/DevLogPanel';
 import { installLogCapture } from './lib/log-buffer';
+import { isBenignTeardownError } from './lib/livekit';
 import './styles/index.css';
 
 // The floating-iPhone simulator opens as a separate Tauri window pointed at
@@ -38,6 +39,10 @@ function escapeHtml(s: string): string {
 declare global {
   interface Window {
     __dsFatalShown?: boolean;
+    /** Set once the React tree has successfully committed (RootErrorBoundary
+     *  componentDidMount). After this, the global error handlers treat late async
+     *  errors as non-fatal notices instead of the latched full-screen overlay. */
+    __dsBooted?: boolean;
   }
 }
 
@@ -84,19 +89,76 @@ function renderFatalError(code: string, err: unknown): void {
   }
 }
 
+// A transient, NON-latching notice (auto-dismisses; direct-DOM so it works in the
+// bare simulator window with no app chrome). Surfaces a post-boot hiccup WITHOUT
+// the latched full-screen fatal overlay that would brick a live session.
+function showTransientNotice(message: string): void {
+  try {
+    // Keep only the latest so repeated rejections can't stack a wall of toasts.
+    document.querySelectorAll('[data-transient-notice]').forEach((n) => n.remove());
+    const note = document.createElement('div');
+    note.setAttribute('data-transient-notice', '');
+    note.style.cssText =
+      'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:2147483646;' +
+      'max-width:80vw;background:#161616;color:#eee;border:1px solid #3a3a3a;border-radius:8px;' +
+      'padding:9px 14px;font:12px/1.45 -apple-system,system-ui,sans-serif;' +
+      'box-shadow:0 6px 20px rgba(0,0,0,.45);opacity:0;transition:opacity .2s ease';
+    note.textContent =
+      'Something hiccuped, but your session is still running' + (message ? ` — ${message}` : '');
+    document.body.appendChild(note);
+    requestAnimationFrame(() => {
+      note.style.opacity = '1';
+    });
+    window.setTimeout(() => {
+      note.style.opacity = '0';
+      window.setTimeout(() => note.remove(), 250);
+    }, 5000);
+  } catch {
+    // A notice must never itself throw back into the error handler.
+  }
+}
+
+// Post-boot degradation: log to the captured dev-log (the crash trail) + a
+// transient notice, but NEVER the latched fatal overlay.
+function reportNonFatal(code: string, reason: unknown): void {
+  const message =
+    reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : '';
+  console.error(`[${code}] non-fatal after boot:`, reason);
+  showTransientNotice(message);
+}
+
 // Catch async errors + unhandled promise rejections (e.g. a failed API/keychain
 // call that nothing awaited) so they surface instead of leaving a dead UI.
-window.addEventListener('error', (e) => renderFatalError('WINDOW_ERROR', e.error ?? e.message));
+//
+// TWO-PHASE policy (founder "GUI keeps getting stuck, nobody can work on it"; A3
+// sweep 2026-07-10). The fatal overlay exists to make a BOOT failure visible — but
+// once the app has successfully mounted (__dsBooted), a stray async rejection is
+// almost never a "can't start" condition, and painting the LATCHED full-screen
+// overlay over a live session bricks a working app until Reload. So:
+//   • benign LiveKit/WebRTC teardown races → swallowed outright (shared
+//     isBenignTeardownError — one source of truth, can't drift from the sender);
+//   • any other async error PRE-boot → the coded fatal panel (real startup failure);
+//   • any other async error POST-boot → downgraded to a non-fatal notice + log.
+// A genuine render-tree failure still routes through RootErrorBoundary →
+// renderFatalError (the app really is blank then), so this only relaxes the
+// async/uncaught paths that don't break the running tree.
+window.addEventListener('error', (e) => {
+  const reason: unknown = e.error ?? e.message;
+  if (isBenignTeardownError(reason)) return;
+  if (window.__dsBooted) {
+    reportNonFatal('WINDOW_ERROR', reason);
+    return;
+  }
+  renderFatalError('WINDOW_ERROR', reason);
+});
 window.addEventListener('unhandledrejection', (e) => {
-  // Benign LiveKit/WebRTC teardown races — a publish or connect that resolves
-  // AFTER the Room's RTCEngine closed rejects with "PC manager is closed" (and
-  // similar). These are harmless and must NOT blank the app: founder-hit
-  // 2026-06-18, an un-caught latency-ping publish in the borderless simulator
-  // window painted the fatal overlay over the iPhone → an undraggable black box
-  // → force-quit. Swallow them; everything else stays fatal.
-  const reasonMessage = e.reason instanceof Error ? e.reason.message : String(e.reason ?? '');
-  if (/PC manager is closed|client initiated disconnect|engine (is )?closed/i.test(reasonMessage)) {
+  if (isBenignTeardownError(e.reason)) {
     e.preventDefault();
+    return;
+  }
+  if (window.__dsBooted) {
+    e.preventDefault();
+    reportNonFatal('UNHANDLED_REJECTION', e.reason);
     return;
   }
   renderFatalError('UNHANDLED_REJECTION', e.reason);
@@ -110,6 +172,14 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { failed: boo
   }
   override componentDidCatch(error: unknown): void {
     renderFatalError('RENDER_ERROR', error);
+  }
+  override componentDidMount(): void {
+    // Mark the app booted once the tree has committed successfully, so the global
+    // handlers downgrade later async errors to a non-fatal notice instead of the
+    // latched overlay. Gated on NOT being failed: a child that throws during
+    // initial mount sets `failed` (getDerivedStateFromError) BEFORE this fires, so
+    // a boot failure is never mis-marked as booted.
+    if (!this.state.failed) window.__dsBooted = true;
   }
   override render(): ReactNode {
     // The fixed overlay owns the screen on failure; render nothing here.

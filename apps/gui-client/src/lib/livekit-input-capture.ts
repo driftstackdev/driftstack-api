@@ -945,6 +945,18 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (editingLocally()) return;
       if (isBareEscape(e)) return;
+      // BACKPRESSURE shed (mirrors onWheel): a HELD key OS-auto-repeats at
+      // ~15-30Hz and each repeat is a RELIABLE keyDown publish — a flood that
+      // head-of-line-blocks taps + navigation on a stalled ordered channel (the
+      // founder's "tapping does nothing"; A3 sweep 2026-07-10). While the reliable
+      // channel is congested, DROP auto-repeat keyDowns: the ORIGINAL (non-repeat)
+      // keyDown already registered in forwardedKeys so its keyUp still fires (no
+      // stuck key), a repeat carries no keyUp (dropping it strands nothing), and the
+      // video is frozen during the stall anyway so a lost repeat is invisible. A
+      // NON-repeat keystroke is never dropped (that would lose a real character).
+      // Held-key repeat is unaffected on a healthy link (the flag stays false).
+      // Self-heals on the next DCBufferStatusChanged.
+      if (e.repeat && reliableCongested) return;
       forwardedKeys.add(keyId(e));
       const modifiers = modifiersFromEvent(e);
       send(

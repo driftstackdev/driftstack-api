@@ -46,6 +46,9 @@ const conn = {
 };
 vi.mock('../../src/lib/livekit-connection-stats', () => ({
   useConnectionStats: () => conn,
+  // #60 transport telemetry is a side-effect-only hook (returns void); stub it as
+  // a no-op so SimulatorWindow renders without the real POST.
+  useTransportTelemetry: () => undefined,
   CONNECTION_STATS_INTERVAL_MS: 3000,
 }));
 

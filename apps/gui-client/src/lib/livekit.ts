@@ -194,7 +194,15 @@ export async function sendActivateTab(room: Room, payload: ActivateTabPayload): 
  *  fire-and-forget send and never worth blanking the app over. */
 export function isBenignTeardownError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
-  return /PC manager is closed|client initiated disconnect|engine (is )?closed|not connected/i.test(
+  // "Publisher connection not set" / "could not establish Publisher connection" are
+  // the mid-RECONNECT publish rejects (a tap/tab-op landing while the Room is
+  // re-establishing its publisher) — harmless (the next event re-syncs), but they
+  // were NOT matched here so sendInputEvent re-threw them into a fire-and-forget
+  // `void` → the global unhandledrejection backstop painted the latched fatal
+  // overlay over the borderless simulator (the founder's "GUI keeps getting stuck";
+  // A3 sweep 2026-07-10). Treating them as benign is the single source of truth the
+  // global handler reuses, so the two matchers can't drift again.
+  return /PC manager is closed|client initiated disconnect|engine (is )?closed|not connected|Publisher connection not set|could not establish Publisher connection/i.test(
     message,
   );
 }

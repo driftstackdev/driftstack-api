@@ -263,6 +263,14 @@ describe('AgentSessionPanel overlay UX', () => {
       act(() => {
         handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
       });
+      // #153 first-frame gate (ww5k0xkmx): the publisher-state overlay clears only
+      // once a real frame paints (videoWidth > 0), not on TrackSubscribed alone.
+      act(() => {
+        const video = container.querySelector('video') as HTMLVideoElement;
+        Object.defineProperty(video, 'videoWidth', { configurable: true, value: 393 });
+        Object.defineProperty(video, 'videoHeight', { configurable: true, value: 790 });
+        video.dispatchEvent(new Event('loadeddata'));
+      });
       // Advance PAST the timeout — the cleared timer must not fire a 'none' state.
       act(() => {
         vi.advanceTimersByTime(NO_PUBLISHER_TIMEOUT_MS + 5_000);
@@ -296,6 +304,15 @@ describe('AgentSessionPanel overlay UX', () => {
       // Track arrives → publishing, no overlays.
       act(() => {
         handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
+      });
+      // #153 first-frame gate (ww5k0xkmx): the overlay clears only once a real
+      // frame paints (videoWidth > 0), not on TrackSubscribed alone. Sticky for
+      // the rest of this connection, so the drop→re-subscribe below stays clear.
+      act(() => {
+        const video = container.querySelector('video') as HTMLVideoElement;
+        Object.defineProperty(video, 'videoWidth', { configurable: true, value: 393 });
+        Object.defineProperty(video, 'videoHeight', { configurable: true, value: 790 });
+        video.dispatchEvent(new Event('loadeddata'));
       });
       expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
       // The SFU drops the video track.
