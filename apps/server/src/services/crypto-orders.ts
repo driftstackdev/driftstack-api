@@ -420,6 +420,17 @@ export interface CryptoOrderTierActivationIntent {
 
 export interface CryptoOrderTierActivator {
   activateTierForPaidOrder: (intent: CryptoOrderTierActivationIntent) => Promise<void>;
+  /**
+   * C3 — refund/chargeback clawback for an already-paid order. Expires the
+   * refunded order's entitlement and reconciles the account tier to its best
+   * remaining valid access (a live Stripe sub / another valid crypto entitlement
+   * / free) — non-stranding, and idempotent on an IPN replay.
+   */
+  revokeTierForRefundedOrder: (args: {
+    account_id: string;
+    order_id: string;
+    at: Date;
+  }) => Promise<{ revoked: boolean }>;
 }
 
 export class CryptoOrdersService {
@@ -1500,20 +1511,21 @@ export class CryptoOrdersService {
     }
 
     // C3 — a refund/failure IPN for an ALREADY-PAID order. `paid` is
-    // terminal-forward, so the lock made no transition (outcome.order.status
-    // is still 'paid') and the activated tier is NOT auto-clawed-back: a
-    // correct clawback must recompute the account's best-remaining entitlement
-    // across any concurrent Stripe subscription AND other paid crypto orders,
-    // which this path has no view of, so a naive downgrade could strand a
-    // customer who still holds valid paid access. NowPayments refunds are
-    // founder-initiated from their dashboard (runbook-documented), so surface a
-    // loud ops alarm naming the manual admin change-tier remediation instead.
-    // Gating on mapped0 (not provider_status==='refunded') also catches an
-    // anomalous failed/expired-after-paid; provider_status is logged to
-    // distinguish. The payment_id-mismatch early-return above already excludes
-    // a refund for a DIFFERENT payment (which alarms separately).
+    // terminal-forward, so the lock made no transition (outcome.order.status is
+    // still 'paid'). The activated tier IS now auto-clawed-back: the entitlement
+    // this order granted is revoked and the account tier is reconciled to its
+    // best REMAINING valid access (a live Stripe sub / another valid crypto
+    // entitlement / free) via the same non-stranding best-remaining machinery the
+    // expiry sweeper uses — see the tierActivator.revokeTierForRefundedOrder call
+    // among the side-effects below (fired OUTSIDE the lock). This WARN is an ops
+    // visibility note; it no longer names a manual remediation as the primary
+    // path (the clawback is automatic + idempotent on IPN replay). Gating on
+    // mapped0 (not provider_status==='refunded') also catches an anomalous
+    // failed/expired-after-paid; provider_status is logged to distinguish. The
+    // payment_id-mismatch early-return above already excludes a refund for a
+    // DIFFERENT payment (which alarms separately).
     if (mapped0 === 'failed' && outcome.order.status === 'paid') {
-      this.opts.logger?.error(
+      this.opts.logger?.warn?.(
         {
           component: 'crypto-orders',
           event: 'ipn_refund_after_paid',
@@ -1523,7 +1535,7 @@ export class CryptoOrdersService {
           payment_id: outcome.order.payment_id,
           provider_status: args.provider_status,
         },
-        'crypto IPN reports refund/failure for an ALREADY-PAID order — order stays paid and the activated tier is NOT clawed back automatically; reconcile via admin change-tier (integrity alarm)',
+        'crypto IPN reports refund/failure for an ALREADY-PAID order — order stays paid; the activated tier is auto-clawed back via entitlement revocation + best-remaining reconcile (non-stranding, idempotent on replay)',
       );
     }
 
@@ -1531,6 +1543,42 @@ export class CryptoOrdersService {
     if (outcome.fireFailed) {
       // V-666.AN — crypto.order.failed on the IPN-driven →failed transition.
       await this.emitFailedTransition(outcome.order, 'ipn');
+    }
+    // C3 — refund/chargeback clawback on an ALREADY-PAID order. Same gate as the
+    // WARN above (a refund/failure IPN that made no forward transition because
+    // the order is terminal-paid). Fires OUTSIDE the lock alongside the other
+    // side-effects. Best-effort: a clawback failure must NOT break the 200 IPN
+    // ack (a non-200 would make NowPayments retry the refund IPN indefinitely),
+    // so it logs a loud integrity alarm naming the manual admin change-tier
+    // fallback instead. Idempotent on replay: the activator's revoke only affects
+    // a still-valid entitlement, so a re-delivered refund IPN finds it already
+    // expired and no-ops (no second reconcile / emit).
+    if (
+      mapped0 === 'failed' &&
+      outcome.order.status === 'paid' &&
+      this.opts.tierActivator !== undefined &&
+      outcome.order.account_id !== null
+    ) {
+      try {
+        await this.opts.tierActivator.revokeTierForRefundedOrder({
+          account_id: outcome.order.account_id,
+          order_id: outcome.order.order_id,
+          at: new Date(this.nowFn()),
+        });
+      } catch (err) {
+        this.opts.logger?.error(
+          {
+            component: 'crypto-orders',
+            event: 'crypto_refund_tier_clawback_failed',
+            order_id: outcome.order.order_id,
+            account_id: outcome.order.account_id,
+            product: outcome.order.product,
+            payment_id: outcome.order.payment_id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'crypto order refunded but the tier clawback FAILED — the refunded customer may retain the paid tier until the entitlement expires; remediate via admin change-tier (integrity alarm)',
+        );
+      }
     }
     // V-666.I/R — crypto.order.paid webhook + receipt email on the →paid transition.
     // Best-effort: emission failures are swallowed so the IPN ack stays 200.

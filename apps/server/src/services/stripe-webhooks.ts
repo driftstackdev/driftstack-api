@@ -208,6 +208,20 @@ export interface StripeWebhooksRepo {
     expiresAt: Date;
   }>;
   /**
+   * C3 — refund/chargeback clawback: bring an order's crypto entitlement expiry
+   * forward to `at` so the best-remaining reconcile no longer floors the account
+   * tier on the refunded grant. Only affects a still-valid row (expires_at > at);
+   * a replayed refund IPN finds the row already expired and matches nothing.
+   * Leaves expired_processed_at NULL so the expiry sweeper can also pick the row
+   * up as a backstop. Returns `{ revoked }` (true iff a row was updated) so the
+   * caller can gate the immediate best-remaining reconcile + emit on a real
+   * revocation and no-op on a replay.
+   */
+  revokeCryptoEntitlementByOrderId(args: {
+    orderId: string;
+    at: Date;
+  }): Promise<{ revoked: boolean }>;
+  /**
    * C1 — sweeper read: entitlements past expiry that the sweeper hasn't yet
    * processed (expired_processed_at IS NULL). Ordered by expires_at, capped.
    */

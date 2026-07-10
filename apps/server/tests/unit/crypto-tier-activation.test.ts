@@ -18,6 +18,7 @@ import {
 import type { Logger } from '../../src/lib/logger.js';
 import type { AccountLifecycleService } from '../../src/services/account-lifecycle.js';
 import type { AuthCache } from '../../src/services/auth-cache.js';
+import { InMemoryStripeWebhooksRepo } from '../integration/_helpers/in-memory-stripe-webhooks-repo.js';
 
 function makeLogger(): Logger & {
   errors: unknown[][];
@@ -219,5 +220,238 @@ describe('C1 CryptoTierActivationService (entitlement-backed)', () => {
     d.invalidateAccount.mockRejectedValueOnce(new Error('redis down'));
     await d.service.activateTierForPaidOrder(intent);
     expect(d.emit).toHaveBeenCalledTimes(1);
+  });
+});
+
+// C3 — refund/chargeback clawback (revokeTierForRefundedOrder). Backed by the
+// real InMemoryStripeWebhooksRepo so the entitlement revoke + the SAME
+// best-remaining reconcile machinery (downgradeAccountTierToBestRemaining) run
+// exactly as in prod — proving non-stranding + idempotency end-to-end, not just
+// against a mock repo.
+describe('C3 CryptoTierActivationService.revokeTierForRefundedOrder', () => {
+  const NOW = new Date('2026-07-10T12:00:00.000Z');
+  const PAID_AT = new Date('2026-07-08T10:00:00.000Z');
+
+  function makeRefundDeps() {
+    const repo = new InMemoryStripeWebhooksRepo();
+    const emit = vi.fn().mockResolvedValue(undefined);
+    const lifecycle = { emit } as unknown as AccountLifecycleService;
+    const invalidateAccount = vi.fn().mockResolvedValue(undefined);
+    const authCache = { invalidateAccount } as unknown as AuthCache;
+    const logger = makeLogger();
+    const service = new CryptoTierActivationService(repo, logger, lifecycle, authCache);
+    return { repo, emit, invalidateAccount, logger, service };
+  }
+
+  it('(a) sole access refunded → entitlement expires, tier reconciles to free, tier_changed emitted', async () => {
+    const d = makeRefundDeps();
+    d.repo.registerAccount({ accountId: 'acc_1', stripeCustomerId: null, tier: 'free' });
+    // Grant an api_builder entitlement (this raises the account tier to api_builder).
+    await d.repo.activateCryptoEntitlement({
+      accountId: 'acc_1',
+      orderId: 'ord_refund',
+      tier: 'api_builder',
+      paidAt: PAID_AT,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+    });
+    expect(d.repo.readAccount('acc_1')?.tier).toBe('api_builder');
+
+    const res = await d.service.revokeTierForRefundedOrder({
+      account_id: 'acc_1',
+      order_id: 'ord_refund',
+      at: NOW,
+    });
+    expect(res.revoked).toBe(true);
+    // Entitlement was brought forward to NOW (no longer floors the tier).
+    const ent = d.repo.listCryptoEntitlements().find((e) => e.orderId === 'ord_refund');
+    expect(ent?.expiresAt.getTime()).toBe(NOW.getTime());
+    // expired_processed_at left NULL so the sweeper can still pick it up.
+    expect(ent?.expiredProcessedAt).toBeNull();
+    // Account reconciled to free (no remaining access).
+    expect(d.repo.readAccount('acc_1')?.tier).toBe('free');
+    expect(d.invalidateAccount).toHaveBeenCalledWith('acc_1');
+    expect(d.emit).toHaveBeenCalledTimes(1);
+    expect(d.emit).toHaveBeenCalledWith('acc_1', {
+      kind: 'subscription.tier_changed',
+      fromTier: 'api_builder',
+      toTier: 'free',
+      effectiveAt: NOW,
+      cryptoOrderId: 'ord_refund',
+    });
+  });
+
+  it('(b1) concurrent still-valid Stripe sub → tier floors to the sub, NOT free', async () => {
+    const d = makeRefundDeps();
+    d.repo.registerAccount({ accountId: 'acc_2', stripeCustomerId: null, tier: 'api_builder' });
+    // A live active Stripe subscription at api_starter floors the account.
+    await d.repo.upsertSubscription({
+      accountId: 'acc_2',
+      stripeSubscriptionId: 'sub_live',
+      stripePriceId: 'price_api_starter',
+      tier: 'api_starter',
+      status: 'active',
+      currentPeriodEnd: new Date('2026-08-10T00:00:00.000Z'),
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      at: PAID_AT,
+    });
+    // The refunded crypto order granted a HIGHER api_builder entitlement.
+    await d.repo.activateCryptoEntitlement({
+      accountId: 'acc_2',
+      orderId: 'ord_higher',
+      tier: 'api_builder',
+      paidAt: PAID_AT,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+    });
+    expect(d.repo.readAccount('acc_2')?.tier).toBe('api_builder');
+
+    const res = await d.service.revokeTierForRefundedOrder({
+      account_id: 'acc_2',
+      order_id: 'ord_higher',
+      at: NOW,
+    });
+    expect(res.revoked).toBe(true);
+    // Floors to the live Stripe sub — NOT stranded to free.
+    expect(d.repo.readAccount('acc_2')?.tier).toBe('api_starter');
+    expect(d.emit).toHaveBeenCalledTimes(1);
+    expect(d.emit).toHaveBeenCalledWith('acc_2', {
+      kind: 'subscription.tier_changed',
+      fromTier: 'api_builder',
+      toTier: 'api_starter',
+      effectiveAt: NOW,
+      cryptoOrderId: 'ord_higher',
+    });
+  });
+
+  it('(b2) another still-valid crypto entitlement → tier floors to it, NOT free', async () => {
+    const d = makeRefundDeps();
+    d.repo.registerAccount({ accountId: 'acc_3', stripeCustomerId: null, tier: 'free' });
+    // A separate, valid solo_manual entitlement (a different order) also floors.
+    await d.repo.activateCryptoEntitlement({
+      accountId: 'acc_3',
+      orderId: 'ord_keep',
+      tier: 'solo_manual',
+      paidAt: PAID_AT,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+    });
+    // The refunded order granted a HIGHER api_builder entitlement.
+    await d.repo.activateCryptoEntitlement({
+      accountId: 'acc_3',
+      orderId: 'ord_higher',
+      tier: 'api_builder',
+      paidAt: PAID_AT,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+    });
+    expect(d.repo.readAccount('acc_3')?.tier).toBe('api_builder');
+
+    const res = await d.service.revokeTierForRefundedOrder({
+      account_id: 'acc_3',
+      order_id: 'ord_higher',
+      at: NOW,
+    });
+    expect(res.revoked).toBe(true);
+    // Floors to the OTHER still-valid crypto entitlement — not free.
+    expect(d.repo.readAccount('acc_3')?.tier).toBe('solo_manual');
+    // The kept entitlement is untouched (still valid, still unprocessed).
+    const kept = d.repo.listCryptoEntitlements().find((e) => e.orderId === 'ord_keep');
+    expect(kept?.expiresAt.getTime()).toBeGreaterThan(NOW.getTime());
+    expect(kept?.expiredProcessedAt).toBeNull();
+    expect(d.emit).toHaveBeenCalledTimes(1);
+    expect(d.emit).toHaveBeenCalledWith('acc_3', {
+      kind: 'subscription.tier_changed',
+      fromTier: 'api_builder',
+      toTier: 'solo_manual',
+      effectiveAt: NOW,
+      cryptoOrderId: 'ord_higher',
+    });
+  });
+
+  it('(c) replayed refund IPN (entitlement already expired) → no-op, no second emit', async () => {
+    const d = makeRefundDeps();
+    d.repo.registerAccount({ accountId: 'acc_4', stripeCustomerId: null, tier: 'free' });
+    await d.repo.activateCryptoEntitlement({
+      accountId: 'acc_4',
+      orderId: 'ord_replay',
+      tier: 'api_builder',
+      paidAt: PAID_AT,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+    });
+    // First refund — real clawback.
+    const first = await d.service.revokeTierForRefundedOrder({
+      account_id: 'acc_4',
+      order_id: 'ord_replay',
+      at: NOW,
+    });
+    expect(first.revoked).toBe(true);
+    expect(d.repo.readAccount('acc_4')?.tier).toBe('free');
+    expect(d.emit).toHaveBeenCalledTimes(1);
+
+    // Replayed refund IPN — the entitlement is already expired → no-op.
+    const second = await d.service.revokeTierForRefundedOrder({
+      account_id: 'acc_4',
+      order_id: 'ord_replay',
+      at: new Date(NOW.getTime() + 60_000),
+    });
+    expect(second.revoked).toBe(false);
+    expect(second.previousTier).toBeNull();
+    expect(second.appliedTier).toBeNull();
+    // No second downgrade, no second emit, no cache invalidation on the replay.
+    expect(d.emit).toHaveBeenCalledTimes(1);
+    expect(d.invalidateAccount).toHaveBeenCalledTimes(1);
+    const [obj] = d.logger.infos.at(-1) as [Record<string, unknown>];
+    expect(obj.event).toBe('crypto_refund_clawback_noop');
+  });
+
+  it('(d) a normal activation (non-refund path) leaves entitlements intact — no regression', async () => {
+    const d = makeRefundDeps();
+    d.repo.registerAccount({ accountId: 'acc_5', stripeCustomerId: null, tier: 'free' });
+    await d.service.activateTierForPaidOrder({
+      account_id: 'acc_5',
+      order_id: 'ord_normal',
+      product: 'api_builder',
+      payment_id: 'pay_x',
+      paid_at: PAID_AT.toISOString(),
+    });
+    // Upgrade applied — the entitlement is recorded and STILL valid (not revoked).
+    expect(d.repo.readAccount('acc_5')?.tier).toBe('api_builder');
+    const ent = d.repo.listCryptoEntitlements().find((e) => e.orderId === 'ord_normal');
+    expect(ent).toBeDefined();
+    expect(ent?.expiresAt.getTime()).toBeGreaterThan(PAID_AT.getTime());
+    expect(ent?.expiredProcessedAt).toBeNull();
+  });
+
+  it('entitlement revoked but a HIGHER floor remains → tier unchanged, no emit', async () => {
+    const d = makeRefundDeps();
+    d.repo.registerAccount({ accountId: 'acc_6', stripeCustomerId: null, tier: 'free' });
+    // A HIGHER api_scale entitlement floors the account.
+    await d.repo.activateCryptoEntitlement({
+      accountId: 'acc_6',
+      orderId: 'ord_top',
+      tier: 'api_scale',
+      paidAt: PAID_AT,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+    });
+    // Refund a LOWER solo_manual entitlement — it was never the active floor.
+    await d.repo.activateCryptoEntitlement({
+      accountId: 'acc_6',
+      orderId: 'ord_low',
+      tier: 'solo_manual',
+      paidAt: PAID_AT,
+      termDays: CRYPTO_ENTITLEMENT_TERM_DAYS,
+    });
+    expect(d.repo.readAccount('acc_6')?.tier).toBe('api_scale');
+
+    const res = await d.service.revokeTierForRefundedOrder({
+      account_id: 'acc_6',
+      order_id: 'ord_low',
+      at: NOW,
+    });
+    expect(res.revoked).toBe(true);
+    // Still floored by api_scale — no tier change, no emit.
+    expect(d.repo.readAccount('acc_6')?.tier).toBe('api_scale');
+    expect(d.emit).not.toHaveBeenCalled();
+    expect(d.invalidateAccount).not.toHaveBeenCalled();
+    const [obj] = d.logger.infos.at(-1) as [Record<string, unknown>];
+    expect(obj.event).toBe('crypto_refund_entitlement_revoked_tier_unchanged');
   });
 });

@@ -346,6 +346,24 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     });
   }
 
+  revokeCryptoEntitlementByOrderId(args: {
+    orderId: string;
+    at: Date;
+  }): Promise<{ revoked: boolean }> {
+    // C3 — mirrors DrizzleStripeWebhooksRepo.revokeCryptoEntitlementByOrderId:
+    // bring the order's entitlement expiry forward to `at` ONLY when still valid
+    // (expiresAt > at). A replayed refund finds it already expired → 0 rows →
+    // revoked:false (idempotent). expiredProcessedAt is left as-is (NULL).
+    let revoked = false;
+    for (const [id, e] of this.entitlements) {
+      if (e.orderId === args.orderId && e.expiresAt.getTime() > args.at.getTime()) {
+        this.entitlements.set(id, { ...e, expiresAt: args.at });
+        revoked = true;
+      }
+    }
+    return Promise.resolve({ revoked });
+  }
+
   listExpiredUnprocessedCryptoEntitlements(args: {
     asOf: Date;
     limit: number;

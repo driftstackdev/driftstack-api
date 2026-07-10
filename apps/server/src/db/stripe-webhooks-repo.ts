@@ -423,6 +423,32 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     });
   }
 
+  async revokeCryptoEntitlementByOrderId(args: {
+    orderId: string;
+    at: Date;
+  }): Promise<{ revoked: boolean }> {
+    // C3 — refund/chargeback clawback: expire the still-valid entitlement this
+    // order granted so the best-remaining reconcile no longer floors the tier on
+    // it. Bring expires_at forward to `at` (the refund moment) ONLY when the row
+    // is still unexpired (expires_at > at) — so a replayed refund IPN finds the
+    // row already expired, matches 0 rows, and returns revoked:false (idempotent,
+    // no second downgrade/emit). expired_processed_at is deliberately left NULL:
+    // the account tier is reconciled immediately by the activator, but leaving it
+    // unprocessed lets the 15-min expiry sweeper also pick the row up as a
+    // belt-and-braces backstop should the immediate reconcile have failed.
+    const result = await this.database.db
+      .update(cryptoEntitlements)
+      .set({ expiresAt: args.at, updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(cryptoEntitlements.orderId, args.orderId),
+          gt(cryptoEntitlements.expiresAt, args.at),
+        ),
+      )
+      .returning({ id: cryptoEntitlements.id });
+    return { revoked: result.length > 0 };
+  }
+
   async listExpiredUnprocessedCryptoEntitlements(args: {
     asOf: Date;
     limit: number;

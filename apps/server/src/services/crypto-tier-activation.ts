@@ -60,7 +60,15 @@ import type { StripeWebhooksRepo } from './stripe-webhooks.js';
  * and the in-memory test twin stay compile-time-parity). Pick (not a
  * re-declared interface) so the two can never drift.
  */
-export type CryptoTierActivationRepo = Pick<StripeWebhooksRepo, 'activateCryptoEntitlement'>;
+export type CryptoTierActivationRepo = Pick<
+  StripeWebhooksRepo,
+  | 'activateCryptoEntitlement'
+  // C3 — refund/chargeback clawback path (revokeTierForRefundedOrder): expire the
+  // refunded order's entitlement, then reconcile the account tier to its best
+  // remaining valid access via the SAME helper the expiry sweeper uses.
+  | 'revokeCryptoEntitlementByOrderId'
+  | 'downgradeAccountTierToBestRemaining'
+>;
 
 /**
  * C1 — how long a one-time crypto payment of a monthly price entitles the tier.
@@ -270,5 +278,108 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
       },
       'crypto order paid for a LOWER tier than the account currently holds — entitlement recorded as the floor until it expires; account tier unchanged',
     );
+  }
+
+  /**
+   * C3 — refund/chargeback clawback for an ALREADY-PAID crypto order. Reverses
+   * the entitlement grant activateTierForPaidOrder minted: it EXPIRES only the
+   * refunded order's entitlement (bringing expires_at forward to `at`), then
+   * reconciles the account tier to its best REMAINING valid access via the SAME
+   * downgradeAccountTierToBestRemaining path the expiry sweeper uses. This is NOT
+   * a naive downgrade to free: the reconcile floors against any live Stripe
+   * subscription AND any OTHER still-valid crypto entitlement, so a refund of one
+   * grant can't strand a customer who still holds concurrent paid access. On a
+   * real tier change it mirrors the sweeper's fan-out EXACTLY — auth-cache
+   * invalidation (new tier on the next request, not after the 30s TTL) then the
+   * `subscription.tier_changed` lifecycle event (audit row + tier-changed email).
+   *
+   * Idempotent on IPN replay: the repo revoke only affects a still-unexpired row,
+   * so a replayed refund finds it already expired → revoked:false → this no-ops
+   * (no second reconcile, no second emit). The best-remaining reconcile is itself
+   * a pure function of committed DB state (previousTier === appliedTier ⇒ no
+   * emit), so even a replay that somehow reached the reconcile would not
+   * double-fire.
+   */
+  async revokeTierForRefundedOrder(args: {
+    account_id: string;
+    order_id: string;
+    at: Date;
+  }): Promise<{
+    revoked: boolean;
+    previousTier: AccountTier | null;
+    appliedTier: AccountTier | null;
+  }> {
+    const { revoked } = await this.repo.revokeCryptoEntitlementByOrderId({
+      orderId: args.order_id,
+      at: args.at,
+    });
+    if (!revoked) {
+      // Already expired / replayed refund — the grant is not (or no longer) a
+      // floor, so there is nothing to claw back. No-op, no emit.
+      this.logger.info(
+        {
+          component: 'crypto-tier-activation',
+          event: 'crypto_refund_clawback_noop',
+          account_id: args.account_id,
+          order_id: args.order_id,
+        },
+        'crypto refund clawback: entitlement already expired (replay or no active grant) — no change',
+      );
+      return { revoked: false, previousTier: null, appliedTier: null };
+    }
+
+    // Reconcile to best remaining — the just-expired row is excluded by the
+    // helper's gt(expires_at, at) union, so the account drops to its best
+    // remaining Stripe sub / other valid crypto entitlement / free. Mirrors the
+    // expiry sweeper's downgrade + fan-out order (cache invalidate, then emit).
+    const { previousTier, appliedTier } = await this.repo.downgradeAccountTierToBestRemaining({
+      accountId: args.account_id,
+      fallbackTier: 'free',
+      at: args.at,
+    });
+    if (previousTier !== appliedTier) {
+      if (this.authCache !== null) {
+        try {
+          await this.authCache.invalidateAccount(args.account_id);
+        } catch {
+          // Best-effort — the tier write is committed; a stale cache entry TTLs
+          // out within CACHE_TTL_SEC (mirrors the sweeper / StripeWebhooksService).
+        }
+      }
+      if (this.accountLifecycle !== null) {
+        await this.accountLifecycle.emit(args.account_id, {
+          kind: 'subscription.tier_changed',
+          fromTier: previousTier,
+          toTier: appliedTier,
+          effectiveAt: args.at,
+          cryptoOrderId: args.order_id,
+        });
+      }
+      this.logger.info(
+        {
+          component: 'crypto-tier-activation',
+          event: 'crypto_refund_tier_clawed_back',
+          account_id: args.account_id,
+          order_id: args.order_id,
+          from_tier: previousTier,
+          to_tier: appliedTier,
+        },
+        'crypto order refunded — entitlement revoked and account tier reconciled to best remaining',
+      );
+    } else {
+      // Entitlement was revoked but the account tier did not move (a higher
+      // Stripe sub / another valid crypto grant still floors it). No emit.
+      this.logger.info(
+        {
+          component: 'crypto-tier-activation',
+          event: 'crypto_refund_entitlement_revoked_tier_unchanged',
+          account_id: args.account_id,
+          order_id: args.order_id,
+          tier: appliedTier,
+        },
+        'crypto order refunded — entitlement revoked; account still floored by other valid access, tier unchanged',
+      );
+    }
+    return { revoked: true, previousTier, appliedTier };
   }
 }

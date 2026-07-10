@@ -2771,15 +2771,28 @@ describe('V-666.AT order event log', () => {
   });
 });
 
-describe('C3 — refund/failure IPN after paid raises an ops alarm (no auto-clawback)', () => {
-  it('logs ipn_refund_after_paid, leaves the order paid, and does not re-fire failed side-effects', async () => {
+describe('C3 — refund/failure IPN after paid auto-claws-back the tier (non-stranding)', () => {
+  it('logs the WARN note, invokes the tier clawback, leaves the order paid, and does not re-fire failed side-effects', async () => {
     const repo = new InMemoryCryptoOrdersRepo();
-    const errors: Array<{ obj: Record<string, unknown>; msg: string }> = [];
+    const warns: Array<{ obj: Record<string, unknown>; msg: string }> = [];
     const failedWebhooks: string[] = [];
+    const clawbackCalls: Array<{ account_id: string; order_id: string; at: Date }> = [];
+    const revokeTierForRefundedOrder = (args: {
+      account_id: string;
+      order_id: string;
+      at: Date;
+    }) => {
+      clawbackCalls.push(args);
+      return Promise.resolve({ revoked: true });
+    };
     const svc = new CryptoOrdersService({
       repo,
       nowFn: () => 9_000,
-      logger: { error: (obj, msg) => errors.push({ obj, msg }) },
+      logger: { warn: (obj, msg) => warns.push({ obj, msg }) },
+      tierActivator: {
+        activateTierForPaidOrder: () => Promise.resolve(),
+        revokeTierForRefundedOrder,
+      },
       webhooks: {
         enqueueEvent: (accountId, eventType) => {
           if (eventType === 'crypto.order.failed') failedWebhooks.push(accountId);
@@ -2807,25 +2820,78 @@ describe('C3 — refund/failure IPN after paid raises an ops alarm (no auto-claw
       provider_status: 'refunded',
     });
 
-    // The order stays paid — no automatic tier clawback.
+    // The order stays paid (terminal-forward) but the tier is auto-clawed-back.
     expect(after?.status).toBe('paid');
-    // The integrity alarm fired with the reconciliation context.
-    const alarm = errors.find((e) => e.obj.event === 'ipn_refund_after_paid');
-    expect(alarm, 'ipn_refund_after_paid alarm must fire').toBeDefined();
-    expect(alarm?.obj.order_id).toBe('ord_refund');
-    expect(alarm?.obj.account_id).toBe('acc_r');
-    expect(alarm?.obj.provider_status).toBe('refunded');
+    // The ops visibility note fired (now a WARN, not an error).
+    const note = warns.find((e) => e.obj.event === 'ipn_refund_after_paid');
+    expect(note, 'ipn_refund_after_paid note must fire').toBeDefined();
+    expect(note?.obj.order_id).toBe('ord_refund');
+    expect(note?.obj.account_id).toBe('acc_r');
+    expect(note?.obj.provider_status).toBe('refunded');
+    // The clawback was invoked with the account + order + refund moment.
+    expect(clawbackCalls).toHaveLength(1);
+    expect(clawbackCalls[0]?.account_id).toBe('acc_r');
+    expect(clawbackCalls[0]?.order_id).toBe('ord_refund');
+    expect(clawbackCalls[0]?.at.getTime()).toBe(9_000);
     // No failed side-effects re-fire (paid is terminal-forward).
     expect(failedWebhooks).toEqual([]);
   });
 
-  it('a refund on a PENDING order still transitions normally to failed (no alarm)', async () => {
+  it('a clawback failure is swallowed (IPN still acks) and logs the integrity alarm', async () => {
     const repo = new InMemoryCryptoOrdersRepo();
-    const errors: Array<{ obj: Record<string, unknown> }> = [];
+    const errors: Array<{ obj: Record<string, unknown>; msg: string }> = [];
     const svc = new CryptoOrdersService({
       repo,
       nowFn: () => 9_000,
-      logger: { error: (obj) => errors.push({ obj }) },
+      logger: {
+        warn: () => undefined,
+        error: (obj, msg) => errors.push({ obj, msg }),
+      },
+      tierActivator: {
+        activateTierForPaidOrder: () => Promise.resolve(),
+        revokeTierForRefundedOrder: () => Promise.reject(new Error('db down')),
+      },
+    });
+    await svc.create({
+      order_id: 'ord_refund_fail',
+      account_id: 'acc_rf',
+      product: 'solo_manual',
+      price_cents: 7900,
+      price_currency: 'USD',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_refund_fail',
+      payment_id: 'npf',
+      provider_status: 'finished',
+    });
+    // The clawback rejects, but the IPN still resolves (200 ack) with the order paid.
+    const after = await svc.applyIpnStatus({
+      order_id: 'ord_refund_fail',
+      payment_id: 'npf',
+      provider_status: 'refunded',
+    });
+    expect(after?.status).toBe('paid');
+    const alarm = errors.find((e) => e.obj.event === 'crypto_refund_tier_clawback_failed');
+    expect(alarm, 'clawback-failed integrity alarm must fire').toBeDefined();
+    expect(alarm?.obj.order_id).toBe('ord_refund_fail');
+    expect(alarm?.obj.account_id).toBe('acc_rf');
+  });
+
+  it('a refund on a PENDING order still transitions normally to failed (no note, no clawback)', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const warns: Array<{ obj: Record<string, unknown> }> = [];
+    const clawbackCalls: unknown[] = [];
+    const svc = new CryptoOrdersService({
+      repo,
+      nowFn: () => 9_000,
+      logger: { warn: (obj) => warns.push({ obj }) },
+      tierActivator: {
+        activateTierForPaidOrder: () => Promise.resolve(),
+        revokeTierForRefundedOrder: (args) => {
+          clawbackCalls.push(args);
+          return Promise.resolve({ revoked: false });
+        },
+      },
     });
     await svc.create({
       order_id: 'ord_pending_refund',
@@ -2840,6 +2906,8 @@ describe('C3 — refund/failure IPN after paid raises an ops alarm (no auto-claw
       provider_status: 'refunded',
     });
     expect(after?.status).toBe('failed');
-    expect(errors.find((e) => e.obj.event === 'ipn_refund_after_paid')).toBeUndefined();
+    // Not an after-paid refund → no visibility note and no clawback attempt.
+    expect(warns.find((e) => e.obj.event === 'ipn_refund_after_paid')).toBeUndefined();
+    expect(clawbackCalls).toHaveLength(0);
   });
 });
