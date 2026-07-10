@@ -143,8 +143,18 @@ export class OAuthClientServiceImpl implements OAuthClientService {
     const pending = await this.deps.pending.findActiveByTokenHash(tokenHash, nowDate);
     if (!pending) return null;
 
-    // Insert the link onto the existing account_id from the pending row,
-    // mark the pending row consumed (single-use).
+    // Atomic single-use gate: claim the pending row BEFORE creating the link.
+    // The findActiveByTokenHash read above is a fast-fail pre-check; this CAS is
+    // the authoritative serialization point (mirrors OAuthService's
+    // consumeCodeIfUnconsumed). Two concurrent confirm-merges carrying the same
+    // token → exactly one claims → exactly one link created; the loser gets a
+    // clean null (→ 400 "already used") instead of a duplicate-key 500.
+    if (!(await this.deps.pending.markConsumedAt(pending.id, nowDate))) {
+      return null;
+    }
+
+    // Insert the link onto the existing account_id from the (now-claimed)
+    // pending row.
     const link = await this.deps.links.insertLink({
       accountId: pending.accountId,
       provider: pending.provider,
@@ -154,7 +164,6 @@ export class OAuthClientServiceImpl implements OAuthClientService {
       providerAvatarUrl: pending.providerAvatarUrl,
     });
     await this.deps.links.markLoginAt(link.id, nowDate);
-    await this.deps.pending.markConsumedAt(pending.id, nowDate);
     return { accountId: pending.accountId, linkId: link.id };
   }
 }

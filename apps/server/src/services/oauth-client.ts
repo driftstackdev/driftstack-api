@@ -99,8 +99,12 @@ export interface OAuthPendingLinksRepo {
    *  `now` arg makes the time-check deterministic for tests. */
   findActiveByTokenHash(tokenHash: string, now: Date): Promise<OAuthPendingLinkRow | null>;
 
-  /** Mark consumed (single-use). Idempotent — second call no-ops. */
-  markConsumedAt(id: string, at: Date): Promise<void>;
+  /** Atomically claim the pending row as consumed (single-use). Returns true
+   *  when THIS call transitioned it to consumed, false if it was already
+   *  consumed (a concurrent confirm won the race). Idempotent — a second call
+   *  no-ops and returns false. Callers must only create the link when the claim
+   *  wins, so a double-submit can't produce a duplicate-key 500. */
+  markConsumedAt(id: string, at: Date): Promise<boolean>;
 }
 
 // ─── service surface ────────────────────────────────────────────

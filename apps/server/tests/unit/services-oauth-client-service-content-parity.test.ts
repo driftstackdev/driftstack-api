@@ -117,10 +117,16 @@ describe('services/oauth-client-service content parity', () => {
     expect(body).toMatch(
       /const tokenHash = sha256Hex\(plaintextToken\);\s*\n?\s*const nowDate = now \?\? new Date\(\);\s*\n?\s*const pending = await this\.deps\.pending\.findActiveByTokenHash\(tokenHash, nowDate\);\s*\n?\s*if \(!pending\) return null;/,
     );
+    // Atomic-claim reorder (2026-07-10): the single-use consume is now a CAS
+    // gate BEFORE insertLink (claim wins → create; loser → clean null/400), so a
+    // double-submit can't hit the duplicate-key 500. Mirrors consumeCodeIfUnconsumed.
     expect(body).toMatch(
-      /\/\/ Insert the link onto the existing account_id from the pending row,\s*\n?\s*\/\/ mark the pending row consumed \(single-use\)\./,
+      /Atomic single-use gate: claim the pending row BEFORE creating the link\./,
     );
-    expect(body).toMatch(/await this\.deps\.pending\.markConsumedAt\(pending\.id, nowDate\);/);
+    expect(body).toMatch(/authoritative serialization point/);
+    expect(body).toMatch(
+      /if \(!\(await this\.deps\.pending\.markConsumedAt\(pending\.id, nowDate\)\)\) \{\s*\n?\s*return null;\s*\n?\s*\}/,
+    );
   });
 
   it("generatePlaintextToken 32-byte → 64-hex framing pinned: 'Same shape as the existing auth-flow plaintext tokens (email_verify, magic_link, password_reset) so the per-token entropy ceiling stays consistent across the auth surface.' — pinned so the cross-token-shape uniformity contract + the existing 3-auth-flow-token cross-reference (email_verify + magic_link + password_reset) all stay documented", () => {

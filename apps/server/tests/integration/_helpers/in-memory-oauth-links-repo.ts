@@ -94,9 +94,12 @@ export class InMemoryOAuthPendingLinksRepo implements OAuthPendingLinksRepo {
     return Promise.resolve(r);
   }
 
-  markConsumedAt(id: string, at: Date): Promise<void> {
+  markConsumedAt(id: string, at: Date): Promise<boolean> {
     const row = this.rows.find((x) => x.id === id);
-    if (row && row.consumedAt === null) row.consumedAt = at;
-    return Promise.resolve();
+    if (row && row.consumedAt === null) {
+      row.consumedAt = at;
+      return Promise.resolve(true);
+    }
+    return Promise.resolve(false);
   }
 }

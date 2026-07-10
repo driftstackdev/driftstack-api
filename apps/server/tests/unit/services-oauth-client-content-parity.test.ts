@@ -95,7 +95,9 @@ describe('services/oauth-client content parity', () => {
       /findActiveByTokenHash\(tokenHash: string, now: Date\): Promise<OAuthPendingLinkRow \| null>;/,
     );
     expect(body).toMatch(
-      /\/\*\* Mark consumed \(single-use\)\. Idempotent — second call no-ops\. \*\/\s*\n?\s*markConsumedAt\(id: string, at: Date\): Promise<void>;/,
+      // Atomic-claim CAS (2026-07-10): returns true only when THIS call claimed
+      // the pending row, so confirmPendingLink can gate link-creation on the win.
+      /Atomically claim the pending row as consumed \(single-use\)[\s\S]{0,420}?markConsumedAt\(id: string, at: Date\): Promise<boolean>;/,
     );
   });
 

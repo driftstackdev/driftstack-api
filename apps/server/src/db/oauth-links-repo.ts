@@ -142,10 +142,14 @@ export class DrizzleOAuthPendingLinksRepo implements OAuthPendingLinksRepo {
     return row ? toPendingRow(row) : null;
   }
 
-  async markConsumedAt(id: string, at: Date): Promise<void> {
-    await this.database.db
+  async markConsumedAt(id: string, at: Date): Promise<boolean> {
+    // Conditional CAS: only the caller that flips consumedAt from NULL claims
+    // the row. RETURNING lets confirmPendingLink gate link-creation on the win.
+    const claimed = await this.database.db
       .update(oauthPendingLinks)
       .set({ consumedAt: at })
-      .where(and(eq(oauthPendingLinks.id, id), isNull(oauthPendingLinks.consumedAt)));
+      .where(and(eq(oauthPendingLinks.id, id), isNull(oauthPendingLinks.consumedAt)))
+      .returning({ id: oauthPendingLinks.id });
+    return claimed.length > 0;
   }
 }
