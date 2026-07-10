@@ -414,6 +414,23 @@ describe('buildAssignProfileBlock (step (e) restore side — crypto-free R2 half
     );
   });
 
+  it('least-privilege: the restore GET TTL is capped at the 1h restore window even when the PUT TTL is longer', async () => {
+    // The restore GET is consumed at session START, not teardown, so it must NOT
+    // inherit the long save-back PUT TTL. With a 4.5h caller TTL, the PUT gets
+    // the full value but the GET is capped at the 3600s restore window.
+    const c = r2For(true);
+    await buildAssignProfileBlock(c.r2, 'prof_abc', 'ZGVr', { urlTtlSeconds: 16200 });
+    expect((c.presignPut.mock.calls[0]![0] as { expiresIn: number }).expiresIn).toBe(16200);
+    expect((c.presignGet.mock.calls[0]![0] as { expiresIn: number }).expiresIn).toBe(3600);
+
+    // A shorter-than-restore-window caller TTL shrinks BOTH (the GET never
+    // exceeds the PUT TTL).
+    const s = r2For(true);
+    await buildAssignProfileBlock(s.r2, 'prof_abc', 'ZGVr', { urlTtlSeconds: 600 });
+    expect((s.presignPut.mock.calls[0]![0] as { expiresIn: number }).expiresIn).toBe(600);
+    expect((s.presignGet.mock.calls[0]![0] as { expiresIn: number }).expiresIn).toBe(600);
+  });
+
   it('the block feeds serializeSessionAssign.profile → valid snake_case wire (sealed_blob_url + sealed_blob_put_url)', async () => {
     const { r2 } = r2For(true);
     const block = await buildAssignProfileBlock(r2, 'prof_abc', 'ZGVr');

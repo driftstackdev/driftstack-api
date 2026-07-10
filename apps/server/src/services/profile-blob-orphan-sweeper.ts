@@ -65,12 +65,16 @@ const SEALED_KEY_RE = /^profiles\/([0-9a-f-]{36})\.sealed$/;
 const SEALED_PREFIX = 'profiles/';
 
 /**
- * Default grace window (2h). MUST exceed the max presigned save-back PUT TTL
- * (currently 3600s / 1h — see DEFAULT_PROFILE_URL_TTL_SECONDS in
- * profile-store.ts) so an in-flight first save-back on a freshly-created
- * profile is never reaped. 2h leaves generous headroom over the 1h ceiling.
+ * Default grace window (6h). MUST exceed the max presigned save-back PUT TTL so
+ * an in-flight save-back is never reaped mid-flight: a blob's lastModified only
+ * advances while a valid PUT URL exists, so once a blob is grace-old no live PUT
+ * could still be writing it. The save-back PUT is minted for the session
+ * lifetime — up to MANUAL_SESSION_MAX_DURATION_SECONDS (4h) plus a teardown
+ * margin (~4.5h max; see buildAssignProfileBlock in profile-store.ts). 6h leaves
+ * headroom over that ceiling. ⚠️ If any caller ever mints a LONGER save-back PUT
+ * TTL, raise this to stay above it.
  */
-export const DEFAULT_ORPHAN_GRACE_MS = 2 * 60 * 60 * 1000;
+export const DEFAULT_ORPHAN_GRACE_MS = 6 * 60 * 60 * 1000;
 
 /** Default sweep interval (6h). */
 export const DEFAULT_ORPHAN_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;

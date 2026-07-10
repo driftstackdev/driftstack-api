@@ -226,14 +226,19 @@ export interface AssignProfileBlock {
  * supplies. A fresh profile (no prior store) gets a PUT URL but no GET URL, so
  * the harness starts stateless and seals its first store on end.
  *
- * `urlTtlSeconds` MUST outlive the session: the save-back PUT URL is minted now
- * (at assign) but used by the harness at session END. R2/S3 presigned URLs
- * default to 900s (15 min), but a session's max duration defaults to 1800s
- * (30 min) and can be configured longer — so the default TTL would expire the
- * save-back URL mid-session and the customer's profile updates would be silently
- * lost. The caller passes the session's maxDurationSeconds plus a teardown
- * margin; the default here (3600s) safely covers the 1800s default max. Clamped
- * to R2's 7-day presign ceiling.
+ * `urlTtlSeconds` sets the save-back PUT URL's lifetime, which MUST outlive the
+ * session: the PUT URL is minted now (at assign) but used by the harness at
+ * session END. R2/S3 presigned URLs default to 900s (15 min) and a manual
+ * session runs up to MANUAL_SESSION_MAX_DURATION_SECONDS (4h) — so a too-short
+ * TTL would expire the save-back URL mid-session and the customer's profile
+ * updates would be silently lost. The caller passes the session's
+ * maxDurationSeconds plus a teardown margin; clamped to R2's 7-day presign
+ * ceiling. The restore GET URL, by contrast, is consumed at session START (the
+ * harness fetches the sealed store to restore it), NOT at teardown — so it gets
+ * a SHORTER TTL (the 1h restore window) independent of `urlTtlSeconds`. That's
+ * least-privilege: a leaked GET (ciphertext of the customer's sealed store) then
+ * stays valid only as long as a restore could plausibly still be pending, not
+ * for the whole multi-hour session.
  */
 const PRESIGN_MAX_TTL_SECONDS = 7 * 24 * 60 * 60; // R2/S3 SigV4 ceiling
 const DEFAULT_PROFILE_URL_TTL_SECONDS = 3600; // covers the 1800s default max session + margin
@@ -244,23 +249,30 @@ export async function buildAssignProfileBlock(
   dek: string,
   opts: { urlTtlSeconds?: number } = {},
 ): Promise<AssignProfileBlock> {
-  const expiresIn = Math.min(
+  // The save-back PUT is used at session END, so its TTL must cover the whole
+  // session lifetime (the caller passes maxDurationSeconds + a teardown margin).
+  const putExpiresIn = Math.min(
     Math.max(opts.urlTtlSeconds ?? DEFAULT_PROFILE_URL_TTL_SECONDS, 1),
     PRESIGN_MAX_TTL_SECONDS,
   );
+  // The restore GET is consumed at session START, not teardown — so it does not
+  // need to outlive the session. Cap it at the restore window (1h, which
+  // comfortably covers any cold-start) for least-privilege; never longer than the
+  // PUT TTL (a short caller override shrinks both).
+  const getExpiresIn = Math.min(putExpiresIn, DEFAULT_PROFILE_URL_TTL_SECONDS);
   const key = profileSealedBlobKey(profileId);
   // PUT URL always (every profile-backed session must be able to save back). TTL
   // covers the full session lifetime — it's used at END, not now.
   const sealedBlobPutUrl = await r2.presignPut({
     key,
     contentType: 'application/octet-stream',
-    expiresIn,
+    expiresIn: putExpiresIn,
   });
   // GET URL only when a prior sealed store exists (else the harness is stateless
   // for this profile until its first save-back).
   const { exists } = await r2.headObject(key);
   if (exists) {
-    const sealedBlobUrl = await r2.presignGet({ key, expiresIn });
+    const sealedBlobUrl = await r2.presignGet({ key, expiresIn: getExpiresIn });
     return { profileId, dek, sealedBlobUrl, sealedBlobPutUrl };
   }
   return { profileId, dek, sealedBlobPutUrl };

@@ -74,6 +74,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger: silentLogger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -93,6 +94,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger: silentLogger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -109,6 +111,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger: silentLogger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -128,6 +131,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger: silentLogger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -150,6 +154,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger: silentLogger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -168,6 +173,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -194,6 +200,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -235,6 +242,7 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       r2,
       profiles,
       logger: silentLogger,
+      graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
     const res = await svc.tickOnce();
@@ -245,16 +253,20 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
 });
 
 describe('ProfileBlobOrphanSweeperService defaults + scheduling', () => {
-  it('grace default = 2h, interval default = 6h', () => {
-    expect(DEFAULT_ORPHAN_GRACE_MS).toBe(2 * HOUR_MS);
+  it('grace default = 6h, interval default = 6h', () => {
+    expect(DEFAULT_ORPHAN_GRACE_MS).toBe(6 * HOUR_MS);
     expect(DEFAULT_ORPHAN_SWEEP_INTERVAL_MS).toBe(6 * HOUR_MS);
   });
 
-  it('grace default (2h) exceeds the max presigned save-back PUT TTL (1h)', () => {
+  it('grace default (6h) exceeds the max presigned save-back PUT TTL (~4.5h)', () => {
     // The reaper's whole safety hinge: grace MUST exceed the max minted
-    // presigned save-back TTL (DEFAULT_PROFILE_URL_TTL_SECONDS = 3600s) so an
-    // in-flight first save-back is never reaped mid-flight.
-    expect(DEFAULT_ORPHAN_GRACE_MS).toBeGreaterThan(3600 * 1000);
+    // presigned save-back TTL so an in-flight save-back is never reaped
+    // mid-flight. The save-back PUT is minted for the session lifetime — up to
+    // MANUAL_SESSION_MAX_DURATION_SECONDS (14400s / 4h) + a ~1800s teardown
+    // margin = ~16200s (4.5h). 6h leaves headroom over that ceiling. If the
+    // save-back TTL is ever raised, this bound (and the grace default) must rise.
+    const MAX_SAVE_BACK_PUT_TTL_SECONDS = 14400 + 1800;
+    expect(DEFAULT_ORPHAN_GRACE_MS).toBeGreaterThan(MAX_SAVE_BACK_PUT_TTL_SECONDS * 1000);
   });
 
   it('start() arms a self-re-arming chain via the injected timer (re-arms after each tick)', async () => {
