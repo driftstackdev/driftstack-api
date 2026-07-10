@@ -112,8 +112,10 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
     // Zero-accounts is also a re-arm path → dedup:false (chain must survive
     // the in-flight job even when there's nothing to evaluate).
     expect(body).toMatch(/\/\/ Even with zero accounts, re-enqueue tomorrow\./);
+    // The chain-survival try/catch deepened this branch's indentation, so
+    // prettier wraps the zero-accounts re-arm across lines (semantics identical).
     expect(body).toMatch(
-      /await enqueueNextNightlyRun\(\{ scheduledJobs: opts\.scheduledJobs, nowFn: now, dedup: false \}\);\s*\n?\s*return;/,
+      /await enqueueNextNightlyRun\(\{\s*\n?\s*scheduledJobs: opts\.scheduledJobs,\s*\n?\s*nowFn: now,\s*\n?\s*dedup: false,\s*\n?\s*\}\);\s*\n?\s*return;/,
     );
   });
 
