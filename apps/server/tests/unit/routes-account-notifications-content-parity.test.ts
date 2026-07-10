@@ -64,12 +64,16 @@ describe('routes/account-notifications.ts content parity', () => {
     expect(body).toMatch(/reply\.raw\.write\(`data: \$\{JSON\.stringify\(event\)\}\\n\\n`\);/);
   });
 
-  it('heartbeat at 25_000ms default (DEFAULT_HEARTBEAT_MS), overridable via opts.heartbeatMs; .unref() so heartbeat does not keep the process alive past disconnect', () => {
+  it('heartbeat at 25_000ms default (DEFAULT_HEARTBEAT_MS), overridable via opts.heartbeatMs; .unref() so heartbeat does not keep the process alive past disconnect; each tick RE-VALIDATES auth (requireAuthEventSource) → success writes the heartbeat, failure destroys the socket so a revoked web session cannot keep streaming (bounds the leak to one interval)', () => {
     expect(body).toMatch(/const DEFAULT_HEARTBEAT_MS = 25_000;/);
     expect(body).toMatch(/const heartbeatMs = opts\.heartbeatMs \?\? DEFAULT_HEARTBEAT_MS;/);
+    expect(body).toMatch(/const heartbeat = setInterval\(\(\) => \{/);
+    // The revoke-teardown fix: re-auth each tick, write on success, destroy on failure.
+    expect(body).toMatch(/void app\.requireAuthEventSource\(req, reply\)\.then\(/);
     expect(body).toMatch(
-      /const heartbeat = setInterval\(\(\) => \{\s*\n?\s*reply\.raw\.write\(`: heartbeat \$\{new Date\(\)\.toISOString\(\)\}\\n\\n`\);\s*\n?\s*\}, heartbeatMs\);/,
+      /reply\.raw\.write\(`: heartbeat \$\{new Date\(\)\.toISOString\(\)\}\\n\\n`\)/,
     );
+    expect(body).toMatch(/\(\) => reply\.raw\.destroy\(\)/);
     expect(body).toMatch(/heartbeat\.unref\(\);/);
   });
 

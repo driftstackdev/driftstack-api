@@ -125,15 +125,29 @@ export function registerAccountNotificationsRoutes(
         if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
       });
 
+      // Each heartbeat also RE-VALIDATES the connection's auth: a web session
+      // revoked after this stream connected (logout / revoke-all / refresh
+      // rotation) must not keep receiving the account's events on the already-
+      // hijacked socket. requireAuthEventSource re-runs authenticate() with the
+      // request's stored token; on failure (revoked / expired) we DESTROY the
+      // socket, which fires the 'close' handler below → cleanup. EventSource won't
+      // silently re-establish (a fresh connect re-auths and 401s). Bounds the
+      // post-revoke leak to one heartbeat (~25s, the auth cache TTL) instead of
+      // lingering until the client's TCP drops; a transient auth blip just closes
+      // and the client reconnects (self-healing).
       const heartbeat = setInterval(() => {
-        reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+        void app.requireAuthEventSource(req, reply).then(
+          () => reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`),
+          () => reply.raw.destroy(),
+        );
       }, heartbeatMs);
       heartbeat.unref();
 
       let closed = false;
       const cleanup = (): void => {
         // Idempotent — invoked from the backpressure guard above AND the
-        // close/error handlers below; double-end / double-unsubscribe /
+        // close/error handlers below (incl. the heartbeat re-auth failure, which
+        // destroys the socket → 'close'); double-end / double-unsubscribe /
         // double-decrement is avoided so the paths can't race.
         if (closed) return;
         closed = true;
