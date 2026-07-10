@@ -459,12 +459,34 @@ export class SessionsService {
       throw err;
     }
 
-    await this.deps.repo.recordEvent({
-      sessionId: record.id,
-      type: 'created',
-      payload: { archetype, purpose, driver_session_id: driverResult.driverSessionId },
-      durationMs: null,
-    });
+    // Best-effort: the session is already fully created (status 'ready', worker
+    // live). A post-hoc created-event write failure (DB blip) must NOT surface
+    // as a raw 500 to the customer — that leaks a live session while the caller
+    // believes create failed. Swallow + log, mirroring the accountAudit block
+    // below (same posture: the session exists, an audit/event write can fail).
+    try {
+      await this.deps.repo.recordEvent({
+        sessionId: record.id,
+        type: 'created',
+        payload: { archetype, purpose, driver_session_id: driverResult.driverSessionId },
+        durationMs: null,
+      });
+    } catch (err) {
+      try {
+        this.deps.logger?.error?.(
+          {
+            component: 'sessions-service',
+            event: 'created_event_record_failed',
+            account_id: accountId,
+            session_id: record.id,
+            err,
+          },
+          'session created-event record failed — session is live; swallowed so create still succeeds',
+        );
+      } catch {
+        // Swallow; logging is best-effort.
+      }
+    }
 
     // V-216 — customer-facing audit entry.
     // V-326e1 — audit row goes on the OWNER's audit log (accountId

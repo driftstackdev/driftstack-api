@@ -158,6 +158,21 @@ export class DrizzleSessionRepo implements SessionRepo {
     return row ? toSessionRecord(row) : null;
   }
 
+  // Terminal statuses ('destroyed', 'errored') are STICKY: once a row reaches
+  // either, this write is a silent no-op (the WHERE excludes terminal rows).
+  // This closes a concurrent-destroy resurrection race — a caller can read a
+  // non-terminal status, await a slow box round-trip, then write the STALE
+  // status back onto a row that a concurrent destroy()/runWithFailureCapture
+  // marked terminal in between. Without this guard the row flips back to
+  // non-terminal (destroyedAt left set) → use-after-destroy (requireOwned only
+  // rejects destroyed/errored, so navigate/interact/capture get dispatched to a
+  // dead box) + re-inclusion in the active/expiry sweeps (double driver.destroy
+  // + duplicate session.completed webhook). Every LEGITIMATE transition still
+  // applies: non-terminal→terminal (normal destroy/error), non-terminal→
+  // non-terminal (create 'ready', getState write-back). Nothing legitimately
+  // transitions OUT of a terminal state (they are sinks), and a terminal→
+  // terminal write (e.g. destroyed→errored) must NOT reorder teardown, so the
+  // no-op is correct for every caller — none inspects the result.
   async updateSessionStatus(
     id: string,
     status: SessionRecord['status'],
@@ -171,7 +186,7 @@ export class DrizzleSessionRepo implements SessionRepo {
         ...(extra?.lastStateAt ? { lastStateAt: extra.lastStateAt } : {}),
         ...(extra?.destroyedAt ? { destroyedAt: extra.destroyedAt } : {}),
       })
-      .where(eq(sessions.id, id));
+      .where(and(eq(sessions.id, id), notInArray(sessions.status, ['destroyed', 'errored'])));
   }
 
   async countActiveSessions(accountId: string): Promise<number> {

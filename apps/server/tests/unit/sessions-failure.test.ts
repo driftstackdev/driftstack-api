@@ -74,6 +74,10 @@ class StubRepo implements SessionRepo {
    *  — simulates a post-dispatch DB-write failure AFTER the worker is live.
    *  Exercises the create() post-dispatch slot-release path. */
   throwOnSetDriverSessionId: Error | null = null;
+  /** Opt-in (default null): when set, recordEvent rejects for the matching
+   *  event type — exercises the create() best-effort created-event guard (a
+   *  post-success event write must not fail the request + leak the live session). */
+  throwOnRecordEventType: { type: string; error: Error } | null = null;
 
   insertSession(input: NewSessionInput): Promise<SessionRecord> {
     if (this.throwOnInsert !== null) return Promise.reject(this.throwOnInsert);
@@ -125,13 +129,17 @@ class StubRepo implements SessionRepo {
   findSessionUnscoped(id: string): Promise<SessionRecord | null> {
     return Promise.resolve(this.sessions.get(id) ?? null);
   }
+  // Terminal statuses ('destroyed', 'errored') are STICKY — mirrors the Drizzle
+  // repo's notInArray(status, ['destroyed','errored']) WHERE clause so service
+  // tests exercise the real concurrent-destroy resurrection guard: a write onto
+  // an already-terminal row is a silent no-op.
   updateSessionStatus(
     id: string,
     status: SessionRecord['status'],
     extra?: { lastStateAt?: Date; destroyedAt?: Date },
   ): Promise<void> {
     const r = this.sessions.get(id);
-    if (!r) return Promise.resolve();
+    if (!r || r.status === 'destroyed' || r.status === 'errored') return Promise.resolve();
     this.sessions.set(id, {
       ...r,
       status,
@@ -161,6 +169,9 @@ class StubRepo implements SessionRepo {
     return Promise.resolve([]);
   }
   recordEvent(input: SessionEventInput): Promise<void> {
+    if (this.throwOnRecordEventType !== null && this.throwOnRecordEventType.type === input.type) {
+      return Promise.reject(this.throwOnRecordEventType.error);
+    }
     this.events.push(input);
     return Promise.resolve();
   }
@@ -180,6 +191,14 @@ class StubRepo implements SessionRepo {
   read(id: string): SessionRecord | undefined {
     return this.sessions.get(id);
   }
+
+  /** Test seam: synchronously plant a terminal state on a row, standing in for
+   *  a CONCURRENT destroy()/error-capture that raced in during a slow box round-
+   *  trip. Bypasses the terminal-sticky guard (this IS the concurrent writer). */
+  forceTerminal(id: string, status: 'destroyed' | 'errored', destroyedAt: Date): void {
+    const r = this.sessions.get(id);
+    if (r) this.sessions.set(id, { ...r, status, destroyedAt });
+  }
 }
 
 class ThrowingDriver implements Driver {
@@ -196,6 +215,11 @@ class ThrowingDriver implements Driver {
   /** Opt-in: when set, the NEXT destroy() rejects (simulates a driver/network
    *  fault on teardown — exercises the destroy() slot-release backstop, #4). */
   private throwOnDestroy: Error | null = null;
+
+  /** Opt-in: runs at the START of getState() — a seam to simulate a CONCURRENT
+   *  destroy landing during the box round-trip (before getState's stale write-
+   *  back), exercising the resurrection guard. */
+  onGetState: (() => void) | null = null;
 
   primeNextThrow(args: { name: string; message: string }): void {
     this.throwOnNext = args;
@@ -256,6 +280,7 @@ class ThrowingDriver implements Driver {
     pageState: null;
     capturedAt: Date;
   }> {
+    if (this.onGetState !== null) this.onGetState();
     this.throwIfArmed();
     return Promise.resolve({
       url: null,
@@ -587,5 +612,91 @@ describe('SessionsService — V-090 driver-failure capture', () => {
 
     // Only session.completed should fire (from destroy).
     expect(webhookEvents.map((e) => e.eventType)).toEqual(['session.completed']);
+  });
+});
+
+describe('SessionsService — terminal-state resurrection guard', () => {
+  it('getState() does NOT resurrect a row destroyed mid box round-trip (concurrent-destroy race)', async () => {
+    // getState reads status='ready' (requireOwned), awaits the box round-trip,
+    // then writes the STALE 'ready' back. If a concurrent destroy marked the row
+    // 'destroyed' during the round-trip, the terminal-sticky guard must reject
+    // that write-back — otherwise the row flips back to 'ready' (destroyedAt left
+    // set) → use-after-destroy + re-inclusion in the sweeps.
+    const { service, repo, driver } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+
+    const destroyedAt = new Date();
+    // Land the concurrent destroy DURING the box round-trip, after requireOwned
+    // already captured status='ready' but before getState's stale write-back.
+    driver.onGetState = () => {
+      repo.forceTerminal(session.id, 'destroyed', destroyedAt);
+    };
+
+    await service.getState(ctx, session.id);
+
+    const after = repo.read(session.id);
+    // The row STAYS destroyed — the stale 'ready' write-back was a no-op.
+    expect(after?.status).toBe('destroyed');
+    expect(after?.destroyedAt).toEqual(destroyedAt);
+  });
+
+  it('updateSessionStatus is terminal-sticky (no resurrection; no destroyed→errored / errored→destroyed flip; normal transitions still apply)', async () => {
+    // The load-bearing repo-level guarantee behind every service-level race in
+    // this suite. Mirrors the Drizzle notInArray WHERE clause.
+    const { service, repo } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    expect(repo.read(session.id)?.status).toBe('ready');
+
+    // (a) NORMAL transition still applies: ready → destroyed.
+    const destroyedAt = new Date('2026-06-01T00:00:00Z');
+    await repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
+    expect(repo.read(session.id)?.status).toBe('destroyed');
+    expect(repo.read(session.id)?.destroyedAt).toEqual(destroyedAt);
+
+    // (b) A non-terminal write onto a destroyed row is a NO-OP (no resurrection);
+    // destroyedAt stays intact.
+    await repo.updateSessionStatus(session.id, 'ready');
+    expect(repo.read(session.id)?.status).toBe('destroyed');
+    expect(repo.read(session.id)?.destroyedAt).toEqual(destroyedAt);
+
+    // (c) A terminal write onto a DIFFERENT terminal state is a NO-OP (no
+    // destroyed→errored flip / no double-teardown churn).
+    await repo.updateSessionStatus(session.id, 'errored', { destroyedAt: new Date() });
+    expect(repo.read(session.id)?.status).toBe('destroyed');
+    expect(repo.read(session.id)?.destroyedAt).toEqual(destroyedAt);
+
+    // (d) Symmetric: an errored row does not accept a 'destroyed' write.
+    const errored = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    repo.forceTerminal(errored.id, 'errored', new Date('2026-06-02T00:00:00Z'));
+    await repo.updateSessionStatus(errored.id, 'destroyed', { destroyedAt: new Date() });
+    expect(repo.read(errored.id)?.status).toBe('errored');
+  });
+
+  it('create() still resolves when the best-effort created-event write fails (live session not leaked as a 500)', async () => {
+    // The session is fully created (status ready, worker live) BEFORE the
+    // created-event write. A DB blip on that write must NOT surface as a raw 500
+    // — that would leak the live session while the caller believes create failed.
+    const { service, repo, driver, loggedErrors } = buildService();
+    const ctx = buildCtx();
+    repo.throwOnRecordEventType = {
+      type: 'created',
+      error: new Error('created-event write failed'),
+    };
+
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+
+    // create resolved successfully with a live 'ready' session.
+    expect(session.status).toBe('ready');
+    expect(session.id).toBeTruthy();
+    // The worker was NOT torn down (the create succeeded).
+    expect(driver.destroyedIds).toEqual([]);
+    // The row is live + non-terminal.
+    expect(repo.read(session.id)?.status).toBe('ready');
+    // The event failure was logged best-effort (not surfaced to the caller).
+    expect(loggedErrors.some((e) => e.obj.event === 'created_event_record_failed')).toBe(true);
   });
 });

@@ -107,13 +107,17 @@ export class InMemorySessionsRepo implements SessionRepo {
     return Promise.resolve(this.sessions.get(id) ?? null);
   }
 
+  // Terminal statuses ('destroyed', 'errored') are STICKY — mirrors the
+  // Drizzle repo's notInArray(status, ['destroyed','errored']) WHERE clause so
+  // service tests exercise the real concurrent-destroy resurrection guard: a
+  // write onto an already-terminal row is a silent no-op.
   updateSessionStatus(
     id: string,
     status: SessionRecord['status'],
     extra?: { lastStateAt?: Date; destroyedAt?: Date },
   ): Promise<void> {
     const s = this.sessions.get(id);
-    if (s) {
+    if (s && s.status !== 'destroyed' && s.status !== 'errored') {
       const updated: SessionRecord = {
         ...s,
         status,
