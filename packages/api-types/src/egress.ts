@@ -167,12 +167,12 @@ export const WireGuardProxyConfigSchema = z.object({
       },
       { message: 'endpoint must be host:port (port 1-65535)' },
     ),
-  allowed_ips: z.string().default('0.0.0.0/0'),
+  allowed_ips: z.string().max(1024).default('0.0.0.0/0'),
   // [Interface] Address (e.g. 10.7.0.2/32) — the harness userspace WireGuard
   // ifconfig needs it to bring up the tunnel (A3 W2109). Optional in the schema
   // for back-compat; the GUI's wg0.conf parser requires it before create.
-  address: z.string().optional(),
-  dns: z.string().optional(),
+  address: z.string().max(128).optional(),
+  dns: z.string().max(256).optional(),
 });
 export type WireGuardProxyConfig = z.infer<typeof WireGuardProxyConfigSchema>;
 
