@@ -34,6 +34,35 @@ class WebhookDeliveryListPage(BaseModel):
     next_cursor: str | None
 
 
+class RotateWebhookSecretResponse(BaseModel):
+    """V-359 — response shape for ``POST /v1/webhooks/{id}/rotate-secret``.
+
+    Mirrors ``RotateWebhookSecretResponseSchema`` in api-types (TS/Go
+    already return this typed). ``secret`` is the fresh plaintext,
+    returned ONCE; the prior secret stays active until
+    ``grace_expires_at`` (Driftstack dual-signs every outbound delivery
+    during the window).
+    """
+
+    id: str
+    secret: str
+    secret_prefix: str
+    prev_secret_prefix: str
+    grace_expires_at: str
+
+
+class SendTestWebhookResponse(BaseModel):
+    """V-356 — response shape for ``POST /v1/webhooks/{id}/test``.
+
+    Mirrors the TS ``sendTest`` return type / Go ``SendTestWebhookResponse``.
+    ``event_type`` is always ``'test.ping'``.
+    """
+
+    delivery_id: str
+    event_id: str
+    event_type: str
+
+
 def _webhook_path(webhook_id: str, suffix: str = "") -> str:
     return f"/v1/webhooks/{quote(webhook_id, safe='')}{suffix}"
 
@@ -116,7 +145,7 @@ class WebhooksResource:
         )
         return parse_model(WebhookDelivery, data)
 
-    def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
+    def rotate_secret(self, webhook_id: str) -> RotateWebhookSecretResponse:
         """V-359 — rotate the webhook signing secret.
 
         Returns the fresh plaintext (shown ONCE) plus grace metadata:
@@ -125,16 +154,20 @@ class WebhooksResource:
         every outbound delivery (both new + old HMAC). Roll the new
         secret across your verifier infra inside that window.
         """
-        return self._http.request("POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={})
+        data = self._http.request(
+            "POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={}
+        )
+        return parse_model(RotateWebhookSecretResponse, data)
 
-    def send_test(self, webhook_id: str) -> dict[str, Any]:
+    def send_test(self, webhook_id: str) -> SendTestWebhookResponse:
         """V-356 — send a synthetic ``test.ping`` event to the endpoint.
 
         Bypasses subscription so customers can verify their handler
         is reachable + signature-valid before depending on it for
         real events. Returns ``{delivery_id, event_id, event_type}``.
         """
-        return self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
+        data = self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
+        return parse_model(SendTestWebhookResponse, data)
 
     def update(self, webhook_id: str, body: dict[str, Any]) -> WebhookEndpoint:
         """V-351 — partial-update a webhook endpoint.
@@ -211,15 +244,17 @@ class AsyncWebhooksResource:
         )
         return parse_model(WebhookDelivery, data)
 
-    async def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
+    async def rotate_secret(self, webhook_id: str) -> RotateWebhookSecretResponse:
         """V-359 — async secret rotation. See :meth:`WebhooksResource.rotate_secret`."""
-        return await self._http.request(
+        data = await self._http.request(
             "POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={}
         )
+        return parse_model(RotateWebhookSecretResponse, data)
 
-    async def send_test(self, webhook_id: str) -> dict[str, Any]:
+    async def send_test(self, webhook_id: str) -> SendTestWebhookResponse:
         """V-356 — async test ping. See :meth:`WebhooksResource.send_test`."""
-        return await self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
+        data = await self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
+        return parse_model(SendTestWebhookResponse, data)
 
     async def update(self, webhook_id: str, body: dict[str, Any]) -> WebhookEndpoint:
         """V-351 — async partial-update. See :meth:`WebhooksResource.update`."""

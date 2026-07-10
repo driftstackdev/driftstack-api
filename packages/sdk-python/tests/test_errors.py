@@ -15,6 +15,7 @@ from driftstack.errors import (
     ConflictError,
     DriftstackError,
     DriverError,
+    DriverNotIntegratedError,
     EmailAlreadyRegisteredError,
     EmailNotVerifiedError,
     ExpiredKeyError,
@@ -61,6 +62,9 @@ def test_subclass_relationships() -> None:
     assert issubclass(ValidationError, DriftstackError)
     assert issubclass(SessionDestroyedError, DriftstackError)
     assert issubclass(DriverError, DriftstackError)
+    # driver-not-integrated (503) subclasses DriverError so existing
+    # `except DriverError` handlers keep catching it (TS parity).
+    assert issubclass(DriverNotIntegratedError, DriverError)
     assert issubclass(TransportError, DriftstackError)
     # V-115 — auth-flow inheritance: InvalidCredentialsError extends AuthError
     # so existing `except AuthError` blocks already catch wrong-password
@@ -99,6 +103,7 @@ def test_every_problem_type_maps_to_a_subclass() -> None:
         ("https://errors.driftstack.dev/tier-limit", QuotaExceededError),
         ("https://errors.driftstack.dev/session-destroyed", SessionDestroyedError),
         ("https://errors.driftstack.dev/driver-error", DriverError),
+        ("https://errors.driftstack.dev/driver-not-integrated", DriverNotIntegratedError),
         # V-115 — V-079 auth-flow problem types.
         ("https://errors.driftstack.dev/email-already-registered", EmailAlreadyRegisteredError),
         ("https://errors.driftstack.dev/invalid-credentials", InvalidCredentialsError),

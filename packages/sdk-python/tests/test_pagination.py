@@ -116,6 +116,23 @@ def test_iterate_paginated_supports_attribute_style_pages() -> None:
     assert list(iterate_paginated(fetch_page)) == [10, 20, 30]
 
 
+def test_iterate_paginated_empty_string_cursor_is_terminal() -> None:
+    """An empty-string next_cursor terminates the walk exactly like null —
+    matching the Go/TS SDKs. Without this the paginator would fetch a bogus
+    empty-cursor page and could raise a spurious 'pagination did not advance'.
+    """
+    fetch_calls: list[str | None] = []
+
+    def fetch_page(cursor: str | None) -> dict[str, Any]:
+        fetch_calls.append(cursor)
+        return {"data": [1, 2], "next_cursor": ""}
+
+    collected = list(iterate_paginated(fetch_page))
+    assert collected == [1, 2]
+    # Stopped after the first page — no bogus second fetch with cursor="".
+    assert fetch_calls == [None]
+
+
 # ── async ─────────────────────────────────────────────────────────────
 
 

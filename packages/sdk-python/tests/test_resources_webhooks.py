@@ -172,8 +172,8 @@ def test_sync_send_test() -> None:
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
             result = client.webhooks.send_test("whk_xx")
         assert route.called
-        assert result["event_type"] == "test.ping"
-        assert result["delivery_id"] == "wdl_test1"
+        assert result.event_type == "test.ping"
+        assert result.delivery_id == "wdl_test1"
 
 
 @pytest.mark.asyncio
@@ -189,7 +189,29 @@ async def test_async_send_test() -> None:
         )
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.webhooks.send_test("whk_xx")
-        assert result["event_type"] == "test.ping"
+        assert result.event_type == "test.ping"
+
+
+# V-359 — webhooks.rotate_secret typed response.
+
+
+def test_sync_rotate_secret_returns_typed_model() -> None:
+    body = {
+        "id": "whk_00000000-0000-4000-8000-000000000001",
+        "secret": "whsec_freshsecretfreshsecretfreshsecretfr",
+        "secret_prefix": "whsec_fr",
+        "prev_secret_prefix": "whsec_aa",
+        "grace_expires_at": "2026-05-20T00:00:00Z",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/webhooks/whk_xx/rotate-secret").mock(
+            return_value=httpx.Response(200, json=body),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.rotate_secret("whk_xx")
+        assert result.secret.startswith("whsec_")
+        assert result.prev_secret_prefix == "whsec_aa"
+        assert result.grace_expires_at == "2026-05-20T00:00:00Z"
 
 
 # V-464 — webhooks.update partial-update.

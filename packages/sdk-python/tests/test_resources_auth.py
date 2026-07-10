@@ -142,9 +142,9 @@ def test_sync_audit_log_export() -> None:
             result = client.audit_log.export()
         assert route.called
         assert "format=json" in str(route.calls[0].request.url)
-        assert result["row_count"] == 1
-        assert result["truncated"] is False
-        assert result["data"][0]["action"] == "profile.created"
+        assert result.row_count == 1
+        assert result.truncated is False
+        assert result.data[0].action == "profile.created"
 
 
 def test_sync_audit_log_export_truncated() -> None:
@@ -161,8 +161,8 @@ def test_sync_audit_log_export_truncated() -> None:
         )
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
             result = client.audit_log.export()
-        assert result["truncated"] is True
-        assert result["row_count"] == 10000
+        assert result.truncated is True
+        assert result.row_count == 10000
 
 
 @pytest.mark.asyncio
@@ -180,4 +180,4 @@ async def test_async_audit_log_export() -> None:
         )
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.audit_log.export()
-        assert result["row_count"] == 0
+        assert result.row_count == 0

@@ -6,8 +6,17 @@ import httpx
 import pytest
 import respx
 
-from driftstack import AsyncDriftstack, Driftstack
+from driftstack import AsyncDriftstack, Driftstack, UsageSeriesResponse
 from driftstack._generated.models import UsagePeriodSummary
+
+SERIES: dict = {
+    "from_date": "2026-05-01",
+    "to_date": "2026-06-01",
+    "buckets": [
+        {"date": "2026-05-01", "totals": {"navigate": 3}},
+        {"date": "2026-05-02", "totals": {}},
+    ],
+}
 
 API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BASE = "https://api.test"
@@ -51,3 +60,33 @@ async def test_async_current_period() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.usage.current_period()
         assert isinstance(result, UsagePeriodSummary)
+
+
+def test_sync_series_returns_typed_model() -> None:
+    captured_paths: list[str] = []
+    with respx.mock(base_url=BASE) as mock:
+        mock.get(url__regex=r"/v1/usage/series.*").mock(
+            side_effect=lambda req: (
+                captured_paths.append(req.url.raw_path.decode("ascii"))
+                or httpx.Response(200, json=SERIES)
+            ),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.usage.series(days=2)
+        assert isinstance(result, UsageSeriesResponse)
+        assert result.from_date == "2026-05-01"
+        assert result.buckets[0].totals["navigate"] == 3
+        assert result.buckets[1].totals == {}
+        assert captured_paths == ["/v1/usage/series?days=2"]
+
+
+@pytest.mark.asyncio
+async def test_async_series_returns_typed_model() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.get(url__regex=r"/v1/usage/series.*").mock(
+            return_value=httpx.Response(200, json=SERIES),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.usage.series()
+        assert isinstance(result, UsageSeriesResponse)
+        assert result.to_date == "2026-06-01"

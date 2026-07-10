@@ -66,7 +66,11 @@ def iterate_paginated(
         page = fetch_page(cursor)
         yield from _extract_data(page)
         next_cursor = _extract_next_cursor(page)
-        if next_cursor is None:
+        # A null OR empty-string next_cursor is terminal — match the Go/TS
+        # SDKs, which stop on both. Some server/proxy layers emit "" rather
+        # than null for "no more pages"; without this the walk would fetch a
+        # bogus empty-cursor page and could trip the non-advancing guard below.
+        if not next_cursor:
             return
         if next_cursor == cursor:
             raise TransportError(_CURSOR_STALL_MSG, status=0)
@@ -83,7 +87,9 @@ async def aiterate_paginated(
         for item in _extract_data(page):
             yield item
         next_cursor = _extract_next_cursor(page)
-        if next_cursor is None:
+        # A null OR empty-string next_cursor is terminal — see the sync
+        # variant above for the rationale (Go/TS parity + empty-string guard).
+        if not next_cursor:
             return
         if next_cursor == cursor:
             raise TransportError(_CURSOR_STALL_MSG, status=0)

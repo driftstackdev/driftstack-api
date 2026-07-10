@@ -71,6 +71,24 @@ describe('iteratePaginated', () => {
     expect(fetchPage).toHaveBeenCalledTimes(2);
   });
 
+  it('treats an empty-string next_cursor as terminal (no bogus extra fetch)', async () => {
+    // A proxy / serializer can coerce a null next_cursor to "". That must be
+    // treated as the end of the walk exactly like null — mirrors the Go SDK's
+    // advanceCursor (`next == nil || *next == ""`). Otherwise the loop would
+    // re-fetch with cursor="" and spuriously trip the non-advance guard.
+    const fetchPage = vi.fn(
+      (_cursor: string | null): Promise<CursorPage<number>> =>
+        Promise.resolve({ data: [1, 2, 3], next_cursor: '' }),
+    );
+    const collected: number[] = [];
+    for await (const n of iteratePaginated(fetchPage)) {
+      collected.push(n);
+    }
+    expect(collected).toEqual([1, 2, 3]);
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+    expect(fetchPage).toHaveBeenCalledWith(null);
+  });
+
   it('propagates errors from fetchPage', async () => {
     const fetchPage = vi.fn(
       (_cursor: string | null): Promise<CursorPage<number>> =>

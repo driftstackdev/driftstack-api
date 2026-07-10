@@ -601,10 +601,14 @@ type WebhookEndpointList struct {
 	Data []WebhookEndpoint `json:"data"`
 }
 
+// CreateWebhookRequest — Description is a pointer so nil omits the field
+// entirely while a pointer to "" transmits an explicit empty description
+// (a plain string with omitempty could never send an empty value).
+// Matches UpdateWebhookRequest and the nullable contract.
 type CreateWebhookRequest struct {
 	URL         string             `json:"url"`
 	Events      []WebhookEventType `json:"events"`
-	Description string             `json:"description,omitempty"`
+	Description *string            `json:"description,omitempty"`
 }
 
 type CreateWebhookResponse struct {
@@ -884,8 +888,15 @@ type MagicLinkRequest struct {
 	Email string `json:"email"`
 }
 
+// MagicLinkRequestResponse — always `Sent: true` to the client even
+// when the email doesn't exist, so the shape doesn't leak account-
+// existence. ExpiresAt is when the magic-link token expires; DebugToken
+// is populated only when the server runs with `EMAIL_DELIVERY_MODE=stub`
+// (production responses omit it), matching SignupResponse.
 type MagicLinkRequestResponse struct {
-	Sent bool `json:"sent"`
+	Sent       bool      `json:"sent"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	DebugToken string    `json:"debug_token,omitempty"`
 }
 
 type MagicLinkConsumeRequest struct {
@@ -900,8 +911,15 @@ type PasswordResetRequest struct {
 	Email string `json:"email"`
 }
 
+// PasswordResetRequestResponse — always `Sent: true` to the client even
+// when the email doesn't exist, so the shape doesn't leak account-
+// existence. ExpiresAt is when the reset token expires; DebugToken is
+// populated only when the server runs with `EMAIL_DELIVERY_MODE=stub`
+// (production responses omit it), matching SignupResponse.
 type PasswordResetRequestResponse struct {
-	Sent bool `json:"sent"`
+	Sent       bool      `json:"sent"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	DebugToken string    `json:"debug_token,omitempty"`
 }
 
 type PasswordResetConfirmRequest struct {
