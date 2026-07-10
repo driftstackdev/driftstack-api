@@ -1,9 +1,9 @@
 // V-298c — Team RBAC v1 routes.
 //
 //   POST   /v1/team/invites              — owner invites email (account_owner)
-//   GET    /v1/team/invites              — list pending (account_owner)
+//   GET    /v1/team/invites              — list pending (requireAuth; owner-scoped by query)
 //   POST   /v1/team/invites/accept       — invitee accepts (requireAuth)
-//   GET    /v1/team/members              — list confirmed (account_owner)
+//   GET    /v1/team/members              — list confirmed (requireAuth; owner-scoped by query)
 //   DELETE /v1/team/members/:id          — remove member (account_owner)
 //
 // V-298c is route-only; the auth path itself doesn't yet honor team

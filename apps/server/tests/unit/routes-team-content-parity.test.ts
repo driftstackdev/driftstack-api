@@ -36,7 +36,10 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
   it('V-298c framing pinned: 5 endpoints listed (POST invites + GET invites + POST invites/accept + GET members + DELETE members/:id); route-only — auth path does NOT yet honor team membership (V-298d); members can be invited + accept but membership does NOT grant permissions on owner resources until V-298d wires it', () => {
     expect(body).toMatch(/\/\/ V-298c — Team RBAC v1 routes\./);
     expect(body).toMatch(
-      /\/\/\s*POST\s+\/v1\/team\/invites\s+— owner invites email \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/invites\s+— list pending \(account_owner\)\s*\n?\s*\/\/\s*POST\s+\/v1\/team\/invites\/accept\s+— invitee accepts \(requireAuth\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/members\s+— list confirmed \(account_owner\)\s*\n?\s*\/\/\s*DELETE \/v1\/team\/members\/:id\s+— remove member \(account_owner\)/,
+      // GET invites/members are requireAuth (owner-scoped by the ctx.account.id
+      // query key), corrected 2026-07-10 to match the actual gate — the mutations
+      // (POST invites / DELETE member) are the account_owner-gated operations.
+      /\/\/\s*POST\s+\/v1\/team\/invites\s+— owner invites email \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/invites\s+— list pending \(requireAuth; owner-scoped by query\)\s*\n?\s*\/\/\s*POST\s+\/v1\/team\/invites\/accept\s+— invitee accepts \(requireAuth\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/members\s+— list confirmed \(requireAuth; owner-scoped by query\)\s*\n?\s*\/\/\s*DELETE \/v1\/team\/members\/:id\s+— remove member \(account_owner\)/,
     );
     expect(body).toMatch(
       /\/\/ V-298c is route-only; the auth path itself doesn't yet honor team\s*\n?\s*\/\/ membership \(V-298d\)\. Members can be invited \+ accept, but the\s*\n?\s*\/\/ resulting membership doesn't grant them any permissions on the\s*\n?\s*\/\/ owner's resources until V-298d wires it\./,
