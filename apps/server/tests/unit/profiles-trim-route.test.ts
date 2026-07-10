@@ -28,6 +28,7 @@ const DEK = Buffer.alloc(32, 9);
 function fakeService(opts: {
   ownedProfileUuid?: string; // get() resolves this id; anything else 404s
   dek?: Buffer | null; // getProfileDek() return
+  dekThrows?: boolean; // getProfileDek() rejects (corrupt/rotated wrapped-DEK)
 }): {
   service: ProfilesService;
   recordTrimCalls: Array<{ profileId: string; accountId: string; newSizeBytes: number }>;
@@ -41,7 +42,9 @@ function fakeService(opts: {
       return Promise.reject(new NotFoundError('Profile not found.'));
     },
     getProfileDek: (_args: { profileId: string; accountId: string }) =>
-      Promise.resolve(opts.dek === undefined ? DEK : opts.dek),
+      opts.dekThrows === true
+        ? Promise.reject(new Error('unwrapProfileDek: corrupt/rotated wrapped-DEK'))
+        : Promise.resolve(opts.dek === undefined ? DEK : opts.dek),
     recordTrim: (args: { profileId: string; accountId: string; newSizeBytes: number }) => {
       recordTrimCalls.push(args);
       return Promise.resolve();
@@ -156,6 +159,22 @@ describe('POST /v1/profiles/:id/trim', () => {
     });
     const res = await trim(app);
     expect(res.statusCode).toBe(404);
+  });
+
+  it('getProfileDek throws (corrupt/rotated wrapped-DEK) → 200 { status:"unavailable" }, NOT a raw 500', async () => {
+    // Regression for the profile-lifecycle audit: unwrapProfileDek can throw on a
+    // corrupt / rotated-but-not-rewrapped DEK; the route must degrade gracefully
+    // (mirroring the buildAssignProfileBlock catch) rather than surfacing a 500.
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID, dekThrows: true });
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: new FleetControlRegistry(),
+      r2: fakeR2({ blobExists: true }),
+    });
+    const res = await trim(app);
+    expect(res.statusCode).toBe(200);
+    expect(res.json<TrimBody>()).toMatchObject({ status: 'unavailable' });
+    expect(res.json<TrimBody>().reason).toMatch(/encryption key/);
   });
 
   it('#14: profile bound to a live session → 200 { status:"unavailable" } BEFORE any node round-trip (avoids the R2 lost-update race)', async () => {
