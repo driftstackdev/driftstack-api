@@ -26,7 +26,6 @@ from driftstack.errors import (
     ConflictError,
     DriftstackError,
     DriverError,
-    DriverNotIntegratedError,
     EmailAlreadyRegisteredError,
     EmailNotVerifiedError,
     ExpiredKeyError,
@@ -56,11 +55,6 @@ from driftstack.errors import (
 )
 from driftstack.resources.agent_sessions import LiveKitInfo
 from driftstack.resources.api_keys import ApiKeyList
-from driftstack.resources.audit_log import (
-    AuditLogEntry,
-    AuditLogExportResponse,
-    AuditLogListPage,
-)
 from driftstack.resources.sessions import SessionsListPage
 from driftstack.resources.team import (
     AcceptInviteResponse,
@@ -69,13 +63,7 @@ from driftstack.resources.team import (
     TeamMember,
     TeamMembersList,
 )
-from driftstack.resources.usage import UsageDailyBucket, UsageSeriesResponse
-from driftstack.resources.webhooks import (
-    RotateWebhookSecretResponse,
-    SendTestWebhookResponse,
-    WebhookDeliveryListPage,
-    WebhookEndpointList,
-)
+from driftstack.resources.webhooks import WebhookDeliveryListPage, WebhookEndpointList
 from driftstack.webhook_signature import verify_webhook_signature
 
 __all__ = [
@@ -100,7 +88,6 @@ __all__ = [
     "SessionTimeoutError",
     "LegalAcceptanceRequiredError",
     "DriverError",
-    "DriverNotIntegratedError",
     "ValidationError",
     "TransportError",
     "EmailAlreadyRegisteredError",
@@ -123,18 +110,11 @@ __all__ = [
     # deep-importing via driftstack.resources.*.
     "AcceptInviteResponse",
     "ApiKeyList",
-    "AuditLogEntry",
-    "AuditLogExportResponse",
-    "AuditLogListPage",
     "SessionsListPage",
     "TeamInvite",
     "TeamInvitesList",
     "TeamMember",
     "TeamMembersList",
-    "UsageDailyBucket",
-    "UsageSeriesResponse",
-    "RotateWebhookSecretResponse",
-    "SendTestWebhookResponse",
     "WebhookDeliveryListPage",
     "WebhookEndpointList",
     "is_retryable",

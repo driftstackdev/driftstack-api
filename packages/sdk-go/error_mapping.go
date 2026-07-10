@@ -27,7 +27,7 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/session-timeout":           buildSessionTimeout,
 	"https://errors.driftstack.dev/legal-acceptance-required": buildLegalAcceptanceRequired,
 	"https://errors.driftstack.dev/driver-error":              buildDriverError,
-	"https://errors.driftstack.dev/driver-not-integrated":     buildDriverNotIntegrated,
+	"https://errors.driftstack.dev/driver-not-integrated":     buildDriverError,
 	"https://errors.driftstack.dev/validation-failed":         buildValidation,
 	// V-437 — auth-flow problem types.
 	"https://errors.driftstack.dev/email-already-registered": buildEmailAlreadyRegistered,
@@ -182,10 +182,6 @@ func buildLegalAcceptanceRequired(base apiError, problem map[string]any, _ strin
 
 func buildDriverError(base apiError, _ map[string]any, _ string) error {
 	return &DriverError{apiError: base}
-}
-
-func buildDriverNotIntegrated(base apiError, _ map[string]any, _ string) error {
-	return &DriverNotIntegratedError{DriverError: DriverError{apiError: base}}
 }
 
 func buildRateLimit(base apiError, problem map[string]any, retryAfterHeader string) error {
@@ -391,7 +387,6 @@ var (
 	_ error = (*SessionTimeoutError)(nil)
 	_ error = (*LegalAcceptanceRequiredError)(nil)
 	_ error = (*DriverError)(nil)
-	_ error = (*DriverNotIntegratedError)(nil)
 	_ error = (*ProfileInUseError)(nil)
 	_ error = (*StorageQuotaExceededError)(nil)
 	_ error = (*ProxyValidationFailedError)(nil)

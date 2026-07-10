@@ -25,7 +25,7 @@ export interface CursorPage<T> {
  *
  * `fetchPage` is called with `null` for the first page and with each
  * subsequent `next_cursor`. The generator stops as soon as
- * `next_cursor` is null or an empty string. Errors from `fetchPage` propagate to the
+ * `next_cursor` is null. Errors from `fetchPage` propagate to the
  * caller (consumer's `try { for await ... } catch`).
  *
  * @example
@@ -44,12 +44,7 @@ export async function* iteratePaginated<T>(
     for (const item of page.data) {
       yield item;
     }
-    // A null OR empty-string next_cursor is terminal. The server signals "no
-    // more pages" with null, but a proxy / serializer can coerce that to "";
-    // treat both as the end so we don't fetch a bogus empty-cursor page (which
-    // would also spuriously trip the non-advance guard on the first page).
-    // Mirrors the Go SDK's advanceCursor (`next == nil || *next == ""`).
-    if (page.next_cursor === null || page.next_cursor === '') {
+    if (page.next_cursor === null) {
       return;
     }
     // Guard against a non-advancing cursor. Keyset pagination always returns a

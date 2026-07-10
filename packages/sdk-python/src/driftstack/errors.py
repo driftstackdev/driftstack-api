@@ -313,16 +313,6 @@ class DriverError(DriftstackError):
     """The driver returned an unrecoverable error during the operation."""
 
 
-class DriverNotIntegratedError(DriverError):
-    """The requested driver is recognised but not integrated in this
-    deployment (HTTP 503, ``driver-not-integrated`` problem-type).
-
-    Mirrors the TypeScript SDK's ``DriverNotIntegratedError`` taxonomy.
-    Subclasses :class:`DriverError` (NOT ``DriftstackError`` directly) so
-    existing ``except DriverError`` handlers keep catching it — customers
-    who don't care about the distinction see no behaviour change."""
-
-
 # ── Transport (network, timeout, parse) ───────────────────────────────────
 
 
@@ -490,7 +480,7 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/session-timeout": SessionTimeoutError,
     "https://errors.driftstack.dev/legal-acceptance-required": LegalAcceptanceRequiredError,
     "https://errors.driftstack.dev/driver-error": DriverError,
-    "https://errors.driftstack.dev/driver-not-integrated": DriverNotIntegratedError,
+    "https://errors.driftstack.dev/driver-not-integrated": DriverError,
     "https://errors.driftstack.dev/validation-failed": ValidationError,
     # V-115: V-079 auth-flow problem types.
     "https://errors.driftstack.dev/email-already-registered": EmailAlreadyRegisteredError,

@@ -1,9 +1,7 @@
 """Audit log resource — /v1/account/audit-log (V-216 / V-449).
 
-Append-only event ledger for compliance / monitoring. Typed against
-the api-types ``AccountAuditEntry`` / ``ListAccountAuditLogResponse`` /
-``ExportAccountAuditLogResponse`` contracts (mirrors the TS/Go SDKs,
-which return typed models here).
+Append-only event ledger for compliance / monitoring. Returns
+``dict[str, Any]`` pending the next regen pass.
 """
 
 from __future__ import annotations
@@ -12,16 +10,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from urllib.parse import urlencode
 
-from driftstack._generated.models import (
-    AccountAuditEntry as AuditLogEntry,
-)
-from driftstack._generated.models import (
-    ExportAccountAuditResponse as AuditLogExportResponse,
-)
-from driftstack._generated.models import (
-    ListAccountAuditResponse as AuditLogListPage,
-)
-from driftstack.http import AsyncHttpClient, HttpClient, parse_model
+from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.pagination import aiterate_paginated, iterate_paginated
 
 
@@ -46,27 +35,26 @@ class AuditLogResource:
         limit: int | None = None,
         cursor: str | None = None,
         action: str | None = None,
-    ) -> AuditLogListPage:
+    ) -> dict[str, Any]:
         """List audit-log entries newest-first. ``action`` filters to a single event type."""
         qs = _qs({"limit": limit, "cursor": cursor, "action": action})
         path = "/v1/account/audit-log" + (f"?{qs}" if qs else "")
-        data = self._http.request("GET", path)
-        return parse_model(AuditLogListPage, data)
+        return self._http.request("GET", path)
 
     def iterate(
         self,
         *,
         limit: int | None = None,
         action: str | None = None,
-    ) -> Iterator[AuditLogEntry]:
+    ) -> Iterator[dict[str, Any]]:
         """Lazily walk every audit-log page."""
 
-        def fetch_page(cursor: str | None) -> AuditLogListPage:
+        def fetch_page(cursor: str | None) -> dict[str, Any]:
             return self.list(limit=limit, cursor=cursor, action=action)
 
         return iterate_paginated(fetch_page)
 
-    def export(self) -> AuditLogExportResponse:
+    def export(self) -> dict[str, Any]:
         """V-462 / V-297 — bulk-export the calling account's audit log as
         a JSON envelope (GDPR Article 20 portability). Single call; up to
         10,000 rows; ``truncated`` is True when older entries were
@@ -74,8 +62,7 @@ class AuditLogResource:
         ``/v1/account/audit-log/export?format=csv`` directly with the
         bearer for browser-driven spreadsheet downloads.
         """
-        data = self._http.request("GET", "/v1/account/audit-log/export?format=json")
-        return parse_model(AuditLogExportResponse, data)
+        return self._http.request("GET", "/v1/account/audit-log/export?format=json")
 
 
 class AsyncAuditLogResource:
@@ -90,24 +77,22 @@ class AsyncAuditLogResource:
         limit: int | None = None,
         cursor: str | None = None,
         action: str | None = None,
-    ) -> AuditLogListPage:
+    ) -> dict[str, Any]:
         qs = _qs({"limit": limit, "cursor": cursor, "action": action})
         path = "/v1/account/audit-log" + (f"?{qs}" if qs else "")
-        data = await self._http.request("GET", path)
-        return parse_model(AuditLogListPage, data)
+        return await self._http.request("GET", path)
 
     def iterate(
         self,
         *,
         limit: int | None = None,
         action: str | None = None,
-    ) -> AsyncIterator[AuditLogEntry]:
-        async def fetch_page(cursor: str | None) -> AuditLogListPage:
+    ) -> AsyncIterator[dict[str, Any]]:
+        async def fetch_page(cursor: str | None) -> dict[str, Any]:
             return await self.list(limit=limit, cursor=cursor, action=action)
 
         return aiterate_paginated(fetch_page)
 
-    async def export(self) -> AuditLogExportResponse:
+    async def export(self) -> dict[str, Any]:
         """V-462 / V-297 — async mirror of ``AuditLogResource.export``."""
-        data = await self._http.request("GET", "/v1/account/audit-log/export?format=json")
-        return parse_model(AuditLogExportResponse, data)
+        return await self._http.request("GET", "/v1/account/audit-log/export?format=json")

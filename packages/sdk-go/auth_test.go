@@ -102,45 +102,16 @@ func TestAuth_Login_MfaRequired(t *testing.T) {
 
 func TestAuth_RequestMagicLink(t *testing.T) {
 	t.Parallel()
-	expiresAt := time.Now().Add(15 * time.Minute).UTC().Truncate(time.Second)
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/auth/magic-link/request" {
 			t.Errorf("path=%q", r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(MagicLinkRequestResponse{Sent: true, ExpiresAt: expiresAt, DebugToken: "ml_stub_tok"})
+		_ = json.NewEncoder(w).Encode(MagicLinkRequestResponse{Sent: true})
 	})
 	got, err := client.Auth.RequestMagicLink(context.Background(), &MagicLinkRequest{Email: "x@y.z"})
 	if err != nil || !got.Sent {
 		t.Errorf("err=%v got=%+v", err, got)
-	}
-	if !got.ExpiresAt.Equal(expiresAt) {
-		t.Errorf("expires_at=%v want %v", got.ExpiresAt, expiresAt)
-	}
-	if got.DebugToken != "ml_stub_tok" {
-		t.Errorf("debug_token=%q", got.DebugToken)
-	}
-}
-
-func TestAuth_RequestPasswordReset(t *testing.T) {
-	t.Parallel()
-	expiresAt := time.Now().Add(30 * time.Minute).UTC().Truncate(time.Second)
-	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/auth/password-reset/request" {
-			t.Errorf("path=%q", r.URL.Path)
-		}
-		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(PasswordResetRequestResponse{Sent: true, ExpiresAt: expiresAt, DebugToken: "pr_stub_tok"})
-	})
-	got, err := client.Auth.RequestPasswordReset(context.Background(), &PasswordResetRequest{Email: "x@y.z"})
-	if err != nil || !got.Sent {
-		t.Errorf("err=%v got=%+v", err, got)
-	}
-	if !got.ExpiresAt.Equal(expiresAt) {
-		t.Errorf("expires_at=%v want %v", got.ExpiresAt, expiresAt)
-	}
-	if got.DebugToken != "pr_stub_tok" {
-		t.Errorf("debug_token=%q", got.DebugToken)
 	}
 }
 

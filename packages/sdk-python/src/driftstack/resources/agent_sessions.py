@@ -229,7 +229,7 @@ class AgentSessionsResource:
     ) -> dict[str, Any]:
         """Slice 4 + Slice 5 (Wave 29-NNN ARC 3) — forward raw LK.6 InputEvent.
 
-        ``event`` must be one of the discriminated variants:
+        ``event`` must be one of the 7 discriminated variants:
 
         - ``{"type": "mouseMove", "x": int, "y": int}``
         - ``{"type": "mouseDown", "x": int, "y": int, "button": 0|1|2}``
@@ -238,19 +238,6 @@ class AgentSessionsResource:
         - ``{"type": "keyUp", "key": str, "modifiers": list[str] | None}``
         - ``{"type": "wheel", "x": int, "y": int, "deltaX": int, "deltaY": int}``
         - ``{"type": "ping", "timestamp": int}``
-
-        Touch vocabulary (2026-06-08 "real iPhone tap not macbook mouse")
-        — the harness expands these into native touch gestures with
-        micro-settle / interpolation / momentum:
-
-        - ``{"type": "tap", "x": int, "y": int}``
-        - ``{"type": "touchStart", "x": int, "y": int, "touchId": int}``
-        - ``{"type": "touchMove", "x": int, "y": int, "touchId": int}``
-        - ``{"type": "touchEnd", "x": int, "y": int, "touchId": int}``
-        - ``{"type": "swipe", "x1": int, "y1": int, "x2": int, "y2": int, "durationMs": int}``
-
-        ``touchStart``/``touchMove``/``touchEnd`` carry a ``touchId`` for
-        multi-touch (concurrent ids = pinch).
 
         Modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20):
         ``keyDown`` / ``keyUp`` ``modifiers`` arrays MUST use the

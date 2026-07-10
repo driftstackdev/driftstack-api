@@ -34,7 +34,7 @@ API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BASE = "https://api.test"
 
 AUDIT_ENTRY: dict = {
-    "id": "00000000-0000-4000-8000-000000000001",
+    "id": "audit_00000000-0000-4000-8000-000000000001",
     "account_id": "acc_00000000-0000-4000-8000-000000000001",
     "actor_type": "customer",
     "actor_account_id": "acc_00000000-0000-4000-8000-000000000001",
@@ -78,7 +78,7 @@ def test_sync_list_with_kwargs_emits_query_string() -> None:
                 cursor="ctok_abc",
                 action="api_key.minted",
             )
-        assert result.data[0].action == "api_key.minted"
+        assert result["data"][0]["action"] == "api_key.minted"
         # Order is dict-insertion order: limit, cursor, action.
         assert captured_paths == [
             "/v1/account/audit-log?limit=50&cursor=ctok_abc&action=api_key.minted",
@@ -106,10 +106,8 @@ def test_sync_list_drops_none_values_from_qs() -> None:
 def test_sync_iterate_walks_pages_via_cursor() -> None:
     # 2-page iterate: first page returns next_cursor='c1', second
     # returns next_cursor=None. iterate_paginated should follow.
-    id1 = "00000000-0000-4000-8000-0000000000a1"
-    id2 = "00000000-0000-4000-8000-0000000000a2"
-    page1 = {"data": [{**AUDIT_ENTRY, "id": id1}], "next_cursor": "c1"}
-    page2 = {"data": [{**AUDIT_ENTRY, "id": id2}], "next_cursor": None}
+    page1 = {"data": [{**AUDIT_ENTRY, "id": "audit_1"}], "next_cursor": "c1"}
+    page2 = {"data": [{**AUDIT_ENTRY, "id": "audit_2"}], "next_cursor": None}
     with respx.mock(base_url=BASE) as mock:
         mock.get(url__regex=r"/v1/account/audit-log\?limit=1$").mock(
             return_value=httpx.Response(200, json=page1),
@@ -119,7 +117,7 @@ def test_sync_iterate_walks_pages_via_cursor() -> None:
         )
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
             entries = list(client.audit_log.iterate(limit=1))
-        assert [str(e.id) for e in entries] == [id1, id2]
+        assert [e["id"] for e in entries] == ["audit_1", "audit_2"]
 
 
 def test_sync_export_pins_format_json_qs() -> None:
@@ -146,8 +144,8 @@ def test_sync_export_pins_format_json_qs() -> None:
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
             result = client.audit_log.export()
         assert captured_paths == ["/v1/account/audit-log/export?format=json"]
-        assert result.row_count == 1
-        assert result.truncated is False
+        assert result["row_count"] == 1
+        assert result["truncated"] is False
 
 
 @pytest.mark.asyncio
@@ -184,10 +182,8 @@ async def test_async_list_with_kwargs() -> None:
 
 @pytest.mark.asyncio
 async def test_async_iterate_walks_pages() -> None:
-    id_a = "00000000-0000-4000-8000-0000000000ba"
-    id_b = "00000000-0000-4000-8000-0000000000bb"
-    page1 = {"data": [{**AUDIT_ENTRY, "id": id_a}], "next_cursor": "c2"}
-    page2 = {"data": [{**AUDIT_ENTRY, "id": id_b}], "next_cursor": None}
+    page1 = {"data": [{**AUDIT_ENTRY, "id": "audit_a"}], "next_cursor": "c2"}
+    page2 = {"data": [{**AUDIT_ENTRY, "id": "audit_b"}], "next_cursor": None}
     with respx.mock(base_url=BASE) as mock:
         mock.get(url__regex=r"/v1/account/audit-log\?limit=1$").mock(
             return_value=httpx.Response(200, json=page1),
@@ -199,7 +195,7 @@ async def test_async_iterate_walks_pages() -> None:
             entries = []
             async for e in client.audit_log.iterate(limit=1):
                 entries.append(e)
-        assert [str(e.id) for e in entries] == [id_a, id_b]
+        assert [e["id"] for e in entries] == ["audit_a", "audit_b"]
 
 
 @pytest.mark.asyncio
@@ -224,4 +220,4 @@ async def test_async_export() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.audit_log.export()
         assert captured_paths == ["/v1/account/audit-log/export?format=json"]
-        assert result.data == []
+        assert result["data"] == []

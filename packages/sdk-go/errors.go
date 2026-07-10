@@ -62,7 +62,6 @@ var (
 	ErrSessionTimeout          = errors.New("session timeout")
 	ErrLegalAcceptanceRequired = errors.New("legal acceptance required")
 	ErrDriverError             = errors.New("driver error")
-	ErrDriverNotIntegrated     = errors.New("driver not integrated")
 	ErrTransport               = errors.New("transport-level failure")
 	// V-437 — auth-flow problem types.
 	ErrEmailAlreadyRegistered = errors.New("email already registered")
@@ -264,19 +263,6 @@ func (e *LegalAcceptanceRequiredError) Is(target error) bool {
 type DriverError struct{ apiError }
 
 func (e *DriverError) Is(target error) bool { return target == ErrDriverError }
-
-// DriverNotIntegratedError — 503 when the requested driver capability
-// isn't wired up on this deployment (distinct from a driver that ran and
-// failed, which is DriverError). Embeds DriverError so existing
-// errors.As(&DriverError{}) / errors.Is(err, ErrDriverError) handlers
-// keep matching it for back-compat, while errors.Is(err,
-// ErrDriverNotIntegrated) distinguishes the 503 specifically. Mirrors
-// the TS SDK's DriverNotIntegratedError (subclass of DriverError).
-type DriverNotIntegratedError struct{ DriverError }
-
-func (e *DriverNotIntegratedError) Is(target error) bool {
-	return target == ErrDriverNotIntegrated || target == ErrDriverError
-}
 
 // TransportError — network failure, parse failure, or any condition
 // that didn't reach the server with a problem-json body. Status will
