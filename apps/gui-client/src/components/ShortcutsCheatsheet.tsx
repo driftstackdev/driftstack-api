@@ -3,7 +3,8 @@
 // the ⌘K palette. Pure presentational + a self-managed Escape-to-close; zero
 // blast radius (an overlay over whatever view is active). Only documents
 // shortcuts that actually exist (⌘K palette, ⌘⇧D theme, ⌘, settings, ⌘⇧L sign
-// out, Enter/⇧Enter in the AI composer) — no aspirational keys.
+// out, Enter/⇧Enter in the AI composer) + the live-iPhone mouse/trackpad→touch
+// mapping (click=tap, drag=swipe, scroll, typing forwarded) — no aspirational keys.
 
 import { useRef } from 'react';
 import type { ReactNode } from 'react';
@@ -46,6 +47,18 @@ const GROUPS: ReadonlyArray<Group> = [
   {
     title: 'Session',
     items: [{ keys: [MOD, '⇧', 'L'], label: 'Sign out (forget key)' }],
+  },
+  {
+    // The live iPhone is a touchscreen driven by the mouse/trackpad — first-timers
+    // don't know the mapping (there's no on-device hint), so the one discoverable
+    // reference should cover the device itself, not just app shortcuts.
+    title: 'iPhone (live session)',
+    items: [
+      { keys: ['Click'], label: 'Tap' },
+      { keys: ['Drag'], label: 'Swipe / drag' },
+      { keys: ['Scroll'], label: 'Scroll the page' },
+      { keys: ['Type'], label: 'Sent to the device' },
+    ],
   },
 ];
 
