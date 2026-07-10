@@ -951,7 +951,16 @@ export async function dispatchSessionAssignOnCreate(args: {
         const dekBase64 = dek.toString('base64');
         if (r2 !== undefined) {
           try {
-            profile = await buildAssignProfileBlock(r2, profileId, dekBase64);
+            // The save-back PUT URL is used at session TEARDOWN, not now — so it
+            // must stay valid for the whole session lifetime. The default 1h TTL
+            // would expire mid-session (manual sessions run up to
+            // MANUAL_SESSION_MAX_DURATION_SECONDS = 4h), 403-ing the final save-back
+            // and SILENTLY losing the profile's saved state. Mint it to cover the
+            // max session + a teardown margin (clamped to the 7-day SigV4 ceiling
+            // inside buildAssignProfileBlock).
+            profile = await buildAssignProfileBlock(r2, profileId, dekBase64, {
+              urlTtlSeconds: MANUAL_SESSION_MAX_DURATION_SECONDS + 1800,
+            });
           } catch (err) {
             // An R2 hiccup minting the restore/save-back URLs must NOT abort the
             // whole dispatch (which would leave the session created-but-never-
