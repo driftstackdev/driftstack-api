@@ -20,9 +20,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Room } from './livekit';
+import { reportTransport, type ControlAuth } from './agent-session-control';
 
 /** Poll cadence. Stats move slowly; 3s keeps the readout fresh without churn. */
 export const CONNECTION_STATS_INTERVAL_MS = 3000;
+
+/** ICE.T — how often (at most) the live transport diagnostics are POSTed to the
+ *  control plane. The stats poll runs every 3s (CONNECTION_STATS_INTERVAL_MS) for
+ *  a fresh LOCAL readout, but telemetry to the CP is throttled to ~15s: the
+ *  transport type + relay path change rarely, so a report every poll would be
+ *  4-5× the traffic for no extra signal. A final report is ALSO flushed on
+ *  session end / unmount regardless of this interval. */
+export const TRANSPORT_REPORT_MIN_INTERVAL_MS = 15_000;
 
 export interface ConnectionStats {
   /** Effective media transport: 'udp' (good for real-time) or 'tcp' (relay
@@ -228,4 +237,68 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
   }, [room, enabled]);
 
   return stats;
+}
+
+/** #60 — throttle floor for transport telemetry POSTs (the stats poll is 3s;
+ *  we don't need fleet telemetry that often). */
+export const TRANSPORT_TELEMETRY_MIN_INTERVAL_MS = 15000;
+
+/** Map the parsed ConnectionStats to the CP transport-report wire body. */
+export function transportReportBody(stats: ConnectionStats): {
+  transport: 'udp' | 'tcp' | null;
+  relayed: boolean | null;
+  rtt_ms: number | null;
+  packet_loss_recent_pct: number | null;
+  jitter_ms: number | null;
+  decode_fps: number | null;
+  freeze_count: number | null;
+} {
+  return {
+    transport: stats.transport,
+    relayed: stats.relayed,
+    rtt_ms: stats.rttMs,
+    packet_loss_recent_pct: stats.packetLossRecentPct,
+    jitter_ms: stats.jitterMs,
+    decode_fps: stats.decodeFps,
+    freeze_count: stats.freezeCount,
+  };
+}
+
+/** #60 — best-effort transport telemetry: POST the live diagnostics
+ *  (transport/relayed/RTT/loss) to the CP on a throttled cadence + a final
+ *  flush on unmount, so we PROVE the selected transport fleet-wide + MEASURE a
+ *  TURN relay before/after WITHOUT disturbing the user. Fire-and-forget:
+ *  reportTransport swallows every error, so this can never touch the stream. */
+export function useTransportTelemetry(opts: {
+  stats: ConnectionStats;
+  sessionId: string;
+  auth: ControlAuth;
+  enabled: boolean;
+}): void {
+  const { stats, sessionId, auth, enabled } = opts;
+  const lastSentAtRef = useRef(0);
+  // Snapshot the latest inputs so the unmount flush posts a fresh sample
+  // without re-subscribing its cleanup on every 3s poll.
+  const latestRef = useRef({ stats, sessionId, auth, enabled });
+  latestRef.current = { stats, sessionId, auth, enabled };
+
+  // Throttled send: at most once per TRANSPORT_TELEMETRY_MIN_INTERVAL_MS, and
+  // only once a real transport has resolved on a live session.
+  useEffect(() => {
+    if (!enabled || sessionId === '' || stats.transport === null) return;
+    const now = Date.now();
+    if (now - lastSentAtRef.current < TRANSPORT_TELEMETRY_MIN_INTERVAL_MS) return;
+    lastSentAtRef.current = now;
+    void reportTransport(sessionId, transportReportBody(stats), auth);
+  }, [stats, sessionId, auth, enabled]);
+
+  // Final flush on unmount — one last transport data point for the session.
+  useEffect(() => {
+    return () => {
+      const l = latestRef.current;
+      if (l.enabled && l.sessionId !== '' && l.stats.transport !== null) {
+        void reportTransport(l.sessionId, transportReportBody(l.stats), l.auth);
+      }
+    };
+  }, []);
 }

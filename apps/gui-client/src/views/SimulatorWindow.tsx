@@ -27,7 +27,7 @@ import {
   type Room,
 } from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
-import { useConnectionStats } from '../lib/livekit-connection-stats';
+import { useConnectionStats, useTransportTelemetry } from '../lib/livekit-connection-stats';
 import {
   useRecordings,
   formatDuration,
@@ -2695,6 +2695,11 @@ export function SimulatorWindow(): JSX.Element {
   // WebRTC transport diagnostics (relay/tcp? loss? freezes?) — founder's
   // "is it slow because we're on TCP?" question. Read-only stats poll.
   const conn = useConnectionStats({ room, enabled: room !== null });
+  // #60 — best-effort transport telemetry to the CP (fleet transport proof +
+  // TURN before/after measurement). Throttled, fire-and-forget; reportTransport
+  // swallows every error so it can never touch the stream. Reuses the same
+  // per-session controlAuth the other control calls use.
+  useTransportTelemetry({ stats: conn, sessionId, auth: controlAuth, enabled: room !== null });
   // Client-side VIDEO-FREEZE detector (#3/#6). The box-reported 'stalled' page_state
   // covers a frozen RENDERER, and the transport badge covers a TCP/relay slow link —
   // but a pure CLIENT decode freeze (decoder stalls / SFU stops delivering frames /

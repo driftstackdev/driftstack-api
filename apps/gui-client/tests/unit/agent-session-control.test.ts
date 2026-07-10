@@ -17,6 +17,7 @@ import {
   endAgentSession,
   mintGuiControlKey,
   getAgentSessionCookies,
+  reportTransport,
   AgentSessionControlError,
 } from '../../src/lib/agent-session-control';
 
@@ -301,4 +302,59 @@ describe('agent-session-control transport', () => {
   // reports per-session `liveness` (state + fresh) inline on the agent-session
   // list/get, so boundSession reads liveness off the list entry directly. No
   // page-state transport remains in this module.
+});
+
+describe('reportTransport (#60 transport telemetry)', () => {
+  it('POSTs the report to /transport-report with the control-key header (best-effort)', async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 204, json: () => Promise.resolve({}) });
+    await reportTransport(
+      'agt_1',
+      { transport: 'tcp', relayed: true, rtt_ms: 844, packet_loss_recent_pct: 2 },
+      { controlKey: 'ck-9', baseUrl: 'https://api.test' },
+    );
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/v1/agent-sessions/agt_1/transport-report');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      transport: 'tcp',
+      relayed: true,
+      rtt_ms: 844,
+      packet_loss_recent_pct: 2,
+    });
+    expect((init.headers as Record<string, string>)['x-driftstack-gui-control-key']).toBe('ck-9');
+  });
+
+  it('is best-effort: a rejected fetch does NOT throw', async () => {
+    mockFetch.mockRejectedValue(new Error('network down'));
+    await expect(
+      reportTransport('agt_1', {
+        transport: 'udp',
+        relayed: false,
+        rtt_ms: null,
+        packet_loss_recent_pct: null,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('is best-effort: a non-2xx response does NOT throw', async () => {
+    mockFetch.mockResolvedValue(fail(404, 'about:blank', 'not found'));
+    await expect(
+      reportTransport('agt_1', {
+        transport: 'udp',
+        relayed: false,
+        rtt_ms: 10,
+        packet_loss_recent_pct: 0,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('no-ops on an empty session id (no fetch)', async () => {
+    await reportTransport('', {
+      transport: 'udp',
+      relayed: false,
+      rtt_ms: null,
+      packet_loss_recent_pct: null,
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
 });

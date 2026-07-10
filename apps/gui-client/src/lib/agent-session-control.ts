@@ -185,6 +185,36 @@ export async function mintGuiControlKey(
   }
 }
 
+/** ICE.T (#60) — best-effort POST of the live media-transport diagnostics
+ *  (udp/tcp, relayed, selected-pair RTT, recent loss) to the CP so we can
+ *  PROVE the selected transport fleet-wide + MEASURE a TURN relay before/after,
+ *  without disturbing the user. Fire-and-forget: EVERY error is swallowed (auth,
+ *  network, teardown) so a telemetry failure can NEVER touch the stream. */
+export async function reportTransport(
+  id: string,
+  body: {
+    transport: 'udp' | 'tcp' | null;
+    relayed: boolean | null;
+    rtt_ms: number | null;
+    packet_loss_recent_pct: number | null;
+    jitter_ms?: number | null;
+    decode_fps?: number | null;
+    freeze_count?: number | null;
+  },
+  auth: ControlAuth = null,
+): Promise<void> {
+  if (id.length === 0) return;
+  try {
+    await authedFetch(
+      `/v1/agent-sessions/${encodeURIComponent(id)}/transport-report`,
+      { method: 'POST', body: JSON.stringify(body) },
+      auth,
+    );
+  } catch {
+    // Best-effort telemetry — never surfaces, never affects the stream.
+  }
+}
+
 /** GET the current mode + pair state (seed on mount, re-fetch on panel expand). */
 export async function getAgentSession(
   id: string,

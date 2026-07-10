@@ -62,6 +62,7 @@ import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { registerMacNodesRoutes } from '../routes/mac-nodes-register.js';
 import { registerAgentSessionsLivekitTokenRoute } from '../routes/agent-sessions-livekit-token.js';
+import { registerAgentSessionsTransportReportRoute } from '../routes/agent-sessions-transport-report.js';
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
@@ -1648,6 +1649,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? { guiControlKeyEncryptionKey: deps.guiControlKeyEncryptionKey }
         : {}),
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
+    });
+  }
+  // ICE.T — lightweight ICE/media-transport telemetry from the gui-client's
+  // live LiveKit connection. Same dual auth as the token route (per-session
+  // gui_control_key OR account Bearer), but the account path floors at
+  // read:sessions (this is a read-stakes report). No DB — it structured-logs.
+  if (deps.agentSessionsRepo !== undefined) {
+    registerAgentSessionsTransportReportRoute(app, {
+      agentSessionsRepo: deps.agentSessionsRepo,
+      // Report via the per-session gui_control_key — the Simulator app holds
+      // only that key (not the account API key). Wired when present.
+      ...(deps.guiControlKeyEncryptionKey !== undefined
+        ? { guiControlKeyEncryptionKey: deps.guiControlKeyEncryptionKey }
+        : {}),
     });
   }
   if (
