@@ -65,10 +65,30 @@ export function RecordingPlayerView({
     loadFrames();
   }, [recording, loadFrames]);
 
-  const totalMs = useMemo(
-    () => (recording !== null ? recordingDurationMs(recording) : 0),
-    [recording],
-  );
+  // Timeline anchor. A long capture can hit MAX_FRAMES_PER_RECORDING and drop
+  // its oldest frames (ring buffer), so frames[0].at may be well AFTER
+  // recording.startedAt while the header's startedAt→endedAt span is unchanged.
+  // Basing the cursor/scrubber on startedAt would then leave the whole
+  // pre-frames[0] stretch with no frame qualifying (currentFrame stays frozen
+  // on frames[0]). Anchor instead on the first SURVIVING frame so the cursor
+  // maps onto the range we can actually show. Fall back to startedAt/duration
+  // for header-only stubs whose frames aren't hydrated yet.
+  const effectiveStart = useMemo(() => {
+    if (recording === null) return 0;
+    return recording.frames[0]?.at ?? recording.startedAt;
+  }, [recording]);
+
+  const totalMs = useMemo(() => {
+    if (recording === null) return 0;
+    const frames = recording.frames;
+    if (frames.length > 0) {
+      const last = frames[frames.length - 1];
+      return last !== undefined ? Math.max(0, last.at - effectiveStart) : 0;
+    }
+    // No frames in memory (header-only stub / genuinely empty) — use the
+    // header-derived duration so the scrubber still spans the run.
+    return recordingDurationMs(recording);
+  }, [recording, effectiveStart]);
 
   const stopTick = useCallback((): void => {
     if (tickRef.current !== null) {
@@ -131,17 +151,19 @@ export function RecordingPlayerView({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [cursorMs, totalMs]);
 
-  // Pick the frame whose `at` is the latest <= recording.startedAt + cursorMs.
+  // Pick the frame whose `at` is the latest <= effectiveStart + cursorMs.
+  // effectiveStart is the first surviving frame (see totalMs above), so cursor 0
+  // maps onto frames[0] even when the front of the buffer was ring-trimmed.
   const currentFrame = useMemo(() => {
     if (recording === null || recording.frames.length === 0) return null;
-    const target = recording.startedAt + cursorMs;
+    const target = effectiveStart + cursorMs;
     let chosen = recording.frames[0] ?? null;
     for (const f of recording.frames) {
       if (f.at <= target) chosen = f;
       else break;
     }
     return chosen;
-  }, [recording, cursorMs]);
+  }, [recording, cursorMs, effectiveStart]);
 
   if (recording === null) {
     return (

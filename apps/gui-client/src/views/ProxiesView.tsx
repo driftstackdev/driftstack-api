@@ -323,7 +323,12 @@ export function ProxiesView(): JSX.Element {
       }));
       setExitResults((r) => dropKey(r, p.id));
     } finally {
-      if (!stale()) setTestingId(null);
+      // Always clear the spinner for the id THIS probe owns — even when a
+      // mid-probe edit/remove bumped the epoch (stale()). The stale-guard's
+      // early returns above skip the state writes, but the card must not stay
+      // pinned on a spinning 'Testing…'; scope the clear so a newer probe that
+      // re-armed testingId to another id isn't stomped.
+      setTestingId((cur) => (cur === p.id ? null : cur));
     }
   }
 

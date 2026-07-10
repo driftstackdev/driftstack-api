@@ -72,7 +72,14 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
     async function probe(): Promise<void> {
       const trimmed = baseUrl.trim().replace(/\/+$/, '');
       const controller = new AbortController();
+      // Leak fix — abort any still-in-flight probe (e.g. a stalled body read)
+      // before we orphan its controller by reassigning abortRef.
+      abortRef.current?.abort();
       abortRef.current = controller;
+      // Leak fix — keep this timer armed until the body is parsed (cleared in
+      // the finally below), so PROBE_TIMEOUT_MS bounds res.json() too. A proxy
+      // that returns 200 headers then stalls the body would otherwise hang the
+      // fetch forever, accumulating orphaned controllers on each interval tick.
       const timer = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
       try {
         const res = await fetch(`${trimmed}/version`, {
@@ -81,7 +88,6 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           // a stale cache after the upstream goes down.
           cache: 'no-store',
         });
-        window.clearTimeout(timer);
         if (cancelled) return;
         if (res.ok) {
           // W625 — parse the driver from /version so the UI can warn on mock.
@@ -121,7 +127,6 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           agentExecution: prev.agentExecution,
         }));
       } catch (err) {
-        window.clearTimeout(timer);
         if (cancelled) return;
         const message =
           err instanceof Error
@@ -136,6 +141,10 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           driver: prev.driver,
           agentExecution: prev.agentExecution,
         }));
+      } finally {
+        // Leak fix — clear only after the body read (or its failure), so the
+        // timeout bounds res.json() rather than being disarmed at headers.
+        window.clearTimeout(timer);
       }
     }
 

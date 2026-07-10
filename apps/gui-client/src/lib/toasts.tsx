@@ -66,7 +66,20 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   const push = useCallback(
     (toast: Omit<Toast, 'id'>) => {
       const id = nextId.current++;
-      setToasts((list) => [...list.slice(-2), { ...toast, id }]); // max 3 visible
+      setToasts((list) => {
+        // Cap at 3 visible; release the auto-dismiss timers of any toasts we
+        // slice off so evicted toasts don't leave dangling setTimeout entries
+        // firing dismiss() against ids no longer in state (#17 leak).
+        const kept = list.slice(-2);
+        for (const dropped of list.slice(0, -2)) {
+          const timer = timers.current.get(dropped.id);
+          if (timer) {
+            clearTimeout(timer);
+            timers.current.delete(dropped.id);
+          }
+        }
+        return [...kept, { ...toast, id }];
+      });
       timers.current.set(
         id,
         setTimeout(() => dismiss(id), AUTO_DISMISS_MS),

@@ -84,11 +84,21 @@ export function LogsView(): JSX.Element {
   }, [entries, filter, query, version]);
 
   // Auto-scroll to the newest matching entry as the buffer grows.
+  // `version` (not just filtered.length) is a dep because once the 500-entry
+  // ring buffer is full, each new line evicts the oldest so filtered.length
+  // stays pinned at 500 — depending on length alone would freeze auto-scroll
+  // exactly when the app is busiest (audit finding #13). `version` bumps on
+  // every in-place buffer mutation, so the effect re-fires per new line.
+  // Only follow when the operator is already near the bottom, so scrolling up
+  // to inspect older entries isn't yanked back down by incoming lines.
   useEffect(() => {
-    if (scrollRef.current !== null) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (el === null) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    if (nearBottom) {
+      el.scrollTop = el.scrollHeight;
     }
-  }, [filtered.length]);
+  }, [filtered.length, version]);
 
   const errorCount = useMemo(
     () => entries.reduce((n, e) => (e.level === 'error' ? n + 1 : n), 0),

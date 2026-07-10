@@ -1456,6 +1456,12 @@ function AgentResponseBody({
       );
     case 'logged-manual':
       return <p className="text-xs italic text-ink-muted">Logged (manual mode — no AI turn).</p>;
+    default:
+      // Robustness (#14): a persisted chat rehydrated from a newer/older build, or a
+      // server that ships a response.kind this build doesn't know, must not render a
+      // bare empty bubble (an unhandled switch returns undefined → blank React node).
+      // Fall back to a neutral, honest message instead.
+      return <p className="text-sm text-ink-muted">This step can’t be shown in this version.</p>;
   }
 }
 
@@ -1511,6 +1517,15 @@ function describeResult(
             cls: 'text-status-busy',
             text: `${intentLabel(result.intent)} — confirmation required (“${result.matchedText}”)`,
           };
+    default:
+      // Robustness (#14): an unknown result.kind from a newer server / rehydrated chat
+      // must not fall through to `undefined` — PlanStep destructures { glyph, cls, text }
+      // from this and would throw on undefined. Render a neutral, honest step instead.
+      return {
+        glyph: '•',
+        cls: 'text-ink-muted',
+        text: 'This step can’t be shown in this version.',
+      };
   }
 }
 
@@ -1528,6 +1543,12 @@ function intentLabel(intent: AgentIntent): string {
       return `scroll ${intent.direction}`;
     case 'behavioral_pause':
       return 'behavioural pause';
+    default:
+      // Robustness (#14): a newer server (or a rehydrated persisted chat) may carry an
+      // intent.kind this build doesn't model. Surface the raw kind rather than letting
+      // the switch fall through to `undefined`, which would render literal 'undefined —
+      // <reason>' inside describeResult's failure/confirmation text.
+      return (intent as { kind?: string }).kind ?? 'action';
   }
 }
 

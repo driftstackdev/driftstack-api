@@ -8,7 +8,7 @@
 // non-null `next_cursor`, the caller can invoke `loadMore` to append
 // the next page in place. Changing any filter resets pagination.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 import type { CryptoOrderData } from './use-crypto-order';
@@ -57,6 +57,12 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
     opts.manual === true ? { kind: 'idle' } : { kind: 'loading' },
   );
 
+  // Race guard: monotonically-increasing request generation. Every fetch/loadMore
+  // captures the generation it started at and bumps this ref; a slow older response
+  // that resolves after a newer request has begun is stale and must not setState,
+  // else out-of-order responses clobber the newer (e.g. filtered) data.
+  const requestGenRef = useRef(0);
+
   const buildUrl = useCallback(
     (cursor: string | null): URL => {
       const baseUrl = settings.baseUrl.replace(/\/+$/, '');
@@ -80,6 +86,8 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
+    // Claim a fresh generation; any earlier in-flight response is now stale.
+    const gen = ++requestGenRef.current;
     setState({ kind: 'loading' });
     try {
       const res = await fetch(buildUrl(null).toString(), {
@@ -89,16 +97,19 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
           accept: 'application/json',
         },
       });
+      if (gen !== requestGenRef.current) return; // superseded by a newer request
       if (!res.ok) {
         setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const body = (await res.json()) as ListApiResponse;
+      if (gen !== requestGenRef.current) return; // superseded by a newer request
       setState({
         kind: 'ready',
         data: { orders: body.orders, nextCursor: body.next_cursor ?? null },
       });
     } catch (err) {
+      if (gen !== requestGenRef.current) return; // superseded by a newer request
       setState({
         kind: 'error',
         message: err instanceof Error ? err.message : String(err),
@@ -114,6 +125,8 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
       return;
     }
     const baseline = state.data;
+    // Claim a fresh generation; a subsequent filter refetch (or this call) supersedes.
+    const gen = ++requestGenRef.current;
     setState({ kind: 'loading_more', data: baseline });
     try {
       const res = await fetch(buildUrl(baseline.nextCursor).toString(), {
@@ -123,11 +136,13 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
           accept: 'application/json',
         },
       });
+      if (gen !== requestGenRef.current) return; // superseded by a newer request
       if (!res.ok) {
         setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const body = (await res.json()) as ListApiResponse;
+      if (gen !== requestGenRef.current) return; // superseded by a newer request
       setState({
         kind: 'ready',
         data: {
@@ -136,6 +151,7 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
         },
       });
     } catch (err) {
+      if (gen !== requestGenRef.current) return; // superseded by a newer request
       setState({
         kind: 'error',
         message: err instanceof Error ? err.message : String(err),

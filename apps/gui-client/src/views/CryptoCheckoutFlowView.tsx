@@ -11,7 +11,7 @@
 // pricing-page CTAs; the user can still switch products before
 // minting.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { formatCents, formatProduct } from '../lib/crypto-format';
@@ -39,6 +39,15 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
   const orderId = checkout.state.kind === 'ready' ? checkout.state.order.order_id : null;
   const order = useCryptoOrder(orderId, { pollIntervalMs: 5_000 });
   const [copied, setCopied] = useState(false);
+  // Track the "Copied ✓" reset timer so a torn-down address block (Start-another-checkout
+  // unmounts the copy button) or a rapid re-copy can't fire setCopied on a stale subtree
+  // or stack overlapping timers (audit 2026-07-08 #19).
+  const copiedTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
 
   const onStart = (): void => {
     if (quote.state.kind !== 'ready') return;
@@ -59,7 +68,12 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
     void navigator.clipboard.writeText(addr).then(
       () => {
         setCopied(true);
-        window.setTimeout(() => setCopied(false), 2000);
+        // Clear any in-flight reset before arming a fresh one so rapid copies don't stack timers.
+        if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+        copiedTimerRef.current = window.setTimeout(() => {
+          copiedTimerRef.current = null;
+          setCopied(false);
+        }, 2000);
       },
       () => {
         /* clipboard blocked in a locked-down WebView — the address stays selectable */

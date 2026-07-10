@@ -170,8 +170,13 @@ interface ProfilesState {
   loading: boolean;
   error: string | null;
   /** Transient success message (e.g. "Exported …") shown in a dismissible
-   *  banner; null when there's nothing to report. */
+   *  banner; null when there's nothing to report. Auto-dismisses after ~5s. */
   notice: string | null;
+  /** In-flight progress message (e.g. the ~10s launch proxy probe). Shown in
+   *  the SAME banner as `notice`, but the 5s auto-dismiss skips it — a slow-but-
+   *  normal launch must keep its progress indicator until the success/error
+   *  branch overwrites it (audit #15). null when nothing is in flight. */
+  progressNotice: string | null;
 }
 
 /** Friendly device label for the simulator toolbar, derived from the archetype
@@ -319,6 +324,7 @@ export function ProfilesView({
     loading: false,
     error: null,
     notice: null,
+    progressNotice: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
   // V-238 — create-form modal state. Lives here (not lifted to App.tsx)
@@ -583,7 +589,14 @@ export function ProfilesView({
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
       if (!client) {
-        setState({ profiles: [], refreshedAt: null, loading: false, error: null, notice: null });
+        setState({
+          profiles: [],
+          refreshedAt: null,
+          loading: false,
+          error: null,
+          notice: null,
+          progressNotice: null,
+        });
         return;
       }
       if (showLoading) setState((s) => ({ ...s, loading: true }));
@@ -860,6 +873,9 @@ export function ProfilesView({
   // confirmation of a completed action (folder moved, exported, cache cleared),
   // so it clears itself after ~5s instead of lingering until manually dismissed.
   // Errors stay sticky (they need action + live in the separate ErrorBanner).
+  // In-flight progress lives in `progressNotice` (NOT `notice`) so this timer
+  // never nulls it mid-wait — a slow launch would otherwise lose its progress
+  // indicator at 5s while the ~10s probe is still running (audit #15).
   useEffect(() => {
     if (state.notice === null) return;
     const id = window.setTimeout(() => {
@@ -1711,10 +1727,15 @@ export function ProfilesView({
       // a transient failure when a key is present (no key → maxAttempts:0), so this also
       // arms the retry path. crypto.randomUUID is available in the Tauri webview.
       // Surface the ~10s pre-launch proxy probe as progress so the wait doesn't
-      // read as a hang (journey audit H1). Superseded by the success/error notice.
+      // read as a hang (journey audit H1). Written to `progressNotice` (NOT
+      // `notice`) so the 5s success-notice auto-dismiss can't null it mid-probe
+      // and make a slow-but-normal launch read as frozen (audit #15). Superseded
+      // by the success/error notice, which also clears this progress line.
       setState((s) => ({
         ...s,
-        notice: 'Starting your session — this can take about 10 seconds while we check your proxy…',
+        progressNotice:
+          'Starting your session — this can take about 10 seconds while we check your proxy…',
+        notice: null,
         error: null,
       }));
       const idempotencyKey = crypto.randomUUID();
@@ -1787,6 +1808,7 @@ export function ProfilesView({
           setState((s) => ({
             ...s,
             notice: 'Session launched — opening the live window.',
+            progressNotice: null,
             error: null,
           }));
         }
@@ -1810,6 +1832,10 @@ export function ProfilesView({
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
       setBusyId(null);
+      // Always retire the in-flight launch progress line once the launch settles
+      // (success, any error branch, or a throw) so it can't linger past the probe;
+      // the success branch already set the transient `notice`, untouched here (audit #15).
+      setState((s) => (s.progressNotice === null ? s : { ...s, progressNotice: null }));
     }
   }
 
@@ -2730,6 +2756,20 @@ export function ProfilesView({
           >
             Dismiss
           </button>
+        </div>
+      )}
+      {/* In-flight launch progress (audit #15) — a separate banner from the
+          transient `notice` so the 5s auto-dismiss can't null it mid-probe. No
+          Dismiss button: the launch continues regardless and it clears itself
+          once the launch settles (see the launch handler's finally). */}
+      {state.progressNotice !== null && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-component="profiles-progress-notice"
+          className="flex items-start gap-3 rounded border border-status-ready/30 bg-status-ready/10 px-3 py-2"
+        >
+          <span className="text-sm text-ink-primary">{state.progressNotice}</span>
         </div>
       )}
 

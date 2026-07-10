@@ -445,7 +445,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
 
   const approve = useCallback(async (): Promise<void> => {
     if (pendingConfirmation === null || lastUserMessage === null) return;
-    setResolvedTurnId(pendingConfirmation.turnId);
+    const turnId = pendingConfirmation.turnId;
     // Accumulate this approval on top of any earlier ones for the same task (dedup by
     // category+matchedText) and re-send ALL of them — otherwise a plan with 2+
     // consequential actions loops: the server, re-decomposing from only the latest
@@ -456,10 +456,26 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     );
     if (!already)
       approvedActionsRef.current = [...approvedActionsRef.current, { category, matchedText }];
-    await post(lastUserMessage, {
+    // Robustness fix: resolve the gate only AFTER the re-send actually succeeds.
+    // Setting resolvedTurnId up front dismissed the Approve/Deny bar permanently
+    // (pendingConfirmation memoises to null once turn.id === resolvedTurnId), so a
+    // failed re-send (e.g. 503) stranded the customer — the gate vanished, the just-
+    // added approvedActionsRef entry was orphaned, and re-approving was impossible;
+    // they'd have to retype the message (re-decompose + re-bill). On failure we
+    // instead leave the gate up and pop the entry we just appended so a retry is clean.
+    const ok = await post(lastUserMessage, {
       approvals: approvedActionsRef.current,
       appendUserTurn: false,
     });
+    if (ok) {
+      setResolvedTurnId(turnId);
+    } else if (!already) {
+      // The re-send failed and we had appended this approval — remove it so the next
+      // Approve re-appends cleanly (idempotent whether or not it's still the tail).
+      approvedActionsRef.current = approvedActionsRef.current.filter(
+        (a) => !(a.category === category && a.matchedText === matchedText),
+      );
+    }
   }, [pendingConfirmation, lastUserMessage, post]);
 
   const deny = useCallback((): void => {
@@ -517,6 +533,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       setSession(null);
       setError(null);
       setResolvedTurnId(null);
+      // Clear denied ids too (mirroring reset()) — restore() rebases idRef into the
+      // low id space, so a stale denied id from the chat we're leaving (e.g. 3) would
+      // otherwise false-mark the restored chat's own turn id 3 as "denied — skipped".
+      setDeniedTurnIds(new Set());
       approvedActionsRef.current = [];
       setLastUserMessage(null);
       // Mark every restored turn as history the (absent) live session won't

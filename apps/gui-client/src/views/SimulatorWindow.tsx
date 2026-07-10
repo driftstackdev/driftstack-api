@@ -5255,8 +5255,15 @@ export function SimulatorWindow(): JSX.Element {
   // RESOLVE time, not call time. Best-effort + guarded.
   const reconcilePageState = useCallback(async (): Promise<void> => {
     if (sessionId === '') return;
+    // Capture the session at call time so a ds-session relaunch that swaps the live
+    // session mid-round-trip can't route this (tabId-less) frame onto the new session's
+    // seed tab — the new address bar would briefly show the prior session's url. Re-check
+    // after the await, matching the sessionIdRef guard in the terminal-end poll +
+    // upload/download handlers (audit 2026-07-08).
+    const reqSessionId = sessionId;
     try {
       const ps = await getAgentSessionPageState(sessionId, controlAuth);
+      if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale page_state
       if (ps === null) return;
       const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
       const inGrace =

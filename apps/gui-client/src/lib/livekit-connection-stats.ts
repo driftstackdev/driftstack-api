@@ -18,7 +18,7 @@
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Room } from './livekit';
 
 /** Poll cadence. Stats move slowly; 3s keeps the readout fresh without churn. */
@@ -32,8 +32,20 @@ export interface ConnectionStats {
   relayed: boolean | null;
   /** Selected candidate-pair RTT in ms (the real media RTT, not the data ping). */
   rttMs: number | null;
-  /** Lifetime inbound video packet loss, percent. */
+  /** Lifetime inbound video packet loss, percent (cumulative average — moves
+   *  very slowly, so a recent burst barely registers; kept as a secondary
+   *  figure). */
   packetLossPct: number | null;
+  /** Packet loss over the LAST poll interval only, percent. A short burst
+   *  (e.g. 3000 lost in 3s during a freeze) shows up here immediately, where
+   *  the lifetime average would dilute it to ~0. null until two polls have
+   *  landed (no prior sample to diff against). */
+  packetLossRecentPct: number | null;
+  /** Raw cumulative inbound-video packet counters (signed per WebRTC spec),
+   *  carried so the polling hook can diff consecutive samples for the recent
+   *  loss figure. null when unavailable. */
+  packetsLost: number | null;
+  packetsReceived: number | null;
   /** Inbound video jitter in ms. */
   jitterMs: number | null;
   /** Decoder frames-per-second the client is actually rendering. */
@@ -47,6 +59,9 @@ const EMPTY: ConnectionStats = {
   relayed: null,
   rttMs: null,
   packetLossPct: null,
+  packetLossRecentPct: null,
+  packetsLost: null,
+  packetsReceived: null,
   jitterMs: null,
   decodeFps: null,
   freezeCount: null,
@@ -118,6 +133,11 @@ export function parseConnectionStats(report: RTCStatsReport): ConnectionStats {
     if (typeof s.jitter === 'number') out.jitterMs = Math.round(s.jitter * 1000);
     const lost = typeof s.packetsLost === 'number' ? s.packetsLost : null;
     const recv = typeof s.packetsReceived === 'number' ? s.packetsReceived : null;
+    // Carry the raw cumulative counters so the polling hook can diff
+    // consecutive samples into a recent-interval loss figure (the lifetime
+    // average below barely moves during a short burst).
+    out.packetsLost = lost;
+    out.packetsReceived = recv;
     if (lost !== null && recv !== null && lost + recv > 0) {
       // packetsLost is a SIGNED cumulative estimate (WebRTC spec) that
       // legitimately goes negative early in a relayed SFU stream (RTX /
@@ -139,9 +159,15 @@ export interface UseConnectionStatsOpts {
 export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStats {
   const { room, enabled } = opts;
   const [stats, setStats] = useState<ConnectionStats>(EMPTY);
+  // Previous poll's cumulative packet counters, kept across polls so we can
+  // report the loss over the LAST interval (the lifetime average dilutes a
+  // short burst to ~0). Reset to null whenever we drop to EMPTY so a stale
+  // pre-resubscribe sample can't diff against a fresh, lower cumulative count.
+  const prevCountersRef = useRef<{ lost: number; recv: number } | null>(null);
 
   useEffect(() => {
     if (room === null || !enabled) {
+      prevCountersRef.current = null;
       setStats(EMPTY);
       return;
     }
@@ -157,13 +183,38 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
       // "link…" until a real report lands, instead of showing a stale
       // udp/tcp + RTT that hides a transport change during recovery.
       if (track === null || typeof track.getRTCStatsReport !== 'function') {
+        prevCountersRef.current = null;
         setStats(EMPTY);
         return;
       }
       void Promise.resolve(track.getRTCStatsReport())
         .then((report: RTCStatsReport | undefined) => {
           if (cancelled || report === undefined) return;
-          setStats(parseConnectionStats(report));
+          const parsed = parseConnectionStats(report);
+          // Compute recent-interval loss from the delta between this poll's
+          // cumulative counters and the last poll's. Only meaningful when the
+          // counters advanced monotonically (recv delta > 0); a fresh/reset
+          // PeerConnection (lower cumulative count than before) is treated as
+          // no prior sample so we don't emit a bogus spike.
+          if (parsed.packetsLost !== null && parsed.packetsReceived !== null) {
+            const prev = prevCountersRef.current;
+            if (
+              prev !== null &&
+              parsed.packetsReceived >= prev.recv &&
+              parsed.packetsLost >= prev.lost
+            ) {
+              const dLost = parsed.packetsLost - prev.lost;
+              const dRecv = parsed.packetsReceived - prev.recv;
+              if (dLost + dRecv > 0) {
+                parsed.packetLossRecentPct = Math.max(
+                  0,
+                  Math.round((dLost / (dLost + dRecv)) * 1000) / 10,
+                );
+              }
+            }
+            prevCountersRef.current = { lost: parsed.packetsLost, recv: parsed.packetsReceived };
+          }
+          setStats(parsed);
         })
         .catch(() => undefined);
     };

@@ -72,6 +72,20 @@ export async function openSimulatorWindow({
     return { opened: false, reason: 'not running under Tauri (browser preview)' };
   }
 
+  // Validate the LiveKit join info BEFORE building the query: URLSearchParams
+  // stringifies a missing ws_url/token to the literal 'undefined', so on token
+  // contract-drift the launch would still succeed (opened:true) but the iPhone
+  // window hangs on "Connecting…" forever with no error to surface. Fail fast
+  // with a clean reason so the caller shows why instead of a silent hang.
+  if (
+    typeof info.ws_url !== 'string' ||
+    info.ws_url.length === 0 ||
+    typeof info.token !== 'string' ||
+    info.token.length === 0
+  ) {
+    return { opened: false, reason: 'incomplete session token from server' };
+  }
+
   const params = new URLSearchParams({
     window: 'simulator',
     ws: info.ws_url,
@@ -126,6 +140,10 @@ export async function openSimulatorWindow({
   // caused a multi-hour "still the same window" debugging saga (founder
   // 2026-06-12). The separate app is reliably installed now, so a launch failure
   // returns a clean `opened:false` reason for the caller to surface to the user.
+  // Track whether we wrote the temp control-key file so we can remove it if the
+  // launch throws AFTER the write (e.g. simulator not installed): otherwise each
+  // failed retry strands a 24h-TTL credential in the shared 0600 /tmp file.
+  let wroteControlKey = false;
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     if (controlKey !== undefined && controlKey.length > 0) {
@@ -135,6 +153,7 @@ export async function openSimulatorWindow({
       // keychain read; we don't block the launch on it.
       try {
         await invoke('sim_key_write', { sessionId, key: controlKey });
+        wroteControlKey = true;
       } catch {
         // ignore — non-fatal; the simulator degrades to API-key auth.
       }
@@ -151,6 +170,17 @@ export async function openSimulatorWindow({
     // window" saga).
     const reason = err instanceof Error ? err.message : String(err);
     console.warn('[simulator] launch_simulator failed; no in-app fallback:', reason);
+    // The simulator never launched to consume it, so drop the temp credential we
+    // wrote above — best-effort; leaving it would accumulate a stale key per
+    // failed retry. sim_key_take reads-and-deletes the shared 0600 /tmp file.
+    if (wroteControlKey) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('sim_key_take', { sessionId });
+      } catch {
+        // ignore — best-effort cleanup; the file carries a 24h TTL regardless.
+      }
+    }
     return { opened: false, reason };
   }
 }

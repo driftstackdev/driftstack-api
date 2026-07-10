@@ -124,9 +124,12 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
       const next = new Map<string, Recording>();
       for (const h of index) {
         const existing = prev.get(h.id);
-        // Keep an already-frame-loaded copy (hydrated===false, frames present)
-        // so opening it again doesn't re-read the disk / flash empty.
-        if (existing && !existing.hydrated && existing.frames.length > 0) {
+        // Keep an already-frame-loaded copy (hydrated===false marks frames loaded)
+        // so opening it again doesn't re-read the disk / flash empty. Includes
+        // loaded-but-EMPTY recordings (0 captured frames) — without this a
+        // zero-frame recording reverts to a hydrated:true/frames:[] stub and the
+        // player effect re-fires loadFrames on every window focus (audit #16).
+        if (existing && !existing.hydrated) {
           next.set(h.id, existing);
         } else {
           next.set(h.id, headerToRecording(h));

@@ -165,8 +165,13 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
   const onShiftTap = useCallback((): void => {
     const now = Date.now();
     const isDouble = now - lastShiftTap.current <= DOUBLE_TAP_MS;
-    lastShiftTap.current = now;
     setShift((prev) => {
+      // A tap that RELEASES caps-lock must NOT seed the double-tap window: it is
+      // the end of a sequence, not the start of one. Otherwise unlock → quick
+      // shift tap (intending one-shot) sees this timestamp within 300ms and
+      // isDouble re-engages caps-lock. Mirror onCharPress's reset-to-0. (Fable
+      // GUI re-audit fix.)
+      lastShiftTap.current = prev === 'locked' ? 0 : now;
       if (prev === 'locked') return 'off';
       if (isDouble) return 'locked';
       return prev === 'once' ? 'off' : 'once';
@@ -391,6 +396,13 @@ function FnKey({
   }, []);
 
   const beginRepeat = useCallback((): void => {
+    // Cancel any in-flight repeat chain before arming a new one. A second
+    // pointerdown without an intervening pointerup (stray second pointer, pen+
+    // touch, synthetic replay) would otherwise leave the FIRST tick() chain
+    // orphaned: repeatTimerRef only tracks the latest timeout, so the eventual
+    // stopRepeat cancels only the second chain and the first keeps firing
+    // Backspace forever. Exactly one live chain per key. (Fable GUI re-audit fix.)
+    stopRepeat();
     let interval = KEY_REPEAT_START_MS;
     const tick = (): void => {
       onPressRef.current();
@@ -398,7 +410,7 @@ function FnKey({
       repeatTimerRef.current = window.setTimeout(tick, interval);
     };
     repeatTimerRef.current = window.setTimeout(tick, KEY_REPEAT_INITIAL_MS);
-  }, []);
+  }, [stopRepeat]);
 
   // Cancel any pending repeat if the key unmounts mid-hold (e.g. layout swaps to
   // the symbols page) so it can't keep firing Backspace into a torn-down view.

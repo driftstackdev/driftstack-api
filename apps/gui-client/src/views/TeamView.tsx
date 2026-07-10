@@ -49,30 +49,58 @@ export function TeamView(): JSX.Element {
   // that the team is empty (audit wiq542bfj). null = no load error.
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!client) return;
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const [m, i] = await Promise.all([client.team.listMembers(), client.team.listInvites()]);
-      setMembers(m.data);
-      setInvites(i.data);
-    } catch (err) {
-      // A 403 = not an account owner → legitimately no team to manage (clean empty
-      // state, no error). ANY other failure (network/5xx/429) means the list is
-      // STALE, not empty — surface it with a retry so an owner doesn't think their
-      // team was wiped (the old per-call catch swallowed ALL errors to []). (W2749)
-      const status = (err as { status?: number } | null)?.status;
-      if (status === 403) {
-        setMembers([]);
-        setInvites([]);
-      } else {
-        setLoadError(friendlyTeamError(err, 'Could not load your team — please try again.'));
+  // Last-write guard: concurrent refresh() calls (e.g. invite's refresh racing a
+  // remove's refresh) can resolve out of order — an older, slower listMembers
+  // resolving last would clobber a newer snapshot and resurrect a removed member.
+  // Each call takes a monotonic id; only the latest in-flight call is allowed to
+  // commit its result. Also doubles as an unmount guard (mountedRef). (audit #9)
+  const refreshSeqRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // `silent` skips the skeleton toggle so a post-mutation re-fetch (invite/remove)
+  // repaints in place instead of flashing the whole list back to a 3-row skeleton
+  // for both round-trips; only the initial mount load shows the skeleton. (audit #18)
+  const refresh = useCallback(
+    async (opts?: { silent?: boolean }): Promise<void> => {
+      if (!client) return;
+      const seq = ++refreshSeqRef.current;
+      if (opts?.silent !== true) setLoading(true);
+      setLoadError(null);
+      try {
+        const [m, i] = await Promise.all([client.team.listMembers(), client.team.listInvites()]);
+        // Ignore a stale/out-of-order result (a newer refresh already ran) or a
+        // result arriving after unmount.
+        if (!mountedRef.current || seq !== refreshSeqRef.current) return;
+        setMembers(m.data);
+        setInvites(i.data);
+      } catch (err) {
+        if (!mountedRef.current || seq !== refreshSeqRef.current) return;
+        // A 403 = not an account owner → legitimately no team to manage (clean empty
+        // state, no error). ANY other failure (network/5xx/429) means the list is
+        // STALE, not empty — surface it with a retry so an owner doesn't think their
+        // team was wiped (the old per-call catch swallowed ALL errors to []). (W2749)
+        const status = (err as { status?: number } | null)?.status;
+        if (status === 403) {
+          setMembers([]);
+          setInvites([]);
+        } else {
+          setLoadError(friendlyTeamError(err, 'Could not load your team — please try again.'));
+        }
+      } finally {
+        // Only the latest call, still mounted, clears the skeleton — a stale call
+        // must not flip loading off under a newer in-flight load.
+        if (mountedRef.current && seq === refreshSeqRef.current && opts?.silent !== true) {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [client]);
+    },
+    [client],
+  );
 
   useEffect(() => {
     void refresh();
@@ -100,7 +128,8 @@ export function TeamView(): JSX.Element {
       // silently over-grant admin to a member just because the last one was.
       setRole('member');
       setNotice({ tone: 'success', text: `Invite sent to ${trimmed}.` });
-      await refresh();
+      // Silent re-fetch: repaint the lists in place, no full-list skeleton flash.
+      await refresh({ silent: true });
     } catch (err) {
       setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not send the invite.') });
     } finally {
@@ -122,7 +151,8 @@ export function TeamView(): JSX.Element {
       setRemovingId(m.id);
       try {
         await client.team.removeMember(m.id);
-        await refresh();
+        // Silent re-fetch: repaint the lists in place, no full-list skeleton flash.
+        await refresh({ silent: true });
       } catch (err) {
         setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not remove the member.') });
       } finally {

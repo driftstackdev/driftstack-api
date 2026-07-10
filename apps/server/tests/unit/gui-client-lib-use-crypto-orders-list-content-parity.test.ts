@@ -82,9 +82,9 @@ describe('W474.A apps/gui-client/src/lib/use-crypto-orders-list.ts content parit
     );
   });
 
-  it("loadMore: state.kind !== 'ready' guard + nextCursor === null guard + apiKey guard + baseline snapshot before setState loading_more + orders [...baseline.orders, ...body.orders] APPEND (not replace) + nextCursor refreshed from body.next_cursor ?? null — pinned so 'Load more' appends instead of replacing", () => {
+  it("loadMore: state.kind !== 'ready' guard + nextCursor === null guard + apiKey guard + baseline snapshot then requestGenRef claim (const gen = ++requestGenRef.current) before setState loading_more + orders [...baseline.orders, ...body.orders] APPEND (not replace) + nextCursor refreshed from body.next_cursor ?? null — pinned so 'Load more' appends instead of replacing and a superseded slow response can't clobber newer data", () => {
     expect(body).toMatch(
-      /const loadMore = useCallback\(async \(\): Promise<void> => \{\s*\n?\s*if \(state\.kind !== 'ready'\) return;\s*\n?\s*if \(state\.data\.nextCursor === null\) return;\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*const baseline = state\.data;\s*\n?\s*setState\(\{ kind: 'loading_more', data: baseline \}\);/,
+      /const loadMore = useCallback\(async \(\): Promise<void> => \{\s*\n?\s*if \(state\.kind !== 'ready'\) return;\s*\n?\s*if \(state\.data\.nextCursor === null\) return;\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*const baseline = state\.data;\s*\n?\s*\/\/ Claim a fresh generation; a subsequent filter refetch \(or this call\) supersedes\.\s*\n?\s*const gen = \+\+requestGenRef\.current;\s*\n?\s*setState\(\{ kind: 'loading_more', data: baseline \}\);/,
     );
     expect(body).toMatch(
       /setState\(\{\s*\n?\s*kind: 'ready',\s*\n?\s*data: \{\s*\n?\s*orders: \[\.\.\.baseline\.orders, \.\.\.body\.orders\],\s*\n?\s*nextCursor: body\.next_cursor \?\? null,\s*\n?\s*\},\s*\n?\s*\}\);/,

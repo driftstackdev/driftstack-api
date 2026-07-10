@@ -24,7 +24,9 @@
 //     end-detection next >= totalMs → setCursorMs(totalMs) +
 //     setPlaying(false) + stopTick.
 //   • Frame selection: linear scan picking latest f.at <=
-//     target where target = recording.startedAt + cursorMs.
+//     target where target = effectiveStart + cursorMs
+//     (effectiveStart = first surviving frame; audit #12
+//     ring-buffer-trimmed basis, not recording.startedAt).
 //   • togglePlay end-restart: cursorMs >= totalMs → reset
 //     cursor to 0 + re-anchor playState before flipping
 //     playing.
@@ -71,9 +73,9 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     );
   });
 
-  it("Frame selection: useMemo currentFrame; null when recording === null or frames.length === 0; otherwise target = recording.startedAt + cursorMs + linear scan picking the latest f.at <= target (early break on first f.at > target — pinned so we don't traverse the whole frame list after finding the right one)", () => {
+  it("Frame selection: useMemo currentFrame; null when recording === null or frames.length === 0; otherwise target = effectiveStart + cursorMs (ring-buffer-trimmed basis, audit #12 — first SURVIVING frame, not recording.startedAt) + linear scan picking the latest f.at <= target (early break on first f.at > target — pinned so we don't traverse the whole frame list after finding the right one); deps include effectiveStart", () => {
     expect(body).toMatch(
-      /const currentFrame = useMemo\(\(\) => \{\s*\n?\s*if \(recording === null \|\| recording\.frames\.length === 0\) return null;\s*\n?\s*const target = recording\.startedAt \+ cursorMs;\s*\n?\s*let chosen = recording\.frames\[0\] \?\? null;\s*\n?\s*for \(const f of recording\.frames\) \{\s*\n?\s*if \(f\.at <= target\) chosen = f;\s*\n?\s*else break;\s*\n?\s*\}\s*\n?\s*return chosen;\s*\n?\s*\}, \[recording, cursorMs\]\);/,
+      /const currentFrame = useMemo\(\(\) => \{\s*\n?\s*if \(recording === null \|\| recording\.frames\.length === 0\) return null;\s*\n?\s*const target = effectiveStart \+ cursorMs;\s*\n?\s*let chosen = recording\.frames\[0\] \?\? null;\s*\n?\s*for \(const f of recording\.frames\) \{\s*\n?\s*if \(f\.at <= target\) chosen = f;\s*\n?\s*else break;\s*\n?\s*\}\s*\n?\s*return chosen;\s*\n?\s*\}, \[recording, cursorMs, effectiveStart\]\);/,
     );
   });
 
