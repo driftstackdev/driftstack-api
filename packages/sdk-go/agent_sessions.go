@@ -135,6 +135,20 @@ type SessionGeolocation struct {
 	Accuracy  *float64 `json:"accuracy,omitempty"`
 }
 
+// AgentUsage is the per-turn usage/cost block attached by the server on
+// every Claude-backed message response (DecomposerKind == "claude");
+// deterministic turns set DecomposerKind == "deterministic" with the
+// token/cost fields absent (nil). Surface it as a
+// "$0.0023 · 145 tok · <model>" badge; render "—" when the pointer
+// fields are nil. Mirrors the TS SDK's AgentUsage field-for-field.
+type AgentUsage struct {
+	DecomposerKind        string  `json:"decomposer_kind"`
+	AnthropicInputTokens  *int    `json:"anthropic_input_tokens,omitempty"`
+	AnthropicOutputTokens *int    `json:"anthropic_output_tokens,omitempty"`
+	CostUSDCents          *int    `json:"cost_usd_cents,omitempty"`
+	Model                 *string `json:"model,omitempty"`
+}
+
 // AgentMessageResponse is the discriminated turn-result. Branch on
 // Kind: "plan-executed" (Intents + Results + OK populated),
 // "clarify" (ClarifyingQuestion populated), or "refuse"
@@ -147,6 +161,9 @@ type AgentMessageResponse struct {
 	OK                 bool              `json:"ok,omitempty"`
 	ClarifyingQuestion string            `json:"clarifying_question,omitempty"`
 	RefuseReason       string            `json:"refuse_reason,omitempty"`
+	// Usage is the per-turn usage/cost block (nil on older servers or
+	// turns that omit it).
+	Usage *AgentUsage `json:"usage,omitempty"`
 }
 
 // CreateOptions carries optional per-call overrides for Create.
