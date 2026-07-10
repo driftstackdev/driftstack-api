@@ -160,10 +160,13 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     expect(body).toMatch(
       /\/\*\*\s*\n?\s*\*\s*Remove a member by membership id\. Returns the removed member's\s*\n?\s*\*\s*account id when the row was found \+ deleted \(so the caller can\s*\n?\s*\*\s*invalidate that member's auth cache\); null when the row was not\s*\n?\s*\*\s*found or owned by a different account\./,
     );
-    // Removal also cancels the member's OUTSTANDING invites (Fable auth
-    // re-audit 2026-07-02) so they can't re-join via a still-pending invite.
+    // Removal atomically drops the membership AND cancels the member's
+    // OUTSTANDING invites in one transaction (TOCTOU fix 2026-07-10; also
+    // stops the re-join-via-pending-invite path from the Fable auth re-audit
+    // 2026-07-02). removeMemberWithInvites is the single atomic call — a
+    // just-removed member can't resurrect their seat via an accept-in-flight.
     expect(body).toMatch(
-      /async removeMember\(input: \{ membershipId: string; ownerAccountId: string \}\): Promise<boolean> \{[\s\S]+?if \(removedMemberAccountId === null\) return false;[\s\S]+?deleteInvitesForEmail\(input\.ownerAccountId, removedEmail\)[\s\S]+?await this\.invalidateAuthCache\(removedMemberAccountId\);/,
+      /async removeMember\(input: \{ membershipId: string; ownerAccountId: string \}\): Promise<boolean> \{[\s\S]+?const removedMemberAccountId = await this\.repo\.removeMemberWithInvites\(\s*\n?\s*input\.membershipId,\s*\n?\s*input\.ownerAccountId,\s*\n?\s*\);[\s\S]+?if \(removedMemberAccountId === null\) return false;[\s\S]+?await this\.invalidateAuthCache\(removedMemberAccountId\);/,
     );
     expect(body).toMatch(
       /action: 'team\.member_removed',\s*\n?\s*targetResourceId: `mem_\$\{input\.membershipId\}`,/,

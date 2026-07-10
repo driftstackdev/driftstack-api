@@ -356,6 +356,110 @@ describe('TeamMembersService.listMembers + listPendingInvites + removeMember', (
     expect(await service.listMembers(OWNER)).toHaveLength(0);
   });
 
+  // TOCTOU fix (2026-07-10 audit, HIGH — privilege-escalation via
+  // membership resurrection): accept() and removeMember() were non-atomic,
+  // so an accept that read the invite BEFORE a concurrent remove deleted it
+  // could still upsert (resurrect) the membership AFTER the remove. The fix
+  // routes accept through acceptInviteAtomic (a CAS-consume of the invite
+  // that both operations serialize on) and remove through
+  // removeMemberWithInvites (membership + invite deleted atomically). Once
+  // the invite is consumed/deleted, a subsequent accept of that token must
+  // 404 and must NOT recreate the membership.
+  it('atomic remove-then-accept: a removed member cannot resurrect their membership via the now-deleted invite', async () => {
+    const { repo, service } = build();
+    repo.upsertAccountEmail(INVITEE_ACCOUNT, INVITEE_EMAIL);
+    const { generateAuthToken, tokenHash } = await import('../../src/lib/auth-tokens.js');
+    const plaintext = generateAuthToken();
+    await repo.upsertInvite({
+      ownerAccountId: OWNER,
+      inviteeEmail: INVITEE_EMAIL,
+      role: 'admin',
+      inviteTokenHash: tokenHash(plaintext),
+      inviteExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      invitedByAccountId: INVITER,
+    });
+    const accepted = await service.accept({
+      plaintextToken: plaintext,
+      acceptingAccountId: INVITEE_ACCOUNT,
+    });
+    expect(await service.listMembers(OWNER)).toHaveLength(1);
+
+    // Owner removes the member (atomically drops the membership + that
+    // member's invites).
+    const removedMemberAccountId = await repo.removeMemberWithInvites(
+      accepted.membership.id,
+      OWNER,
+    );
+    expect(removedMemberAccountId).toBe(INVITEE_ACCOUNT);
+    expect(await service.listMembers(OWNER)).toHaveLength(0);
+    expect(repo.getAllInvites()).toHaveLength(0);
+
+    // The removed member replays the (now-deleted) invite token — findInvite
+    // returns nothing, so accept 404s and NO membership is recreated.
+    await expect(
+      service.accept({ plaintextToken: plaintext, acceptingAccountId: INVITEE_ACCOUNT }),
+    ).rejects.toThrow(/not found/);
+    expect(await service.listMembers(OWNER)).toHaveLength(0);
+    expect(repo.getAllMembers()).toHaveLength(0);
+  });
+
+  it('acceptInviteAtomic returns null (no membership) when the invite is already accepted or deleted', async () => {
+    const { repo } = build();
+    repo.upsertAccountEmail(INVITEE_ACCOUNT, INVITEE_EMAIL);
+    const { generateAuthToken, tokenHash } = await import('../../src/lib/auth-tokens.js');
+    const plaintext = generateAuthToken();
+    const invite = await repo.upsertInvite({
+      ownerAccountId: OWNER,
+      inviteeEmail: INVITEE_EMAIL,
+      role: 'member',
+      inviteTokenHash: tokenHash(plaintext),
+      inviteExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      invitedByAccountId: INVITER,
+    });
+
+    // First atomic accept consumes the invite + creates the membership.
+    const first = await repo.acceptInviteAtomic({
+      inviteId: invite.id,
+      ownerAccountId: OWNER,
+      memberAccountId: INVITEE_ACCOUNT,
+      memberEmail: INVITEE_EMAIL,
+      role: 'member',
+      invitedAt: invite.createdAt,
+      invitedByAccountId: INVITER,
+      acceptedAt: new Date(),
+    });
+    expect(first).not.toBeNull();
+    expect(repo.getAllMembers()).toHaveLength(1);
+
+    // The invite is now accepted — a second atomic accept CAS-misses and
+    // returns null without touching the membership set.
+    const secondAlreadyAccepted = await repo.acceptInviteAtomic({
+      inviteId: invite.id,
+      ownerAccountId: OWNER,
+      memberAccountId: INVITEE_ACCOUNT,
+      memberEmail: INVITEE_EMAIL,
+      role: 'admin',
+      invitedAt: invite.createdAt,
+      invitedByAccountId: INVITER,
+      acceptedAt: new Date(),
+    });
+    expect(secondAlreadyAccepted).toBeNull();
+
+    // An entirely unknown invite id also returns null.
+    const unknown = await repo.acceptInviteAtomic({
+      inviteId: '00000000-0000-4000-8000-0000000000ff',
+      ownerAccountId: OWNER,
+      memberAccountId: INVITEE_ACCOUNT,
+      memberEmail: INVITEE_EMAIL,
+      role: 'member',
+      invitedAt: new Date(),
+      invitedByAccountId: INVITER,
+      acceptedAt: new Date(),
+    });
+    expect(unknown).toBeNull();
+    expect(repo.getAllMembers()).toHaveLength(1);
+  });
+
   it('removeMember returns false for cross-owner attempt', async () => {
     const { repo, service } = build();
     repo.upsertAccountEmail(INVITEE_ACCOUNT, INVITEE_EMAIL);

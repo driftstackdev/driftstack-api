@@ -112,6 +112,51 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
+  async acceptInviteAtomic(input: {
+    inviteId: string;
+    ownerAccountId: string;
+    memberAccountId: string;
+    memberEmail: string;
+    role: TeamRole;
+    invitedAt: Date;
+    invitedByAccountId: string | null;
+    acceptedAt: Date;
+  }): Promise<TeamMemberRow | null> {
+    // TOCTOU fix mirror — CAS-consume the invite (only while still un-accepted)
+    // then upsert the membership. No real concurrency here, but the SAME
+    // conditional semantics as the Drizzle transaction: if the invite is gone
+    // or already accepted, return null and DON'T recreate a membership.
+    const invite = this.invites.find((inv) => inv.id === input.inviteId);
+    if (!invite || invite.acceptedAt !== null) return null;
+    invite.acceptedAt = input.acceptedAt;
+    const existing = this.members.find(
+      (m) =>
+        m.ownerAccountId === input.ownerAccountId && m.memberAccountId === input.memberAccountId,
+    );
+    if (existing) {
+      // Mirror upsertMembership's onConflictDoUpdate: role/invitedAt/inviter
+      // refresh, acceptedAt untouched ("member since" preserved).
+      existing.role = input.role;
+      existing.invitedAt = input.invitedAt;
+      existing.invitedByAccountId = input.invitedByAccountId;
+      return existing;
+    }
+    const row: TeamMemberRow = {
+      id: randomUUID(),
+      ownerAccountId: input.ownerAccountId,
+      memberAccountId: input.memberAccountId,
+      memberEmail: input.memberEmail,
+      role: input.role,
+      invitedAt: input.invitedAt,
+      acceptedAt: input.acceptedAt,
+      invitedByAccountId: input.invitedByAccountId,
+      createdAt: new Date(),
+    };
+    this.members.push(row);
+    return row;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
   async markInviteAccepted(inviteId: string, at: Date): Promise<void> {
     const row = this.invites.find((inv) => inv.id === inviteId);
     if (row) row.acceptedAt = at;
@@ -138,6 +183,36 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     const removed = this.members[idx];
     this.members.splice(idx, 1);
     return removed?.memberAccountId ?? null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async removeMemberWithInvites(
+    membershipId: string,
+    ownerAccountId: string,
+  ): Promise<string | null> {
+    // TOCTOU fix mirror — delete the membership + that member's invites in one
+    // logical step (replicates removeMember + deleteInvitesForEmail). Sequential
+    // here (no real concurrency), but the atomic Drizzle sibling is what closes
+    // the resurrection race in production.
+    const idx = this.members.findIndex(
+      (m) => m.id === membershipId && m.ownerAccountId === ownerAccountId,
+    );
+    if (idx === -1) return null;
+    const removed = this.members[idx];
+    this.members.splice(idx, 1);
+    const memberAccountId = removed?.memberAccountId ?? null;
+    if (memberAccountId === null) return null;
+    const email = this.accountEmails.get(memberAccountId);
+    if (email) {
+      const norm = email.trim().toLowerCase();
+      for (let i = this.invites.length - 1; i >= 0; i--) {
+        const inv = this.invites[i];
+        if (inv && inv.ownerAccountId === ownerAccountId && inv.inviteeEmail === norm) {
+          this.invites.splice(i, 1);
+        }
+      }
+    }
+    return memberAccountId;
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await

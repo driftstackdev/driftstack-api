@@ -155,6 +155,56 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
     return this.attachMemberEmail(row, input.memberEmail);
   }
 
+  async acceptInviteAtomic(input: {
+    inviteId: string;
+    ownerAccountId: string;
+    memberAccountId: string;
+    memberEmail: string;
+    role: TeamRole;
+    invitedAt: Date;
+    invitedByAccountId: string | null;
+    acceptedAt: Date;
+  }): Promise<TeamMemberRow | null> {
+    // TOCTOU fix (2026-07-10 audit) — compare-and-swap consume the invite THEN
+    // upsert the membership in one transaction, so a just-removed member cannot
+    // resurrect their seat via a concurrent accept. The CAS
+    // (set acceptedAt WHERE id = inviteId AND acceptedAt IS NULL) is the
+    // serialization point: if a concurrent removeMemberWithInvites deleted this
+    // invite first, the CAS matches 0 rows and we return null WITHOUT creating a
+    // membership. The upsert body mirrors upsertMembership exactly (same
+    // onConflictDoUpdate, acceptedAt excluded from SET to preserve "member
+    // since"), just bound to the transaction handle.
+    return this.database.db.transaction(async (tx) => {
+      const consumed = await tx
+        .update(teamInvites)
+        .set({ acceptedAt: input.acceptedAt })
+        .where(and(eq(teamInvites.id, input.inviteId), isNull(teamInvites.acceptedAt)))
+        .returning();
+      if (consumed.length === 0) return null;
+      const [row] = await tx
+        .insert(teamMembers)
+        .values({
+          ownerAccountId: input.ownerAccountId,
+          memberAccountId: input.memberAccountId,
+          role: input.role,
+          invitedAt: input.invitedAt,
+          acceptedAt: input.acceptedAt,
+          invitedByAccountId: input.invitedByAccountId,
+        })
+        .onConflictDoUpdate({
+          target: [teamMembers.ownerAccountId, teamMembers.memberAccountId],
+          set: {
+            role: input.role,
+            invitedAt: input.invitedAt,
+            invitedByAccountId: input.invitedByAccountId,
+          },
+        })
+        .returning();
+      if (!row) throw new Error('team_members upsert produced no row');
+      return this.attachMemberEmail(row, input.memberEmail);
+    });
+  }
+
   async markInviteAccepted(inviteId: string, at: Date): Promise<void> {
     await this.database.db
       .update(teamInvites)
@@ -199,6 +249,45 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
       .where(and(eq(teamMembers.id, membershipId), eq(teamMembers.ownerAccountId, ownerAccountId)))
       .returning({ memberAccountId: teamMembers.memberAccountId });
     return result.length > 0 ? (result[0]?.memberAccountId ?? null) : null;
+  }
+
+  async removeMemberWithInvites(
+    membershipId: string,
+    ownerAccountId: string,
+  ): Promise<string | null> {
+    // TOCTOU fix (2026-07-10 audit) — delete the membership AND cancel that
+    // member's invites in one transaction, so a concurrent acceptInviteAtomic
+    // can't slip its membership upsert between the membership delete and the
+    // invite delete. The invite delete + the accept's CAS on the same invite
+    // row serialize, so a just-removed member can't resurrect their seat. Same
+    // owner-scoped WHERE as removeMember (id + ownerAccountId); same normalized
+    // (owner, email) predicate as deleteInvitesForEmail.
+    return this.database.db.transaction(async (tx) => {
+      const result = await tx
+        .delete(teamMembers)
+        .where(
+          and(eq(teamMembers.id, membershipId), eq(teamMembers.ownerAccountId, ownerAccountId)),
+        )
+        .returning({ memberAccountId: teamMembers.memberAccountId });
+      const memberAccountId = result.length > 0 ? (result[0]?.memberAccountId ?? null) : null;
+      if (memberAccountId === null) return null;
+      const [account] = await tx
+        .select({ email: accounts.email })
+        .from(accounts)
+        .where(eq(accounts.id, memberAccountId))
+        .limit(1);
+      if (account?.email) {
+        await tx
+          .delete(teamInvites)
+          .where(
+            and(
+              eq(teamInvites.ownerAccountId, ownerAccountId),
+              eq(teamInvites.inviteeEmail, account.email.trim().toLowerCase()),
+            ),
+          );
+      }
+      return memberAccountId;
+    });
   }
 
   async deleteInvitesForEmail(ownerAccountId: string, email: string): Promise<void> {

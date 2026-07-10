@@ -100,6 +100,38 @@ function makeRepo(): {
       state.members.push(row);
       return Promise.resolve(row);
     },
+    acceptInviteAtomic: (input) => {
+      // TOCTOU-fix mirror — CAS-consume the invite (only while un-accepted) then
+      // upsert the membership. Returns null (no membership created) when the
+      // invite is missing or already accepted.
+      const inv = state.invites.find((i) => i.id === input.inviteId);
+      if (!inv || inv.acceptedAt !== null) return Promise.resolve(null);
+      inv.acceptedAt = input.acceptedAt;
+      const existing = state.members.find(
+        (m) =>
+          m.ownerAccountId === input.ownerAccountId && m.memberAccountId === input.memberAccountId,
+      );
+      if (existing) {
+        existing.role = input.role;
+        existing.invitedAt = input.invitedAt;
+        existing.invitedByAccountId = input.invitedByAccountId;
+        return Promise.resolve(existing);
+      }
+      memberCounter += 1;
+      const row: TeamMemberRow = {
+        id: `mem_${memberCounter.toString()}`,
+        ownerAccountId: input.ownerAccountId,
+        memberAccountId: input.memberAccountId,
+        memberEmail: input.memberEmail,
+        role: input.role,
+        invitedAt: input.invitedAt,
+        acceptedAt: input.acceptedAt,
+        invitedByAccountId: input.invitedByAccountId,
+        createdAt: new Date(),
+      };
+      state.members.push(row);
+      return Promise.resolve(row);
+    },
     markInviteAccepted: (inviteId, at) => {
       const inv = state.invites.find((i) => i.id === inviteId);
       if (inv) inv.acceptedAt = at;
@@ -119,6 +151,27 @@ function makeRepo(): {
       const removed = state.members[idx];
       state.members.splice(idx, 1);
       return Promise.resolve(removed?.memberAccountId ?? null);
+    },
+    removeMemberWithInvites: (membershipId, ownerAccountId) => {
+      // TOCTOU-fix mirror — delete the membership + that member's invites in one
+      // logical step (removeMember + deleteInvitesForEmail). Returns the removed
+      // member's account id, or null when not found / wrong-owner.
+      const idx = state.members.findIndex(
+        (m) => m.id === membershipId && m.ownerAccountId === ownerAccountId,
+      );
+      if (idx < 0) return Promise.resolve(null);
+      const removed = state.members[idx];
+      state.members.splice(idx, 1);
+      const memberAccountId = removed?.memberAccountId ?? null;
+      if (memberAccountId === null) return Promise.resolve(null);
+      const memberEmail = state.emailByAccount.get(memberAccountId);
+      if (memberEmail) {
+        const norm = memberEmail.trim().toLowerCase();
+        state.invites = state.invites.filter(
+          (i) => !(i.ownerAccountId === ownerAccountId && i.inviteeEmail === norm),
+        );
+      }
+      return Promise.resolve(memberAccountId);
     },
     deleteInvitesForEmail: (ownerAccountId, email) => {
       const norm = email.trim().toLowerCase();

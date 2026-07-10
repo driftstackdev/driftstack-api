@@ -80,6 +80,25 @@ export interface TeamMembersRepo {
     acceptedAt: Date;
     invitedByAccountId: string | null;
   }): Promise<TeamMemberRow>;
+  /**
+   * ATOMIC accept — TOCTOU fix (2026-07-10). Compare-and-swap the invite
+   * (consume it only while still un-accepted) then upsert the membership in
+   * ONE transaction, so an accept-in-flight can't resurrect a membership that
+   * a concurrent removeMember is deleting. Returns null when the invite was no
+   * longer consumable (deleted or already accepted by a racing statement) — in
+   * which case NO membership is (re)created. Serialization point: accept and
+   * remove both mutate the invite row, so they can't interleave.
+   */
+  acceptInviteAtomic(input: {
+    inviteId: string;
+    ownerAccountId: string;
+    memberAccountId: string;
+    memberEmail: string;
+    role: TeamRole;
+    invitedAt: Date;
+    invitedByAccountId: string | null;
+    acceptedAt: Date;
+  }): Promise<TeamMemberRow | null>;
   /** Mark invite as accepted (idempotent). */
   markInviteAccepted(inviteId: string, at: Date): Promise<void>;
   /** List confirmed members for an owner account. */
@@ -93,6 +112,16 @@ export interface TeamMembersRepo {
    * found or owned by a different account.
    */
   removeMember(membershipId: string, ownerAccountId: string): Promise<string | null>;
+  /**
+   * ATOMIC removal — TOCTOU fix (2026-07-10). Delete the membership AND that
+   * member's invites in ONE transaction, so an accept-in-flight can't slip its
+   * upsert between the membership delete and the invite delete. Returns the
+   * removed member's account id (for auth-cache invalidation), or null when the
+   * membership was not found / owned by a different account. Both the membership
+   * delete and the invite delete serialize against a concurrent
+   * acceptInviteAtomic on the shared invite row.
+   */
+  removeMemberWithInvites(membershipId: string, ownerAccountId: string): Promise<string | null>;
   /**
    * Delete ALL invites (pending or accepted) for an (owner, invitee-email) pair.
    * Called on member removal so a removed member cannot re-join by accepting a
@@ -229,16 +258,24 @@ export class TeamMembersService {
       );
     }
     const now = new Date();
-    const membership = await this.repo.upsertMembership({
+    // TOCTOU fix (2026-07-10) — atomically consume the invite (CAS on the
+    // still-un-accepted row) AND upsert the membership in one transaction. If a
+    // concurrent removeMember already deleted this invite, the CAS matches no
+    // row and no membership is (re)created, so a just-removed member can't
+    // resurrect their seat via an accept that read the invite before removal.
+    const membership = await this.repo.acceptInviteAtomic({
+      inviteId: invite.id,
       ownerAccountId: invite.ownerAccountId,
       memberAccountId: input.acceptingAccountId,
       memberEmail: acceptingEmail,
       role: invite.role,
       invitedAt: invite.createdAt,
-      acceptedAt: now,
       invitedByAccountId: invite.invitedByAccountId,
+      acceptedAt: now,
     });
-    await this.repo.markInviteAccepted(invite.id, now);
+    if (membership === null) {
+      throw new NotFoundError('Invite not found or already used.');
+    }
     await this.invalidateAuthCache(input.acceptingAccountId);
     if (this.accountAudit) {
       try {
@@ -273,20 +310,20 @@ export class TeamMembersService {
   /** Remove a member from the team. Returns true if removed; false if
    *  membership not found or owned by a different account. */
   async removeMember(input: { membershipId: string; ownerAccountId: string }): Promise<boolean> {
-    const removedMemberAccountId = await this.repo.removeMember(
+    // Delete the membership AND cancel any outstanding invites for the removed
+    // member in ONE atomic transaction (TOCTOU fix 2026-07-10). This both stops
+    // a re-join via a still-pending invite (e.g. one created by a role-change
+    // re-invite before the removal — the single-use accept guard only blocks
+    // REPLAY of a used token, Fable auth re-audit 2026-07-02) AND closes the
+    // membership-resurrection race: an accept that read the invite before this
+    // removal can no longer slip its membership upsert between the membership
+    // delete and the invite delete, because both delete statements and the
+    // accept's compare-and-swap consume of the same invite row now serialize.
+    const removedMemberAccountId = await this.repo.removeMemberWithInvites(
       input.membershipId,
       input.ownerAccountId,
     );
     if (removedMemberAccountId === null) return false;
-    // Cancel any outstanding invites for the removed member so they cannot
-    // re-join by accepting a still-pending invite (e.g. one created by a
-    // role-change re-invite before the removal). The single-use accept guard
-    // only blocks REPLAY of a used token; a pending un-accepted invite would
-    // still let a removed member back in. (Fable auth re-audit 2026-07-02.)
-    const removedEmail = await this.repo.findAccountEmail(removedMemberAccountId);
-    if (removedEmail !== null) {
-      await this.repo.deleteInvitesForEmail(input.ownerAccountId, removedEmail);
-    }
     await this.invalidateAuthCache(removedMemberAccountId);
     if (this.accountAudit) {
       try {
