@@ -56,9 +56,14 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
     );
   });
 
-  it("Cross-account-404-and-status!=active-403 framing pinned: 'Cross-account access is a 404 (anti-enumeration; same posture as /v1/sessions/:id and the rest of the customer-facing surface).' + 'Cannot mint LiveKit token for ${session.status} agent session.' + '403 rather than 404 — the customer DID own this session, they just can't mint a token for a closed one. Matches the existing pair-mode-action posture.' — pinned so the cross-account-404 + same-account-but-closed-403 + pair-mode-action-symmetry contract all stay documented (drift to 403 on cross-account would leak existence; drift to 404 on closed would lose the helpful 'you owned this but it's done' UX)", () => {
+  it("Access-404-and-status!=active-403 framing pinned: a caller who can't reach the session (not self AND not a team admin) is a 404 (anti-enumeration; same posture as /v1/sessions/:id), team-admin access resolved via the canonical callerCanAccessAgentSession; + 'Cannot mint LiveKit token for ${session.status} agent session.' + '403 rather than 404 — the customer DID own this session, they just can't mint a token for a closed one. Matches the existing pair-mode-action posture.' — pinned so the access-404 + team-RBAC + same-owner-but-closed-403 + pair-mode-action-symmetry contract stay documented (drift to 403 on no-access would leak existence; drift to 404 on closed would lose the helpful 'you owned this but it's done' UX; drift to raw owner-equality would 404 a legitimate team admin)", () => {
+    // Anti-enumeration 404 for a caller who can't reach the session, resolved via
+    // the canonical team-RBAC helper (self OR team-admin), not raw owner-equality.
+    expect(body).toMatch(/enforce access is a 404 for a caller who can't reach this/);
+    expect(body).toMatch(/\(anti-enumeration; same posture as \/v1\/sessions\/:id\)/);
+    expect(body).toMatch(/!callerCanAccessAgentSession\(ctx, session\.accountId\)/);
     expect(body).toMatch(
-      /\/\/ Account path: enforce cross-account access is a 404 \(anti-enumeration;\s*\n?\s*\/\/ same posture as \/v1\/sessions\/:id\)\. Control-key path: the key was already\s*\n?\s*\/\/ decrypt-matched against THIS session in the preHandler/,
+      /Control-key path: the key was already\s*\n?\s*\/\/ decrypt-matched against THIS session in the preHandler/,
     );
     expect(body).toMatch(
       /\/\/ 403 rather than 404 — the customer DID own this session,\s*\n?\s*\/\/ they just can't mint a token for a closed one\. Matches the\s*\n?\s*\/\/ existing pair-mode-action posture\./,

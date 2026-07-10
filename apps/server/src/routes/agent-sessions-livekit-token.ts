@@ -23,6 +23,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
+import { callerCanAccessAgentSession } from './agent-sessions.js';
 import { mintLivekitToken, resolveSessionPublisherNode } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
@@ -146,11 +147,16 @@ export function registerAgentSessionsLivekitTokenRoute(
         bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
-      // Account path: enforce cross-account access is a 404 (anti-enumeration;
-      // same posture as /v1/sessions/:id). Control-key path: the key was already
+      // Account path: enforce access is a 404 for a caller who can't reach this
+      // session (anti-enumeration; same posture as /v1/sessions/:id). Access =
+      // self OR a TEAM ADMIN of the owning account — a team admin who launched the
+      // session on the owner's behalf must be able to mint its token. Use the
+      // canonical callerCanAccessAgentSession (the same helper all sibling
+      // agent-session routes use), NOT a raw owner-equality (which 404'd a
+      // legitimate team admin). Control-key path: the key was already
       // decrypt-matched against THIS session in the preHandler, so it is
       // authorized for this one session and skips the ownership check.
-      if (!controlKeyAuthorized && session.accountId !== ctx?.account.id) {
+      if (!controlKeyAuthorized && (!ctx || !callerCanAccessAgentSession(ctx, session.accountId))) {
         bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
@@ -163,15 +169,19 @@ export function registerAgentSessionsLivekitTokenRoute(
       }
 
       // The owning account id drives the participant identity (SFU join-dedupe)
-      // and the LiveKit room scoping. It's session.accountId either way — on the
-      // account path it equals ctx.account.id (ownership was just checked); on
-      // the control-key path it's the owner the key validated against. Region is
-      // only used for the publisher-node FALLBACK (a NULL/legacy node_id); the
-      // control-key path has no account region in hand, so it passes null —
-      // reconnect runs against an active, already-dispatched session whose
-      // node_id is bound, so the fallback isn't exercised.
+      // and the LiveKit room scoping — it's session.accountId either way (on the
+      // account path it's the owner the caller is authorized against; on the
+      // control-key path it's the owner the key validated against). Region is only
+      // used for the publisher-node FALLBACK (a NULL/legacy node_id); an active,
+      // already-dispatched session has a bound node_id so the fallback isn't
+      // exercised. Use the caller's region ONLY when the caller IS the owner — a
+      // team admin's region is NOT the owner's and we don't hold the owner's here,
+      // so pass null (same as the control-key path). Passing a team member's
+      // region could otherwise resolve a wrong-region node in the rare fallback.
       const ownerAccountId = session.accountId;
-      const region = controlKeyAuthorized ? null : (ctx?.account.region ?? null);
+      const isOwnerCaller =
+        !controlKeyAuthorized && ctx != null && session.accountId === ctx.account.id;
+      const region = isOwnerCaller ? (ctx?.account.region ?? null) : null;
 
       // Bind the token to the Mac that ACTUALLY publishes this session's stream
       // (agent_sessions.node_id, set at dispatch) — NOT the region's

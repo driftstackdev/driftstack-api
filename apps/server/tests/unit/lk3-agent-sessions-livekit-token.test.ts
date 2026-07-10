@@ -115,6 +115,9 @@ async function buildApp(args: {
   boundMacs?: Record<string, FleetNodeDetail | null>;
   encryptionKey: string;
   callerAccountId?: string;
+  /** Team memberships on the caller's ctx (real AccountContext always has this
+   *  array — the route now resolves team-admin access via callerCanAccessAgentSession). */
+  teams?: Array<{ ownerAccountId: string; role: 'member' | 'admin' }>;
   metrics?: MetricsRegistry;
 }) {
   const app = Fastify();
@@ -123,6 +126,7 @@ async function buildApp(args: {
     (req as { account: unknown }).account = {
       account: { id: args.callerAccountId ?? ACCOUNT_ID, tier: 'starter' },
       apiKey: { id: 'key_lk3', scopes: ['read', 'write'] },
+      teams: args.teams ?? [],
     };
     done();
   });
@@ -308,6 +312,37 @@ describe('LK.3 — POST /v1/agent-sessions/:id/livekit-token', () => {
       session: makeSession({ accountId: OTHER_ACCOUNT_ID }),
       mac: makeMac({ encryptionKey: key }),
       encryptionKey: key,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/livekit-token`,
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('200 — team ADMIN of the owning account can mint the token (team-RBAC, not raw owner-equality)', async () => {
+    const app = await buildApp({
+      session: makeSession({ accountId: OTHER_ACCOUNT_ID }),
+      mac: makeMac({ encryptionKey: key }),
+      encryptionKey: key,
+      // Caller is ACCOUNT_ID but is an ADMIN member of OTHER_ACCOUNT_ID (the owner).
+      teams: [{ ownerAccountId: OTHER_ACCOUNT_ID, role: 'admin' }],
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/livekit-token`,
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('404 — team MEMBER (non-admin) of the owning account cannot mint the token', async () => {
+    const app = await buildApp({
+      session: makeSession({ accountId: OTHER_ACCOUNT_ID }),
+      mac: makeMac({ encryptionKey: key }),
+      encryptionKey: key,
+      teams: [{ ownerAccountId: OTHER_ACCOUNT_ID, role: 'member' }],
     });
     const res = await app.inject({
       method: 'POST',
