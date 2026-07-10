@@ -207,6 +207,35 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
       'private',
     );
   });
+  it('rejects a config_blob with a script-executing directive (P0 RCE 118722821 defense-in-depth)', () => {
+    // The exact RCE class: up/down/... runs a program (as root on the egress host).
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: 'client\nremote vpn.example.com 1194\nup /bin/sh\n' }),
+    ).toBe('unsafe-directive');
+    expect(classifyUnsafeVpnTargets({ configBlob: '  DOWN\t/tmp/x\n' })).toBe('unsafe-directive');
+    expect(classifyUnsafeVpnTargets({ configBlob: 'route-up /x\n' })).toBe('unsafe-directive');
+    expect(classifyUnsafeVpnTargets({ configBlob: 'tls-verify /x\n' })).toBe('unsafe-directive');
+    // script-security 2/3 is the switch that ENABLES the above → reject; 0/1 safe.
+    expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 2\n' })).toBe(
+      'unsafe-directive',
+    );
+    expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 3\n' })).toBe(
+      'unsafe-directive',
+    );
+    expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 1\n' })).toBeNull();
+  });
+  it('does NOT false-positive on a benign config, comments, or a hostname containing a keyword', () => {
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: 'client\nremote vpn.example.com 1194\ndev tun\n' }),
+    ).toBeNull();
+    // A comment (# / ;) mentioning up/down is skipped; `remote up-north...` — the
+    // directive keyword is `remote`, not `up`.
+    expect(
+      classifyUnsafeVpnTargets({
+        configBlob: '# up /bin/sh (disabled)\n; down /x\nremote up-north.example.com 1194\n',
+      }),
+    ).toBeNull();
+  });
   it('passes a fully public WireGuard + OpenVPN config', () => {
     expect(
       classifyUnsafeVpnTargets({ endpoint: 'vpn.example.com:51820', dns: '1.1.1.1' }),

@@ -440,7 +440,9 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // SSRF: the real egress is the embedded `remote <host>`, NOT the display host — guard it.
       if (classifyUnsafeVpnTargets({ configBlob: config_blob }) !== null) {
         throw new BadRequestError(
-          'OpenVPN remote must not target a private, loopback, link-local, or metadata address.',
+          'OpenVPN config must not target a private, loopback, link-local, or metadata ' +
+            'address, or use a script-executing directive (up/down/route-up/tls-verify/… ' +
+            'or script-security 2+).',
         );
       }
       const secret = JSON.stringify({ config_blob, ...(password ? { password } : {}) });

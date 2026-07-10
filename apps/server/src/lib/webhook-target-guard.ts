@@ -184,17 +184,64 @@ export function openvpnProxyHosts(configBlob: string): string[] {
 }
 
 /**
- * Returns the unsafe reason for the FIRST private/loopback/metadata VPN egress target, or
- * null when all are safe. Guards the REAL connection destinations the cosmetic display
- * `host` field does NOT cover: a WireGuard `endpoint` host + `dns`, and every OpenVPN
- * `remote` / `http-proxy` / `socks-proxy` host. Without this a customer can tunnel sessions
- * to 169.254.169.254 / RFC1918 even though the display host passed classifyUnsafeHost (SSRF).
+ * OpenVPN config directives that invoke an external program when script-security
+ * is >=2 — the class the P0 root-RCE (A3 118722821) exploited (a customer
+ * `config_blob` with `up /path/script` ran as root on the userspace egress host).
+ * The box now forces `--script-security 1` (user scripts disabled), but the CP
+ * REJECTS a config carrying any of these at ingress so a weaponized blob is never
+ * stored or dispatched — defense-in-depth, not sole line of defense. Lower-cased,
+ * matched on the directive keyword at line start.
+ */
+const DANGEROUS_OPENVPN_DIRECTIVES = new Set([
+  'up',
+  'down',
+  'route-up',
+  'route-pre-down',
+  'ipchange',
+  'tls-verify',
+  'learn-address',
+  'client-connect',
+  'client-disconnect',
+  'auth-user-pass-verify',
+  'up-restart',
+]);
+
+/**
+ * True when an OpenVPN `config_blob` contains a script-executing directive
+ * (up/down/route-up/…) or raises `script-security` to 2/3 (which is what ENABLES
+ * those directives to run programs). Comment (`#`/`;`) and blank lines are
+ * skipped; matched case-insensitively on the first whitespace-delimited token.
+ */
+function hasUnsafeOpenvpnDirective(configBlob: string): boolean {
+  for (const raw of configBlob.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#') || line.startsWith(';')) continue;
+    const tokens = line.split(/\s+/);
+    const keyword = (tokens[0] ?? '').toLowerCase();
+    if (DANGEROUS_OPENVPN_DIRECTIVES.has(keyword)) return true;
+    // `script-security 2`/`3` is the switch that lets the above run programs;
+    // 0/1 are safe (1 = only built-ins; the box floors at 1 regardless).
+    if (keyword === 'script-security') {
+      const level = Number(tokens[1]);
+      if (Number.isFinite(level) && level >= 2) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Returns the unsafe reason for the FIRST private/loopback/metadata VPN egress target
+ * OR a script-executing OpenVPN directive, or null when all are safe. Guards the REAL
+ * connection destinations the cosmetic display `host` field does NOT cover: a WireGuard
+ * `endpoint` host + `dns`, and every OpenVPN `remote` / `http-proxy` / `socks-proxy` host
+ * (SSRF to 169.254.169.254 / RFC1918); AND (defense-in-depth for the P0 root-RCE) any
+ * OpenVPN up/down/route-up/... script directive or `script-security >=2`.
  */
 export function classifyUnsafeVpnTargets(opts: {
   endpoint?: string | null;
   dns?: string | null;
   configBlob?: string | null;
-}): 'localhost' | 'private' | 'numeric-encoding' | null {
+}): 'localhost' | 'private' | 'numeric-encoding' | 'unsafe-directive' | null {
   if (opts.endpoint) {
     const r = classifyUnsafeHost(vpnEndpointHost(opts.endpoint));
     if (r !== null) return r;
@@ -206,6 +253,9 @@ export function classifyUnsafeVpnTargets(opts: {
     }
   }
   if (opts.configBlob) {
+    // Script-executing directives first — a weaponized config is refused outright,
+    // before we even bother resolving its target hosts.
+    if (hasUnsafeOpenvpnDirective(opts.configBlob)) return 'unsafe-directive';
     const configHosts = [
       ...openvpnRemoteHosts(opts.configBlob),
       ...openvpnProxyHosts(opts.configBlob),
