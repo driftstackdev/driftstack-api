@@ -1124,6 +1124,19 @@ export class AuthFlowsService {
       // Rotate: revoke the old row, issue a new one. The plaintext returned
       // is the new token; the old plaintext is now useless.
       await this.repo.revokeWebSession(old.id, now);
+      // Invalidate any cached web-session AccountContext for the rotated-out
+      // token — mirrors every other revoke path here (logout / stepUpReauth /
+      // revokeWebSessionForAccount / revokeAll*). Without this the DB-revoked
+      // old token keeps authenticating on the cache fast-path (which re-checks
+      // only expiresAt, not revokedAt) for up to the 30s TTL, a rotation-replay
+      // window. Best-effort — a cache failure doesn't undo the DB revocation.
+      if (this.authCache) {
+        try {
+          await this.authCache.invalidateAccount(old.accountId);
+        } catch {
+          // Drop on the floor; cache will TTL out within 30s.
+        }
+      }
       const account = await this.requireAccount(old.accountId);
       const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
       return { account, session };
