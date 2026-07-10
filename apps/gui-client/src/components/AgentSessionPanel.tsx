@@ -287,6 +287,16 @@ export function AgentSessionPanel({
   // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
   // connect. 'none' renders the honest no-worker overlay.
   const [publisher, setPublisher] = useState<'waiting' | 'publishing' | 'none'>('waiting');
+  // A3 UX audit ww5k0xkmx (cold-start blank pane) — 'publishing' flips on
+  // TrackSubscribed, but on a cold start the first DECODED frame can lag the
+  // subscription by seconds (box encoder ramping to the first keyframe). If the
+  // waiting overlay dropped at TrackSubscribed the pane would sit pure black with
+  // no "is it working?" signal. Hold the starting overlay until a frame actually
+  // paints (videoWidth > 0); re-armed per connection attempt alongside
+  // setPublisher('waiting') so a Retry/reconnect gets the hold again. Once true it
+  // stays true for the connection (mid-session drops keep the calmer
+  // reconnecting-pill path over the last good frame — deliberate).
+  const [firstFramePainted, setFirstFramePainted] = useState(false);
   // #1 — during the post-track-drop grace window (before we know whether the
   // publisher is truly gone or just re-negotiating), show a CALM "reconnecting…"
   // pill over the last good frame instead of the scary launch-failed overlay. True
@@ -373,6 +383,24 @@ export function AgentSessionPanel({
     videoEl.addEventListener('resize', onResize);
     return () => {
       videoEl.removeEventListener('resize', onResize);
+    };
+  }, [videoEl]);
+  // Cold-start first-frame detector (ww5k0xkmx): flip firstFramePainted the
+  // moment the element has a decoded frame. Checks immediately (the element may
+  // already be playing when it (re)mounts), then listens for loadeddata + resize
+  // (both fire when the intrinsic size becomes real). Cheap: listeners detach on
+  // unmount and the setState is a no-op once true.
+  useEffect(() => {
+    if (videoEl === null) return;
+    const check = (): void => {
+      if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) setFirstFramePainted(true);
+    };
+    check();
+    videoEl.addEventListener('loadeddata', check);
+    videoEl.addEventListener('resize', check);
+    return () => {
+      videoEl.removeEventListener('loadeddata', check);
+      videoEl.removeEventListener('resize', check);
     };
   }, [videoEl]);
   // P1a — the latest terminal-end flag in a ref so the connect effect's event
@@ -549,6 +577,7 @@ export function AgentSessionPanel({
 
     setS({ kind: 'connecting' });
     setPublisher('waiting');
+    setFirstFramePainted(false);
     setPublisherReconnecting(false);
     // W617 / #59 — empty-room detector: connected but no video track within the
     // timeout means the launch never produced a stream (no worker publishing /
@@ -861,60 +890,70 @@ export function AgentSessionPanel({
       {/* W617 — connected but nothing publishing: waiting spinner first,
           then the honest no-worker overlay with the parent's fallback. P1a:
           suppressed when terminally ended (the "Session ended" overlay wins). */}
-      {sessionEnded === null && state.kind === 'connected' && publisher !== 'publishing' && (
-        <div
-          data-overlay="publisher-state"
-          data-state={publisher}
-          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
-        >
-          {publisher === 'waiting' ? (
-            <>
-              <span
-                className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
-                aria-hidden="true"
-              />
-              <span>Connected — starting the browser… a cold start can take a few seconds.</span>
-            </>
-          ) : (
-            <>
-              <span>
-                Couldn’t show the live view — the stream connected, but no video arrived from the
-                automation device. The task itself may still have run; this is usually temporary, so
-                press Retry. If it keeps happening, the device’s screen capture may need attention.
-              </span>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {/* #59 — a no-stream launch can recover on a fresh connect (the worker
+      {/* ww5k0xkmx — ALSO held while 'publishing' until the first frame decodes,
+          so the cold-start gap between TrackSubscribed and the first keyframe
+          shows the starting spinner instead of a silent black pane. */}
+      {sessionEnded === null &&
+        state.kind === 'connected' &&
+        (publisher !== 'publishing' || !firstFramePainted) && (
+          <div
+            data-overlay="publisher-state"
+            data-state={publisher}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
+          >
+            {publisher === 'waiting' || publisher === 'publishing' ? (
+              <>
+                <span
+                  className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
+                  aria-hidden="true"
+                />
+                <span>
+                  {publisher === 'publishing'
+                    ? 'Almost there — the video stream is arriving…'
+                    : 'Connected — starting the browser… a cold start can take a few seconds.'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  Couldn’t show the live view — the stream connected, but no video arrived from the
+                  automation device. The task itself may still have run; this is usually temporary,
+                  so press Retry. If it keeps happening, the device’s screen capture may need
+                  attention.
+                </span>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {/* #59 — a no-stream launch can recover on a fresh connect (the worker
                     was slow, the proxy came back, a transient SFU hiccup), so always
                     offer Retry. It bumps retryNonce → the connect effect re-runs (new
                     Room + reconnect + a fresh NO_PUBLISHER_TIMEOUT_MS window). */}
-                <button
-                  type="button"
-                  data-action="retry-launch"
-                  onClick={() => {
-                    // #8 — a USER-initiated retry grants a fresh auto-reconnect
-                    // budget (1s→3s→9s) if the new connection later drops.
-                    autoReconnectAttemptRef.current = 0;
-                    setRetryNonce((n) => n + 1);
-                  }}
-                  className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
-                >
-                  Retry
-                </button>
-                {onNoPublisher !== undefined && (
                   <button
                     type="button"
-                    data-action="open-polling-viewer"
-                    onClick={onNoPublisher}
+                    data-action="retry-launch"
+                    onClick={() => {
+                      // #8 — a USER-initiated retry grants a fresh auto-reconnect
+                      // budget (1s→3s→9s) if the new connection later drops.
+                      autoReconnectAttemptRef.current = 0;
+                      setRetryNonce((n) => n + 1);
+                    }}
                     className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
                   >
-                    Open in the direct viewer instead
+                    Retry
                   </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+                  {onNoPublisher !== undefined && (
+                    <button
+                      type="button"
+                      data-action="open-polling-viewer"
+                      onClick={onNoPublisher}
+                      className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+                    >
+                      Open in the direct viewer instead
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       {/* P1a — suppressed when terminally ended so a Disconnected/error never shows
           the looping "reconnecting…" / Reconnect overlay over a session that's gone;
           the "Session ended" overlay above is the single source of truth. */}

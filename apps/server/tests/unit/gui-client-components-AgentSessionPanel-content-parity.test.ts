@@ -140,7 +140,9 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // cause-assertion (the common real cause is the device's screen-capture grant).
     expect(body).toMatch(/Couldn.t show the live view/);
     expect(body).toMatch(/The task itself may still have run/);
-    expect(body).toMatch(/screen capture may need attention/);
+    // \s+ — prettier wraps this JSX text node at a depth-dependent column (the
+    // ww5k0xkmx first-frame hold deepened the conditional), so tolerate any wrap.
+    expect(body).toMatch(/screen capture may need\s+attention/);
     expect(body).not.toMatch(/the proxy or connection may be down/);
     expect(body).toMatch(/data-action="retry-launch"/);
   });
