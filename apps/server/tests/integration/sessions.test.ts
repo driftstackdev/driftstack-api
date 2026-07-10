@@ -429,6 +429,87 @@ describe('GET /v1/sessions/:id/state', () => {
   });
 });
 
+// #122 — read:sessions floor on the SINGLE-session reads (GET /:id +
+// GET /:id/state). The list route already gated read:sessions in
+// SessionsService.list() (V-553.B-21), but describe()/getState() only
+// enforced ownership — so a narrow write:sessions-only or gui_control
+// key could read one session's full record + live state (url / cookies /
+// localStorage) it could never list. These prove the 3-way contract:
+// (a) broad `read` passes, (b) granular `read:sessions` passes, (c) a
+// DIFFERENT-resource granular scope (read:webhooks) is blocked with 403.
+// The scope check runs in the preHandler BEFORE the ownership lookup, so
+// a passing scope on a non-existent session surfaces as 404 (NOT 403) —
+// that's the signal the gate let the request through.
+describe('#122 — read:sessions floor on GET /v1/sessions/:id (describe)', () => {
+  const SYNTHETIC_ID = 'ses_00000000-0000-4000-8000-0000000000ff';
+  const get = (fxArg: TestAppFixture) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url: `/v1/sessions/${SYNTHETIC_ID}`,
+      headers: auth(fxArg),
+    });
+
+  it('403 for a write:sessions-only key, naming the required scope', async () => {
+    fx = await buildTestApp({ scopes: ['write:sessions'] });
+    const res = await get(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:sessions');
+  });
+
+  it('403 for a cross-resource granular key (read:webhooks does NOT satisfy read:sessions)', async () => {
+    fx = await buildTestApp({ scopes: ['read:webhooks'] });
+    const res = await get(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:sessions');
+  });
+
+  it('past the gate (404, not 403) for a granular read:sessions key', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions'] });
+    expect((await get(fx)).statusCode).toBe(404);
+  });
+
+  it('past the gate (404, not 403) for a broad read key and an account_owner key (V-481)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    expect((await get(fx)).statusCode).toBe(404);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    expect((await get(fx)).statusCode).toBe(404);
+  });
+});
+
+describe('#122 — read:sessions floor on GET /v1/sessions/:id/state (getState)', () => {
+  const SYNTHETIC_ID = 'ses_00000000-0000-4000-8000-0000000000fe';
+  const get = (fxArg: TestAppFixture) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url: `/v1/sessions/${SYNTHETIC_ID}/state`,
+      headers: auth(fxArg),
+    });
+
+  it('403 for a write:sessions-only key, naming the required scope', async () => {
+    fx = await buildTestApp({ scopes: ['write:sessions'] });
+    const res = await get(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:sessions');
+  });
+
+  it('403 for a cross-resource granular key (read:webhooks)', async () => {
+    fx = await buildTestApp({ scopes: ['read:webhooks'] });
+    expect((await get(fx)).statusCode).toBe(403);
+  });
+
+  it('past the gate (404, not 403) for read:sessions / broad read / account_owner keys', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions'] });
+    expect((await get(fx)).statusCode).toBe(404);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['read'] });
+    expect((await get(fx)).statusCode).toBe(404);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    expect((await get(fx)).statusCode).toBe(404);
+  });
+});
+
 describe('POST /v1/sessions/:id/capture', () => {
   it('returns base64 screenshot data', async () => {
     fx = await buildTestApp();

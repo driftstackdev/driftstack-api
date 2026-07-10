@@ -96,4 +96,36 @@ describe('/v1/api-keys customer create + list end-to-end', () => {
     expect(res.statusCode).toBeGreaterThanOrEqual(400);
     expect(res.statusCode).toBeLessThan(500);
   });
+
+  // #122 — read:api-keys floor on GET /v1/api-keys (list).
+  // ApiKeysService.list() gates read:api-keys (V-553.B-21). The scope
+  // check fires before any data read, so the pass legs list an empty set.
+  // 3-way contract: (a) broad `read` passes, (b) granular read:api-keys
+  // passes, (c) a DIFFERENT-resource granular scope (read:sessions) is 403.
+  const listKeys = (fxArg: TestAppFixture) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${fxArg.plaintext}` },
+    });
+
+  it('403 for a cross-resource granular key (read:sessions does NOT satisfy read:api-keys)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder', scopes: ['read:sessions'] });
+    const res = await listKeys(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:api-keys');
+  });
+
+  it('200 for a granular read:api-keys key', async () => {
+    fx = await buildTestApp({ tier: 'api_builder', scopes: ['read:api-keys'] });
+    expect((await listKeys(fx)).statusCode).toBe(200);
+  });
+
+  it('200 for a broad read key and an account_owner key (V-481)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder', scopes: ['read'] });
+    expect((await listKeys(fx)).statusCode).toBe(200);
+    await fx.cleanup();
+    fx = await buildTestApp({ tier: 'api_builder', scopes: ['account_owner'] });
+    expect((await listKeys(fx)).statusCode).toBe(200);
+  });
 });

@@ -28,6 +28,7 @@ import {
   PaginationQuerySchema,
   type AgentModel,
   type AccountTier,
+  type ApiKeyScope,
 } from '@driftstack/api-types';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
@@ -1591,7 +1592,13 @@ export function registerAgentSessionsRoutes(
    * on every route's preHandler chain (not here).
    */
   function controlKeyOrAccountAuth(
-    requiredScope: 'read' | 'write',
+    // #122 — widened from `'read' | 'write'` to the full scope union so the
+    // read GET routes can pass the granular `read:sessions` floor (mirroring
+    // the driver-session read routes in routes/sessions.ts) while the write
+    // control routes keep `'write'`. The control-key branch (b) is unaffected
+    // — a valid per-session gui_control_key bypasses requireScope entirely, so
+    // the GUI/Simulator's per-session channel keeps working regardless.
+    requiredScope: ApiKeyScope,
   ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
     return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
       const sessionId = (req.params as { id?: string }).id ?? '';
@@ -2079,9 +2086,17 @@ export function registerAgentSessionsRoutes(
   // /v1/sessions et al., so a busy account can page its full AI-session
   // history (was hard-capped at 100 with no cursor — older sessions
   // were unreachable via the API/SDK entirely).
+  // #122 — read:sessions floor. Mirrors the driver-session list route
+  // (GET /v1/sessions, gated read:sessions in SessionsService.list()) +
+  // the single-agent-session reads above: agent-session listing is a
+  // pure read of session data, so it takes the same granular read floor.
+  // This route has no per-session gui_control_key path (it isn't
+  // :id-scoped), so it uses the plain account-auth chain. Broad `read` /
+  // `account_owner` bearers satisfy the granular scope (V-481), so the
+  // dashboard /agent-sessions page + existing broad keys are unaffected.
   app.get(
     '/v1/agent-sessions',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const query = PaginationQuerySchema.parse(req.query ?? {});
@@ -2101,8 +2116,9 @@ export function registerAgentSessionsRoutes(
     '/v1/agent-sessions/:id',
     // Control-auth path (b): a valid per-session gui_control_key reads
     // ONLY this `:id` session (the route is already `/:id`-scoped). The
-    // 'read' scope is the floor for the account path here.
-    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    // read:sessions is the floor for the account path here (#122 —
+    // granular; broad `read` / `account_owner` still satisfy it).
+    { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
     async (req) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
@@ -2135,8 +2151,8 @@ export function registerAgentSessionsRoutes(
     // Control-auth path (b): the SEPARATE Simulator app has no account Bearer key,
     // only a per-session gui_control_key — so this MUST accept it like GET /:id
     // (was app.requireAuth → every poll from the standalone Simulator 401'd → the
-    // live URL never appeared). 'read' is the floor for the account path.
-    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    // live URL never appeared). read:sessions is the floor for the account path.
+    { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
     async (req) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
@@ -2200,9 +2216,9 @@ export function registerAgentSessionsRoutes(
   app.get<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/cookies',
     // Same control-auth path as GET /:id/page-state: the SEPARATE Simulator app
-    // has only a per-session gui_control_key, not an account Bearer key. 'read'
-    // is the floor for the account path.
-    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    // has only a per-session gui_control_key, not an account Bearer key.
+    // read:sessions is the floor for the account path.
+    { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
     async (req) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
@@ -2726,7 +2742,7 @@ export function registerAgentSessionsRoutes(
   // fork download-delegate populates it). Names are bare basenames, never paths.
   app.get<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/downloads',
-    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
     async (req) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
@@ -2795,7 +2811,7 @@ export function registerAgentSessionsRoutes(
   const DownloadFetchQuerySchema = z.object({ name: z.string().min(1).max(255) });
   app.get<{ Params: { id: string }; Querystring: { name?: string } }>(
     '/v1/agent-sessions/:id/downloads/content',
-    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
     async (req) => {
       const q = DownloadFetchQuerySchema.safeParse(req.query ?? {});
       if (!q.success) throw new ValidationError(q.error.flatten());

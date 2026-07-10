@@ -77,6 +77,37 @@ describe('GET /v1/account/audit-log', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  // #122 — complete the 3-way scope contract: a DIFFERENT-resource
+  // granular scope must NOT satisfy read:audit (narrow keys stay narrow).
+  it('403 for a cross-resource granular key (read:sessions does NOT satisfy read:audit)', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:audit');
+  });
+
+  it('200 for a broad read key and an account_owner key (V-481)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    const readRes = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log',
+      headers: auth(fx),
+    });
+    expect(readRes.statusCode).toBe(200);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    const ownerRes = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log',
+      headers: auth(fx),
+    });
+    expect(ownerRes.statusCode).toBe(200);
+  });
+
   it('400 on a malformed cursor (not a uuid) rather than a 500 from the uuid keyset lookup', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

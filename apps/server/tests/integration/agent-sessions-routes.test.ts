@@ -2336,3 +2336,53 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
     expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(1);
   });
 });
+
+// #122 — read:sessions floor on GET /v1/agent-sessions (list). This list
+// route had NO scope gate at either the route OR repo layer (the repo's
+// listPageByAccount is a pure data method), so any authenticated key —
+// including a narrow write:sessions-only or gui_control key — could
+// enumerate an account's full AI-session history. Now gated read:sessions
+// at the route layer, mirroring the driver-session list route + the
+// single-agent-session reads. The 3-way contract: (a) broad `read` passes,
+// (b) granular read:sessions passes, (c) a different-resource granular
+// scope (read:webhooks) is blocked with 403.
+describe('#122 — read:sessions floor on GET /v1/agent-sessions (list)', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  const list = (fxArg: TestAppFixture) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fxArg.plaintext}` },
+    });
+
+  it('403 for a write:sessions-only key, naming the required scope', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['write:sessions'] });
+    const res = await list(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:sessions');
+  });
+
+  it('403 for a cross-resource granular key (read:webhooks does NOT satisfy read:sessions)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read:webhooks'] });
+    const res = await list(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:sessions');
+  });
+
+  it('200 for a granular read:sessions key', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read:sessions'] });
+    expect((await list(fx)).statusCode).toBe(200);
+  });
+
+  it('200 for a broad read key and an account_owner key (V-481)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read'] });
+    expect((await list(fx)).statusCode).toBe(200);
+    await fx.cleanup();
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['account_owner'] });
+    expect((await list(fx)).statusCode).toBe(200);
+  });
+});

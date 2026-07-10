@@ -176,4 +176,34 @@ describe('GET /v1/account/audit-log/export', () => {
     const body = res.json<{ data: { target_resource_id: string | null }[] }>();
     expect(body.data.some((d) => d.target_resource_id === 'should_not_appear')).toBe(false);
   });
+
+  // #122 — read:audit floor on the EXPORT route. It walks the same
+  // AccountAuditService.list() that the read endpoint gates (read:audit),
+  // so the scope contract holds identically: (a) broad `read` passes,
+  // (b) granular read:audit passes, (c) a different-resource granular
+  // scope (read:sessions) is blocked 403.
+  const exportJson = (fxArg: TestAppFixture) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log/export?format=json',
+      headers: { authorization: `Bearer ${fxArg.plaintext}` },
+    });
+
+  it('403 for a cross-resource granular key (read:sessions does NOT satisfy read:audit)', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions'] });
+    const res = await exportJson(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:audit');
+  });
+
+  it('200 for a granular read:audit key, a broad read key, and an account_owner key', async () => {
+    fx = await buildTestApp({ scopes: ['read:audit'] });
+    expect((await exportJson(fx)).statusCode).toBe(200);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['read'] });
+    expect((await exportJson(fx)).statusCode).toBe(200);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    expect((await exportJson(fx)).statusCode).toBe(200);
+  });
 });

@@ -509,10 +509,22 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   // egress_capabilities (migration 0045, cross-agent contract 7d5992d9).
   // V-326e3 — describe is a READ; both 'member' and 'admin' roles allowed
   // on team-scoped requests.
+  // #122 — read:sessions floor. GET /v1/sessions (list) already gates
+  // read:sessions in SessionsService.list() (V-553.B-21), but the
+  // single-session reads below (describe / getState) went through
+  // service methods that only enforce ownership, NOT scope — so a
+  // narrow write:sessions-only or gui_control key could read one
+  // session's full record + live state (url / cookies / localStorage)
+  // even though it can't list. Closing the gap at the route layer (the
+  // service's requireOwned is SHARED with the write actions, which must
+  // NOT get a read gate) makes single-session reads consistent with the
+  // list route. Broad `read` + `account_owner` bearers satisfy it via
+  // the V-481 broad-satisfies-granular rule, so existing keys and the
+  // dashboard are unaffected.
   app.get<{ Params: { id: string } }>(
     '/v1/sessions/:id',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = requireCtx(request);
@@ -529,10 +541,16 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
 
   // ── GET /v1/sessions/:id/state ─────────────────────────────────────────
   // V-326e3 — getState is a READ; both 'member' and 'admin' allowed.
+  // #122 — read:sessions floor (same rationale as GET /v1/sessions/:id
+  // above): getState returns the live page-state / cookies / localStorage,
+  // a pure read of session data, so it takes the same granular read floor
+  // the list route already enforces. Broad `read` / `account_owner` keys
+  // satisfy it; a write:sessions-only or gui_control key no longer reads
+  // session state it can't list.
   app.get<{ Params: { id: string } }>(
     '/v1/sessions/:id/state',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = requireCtx(request);

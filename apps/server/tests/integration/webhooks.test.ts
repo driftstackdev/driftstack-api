@@ -123,6 +123,34 @@ describe('GET /v1/webhooks', () => {
       expect(typeof ep.secret_prefix).toBe('string');
     }
   });
+
+  // #122 — read:webhooks floor. WebhooksService.listWithCounts()/get()/
+  // listDeliveries() gate read:webhooks (V-553.B-21). The 3-way contract:
+  // (a) broad `read` passes, (b) granular read:webhooks passes, (c) a
+  // DIFFERENT-resource granular scope (read:sessions) is blocked 403.
+  const listWebhooks = (fxArg: TestAppFixture) =>
+    fxArg.app.inject({ method: 'GET', url: '/v1/webhooks', headers: auth(fxArg) });
+
+  it('403 for a cross-resource granular key (read:sessions does NOT satisfy read:webhooks)', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions'] });
+    const res = await listWebhooks(fx);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ type: string; detail: string }>().type).toBe(PROBLEM_TYPES.Forbidden);
+    expect(res.json<{ detail: string }>().detail).toContain('read:webhooks');
+  });
+
+  it('200 for a granular read:webhooks key', async () => {
+    fx = await buildTestApp({ scopes: ['read:webhooks'] });
+    expect((await listWebhooks(fx)).statusCode).toBe(200);
+  });
+
+  it('200 for a broad read key and an account_owner key (V-481)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    expect((await listWebhooks(fx)).statusCode).toBe(200);
+    await fx.cleanup();
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    expect((await listWebhooks(fx)).statusCode).toBe(200);
+  });
 });
 
 describe('DELETE /v1/webhooks/:id', () => {
