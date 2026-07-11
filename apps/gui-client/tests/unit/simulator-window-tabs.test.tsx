@@ -210,6 +210,69 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(container.querySelector('[data-component="simulator-tab-switching"]')).toBeNull();
   });
 
+  // #116 warm-tabs pre-flight (workflow w58dcbhxt #5): the WINDOW-GLOBAL page chrome
+  // (error overlay / freeze badge / loading bar / nav-target gate) must be driven ONLY by a
+  // frame for the ACTIVE tab. Today prod page_state carries no tabId so every frame is
+  // implicitly the active tab (unchanged). The moment A3 stamps page_state.tabId AND
+  // warm-tabs keeps live BACKGROUND renderers, a background tab's terminal frame would
+  // otherwise clobber the FOREGROUND chrome — the #72/#135 false-error, re-introduced
+  // cross-tab. url/title still route per-tab; only the global chrome is gated.
+  it('a page_state{errored} for a recognised BACKGROUND tab does NOT pop the foreground error overlay; the ACTIVE tab still does', () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active, tab1 background
+    const payload = lastTabListCall();
+    const activeId = payload.activeTabId;
+    const bgId = (payload.tabs as { id: string }[]).map((t) => t.id).find((id) => id !== activeId);
+    if (bgId === undefined) throw new Error('expected a background tab');
+    // Background-tab errored frame → gated out → NO foreground overlay.
+    pushPageState({
+      tabId: bgId,
+      state: 'errored',
+      url: 'https://example.test/bg',
+      error: { kind: 'dns' },
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+    // The SAME frame routed to the ACTIVE tab surfaces the overlay (chrome applies).
+    pushPageState({
+      tabId: activeId,
+      state: 'errored',
+      url: 'https://example.test/active',
+      error: { kind: 'dns' },
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+  });
+
+  // workflow w58dcbhxt #4: opening a new tab (+) supersedes an in-flight switch, so a
+  // stale ack-miss retry can't later re-issue activateTab for the abandoned tab (which
+  // would swing the box's published page back to it behind the new tab). Mirrors the
+  // supersede-prune onActivateTab / onCloseTab already do.
+  it('opening a new tab supersedes an in-flight switch — no stale retry re-activates the abandoned tab', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+      // Switch to tab1 (in-flight — the harness sends no ack, so tab1's retry timer arms).
+      fireEvent.click(tabEls(container)[0]);
+      expect(
+        sendActivateTab.mock.calls.some((c) => (c[1] as { tabId: string }).tabId === tab1Id),
+      ).toBe(true);
+      sendActivateTab.mockClear();
+      // Before tab1's ack, open a NEW tab → supersedes the in-flight switch to tab1.
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      sendActivateTab.mockClear();
+      // Advance well past the ack-miss retry window: tab1's retry must have been pruned.
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(
+        sendActivateTab.mock.calls.some((c) => (c[1] as { tabId: string }).tabId === tab1Id),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('switching to a tab with an empty/seed url sends the branded NEW_TAB_URL (not "") so the box allowlist accepts it', () => {
     const { container } = renderSim();
     // The seed (first) tab stores url='' — switch AWAY (open a "+" tab, which is

@@ -4098,6 +4098,28 @@ export function SimulatorWindow(): JSX.Element {
             true,
           );
         }
+        // #116 warm-tabs pre-flight — the page chrome below (freeze badge / error
+        // overlay / load-stall advisory / loading bar + watchdog / nav-target gate /
+        // progress) is WINDOW-GLOBAL, not per-tab. url/title route per-tab above, but the
+        // FOREGROUND chrome must be driven ONLY by a frame for the ACTIVE tab. A tabId-less
+        // or UNRECOGNISED frame is treated as the active tab (today's exact tabId-less prod
+        // behaviour → zero change). The moment A3 stamps page_state.tabId AND warm-tabs
+        // keeps live BACKGROUND renderers, a background tab's 'loading'/'errored'/'stalled'
+        // would otherwise pop the foreground's loading bar / "PAGE FAILED TO LOAD" overlay /
+        // "page unresponsive" badge and repoint the window-global currentNavTargetRef —
+        // which then suppresses the foreground page's OWN real error (the #72/#135 false-
+        // suppression, re-introduced cross-tab). Mirrors writeTabPageState's tabId
+        // recognition exactly. NOTE: this early-out requires the chrome block to remain the
+        // LAST statements in this handler (it is — the try ends at the catch below).
+        {
+          const rawChromeTabId =
+            typeof msg.tabId === 'string' && msg.tabId !== '' ? msg.tabId : null;
+          const chromeTabId =
+            rawChromeTabId !== null && tabsRef.current.some((t) => t.id === rawChromeTabId)
+              ? rawChromeTabId
+              : null;
+          if (chromeTabId !== null && chromeTabId !== activeTabIdRef.current) return;
+        }
         // #135 — a page_state{state:'stalled'} is OVERLOADED: A3's NAV-stall timer
         // (box 5eeaf794a) tags a slow-LOAD stall with error.kind==='timeout', while the
         // W2845 renderer-FREEZE stall carries no error. Split them: the timeout variant
@@ -4289,6 +4311,21 @@ export function SimulatorWindow(): JSX.Element {
             },
             hasTabId || !inSwitchGrace,
           );
+          // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
+          // page chrome below (freeze badge / error overlay / load-stall advisory / loading
+          // bar + watchdog / nav-target gate) must be driven ONLY by a frame for the ACTIVE
+          // tab. tabId-less or UNRECOGNISED ⇒ active (today's exact prod behaviour, zero
+          // change); once A3 stamps page_state.tabId + warm-tabs keeps live BACKGROUND
+          // renderers, a background tab's poll frame routes its url/title above but must not
+          // touch the foreground chrome (else the #72/#135 false-error is re-introduced
+          // cross-tab). Recognition mirrors writeTabPageState exactly.
+          const rawPollChromeTabId =
+            typeof ps.tabId === 'string' && ps.tabId !== '' ? ps.tabId : null;
+          const pollChromeTabId =
+            rawPollChromeTabId !== null && tabsRef.current.some((t) => t.id === rawPollChromeTabId)
+              ? rawPollChromeTabId
+              : null;
+          if (pollChromeTabId !== null && pollChromeTabId !== activeTabIdRef.current) return;
           // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
           // (independent of the loading grace window; a stall is real regardless).
           // #4 — through applyStalledState so each 'stalled' poll refreshes the TTL
@@ -5457,6 +5494,24 @@ export function SimulatorWindow(): JSX.Element {
   const onNewTab = useCallback((): void => {
     const tab: SimTab = { id: makeTabId(), url: NEW_TAB_URL, scrollY: 0, title: NEW_TAB_TITLE };
     const prevActive = activeTabId;
+    // SUPERSEDE any in-flight switch to a DIFFERENT tab (same guard onActivateTab L~5702 +
+    // onCloseTab already have): opening '+' abandons a pending switch, so cancel its
+    // ack-miss retry timer + prune its pending activations. Without this, cold-switching
+    // A→B then hitting '+' before B's ack left B's 1200ms retry armed → if B's ack lagged
+    // past that window the timer re-issued activateTab(B) while the GUI shows the new tab,
+    // swinging the box's published page back to B (video/GUI desync) + letting the next
+    // tabId-less poll write B's url onto the active tab. The new tab has no retry entry yet
+    // (its activateTab fires below), so this prunes only the stale in-flight ones.
+    // (warm-tabs pre-flight, workflow w58dcbhxt #4.)
+    for (const [tid, r] of activationRetryRef.current) {
+      if (tid !== tab.id) {
+        window.clearTimeout(r.timer);
+        activationRetryRef.current.delete(tid);
+        for (const [rid, p] of pendingActivationsRef.current) {
+          if (p.tabId === tid) pendingActivationsRef.current.delete(rid);
+        }
+      }
+    }
     setTabs((prev) => {
       const next = [...prev, tab];
       emitTabList(next, tab.id);
