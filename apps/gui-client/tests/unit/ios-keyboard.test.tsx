@@ -226,6 +226,27 @@ describe('IOSKeyboard — shift', () => {
     }
   });
 
+  it('SPACE between two quick shift taps does NOT falsely caps-lock (keyboard audit w8cp0yp5d)', () => {
+    const now = vi.spyOn(Date, 'now');
+    try {
+      const { container } = render(<IOSKeyboard room={ROOM} />);
+      const kb = (): Element => el(container, '[data-component="ios-keyboard"]');
+      now.mockReturnValue(1000);
+      tap(container, '⇧'); // shift → once
+      expect(kb()).toHaveAttribute('data-shift', 'once');
+      // A SPACE is a non-shift keypress → it must BREAK the double-tap sequence exactly
+      // like a char press (reset lastShiftTap). Before the fix, space left the first
+      // shift's timestamp intact, so the next quick shift saw isDouble and LOCKED caps.
+      pressKey(container, 'space');
+      // A second shift tap still inside the FIRST tap's window must NOT lock.
+      now.mockReturnValue(1000 + DOUBLE_TAP_MS - 1);
+      tap(container, '⇧');
+      expect(kb()).not.toHaveAttribute('data-shift', 'locked');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('two slow taps (outside the window) do NOT caps-lock — they toggle one-shot off', () => {
     const now = vi.spyOn(Date, 'now');
     try {

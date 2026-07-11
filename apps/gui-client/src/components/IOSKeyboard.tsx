@@ -178,10 +178,26 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
     });
   }, []);
 
-  // Named keys mirror the host path's `e.key` values exactly.
-  const onReturn = useCallback((): void => pressKey(room, 'Enter'), [room]);
-  const onDelete = useCallback((): void => pressKey(room, 'Backspace'), [room]);
-  const onSpace = useCallback((): void => pressKey(room, ' '), [room]);
+  // Named keys mirror the host path's `e.key` values exactly. Each is a NON-shift
+  // keypress, so it must BREAK the shift double-tap sequence (mirror onCharPress's
+  // `lastShiftTap.current = 0` at L155): without this reset, a fast
+  // shift → space/return/delete → shift within DOUBLE_TAP_MS lets the SECOND shift see
+  // the FIRST shift's timestamp still inside the window and falsely engage caps-lock
+  // (e.g. shift → space → shift wrongly LOCKS instead of arming a one-shot). Only
+  // char presses reset it before; these named keys did not. (Keyboard audit w8cp0yp5d
+  // 2026-07-11.)
+  const onReturn = useCallback((): void => {
+    lastShiftTap.current = 0;
+    pressKey(room, 'Enter');
+  }, [room]);
+  const onDelete = useCallback((): void => {
+    lastShiftTap.current = 0;
+    pressKey(room, 'Backspace');
+  }, [room]);
+  const onSpace = useCallback((): void => {
+    lastShiftTap.current = 0;
+    pressKey(room, ' ');
+  }, [room]);
 
   const charRows =
     layer === 'letters' ? LETTER_ROWS : layer === 'numbers' ? NUMBER_ROWS : SYMBOL_ROWS;
