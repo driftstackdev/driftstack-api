@@ -344,6 +344,50 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe', 'rebuild']);
   });
 
+  // A3 freeze-recovery cross-cycle cap (2026-07-11): a stage-2 rebuild churns connState
+  // (reconnecting→connected), which the detector force-clears `videoFrozen` on — so a
+  // budget keyed on `!videoFrozen` would reset on the rebuild's OWN blip → the ladder
+  // re-escalates → infinite ~16s rebuild thrash. The budget must reset ONLY on SUSTAINED
+  // frame progress (N consecutive currentTime advances). This models a stream that
+  // delivers ONE frame per reconnect then re-freezes (never sustains) and asserts the
+  // ladder caps at MAX_FREEZE_REBUILDS instead of rebuilding forever.
+  it('caps the rebuild ladder across connState-blip cycles (no infinite ~16s thrash)', () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    renderSim();
+    let t = 1;
+    const frame = (): void => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    };
+    // Arm with real frames, then freeze → resubscribe → rebuild #1.
+    advance(2, frame);
+    advance(5); // FREEZE_AFTER_MS → frozen
+    advance(9); // SUSTAINED_FREEZE_MS → resubscribe
+    advance(5); // RESUBSCRIBE_GRACE_MS → rebuild #1
+    expect(panelCbs.recoverActions.filter((r) => r.mode === 'rebuild')).toHaveLength(1);
+
+    // Each cycle = the connState blip a rebuild causes → ONE frame on reconnect (arms the
+    // detector but < SUSTAINED_PROGRESS_TICKS, so NOT genuine recovery — the cap must
+    // survive) → re-freeze → next rebuild. Without the cap this repeats forever.
+    const cycle = (): void => {
+      act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }));
+      advance(1);
+      act(() => panelCbs.onStateChange?.({ kind: 'connected' }));
+      advance(1, frame); // ONE frame on reconnect, then it re-freezes
+      advance(5); // re-detect the freeze
+      advance(9); // resubscribe
+      advance(5); // rebuild
+    };
+    cycle(); // rebuild #2
+    cycle(); // rebuild #3
+    cycle(); // cap hit (3 >= MAX_FREEZE_REBUILDS) → NO rebuild #4
+
+    const rebuilds = panelCbs.recoverActions.filter((r) => r.mode === 'rebuild');
+    expect(rebuilds).toHaveLength(3); // capped — the ladder stopped thrashing the Room
+  });
+
   // #5/#9 — if the resubscribe restores frame-progress before the escalation window,
   // the rebuild must NOT fire and the badge clears (frames are flowing again).
   it('does NOT escalate to rebuild if frame-progress resumes after the resubscribe', () => {

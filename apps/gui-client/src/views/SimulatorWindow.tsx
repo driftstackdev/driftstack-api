@@ -2726,6 +2726,18 @@ export function SimulatorWindow(): JSX.Element {
   // a true freeze pins it.
   const lastSampledCurrentTimeRef = useRef<number | null>(null);
   const lastCurrentTimeAdvanceAtRef = useRef(0);
+  // Cross-cycle freeze-recovery cap (A3-agreed 2026-07-11) — see the recovery effect
+  // below. consecutiveAdvancesRef counts CONSECUTIVE ticks with a real currentTime
+  // advance; SUSTAINED_PROGRESS_TICKS in a row = genuine frame recovery, the ONLY thing
+  // that resets rebuildAttemptsRef. We can't key that reset on `videoFrozen`: the
+  // detector force-clears it to false whenever connState leaves 'connected' — including
+  // the blip a stage-2 rebuild itself causes — so a naive `!videoFrozen` reset clears the
+  // budget on the rebuild's own reconnect → the ladder re-escalates → infinite ~16s
+  // rebuild thrash. currentTime advancing across N connected ticks can only mean frames.
+  const consecutiveAdvancesRef = useRef(0);
+  const rebuildAttemptsRef = useRef(0);
+  const SUSTAINED_PROGRESS_TICKS = 3; // ~3 consecutive advancing 1s ticks = sustained
+  const MAX_FREEZE_REBUILDS = 3; // generous — a transient freeze recovers in one rebuild
   useEffect(() => {
     // Suppress the freeze badge when the LiveKit connection itself isn't connected: a
     // transport drop (disconnected/reconnecting) naturally stops frame progress, and the
@@ -2737,6 +2749,10 @@ export function SimulatorWindow(): JSX.Element {
       freezeSinceRef.current = null;
       lastSampledCurrentTimeRef.current = null;
       lastCurrentTimeAdvanceAtRef.current = 0;
+      // A connState blip (incl. the one a stage-2 rebuild causes) is NOT frame recovery:
+      // zero the sustained-progress run, but DELIBERATELY leave rebuildAttemptsRef alone
+      // so the cross-cycle cap survives the blip (the whole point of the fix).
+      consecutiveAdvancesRef.current = 0;
       setVideoFrozen(false);
       return;
     }
@@ -2775,6 +2791,16 @@ export function SimulatorWindow(): JSX.Element {
         } else if (Math.abs(ct - prev) > 0.001) {
           lastSampledCurrentTimeRef.current = ct;
           lastCurrentTimeAdvanceAtRef.current = now;
+          // SUSTAINED frame progress: N consecutive advancing ticks = genuine recovery
+          // → clear the cross-cycle rebuild budget so a real recovery earns a fresh set
+          // of attempts. NOT keyed on `videoFrozen` (force-cleared on connState blips).
+          consecutiveAdvancesRef.current += 1;
+          if (consecutiveAdvancesRef.current >= SUSTAINED_PROGRESS_TICKS) {
+            rebuildAttemptsRef.current = 0;
+          }
+        } else {
+          // currentTime did NOT advance this tick — break the sustained-progress run.
+          consecutiveAdvancesRef.current = 0;
         }
       }
       // The most-recent moment the element produced a frame, by EITHER signal: rVFC
@@ -2865,6 +2891,18 @@ export function SimulatorWindow(): JSX.Element {
       stage2Handle = window.setTimeout(() => {
         if (recoverPhaseRef.current !== 'resubscribed') return;
         recoverPhaseRef.current = 'rebuilt';
+        if (rebuildAttemptsRef.current >= MAX_FREEZE_REBUILDS) {
+          // Cross-cycle cap: MAX_FREEZE_REBUILDS full rebuilds have failed to restore
+          // SUSTAINED frame progress (the budget resets ONLY on N consecutive currentTime
+          // advances — genuine recovery — never on the connState blip a rebuild itself
+          // causes). A session that survives that many rebuilds is effectively gone, not
+          // transiently frozen — stop thrashing the Room (~every 16s) and hold the frozen
+          // badge; the user can manually Reconnect, and session-end detection surfaces the
+          // terminal overlay when the worker is confirmed gone. (A3 freeze-recovery loop.)
+          setRecovering(false);
+          return;
+        }
+        rebuildAttemptsRef.current += 1;
         setRecoverAction((a) => ({ nonce: a.nonce + 1, mode: 'rebuild' }));
       }, RESUBSCRIBE_GRACE_MS);
     }, SUSTAINED_FREEZE_MS);
