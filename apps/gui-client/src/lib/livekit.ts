@@ -66,6 +66,13 @@ export type InputEvent =
       url: string;
       scrollY: number;
     }
+  // Paste-into-device (QW1, A3 accepted 2026-07-11) — bulk text typed into the focused
+  // field on the device. The GUI's ⌘V reads the Mac clipboard and sends ONE atomic
+  // `text` event (NOT per-char keyDown/keyUp — that would flood the reliable channel);
+  // Agent 1's harness types it via performKeyActions (per-key human hold, un-flooded +
+  // non-robotic). A GUI↔box transport detail like navigate / tab ops — NOT part of the
+  // customer InputEventSchema (see packages/api-types agent-tab-ops).
+  | { type: 'text'; text: string }
   | { type: 'ping'; timestamp: number };
 
 /** Payload for `sendTabListUpdate` — the InputEvent body minus the discriminant. */
@@ -187,6 +194,15 @@ export async function sendActivateTab(room: Room, payload: ActivateTabPayload): 
   const requestId = crypto.randomUUID();
   await sendInputEvent(room, { type: 'activateTab', requestId, ...payload }, { reliable: true });
   return requestId;
+}
+
+/** Paste-into-device (QW1) — type `text` into the device's focused field over the
+ *  SAME reliable channel as taps. ONE atomic `text` event (the harness types it with a
+ *  per-key human hold) rather than per-char keyDown/keyUp, so a long password/URL never
+ *  floods the reliable channel. reliable=true (a dropped paste silently loses the
+ *  text); teardown races are swallowed (shared sendInputEvent codepath). */
+export async function sendText(room: Room, text: string): Promise<void> {
+  await sendInputEvent(room, { type: 'text', text }, { reliable: true });
 }
 
 /** True for the LiveKit errors thrown when an operation runs after the Room's

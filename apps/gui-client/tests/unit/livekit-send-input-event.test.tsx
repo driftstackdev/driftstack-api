@@ -20,6 +20,7 @@ import {
   isBenignTeardownError,
   sendInputEvent,
   sendNavigate,
+  sendText,
   sendTabListUpdate,
   sendActivateTab,
   type InputEvent,
@@ -303,6 +304,28 @@ describe('sendActivateTab', () => {
     const a = await sendActivateTab(room, { sessionId: 's', tabId: 't', url: 'u', scrollY: 0 });
     const b = await sendActivateTab(room, { sessionId: 's', tabId: 't', url: 'u', scrollY: 0 });
     expect(a).not.toBe(b);
+  });
+});
+
+describe('sendText', () => {
+  it('sends ONE atomic {type:"text", text} reliably (paste-into-device, not per-char)', async () => {
+    const { room, publishData } = makeRoom();
+    await sendText(room, 'hunter2 pa$$word');
+    const call = firstCall(publishData);
+    expect(decodeEvent(call)).toEqual({ type: 'text', text: 'hunter2 pa$$word' });
+    expect(call.opts.reliable).toBe(true);
+    // exactly one publish — a long paste must never fan out into per-char keyDowns
+    // (that flood is the reliable-channel HOL problem this event exists to avoid).
+    expect(publishData).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves unicode + newlines round-trip through the UTF-8 JSON wire', async () => {
+    const { room, publishData } = makeRoom();
+    await sendText(room, 'café\n日本語\ttab');
+    expect(decodeEvent(firstCall(publishData))).toEqual({
+      type: 'text',
+      text: 'café\n日本語\ttab',
+    });
   });
 });
 

@@ -21,6 +21,7 @@ import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import {
   sendNavigate,
+  sendText,
   sendTabListUpdate,
   sendActivateTab,
   RoomEvent,
@@ -3298,6 +3299,46 @@ export function SimulatorWindow(): JSX.Element {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [browserMode, info]);
+
+  // Paste-into-device (QW1, A3 accepted `{type:'text'}` 2026-07-11) — ⌘V / Ctrl+V while
+  // the DEVICE screen has focus pastes the Mac clipboard INTO the phone's focused field.
+  // iOS ⌘V would paste the DEVICE's (empty) clipboard, so we bridge: read the Mac
+  // clipboard and send ONE atomic `text` event (the harness types it un-flooded via
+  // performKeyActions). Skipped while a GUI-local field (address bar / composer) is
+  // focused, so ⌘V pastes THERE normally. This document-level listener BUBBLES before the
+  // input-capture's window keydown (which would otherwise forward the raw ⌘V to the
+  // device); stopPropagation keeps the raw shortcut off the wire.
+  useEffect(() => {
+    if (info === null) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (!((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.code === 'KeyV'))) return;
+      const el = document.activeElement;
+      const editingGui =
+        el !== null &&
+        (el.tagName === 'INPUT' ||
+          el.tagName === 'TEXTAREA' ||
+          (el as HTMLElement).isContentEditable === true);
+      if (editingGui) return; // let the focused GUI field handle its own paste
+      e.preventDefault();
+      e.stopPropagation(); // keep the raw ⌘V off the input-capture forward path
+      if (room === null) return;
+      void (async () => {
+        try {
+          if (navigator.clipboard === undefined) return;
+          const text = await navigator.clipboard.readText();
+          if (text === '') return;
+          await sendText(room, text);
+          setNotice('Pasted to the device');
+          window.setTimeout(() => setNotice(null), 2500);
+        } catch {
+          setNotice("Couldn't read the clipboard");
+          window.setTimeout(() => setNotice(null), 2500);
+        }
+      })();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [info, room]);
 
   // Escape collapses the open pane back to the always-docked rail (the drawer is a
   // docked side panel, NOT an overlay — so an outside-pointer-down must NOT close
