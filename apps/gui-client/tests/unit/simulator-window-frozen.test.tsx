@@ -388,6 +388,49 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     expect(rebuilds).toHaveLength(3); // capped — the ladder stopped thrashing the Room
   });
 
+  // overlay audit wsob9ma70 — once the rebuild budget is exhausted the ladder goes
+  // quiescent (correct), but the founder must not be stranded at a passive "Video frozen"
+  // pill. The badge exposes a Reconnect affordance that earns a fresh budget + fires a
+  // full Room reconnect.
+  it('offers a working Reconnect on the frozen badge once the rebuild cap is exhausted', () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    const { container } = renderSim();
+    let t = 1;
+    const frame = (): void => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    };
+    advance(2, frame);
+    advance(5);
+    advance(9);
+    advance(5); // rebuild #1
+    const cycle = (): void => {
+      act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }));
+      advance(1);
+      act(() => panelCbs.onStateChange?.({ kind: 'connected' }));
+      advance(1, frame);
+      advance(5);
+      advance(9);
+      advance(5);
+    };
+    cycle(); // #2
+    cycle(); // #3
+    cycle(); // cap hit → exhausted latched, no #4
+    // The passive frozen pill is now an actionable Reconnect.
+    const badge = frozenBadge(container);
+    expect(badge?.getAttribute('data-exhausted')).toBe('true');
+    const reconnect = container.querySelector('[data-component="video-frozen-reconnect"]');
+    expect(reconnect).not.toBeNull();
+    // Clicking it fires a FRESH full rebuild (deliberate human action earns a new budget).
+    const before = panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length;
+    act(() => {
+      fireEvent.click(reconnect as Element);
+    });
+    expect(panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length).toBe(before + 1);
+  });
+
   // #5/#9 — if the resubscribe restores frame-progress before the escalation window,
   // the rebuild must NOT fire and the badge clears (frames are flowing again).
   it('does NOT escalate to rebuild if frame-progress resumes after the resubscribe', () => {

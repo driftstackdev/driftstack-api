@@ -2853,6 +2853,13 @@ export function SimulatorWindow(): JSX.Element {
   // lever and frames resuming / the rebuild escalation). It drives the badge copy so
   // we never claim "recovering" when we're merely showing a passive freeze badge.
   const [recovering, setRecovering] = useState(false);
+  // Cap-exhausted latch (overlay audit wsob9ma70): when the rebuild budget runs out the
+  // recovery machine goes quiescent ON PURPOSE (no auto-thrash — see the cap comment in
+  // the stage-2 gate), but the badge previously just said "Video frozen" forever with no
+  // way out. This flag switches the badge to an actionable "Reconnect" affordance; the
+  // click is a DELIBERATE human action, so it earns a fresh rebuild budget and fires a
+  // full Room reconnect through the same recoverAction channel the automatic ladder uses.
+  const [freezeRecoveryExhausted, setFreezeRecoveryExhausted] = useState(false);
   // Recovery phase, held in a ref so the driver effect doesn't re-run on each phase
   // change: 'idle' (no freeze) → 'resubscribed' (lever 1 fired, awaiting recovery) →
   // 'rebuilt' (lever 2 fired, terminal until frames resume or the freeze clears).
@@ -2897,8 +2904,11 @@ export function SimulatorWindow(): JSX.Element {
           // advances — genuine recovery — never on the connState blip a rebuild itself
           // causes). A session that survives that many rebuilds is effectively gone, not
           // transiently frozen — stop thrashing the Room (~every 16s) and hold the frozen
-          // badge; the user can manually Reconnect, and session-end detection surfaces the
-          // terminal overlay when the worker is confirmed gone. (A3 freeze-recovery loop.)
+          // badge; and — overlay audit wsob9ma70 — surface an actionable Reconnect on the
+          // badge (freezeRecoveryExhausted) so the founder isn't stuck at a passive frozen
+          // pill with no way out; session-end detection still surfaces the terminal overlay
+          // when the worker is confirmed gone. (A3 freeze-recovery loop.)
+          setFreezeRecoveryExhausted(true);
           setRecovering(false);
           return;
         }
@@ -2911,6 +2921,13 @@ export function SimulatorWindow(): JSX.Element {
       if (stage2Handle !== null) window.clearTimeout(stage2Handle);
     };
   }, [videoFrozen, connState, sessionEnded]);
+  // Retire the cap-exhausted "Reconnect" latch the moment frames genuinely resume
+  // (videoFrozen flips false) — a healthy stream must never keep the affordance over live
+  // video. Keyed on videoFrozen alone (not connState) so a transient blip doesn't clear it
+  // prematurely. (overlay audit wsob9ma70.)
+  useEffect(() => {
+    if (!videoFrozen) setFreezeRecoveryExhausted(false);
+  }, [videoFrozen]);
   // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
   // overlay (the founder keeps reporting streaming/latency issues and needs the
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
@@ -6131,10 +6148,35 @@ export function SimulatorWindow(): JSX.Element {
                     role="status"
                     data-component="video-frozen-badge"
                     data-recovering={recovering ? 'true' : 'false'}
+                    data-exhausted={freezeRecoveryExhausted ? 'true' : 'false'}
                     className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
                   >
                     <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-                    {recovering ? 'Video frozen — recovering' : 'Video frozen'}
+                    {freezeRecoveryExhausted && sessionEnded === null ? (
+                      <>
+                        <span>Video frozen — recovery didn&apos;t take.</span>
+                        <button
+                          type="button"
+                          data-component="video-frozen-reconnect"
+                          onClick={() => {
+                            // Deliberate human action → earn a FRESH rebuild budget + a clean
+                            // recovery cycle, and fire a full Room reconnect through the same
+                            // recoverAction channel the automatic ladder uses. (audit wsob9ma70.)
+                            rebuildAttemptsRef.current = 0;
+                            consecutiveAdvancesRef.current = 0;
+                            recoverPhaseRef.current = 'idle';
+                            setFreezeRecoveryExhausted(false);
+                            setRecovering(true);
+                            setRecoverAction((a) => ({ nonce: a.nonce + 1, mode: 'rebuild' }));
+                          }}
+                          className="rounded-full bg-white/15 px-2.5 py-0.5 font-semibold text-white transition-colors hover:bg-white/25"
+                        >
+                          Reconnect
+                        </button>
+                      </>
+                    ) : (
+                      <span>{recovering ? 'Video frozen — recovering' : 'Video frozen'}</span>
+                    )}
                   </div>
                 )}
                 {/* W616 — honest page-navigation error overlay (DNS/TLS/HTTP/
