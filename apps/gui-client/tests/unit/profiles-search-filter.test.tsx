@@ -6,7 +6,7 @@
 // profile row (seedMetaFromServer), so we set them on the mocked list response.
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 
 // Two profiles with distinct org metadata. `alpha` lives in the "Shopping"
 // folder, is tagged "aged", and has a note "warm cookies". `beta` carries none
@@ -152,6 +152,32 @@ describe('ProfilesView search matches synced org metadata', () => {
     search('beta');
     await waitFor(() => expect(screen.getByText('Beta')).toBeTruthy());
     expect(screen.queryByText('Alpha')).toBeNull();
+    cleanup();
+  });
+});
+
+describe('ProfilesView search is GLOBAL — it bypasses the folder rail scoping', () => {
+  // Founder 2026-07-11: "the search ain't even working to find anything". Root cause:
+  // the search results were INTERSECTED with the active folder/tag rail selection, so
+  // browsing into a folder and later searching for a profile that lives elsewhere
+  // returned 0 results with no hint why. A typed query is an explicit "find it
+  // wherever it is" (the Finder/Gmail convention) — it must search ALL profiles.
+  it('finds a profile in ANOTHER folder while a rail folder is selected', async () => {
+    await renderAndWaitForProfiles();
+    // Browse into the Shopping folder — only Alpha (its member) stays visible.
+    const rail = screen.getByLabelText('Folders and tags');
+    fireEvent.click(within(rail).getByText('Shopping'));
+    await waitFor(() => expect(screen.queryByText('Beta')).toBeNull());
+    expect(screen.getByText('Alpha')).toBeTruthy();
+    // Search for the UNFILED profile: before the fix this was 0 results (Beta is
+    // outside Shopping); now the query searches everywhere.
+    search('beta');
+    await waitFor(() => expect(screen.getByText('Beta')).toBeTruthy());
+    expect(screen.queryByText('Alpha')).toBeNull();
+    // Clearing the search returns to the folder-scoped browse view unchanged.
+    search('');
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeTruthy());
+    expect(screen.queryByText('Beta')).toBeNull();
     cleanup();
   });
 });

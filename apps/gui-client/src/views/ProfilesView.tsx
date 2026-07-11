@@ -1366,14 +1366,22 @@ export function ProfilesView({
         );
       });
     }
-    if (folderFilter !== 'all') {
+    // Search is GLOBAL (the Finder/Gmail convention): while the query is non-empty it
+    // searches ALL profiles, bypassing the folder/tag rail scoping. Intersecting them
+    // was the founder's "search doesn't find anything" (2026-07-11): browse into a
+    // folder, later type a search for a profile that lives elsewhere → 0 results with
+    // no hint why. The rail selection is browse-mode state, easy to leave behind; a
+    // typed query is an explicit "find it wherever it is". The STATUS filter still
+    // applies while searching — it's a visible segmented control in the SAME bar as
+    // the search box, not a forgotten sidebar selection.
+    if (q.length === 0 && folderFilter !== 'all') {
       list = list.filter((p) =>
         folderFilter === 'unfiled'
           ? (profilesMeta[p.id]?.folder ?? '') === ''
           : profilesMeta[p.id]?.folder === folderFilter,
       );
     }
-    if (tagFilter !== null) {
+    if (q.length === 0 && tagFilter !== null) {
       list = list.filter((p) => (profilesMeta[p.id]?.tags ?? []).includes(tagFilter));
     }
     if (statusFilter !== 'all') {
