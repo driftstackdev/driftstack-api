@@ -125,7 +125,21 @@ export async function registerFleetEventsRoutes(
         socket.close(1008, 'unauthenticated');
         return;
       }
-      const conn = deps.registry.register(nodeId, (data) => socket.send(data));
+      // The 3rd arg lets a later reconnect for this node SUPERSEDE + actively close this
+      // socket, so a half-open box socket can't linger + zombie-heartbeat into the CP's
+      // stale-guard forever (the 2026-07-11 P0). GRACEFUL close (1012), not terminate()/
+      // destroy — the box sees a clean WS close + reconnects, not an abrupt RST.
+      const conn = deps.registry.register(
+        nodeId,
+        (data) => socket.send(data),
+        () => {
+          try {
+            socket.close(1012, 'superseded by a newer control connection');
+          } catch {
+            // socket already closing — ignore
+          }
+        },
+      );
       socket.on('message', (data: WsMessageData) => conn.handleInbound(messageToString(data)));
       // Explicitly PONG every inbound ping from the node. With autoPong:false in
       // the plugin options, ws no longer auto-replies, so this is the single,

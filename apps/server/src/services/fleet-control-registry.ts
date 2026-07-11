@@ -128,6 +128,11 @@ export class FleetControlConnection {
   private readonly onHeartbeat?: (frame: Heartbeat) => void;
   private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void;
   private readonly logger: Logger | null;
+  // Actively closes THIS connection's underlying socket. Called from `supersede()`
+  // when a newer connection for the node replaces this one, so a half-open box socket
+  // can't linger + zombie-heartbeat forever (P0 2026-07-11). Optional (legacy/test
+  // callers omit it → supersede degrades to the old close-only behaviour).
+  private readonly terminate?: () => void;
   // Reconnect/replace race guard (CONFIRMED audit finding): a physical socket has
   // NO cross-connection ordering guarantee against its successor — a harness
   // crash+fast-respawn can open a brand-new TCP connection (→ a brand-new
@@ -158,8 +163,12 @@ export class FleetControlConnection {
     // can log one warn. Omitted (legacy callers / tests) → the guard still DROPS
     // the frame; it just logs nothing.
     logger?: Logger | null,
+    // Closes this connection's socket — threaded from the WS route so `supersede()` can
+    // actively terminate a replaced/half-open socket (P0 2026-07-11).
+    terminate?: () => void,
   ) {
     this.send = send;
+    this.terminate = terminate;
     this.onProfileSaved = onProfileSaved;
     this.onChallengeDetected = onChallengeDetected;
     this.onPageState = onPageState;
@@ -576,6 +585,20 @@ export class FleetControlConnection {
     this.downloadCorrelator.failAll(reason);
     this.trimProfileCorrelator.failAll(reason);
   }
+
+  /** Superseded by a newer connection for this node (a reconnect): fail in-flight
+   *  requests (via close()) AND actively close the OLD socket. Without the socket close,
+   *  a half-open box socket lingers — the box keeps heartbeating on it (~11s) while the
+   *  CP drops every frame via the stale-guard, and it never reconnects cleanly. This was
+   *  the 2026-07-11 P0 ("browser instantly crashes" — dispatch couldn't reach the box).
+   *  A GRACEFUL close (code 1012, not terminate()/socket.destroy()) so the box sees a
+   *  clean WS close and reconnects, not an abrupt RST (ENOTCONN). The old socket's own
+   *  'close' handler then no-ops through unregister()'s identity guard, and stops its
+   *  keepalive interval — so this also plugs a per-supersede keepalive leak. */
+  supersede(reason: string): void {
+    this.close(reason);
+    this.terminate?.();
+  }
 }
 
 /**
@@ -653,10 +676,19 @@ export class FleetControlRegistry {
     private readonly logger?: Logger | null,
   ) {}
 
-  register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
+  register(
+    nodeId: string,
+    send: FleetNodeSocketSend,
+    // Closes the NEW socket — threaded into the connection so a later reconnect can
+    // actively terminate THIS one on supersede (P0 2026-07-11). Optional: legacy/test
+    // callers omit it and supersede degrades to close-only (the prior behaviour).
+    terminate?: () => void,
+  ): FleetControlConnection {
     const existing = this.connections.get(nodeId);
     if (existing !== undefined) {
-      existing.close(`replaced by a new connection for node ${nodeId}`);
+      // supersede (not just close): actively close the OLD socket so a half-open box
+      // socket can't linger + zombie-heartbeat into the stale-guard forever. (P0.)
+      existing.supersede(`replaced by a new connection for node ${nodeId}`);
     }
     const conn = new FleetControlConnection(
       nodeId,
@@ -668,6 +700,7 @@ export class FleetControlRegistry {
       this.onHeartbeat,
       this.onSessionStatus,
       this.logger,
+      terminate,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

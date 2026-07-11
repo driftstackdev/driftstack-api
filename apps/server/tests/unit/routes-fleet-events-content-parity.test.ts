@@ -68,9 +68,12 @@ describe('routes/fleet-events content parity', () => {
   });
 
   it('handler wiring pinned: register node by nodeId; route inbound messages; explicit PONG of inbound pings (+ ws auto-pong) + 30s keepalive ping with NO terminate(); clearInterval + unregister on close + error', () => {
-    expect(body).toMatch(
-      /const conn = deps\.registry\.register\(nodeId, \(data\) => socket\.send\(data\)\);/,
-    );
+    // register(nodeId, send, terminate) — the 3rd arg lets a later reconnect SUPERSEDE +
+    // actively close THIS socket (P0 2026-07-11 zombie-conn fix). toContain fragments —
+    // prettier wraps the multi-line call.
+    expect(body).toContain('const conn = deps.registry.register(');
+    expect(body).toContain('(data) => socket.send(data),');
+    expect(body).toContain("socket.close(1012, 'superseded by a newer control connection')");
     expect(body).toMatch(
       /socket\.on\('message', \(data: WsMessageData\) => conn\.handleInbound\(messageToString\(data\)\)\);/,
     );

@@ -648,6 +648,32 @@ describe('FleetControlRegistry', () => {
     expect(r.errorMessage).toMatch(/replaced by a new connection/);
   });
 
+  it('reconnect SUPERSEDES the prior connection — actively CLOSES its old socket (P0 2026-07-11 zombie-conn fix)', () => {
+    const reg = new FleetControlRegistry();
+    let firstClosed = 0;
+    // First connection with a socket-terminate cb (as the WS route threads).
+    reg.register(
+      'node-1',
+      () => {},
+      () => {
+        firstClosed += 1;
+      },
+    );
+    expect(firstClosed).toBe(0);
+    // Reconnect for the SAME node → supersede must actively close the OLD socket exactly
+    // once, so a half-open box socket can't linger + zombie-heartbeat into the stale-guard.
+    const second = reg.register(
+      'node-1',
+      () => {},
+      () => {},
+    );
+    expect(firstClosed).toBe(1);
+    expect(reg.get('node-1')).toBe(second);
+    // A later unregister of the LIVE conn does NOT re-close the old socket (identity guard).
+    reg.unregister('node-1', second, 'closed');
+    expect(firstClosed).toBe(1);
+  });
+
   it('queues a teardown when a node is offline + re-dispatches sessionEnd on reconnect (A3 W2859)', () => {
     const reg = new FleetControlRegistry();
     // No connection for node-1 yet → a session close couldn't reach the box; queue it.
