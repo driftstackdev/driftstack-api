@@ -4498,7 +4498,11 @@ export function SimulatorWindow(): JSX.Element {
           if (res.status === 'ok') {
             const jar = res.cookies ?? [];
             setCookies(jar);
-            hasCookiesRef.current = jar.length > 0;
+            // ANY successful fetch means we HAVE fetched — an EMPTY jar is a real result
+            // ("no cookies yet"), not "nothing fetched yet". Keying on jar.length>0 made an
+            // empty-but-ok fetch look un-fetched, so a later transient tick showed "waiting
+            // for the device…" over a jar we'd already read as empty. (Audit wm0hhkq30.)
+            hasCookiesRef.current = true;
             setCookiesNote(null);
             backoff = 3000; // reset cadence on a real success
           } else if (res.status === 'timeout') {
@@ -4691,7 +4695,10 @@ export function SimulatorWindow(): JSX.Element {
           if (res.status === 'ok') {
             const files = res.files ?? [];
             setDownloads(files);
-            hasDownloadsRef.current = files.length > 0;
+            // Empty-but-ok is a real fetch ("no downloads yet"), not "nothing fetched yet"
+            // — twin of the cookies flag; keying on length>0 wrongly re-showed "waiting for
+            // the device…" over a successfully-read empty list. (Audit wm0hhkq30.)
+            hasDownloadsRef.current = true;
             setDownloadsNote(null);
             backoff = 3000; // reset cadence on a real success
           } else if (res.status === 'timeout') {
@@ -6889,10 +6896,13 @@ export function SimulatorWindow(): JSX.Element {
                           type="button"
                           aria-label="Upload file"
                           title="Upload a file into the session"
-                          disabled={uploading || sessionId === ''}
+                          // Freeze on a TERMINALLY-ended session (twin of the cookies /
+                          // downloads panes): uploading to a dead session just fails with a
+                          // misleading "device isn't reachable". (Audit wm0hhkq30.)
+                          disabled={uploading || sessionId === '' || sessionEnded !== null}
                           onClick={() => fileInputRef.current?.click()}
                           onDragOver={(e) => {
-                            if (uploading || sessionId === '') return;
+                            if (uploading || sessionId === '' || sessionEnded !== null) return;
                             e.preventDefault();
                             setFileDragOver(true);
                           }}
@@ -6900,7 +6910,7 @@ export function SimulatorWindow(): JSX.Element {
                           onDrop={(e) => {
                             e.preventDefault();
                             setFileDragOver(false);
-                            if (uploading || sessionId === '') return;
+                            if (uploading || sessionId === '' || sessionEnded !== null) return;
                             const f = e.dataTransfer.files?.[0];
                             if (f) onUploadFile(f);
                           }}
@@ -6914,11 +6924,13 @@ export function SimulatorWindow(): JSX.Element {
                             ⬆
                           </span>
                           <span className="text-[11.5px] font-medium">
-                            {sessionId === ''
-                              ? 'Waiting for the device…'
-                              : uploading
-                                ? 'Uploading…'
-                                : 'Drop a file or click to upload'}
+                            {sessionEnded !== null
+                              ? 'Session ended — uploads unavailable'
+                              : sessionId === ''
+                                ? 'Waiting for the device…'
+                                : uploading
+                                  ? 'Uploading…'
+                                  : 'Drop a file or click to upload'}
                           </span>
                           <span className="text-[10px] text-white/35">
                             → feeds the page&apos;s file picker · max 64 MiB
