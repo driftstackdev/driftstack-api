@@ -189,6 +189,27 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(lastTabListCall().activeTabId).toBe(tab1Id);
   });
 
+  // Tab-switch audit wap1x781b (3/3 verified) — the cold-switch "switching…" blank MUST
+  // stay up until the target tab genuinely LOADS. The box's page_state fires state:'loading'
+  // carrying the TARGET url at nav-START; resolving the switch on that frame dropped the
+  // blank while the box was still re-navigating → the OLD/loading page flashed through (the
+  // founder's persistent "keeps other tab's content open + not smooth" on switch). A loading
+  // frame must NOT resolve the switch; only a TERMINAL (loaded/errored/stalled) one does.
+  it('holds the "switching…" affordance on a page_state{loading} frame and clears it only on {loaded}', () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // 2 tabs, tab2 active
+    // Switch back to tab1 → the "switching…" affordance shows on it immediately.
+    fireEvent.click(tabEls(container)[0]);
+    expect(container.querySelector('[data-component="simulator-tab-switching"]')).not.toBeNull();
+    // Box begins re-navigating the target → a loading frame with the TARGET url. This must
+    // NOT drop the blank (else the old page is exposed mid-navigation).
+    pushPageState({ state: 'loading', url: 'https://example.test/target' });
+    expect(container.querySelector('[data-component="simulator-tab-switching"]')).not.toBeNull();
+    // The terminal loaded frame (page painted) resolves the switch → the blank clears.
+    pushPageState({ state: 'loaded', url: 'https://example.test/target', title: 'Target' });
+    expect(container.querySelector('[data-component="simulator-tab-switching"]')).toBeNull();
+  });
+
   it('switching to a tab with an empty/seed url sends the branded NEW_TAB_URL (not "") so the box allowlist accepts it', () => {
     const { container } = renderSim();
     // The seed (first) tab stores url='' — switch AWAY (open a "+" tab, which is

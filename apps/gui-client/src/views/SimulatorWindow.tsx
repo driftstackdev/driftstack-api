@@ -3694,7 +3694,12 @@ export function SimulatorWindow(): JSX.Element {
   // liveTitle are mirrored separately (only when the written tab IS the active one).
   const writeTabPageState = useCallback(
     (
-      frame: { tabId?: string | null; url?: string | null; title?: string | null },
+      frame: {
+        tabId?: string | null;
+        url?: string | null;
+        title?: string | null;
+        state?: string | null;
+      },
       // Whether this frame is AUTHORITATIVE for resolving an in-flight switch. A switch
       // must only resolve (clear "switching…" + cancel the activateTab retry net) on a
       // frame that genuinely reflects the SWITCHED page — a tabId-routed frame to the
@@ -3724,8 +3729,18 @@ export function SimulatorWindow(): JSX.Element {
       // The box reported a page for this tab → the switch (if any) landed; clear the
       // "switching…" affordance + cancel its re-issue timer (instant-feedback path).
       // Only on an authoritative frame: a stale in-grace tabId-less poll must keep the
-      // retry net running until a genuine frame/ack for the switched page arrives.
-      if (isAuthoritative) resolveSwitchRef.current(targetId);
+      // retry net running until a genuine frame/ack for the switched page arrives. And
+      // NEVER resolve on a `loading` frame: a cold switch's page_state fires state:'loading'
+      // carrying the TARGET url at nav-START — resolving there dropped the "switching…"
+      // blank while the box was still re-navigating, flashing the OLD/loading page through
+      // (the founder's persistent "keeps other tab's content open + not smooth" on switch;
+      // tab-switch audit wap1x781b, 3/3 verified). Wait for a TERMINAL frame (loaded/
+      // errored/stalled) — exactly how the cold ACK path already holds the blank (it uses
+      // cancelActivationRetry, not resolveSwitch). The url/title write below STILL happens
+      // on a loading frame, so the address bar tracks the target url live during the load;
+      // and the 6s SWITCH_AFFORDANCE_TIMEOUT hard net (sendActivateAttempt) drops the blank
+      // even if a terminal frame never arrives, so this can't hang the affordance.
+      if (isAuthoritative && frame.state !== 'loading') resolveSwitchRef.current(targetId);
       // #116 — the founder's "tab switch blinks the new page then REVERTS to the old
       // tab" + wrong url/title. On prod the box still emits page_state WITHOUT a tabId
       // (per-tab tagging is A3's held fix), so a tabId-LESS frame that lands in the
@@ -4061,7 +4076,10 @@ export function SimulatorWindow(): JSX.Element {
         ) {
           // Data-channel page_state is authoritative for the switch — it's the box's
           // live push for the page it's actually showing.
-          writeTabPageState({ tabId: msg.tabId, url: msg.url, title: msg.title }, true);
+          writeTabPageState(
+            { tabId: msg.tabId, url: msg.url, title: msg.title, state: msg.state },
+            true,
+          );
         }
         // #135 — a page_state{state:'stalled'} is OVERLOADED: A3's NAV-stall timer
         // (box 5eeaf794a) tags a slow-LOAD stall with error.kind==='timeout', while the
@@ -4250,6 +4268,7 @@ export function SimulatorWindow(): JSX.Element {
               tabId: ps.tabId,
               url: suppress ? null : ps.url,
               title: suppress ? null : ps.title,
+              state: ps.state,
             },
             hasTabId || !inSwitchGrace,
           );
@@ -5379,6 +5398,7 @@ export function SimulatorWindow(): JSX.Element {
           tabId: ps.tabId,
           url: suppress ? null : ps.url,
           title: suppress ? null : ps.title,
+          state: ps.state,
         },
         hasTabId || !inSwitchGrace,
       );
