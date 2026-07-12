@@ -108,4 +108,13 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
     expect(body).toMatch(/<input[^>]*id="reset-password-input"[\s\S]*?required/);
     expect(body).toMatch(/<input[^>]*id="reset-confirm-input"[\s\S]*?required/);
   });
+
+  it('one-time reset consumption is single-flight and bounded', () => {
+    expect(body).toMatch(/const RESET_REQUEST_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/let resetInFlight = false;/);
+    expect(body).toMatch(/if \(resetInFlight\) return;/);
+    expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), RESET_REQUEST_TIMEOUT_MS\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\);\s*resetInFlight = false;/);
+  });
 });

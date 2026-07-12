@@ -42,7 +42,7 @@ describe('auth forms submit pending-state parity', () => {
 
       it('toggles submitting ON during the request and re-enables via .finally (never stuck disabled)', () => {
         expect(body).toMatch(/setSubmitting\(true\);/);
-        expect(body).toMatch(/\.finally\(\(\) => setSubmitting\(false\)\);/);
+        expect(body).toMatch(/\.finally\(\(\) =>\s*(?:\{[\s\S]*?)?setSubmitting\(false\)/);
       });
     });
   }

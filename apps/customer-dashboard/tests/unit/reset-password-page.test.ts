@@ -29,7 +29,8 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   url?: string;
-  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+  requestTimeoutImmediately?: boolean;
+  fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
 function setUpDom(
@@ -71,6 +72,18 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  if (opts.requestTimeoutImmediately) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 15_000) {
+        window.queueMicrotask(() => {
+          if (typeof handler === 'function') handler(...args);
+        });
+        return 42;
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+  }
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="reset-password"'));
   if (!pageScript) throw new Error('reset-password inline script not found');
@@ -168,5 +181,34 @@ describe('reset-password page — local integration', () => {
     await flush();
     expect(bannerText(window)).toMatch(/This reset link has expired\./);
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+  });
+
+  it('serializes duplicate submits and recovers when the bounded request times out', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      requestTimeoutImmediately: true,
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    const submitBtn = window.document.querySelector(
+      '[data-form] button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.getAttribute('aria-busy')).toBe('false');
+    expect(submitBtn.textContent).toBe('Reset password + sign in');
+    expect(bannerText(window)).toMatch(/took too long.*check your connection/i);
   });
 });
