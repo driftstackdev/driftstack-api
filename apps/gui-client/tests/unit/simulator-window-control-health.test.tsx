@@ -155,7 +155,11 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     const { ReliableInputCongestedError } = await import('../../src/lib/livekit-input-congestion');
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
-    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' });
+      panelCbs.onPublisher?.('publishing');
+    });
 
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
     await act(async () => {
@@ -176,6 +180,33 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     expect(previouslyActive?.getAttribute('data-active')).toBe('true');
     expect(target?.getAttribute('data-active')).toBe('false');
     expect(container.textContent).toContain('Connection catching up — tab switch paused');
+  });
+
+  it('restores the previous address when congestion wins the navigation publish race', async () => {
+    const { ReliableInputCongestedError } = await import('../../src/lib/livekit-input-congestion');
+    localStorage.setItem('ds-sim-browser-mode', '1');
+    const { container } = renderSim();
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' });
+      panelCbs.onPublisher?.('publishing');
+    });
+    const address = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(address.value).toBe('');
+
+    sendNavigate.mockRejectedValueOnce(new ReliableInputCongestedError());
+    fireEvent.change(address, { target: { value: 'example.com' } });
+    fireEvent.submit(address.closest('form') as HTMLFormElement);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sendNavigate).toHaveBeenCalledTimes(1);
+    expect((container.querySelector('[aria-label="Address bar"]') as HTMLInputElement).value).toBe(
+      '',
+    );
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('Connection catching up — navigation paused');
   });
 
   it('does not optimistically create a tab or navigate while input is paused', () => {

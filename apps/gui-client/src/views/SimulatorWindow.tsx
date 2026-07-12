@@ -6167,6 +6167,21 @@ export function SimulatorWindow(): JSX.Element {
       showNotice('Enter an address or a search term', 3000);
       return;
     }
+    // Snapshot the current chrome before optimistic mutation. Congestion can begin
+    // after the guard above but before publish; if that race rejects, the worker is
+    // still on this page and the GUI must return to the same truth immediately.
+    const previousNavigation = {
+      tabUrl: activeTab?.url ?? liveUrl,
+      pageLoading,
+      loadProgress,
+      pageStalled,
+      pageLoadStalled,
+      pageLoadTimeout,
+      pageError,
+      reachedLoaded: pageReachedLoadedRef.current,
+      navTarget: currentNavTargetRef.current,
+      lastNavAt: lastNavAtRef.current,
+    };
     // A fresh navigate supersedes a prior failed-send banner (incl. our own Retry).
     setNavSendFailed(null);
     // First successful navigate: stop auto-opening the Controls pane on launch
@@ -6204,7 +6219,29 @@ export function SimulatorWindow(): JSX.Element {
     currentNavTargetRef.current = normalizeNavUrl(url);
     lastNavAtRef.current = Date.now();
     setPageLoading(armLoadWatchdog(true));
-    void sendNavigate(room, url).catch(() => {
+    void sendNavigate(room, url).catch((err: unknown) => {
+      if (err instanceof ReliableInputCongestedError) {
+        updateActiveTab({ url: previousNavigation.tabUrl });
+        setLiveUrl(isBlankTabUrl(previousNavigation.tabUrl) ? '' : previousNavigation.tabUrl);
+        setLoadProgress(previousNavigation.loadProgress);
+        setPageStalled(previousNavigation.pageStalled);
+        setPageLoadStalled(previousNavigation.pageLoadStalled);
+        setPageError(previousNavigation.pageError);
+        pageReachedLoadedRef.current = previousNavigation.reachedLoaded;
+        currentNavTargetRef.current = previousNavigation.navTarget;
+        lastNavAtRef.current = previousNavigation.lastNavAt;
+        clearLoadWatchdog();
+        if (previousNavigation.pageLoading) {
+          setPageLoading(armLoadWatchdog(true));
+        } else {
+          setPageLoading(false);
+          setPageLoadTimeout(previousNavigation.pageLoadTimeout);
+        }
+        setNavSendFailed(null);
+        showNotice('Connection catching up — navigation paused', 2500);
+        void reconcilePageState();
+        return;
+      }
       // Persistent + actionable rather than a 3s auto-toast — the send can fail on a
       // congested/dropped data channel and the user should be able to Retry (M5).
       setNavSendFailed(url);
