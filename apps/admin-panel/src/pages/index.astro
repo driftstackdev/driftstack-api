@@ -989,6 +989,44 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
       }
       const secretsList = root.querySelector('[data-list="owner-secrets"]');
+      const secretRevealsInFlight = new Set();
+      async function revealSecret(name, button) {
+        if (!name || secretRevealsInFlight.has(name)) return;
+        const out = Array.from(root.querySelectorAll('[data-secret-value]')).find(
+          (candidate) => candidate.getAttribute('data-secret-value') === name,
+        );
+        if (!out) return;
+        if (!out.classList.contains('hidden')) {
+          out.textContent = '';
+          out.classList.add('hidden');
+          button.textContent = 'Reveal';
+          return;
+        }
+        secretRevealsInFlight.add(name);
+        button.disabled = true;
+        button.textContent = 'Revealing…';
+        button.setAttribute('aria-busy', 'true');
+        try {
+          const response = await authedFetch(
+            '/v1/admin/owner/secrets/' + encodeURIComponent(name) + '/reveal',
+            { method: 'POST' },
+          );
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const body = await response.json();
+          out.textContent = String(body.value);
+          out.classList.remove('hidden');
+        } catch {
+          out.textContent = '';
+          out.classList.add('hidden');
+        } finally {
+          secretRevealsInFlight.delete(name);
+          if (button.isConnected) {
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
+            button.textContent = out.classList.contains('hidden') ? 'Reveal' : 'Hide';
+          }
+        }
+      }
       if (secretsList) {
         secretsList.addEventListener('click', (e) => {
           const t = e.target;
@@ -996,25 +1034,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           const deleteBtn = t && t.closest ? t.closest('[data-delete-secret]') : null;
           if (revealBtn) {
             const name = revealBtn.getAttribute('data-reveal-secret');
-            const out = root.querySelector('[data-secret-value="' + name + '"]');
-            if (!out) return;
-            if (!out.classList.contains('hidden')) {
-              out.textContent = '';
-              out.classList.add('hidden');
-              revealBtn.textContent = 'Reveal';
-              return;
-            }
-            revealBtn.textContent = '…';
-            void authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name) + '/reveal', { method: 'POST' })
-              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-              .then((body) => {
-                out.textContent = String(body.value);
-                out.classList.remove('hidden');
-                revealBtn.textContent = 'Hide';
-              })
-              .catch(() => {
-                revealBtn.textContent = 'Reveal';
-              });
+            if (name) void revealSecret(name, revealBtn);
           }
           if (deleteBtn) {
             const name = deleteBtn.getAttribute('data-delete-secret');

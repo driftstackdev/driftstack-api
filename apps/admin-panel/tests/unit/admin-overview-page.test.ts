@@ -688,6 +688,65 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(submit.textContent).toBe('Save secret');
   });
 
+  it('owner-secret reveal is single-flight, visibly busy, and Hide clears plaintext', async () => {
+    let resolveReveal: ((response: Response) => void) | undefined;
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({
+            enabled: true,
+            secrets: [{ name: 'stripe_key', description: 'billing', updated_at: null }],
+          });
+        }
+        if (
+          /\/v1\/admin\/owner\/secrets\/stripe_key\/reveal$/.test(call.url) &&
+          method === 'POST'
+        ) {
+          return new Promise<Response>((resolve) => {
+            resolveReveal = resolve;
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-reveal-secret="stripe_key"]',
+    ) as HTMLButtonElement;
+    const output = window.document.querySelector(
+      '[data-secret-value="stripe_key"]',
+    ) as HTMLOutputElement;
+    button.click();
+    button.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(1);
+
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe('Revealing…');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(
+      fetchCalls.filter((call) => /\/owner\/secrets\/stripe_key\/reveal$/.test(call.url)),
+    ).toHaveLength(1);
+
+    resolveReveal?.(json({ value: 'sk_plaintext' }));
+    await flush();
+    expect(output.textContent).toBe('sk_plaintext');
+    expect(output.classList.contains('hidden')).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Hide');
+    expect(button.getAttribute('aria-busy')).toBeNull();
+
+    button.click();
+    expect(output.textContent).toBe('');
+    expect(output.classList.contains('hidden')).toBe(true);
+    expect(button.textContent).toBe('Reveal');
+  });
+
   it('owner-secret delete is destructive-confirmed, single-flight, and visibly busy', async () => {
     let resolveDelete: ((response: Response) => void) | undefined;
     const confirmCalls: unknown[] = [];

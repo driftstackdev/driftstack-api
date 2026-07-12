@@ -104,6 +104,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toMatch(/secretSetInFlight = false;\s*form\.removeAttribute\('aria-busy'\)/);
   });
 
+  it('owner-secret reveal is single-flight and clears plaintext on hide/failure', () => {
+    expect(body).toMatch(/const secretRevealsInFlight = new Set\(\);/);
+    expect(body).toMatch(/secretRevealsInFlight\.has\(name\)/);
+    expect(body).toMatch(/button\.textContent = 'Revealing…'/);
+    expect(body).toMatch(/button\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/out\.textContent = '';/);
+    expect(body).toMatch(/secretRevealsInFlight\.delete\(name\)/);
+    expect(body).toMatch(/out\.classList\.contains\('hidden'\) \? 'Reveal' : 'Hide'/);
+  });
+
   it('tile data-fields map to overview-response keys', () => {
     // The progressive-enhancement script setText()s these three
     // fields from the body.accounts / body.webhooks payload —
