@@ -24743,3 +24743,15 @@ Verification:
 - exhaustive root Vitest: 2,486 files passed and 26 skipped; 24,749 tests passed and 89 skipped;
 - root workspace typecheck passes;
 - full GUI jsdom remains green at 1,198 passed and 6 skipped across 148 files.
+
+## V-567 — admin refresh and lookup single-flight feedback
+
+**Date:** 2026-07-12
+
+Made the admin Cost and Atlas-priority controls honest during network work. Cost account queries and the two-request top-account refresh now reject duplicate submissions, disable their trigger, expose `aria-busy`, and replace idle labels with progress copy until success or failure settles. The Atlas queue's manual refresh now follows the same single-flight contract without blocking its independent filter and polling refreshes.
+
+Verification:
+
+- production-shaped admin-panel build succeeds with `PUBLIC_API_BASE_URL=https://api.driftstack.dev`;
+- focused admin Cost and Atlas-priority suites: 12/12 tests pass, including deferred-response duplicate-click coverage;
+- admin Astro check reports zero errors and zero warnings (18 existing suggestions only).

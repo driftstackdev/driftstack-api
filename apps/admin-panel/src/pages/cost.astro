@@ -186,6 +186,7 @@ const apiBaseUrl = resolveApiBaseUrl();
   const tierThresholds = root.querySelector('[data-field="tier-thresholds"]');
   const accountForm = root.querySelector('[data-form="account-query"]');
   const accountResult = root.querySelector('[data-field="account-result"]');
+  const accountSubmitBtn = accountForm?.querySelector('button[type="submit"]');
 
   function showBanner(msg) {
     if (!banner) return;
@@ -355,6 +356,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
   const topResult = root.querySelector('[data-field="top-result"]');
   const refreshTopBtn = root.querySelector('[data-button="refresh-top"]');
+  let topAccountsLoading = false;
 
   function renderTopAccounts(rows) {
     if (!topResult) return;
@@ -392,7 +394,13 @@ const apiBaseUrl = resolveApiBaseUrl();
   }
 
   async function loadTopAccounts() {
-    if (!topResult) return;
+    if (!topResult || topAccountsLoading) return;
+    topAccountsLoading = true;
+    if (refreshTopBtn) {
+      refreshTopBtn.disabled = true;
+      refreshTopBtn.setAttribute('aria-busy', 'true');
+      refreshTopBtn.textContent = 'Refreshing…';
+    }
     topResult.innerHTML = '<p class="text-sm text-tk-ink-3">Loading…</p>';
     try {
       // Step 1 — pull first 50 accounts.
@@ -422,6 +430,13 @@ const apiBaseUrl = resolveApiBaseUrl();
     } catch (err) {
       const msg = err && err.message ? err.message : 'network error';
       topResult.innerHTML = `<p class="text-sm text-red-600">Could not load top accounts (${escapeHtml(msg)}).</p>`;
+    } finally {
+      topAccountsLoading = false;
+      if (refreshTopBtn) {
+        refreshTopBtn.disabled = false;
+        refreshTopBtn.setAttribute('aria-busy', 'false');
+        refreshTopBtn.textContent = 'Refresh';
+      }
     }
   }
 
@@ -470,8 +485,10 @@ const apiBaseUrl = resolveApiBaseUrl();
   }
 
   if (accountForm) {
+    let accountQueryLoading = false;
     accountForm.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (accountQueryLoading) return;
       const fd = new FormData(accountForm);
       const rawInput = String(fd.get('account_id') ?? '').trim();
       // Strip the public 'acc_' prefix if present — the cost endpoint
@@ -480,6 +497,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       const accountId = rawInput.startsWith('acc_') ? rawInput.slice(4) : rawInput;
       const billingCycle = String(fd.get('billing_cycle') ?? '').trim();
       if (!accountId) return;
+      accountQueryLoading = true;
+      accountForm.setAttribute('aria-busy', 'true');
+      if (accountSubmitBtn) {
+        accountSubmitBtn.disabled = true;
+        accountSubmitBtn.textContent = 'Querying…';
+      }
       try {
         const qs = billingCycle ? `?billing_cycle=${encodeURIComponent(billingCycle)}` : '';
         const res = await authedFetch(
@@ -522,6 +545,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       } catch (err) {
         const msg = err && err.message ? err.message : 'network error';
         showBanner('Could not load account cost (' + msg + ').');
+      } finally {
+        accountQueryLoading = false;
+        accountForm.setAttribute('aria-busy', 'false');
+        if (accountSubmitBtn) {
+          accountSubmitBtn.disabled = false;
+          accountSubmitBtn.textContent = 'Query';
+        }
       }
     });
   }

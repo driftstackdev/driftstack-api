@@ -29,7 +29,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   adminToken?: string;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -298,5 +298,73 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(top).toContain('$21.00');
     expect(top).toContain('$15.50');
     expect(top).toContain('$50.00');
+  });
+
+  it('top-accounts refresh is single-flight and exposes honest progress', async () => {
+    let releaseAccounts: (() => void) | undefined;
+    const accountsGate = new Promise<void>((resolve) => {
+      releaseAccounts = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: async (call) => {
+        if (/\/v1\/admin\/accounts\?/.test(call.url)) {
+          await accountsGate;
+          return json({ data: [] });
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const btn = window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement;
+    btn.click();
+    btn.click();
+    await flush(2);
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.textContent?.trim()).toBe('Refreshing…');
+    expect(fetchCalls.filter((call) => /\/v1\/admin\/accounts\?/.test(call.url))).toHaveLength(1);
+    releaseAccounts?.();
+    await flush();
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+    expect(btn.textContent?.trim()).toBe('Refresh');
+  });
+
+  it('account lookup is single-flight and exposes honest progress', async () => {
+    let releaseQuery: (() => void) | undefined;
+    const queryGate = new Promise<void>((resolve) => {
+      releaseQuery = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: async (call) => {
+        if (/\/v1\/admin\/cost\/accounts\/test123/.test(call.url)) {
+          await queryGate;
+          return json({ breakdown: {}, thresholds: {} });
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_test123';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(2);
+    const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(form.getAttribute('aria-busy')).toBe('true');
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent?.trim()).toBe('Querying…');
+    expect(
+      fetchCalls.filter((call) => /\/v1\/admin\/cost\/accounts\/test123/.test(call.url)),
+    ).toHaveLength(1);
+    releaseQuery?.();
+    await flush();
+    expect(form.getAttribute('aria-busy')).toBe('false');
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent?.trim()).toBe('Query');
   });
 });

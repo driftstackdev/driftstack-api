@@ -175,6 +175,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     const tbody = document.getElementById('queue-tbody');
     const errorBanner = document.getElementById('error-banner');
     const statusLine = document.getElementById('status-line');
+    const refreshBtn = document.getElementById('refresh-btn');
     const statSpans = Object.fromEntries(
       Array.from(document.querySelectorAll('[data-stat]')).map((el) => [
         el.getAttribute('data-stat'),
@@ -187,7 +188,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       pageUrl: document.getElementById('filter-page-url'),
       failuresOnly: document.getElementById('filter-failures-only'),
     };
-    document.getElementById('refresh-btn').addEventListener('click', () => fetchQueue());
+    let manualRefreshLoading = false;
+    refreshBtn.addEventListener('click', () => fetchQueue(true));
     Object.values(filters).forEach((el) => el.addEventListener('change', () => fetchQueue()));
     filters.customer.addEventListener('input', debounce(() => fetchQueue(), 400));
     filters.pageUrl.addEventListener('input', debounce(() => fetchQueue(), 400));
@@ -239,7 +241,14 @@ const apiBaseUrl = resolveApiBaseUrl();
     // it only writes to the DOM if it's still the most-recently-started call.
     let inFlight = 0;
 
-    async function fetchQueue() {
+    async function fetchQueue(manual = false) {
+      if (manual && manualRefreshLoading) return;
+      if (manual) {
+        manualRefreshLoading = true;
+        refreshBtn.disabled = true;
+        refreshBtn.setAttribute('aria-busy', 'true');
+        refreshBtn.textContent = 'Refreshing…';
+      }
       const myReq = ++inFlight;
       const params = new URLSearchParams();
       if (filters.status.value) params.set('status', filters.status.value);
@@ -285,6 +294,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">Could not load the queue.</td></tr>';
         showError('Fetch failed: ' + (err.message || String(err)));
       } finally {
+        if (manual) {
+          manualRefreshLoading = false;
+          refreshBtn.disabled = false;
+          refreshBtn.setAttribute('aria-busy', 'false');
+          refreshBtn.textContent = 'Refresh now';
+        }
         // 2026-05-21 — AdminLayout opacity-gate signal.
         if (typeof window.dashboardHydrated === 'function') {
           window.dashboardHydrated();
