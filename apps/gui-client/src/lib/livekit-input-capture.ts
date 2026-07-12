@@ -64,6 +64,9 @@ export interface UseInputCaptureOpts {
    *  effectively dead, so control isn't reaching the device. The parent wires
    *  this to a small non-fatal badge. Fired at most once per effect run. */
   onPublishError?: () => void;
+  /** Temporary reliable-channel backpressure state. Fresh input is intentionally
+   * paused until LiveKit reports the ordered buffer low again. */
+  onCongestionChange?: (congested: boolean) => void;
   /** The live captured-frame logical device-CSS-px dims the Mac touch injector
    *  addresses (per-archetype, A3 84de32ad4d). The parent computes this from the
    *  <video> element's FIRST full-res natural size ÷ dpr (= screen_width ×
@@ -405,6 +408,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   useEffect(() => {
     onPublishErrorRef.current = opts.onPublishError;
   }, [opts.onPublishError]);
+  const onCongestionChangeRef = useRef(opts.onCongestionChange);
+  useEffect(() => {
+    onCongestionChangeRef.current = opts.onCongestionChange;
+  }, [opts.onCongestionChange]);
 
   // Destructure to PRIMITIVES so the effect depends on the actual room / element
   // / enabled VALUES, not the opts OBJECT. A caller passing an inline
@@ -426,6 +433,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   const logicalH = opts.logical?.height ?? DEVICE_LOGICAL_HEIGHT;
   useEffect(() => {
     if (!enabled || room === null || video === null) return;
+    onCongestionChangeRef.current?.(false);
     // The captured-frame logical frame the injector addresses (per-archetype). Used
     // for the pointer mapping AND the scroll/glide clamps so both adapt together.
     const logical = { width: logicalW, height: logicalH };
@@ -457,6 +465,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (kind !== 0) return;
       reliableCongested = !isLow;
       setReliableInputCongested(room, reliableCongested);
+      onCongestionChangeRef.current?.(reliableCongested);
       if (!reliableCongested) return;
 
       // Stop any gesture already in progress as soon as congestion is reported. A
@@ -1103,6 +1112,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         );
       }
       setReliableInputCongested(room, false);
+      onCongestionChangeRef.current?.(false);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', finishGesture);
       window.removeEventListener('pointerup', finishGesture);

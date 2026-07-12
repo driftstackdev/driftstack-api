@@ -62,12 +62,15 @@ function makeRoom(): {
   return { room, state, fireDC: (isLow, kind) => handler?.(isLow, kind) };
 }
 
-function mount(room: Room): { video: HTMLVideoElement; unmount: () => void } {
+function mount(
+  room: Room,
+  onCongestionChange?: (congested: boolean) => void,
+): { video: HTMLVideoElement; unmount: () => void } {
   const video = document.createElement('video');
   document.body.appendChild(video);
   stubVideo(video);
   function Wired(): JSX.Element {
-    useInputCapture({ room, videoElement: video, enabled: true });
+    useInputCapture({ room, videoElement: video, enabled: true, onCongestionChange });
     return <span />;
   }
   const { unmount } = render(<Wired />);
@@ -109,6 +112,21 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     mount(room);
     expect(state.on).toBe(1);
     expect(state.hasHandler).toBe(true);
+  });
+
+  it('surfaces congestion transitions and clears the state during teardown', () => {
+    const { room, fireDC } = makeRoom();
+    const onCongestionChange = vi.fn();
+    const { unmount } = mount(room, onCongestionChange);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    fireDC(false, 0);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+    fireDC(true, 0);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    fireDC(false, 1);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    unmount();
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
   });
 
   it('baseline: with the channel healthy (no congestion event), a scroll emits touch events', () => {

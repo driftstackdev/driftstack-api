@@ -62,6 +62,7 @@ const fakeRoom = {
 // demand (the real panel only surfaces these after a live connect).
 const panelCbs: {
   onPublishError?: () => void;
+  onInputCongestionChange?: (congested: boolean) => void;
   onRoom?: (room: unknown) => void;
   onStateChange?: (s: { kind: string }) => void;
   onPublisher?: (p: string) => void;
@@ -69,11 +70,13 @@ const panelCbs: {
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
     onPublishError?: () => void;
+    onInputCongestionChange?: (congested: boolean) => void;
     onRoom?: (room: unknown) => void;
     onStateChange?: (s: { kind: string }) => void;
     onPublisher?: (p: string) => void;
   }) => {
     panelCbs.onPublishError = props.onPublishError;
+    panelCbs.onInputCongestionChange = props.onInputCongestionChange;
     panelCbs.onRoom = props.onRoom;
     panelCbs.onStateChange = props.onStateChange;
     panelCbs.onPublisher = props.onPublisher;
@@ -123,6 +126,21 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
     // A fresh/reconnected room clears it (the latch is gone).
     act(() => panelCbs.onRoom?.(fakeRoom));
     expect(container.querySelector('[data-component="control-unreachable-badge"]')).toBeNull();
+  });
+});
+
+describe('SimulatorWindow — temporary input congestion feedback', () => {
+  it('shows a calm catching-up badge during congestion and clears it on drain', () => {
+    const { container } = renderSim();
+    expect(container.querySelector('[data-component="input-congestion-badge"]')).toBeNull();
+
+    act(() => panelCbs.onInputCongestionChange?.(true));
+    const badge = container.querySelector('[data-component="input-congestion-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge).toHaveTextContent('Connection catching up — input paused briefly');
+
+    act(() => panelCbs.onInputCongestionChange?.(false));
+    expect(container.querySelector('[data-component="input-congestion-badge"]')).toBeNull();
   });
 });
 

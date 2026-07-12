@@ -74,6 +74,8 @@ export interface AgentSessionPanelProps {
    *  control data channel is effectively dead, so taps/keys aren't reaching the
    *  device. The simulator surfaces this as a small non-fatal badge. */
   onPublishError?: () => void;
+  /** Fired when reliable input temporarily enters/leaves backpressure. */
+  onInputCongestionChange?: (congested: boolean) => void;
   /** Legacy no-op (kept for prop-plumbing compatibility). It USED to mask the freed
    *  iOS-Safari chrome bands (a ~110px bottom + ~50px top band the old fork baked
    *  into the capture when it hid the URL bar but kept the 714px web-view inside an
@@ -253,6 +255,7 @@ export function AgentSessionPanel({
   onRoom,
   onVideoEl,
   onPublishError,
+  onInputCongestionChange,
   // Legacy no-op — the content-only fork (A3 84de32ad4d) emits NO chrome bands, so
   // the old bezel-black masks are gone (they covered real content otherwise). The
   // prop is destructured (default off) only to keep the call-site shape stable.
@@ -324,6 +327,7 @@ export function AgentSessionPanel({
     videoElement: videoEl,
     enabled: interactive,
     onPublishError,
+    onCongestionChange: onInputCongestionChange,
     // Per-archetype captured-frame logical dims so the tap/scroll mapping matches the
     // dispatched device's content-only frame (A3 84de32ad4d); undefined → 402×874.
     logical: inputLogical,

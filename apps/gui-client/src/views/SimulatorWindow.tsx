@@ -2803,6 +2803,10 @@ export function SimulatorWindow(): JSX.Element {
   // (the LiveKit data channel is effectively dead, so taps/keys aren't reaching
   // the device). Surfaced as a small badge rather than blocking the view.
   const [controlUnreachable, setControlUnreachable] = useState(false);
+  // Temporary ordered-channel backpressure. Fresh input is deliberately paused
+  // during this window so it cannot replay late against another page; unlike
+  // controlUnreachable this self-clears on buffer drain and needs no reconnect.
+  const [inputCongested, setInputCongested] = useState(false);
   const latencyStoreRef = useRef<LiveLatencyStore | null>(null);
   if (latencyStoreRef.current === null) latencyStoreRef.current = createLiveLatencyStore();
   const latencyStore = latencyStoreRef.current;
@@ -6506,6 +6510,16 @@ export function SimulatorWindow(): JSX.Element {
                       </button>
                     </div>
                   )}
+                  {inputCongested && !controlUnreachable && (
+                    <div
+                      role="status"
+                      data-component="input-congestion-badge"
+                      className="pointer-events-auto flex items-center gap-2 rounded-full bg-amber-400/90 px-3 py-1 text-[10px] font-medium text-black shadow"
+                    >
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-black/60" />
+                      <span>Connection catching up — input paused briefly</span>
+                    </div>
+                  )}
                   {/* #135 — SOFT load-stall advisory (A3 box 5eeaf794a: a main-frame
                       nav that hasn't finished in ~40s). NON-blocking — the page is still
                       trying, so a gentle banner with a Retry, NOT the full-screen
@@ -6702,6 +6716,7 @@ export function SimulatorWindow(): JSX.Element {
                     onStateChange={(s) => setConnState(s.kind)}
                     onPublisher={setPublisherState}
                     onPublishError={() => setControlUnreachable(true)}
+                    onInputCongestionChange={setInputCongested}
                     onVideoEl={(el) => {
                       videoElRef.current = el;
                       if (el !== null) armFpsCounter(el);
