@@ -74,6 +74,41 @@ describe('AI-B2 StubAgentExecutor', () => {
     expect(first.summary).toMatch(/https:\/\/example\.com/);
   });
 
+  it('never copies typed values into stub summaries or persisted transcript text', async () => {
+    const exec = new StubAgentExecutor();
+    const result = await exec.execute({
+      sessionId: 'ses_secret',
+      plan: {
+        kind: 'plan',
+        intents: [
+          {
+            kind: 'interact',
+            action: 'type',
+            selector: '#password',
+            value: 'correct horse battery staple',
+            sensitive: true,
+          },
+          {
+            kind: 'interact',
+            action: 'type',
+            selector: '#display-name',
+            value: 'ordinary text is value-blind too',
+            sensitive: false,
+          },
+        ],
+        tokensConsumed: 0,
+      },
+    });
+
+    expect(result.results.map((item) => (item.kind === 'success' ? item.summary : ''))).toEqual([
+      'stub type on #password',
+      'stub type on #display-name',
+    ]);
+    const entry = runResultToTranscriptEntry(result, '2026-05-16T00:00:00Z');
+    expect(entry.body).not.toContain('correct horse battery staple');
+    expect(entry.body).not.toContain('ordinary text is value-blind too');
+  });
+
   it('does NOT throw — failures surface as IntentResult discriminants (stub is all-success; this test asserts the contract via resolve)', async () => {
     const exec = new StubAgentExecutor();
     await expect(

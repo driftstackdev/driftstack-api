@@ -446,6 +446,14 @@ function stubSummary(intent: AgentIntent): string {
     case 'navigate':
       return `stub navigate → ${intent.url} (returns 200; no real fetch)`;
     case 'interact':
+      // Typed text can be a password, OTP, card value, or other secret. The
+      // stub is a production-capable no-fleet fallback and its summary is
+      // persisted into the transcript, so never copy the value even when the
+      // caller forgot/misclassified `sensitive`. Selector-only matches the real
+      // executors' value-blind "typed into <selector>" summaries.
+      if (intent.action === 'type') {
+        return `stub type${intent.selector ? ' on ' + intent.selector : ''}`;
+      }
       return `stub ${intent.action}${intent.selector ? ' on ' + intent.selector : ''}${intent.value !== undefined ? ' with value ' + intent.value : ''}`;
     case 'wait':
       return `stub wait ${intent.condition}${intent.selector ? ' on ' + intent.selector : ''}${intent.timeoutMs !== undefined ? ' (' + intent.timeoutMs + 'ms)' : ''}`;

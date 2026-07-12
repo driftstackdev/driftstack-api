@@ -95,6 +95,10 @@ describe('services/agent-executor content parity', () => {
       /case 'navigate':\s*\n?\s*return `stub navigate → \$\{intent\.url\} \(returns 200; no real fetch\)`;/,
     );
     expect(body).toMatch(/case 'interact':/);
+    expect(body).toMatch(/if \(intent\.action === 'type'\) \{/);
+    expect(body).toMatch(
+      /return `stub type\$\{intent\.selector \? ' on ' \+ intent\.selector : ''\}`;/,
+    );
     expect(body).toMatch(/case 'wait':/);
     expect(body).toMatch(/case 'capture':\s*\n?\s*return `stub captured \$\{intent\.capture\}`;/);
   });
