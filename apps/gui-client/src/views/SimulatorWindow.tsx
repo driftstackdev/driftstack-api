@@ -29,19 +29,14 @@ import {
 } from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { useConnectionStats, useTransportTelemetry } from '../lib/livekit-connection-stats';
-import {
-  useRecordings,
-  formatDuration,
-  recordingDurationMs,
-  recordingTotalBytes,
-  type Recording,
-} from '../lib/recordings';
+import { useRecordings, type Recording } from '../lib/recordings';
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { exportCookies } from '../lib/cookie-export';
 import { parseCookies } from '../lib/cookie-import';
 import { startSimulatorCrashMarker } from '../lib/simulator-crash-marker';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { IOSKeyboard } from '../components/IOSKeyboard';
+import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
@@ -513,13 +508,6 @@ function wsHost(wsUrl: string): string {
   } catch {
     return wsUrl.length > 0 ? wsUrl : 'not connected';
   }
-}
-
-/** Compact human-readable byte size for the Recording pane (KB up to ~1 MB,
- *  then MB with one decimal) — mirrors RecordingsView's `… MB` formatting. */
-function formatRecBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${Math.max(0, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /** A glanceable file-type glyph + accent color for the Files / Downloads cards
@@ -2691,15 +2679,6 @@ export function SimulatorWindow(): JSX.Element {
       if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
     };
   }, []);
-  // SLICE 3 — drive the Recording pane's live elapsed readout. The capture loop
-  // re-renders via addFrame each second, but only when a frame is actually
-  // grabbed (videoWidth>0). Tick a clock independently while recording so the
-  // elapsed time advances even before/while the stream warms up. The interval
-  // and its 1Hz re-render are gated on the Recording pane being OPEN (the
-  // elapsed readout only renders inside activePane==='recording') so an
-  // off-screen REC counter doesn't re-render the whole monolith every second —
-  // the gated effect is declared below, after activePane / recordingPaneActive.
-  const [recNow, setRecNow] = useState<number>(() => Date.now());
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
@@ -3167,22 +3146,6 @@ export function SimulatorWindow(): JSX.Element {
   // keeps the effect from re-arming when an UNRELATED pane switch happens.
   const cookiesPaneActive = activePane === 'cookies';
   const downloadsPaneActive = activePane === 'downloads';
-  const recordingPaneActive = activePane === 'recording';
-
-  // SLICE 3 (perf) — the live elapsed clock ticks (and forces a 1Hz re-render of
-  // this ~7000-line window) ONLY while a recording is active AND its pane is on
-  // screen. The elapsedMs readout renders exclusively inside activePane===
-  // 'recording', so a background REC counter has nothing to update — gating both
-  // conditions keeps the monolith from re-rendering every second behind a closed
-  // pane. On entering the pane (or starting a recording) recNow is reset to
-  // now() so the readout isn't stale from before the interval was armed. Placed
-  // here (after activePane) to avoid a TDZ on recordingPaneActive.
-  useEffect(() => {
-    if (recordingId === null || !recordingPaneActive) return;
-    setRecNow(Date.now());
-    const t = window.setInterval(() => setRecNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [recordingId, recordingPaneActive]);
 
   // Browser mode (founder 2026-06-21, greenlit) — a native GUI URL bar in the
   // toolbar instead of relying on the rendered iOS-Safari chrome (which the page
@@ -7493,162 +7456,17 @@ export function SimulatorWindow(): JSX.Element {
                       here: playback lives in the dedicated RecordingsView gallery
                       (with its frame player); the slim drawer has no player host and
                       this slice does not invent one. */}
-                    {activePane === 'recording' &&
-                      (() => {
-                        const activeRec =
-                          recordingId !== null ? (recordings.get(recordingId) ?? null) : null;
-                        const isRec = activeRec !== null;
-                        // Saved list = every recording that is not the live one,
-                        // newest first (mirrors the demo's "Saved recordings · N").
-                        const saved = Array.from(recordings.values())
-                          .filter((r) => r.id !== recordingId)
-                          .sort((a, b) => b.startedAt - a.startedAt);
-                        // `recNow` keeps the elapsed readout ticking each second while
-                        // recording (read here so React tracks the dependency).
-                        const elapsedMs = isRec
-                          ? Math.max(recordingDurationMs(activeRec), recNow - activeRec.startedAt)
-                          : 0;
-                        const liveFrames = activeRec?.frames.length ?? 0;
-                        const liveBytes = activeRec !== null ? recordingTotalBytes(activeRec) : 0;
-                        return (
-                          <section
-                            data-component="drawer-recording"
-                            className="space-y-2.5 text-[11px] text-white/80"
-                          >
-                            <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
-                              <span>Recording</span>
-                              {isRec && (
-                                <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-red-400">
-                                  <span
-                                    aria-hidden="true"
-                                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.6)]"
-                                  />
-                                  REC {formatDuration(elapsedMs)}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Record control */}
-                            <div
-                              className={`rounded-lg border p-3 ${
-                                isRec
-                                  ? 'border-red-500/30 bg-red-500/[0.06]'
-                                  : 'border-white/[0.10] bg-black/20'
-                              }`}
-                            >
-                              <button
-                                type="button"
-                                aria-label={isRec ? 'Stop recording' : 'Start recording'}
-                                title={
-                                  isRec
-                                    ? 'Stop and save the recording'
-                                    : 'Capture the live session as frames you can replay or export'
-                                }
-                                disabled={sessionId === ''}
-                                onClick={toggleRecord}
-                                className={`flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                                  isRec
-                                    ? 'bg-red-500/20 text-red-200 hover:bg-red-500/30'
-                                    : 'bg-white/5 text-white/90 hover:bg-white/10'
-                                }`}
-                              >
-                                <span
-                                  aria-hidden="true"
-                                  className={
-                                    isRec
-                                      ? 'h-2.5 w-2.5 rounded-[2px] bg-red-400'
-                                      : 'h-2.5 w-2.5 rounded-full bg-red-500'
-                                  }
-                                />
-                                {isRec ? 'Stop recording' : 'Start recording'}
-                              </button>
-                              <div
-                                className={`mt-2 text-center text-[10px] ${
-                                  isRec ? 'text-red-200/80' : 'text-white/40'
-                                }`}
-                              >
-                                {isRec
-                                  ? `${formatDuration(elapsedMs)} · ${liveFrames.toLocaleString()} frames · ${formatRecBytes(liveBytes)} · capturing…`
-                                  : 'Capture the live session as frames you can replay or export'}
-                              </div>
-                            </div>
-
-                            {/* Saved recordings */}
-                            <div className="mt-3 px-0.5 text-[10px] uppercase tracking-[0.04em] text-white/40">
-                              Saved recordings
-                              {saved.length > 0 && <span> · {saved.length}</span>}
-                            </div>
-                            {saved.length === 0 ? (
-                              <div className="py-6 text-center text-[11px] text-white/40">
-                                No recordings yet.
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {saved.map((r) => {
-                                  const frames = r.frameCount > 0 ? r.frameCount : r.frames.length;
-                                  return (
-                                    <div
-                                      key={r.id}
-                                      data-component="sim-recording-row"
-                                      className="flex items-center gap-2.5 rounded-lg border border-white/[0.10] bg-black/20 px-2.5 py-2"
-                                    >
-                                      <span
-                                        aria-hidden="true"
-                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-inset text-ink-secondary"
-                                      >
-                                        <svg
-                                          width="13"
-                                          height="13"
-                                          viewBox="0 0 24 24"
-                                          fill="currentColor"
-                                        >
-                                          <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                      </span>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="truncate text-[11.5px] font-semibold text-white">
-                                          {r.label ?? 'Session recording'}
-                                        </div>
-                                        <div className="truncate text-[10px] text-white/40">
-                                          {formatDuration(recordingDurationMs(r))} ·{' '}
-                                          {frames.toLocaleString()} frames ·{' '}
-                                          {formatRecBytes(recordingTotalBytes(r))}
-                                        </div>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        aria-label={`Export ${r.label ?? 'recording'}`}
-                                        title="Export this recording as JSON"
-                                        onClick={() => exportRecording(r)}
-                                        className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-white/80 transition-colors hover:bg-white/10"
-                                      >
-                                        ⬇
-                                      </button>
-                                      <button
-                                        type="button"
-                                        aria-label={`Delete ${r.label ?? 'recording'}`}
-                                        title={
-                                          confirmingDeleteRecId === r.id
-                                            ? 'Click again to permanently delete'
-                                            : 'Delete this recording'
-                                        }
-                                        onClick={() => onDeleteRecording(r.id)}
-                                        className={`shrink-0 rounded border px-2 py-0.5 text-[11px] transition-colors ${
-                                          confirmingDeleteRecId === r.id
-                                            ? 'border-red-400/70 bg-red-500/30 text-red-200'
-                                            : 'border-white/15 bg-white/5 text-white/60 hover:bg-red-500/20 hover:text-red-300'
-                                        }`}
-                                      >
-                                        {confirmingDeleteRecId === r.id ? 'Delete?' : '×'}
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </section>
-                        );
-                      })()}
+                    {activePane === 'recording' && (
+                      <SimulatorRecordingPane
+                        recordings={recordings}
+                        recordingId={recordingId}
+                        sessionAvailable={sessionId !== ''}
+                        confirmingDeleteId={confirmingDeleteRecId}
+                        onToggleRecording={toggleRecord}
+                        onExport={exportRecording}
+                        onDelete={onDeleteRecording}
+                      />
+                    )}
                   </div>
                 </div>
               )}
