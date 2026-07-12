@@ -50,6 +50,19 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
   });
 
+  it('password login has a real single-flight lease and bounded network deadline', () => {
+    expect(body).toMatch(/const LOGIN_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/let loginInFlight = false/);
+    expect(body).toMatch(/if \(loginInFlight\) return/);
+    expect(body).toMatch(/loginInFlight = true/);
+    expect(body).toMatch(/const controller = new AbortController\(\)/);
+    expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), LOGIN_REQUEST_TIMEOUT_MS\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\)/);
+    expect(body).toMatch(/loginInFlight = false/);
+    expect(body).toMatch(/Sign-in took too long/);
+  });
+
   it('V-353d/W528 MFA-required branch opens the challenge form (no dead-end banner, no silent redirect-loop)', () => {
     expect(body).toMatch(/V-353d/);
     expect(body).toMatch(/body\.mfa_required === true/);

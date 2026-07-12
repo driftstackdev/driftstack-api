@@ -30,7 +30,8 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   url?: string;
-  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+  requestTimeoutImmediately?: boolean;
+  fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
 function setUpDom(
@@ -72,6 +73,18 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  if (opts.requestTimeoutImmediately) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 15_000) {
+        window.queueMicrotask(() => {
+          if (typeof handler === 'function') handler(...args);
+        });
+        return 42;
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+  }
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="login"'));
   if (!pageScript) throw new Error('login inline script not found');
@@ -178,6 +191,34 @@ describe('login page — local integration', () => {
     expect(bannerHidden(window)).toBe(false);
     expect(bannerText(window)).toMatch(/Invalid email or password\./);
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+  });
+
+  it('serializes duplicate password submits and recovers after the bounded request times out', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      requestTimeoutImmediately: true,
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'alice@example.com', 'secret-password');
+    submitLogin(window, 'alice@example.com', 'secret-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    const submitBtn = window.document.querySelector(
+      '[data-form="login"] button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.getAttribute('aria-busy')).toBe('false');
+    expect(submitBtn.textContent).toBe('Sign in');
+    expect(bannerText(window)).toMatch(/sign-in took too long.*check your connection/i);
   });
 
   it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start', async () => {
