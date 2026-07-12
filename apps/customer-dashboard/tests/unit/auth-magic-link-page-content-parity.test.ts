@@ -63,6 +63,15 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/showFallbackForm\(null\);/);
   });
 
+  it('URL auto-consume and fallback form share one accessible request lease', () => {
+    expect(body).toMatch(/let consumeInFlight = false;/);
+    expect(body).toMatch(/if \(consumeInFlight\) return Promise\.resolve\(false\);/);
+    expect(body).toMatch(/consumeInFlight = true;/);
+    expect(body).toMatch(/form\.setAttribute\('aria-busy', busy \? 'true' : 'false'\)/);
+    expect(body).toMatch(/consumeSubmit\.textContent = busy \? 'Signing in…' : consumeSubmitText/);
+    expect(body).toMatch(/\.finally\(\(\) => \{\s*consumeInFlight = false;/);
+  });
+
   it('autocomplete="one-time-code" on token input (a11y + mobile OTP)', () => {
     expect(body).toMatch(/<input[^>]*id="magic-link-token"[\s\S]*?autocomplete="one-time-code"/);
     expect(body).toMatch(/<input[^>]*id="magic-link-token"[\s\S]*?required/);

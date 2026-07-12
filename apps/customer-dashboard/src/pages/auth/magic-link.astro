@@ -89,11 +89,26 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (prefill && tokenInput) tokenInput.value = prefill;
       }
 
+      const consumeSubmit = form ? form.querySelector('button[type="submit"]') : null;
+      const consumeSubmitText = consumeSubmit ? consumeSubmit.textContent : '';
+      let consumeInFlight = false;
+      function setConsumeBusy(busy) {
+        if (form) form.setAttribute('aria-busy', busy ? 'true' : 'false');
+        if (tokenInput) tokenInput.disabled = busy;
+        if (consumeSubmit) {
+          consumeSubmit.disabled = busy;
+          consumeSubmit.textContent = busy ? 'Signing in…' : consumeSubmitText;
+        }
+      }
+
       function submitToken(token) {
+        if (consumeInFlight) return Promise.resolve(false);
+        consumeInFlight = true;
+        setConsumeBusy(true);
         banner.classList.add('hidden');
         if (intro) intro.textContent = 'Signing you in…';
 
-        fetch(apiBaseUrl + '/v1/auth/magic-link/consume', {
+        return fetch(apiBaseUrl + '/v1/auth/magic-link/consume', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ token: token }),
@@ -140,6 +155,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             showFallbackForm(token);
             showBanner(err && err.message ? err.message : 'Magic-link sign-in failed.');
+          })
+          .finally(() => {
+            consumeInFlight = false;
+            setConsumeBusy(false);
           });
       }
 
