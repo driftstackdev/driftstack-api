@@ -18,6 +18,10 @@ export const TouchCursorOverlay = forwardRef<TouchCursorOverlayHandle>(
         show: (x, y) => {
           const cursor = cursorRef.current;
           if (cursor === null) return;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            cursor.hidden = true;
+            return;
+          }
           cursor.style.left = `${x}px`;
           cursor.style.top = `${y}px`;
           cursor.hidden = false;

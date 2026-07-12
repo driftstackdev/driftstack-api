@@ -409,7 +409,12 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(cursor.hidden).toBe(true);
     (host as HTMLElement).getBoundingClientRect = () =>
       ({ left: 0, top: 0, width: 300, height: 600 }) as DOMRect;
-    fireEvent.pointerMove(host as Element, { clientX: 120, clientY: 240 });
+    const pointerMove = new Event('pointermove', { bubbles: true });
+    Object.defineProperties(pointerMove, {
+      clientX: { value: 120 },
+      clientY: { value: 240 },
+    });
+    fireEvent(host as Element, pointerMove);
     const dot = container.querySelector('[data-component="touch-cursor"]') as HTMLElement;
     expect(dot.hidden).toBe(false);
     expect(dot.className).toContain('pointer-events-none');

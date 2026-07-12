@@ -33,6 +33,14 @@ describe('TouchCursorOverlay', () => {
     expect(cursor.style.top).toBe('240px');
     expect(parentRenders).toBe(1);
 
+    act(() => cursorRef.current?.show(Number.NaN, 280));
+    expect(cursor.hidden).toBe(true);
+    expect(cursor.style.left).not.toContain('NaN');
+    expect(parentRenders).toBe(1);
+
+    act(() => cursorRef.current?.show(140, 280));
+    expect(cursor.hidden).toBe(false);
+
     act(() => cursorRef.current?.setPressed(true));
     expect(cursor.classList.contains('ds-touch-dot--pressed')).toBe(true);
     expect(parentRenders).toBe(1);
