@@ -109,7 +109,11 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
     expect(body).toMatch(
       /\{addr !== null && \(\s*\n?\s*<div className="flex items-center gap-2">\s*\n?\s*<span className="text-ink-secondary">Send to:<\/span>\s*\n?\s*<span className="min-w-0 flex-1 break-all font-mono text-xs">\{addr\}<\/span>/,
     );
-    expect(body).toMatch(/aria-label="Copy payment address"/);
+    expect(body).toMatch(/copyState === 'failed'[\s\S]*?'Retry copying payment address'/);
+    expect(body).toMatch(/aria-busy=\{copyState === 'copying'\}/);
+    expect(body).toMatch(
+      /Couldn’t copy the payment address\. Check clipboard permission and try again\./,
+    );
     expect(body).toMatch(
       /\{order\.provider === 'stub' && \(\s*\n?\s*<div className="text-ink-secondary">\s*\n?\s*Payment provider is in stub mode\. Contact support to receive a real payment\s*\n?\s*address\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
     );

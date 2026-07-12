@@ -66,11 +66,15 @@ describe('W480.A apps/gui-client/src/views/CryptoReceiptView.tsx content parity'
     );
   });
 
-  it("Copy-to-clipboard flow: copied flag + setTimeout 2_000ms reset 'so the user sees the confirmation but the button returns to its default state.' + clipboard.writeText(formatReceiptForClipboard(data)) + silent catch for iframes / locked-down envs ('clipboard write can fail in iframes / locked-down envs; silent')", () => {
-    expect(body).toMatch(/const \[copied, setCopied\] = useState\(false\);/);
+  it('Copy-to-clipboard flow is single-flight, timer-safe, and visibly retryable', () => {
     expect(body).toMatch(
-      /const onCopy = async \(\): Promise<void> => \{\s*\n?\s*try \{\s*\n?\s*await navigator\.clipboard\.writeText\(formatReceiptForClipboard\(data\)\);\s*\n?\s*setCopied\(true\);\s*\n?\s*\/\/ Reset after 2s so the user sees the confirmation but the\s*\n?\s*\/\/ button returns to its default state\.\s*\n?\s*setTimeout\(\(\) => setCopied\(false\), 2_000\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* clipboard write can fail in iframes \/ locked-down envs; silent \*\/\s*\n?\s*\}\s*\n?\s*\};/,
+      /const \[copyState, setCopyState\] = useState<'idle' \| 'copying' \| 'copied' \| 'failed'>\('idle'\);/,
     );
+    expect(body).toMatch(
+      /if \(copyState === 'copying'\) return;\s*\n?\s*setCopyState\('copying'\);[\s\S]*?await navigator\.clipboard\.writeText\(formatReceiptForClipboard\(data\)\);[\s\S]*?setCopyState\('copied'\);[\s\S]*?catch \{\s*\n?\s*setCopyState\('failed'\);/,
+    );
+    expect(body).toMatch(/window\.setTimeout\(\(\) => setCopyState\('idle'\), 2_000\)/);
+    expect(body).toMatch(/Couldn’t copy the receipt\. Check clipboard permission and try again\./);
   });
 
   it("3-button row: 'Download PDF' onClick=>pdf.download(order_id, 'pdf') + 'Download .txt' onClick=>pdf.download(order_id, 'txt') + 'Copy to clipboard'/'Copied' toggle; both download buttons disabled while pdf.state.kind === 'downloading' + label switches to 'Downloading…'", () => {
@@ -80,18 +84,14 @@ describe('W480.A apps/gui-client/src/views/CryptoReceiptView.tsx content parity'
     expect(body).toMatch(
       /onClick=\{\(\) => void pdf\.download\(data\.order_id, 'txt'\)\}\s*\n?\s*disabled=\{pdf\.state\.kind === 'downloading'\}/,
     );
-    expect(body).toMatch(
-      /\{pdf\.state\.kind === 'downloading' \? 'Downloading…' : 'Download PDF'\}/,
-    );
-    expect(body).toMatch(
-      /\{pdf\.state\.kind === 'downloading' \? 'Downloading…' : 'Download \.txt'\}/,
-    );
-    expect(body).toMatch(/\{copied \? 'Copied' : 'Copy to clipboard'\}/);
+    expect(body).toMatch(/\{downloadingPdf \? 'Downloading PDF…' : 'Download PDF'\}/);
+    expect(body).toMatch(/\{downloadingText \? 'Downloading text…' : 'Download \.txt'\}/);
+    expect(body).toMatch(/copyState === 'failed'[\s\S]*?'Retry copy'/);
   });
 
   it("PDF-failure surface: pdf.state.kind === 'failed' → ErrorBanner with `PDF download failed: ${pdf.state.message}` message + onDismiss=>pdf.reset() (retry-on-dismiss); dl rows: Order/Status/Product/Amount(formatCents)/paid_at conditional (formatTimestamp)/payment_id conditional/Issued", () => {
     expect(body).toMatch(
-      /\{pdf\.state\.kind === 'failed' && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{`PDF download failed: \$\{pdf\.state\.message\}`\}\s*\n?\s*onDismiss=\{\(\) => pdf\.reset\(\)\}\s*\n?\s*\/>\s*\n?\s*\)\}/,
+      /\{pdf\.state\.kind === 'failed' && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{`\$\{pdf\.state\.format === 'pdf' \? 'PDF' : 'Text receipt'\} download failed: \$\{pdf\.state\.message\}`\}/,
     );
     expect(body).toMatch(/<dd>\{formatCents\(data\.price_cents, data\.price_currency\)\}<\/dd>/);
     expect(body).toMatch(

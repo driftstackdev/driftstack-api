@@ -54,9 +54,9 @@ describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content par
     );
   });
 
-  it('ReceiptPdfDownloadState 3-variant (idle | downloading | failed{message}); UseReceiptPdfDownloadResult: download(orderId, format?: ReceiptDownloadFormat) => Promise<void> + reset(): void', () => {
+  it('ReceiptPdfDownloadState retains format in active/failure variants', () => {
     expect(body).toMatch(
-      /export type ReceiptPdfDownloadState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'downloading' \}\s*\n?\s*\| \{ kind: 'failed'; message: string \};/,
+      /export type ReceiptPdfDownloadState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'downloading'; format: ReceiptDownloadFormat \}\s*\n?\s*\| \{ kind: 'failed'; format: ReceiptDownloadFormat; message: string \};/,
     );
     expect(body).toMatch(
       /export interface UseReceiptPdfDownloadResult \{\s*\n?\s*state: ReceiptPdfDownloadState;\s*\n?\s*download: \(orderId: string, format\?: ReceiptDownloadFormat\) => Promise<void>;\s*\n?\s*reset: \(\) => void;\s*\n?\s*\}/,
@@ -65,7 +65,7 @@ describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content par
 
   it("download signature: format default 'pdf'; no-apiKey → failed{message:'No API key configured.'}; setState downloading; URL with encodeURIComponent(orderId) + .${format} suffix + accept: FORMAT_ACCEPT[format] (per-format Accept header)", () => {
     expect(body).toMatch(
-      /async \(orderId: string, format: ReceiptDownloadFormat = 'pdf'\): Promise<void> => \{\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'failed', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'downloading' \}\);/,
+      /async \(orderId: string, format: ReceiptDownloadFormat = 'pdf'\): Promise<void> => \{\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'failed', format, message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'downloading', format \}\);/,
     );
     expect(body).toMatch(
       /const res = await fetch\(\s*\n?\s*`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt\.\$\{format\}`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: FORMAT_ACCEPT\[format\],\s*\n?\s*\},\s*\n?\s*\},\s*\n?\s*\);/,
@@ -77,7 +77,7 @@ describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content par
       /const blob = await res\.blob\(\);\s*\n?\s*const objectUrl = URL\.createObjectURL\(blob\);\s*\n?\s*const a = document\.createElement\('a'\);\s*\n?\s*a\.href = objectUrl;\s*\n?\s*a\.download = `receipt-\$\{orderId\}\.\$\{format\}`;\s*\n?\s*a\.style\.display = 'none';\s*\n?\s*document\.body\.appendChild\(a\);\s*\n?\s*a\.click\(\);\s*\n?\s*document\.body\.removeChild\(a\);\s*\n?\s*URL\.revokeObjectURL\(objectUrl\);\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
     );
     expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'failed',\s*\n?\s*message: err instanceof Error \? err\.message : String\(err\),\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /\} catch \(err\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'failed',\s*\n?\s*format,\s*\n?\s*message: err instanceof Error \? err\.message : String\(err\),\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
