@@ -190,6 +190,19 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
+  it('surfaces saved-tab restore before launch without exposing encrypted tab details', () => {
+    const { rerender } = render(
+      <ProfilesTable {...props({ rows: [row({ savedTabsReopen: true, running: false })] })} />,
+    );
+    expect(screen.getByText('↻ Saved tabs reopen')).toBeTruthy();
+
+    rerender(
+      <ProfilesTable {...props({ rows: [row({ savedTabsReopen: true, running: true })] })} />,
+    );
+    expect(screen.queryByText('↻ Saved tabs reopen')).toBeNull();
+    cleanup();
+  });
+
   it('Trim button ("Clear cache, keep logins") fires onTrim without toggling row select', () => {
     const onTrim = vi.fn();
     const onToggleSelect = vi.fn();

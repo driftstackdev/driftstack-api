@@ -29,6 +29,10 @@ export interface ProfilePhoneCardProps {
    *  or "—" when never saved). The parent formats it via fmtBytes so the card
    *  stays purely presentational. */
   sizeLabel?: string;
+  /** Existing save metadata proves this profile has a persisted browser-state
+   *  blob. The exact tab count stays encrypted inside ProfileBlob.openTabs, so
+   *  the card truthfully promises restore without inventing a number. */
+  savedTabsReopen?: boolean;
   folder: string;
   tags: ReadonlyArray<string>;
   /** Free-text note (F3 — now editable in the grid card too, not just the table).
@@ -407,20 +411,32 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             </button>
           ) : null}
 
-          <span className="mt-auto flex items-center justify-center gap-1.5 text-center text-[9.5px] text-ink-muted">
-            {p.lastUsedIso !== null ? (
-              <RelativeTime iso={p.lastUsedIso} tooltipPrefix="Last used" />
-            ) : (
-              'never launched'
-            )}
-            {/* doc-150 item 5 — per-profile sealed-store size. "—" = never saved. */}
-            {p.sizeLabel !== undefined && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span title="Stored profile size (encrypted browser state)">{p.sizeLabel}</span>
-              </>
-            )}
-          </span>
+          <div className="mt-auto flex flex-col items-center gap-1">
+            {p.savedTabsReopen === true && !p.running ? (
+              <span
+                data-component="saved-tabs-reopen"
+                title="This profile's saved tabs reopen when you launch it"
+                className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent-subtle px-2 py-0.5 text-[9.5px] font-medium text-accent"
+              >
+                <span aria-hidden="true">↻</span>
+                Saved tabs reopen
+              </span>
+            ) : null}
+            <span className="flex items-center justify-center gap-1.5 text-center text-[9.5px] text-ink-muted">
+              {p.lastUsedIso !== null ? (
+                <RelativeTime iso={p.lastUsedIso} tooltipPrefix="Last used" />
+              ) : (
+                'never launched'
+              )}
+              {/* doc-150 item 5 — per-profile sealed-store size. "—" = never saved. */}
+              {p.sizeLabel !== undefined && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span title="Stored profile size (encrypted browser state)">{p.sizeLabel}</span>
+                </>
+              )}
+            </span>
+          </div>
         </div>
 
         {/* footer: the Launch dock + a hover action strip that floats ABOVE it

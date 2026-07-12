@@ -43,6 +43,9 @@ export interface ProfileTableRow {
   /** doc-150 item 5 — already-formatted per-profile storage size (e.g. "2.4 MiB"
    *  or "—" when never saved). The parent formats it via fmtBytes. */
   sizeLabel: string;
+  /** True when existing profile save metadata proves saved browser state is
+   *  available. The tab count itself is encrypted and intentionally not guessed. */
+  savedTabsReopen?: boolean;
   createdAtIso: string | null;
   lastUsedIso: string | null;
   selected: boolean;
@@ -227,6 +230,15 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               {r.deviceLabel}
               {r.folder !== '' ? ` · 📁 ${r.folder}` : ''}
             </p>
+            {r.savedTabsReopen === true && !r.running ? (
+              <p
+                data-component="saved-tabs-reopen"
+                title="This profile's saved tabs reopen when you launch it"
+                className="mt-0.5 text-[10px] font-medium text-accent"
+              >
+                ↻ Saved tabs reopen
+              </p>
+            ) : null}
           </div>
         </div>
       </td>

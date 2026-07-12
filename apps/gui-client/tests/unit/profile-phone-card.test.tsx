@@ -219,6 +219,19 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
+  it('tells an idle saved profile that its tabs reopen without inventing a count', () => {
+    const { rerender } = render(
+      <ProfilePhoneCard {...props({ savedTabsReopen: true, running: false })} />,
+    );
+    expect(screen.getByText('Saved tabs reopen')).toBeTruthy();
+    expect(screen.getByText('Saved tabs reopen').getAttribute('title')).toMatch(/launch it/i);
+
+    // Once live, the tabs are already open; the pre-launch promise should disappear.
+    rerender(<ProfilePhoneCard {...props({ savedTabsReopen: true, running: true })} />);
+    expect(screen.queryByText('Saved tabs reopen')).toBeNull();
+    cleanup();
+  });
+
   it('clicking the card toggles selection; Launch + Test do NOT select (stopPropagation)', () => {
     const onToggleSelect = vi.fn();
     const onTest = vi.fn();

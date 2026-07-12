@@ -179,6 +179,9 @@ interface Profile {
   // row + summed into the account-wide storage meter. Mirrors the canonical
   // @driftstack/api-types Profile shape.
   size_bytes: number | null;
+  // Save metadata proves a persisted browser-state blob exists. Optional for
+  // compatibility with older deployments/test fixtures that predate the field.
+  last_saved_at?: string | null;
   // L4b recycle bin — null for live profiles; set for trashed ones (only the
   // GET /v1/profiles/trash response carries a non-null value).
   deleted_at: string | null;
@@ -3215,6 +3218,9 @@ export function ProfilesView({
                           selected={selectedIds.has(profile.id)}
                           lastUsedIso={profile.last_used_at}
                           sizeLabel={fmtBytes(profile.size_bytes)}
+                          savedTabsReopen={
+                            profile.last_saved_at != null || profile.size_bytes !== null
+                          }
                           folder={profilesMeta[profile.id]?.folder ?? ''}
                           tags={profilesMeta[profile.id]?.tags ?? []}
                           note={profilesMeta[profile.id]?.note ?? ''}
@@ -3333,6 +3339,7 @@ export function ProfilesView({
                       tags: profilesMeta[profile.id]?.tags ?? [],
                       note: profilesMeta[profile.id]?.note ?? '',
                       sizeLabel: fmtBytes(profile.size_bytes),
+                      savedTabsReopen: profile.last_saved_at != null || profile.size_bytes !== null,
                       createdAtIso: profile.created_at,
                       lastUsedIso: profile.last_used_at,
                       selected: selectedIds.has(profile.id),
