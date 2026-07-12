@@ -94,6 +94,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).not.toMatch(/if \(!window\.confirm\('Delete secret/);
   });
 
+  it('owner-secret writes are confirm-gated and single-flight without logging the value', () => {
+    expect(body).toMatch(/let secretSetInFlight = false;/);
+    expect(body).toMatch(/if \(secretSetInFlight\) return;/);
+    expect(body).toMatch(/form\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/confirmLabel: 'Save secret'/);
+    expect(body).toMatch(/The value is never written to the audit log/);
+    expect(body).toMatch(/if \(submit\) submit\.textContent = 'Saving…'/);
+    expect(body).toMatch(/secretSetInFlight = false;\s*form\.removeAttribute\('aria-busy'\)/);
+  });
+
   it('tile data-fields map to overview-response keys', () => {
     // The progressive-enhancement script setText()s these three
     // fields from the body.accounts / body.webhooks payload —

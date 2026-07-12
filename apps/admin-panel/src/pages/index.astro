@@ -1023,29 +1023,71 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
       const secretForm = root.querySelector('[data-form="secret-set"]');
+      let secretSetInFlight = false;
+      async function saveSecret(form) {
+        if (secretSetInFlight) return;
+        const status = root.querySelector('[data-field="secret-set-status"]');
+        const fd = new FormData(form);
+        const name = String(fd.get('name') || '');
+        const value = String(fd.get('value') || '');
+        const description = String(fd.get('description') || '');
+        if (!name || !value) return;
+        secretSetInFlight = true;
+        form.setAttribute('aria-busy', 'true');
+        const controls = Array.from(form.elements);
+        const disabledBefore = controls.map((control) => control.disabled);
+        controls.forEach((control) => {
+          control.disabled = true;
+        });
+        const submit = form.querySelector('button[type="submit"]');
+        const idleLabel = submit ? submit.textContent : 'Save secret';
+        if (submit) submit.textContent = 'Confirming…';
+        try {
+          const confirmed = await window.driftstackConfirm(
+            'Store platform secret "' + name + '"? If it already exists, its encrypted value will be replaced. The value is never written to the audit log.',
+            { confirmLabel: 'Save secret' },
+          );
+          if (!confirmed) return;
+          if (submit) submit.textContent = 'Saving…';
+          if (status) {
+            status.textContent = 'saving…';
+            status.className = 'text-[11px] text-tk-ink-3';
+          }
+          const response = await authedFetch(
+            '/v1/admin/owner/secrets/' + encodeURIComponent(name),
+            {
+              method: 'PUT',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ value, description: description || null }),
+            },
+          );
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const body = await response.json();
+          if (status) {
+            status.textContent = body.status === 'created' ? 'created ✓' : 'updated ✓';
+            status.className = 'text-[11px] text-emerald-600';
+          }
+          form.reset();
+          await fetchSecrets();
+        } catch (err) {
+          if (status) {
+            status.textContent =
+              'failed (' + (err && err.message ? err.message : 'error') + ')';
+            status.className = 'text-[11px] text-red-600';
+          }
+        } finally {
+          secretSetInFlight = false;
+          form.removeAttribute('aria-busy');
+          controls.forEach((control, index) => {
+            control.disabled = disabledBefore[index];
+          });
+          if (submit) submit.textContent = idleLabel;
+        }
+      }
       if (secretForm) {
         secretForm.addEventListener('submit', (e) => {
           e.preventDefault();
-          const status = root.querySelector('[data-field="secret-set-status"]');
-          const fd = new FormData(secretForm);
-          const name = String(fd.get('name') || '');
-          const value = String(fd.get('value') || '');
-          const description = String(fd.get('description') || '');
-          if (status) { status.textContent = 'saving…'; status.className = 'text-[11px] text-tk-ink-3'; }
-          void authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name), {
-            method: 'PUT',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ value, description: description || null }),
-          })
-            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-            .then((body) => {
-              if (status) { status.textContent = body.status === 'created' ? 'created ✓' : 'updated ✓'; status.className = 'text-[11px] text-emerald-600'; }
-              secretForm.reset();
-              return fetchSecrets();
-            })
-            .catch((err) => {
-              if (status) { status.textContent = 'failed (' + (err && err.message ? err.message : 'error') + ')'; status.className = 'text-[11px] text-red-600'; }
-            });
+          void saveSecret(secretForm);
         });
       }
       void fetchSecrets().catch(() => {});

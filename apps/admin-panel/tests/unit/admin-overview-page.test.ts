@@ -633,6 +633,61 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-banner]')).toContain('admin scope required');
   });
 
+  it('owner-secret save confirms without exposing the value and is single-flight', async () => {
+    let resolveSave: ((response: Response) => void) | undefined;
+    const confirmCalls: unknown[] = [];
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      confirmCalls,
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({ enabled: true, secrets: [] });
+        }
+        if (/\/v1\/admin\/owner\/secrets\/stripe_key$/.test(call.url) && method === 'PUT') {
+          return new Promise<Response>((resolve) => {
+            resolveSave = resolve;
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="secret-set"]') as HTMLFormElement;
+    const name = form.querySelector('[name="name"]') as HTMLInputElement;
+    const value = form.querySelector('[name="value"]') as HTMLInputElement;
+    const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    name.value = 'stripe_key';
+    value.value = 'sk_secret_must_never_appear';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(1);
+
+    expect(confirmCalls).toEqual([{ confirmLabel: 'Save secret' }]);
+    expect(form.getAttribute('aria-busy')).toBe('true');
+    expect(name.disabled).toBe(true);
+    expect(value.disabled).toBe(true);
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Saving…');
+    const puts = fetchCalls.filter(
+      (call) => call.init?.method === 'PUT' && /\/owner\/secrets\/stripe_key$/.test(call.url),
+    );
+    expect(puts).toHaveLength(1);
+    expect(String(puts[0]?.init?.body)).toContain('sk_secret_must_never_appear');
+
+    resolveSave?.(json({ status: 'created' }));
+    await flush();
+    expect(form.getAttribute('aria-busy')).toBeNull();
+    expect(name.disabled).toBe(false);
+    expect(value.disabled).toBe(false);
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toBe('Save secret');
+  });
+
   it('owner-secret delete is destructive-confirmed, single-flight, and visibly busy', async () => {
     let resolveDelete: ((response: Response) => void) | undefined;
     const confirmCalls: unknown[] = [];
