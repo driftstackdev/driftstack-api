@@ -471,8 +471,10 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
         }
       }
 
+      let postingIncident = false;
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
+        if (postingIncident) return;
         hideErr();
         const token = getToken();
         if (!token) {
@@ -499,7 +501,9 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
           showErr('Title + initial update are required.');
           return;
         }
+        postingIncident = true;
         submit.disabled = true;
+        submit.setAttribute('aria-busy', 'true');
         submit.textContent = 'Posting…';
         fetch(apiBaseUrl + '/v1/admin/incidents', {
           method: 'POST',
@@ -535,7 +539,11 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
           })
           .catch(function (err) {
             showErr(err && err.message ? err.message : 'Failed to post incident.');
+          })
+          .finally(function () {
+            postingIncident = false;
             submit.disabled = false;
+            submit.removeAttribute('aria-busy');
             submit.textContent = 'Post incident';
           });
       });

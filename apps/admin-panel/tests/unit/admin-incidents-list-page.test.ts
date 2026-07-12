@@ -29,7 +29,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -196,5 +196,36 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     expect(fetchCalls.length).toBeGreaterThanOrEqual(2);
     expect(bannerHidden(window)).toBe(true);
     expect(text(window, '[data-incidents-list]')).toContain('Elevated 5xx on /v1/sessions/create');
+  });
+
+  it('single-flights incident creation and exposes accessible busy state', async () => {
+    let finishPost: (response: Response) => void = () => {};
+    const pendingPost = new Promise<Response>((resolve) => {
+      finishPost = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: (call) => (call.init?.method === 'POST' ? pendingPost : json({ data: [] })),
+    });
+    win = window;
+    await flush();
+    const form = window.document.getElementById('new-incident-form') as HTMLFormElement;
+    (form.querySelector('[name="title"]') as HTMLInputElement).value = 'API outage';
+    (form.querySelector('[name="description"]') as HTMLTextAreaElement).value =
+      'Investigating elevated failures.';
+    const submit = window.document.getElementById('submit-btn') as HTMLButtonElement;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(2);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(submit.disabled).toBe(true);
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.textContent).toContain('Posting');
+
+    finishPost(json({ id: 'inc_new' }));
+    await flush();
+    expect(submit.disabled).toBe(false);
+    expect(submit.hasAttribute('aria-busy')).toBe(false);
   });
 });

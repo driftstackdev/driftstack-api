@@ -470,8 +470,10 @@ const isResolved = incident.status === 'resolved';
       function bind(formId, urlSuffix, includeStatus) {
         const form = document.getElementById(formId);
         if (!form) return;
+        let posting = false;
         form.addEventListener('submit', function (ev) {
           ev.preventDefault();
+          if (posting) return;
           const token = getToken();
           if (!token) {
             showBanner('Sign in with a staff admin account before posting.', true);
@@ -485,8 +487,10 @@ const isResolved = incident.status === 'resolved';
             body.status = (fd.get('status') || 'monitoring').toString();
           }
           const submit = form.querySelector('button[type="submit"]');
+          posting = true;
           if (submit) {
             submit.disabled = true;
+            submit.setAttribute('aria-busy', 'true');
             submit.dataset.origText = submit.textContent || '';
             submit.textContent = 'Posting…';
           }
@@ -519,8 +523,12 @@ const isResolved = incident.status === 'resolved';
                 'Post failed: ' + (err && err.message ? err.message : 'network error'),
                 true,
               );
+            })
+            .finally(function () {
+              posting = false;
               if (submit) {
                 submit.disabled = false;
+                submit.removeAttribute('aria-busy');
                 submit.textContent = submit.dataset.origText || 'Submit';
               }
             });

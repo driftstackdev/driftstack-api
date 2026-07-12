@@ -110,6 +110,14 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     expect(body).toMatch(/Sign in with a staff admin account before posting an incident/);
   });
 
+  it('incident creation is synchronous single-flight with accessible busy state', () => {
+    expect(body).toMatch(/let postingIncident = false;/);
+    expect(body).toMatch(/if \(postingIncident\) return;/);
+    expect(body).toMatch(/postingIncident = true;/);
+    expect(body).toMatch(/submit\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/\.finally\(function \(\) \{\s*postingIncident = false;/);
+  });
+
   it('CSS class on `Public on status page` checkbox is `checked` by default (status-page-default-public)', () => {
     // The default posture is PUBLIC, not private — pin so a
     // future "default to private" change forces a discussion
