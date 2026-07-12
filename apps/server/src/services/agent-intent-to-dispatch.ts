@@ -30,6 +30,7 @@ import {
   HARNESS_INTENT_PARAM_SCHEMAS,
   type HarnessIntentName,
 } from '../schemas/harness-control-protocol.js';
+import { selectorImpliesSensitiveInput } from './agent-sensitive-input.js';
 
 export type AgentIntentDispatch =
   | { ok: true; intentName: HarnessIntentName; params: Record<string, unknown> }
@@ -128,13 +129,14 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
         params: { strategy: 'css selector', value: intent.selector },
       };
 
-    case 'type':
+    case 'type': {
       if (intent.selector === undefined || intent.selector.length === 0) {
         return { ok: false, reason: 'interact:type requires a selector' };
       }
       if (intent.value === undefined) {
         return { ok: false, reason: 'interact:type requires a value (the text to type)' };
       }
+      const sensitive = intent.sensitive === true || selectorImpliesSensitiveInput(intent.selector);
       return {
         ok: true,
         intentName: 'send_keys',
@@ -144,9 +146,14 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
           text: intent.value,
           // W1150 (A3 W1149) — forwarded only when set: sensitive fields get
           // no visible typo-corrections harness-side (and are never logged).
-          ...(intent.sensitive === undefined ? {} : { sensitive: intent.sensitive }),
+          ...(sensitive
+            ? { sensitive: true }
+            : intent.sensitive === false
+              ? { sensitive: false }
+              : {}),
         },
       };
+    }
 
     case 'scroll':
       // The current AgentIntent scroll carries no direction/distance, so we

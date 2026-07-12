@@ -148,9 +148,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('send_keys params pinned: strategy + value + text all required (strict)', () => {
+  it('send_keys params pinned: strategy + value + text required, sensitive optional (strict)', () => {
     expect(body).toMatch(
-      /export const SendKeysParamsSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*strategy: z\.string\(\)\.min\(1\),\s*\n?\s*value: z\.string\(\),\s*\n?\s*text: z\.string\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /export const SendKeysParamsSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*strategy: z\.string\(\)\.min\(1\),\s*\n?\s*value: z\.string\(\),\s*\n?\s*text: z\.string\(\),\s*\n?\s*sensitive: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
   });
 
@@ -1214,11 +1214,27 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(ClickParamsSchema.safeParse({ strategy: 'css' }).success).toBe(false);
   });
 
-  it('send_keys requires all three fields', () => {
+  it('send_keys requires locator/text and accepts optional sensitive only', () => {
     expect(
       SendKeysParamsSchema.safeParse({ strategy: 'css', value: '#in', text: 'hi' }).success,
     ).toBe(true);
+    expect(
+      SendKeysParamsSchema.safeParse({
+        strategy: 'css',
+        value: '#password',
+        text: 'secret',
+        sensitive: true,
+      }).success,
+    ).toBe(true);
     expect(SendKeysParamsSchema.safeParse({ strategy: 'css', value: '#in' }).success).toBe(false);
+    expect(
+      SendKeysParamsSchema.safeParse({
+        strategy: 'css',
+        value: '#in',
+        text: 'hi',
+        sensitive: 'true',
+      }).success,
+    ).toBe(false);
   });
 
   it('scroll: all-optional, direction enum + positive distance', () => {

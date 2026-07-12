@@ -74,9 +74,8 @@ describe('W875 InteractAction+WaitCondition cross-source invariant', () => {
     const dispatch = read(
       resolve(REPO_ROOT, 'apps/server/src/services/agent-intent-to-dispatch.ts'),
     );
-    expect(dispatch).toMatch(
-      /\.\.\.\(intent\.sensitive === undefined \? \{\} : \{ sensitive: intent\.sensitive \}\)/,
-    );
+    expect(dispatch).toMatch(/selectorImpliesSensitiveInput\(intent\.selector\)/);
+    expect(dispatch).toMatch(/\? \{ sensitive: true \}/);
     // Python SDK is datamodel-codegen-generated from the dumped spec; the
     // regenerated models must carry the field too (stale-regen guard).
     const py = read(resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/_generated/models.py'));

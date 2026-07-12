@@ -139,12 +139,14 @@ export const ClickParamsSchema = z.union([
   z.object({ strategy: z.string().min(1), value: z.string() }).strict(),
 ]);
 
-// send_keys: all three required (field located by strategy+value, text typed).
+// send_keys: locator + text required; sensitive optionally suppresses typo
+// correction/loggable typing behavior in the harness.
 export const SendKeysParamsSchema = z
   .object({
     strategy: z.string().min(1),
     value: z.string(),
     text: z.string(),
+    sensitive: z.boolean().optional(),
   })
   .strict();
 

@@ -92,6 +92,45 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
     });
   });
 
+  it('forces sensitive=true for obvious secret selectors and preserves ordinary false', () => {
+    expect(
+      agentIntentToDispatch({
+        kind: 'interact',
+        action: 'type',
+        selector: 'input[autocomplete="one-time-code"]',
+        value: '123456',
+        sensitive: false,
+      }),
+    ).toEqual({
+      ok: true,
+      intentName: 'send_keys',
+      params: {
+        strategy: 'css selector',
+        value: 'input[autocomplete="one-time-code"]',
+        text: '123456',
+        sensitive: true,
+      },
+    });
+    expect(
+      agentIntentToDispatch({
+        kind: 'interact',
+        action: 'type',
+        selector: '#display-name',
+        value: 'Ada',
+        sensitive: false,
+      }),
+    ).toEqual({
+      ok: true,
+      intentName: 'send_keys',
+      params: {
+        strategy: 'css selector',
+        value: '#display-name',
+        text: 'Ada',
+        sensitive: false,
+      },
+    });
+  });
+
   it('interact:scroll → bare scroll {} (harness applies persona defaults)', () => {
     const r = agentIntentToDispatch({ kind: 'interact', action: 'scroll' });
     expect(r).toEqual({ ok: true, intentName: 'scroll', params: {} });

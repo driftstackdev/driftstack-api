@@ -34,6 +34,7 @@ import type {
   DecomposeResult,
   DecomposeUsage,
 } from './agent-decomposer.js';
+import { selectorImpliesSensitiveInput } from './agent-sensitive-input.js';
 import { AUP_REFUSAL_PATTERNS } from './agent-decomposer-deterministic.js';
 import { normalizeTaskForScreening } from './task-refusal.js';
 
@@ -601,7 +602,11 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
             action,
             selector: i.selector,
             value: i.value,
-            ...(typeof i.sensitive === 'boolean' ? { sensitive: i.sensitive } : {}),
+            ...(i.sensitive === true || selectorImpliesSensitiveInput(i.selector)
+              ? { sensitive: true }
+              : i.sensitive === false
+                ? { sensitive: false }
+                : {}),
           });
         } else if (action === 'scroll') {
           out.push({ kind: 'interact', action });

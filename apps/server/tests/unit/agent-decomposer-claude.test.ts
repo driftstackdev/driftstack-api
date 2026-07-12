@@ -362,6 +362,20 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
               value: 'Ada',
               sensitive: 'true',
             },
+            {
+              kind: 'interact',
+              action: 'type',
+              selector: '#password',
+              value: 'secret',
+              sensitive: false,
+            },
+            {
+              kind: 'interact',
+              action: 'type',
+              selector: '#display-name',
+              value: 'Grace',
+              sensitive: false,
+            },
           ],
         }),
       ]);
@@ -370,6 +384,20 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents).toEqual([
         { kind: 'interact', action: 'type', selector: '#otp', value: '123456', sensitive: true },
         { kind: 'interact', action: 'type', selector: '#name', value: 'Ada' },
+        {
+          kind: 'interact',
+          action: 'type',
+          selector: '#password',
+          value: 'secret',
+          sensitive: true,
+        },
+        {
+          kind: 'interact',
+          action: 'type',
+          selector: '#display-name',
+          value: 'Grace',
+          sensitive: false,
+        },
       ]);
     });
 
