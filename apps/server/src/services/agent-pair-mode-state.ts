@@ -27,7 +27,13 @@ export type PairModeState =
   | { kind: 'ai-driving' }
   | { kind: 'takeover-pending'; requestedByClientId: string; requestedAt: string }
   | { kind: 'human-driving'; clientId: string; sinceAt: string }
-  | { kind: 'handback-pending'; requestedAt: string }
+  | {
+      kind: 'handback-pending';
+      requestedAt: string;
+      /** Additive/optional for persisted pre-fix states. New transitions always set both. */
+      clientId?: string;
+      sinceAt?: string;
+    }
   /**
    * Arc 4 Wave 2.A sub-slice 8.11 (v2-#8) — intermediate state when a
    * takeover request lands while AgentRuntime.runTurn is mid-flight
@@ -51,7 +57,13 @@ export type PairModeState =
    * SSE subscribers see the queued discriminator + dashboard renders
    * a "handback queued" hint.
    */
-  | { kind: 'handback-queued'; queuedByClientId: string; queuedAt: string };
+  | {
+      kind: 'handback-queued';
+      queuedByClientId: string;
+      queuedAt: string;
+      /** Original takeover time; optional only for persisted pre-fix states. */
+      sinceAt?: string;
+    };
 
 export type PairModeTransition =
   | { kind: 'takeover-request'; clientId: string; at: string }
@@ -186,7 +198,12 @@ export function applyPairModeTransition(
 
     case 'human-driving':
       if (transition.kind === 'handback-request') {
-        return { kind: 'handback-pending', requestedAt: transition.at };
+        return {
+          kind: 'handback-pending',
+          requestedAt: transition.at,
+          clientId: state.clientId,
+          sinceAt: state.sinceAt,
+        };
       }
       if (transition.kind === 'handback-request-queued') {
         // Arc 4 Wave 2.A 8.12 — defer until decompose-settled fires.
@@ -194,6 +211,7 @@ export function applyPairModeTransition(
           kind: 'handback-queued',
           queuedByClientId: transition.clientId,
           queuedAt: transition.at,
+          sinceAt: state.sinceAt,
         };
       }
       if (transition.kind === 'decompose-settled') return state;
@@ -205,7 +223,12 @@ export function applyPairModeTransition(
 
     case 'handback-queued':
       if (transition.kind === 'decompose-settled') {
-        return { kind: 'handback-pending', requestedAt: transition.at };
+        return {
+          kind: 'handback-pending',
+          requestedAt: transition.at,
+          clientId: state.queuedByClientId,
+          sinceAt: state.sinceAt ?? state.queuedAt,
+        };
       }
       if (transition.kind === 'handback-cancel') {
         // Rollback to human-driving. We track the queue's clientId
@@ -215,7 +238,7 @@ export function applyPairModeTransition(
         return {
           kind: 'human-driving',
           clientId: state.queuedByClientId,
-          sinceAt: state.queuedAt,
+          sinceAt: state.sinceAt ?? state.queuedAt,
         };
       }
       // Arc 4 Wave 2.A 8.13 — heartbeat-timeout completes the
@@ -232,13 +255,13 @@ export function applyPairModeTransition(
       // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout.
       if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       if (transition.kind === 'handback-cancel') {
-        // Cancel a pending handback — go back to human-driving. The
-        // clientId from the prior human-driving state isn't recoverable
-        // from the handback-pending payload, so we mark it 'unknown'.
-        // Callers must track the active client separately when they
-        // care; the state machine itself is concerned with mode
-        // transitions, not session attribution.
-        return { kind: 'human-driving', clientId: 'unknown', sinceAt: state.requestedAt };
+        // New states preserve the exact controller identity + original takeover
+        // time. The fallbacks apply only to persisted pre-fix transient states.
+        return {
+          kind: 'human-driving',
+          clientId: state.clientId ?? 'unknown',
+          sinceAt: state.sinceAt ?? state.requestedAt,
+        };
       }
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
   }

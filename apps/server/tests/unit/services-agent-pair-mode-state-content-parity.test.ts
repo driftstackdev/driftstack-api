@@ -61,20 +61,20 @@ describe('services/agent-pair-mode-state content parity', () => {
     );
   });
 
-  it("PairModeState 6-variant discriminated union pinned: ai-driving (no payload) + takeover-pending (requestedByClientId + requestedAt) + human-driving (clientId + sinceAt) + handback-pending (requestedAt) + takeover-queued (requestedByClientId + queuedAt; Wave 2.A 8.11) + handback-queued (queuedByClientId + queuedAt; Wave 2.A 8.12). Drift to dropping a variant would break the dashboard SSE consumer's exhaustive-switch render", () => {
+  it('PairModeState 6-variant discriminated union pins controller identity through handback pending/queued rollback', () => {
     expect(body).toMatch(/export type PairModeState =/);
     expect(body).toMatch(/\| \{ kind: 'ai-driving' \}/);
     expect(body).toMatch(
       /\| \{ kind: 'takeover-pending'; requestedByClientId: string; requestedAt: string \}/,
     );
     expect(body).toMatch(/\| \{ kind: 'human-driving'; clientId: string; sinceAt: string \}/);
-    expect(body).toMatch(/\| \{ kind: 'handback-pending'; requestedAt: string \}/);
+    expect(body).toContain("kind: 'handback-pending';");
+    expect(body).toContain('clientId?: string;');
+    expect(body).toContain('sinceAt?: string;');
     expect(body).toMatch(
       /\| \{ kind: 'takeover-queued'; requestedByClientId: string; queuedAt: string \}/,
     );
-    expect(body).toMatch(
-      /\| \{ kind: 'handback-queued'; queuedByClientId: string; queuedAt: string \}/,
-    );
+    expect(body).toContain("kind: 'handback-queued';");
   });
 
   it('PairModeTransition 9-variant catalog pinned: takeover-request + takeover-grant + takeover-decline + handback-request + handback-complete + handback-cancel + takeover-request-queued (8.11) + decompose-settled (8.11) + handback-request-queued (8.12) + heartbeat-timeout (8.13). Drift to dropping a transition would either break the route layer that fires it OR (worse) leave a transition fired with no reducer arm to handle it', () => {
@@ -137,12 +137,11 @@ describe('services/agent-pair-mode-state content parity', () => {
     );
   });
 
-  it("handback-cancel-from-handback-pending UNKNOWN-clientId fallback pinned: 'The clientId from the prior human-driving state isn't recoverable from the handback-pending payload, so we mark it unknown.' — pinned so the documented data-loss-on-rollback contract stays explicit. Drift to inventing a clientId would silently mis-attribute the recovered human-driving state", () => {
+  it('handback-cancel restores the preserved controller; unknown/requestedAt remain legacy-state fallbacks only', () => {
     expect(body).toMatch(
-      /\/\/ Cancel a pending handback — go back to human-driving\. The\s*\n?\s*\/\/ clientId from the prior human-driving state isn't recoverable\s*\n?\s*\/\/ from the handback-pending payload, so we mark it 'unknown'\./,
+      /\/\/ New states preserve the exact controller identity \+ original takeover\s*\n?\s*\/\/ time\. The fallbacks apply only to persisted pre-fix transient states\./,
     );
-    expect(body).toMatch(
-      /return \{ kind: 'human-driving', clientId: 'unknown', sinceAt: state\.requestedAt \};/,
-    );
+    expect(body).toContain("clientId: state.clientId ?? 'unknown'");
+    expect(body).toContain('sinceAt: state.sinceAt ?? state.requestedAt');
   });
 });

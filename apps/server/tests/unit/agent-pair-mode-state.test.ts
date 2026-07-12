@@ -31,6 +31,10 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     }
     s = applyPairModeTransition(s, { kind: 'handback-request', at: AT2 });
     expect(s.kind).toBe('handback-pending');
+    if (s.kind === 'handback-pending') {
+      expect(s.clientId).toBe('cli_a');
+      expect(s.sinceAt).toBe(AT);
+    }
     s = applyPairModeTransition(s, { kind: 'handback-complete' });
     expect(s.kind).toBe('ai-driving');
   });
@@ -48,7 +52,7 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     s = applyPairModeTransition(s, { kind: 'takeover-grant', at: AT });
     s = applyPairModeTransition(s, { kind: 'handback-request', at: AT2 });
     s = applyPairModeTransition(s, { kind: 'handback-cancel' });
-    expect(s.kind).toBe('human-driving');
+    expect(s).toEqual({ kind: 'human-driving', clientId: 'cli_a', sinceAt: AT });
   });
 
   it('CRITICAL invalid transitions throw PairModeStateInvalidTransitionError with from + transition diagnostics', () => {
@@ -165,6 +169,7 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     if (s.kind === 'handback-queued') {
       expect(s.queuedByClientId).toBe('cli_a');
       expect(s.queuedAt).toBe(AT2);
+      expect(s.sinceAt).toBe(AT);
     }
   });
 
@@ -173,11 +178,14 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
       kind: 'handback-queued',
       queuedByClientId: 'cli_a',
       queuedAt: AT,
+      sinceAt: '2026-05-18T11:00:00Z',
     };
     s = applyPairModeTransition(s, { kind: 'decompose-settled', at: AT2 });
     expect(s.kind).toBe('handback-pending');
     if (s.kind === 'handback-pending') {
       expect(s.requestedAt).toBe(AT2);
+      expect(s.clientId).toBe('cli_a');
+      expect(s.sinceAt).toBe('2026-05-18T11:00:00Z');
     }
   });
 
@@ -186,11 +194,13 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
       kind: 'handback-queued',
       queuedByClientId: 'cli_a',
       queuedAt: AT,
+      sinceAt: '2026-05-18T11:00:00Z',
     };
     s = applyPairModeTransition(s, { kind: 'handback-cancel' });
     expect(s.kind).toBe('human-driving');
     if (s.kind === 'human-driving') {
       expect(s.clientId).toBe('cli_a');
+      expect(s.sinceAt).toBe('2026-05-18T11:00:00Z');
     }
   });
 
