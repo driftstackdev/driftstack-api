@@ -127,7 +127,7 @@ const SYSTEM_PROMPT = [
   'invent new verbs.',
   '',
   '  - navigate { url: string }',
-  '  - interact { action: "tap"|"type"|"scroll"|"press", selector?: string, value?: string, sensitive?: boolean } (type: sensitive=true for OTP/PIN/card values; press: value = key name, e.g. "Enter"; use the top-level scroll verb for directional human scrolling)',
+  '  - interact { action: "tap"|"type"|"scroll"|"press", selector?: string, value?: string, sensitive?: boolean } (tap requires selector; type requires selector+value and sensitive=true for OTP/PIN/card values; press requires value = key name, e.g. "Enter"; use the top-level scroll verb for directional human scrolling)',
   '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number }',
   '  - capture { capture: "screenshot"|"dom_snapshot" } (PDF is not executable on the live harness)',
   '  - scroll { direction: "up"|"down", amount_px?: number }',
@@ -573,14 +573,30 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
         break;
       case 'interact': {
         const action = i.action;
-        if (action === 'tap' || action === 'type' || action === 'scroll' || action === 'press') {
+        if (action === 'tap' && typeof i.selector === 'string' && i.selector.length > 0) {
+          out.push({ kind: 'interact', action, selector: i.selector });
+        } else if (
+          action === 'type' &&
+          typeof i.selector === 'string' &&
+          i.selector.length > 0 &&
+          typeof i.value === 'string'
+        ) {
           out.push({
             kind: 'interact',
             action,
-            ...(typeof i.selector === 'string' ? { selector: i.selector } : {}),
-            ...(typeof i.value === 'string' ? { value: i.value } : {}),
+            selector: i.selector,
+            value: i.value,
             ...(typeof i.sensitive === 'boolean' ? { sensitive: i.sensitive } : {}),
           });
+        } else if (action === 'scroll') {
+          out.push({ kind: 'interact', action });
+        } else if (
+          action === 'press' &&
+          typeof i.value === 'string' &&
+          i.value.length > 0 &&
+          i.value.length <= 20
+        ) {
+          out.push({ kind: 'interact', action, value: i.value });
         }
         break;
       }

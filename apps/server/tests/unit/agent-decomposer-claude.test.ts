@@ -206,7 +206,7 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       ]);
     });
 
-    it('#139 BARE-STRING verb-keyed intents keep their param (not dropped) — {capture:"screenshot"} etc.', async () => {
+    it('#139 BARE-STRING verb-keyed intents keep executable params and drop incomplete interact', async () => {
       // Review finding: a primitive verb value ({navigate:"url"}, {capture:"screenshot"},
       // {scroll:"down"}) was normalized to {kind:verb} with the param discarded, so
       // parseIntents silently dropped it = "AI does nothing" via a new shape. The
@@ -228,7 +228,6 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents).toEqual([
         { kind: 'navigate', url: 'https://x.test' },
         { kind: 'scroll', direction: 'down' },
-        { kind: 'interact', action: 'tap' },
         { kind: 'capture', capture: 'screenshot' },
       ]);
     });
@@ -370,6 +369,35 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents).toEqual([
         { kind: 'interact', action: 'type', selector: '#otp', value: '123456', sensitive: true },
         { kind: 'interact', action: 'type', selector: '#name', value: 'Ada' },
+      ]);
+    });
+
+    it('drops interact actions missing live-dispatch requirements', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'interact', action: 'tap' },
+            { kind: 'interact', action: 'tap', selector: '' },
+            { kind: 'interact', action: 'type', selector: '#name' },
+            { kind: 'interact', action: 'type', value: 'Ada' },
+            { kind: 'interact', action: 'press' },
+            { kind: 'interact', action: 'press', value: '' },
+            { kind: 'interact', action: 'press', value: 'x'.repeat(21) },
+            { kind: 'interact', action: 'tap', selector: '#go' },
+            { kind: 'interact', action: 'type', selector: '#name', value: '' },
+            { kind: 'interact', action: 'scroll', selector: '#ignored', value: 'ignored' },
+            { kind: 'interact', action: 'press', value: 'Enter' },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'interact', action: 'tap', selector: '#go' },
+        { kind: 'interact', action: 'type', selector: '#name', value: '' },
+        { kind: 'interact', action: 'scroll' },
+        { kind: 'interact', action: 'press', value: 'Enter' },
       ]);
     });
 
