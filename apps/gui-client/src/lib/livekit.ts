@@ -17,6 +17,7 @@
 
 import { Room, RoomEvent } from 'livekit-client';
 import type { LiveKitInfo } from '@driftstack/sdk';
+import { isReliableInputCongested, ReliableInputCongestedError } from './livekit-input-congestion';
 
 /** LK.6.d — the input-event schema the Mac side decodes. Must
  *  stay in lock-step with Agent 1's Swift `InputEvent` enum. */
@@ -279,6 +280,21 @@ export async function sendInputEvent(
     throw new RangeError(`Input event text contains an invalid paste payload`);
   }
   const reliable = opts.reliable ?? true;
+  // Every reliable input command shares one ordered DataChannel. Once LiveKit says
+  // its buffer is high, adding fresh intent makes it replay late against potentially
+  // different page state. Fail fast instead. Releases remain mandatory so a key/finger
+  // already down cannot stick; tab snapshots have their own single-flight/latest-wins
+  // coordinator and remain eligible to converge receiver state after the drain.
+  const requiredRelease =
+    event.type === 'touchEnd' || event.type === 'keyUp' || event.type === 'mouseUp';
+  if (
+    reliable &&
+    isReliableInputCongested(room) &&
+    !requiredRelease &&
+    event.type !== 'tabListUpdate'
+  ) {
+    throw new ReliableInputCongestedError();
+  }
   const data = new TextEncoder().encode(JSON.stringify(event));
   const maxEncodedBytes =
     event.type === 'tabListUpdate' ? MAX_TAB_SNAPSHOT_BYTES : MAX_INPUT_EVENT_BYTES;

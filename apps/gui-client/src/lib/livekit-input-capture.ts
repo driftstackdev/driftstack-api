@@ -45,6 +45,7 @@
 import { useEffect, useRef } from 'react';
 import { type CanonicalModifier } from '@driftstack/sdk';
 import { sendInputEvent, RoomEvent, type InputEvent, type Room } from './livekit';
+import { ReliableInputCongestedError, setReliableInputCongested } from './livekit-input-congestion';
 
 export interface UseInputCaptureOpts {
   /** The LiveKit room — null when not connected. Capture is a
@@ -455,6 +456,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // we degrade safely to the prior (no-backpressure) behavior.
       if (kind !== 0) return;
       reliableCongested = !isLow;
+      setReliableInputCongested(room, reliableCongested);
       if (!reliableCongested) return;
 
       // Stop any gesture already in progress as soon as congestion is reported. A
@@ -469,6 +471,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
 
     const send = (event: InputEvent, reliable: boolean): void => {
       lastSend.current = sendInputEvent(room, event, { reliable }).catch((err: unknown) => {
+        // Expected backpressure shedding is not a control failure. It self-heals on
+        // buffer-low and must not raise the persistent "control unreachable" badge.
+        if (err instanceof ReliableInputCongestedError) return undefined;
         // Swallow per-event (a rejected move must not throw into the UI), but
         // surface the FIRST failure: a silently-dead control channel reads as
         // "view-only" with no diagnostic (founder-hit 2026-06-12).
@@ -1097,6 +1102,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
           onDCBufferStatus,
         );
       }
+      setReliableInputCongested(room, false);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', finishGesture);
       window.removeEventListener('pointerup', finishGesture);

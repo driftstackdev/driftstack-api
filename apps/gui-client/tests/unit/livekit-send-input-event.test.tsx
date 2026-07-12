@@ -37,6 +37,10 @@ import {
   type Room,
   type TabListUpdatePayload,
 } from '../../src/lib/livekit';
+import {
+  ReliableInputCongestedError,
+  setReliableInputCongested,
+} from '../../src/lib/livekit-input-congestion';
 
 interface MinimalRoom {
   localParticipant: {
@@ -73,6 +77,30 @@ function decodeEvent(call: DataCall): InputEvent {
 }
 
 describe('sendInputEvent', () => {
+  it('fails fresh reliable intent fast while the room channel is congested', async () => {
+    const { room, publishData } = makeRoom();
+    setReliableInputCongested(room, true);
+    await expect(sendNavigate(room, 'https://example.com/')).rejects.toBeInstanceOf(
+      ReliableInputCongestedError,
+    );
+    expect(publishData).not.toHaveBeenCalled();
+  });
+
+  it('still publishes mandatory releases while congested', async () => {
+    const { room, publishData } = makeRoom();
+    setReliableInputCongested(room, true);
+    await sendInputEvent(room, { type: 'touchEnd', x: 1, y: 2, touchId: 3 });
+    await sendInputEvent(room, { type: 'keyUp', key: 'Shift' });
+    expect(publishData).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not gate lossy events while the reliable channel is congested', async () => {
+    const { room, publishData } = makeRoom();
+    setReliableInputCongested(room, true);
+    await sendInputEvent(room, { type: 'ping', timestamp: 1 }, { reliable: false });
+    expect(publishData).toHaveBeenCalledTimes(1);
+  });
+
   it('JSON-encodes a mouseMove event + UTF-8 encodes the JSON string', async () => {
     const { room, publishData } = makeRoom();
     await sendInputEvent(room, { type: 'mouseMove', x: 100, y: 200 });
