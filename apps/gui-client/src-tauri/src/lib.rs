@@ -1038,29 +1038,27 @@ struct EndpointResolveResult {
 async fn endpoint_resolve(host: String, port: u16) -> EndpointResolveResult {
     // to_socket_addrs() is a blocking DNS lookup; keep it off the main thread so
     // a slow resolver can't freeze the WebView (same class as proxy_test).
-    tauri::async_runtime::spawn_blocking(move || {
-        match (host.as_str(), port).to_socket_addrs() {
-            Ok(mut addrs) => match addrs.next() {
-                Some(addr) => EndpointResolveResult {
-                    resolved: true,
-                    ip: addr.ip().to_string(),
-                    message: format!(
-                        "Endpoint resolves to {} — tunnel verified at launch.",
-                        addr.ip()
-                    ),
-                },
-                None => EndpointResolveResult {
-                    resolved: false,
-                    ip: String::new(),
-                    message: "Host resolved to no addresses — check the endpoint.".into(),
-                },
+    tauri::async_runtime::spawn_blocking(move || match (host.as_str(), port).to_socket_addrs() {
+        Ok(mut addrs) => match addrs.next() {
+            Some(addr) => EndpointResolveResult {
+                resolved: true,
+                ip: addr.ip().to_string(),
+                message: format!(
+                    "Endpoint resolves to {} — tunnel verified at launch.",
+                    addr.ip()
+                ),
             },
-            Err(e) => EndpointResolveResult {
+            None => EndpointResolveResult {
                 resolved: false,
                 ip: String::new(),
-                message: format!("Couldn't resolve the endpoint host: {e}"),
+                message: "Host resolved to no addresses — check the endpoint.".into(),
             },
-        }
+        },
+        Err(e) => EndpointResolveResult {
+            resolved: false,
+            ip: String::new(),
+            message: format!("Couldn't resolve the endpoint host: {e}"),
+        },
     })
     .await
     .unwrap_or_else(|_| EndpointResolveResult {
