@@ -24714,3 +24714,19 @@ Verification:
 
 - OpenAPI integration and snapshot-sync suites: 26/26 tests pass;
 - generation used the canonical `npm run sdk:python:dump-spec` command.
+
+## V-565 — root test-fixture typecheck restoration
+
+**Date:** 2026-07-12
+
+Repaired six stale test-fixture typings without changing runtime behavior:
+
+- removed an unused Drizzle repo parameter from the terminal-stickiness seed helper;
+- made the Fastify `requireScope` test decorator match the async request/reply contract;
+- completed crypto-order logger and tier-activation repo doubles after their production interfaces grew;
+- normalized an optional scheduled-job dedup flag to the fake queue's required boolean.
+
+Verification:
+
+- focused server suites: 193 passed and 3 database-gated tests skipped;
+- root `npm run typecheck` passes across every workspace; admin/customer Astro output retains suggestions only, with zero errors and zero warnings.

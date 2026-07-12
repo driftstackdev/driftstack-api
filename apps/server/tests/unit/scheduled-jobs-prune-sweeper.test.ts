@@ -49,7 +49,7 @@ class FakeScheduledJobs {
       jobType: input.jobType,
       accountId: input.accountId,
       runAt: input.runAt,
-      dedup: input.dedupOnAccountAndType,
+      dedup: input.dedupOnAccountAndType ?? false,
       completed: false,
     });
     return Promise.resolve({ enqueued: true });

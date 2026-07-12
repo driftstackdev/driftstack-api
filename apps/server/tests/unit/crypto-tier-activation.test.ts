@@ -118,6 +118,10 @@ describe('C1 CryptoTierActivationService (entitlement-backed)', () => {
     const full = { startsAt: START, expiresAt: EXPIRES, ...repoResult };
     const repo = {
       activateCryptoEntitlement: vi.fn().mockResolvedValue(full),
+      revokeCryptoEntitlementByOrderId: vi.fn().mockResolvedValue({ revoked: false }),
+      downgradeAccountTierToBestRemaining: vi
+        .fn()
+        .mockResolvedValue({ previousTier: null, appliedTier: 'free' as AccountTier }),
     };
     const emit = vi.fn().mockResolvedValue(undefined);
     const lifecycle = { emit } as unknown as AccountLifecycleService;

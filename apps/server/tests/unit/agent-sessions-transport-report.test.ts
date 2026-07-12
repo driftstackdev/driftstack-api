@@ -109,13 +109,14 @@ async function buildApp(args: {
   app.decorate('requireAuth', async () => {});
   // requireScope stub: the route floors the account path at read:sessions.
   // Enforce it against the granted scopes so the least-privilege test bites.
-  app.decorate('requireScope', (scope: string) => (req: FastifyRequest) => {
+  app.decorate('requireScope', (scope) => (req) => {
     const acct = (req as { account: { apiKey: { scopes: string[] } } | null }).account;
     if (acct !== null && !acct.apiKey.scopes.includes(scope)) {
       const err = new Error(`missing scope ${scope}`) as Error & { status: number };
       err.status = 403;
       throw err;
     }
+    return Promise.resolve();
   });
   registerAgentSessionsTransportReportRoute(app, {
     agentSessionsRepo: makeStubAgentSessionsRepo(args.session),

@@ -65,11 +65,7 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'DrizzleSessionRepo.updateSessionStatus terminal-stickiness (real Postgres)',
   () => {
-    async function seedRow(
-      repo: DrizzleSessionRepo,
-      status: string,
-      destroyedAt: Date | null,
-    ): Promise<string> {
+    async function seedRow(status: string, destroyedAt: Date | null): Promise<string> {
       const acc = randomUUID();
       const key = randomUUID();
       seeded.push({ accountId: acc, apiKeyId: key });
@@ -94,7 +90,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
 
       const destroyedAt = new Date(Date.UTC(2026, 5, 1, 0, 0, 0));
-      const id = await seedRow(repo, 'destroyed', destroyedAt);
+      const id = await seedRow('destroyed', destroyedAt);
 
       await repo.updateSessionStatus(id, 'ready');
 
@@ -108,7 +104,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
 
-      const id = await seedRow(repo, 'errored', new Date(Date.UTC(2026, 5, 2, 0, 0, 0)));
+      const id = await seedRow('errored', new Date(Date.UTC(2026, 5, 2, 0, 0, 0)));
 
       await repo.updateSessionStatus(id, 'destroyed', { destroyedAt: new Date() });
 
@@ -120,7 +116,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
 
-      const id = await seedRow(repo, 'ready', null);
+      const id = await seedRow('ready', null);
       const destroyedAt = new Date(Date.UTC(2026, 5, 3, 0, 0, 0));
 
       await repo.updateSessionStatus(id, 'destroyed', { destroyedAt });

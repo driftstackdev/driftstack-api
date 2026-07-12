@@ -2788,7 +2788,10 @@ describe('C3 — refund/failure IPN after paid auto-claws-back the tier (non-str
     const svc = new CryptoOrdersService({
       repo,
       nowFn: () => 9_000,
-      logger: { warn: (obj, msg) => warns.push({ obj, msg }) },
+      logger: {
+        warn: (obj, msg) => warns.push({ obj, msg }),
+        error: () => undefined,
+      },
       tierActivator: {
         activateTierForPaidOrder: () => Promise.resolve(),
         revokeTierForRefundedOrder,
@@ -2884,7 +2887,10 @@ describe('C3 — refund/failure IPN after paid auto-claws-back the tier (non-str
     const svc = new CryptoOrdersService({
       repo,
       nowFn: () => 9_000,
-      logger: { warn: (obj) => warns.push({ obj }) },
+      logger: {
+        warn: (obj) => warns.push({ obj }),
+        error: () => undefined,
+      },
       tierActivator: {
         activateTierForPaidOrder: () => Promise.resolve(),
         revokeTierForRefundedOrder: (args) => {
