@@ -75,6 +75,7 @@ import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson } from '../lib/download';
 import { persistBaseUrl } from '../lib/settings';
 import { useTransientNotice } from '../lib/use-transient-notice';
+import { pasteClipboardToDevice } from '../lib/device-paste';
 import {
   getAgentSession,
   getAgentSessionPageState,
@@ -3476,19 +3477,23 @@ export function SimulatorWindow(): JSX.Element {
       e.preventDefault();
       e.stopPropagation(); // keep the raw ⌘V off the input-capture forward path
       if (room === null) return;
+      const requestSessionId = sessionIdRef.current;
       void (async () => {
-        try {
-          if (navigator.clipboard === undefined) return;
-          const text = await navigator.clipboard.readText();
-          if (text === '') return;
-          if (new TextEncoder().encode(text).byteLength > MAX_DEVICE_TEXT_BYTES) {
-            showNotice('Clipboard is too large — paste up to 8 KB at a time', 3500);
-            return;
-          }
-          await sendText(room, text);
+        if (navigator.clipboard === undefined) return;
+        const result = await pasteClipboardToDevice(
+          () => navigator.clipboard.readText(),
+          (text) => sendText(room, text),
+          () => sessionIdRef.current === requestSessionId,
+          MAX_DEVICE_TEXT_BYTES,
+        );
+        if (result === 'ok') {
           showNotice('Pasted to the device', 2500);
-        } catch {
+        } else if (result === 'too_large') {
+          showNotice('Clipboard is too large — paste up to 8 KB at a time', 3500);
+        } else if (result === 'clipboard_error') {
           showNotice("Couldn't read the clipboard", 2500);
+        } else if (result === 'send_error') {
+          showNotice("Couldn't paste to the device — reconnect and try again", 3500);
         }
       })();
     };
