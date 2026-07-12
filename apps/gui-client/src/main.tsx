@@ -63,21 +63,36 @@ function renderFatalError(code: string, err: unknown): void {
     box.style.cssText =
       'position:fixed;inset:0;z-index:2147483647;background:#0b0b0b;color:#eee;' +
       'font:13px/1.55 -apple-system,system-ui,sans-serif;padding:28px;overflow:auto;';
+    // Friendly-first: lead with plain human copy + a Reload action, and tuck the
+    // code/message/stack behind a collapsed "Show technical details" disclosure so
+    // an end user never faces a raw stack trace (founder: no dev output in the
+    // operator's face). The details survive for support — native <details>, no JS.
     box.innerHTML =
-      '<div style="max-width:720px;margin:0 auto">' +
-      '<h1 style="font-size:16px;color:#ff6b6b;margin:0 0 4px">Driftstack couldn’t start</h1>' +
-      '<div style="color:#888;margin:0 0 18px">Error code: <b style="color:#ffb86b">' +
+      '<div style="max-width:640px;margin:12vh auto 0">' +
+      '<h1 style="font-size:17px;color:#eee;margin:0 0 8px">Driftstack hit a snag</h1>' +
+      '<div style="color:#9a9a9a;margin:0 0 20px">The app needs to reload to recover. ' +
+      'Your saved profiles and sessions are safe.</div>' +
+      '<button id="ds-fatal-reload" data-tauri-drag-region="false" ' +
+      'style="background:#c0392b;color:#fff;border:none;border-radius:7px;padding:9px 18px;' +
+      'cursor:pointer;font-size:13px;font-weight:600">Reload Driftstack</button>' +
+      '<details data-tauri-drag-region="false" style="margin-top:22px">' +
+      '<summary data-tauri-drag-region="false" style="cursor:pointer;font-size:12px;' +
+      'color:#888;user-select:none;outline:none">Show technical details</summary>' +
+      '<div style="color:#888;margin:10px 0 0">Error code: <b style="color:#ffb86b">' +
       escapeHtml(code) +
       '</b></div>' +
-      '<div style="background:#161616;border:1px solid #333;border-radius:8px;padding:12px 14px;margin:0 0 12px"><b>' +
+      '<div style="background:#161616;border:1px solid #333;border-radius:8px;padding:10px 12px;' +
+      'margin:8px 0 0;color:#bbb;font-size:12px">' +
       escapeHtml(message || '(no message)') +
-      '</b></div>' +
+      '</div>' +
       (stack
-        ? '<pre style="white-space:pre-wrap;word-break:break-word;color:#9aa;background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:12px;font-size:11px;max-height:45vh;overflow:auto">' +
+        ? '<pre style="white-space:pre-wrap;word-break:break-word;color:#8a8a8a;background:#111;' +
+          'border:1px solid #2a2a2a;border-radius:8px;padding:10px;font-size:11px;max-height:38vh;' +
+          'overflow:auto;margin:8px 0 0">' +
           escapeHtml(stack) +
           '</pre>'
         : '') +
-      '<button id="ds-fatal-reload" data-tauri-drag-region="false" style="margin-top:16px;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:6px;padding:8px 16px;cursor:pointer">Reload</button>' +
+      '</details>' +
       '</div>';
     document.body.appendChild(box);
     document

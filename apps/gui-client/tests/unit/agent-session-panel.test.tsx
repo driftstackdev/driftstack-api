@@ -56,8 +56,11 @@ describe('friendlyConnectError — raw LiveKit errors → customer copy', () => 
   it('maps a closed/disconnect to a close-or-reconnect message', () => {
     expect(friendlyConnectError(new Error('room closed'))).toMatch(/connection closed/i);
   });
-  it('falls back to the raw text for unrecognized errors, else a generic line', () => {
-    expect(friendlyConnectError(new Error('weird thing'))).toBe('weird thing');
+  it('returns a generic friendly line for unrecognized errors (never leaks raw transport text)', () => {
+    // Unrecognized transport strings (e.g. a cryptic -1004) must NOT reach the
+    // overlay — they collapse to a friendly generic line (founder: no raw codes).
+    expect(friendlyConnectError(new Error('weird thing'))).toMatch(/could not connect/i);
+    expect(friendlyConnectError(new Error('weird thing'))).not.toMatch(/weird thing/);
     expect(friendlyConnectError(null)).toMatch(/could not connect/i);
   });
 });

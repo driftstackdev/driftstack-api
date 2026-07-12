@@ -17,5 +17,10 @@ export async function readApiErrorMessage(res: Response): Promise<string> {
   } catch {
     /* body wasn't JSON; fall through */
   }
+  // Shared across the dashboard + admin panel (not just the live-session GUI); the
+  // server almost always sends a friendly problem+json `detail`, and where it
+  // doesn't the bare status is a useful debugging signal for those surfaces. The
+  // founder's "no raw codes in the operator's face" applies to the live Simulator
+  // surface, which friendly-izes its own copy (page-error-copy / friendlyConnectError).
   return `HTTP ${res.status.toString()}`;
 }

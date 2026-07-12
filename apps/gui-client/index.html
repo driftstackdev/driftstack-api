@@ -26,19 +26,27 @@
             b.setAttribute('data-fatal-error', code);
             b.style.cssText =
               'position:fixed;inset:0;z-index:2147483647;background:#0b0b0b;color:#eee;font:13px/1.55 -apple-system,system-ui,sans-serif;padding:28px;overflow:auto';
+            // Friendly-first (matches main.tsx): human copy + Reload up front, the
+            // code/message/stack tucked behind a collapsed <details> so an end user
+            // never faces a raw stack trace.
             b.innerHTML =
-              '<div style="max-width:720px;margin:0 auto"><h1 style="font-size:16px;color:#ff6b6b;margin:0 0 4px">Driftstack could not start</h1><div style="color:#888;margin:0 0 18px">Error code: <b style="color:#ffb86b">' +
+              '<div style="max-width:640px;margin:12vh auto 0"><h1 style="font-size:17px;color:#eee;margin:0 0 8px">Driftstack hit a snag</h1><div style="color:#9a9a9a;margin:0 0 20px">The app needs to reload to recover. Your saved profiles and sessions are safe.</div>' +
+              '<button onclick="location.reload()" style="background:#c0392b;color:#fff;border:none;border-radius:7px;padding:9px 18px;cursor:pointer;font-size:13px;font-weight:600">Reload Driftstack</button>' +
+              '<details style="margin-top:22px"><summary style="cursor:pointer;font-size:12px;color:#888;user-select:none;outline:none">Show technical details</summary>' +
+              '<div style="color:#888;margin:10px 0 0">Error code: <b style="color:#ffb86b">' +
               esc(code) +
-              '</b></div><div style="background:#161616;border:1px solid #333;border-radius:8px;padding:12px 14px;margin:0 0 12px"><b>' +
+              '</b></div><div style="background:#161616;border:1px solid #333;border-radius:8px;padding:10px 12px;margin:8px 0 0;color:#bbb;font-size:12px">' +
               esc(msg || '(no message)') +
-              '</b></div>' +
+              '</div>' +
               (stack
-                ? '<pre style="white-space:pre-wrap;word-break:break-word;color:#9aa;background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:12px;font-size:11px;max-height:45vh;overflow:auto">' +
+                ? '<pre style="white-space:pre-wrap;word-break:break-word;color:#8a8a8a;background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:10px;font-size:11px;max-height:38vh;overflow:auto;margin:8px 0 0">' +
                   esc(stack) +
                   '</pre>'
                 : '') +
-              '<button onclick="location.reload()" style="margin-top:16px;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:6px;padding:8px 16px;cursor:pointer">Reload</button></div>';
+              '</details></div>';
             (document.body || document.documentElement).appendChild(b);
+            var sp = document.getElementById('ds-boot-splash');
+            if (sp) sp.remove();
           } catch (e) {
             document.title = 'Driftstack error ' + code + ': ' + msg;
           }
@@ -76,6 +84,8 @@
           var root = document.getElementById('root');
           if (root && root.childElementCount > 0) {
             clearInterval(__dsMountPoll); // mounted — all good
+            var sp = document.getElementById('ds-boot-splash');
+            if (sp) sp.remove(); // React committed — drop the splash
             return;
           }
           if (now - __dsMountStart >= 30000 && !window.__dsFatalShown) {
@@ -91,9 +101,38 @@
         }, 500);
       })();
     </script>
+    <style>
+      @keyframes ds-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body class="bg-surface-base text-ink-primary font-sans antialiased">
     <div id="root"></div>
+    <script>
+      // Boot splash (architectural: the window must NEVER be an unexplained blank
+      // rectangle). Painted immediately as a SIBLING of #root — never a child, so
+      // the mount-poll's `#root has children` test still detects the real React
+      // mount — and removed the instant React commits (or a fatal panel paints).
+      // Skipped for the bare `?window=simulator` window, which is transparent and
+      // renders only the device frame (a solid splash would look wrong there).
+      (function () {
+        if (new URLSearchParams(window.location.search).get('window') === 'simulator') return;
+        var s = document.createElement('div');
+        s.id = 'ds-boot-splash';
+        s.style.cssText =
+          'position:fixed;inset:0;z-index:2147483640;display:flex;flex-direction:column;' +
+          'align-items:center;justify-content:center;gap:16px;background:#0b0b0b;' +
+          'font:13px/1.5 -apple-system,system-ui,sans-serif;color:#8a8a8a';
+        s.innerHTML =
+          '<div style="width:26px;height:26px;border:2.5px solid #2a2a2a;border-top-color:#c0392b;' +
+          'border-radius:50%;animation:ds-boot-spin .8s linear infinite"></div>' +
+          '<div>Starting Driftstack…</div>';
+        (document.body || document.documentElement).appendChild(s);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

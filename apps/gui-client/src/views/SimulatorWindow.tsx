@@ -2864,6 +2864,21 @@ export function SimulatorWindow(): JSX.Element {
   // change: 'idle' (no freeze) → 'resubscribed' (lever 1 fired, awaiting recovery) →
   // 'rebuilt' (lever 2 fired, terminal until frames resume or the freeze clears).
   const recoverPhaseRef = useRef<'idle' | 'resubscribed' | 'rebuilt'>('idle');
+  // Shared "Reconnect now" — a DELIBERATE human action that earns a fresh rebuild
+  // budget, clears the exhausted latch, and fires a full Room reconnect through the
+  // same recoverAction channel the automatic ladder uses (re-establishing BOTH the
+  // media track and the data channel that input/nav/control ride on). Used by the
+  // freeze badge (both mid-ladder and after it exhausts) AND the control-unreachable
+  // badge, so a user never has to wait out the multi-cycle auto-recovery ladder or
+  // stare at a dead-end "control may not be reaching the device" advisory.
+  const manualReconnect = useCallback(() => {
+    rebuildAttemptsRef.current = 0;
+    consecutiveAdvancesRef.current = 0;
+    recoverPhaseRef.current = 'idle';
+    setFreezeRecoveryExhausted(false);
+    setRecovering(true);
+    setRecoverAction((a) => ({ nonce: a.nonce + 1, mode: 'rebuild' }));
+  }, []);
   useEffect(() => {
     // P1a — the session terminally ended (worker browser closed / destroyed /
     // reaped): NEVER run the resubscribe→rebuild freeze recovery. The frozen "last
@@ -3625,6 +3640,21 @@ export function SimulatorWindow(): JSX.Element {
   // page_state for that tab arrives (the one-shot reconcile / activateTabResult ok /
   // a tab-routed page_state frame) or on a bounded timeout so it never hangs.
   const [switchingTabId, setSwitchingTabId] = useState<string | null>(null);
+  // Cold-switch "taking longer than usual" escape: the switch-blank cover holds the
+  // video black until the target tab's `loaded` frame (or the 6s affordance net drops
+  // it). A cold reload can eat most of that window, so after 3s we surface a hint +
+  // a "Show current page" button that drops the blank immediately — the user never
+  // has to sit and stare at an unexplained black rectangle. (Structural fix = warm
+  // tabs; this is only the black-cover backstop.)
+  const [switchTakingLong, setSwitchTakingLong] = useState(false);
+  useEffect(() => {
+    if (switchingTabId === null) {
+      setSwitchTakingLong(false);
+      return;
+    }
+    const t = setTimeout(() => setSwitchTakingLong(true), 3000);
+    return () => clearTimeout(t);
+  }, [switchingTabId]);
   // SOFTER "could not switch tab" handling (founder 2026-06-25). The harness can
   // MISS an activateTab ack (a dropped data-channel frame); rather than silently
   // leaving the switch half-acknowledged we RE-SEND activateTab once or twice with a
@@ -6127,53 +6157,130 @@ export function SimulatorWindow(): JSX.Element {
                 {switchingTabId !== null && (
                   <div
                     data-component="simulator-switch-blank"
-                    aria-hidden="true"
                     className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black"
                   >
                     <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-white/70" />
                     <span className="text-[11px] font-medium text-white/45">Switching…</span>
+                    {switchTakingLong && (
+                      <>
+                        <span className="mt-1 text-[11px] font-medium text-white/35">
+                          Taking longer than usual…
+                        </span>
+                        <button
+                          type="button"
+                          data-component="switch-blank-escape"
+                          onClick={() => setSwitchingTabId(null)}
+                          className="mt-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 transition hover:bg-white/20"
+                        >
+                          Show current page
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
-                {notice !== null && (
-                  <div
-                    role="status"
-                    className="absolute left-1/2 top-12 z-20 max-w-[min(90%,26rem)] -translate-x-1/2 rounded-lg bg-black/90 px-3.5 py-2 text-center text-[13px] font-medium leading-snug text-white shadow-lg ring-1 ring-white/20 backdrop-blur"
-                  >
-                    {notice}
-                  </div>
-                )}
-                {navSendFailed !== null && (
-                  <div
-                    role="alert"
-                    className="absolute left-1/2 top-12 z-20 flex max-w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2 rounded-lg bg-black/90 px-3.5 py-2 text-[13px] font-medium leading-snug text-white shadow-lg ring-1 ring-status-error/50 backdrop-blur"
-                  >
-                    <span className="min-w-0 flex-1">Couldn&apos;t send that to the device.</span>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate(navSendFailed)}
-                      className="shrink-0 rounded bg-white/15 px-2 py-0.5 text-xs hover:bg-white/25"
+                {/* Top-advisory STACK (badge-collision fix): every top-anchored
+                    badge flows through ONE centered flex column so they never
+                    overlap no matter how many fire at once (previously each used a
+                    hand-tuned absolute top-* offset that collided when ≥2 showed, and
+                    couldn't handle a badge that wrapped to 2+ lines). The container is
+                    pointer-events-none so taps fall through the gaps to the video;
+                    each badge re-enables pointer-events. The CENTER freeze/stall
+                    badges, the full-screen page-error overlay, and the BOTTOM
+                    AI-driving pill live outside this stack (different screen regions). */}
+                <div
+                  data-component="top-advisory-stack"
+                  className="pointer-events-none absolute inset-x-0 top-12 z-20 flex flex-col items-center gap-2 px-3"
+                >
+                  {notice !== null && (
+                    <div
+                      role="status"
+                      className="pointer-events-auto max-w-[min(90%,26rem)] rounded-lg bg-black/90 px-3.5 py-2 text-center text-[13px] font-medium leading-snug text-white shadow-lg ring-1 ring-white/20 backdrop-blur"
                     >
-                      Retry
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Dismiss"
-                      onClick={() => setNavSendFailed(null)}
-                      className="shrink-0 text-white/50 hover:text-white/90"
+                      {notice}
+                    </div>
+                  )}
+                  {navSendFailed !== null && (
+                    <div
+                      role="alert"
+                      className="pointer-events-auto flex max-w-[min(90%,26rem)] items-center gap-2 rounded-lg bg-black/90 px-3.5 py-2 text-[13px] font-medium leading-snug text-white shadow-lg ring-1 ring-status-error/50 backdrop-blur"
                     >
-                      ✕
-                    </button>
-                  </div>
-                )}
-                {controlUnreachable && (
-                  <div
-                    role="status"
-                    data-component="control-unreachable-badge"
-                    className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
-                  >
-                    Control may not be reaching the device
-                  </div>
-                )}
+                      <span className="min-w-0 flex-1">Couldn&apos;t send that to the device.</span>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(navSendFailed)}
+                        className="shrink-0 rounded bg-white/15 px-2 py-0.5 text-xs hover:bg-white/25"
+                      >
+                        Retry
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Dismiss"
+                        onClick={() => setNavSendFailed(null)}
+                        className="shrink-0 text-white/50 hover:text-white/90"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  {controlUnreachable && (
+                    <div
+                      role="status"
+                      data-component="control-unreachable-badge"
+                      className="pointer-events-auto flex items-center gap-2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
+                    >
+                      <span>Control may not be reaching the device</span>
+                      <button
+                        type="button"
+                        data-component="control-unreachable-reconnect"
+                        onClick={manualReconnect}
+                        className="shrink-0 rounded-full bg-black/25 px-2 py-0.5 font-semibold text-black transition-colors hover:bg-black/40"
+                      >
+                        Reconnect
+                      </button>
+                    </div>
+                  )}
+                  {/* #135 — SOFT load-stall advisory (A3 box 5eeaf794a: a main-frame
+                      nav that hasn't finished in ~40s). NON-blocking — the page is still
+                      trying, so a gentle banner with a Retry, NOT the full-screen
+                      "failed" overlay. Suppressed while the hard error overlay is up. */}
+                  {pageLoadStalled !== null && pageError === null && (
+                    <div
+                      role="status"
+                      data-component="page-load-stalled-banner"
+                      className="pointer-events-auto flex max-w-[min(90%,26rem)] items-center gap-2.5 rounded-lg bg-black/85 px-3.5 py-2 text-[12px] font-medium leading-snug text-white shadow-lg ring-1 ring-amber-400/40 backdrop-blur"
+                    >
+                      <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
+                      <span className="min-w-0">{pageLoadStalled.message}</span>
+                      <button
+                        type="button"
+                        data-action="retry-stalled-navigate"
+                        onClick={() =>
+                          onNavigate(pageLoadStalled.url !== '' ? pageLoadStalled.url : liveUrl)
+                        }
+                        className="ml-1 shrink-0 rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-white/20"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC
+                      silently falls back to a TCP/TURN relay when direct UDP is blocked
+                      (box firewall / NAT / ISP) — head-of-line blocking makes real-time
+                      video feel "1000× slower". Surface it prominently so a relayed
+                      session is never silently slow — the #1 latency suspect. */}
+                  {(conn.transport === 'tcp' || conn.relayed === true) && (
+                    <div
+                      role="status"
+                      data-component="transport-fallback-badge"
+                      title="The video is going through a TCP/TURN relay because direct UDP is blocked (firewall / NAT / ISP). Real-time video over TCP head-of-line-blocks, which feels very slow. Fix: open the box UDP port range to your network, or use a closer (EU) box."
+                      className="pointer-events-auto whitespace-nowrap rounded-full bg-status-error px-3 py-1 text-[10px] font-semibold text-white shadow"
+                    >
+                      ⚠ Slow link — video{' '}
+                      {conn.relayed === true ? 'relayed' : `over ${conn.transport?.toUpperCase()}`}{' '}
+                      (UDP blocked)
+                    </div>
+                  )}
+                </div>
                 {/* A3 W2845 — frozen-renderer ("stalled") badge. The page hung
                   (the last frame is still showing, the stream still reports live),
                   so we overlay a calm reconnecting indicator on the visible frame
@@ -6208,29 +6315,26 @@ export function SimulatorWindow(): JSX.Element {
                   >
                     <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
                     {freezeRecoveryExhausted && sessionEnded === null ? (
-                      <>
-                        <span>Video frozen — recovery didn&apos;t take.</span>
-                        <button
-                          type="button"
-                          data-component="video-frozen-reconnect"
-                          onClick={() => {
-                            // Deliberate human action → earn a FRESH rebuild budget + a clean
-                            // recovery cycle, and fire a full Room reconnect through the same
-                            // recoverAction channel the automatic ladder uses. (audit wsob9ma70.)
-                            rebuildAttemptsRef.current = 0;
-                            consecutiveAdvancesRef.current = 0;
-                            recoverPhaseRef.current = 'idle';
-                            setFreezeRecoveryExhausted(false);
-                            setRecovering(true);
-                            setRecoverAction((a) => ({ nonce: a.nonce + 1, mode: 'rebuild' }));
-                          }}
-                          className="rounded-full bg-white/15 px-2.5 py-0.5 font-semibold text-white transition-colors hover:bg-white/25"
-                        >
-                          Reconnect
-                        </button>
-                      </>
+                      <span>Video frozen — recovery didn&apos;t take.</span>
                     ) : (
                       <span>{recovering ? 'Video frozen — recovering' : 'Video frozen'}</span>
+                    )}
+                    {/* Manual escape hatch (founder: "stuck, nothing to do"). Once a
+                        recovery is actually in flight (recovering, ~8s in) OR the auto
+                        ladder has exhausted, let the user fire a full reconnect
+                        IMMEDIATELY via the shared manualReconnect rather than waiting
+                        out the multi-cycle ~16s ladder. Hidden pre-recovery (a sub-8s
+                        blip usually self-clears) and on a terminally ended session (the
+                        panel shows the "Session ended" overlay instead). */}
+                    {sessionEnded === null && (recovering || freezeRecoveryExhausted) && (
+                      <button
+                        type="button"
+                        data-component="video-frozen-reconnect"
+                        onClick={manualReconnect}
+                        className="shrink-0 rounded-full bg-white/15 px-2.5 py-0.5 font-semibold text-white transition-colors hover:bg-white/25"
+                      >
+                        Reconnect now
+                      </button>
                     )}
                   </div>
                 )}
@@ -6263,50 +6367,8 @@ export function SimulatorWindow(): JSX.Element {
                     )}
                   </div>
                 )}
-                {/* #135 — SOFT load-stall advisory (A3 box 5eeaf794a: a main-frame nav
-                  that hasn't finished in ~40s). NON-blocking — the page is still trying,
-                  so a gentle top banner with a Retry, NOT the full-screen "failed" overlay.
-                  Suppressed while the hard error overlay is up (an 'errored' frame
-                  supersedes the advisory); a later 'loaded'/navigate clears it. Directly
-                  answers the founder's "it just stops loading, stays on the same site." */}
-                {pageLoadStalled !== null && pageError === null && (
-                  <div
-                    role="status"
-                    data-component="page-load-stalled-banner"
-                    className="absolute left-1/2 top-28 z-20 flex max-w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2.5 rounded-lg bg-black/85 px-3.5 py-2 text-[12px] font-medium leading-snug text-white shadow-lg ring-1 ring-amber-400/40 backdrop-blur"
-                  >
-                    <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
-                    <span className="min-w-0">{pageLoadStalled.message}</span>
-                    <button
-                      type="button"
-                      data-action="retry-stalled-navigate"
-                      onClick={() =>
-                        onNavigate(pageLoadStalled.url !== '' ? pageLoadStalled.url : liveUrl)
-                      }
-                      className="ml-1 shrink-0 rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-white/20"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-                {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC
-                  silently falls back to a TCP/TURN relay when direct UDP is
-                  blocked (box firewall / NAT / ISP) — head-of-line blocking makes
-                  real-time video feel "1000× slower". Surface it prominently
-                  (NOT only in the info overlay) so a relayed session is never
-                  silently slow — this is the #1 latency suspect. */}
-                {(conn.transport === 'tcp' || conn.relayed === true) && (
-                  <div
-                    role="status"
-                    data-component="transport-fallback-badge"
-                    title="The video is going through a TCP/TURN relay because direct UDP is blocked (firewall / NAT / ISP). Real-time video over TCP head-of-line-blocks, which feels very slow. Fix: open the box UDP port range to your network, or use a closer (EU) box."
-                    className="absolute left-1/2 top-32 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-status-error px-3 py-1 text-[10px] font-semibold text-white shadow"
-                  >
-                    ⚠ Slow link — video{' '}
-                    {conn.relayed === true ? 'relayed' : `over ${conn.transport?.toUpperCase()}`}{' '}
-                    (UDP blocked)
-                  </div>
-                )}
+                {/* (page-load-stalled + transport-fallback badges moved up into the
+                    top-advisory stack above so they never overlap the other badges.) */}
                 {/* Finding #7 — persistent "Agent is driving" pill over the video in AI
                   mode. Input capture is off (interactive=false), so taps/scroll/keys do
                   nothing on the device — but with the drawer collapsed (the default

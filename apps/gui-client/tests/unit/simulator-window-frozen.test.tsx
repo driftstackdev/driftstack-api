@@ -431,6 +431,41 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     expect(panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length).toBe(before + 1);
   });
 
+  // GUI UX pass (Wave 1) — the founder must not be stranded through the multi-cycle
+  // ~16s auto-recovery ladder with no action. The manual "Reconnect now" affordance
+  // appears as soon as a recovery is actually IN FLIGHT (recovering) — not only after
+  // the whole ladder exhausts — and firing it drives a fresh full rebuild immediately.
+  it('offers "Reconnect now" mid-ladder once a recovery is in flight (not only after exhaustion)', () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    const { container } = renderSim();
+    let t = 1;
+    advance(2, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    });
+    // Detect the freeze — while merely SHOWN (not yet recovering) there's no button
+    // (a sub-8s blip usually self-clears; the manual escape would be premature).
+    advance(5);
+    expect(frozenBadge(container)).not.toBeNull();
+    expect(container.querySelector('[data-component="video-frozen-reconnect"]')).toBeNull();
+    // SUSTAINED_FREEZE_MS → a resubscribe fires (recovering=true): now the manual
+    // escape hatch is available, well before the ~48s exhaustion.
+    advance(9);
+    const badge = frozenBadge(container);
+    expect(badge?.getAttribute('data-recovering')).toBe('true');
+    expect(badge?.getAttribute('data-exhausted')).toBe('false');
+    const reconnect = container.querySelector('[data-component="video-frozen-reconnect"]');
+    expect(reconnect).not.toBeNull();
+    // Clicking it short-circuits the ladder with an immediate fresh rebuild.
+    const before = panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length;
+    act(() => {
+      fireEvent.click(reconnect as Element);
+    });
+    expect(panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length).toBe(before + 1);
+  });
+
   // #5/#9 — if the resubscribe restores frame-progress before the escalation window,
   // the rebuild must NOT fire and the badge clears (frames are flowing again).
   it('does NOT escalate to rebuild if frame-progress resumes after the resubscribe', () => {
@@ -614,6 +649,29 @@ describe('SimulatorWindow — gui_control_key expiry surfaces controlUnreachable
       await Promise.resolve();
     });
     expect(badge(container)).toBeNull();
+  });
+
+  // GUI UX pass (Wave 1) — the badge was an informational dead-end ("control may not be
+  // reaching the device" with nothing to do). It now carries a working Reconnect that
+  // fires a full Room rebuild (re-establishing the data channel control rides on).
+  it('offers a working Reconnect on the controlUnreachable badge (no longer a dead-end)', async () => {
+    vi.useFakeTimers();
+    panelCbs.recoverActions = [];
+    const { container } = renderSim();
+    sessionState.error = new FakeControlError('expired', 401);
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(badge(container)).not.toBeNull();
+    const reconnect = container.querySelector('[data-component="control-unreachable-reconnect"]');
+    expect(reconnect).not.toBeNull();
+    const before = panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length;
+    act(() => {
+      fireEvent.click(reconnect as Element);
+    });
+    expect(panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length).toBe(before + 1);
   });
 });
 

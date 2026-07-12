@@ -456,10 +456,17 @@ function Shell(): JSX.Element {
     };
   }, [settings.apiKey, settings.baseUrl, activeWorkspace, push]);
 
-  // While settings load, render nothing rather than flashing the wizard.
+  // While settings load, show a calm spinner rather than a bare "Loading…" text
+  // flash (matches the index.html boot splash so the boot→mount handoff is
+  // seamless) — and never flash the wizard before we know the key state.
   if (loading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-surface-base">
+      <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-surface-base">
+        <div
+          className="h-6 w-6 animate-spin rounded-full border-2 border-surface-divider border-t-ink-primary"
+          role="status"
+          aria-label="Loading"
+        />
         <span className="section-label text-ink-muted">Loading…</span>
       </div>
     );

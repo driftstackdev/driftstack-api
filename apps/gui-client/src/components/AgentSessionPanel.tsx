@@ -171,7 +171,10 @@ export function friendlyConnectError(err: unknown): string {
   if (/closed|disconnect/i.test(raw)) {
     return 'The live connection closed — Reconnect, or close this window if the session ended.';
   }
-  return raw.length > 0 ? raw : 'Could not connect to the live stream.';
+  // Unrecognized — a generic friendly line rather than raw transport jargon
+  // (founder: no raw codes/strings like -1004 in the overlay). The raw text still
+  // reaches the dev logs via the caller's error logging.
+  return 'Could not connect to the live stream — Reconnect to try again.';
 }
 
 /** True when the connect error is an expired/invalid token. For these, Reconnect can't

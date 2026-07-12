@@ -24,17 +24,30 @@ export function pageErrorCopy(err: PageErrorInfo): string {
       return "Couldn't find this site — check the address (DNS lookup failed).";
     case 'tls':
       return 'Secure connection failed — the site’s certificate could not be trusted.';
-    case 'http':
-      return `The site returned HTTP ${err.http_status ?? 'error'}.`;
+    case 'http': {
+      // HTTP statuses are user-comprehensible, so keep the number — but lead with
+      // plain "what happened" copy rather than a bare "HTTP 404".
+      const s = err.http_status;
+      if (s === 404) return "This page wasn't found (404).";
+      if (s === 403) return 'Access to this page was denied (403).';
+      if (s === 401) return 'This page requires you to sign in (401).';
+      if (s === 429) return 'The site is rate-limiting requests — try again shortly (429).';
+      if (typeof s === 'number' && s >= 500)
+        return `The site is having problems right now (HTTP ${s}).`;
+      return typeof s === 'number'
+        ? `The site couldn't load this page (HTTP ${s}).`
+        : "The site couldn't load this page.";
+    }
     case 'timeout':
       return 'The site took too long to respond.';
     case 'net':
       return 'Network error while loading the page.';
     default:
-      // Unrecognized / missing kind — prefer the harness message if present, else
-      // a generic honest fallback (never read the failure as a clean load).
-      return typeof err.message === 'string' && err.message.length > 0
-        ? err.message
-        : "This page couldn't be loaded.";
+      // Unrecognized / missing kind — a generic honest fallback (never read the
+      // failure as a clean load). The raw harness `err.message` is deliberately
+      // NOT surfaced here: it can be a cryptic transport code (e.g. -1004) that
+      // must never reach the operator's face (founder). It still reaches the dev
+      // logs via the caller's envelope logging.
+      return "This page couldn't be loaded.";
   }
 }
