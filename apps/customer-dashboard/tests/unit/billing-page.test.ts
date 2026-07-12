@@ -27,6 +27,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
+  portalTimeoutImmediately?: boolean;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
@@ -62,6 +63,18 @@ function setUpDom(
   window.dashboardHydrated = () => {};
   // @ts-expect-error — injected by DashboardLayout
   window.driftstackActAsHeaders = () => ({});
+  if (opts.portalTimeoutImmediately) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 15_000) {
+        window.queueMicrotask(() => {
+          if (typeof handler === 'function') handler(...args);
+        });
+        return 42;
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+  }
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="billing"'));
   if (!pageScript) throw new Error('billing inline script not found');
@@ -256,6 +269,43 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     expect(portalBtn.getAttribute('aria-busy')).toBe('false');
     expect(portalBtn.textContent).toBe('Manage in Stripe portal');
     expect(cancelBtn.textContent).toBe('Cancel in Stripe portal');
+  });
+
+  it('bounds a stalled portal request and restores both entry buttons', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      portalTimeoutImmediately: true,
+      route: (call) => {
+        if (/\/v1\/billing\/portal-session$/.test(call.url)) {
+          return new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          });
+        }
+        return json({
+          subscription: {
+            tier: 'api_builder',
+            status: 'active',
+            current_period_end: '2026-06-30T00:00:00.000Z',
+            cancel_at_period_end: false,
+          },
+        });
+      },
+    });
+    win = window;
+    await flush();
+    const portalBtn = window.document.querySelector('[data-action="portal"]') as HTMLButtonElement;
+    const cancelBtn = window.document.querySelector('[data-action="cancel"]') as HTMLButtonElement;
+    portalBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+
+    const portalCall = fetchCalls.find((call) => /\/v1\/billing\/portal-session$/.test(call.url));
+    expect(portalCall?.init?.signal?.aborted).toBe(true);
+    expect(portalBtn.disabled).toBe(false);
+    expect(cancelBtn.disabled).toBe(false);
+    expect(portalBtn.getAttribute('aria-busy')).toBe('false');
+    expect(text(window, '[data-banner]')).toContain("Couldn't open Stripe right now");
   });
 
   it('crypto orders: renders tier label, price, created day + a Receipt button ONLY on paid orders (slice 3.3)', async () => {

@@ -288,6 +288,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const cancelHint = root.querySelector('[data-field="cancel-hint"]');
 
       let portalLoading = false;
+      const PORTAL_REQUEST_TIMEOUT_MS = 15_000;
       function setPortalLoading(loading) {
         portalLoading = loading;
         [portalBtn, cancelBtn].forEach((btn) => {
@@ -310,10 +311,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (portalLoading) return;
         setPortalLoading(true);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), PORTAL_REQUEST_TIMEOUT_MS);
         try {
           const response = await authedFetch('/v1/billing/portal-session', {
             method: 'POST',
             body: '{}',
+            signal: controller.signal,
           });
           if (!response.ok) throw new Error('portal unavailable');
           const body = await response.json();
@@ -322,6 +326,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         } catch {
           showBanner("Couldn't open Stripe right now — check your connection and try again.");
         } finally {
+          clearTimeout(timeoutId);
           setPortalLoading(false);
         }
       }
