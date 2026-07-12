@@ -24730,3 +24730,16 @@ Verification:
 
 - focused server suites: 193 passed and 3 database-gated tests skipped;
 - root `npm run typecheck` passes across every workspace; admin/customer Astro output retains suggestions only, with zero errors and zero warnings.
+
+## V-566 — exhaustive repository gate closure
+
+**Date:** 2026-07-12
+
+Updated the three remaining GUI source-parity guards to protect the new format-aware receipt download state, honest clipboard failure/retry flows, and accessible payment-address copy state.
+
+Verification:
+
+- focused updated parity guards: 22/22 tests pass;
+- exhaustive root Vitest: 2,486 files passed and 26 skipped; 24,749 tests passed and 89 skipped;
+- root workspace typecheck passes;
+- full GUI jsdom remains green at 1,198 passed and 6 skipped across 148 files.
