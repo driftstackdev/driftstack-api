@@ -102,6 +102,10 @@ export const MAX_TAB_SNAPSHOT_BYTES = 48 * 1024;
 export const MAX_TAB_URL_BYTES = 4 * 1024;
 export const MAX_TAB_TITLE_BYTES = 1024;
 export const MAX_TAB_ID_BYTES = 256;
+/** Hard ceiling for every JSON input envelope before DataChannel publish. Kept below
+ * LiveKit's ~64KiB reliable-buffer congestion threshold so no current or future
+ * event type can strand touchEnd/keyUp behind one oversized packet. */
+export const MAX_INPUT_EVENT_BYTES = 48 * 1024;
 
 const truncateTabField = (value: string, maxChars: number): string =>
   value.length <= maxChars ? value : value.slice(0, maxChars);
@@ -250,6 +254,11 @@ export async function sendInputEvent(
   }
   const reliable = opts.reliable ?? true;
   const data = new TextEncoder().encode(JSON.stringify(event));
+  if (data.byteLength > MAX_INPUT_EVENT_BYTES) {
+    throw new RangeError(
+      `Input event ${event.type} exceeds ${MAX_INPUT_EVENT_BYTES} encoded bytes`,
+    );
+  }
   try {
     await room.localParticipant.publishData(data, { reliable });
   } catch (err) {

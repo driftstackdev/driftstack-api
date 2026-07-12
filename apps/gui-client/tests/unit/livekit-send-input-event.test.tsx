@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   boundTabListUpdate,
   isBenignTeardownError,
+  MAX_INPUT_EVENT_BYTES,
   MAX_TAB_FIELD_CHARS,
   MAX_TAB_ID_CHARS,
   MAX_TAB_LIST_COUNT,
@@ -173,6 +174,14 @@ describe('sendInputEvent', () => {
       await expect(sendInputEvent(room, event)).rejects.toThrow(/non-finite number/i);
       expect(publishData).not.toHaveBeenCalled();
     }
+  });
+
+  it('rejects every oversized encoded envelope before it can block the channel', async () => {
+    const { room, publishData } = makeRoom();
+    await expect(
+      sendInputEvent(room, { type: 'keyDown', key: 'x'.repeat(MAX_INPUT_EVENT_BYTES) }),
+    ).rejects.toThrow(/exceeds .* encoded bytes/i);
+    expect(publishData).not.toHaveBeenCalled();
   });
 });
 
