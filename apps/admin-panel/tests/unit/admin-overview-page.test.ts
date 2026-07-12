@@ -22,7 +22,9 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
-  route: (call: MockFetchCall) => Response;
+  confirmCalls?: unknown[];
+  confirmReturns?: boolean;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -55,6 +57,11 @@ function setUpDom(
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
   // @ts-expect-error — injected by AdminLayout
   window.dashboardHydrated = () => {};
+  // @ts-expect-error — injected by AdminLayout
+  window.driftstackConfirm = (_message: string, confirmOpts: unknown) => {
+    opts.confirmCalls?.push(confirmOpts);
+    return Promise.resolve(opts.confirmReturns ?? true);
+  };
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-overview"'));
   if (!pageScript) throw new Error('admin-overview inline script not found');
@@ -550,5 +557,56 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     win = window;
     await flush();
     expect(text(window, '[data-banner]')).toContain('admin scope required');
+  });
+
+  it('owner-secret delete is destructive-confirmed, single-flight, and visibly busy', async () => {
+    let resolveDelete: ((response: Response) => void) | undefined;
+    const confirmCalls: unknown[] = [];
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      confirmCalls,
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({
+            enabled: true,
+            secrets: [
+              { name: 'stripe_key', description: 'billing', updated_at: '2026-07-12T18:00:00Z' },
+            ],
+          });
+        }
+        if (/\/v1\/admin\/owner\/secrets\/stripe_key$/.test(call.url) && method === 'DELETE') {
+          return new Promise<Response>((resolve) => {
+            resolveDelete = resolve;
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-delete-secret="stripe_key"]',
+    ) as HTMLButtonElement;
+
+    button.click();
+    await flush(1);
+    button.click();
+
+    expect(confirmCalls).toEqual([{ confirmLabel: 'Delete secret', destructive: true }]);
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe('Deleting…');
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'DELETE' && /\/owner\/secrets\/stripe_key$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+
+    resolveDelete?.(new Response(null, { status: 204 }));
+    await flush();
   });
 });

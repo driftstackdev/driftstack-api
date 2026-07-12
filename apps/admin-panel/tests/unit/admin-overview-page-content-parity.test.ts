@@ -74,6 +74,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/pricing'");
   });
 
+  it('irreversible owner-secret deletion uses the branded destructive modal and a per-secret single-flight guard', () => {
+    expect(body).toMatch(/const secretDeletesInFlight = new Set\(\);/);
+    expect(body).toMatch(/secretDeletesInFlight\.has\(name\)/);
+    expect(body).toMatch(/window\.driftstackConfirm/);
+    expect(body).toMatch(/confirmLabel: 'Delete secret',\s*destructive: true/);
+    expect(body).toMatch(/button\.textContent = 'Deleting…'/);
+    expect(body).toMatch(/button\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).not.toMatch(/if \(!window\.confirm\('Delete secret/);
+  });
+
   it('tile data-fields map to overview-response keys', () => {
     // The progressive-enhancement script setText()s these three
     // fields from the body.accounts / body.webhooks payload —

@@ -912,7 +912,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 '<span class="ml-auto text-[11px] text-tk-ink-3">' + updated + '</span>' +
                 '<output class="hidden max-w-[16rem] truncate rounded bg-slate-900 px-2 py-0.5 font-mono text-[11px] text-emerald-300" data-secret-value="' + name + '"></output>' +
                 '<button type="button" data-reveal-secret="' + name + '" class="rounded border border-tk-border px-2 py-1 text-[11px] text-tk-ink-2 hover:bg-tk-hover">Reveal</button>' +
-                '<button type="button" data-delete-secret="' + name + '" class="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50">Delete</button>' +
+                '<button type="button" data-delete-secret="' + name + '" class="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">Delete</button>' +
                 '</div>'
               );
             })
@@ -924,6 +924,46 @@ const apiBaseUrl = resolveApiBaseUrl();
         return authedFetch('/v1/admin/owner/secrets')
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => renderSecrets(body));
+      }
+      const secretDeletesInFlight = new Set();
+      async function deleteSecret(name, button) {
+        if (!name || secretDeletesInFlight.has(name)) return;
+        secretDeletesInFlight.add(name);
+        const idleLabel = button ? button.textContent : 'Delete';
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'Confirming…';
+          button.setAttribute('aria-busy', 'true');
+        }
+        try {
+          const confirmFn = window.driftstackConfirm;
+          const confirmed = confirmFn
+            ? await confirmFn('Delete secret "' + name + '"? This is audited and irreversible.', {
+                confirmLabel: 'Delete secret',
+                destructive: true,
+              })
+            : window.confirm('Delete secret "' + name + '"? This is audited and irreversible.');
+          if (!confirmed) return;
+          if (button) button.textContent = 'Deleting…';
+          const dstatus = root.querySelector('[data-field="secret-set-status"]');
+          const r = await authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name), {
+            method: 'DELETE',
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          if (dstatus) dstatus.textContent = 'Deleted "' + name + '".';
+          await fetchSecrets();
+        } catch (err) {
+          const dstatus = root.querySelector('[data-field="secret-set-status"]');
+          const msg = err && err.message ? err.message : 'network error';
+          if (dstatus) dstatus.textContent = 'Delete failed (' + msg + ').';
+        } finally {
+          secretDeletesInFlight.delete(name);
+          if (button && button.isConnected) {
+            button.disabled = false;
+            button.textContent = idleLabel;
+            button.removeAttribute('aria-busy');
+          }
+        }
       }
       const secretsList = root.querySelector('[data-list="owner-secrets"]');
       if (secretsList) {
@@ -955,22 +995,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           if (deleteBtn) {
             const name = deleteBtn.getAttribute('data-delete-secret');
-            if (!window.confirm('Delete secret "' + name + '"? This is audited and irreversible.')) return;
-            // Reject on non-2xx + surface the outcome — the old
-            // `.then(fetchSecrets).catch(() => {})` ran on a 4xx/5xx the same as on
-            // success and swallowed network errors, so a FAILED delete of an
-            // owner secret looked like it succeeded (adversarial review wlcfjoxqq #7).
-            const dstatus = root.querySelector('[data-field="secret-set-status"]');
-            void authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name), { method: 'DELETE' })
-              .then((r) => {
-                if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
-                if (dstatus) dstatus.textContent = 'Deleted "' + name + '".';
-                return fetchSecrets();
-              })
-              .catch((err) => {
-                const msg = err && err.message ? err.message : 'network error';
-                if (dstatus) dstatus.textContent = 'Delete failed (' + msg + ').';
-              });
+            if (name) void deleteSecret(name, deleteBtn);
           }
         });
       }
