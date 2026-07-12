@@ -139,15 +139,13 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
   });
 
-  it('shared confirm + prompt modals reject overlapping calls and release their single-flight locks on close', () => {
-    expect(body).toMatch(/var confirmOpen = false;/);
-    expect(body).toMatch(/if \(confirmOpen\) \{ resolve\(false\); return; \}/);
-    expect(body).toMatch(/confirmOpen = true;/);
-    expect(body).toMatch(/function done\(result\) \{\s*confirmOpen = false;/);
-    expect(body).toMatch(/var promptOpen = false;/);
-    expect(body).toMatch(/if \(promptOpen\) \{ resolve\(null\); return; \}/);
-    expect(body).toMatch(/promptOpen = true;/);
-    expect(body).toMatch(/function done\(result\) \{\s*promptOpen = false;/);
+  it('shared confirm + prompt modals use one cross-type lease and release it only on close', () => {
+    expect(body).toMatch(/var modalOpen = false;/);
+    expect(body).toMatch(/if \(modalOpen\) \{ resolve\(false\); return; \}/);
+    expect(body).toMatch(/if \(modalOpen\) \{ resolve\(null\); return; \}/);
+    expect(body.match(/modalOpen = true;/g)).toHaveLength(2);
+    expect(body.match(/function done\(result\) \{\s*modalOpen = false;/g)).toHaveLength(2);
+    expect(body).not.toMatch(/var (?:confirm|prompt)Open/);
   });
 
   it('all 10 navItem targets exist as files (no dangling sidebar links)', () => {

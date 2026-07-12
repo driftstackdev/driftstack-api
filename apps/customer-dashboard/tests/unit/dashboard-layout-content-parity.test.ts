@@ -59,15 +59,19 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/<meta name="robots" content="noindex" \/>/);
   });
 
-  it('shared confirm + prompt modals reject overlapping calls and release their single-flight locks on close', () => {
-    expect(body).toMatch(/var confirmOpen = false;/);
-    expect(body).toMatch(/if \(confirmOpen\) \{\s*resolve\(false\);\s*return;\s*\}/);
-    expect(body).toMatch(/confirmOpen = true;/);
-    expect(body).toMatch(/function done\(result\) \{\s*confirmOpen = false;/);
-    expect(body).toMatch(/var promptOpen = false;/);
-    expect(body).toMatch(/if \(promptOpen\) \{\s*resolve\(null\);\s*return;\s*\}/);
-    expect(body).toMatch(/promptOpen = true;/);
-    expect(body).toMatch(/function done\(result\) \{\s*promptOpen = false;/);
+  it('shared confirm + prompt modals use one cross-type lease and release it only on close', () => {
+    expect(body.match(/typeof window\.__driftstackModalOpen !== 'boolean'/g)).toHaveLength(2);
+    expect(body).toMatch(
+      /if \(window\.__driftstackModalOpen\) \{\s*resolve\(false\);\s*return;\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(window\.__driftstackModalOpen\) \{\s*resolve\(null\);\s*return;\s*\}/,
+    );
+    expect(body.match(/window\.__driftstackModalOpen = true;/g)).toHaveLength(2);
+    expect(
+      body.match(/function done\(result\) \{\s*window\.__driftstackModalOpen = false;/g),
+    ).toHaveLength(2);
+    expect(body).not.toMatch(/var (?:confirm|prompt)Open/);
   });
 
   it('destructive confirms require an explicit OK click: focus Cancel and swallow Enter', () => {
