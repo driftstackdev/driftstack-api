@@ -271,6 +271,31 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(panel?.querySelector('[aria-label="Close drawer"]')).not.toBeNull();
   });
 
+  it('the drawer rail persistently labels every section without relying on hover', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_x');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const rail = container.querySelector('[data-component="sim-drawer-rail"]');
+    expect(rail).not.toBeNull();
+    for (const [pane, label] of [
+      ['session', 'Session'],
+      ['controls', 'Controls'],
+      ['diagnostics', 'Health'],
+      ['cookies', 'Cookies'],
+      ['files', 'Files'],
+      ['downloads', 'Downloads'],
+      ['recording', 'Record'],
+    ] as const) {
+      const persistent = rail?.querySelector(`[data-component="sim-rail-label-${pane}"]`);
+      expect(persistent?.textContent).toBe(label);
+      expect(persistent?.className).not.toContain('opacity-0');
+    }
+    expect(rail?.querySelector('[data-component="sim-rail-end"]')?.textContent).toContain('End');
+  });
+
   it('brands the toolbar: Drift mark + profile name (primary) with the device muted beside it', () => {
     window.history.pushState(
       {},

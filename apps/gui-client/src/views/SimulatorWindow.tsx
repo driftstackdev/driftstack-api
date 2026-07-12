@@ -858,10 +858,19 @@ const SIM_PANE_TITLES: Record<SimDrawerPane, string> = {
   downloads: 'Downloads',
   recording: 'Recording',
 };
+const SIM_PANE_RAIL_LABELS: Record<SimDrawerPane, string> = {
+  session: 'Session',
+  controls: 'Controls',
+  diagnostics: 'Health',
+  cookies: 'Cookies',
+  files: 'Files',
+  downloads: 'Downloads',
+  recording: 'Record',
+};
 
-/** One icon button in the Approach-B drawer rail — a square, ~44px tap target
- *  with a hand-rolled stroke-SVG glyph. The active section gets the accent
- *  background; an optional `pulse` (recording) shows a small live dot. */
+/** One button in the Approach-B drawer rail — a compact icon + persistent label
+ *  (Tauri hover/title tooltips are unreliable). The active section gets the
+ *  accent background; an optional `pulse` (recording) shows a small live dot. */
 function DrawerRailButton({
   pane,
   active,
@@ -874,6 +883,7 @@ function DrawerRailButton({
   onSelect: (pane: SimDrawerPane) => void;
 }): JSX.Element {
   const title = SIM_PANE_TITLES[pane];
+  const railLabel = SIM_PANE_RAIL_LABELS[pane];
   return (
     <button
       type="button"
@@ -881,7 +891,7 @@ function DrawerRailButton({
       aria-label={title}
       aria-pressed={active}
       onClick={() => onSelect(pane)}
-      className={`group relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+      className={`group relative flex h-10 w-11 flex-col items-center justify-center gap-0.5 rounded-lg transition-colors ${
         active
           ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
           : 'text-ink-secondary hover:bg-white/10 hover:text-ink-primary'
@@ -900,6 +910,13 @@ function DrawerRailButton({
       >
         {SIM_PANE_ICONS[pane]}
       </svg>
+      <span
+        data-component={`sim-rail-label-${pane}`}
+        aria-hidden="true"
+        className="max-w-[42px] truncate text-[7.5px] font-medium leading-none tracking-tight"
+      >
+        {railLabel}
+      </span>
       {pulse === true && (
         <span
           aria-hidden="true"
@@ -6748,7 +6765,7 @@ export function SimulatorWindow(): JSX.Element {
                       disabled={controlBusy}
                       aria-busy={controlAction?.kind === 'end'}
                       onClick={onEndSession}
-                      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:opacity-50 ${
+                      className={`flex h-10 w-11 flex-col items-center justify-center gap-0.5 rounded-lg transition-colors disabled:opacity-50 ${
                         endArmed
                           ? 'bg-red-500/30 text-red-200 ring-1 ring-red-400/70'
                           : 'text-red-400 hover:bg-red-500/20 hover:text-red-300'
@@ -6756,6 +6773,9 @@ export function SimulatorWindow(): JSX.Element {
                     >
                       <span aria-hidden="true">
                         {controlAction?.kind === 'end' ? <ControlActionSpinner /> : '◼'}
+                      </span>
+                      <span aria-hidden="true" className="text-[7.5px] font-medium leading-none">
+                        End
                       </span>
                     </button>
                   </>
