@@ -18,6 +18,9 @@
 import { Room, RoomEvent } from 'livekit-client';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { isReliableInputCongested, ReliableInputCongestedError } from './livekit-input-congestion';
+import { isBenignTeardownError } from './livekit-errors';
+
+export { isBenignTeardownError } from './livekit-errors';
 
 /** LK.6.d — the input-event schema the Mac side decodes. Must
  *  stay in lock-step with Agent 1's Swift `InputEvent` enum. */
@@ -405,24 +408,6 @@ export async function sendText(room: Room, text: string): Promise<void> {
     throw new RangeError(`Device paste exceeds ${MAX_DEVICE_TEXT_BYTES} UTF-8 bytes`);
   }
   await sendInputEvent(room, { type: 'text', text }, { reliable: true });
-}
-
-/** True for the LiveKit errors thrown when an operation runs after the Room's
- *  RTCEngine has been closed (teardown races) — safe to ignore on a
- *  fire-and-forget send and never worth blanking the app over. */
-export function isBenignTeardownError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  // "Publisher connection not set" / "could not establish Publisher connection" are
-  // the mid-RECONNECT publish rejects (a tap/tab-op landing while the Room is
-  // re-establishing its publisher) — harmless (the next event re-syncs), but they
-  // were NOT matched here so sendInputEvent re-threw them into a fire-and-forget
-  // `void` → the global unhandledrejection backstop painted the latched fatal
-  // overlay over the borderless simulator (the founder's "GUI keeps getting stuck";
-  // A3 sweep 2026-07-10). Treating them as benign is the single source of truth the
-  // global handler reuses, so the two matchers can't drift again.
-  return /PC manager is closed|client initiated disconnect|engine (is )?closed|not connected|Publisher connection not set|could not establish Publisher connection/i.test(
-    message,
-  );
 }
 
 /** Re-export the public surface gui-client AgentSessionPanel

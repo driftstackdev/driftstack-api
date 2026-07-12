@@ -1,12 +1,7 @@
 import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App';
-import { SimulatorWindow } from './views/SimulatorWindow';
-import { RecordingsProvider } from './lib/recordings';
-import { ConfirmProvider } from './components/ConfirmProvider';
-import { DevLogPanel } from './components/DevLogPanel';
 import { installLogCapture } from './lib/log-buffer';
-import { isBenignTeardownError } from './lib/livekit';
+import { isBenignTeardownError } from './lib/livekit-errors';
 import './styles/index.css';
 
 // The floating-iPhone simulator opens as a separate Tauri window pointed at
@@ -202,14 +197,52 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { failed: boo
   }
 }
 
+async function mountApplication(root: HTMLElement): Promise<void> {
+  if (isSimulatorWindow) {
+    const [{ SimulatorWindow }, { RecordingsProvider }] = await Promise.all([
+      import('./views/SimulatorWindow'),
+      import('./lib/recordings'),
+    ]);
+    createRoot(root).render(
+      <StrictMode>
+        <RootErrorBoundary>
+          {/* RecordingsProvider here too: the simulator's Record pill writes
+              through the same Rust-side shared store as the main window. */}
+          <RecordingsProvider>
+            <SimulatorWindow />
+          </RecordingsProvider>
+        </RootErrorBoundary>
+      </StrictMode>,
+    );
+    return;
+  }
+
+  const [{ App }, { ConfirmProvider }, { DevLogPanel }] = await Promise.all([
+    import('./App'),
+    import('./components/ConfirmProvider'),
+    import('./components/DevLogPanel'),
+  ]);
+  createRoot(root).render(
+    <StrictMode>
+      <RootErrorBoundary>
+        <ConfirmProvider>
+          <App />
+        </ConfirmProvider>
+      </RootErrorBoundary>
+      {/* Outside the error boundary: the dev-log panel stays available even if
+          the App tree throws (so you can read what failed). */}
+      <DevLogPanel />
+    </StrictMode>,
+  );
+}
+
 try {
   const root = document.getElementById('root');
   if (!root) throw new Error('#root element missing from index.html');
   // The floating-iPhone simulator opens as a separate Tauri window pointed at
   // `?window=simulator` — that window renders ONLY the device (no app chrome).
   // Reuses the value computed up front for the per-window log mirror (#137).
-  const isSimulator = isSimulatorWindow;
-  if (isSimulator) {
+  if (isSimulatorWindow) {
     // The window is `transparent: true` — make the webview see-through so only
     // the device frame paints (the body otherwise fills it with bg-surface-base).
     document.documentElement.style.background = 'transparent';
@@ -222,27 +255,7 @@ try {
     document.documentElement.dataset.mode = 'dark';
     document.documentElement.dataset.accent = 'oxblood';
   }
-  createRoot(root).render(
-    <StrictMode>
-      <RootErrorBoundary>
-        {isSimulator ? (
-          // RecordingsProvider here too: the simulator's Record pill writes
-          // through the same Rust-side shared store as the main window.
-          <RecordingsProvider>
-            <SimulatorWindow />
-          </RecordingsProvider>
-        ) : (
-          <ConfirmProvider>
-            <App />
-          </ConfirmProvider>
-        )}
-      </RootErrorBoundary>
-      {/* Outside the error boundary: the dev-log panel stays available even if
-          the App tree throws (so you can read what failed). Not in the bare
-          simulator window. */}
-      {!isSimulator && <DevLogPanel />}
-    </StrictMode>,
-  );
+  void mountApplication(root).catch((err: unknown) => renderFatalError('BOOT_EXCEPTION', err));
 } catch (err) {
   renderFatalError('BOOT_EXCEPTION', err);
 }
