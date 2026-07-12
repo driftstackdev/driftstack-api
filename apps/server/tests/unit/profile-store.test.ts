@@ -327,7 +327,7 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
         sessionId: 'ses_y',
         profile_id: 'p2',
         stored: true,
-        size_bytes: 200_000_000,
+        size_bytes: 9_000_000_000, // multi-GiB metadata; no blob retained in this frame
       },
       ownerNodeId,
     );
@@ -335,7 +335,7 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     expect(recordSave.mock.calls[0]![0]).toMatchObject({
       id: 'p2',
       accountId: 'acc_owner',
-      sizeBytes: 200_000_000,
+      sizeBytes: 9_000_000_000,
     });
     expect(putObject).not.toHaveBeenCalled();
   });

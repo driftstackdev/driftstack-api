@@ -38,7 +38,7 @@ import {
   PAGE_STATE_URL_MAX_LENGTH,
   PAGE_STATE_TEXT_MAX_LENGTH,
   PROFILE_SAVED_INLINE_MAX_BYTES,
-  PROFILE_SAVED_MAX_BYTES,
+  PROFILE_SAVED_SIZE_MAX_BYTES,
   HARNESS_INTENT_PARAM_SCHEMAS,
   TERMINAL_SESSION_STATUSES,
   HarnessIntentNameSchema,
@@ -389,7 +389,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('profile_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
     expect(body).toContain('stored: z.literal(true).optional(),');
     expect(body).toContain(
-      'size_bytes: z.number().int().nonnegative().max(PROFILE_SAVED_MAX_BYTES)',
+      'size_bytes: z.number().int().nonnegative().max(PROFILE_SAVED_SIZE_MAX_BYTES)',
     );
     // inline + large shapes both parse via the union; sessionId required.
     expect(
@@ -415,7 +415,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         sessionId: 's1',
         profile_id: 'p1',
         stored: true,
-        size_bytes: 200_000_000,
+        size_bytes: 9_000_000_000,
       }).success,
     ).toBe(true);
     // a negative size_bytes is rejected (nonnegative).
@@ -468,7 +468,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         sessionId: 's1',
         profile_id: 'p1',
         stored: true,
-        size_bytes: PROFILE_SAVED_MAX_BYTES + 1,
+        size_bytes: PROFILE_SAVED_SIZE_MAX_BYTES + 1,
       }).success,
     ).toBe(false);
   });

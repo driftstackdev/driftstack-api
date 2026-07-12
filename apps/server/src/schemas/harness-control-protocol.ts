@@ -89,7 +89,10 @@ export const HARNESS_FRAME_ID_MAX_LENGTH = 256;
 export const PAGE_STATE_URL_MAX_LENGTH = 8192;
 export const PAGE_STATE_TEXT_MAX_LENGTH = 4096;
 export const PROFILE_SAVED_INLINE_MAX_BYTES = 256 * 1024;
-export const PROFILE_SAVED_MAX_BYTES = 256 * 1024 * 1024;
+// `size_bytes` is metadata for both inline and presigned saves, not retained
+// frame content. Profiles can legitimately be multi-GiB; bound only to the
+// largest integer JavaScript can represent exactly before writing bigint data.
+export const PROFILE_SAVED_SIZE_MAX_BYTES = Number.MAX_SAFE_INTEGER;
 const PROFILE_SAVED_INLINE_MAX_BASE64_LENGTH = 4 * Math.ceil(PROFILE_SAVED_INLINE_MAX_BYTES / 3);
 const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
@@ -680,7 +683,7 @@ export const ProfileSavedSchema = z
     // and the consumer leaves size_bytes NULL. The save-back persists it (plus
     // last_saved_at) on the profile row so the dashboard can surface per-profile
     // storage + an account total.
-    size_bytes: z.number().int().nonnegative().max(PROFILE_SAVED_MAX_BYTES).optional(),
+    size_bytes: z.number().int().nonnegative().max(PROFILE_SAVED_SIZE_MAX_BYTES).optional(),
   })
   .superRefine((frame, ctx) => {
     const inline = frame.sealed_blob !== undefined;
