@@ -10,6 +10,7 @@
 // muscle-memory surface.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useModalPresence } from '../lib/use-modal-presence';
 
 export interface PaletteAction {
   id: string;
@@ -49,6 +50,7 @@ export function CommandPalette({
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const { shouldRender, isExiting } = useModalPresence(open);
 
   const matches = useMemo(() => filterActions(actions, query), [actions, query]);
 
@@ -76,7 +78,7 @@ export function CommandPalette({
     setCursor((c) => Math.min(c, Math.max(0, matches.length - 1)));
   }, [matches.length]);
 
-  if (!open) return null;
+  if (!shouldRender) return null;
 
   function runAt(index: number): void {
     const action = matches[index];
@@ -91,12 +93,19 @@ export function CommandPalette({
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"
-      className="fixed inset-0 z-50 grid place-items-start justify-center bg-black/35 pt-[14vh] backdrop-blur-[2px]"
+      {...(isExiting ? { 'aria-hidden': true, inert: '' } : {})}
+      className={`fixed inset-0 z-50 grid place-items-start justify-center bg-black/35 pt-[14vh] backdrop-blur-[2px] ${
+        isExiting ? 'pointer-events-none animate-modal-backdrop-out' : 'animate-modal-backdrop-in'
+      }`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (open && e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[560px] max-w-[90vw] overflow-hidden rounded-xl border border-surface-divider bg-surface-raised shadow-2xl">
+      <div
+        className={`w-[560px] max-w-[90vw] overflow-hidden rounded-xl border border-surface-divider bg-surface-raised shadow-2xl ${
+          isExiting ? 'animate-modal-panel-out' : 'animate-modal-panel-in'
+        }`}
+      >
         <div className="flex items-center gap-2.5 border-b border-surface-divider px-4 py-3">
           <span className="text-xs text-ink-muted">⌘K</span>
           <input

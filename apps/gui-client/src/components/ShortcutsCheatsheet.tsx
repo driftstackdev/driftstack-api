@@ -9,6 +9,7 @@
 import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useFocusTrap } from '../lib/use-focus-trap';
+import { useModalPresence } from '../lib/use-modal-presence';
 
 const isMac =
   typeof navigator !== 'undefined' &&
@@ -71,17 +72,21 @@ export function ShortcutsCheatsheet({
   onClose: () => void;
 }): JSX.Element | null {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const { shouldRender, isExiting } = useModalPresence(open);
   // Focus-trap the dialog, close on Escape, and restore focus to the opener on
   // close (was Escape-only, so keyboard focus leaked to the view behind it).
   useFocusTrap(open, dialogRef, onClose);
 
-  if (!open) return null;
+  if (!shouldRender) return null;
   return (
     <div
       data-component="shortcuts-cheatsheet"
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-[2px]"
+      {...(isExiting ? { 'aria-hidden': true, inert: '' } : {})}
+      className={`fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-[2px] ${
+        isExiting ? 'pointer-events-none animate-modal-backdrop-out' : 'animate-modal-backdrop-in'
+      }`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (open && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -89,7 +94,9 @@ export function ShortcutsCheatsheet({
         role="dialog"
         aria-modal="true"
         aria-label="Keyboard shortcuts"
-        className="w-[480px] max-w-[92vw] overflow-hidden rounded-xl border border-surface-divider bg-surface-raised shadow-2xl"
+        className={`w-[480px] max-w-[92vw] overflow-hidden rounded-xl border border-surface-divider bg-surface-raised shadow-2xl ${
+          isExiting ? 'animate-modal-panel-out' : 'animate-modal-panel-in'
+        }`}
       >
         <div className="flex items-center justify-between border-b border-surface-divider px-4 py-3">
           <span className="text-sm font-medium text-ink-primary">Keyboard shortcuts</span>

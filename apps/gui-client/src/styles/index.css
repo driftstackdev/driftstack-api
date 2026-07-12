@@ -133,6 +133,58 @@
   animation: ds-view-in 150ms ease-out;
 }
 
+/* Shared modal presence transition. The modal remains mounted but inert for the
+   120ms exit, so the backdrop and panel leave as one deliberate gesture without
+   keeping focus or pointer interaction alive. */
+@keyframes ds-modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ds-modal-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ds-modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes ds-modal-panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+.animate-modal-backdrop-in {
+  animation: ds-modal-backdrop-in 120ms ease-out both;
+}
+.animate-modal-backdrop-out {
+  animation: ds-modal-backdrop-out 120ms ease-in both;
+}
+.animate-modal-panel-in {
+  animation: ds-modal-panel-in 120ms ease-out both;
+}
+.animate-modal-panel-out {
+  animation: ds-modal-panel-out 120ms ease-in both;
+}
+
 /* iOS tap cursor (SimulatorWindow) — a ring that blooms from the tap point and
    fades. One-shot (forwards) so it disappears after a single tap. Centered on
    its left/top anchor via the translate. */

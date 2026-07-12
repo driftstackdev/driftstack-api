@@ -1,7 +1,7 @@
 // CommandPalette — filter ranking, keyboard navigation, run/close contract.
 
 import { describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import {
   CommandPalette,
@@ -87,5 +87,26 @@ describe('CommandPalette', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.getAttribute('data-component')).toBe('command-palette');
+  });
+
+  it('keeps the closing dialog inert for its exit transition, then removes it', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container, rerender } = render(
+        <CommandPalette open actions={actions()} onClose={() => {}} />,
+      );
+      rerender(<CommandPalette open={false} actions={actions()} onClose={() => {}} />);
+
+      const exiting = container.querySelector('[data-component="command-palette"]');
+      expect(exiting).not.toBeNull();
+      expect(exiting).toHaveAttribute('aria-hidden', 'true');
+      expect(exiting).toHaveAttribute('inert');
+      expect(exiting).toHaveClass('pointer-events-none', 'animate-modal-backdrop-out');
+
+      await act(() => vi.advanceTimersByTime(120));
+      expect(container.querySelector('[data-component="command-palette"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
