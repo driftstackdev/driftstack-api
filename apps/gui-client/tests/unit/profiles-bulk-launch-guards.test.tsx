@@ -91,7 +91,7 @@ const stableContext = {
     concurrent_session_active: 0,
     profile_cap: 10,
     profile_active: 2,
-    teams: [] as Array<{ owner_account_id: string; role: string }>,
+    teams: [] as Array<{ membership_id: string; owner_account_id: string; role: string }>,
   },
   refreshAccountMe: vi.fn(() => Promise.resolve()),
   loading: false,
@@ -294,7 +294,9 @@ describe('ProfilesView bulk launch guards', () => {
   // Finding 2 (low): read-only team gate.
   it('blocks a read-only team member with the clean reason and creates nothing', async () => {
     stableContext.activeWorkspace = 'acct_team';
-    stableContext.accountMe.teams = [{ owner_account_id: 'acct_team', role: 'member' }];
+    stableContext.accountMe.teams = [
+      { membership_id: 'mem_team_member', owner_account_id: 'acct_team', role: 'member' },
+    ];
     renderView();
 
     fireEvent.click(await screen.findByLabelText('Select Idle'));
@@ -312,7 +314,9 @@ describe('ProfilesView bulk launch guards', () => {
 
   it('still allows bulk Launch for a team ADMIN', async () => {
     stableContext.activeWorkspace = 'acct_team';
-    stableContext.accountMe.teams = [{ owner_account_id: 'acct_team', role: 'admin' }];
+    stableContext.accountMe.teams = [
+      { membership_id: 'mem_team_admin', owner_account_id: 'acct_team', role: 'admin' },
+    ];
     agentCreate.mockResolvedValue({ id: 'agt_admin', livekit: LIVEKIT });
     renderView();
 
