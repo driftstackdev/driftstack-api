@@ -831,7 +831,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (body && Array.isArray(body.tiers)) renderPricing(body.tiers);
           });
       }
-      function savePricing(tier) {
+      const pricingSavesInFlight = new Set();
+      async function savePricing(tier, button) {
+        if (!tier || pricingSavesInFlight.has(tier)) return;
         const input = root.querySelector('[data-edit-tier="' + tier + '"]');
         const status = root.querySelector('[data-save-status="' + tier + '"]');
         if (!input) return;
@@ -843,34 +845,55 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           return;
         }
-        if (status) {
-          status.textContent = '…';
-          status.className = 'w-12 text-[11px] text-tk-ink-3';
+        pricingSavesInFlight.add(tier);
+        const idleLabel = button ? button.textContent : 'Save';
+        input.disabled = true;
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'Confirming…';
+          button.setAttribute('aria-busy', 'true');
         }
-        authedFetch('/v1/admin/owner/pricing/' + encodeURIComponent(tier), {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ monthly_cents: cents }),
-        })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then(() => {
-            // Reflect the saved price in-place — a full re-render (fetchPricing)
-            // would wipe this status + clobber any other in-progress edit. The
-            // 30s poll reconciles the rest.
-            const row = root.querySelector('[data-pricing-row="' + tier + '"]');
-            const label = row ? row.querySelector('dt span') : null;
-            if (label) label.textContent = '$' + (cents / 100).toFixed(0) + '/mo';
-            if (status) {
-              status.textContent = 'saved';
-              status.className = 'w-12 text-[11px] text-emerald-600';
-            }
-          })
-          .catch(() => {
-            if (status) {
-              status.textContent = 'error';
-              status.className = 'w-12 text-[11px] text-rose-600';
-            }
+        try {
+          const confirmed = await window.driftstackConfirm(
+            'Set ' + tier + ' monthly price to $' + (cents / 100).toFixed(2) + '? This changes the price used for future purchases.',
+            { confirmLabel: 'Save price' },
+          );
+          if (!confirmed) return;
+          if (button) button.textContent = 'Saving…';
+          if (status) {
+            status.textContent = '…';
+            status.className = 'w-12 text-[11px] text-tk-ink-3';
+          }
+          const response = await authedFetch('/v1/admin/owner/pricing/' + encodeURIComponent(tier), {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ monthly_cents: cents }),
           });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          // Reflect the saved price in-place — a full re-render (fetchPricing)
+          // would wipe this status + clobber any other in-progress edit. The
+          // 30s poll reconciles the rest.
+          const row = root.querySelector('[data-pricing-row="' + tier + '"]');
+          const label = row ? row.querySelector('dt span') : null;
+          if (label) label.textContent = '$' + (cents / 100).toFixed(0) + '/mo';
+          if (status) {
+            status.textContent = 'saved';
+            status.className = 'w-12 text-[11px] text-emerald-600';
+          }
+        } catch {
+          if (status) {
+            status.textContent = 'error';
+            status.className = 'w-12 text-[11px] text-rose-600';
+          }
+        } finally {
+          pricingSavesInFlight.delete(tier);
+          input.disabled = false;
+          if (button && button.isConnected) {
+            button.disabled = false;
+            button.textContent = idleLabel;
+            button.removeAttribute('aria-busy');
+          }
+        }
       }
       // Delegated Save handler — bound once (renderPricing replaces innerHTML
       // on each poll, so a per-row listener would leak; delegation survives).
@@ -879,7 +902,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         pricingList.addEventListener('click', (e) => {
           const t = e.target;
           const btn = t && t.closest ? t.closest('[data-save-tier]') : null;
-          if (btn) savePricing(btn.getAttribute('data-save-tier'));
+          if (btn) savePricing(btn.getAttribute('data-save-tier'), btn);
         });
       }
       void fetchPricing().catch(() => {});

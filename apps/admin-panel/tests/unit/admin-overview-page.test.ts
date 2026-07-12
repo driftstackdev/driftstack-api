@@ -422,6 +422,80 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-save-status="api_scale"]')).toContain('saved');
   });
 
+  it('owner pricing confirms the resolved value and serializes duplicate saves per tier', async () => {
+    const confirmCalls: unknown[] = [];
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      confirmCalls,
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        pricingStatus: 200,
+        pricing: { tiers: [{ tier: 'api_scale', monthly_cents: 149900 }] },
+      }),
+    });
+    win = window;
+    await flush();
+    const input = window.document.querySelector('[data-edit-tier="api_scale"]') as HTMLInputElement;
+    const button = window.document.querySelector(
+      '[data-save-tier="api_scale"]',
+    ) as HTMLButtonElement;
+    input.value = '199900';
+    button.click();
+    button.dispatchEvent(new window.Event('click', { bubbles: true }));
+    expect(input.disabled).toBe(true);
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    await flush();
+
+    expect(confirmCalls).toEqual([{ confirmLabel: 'Save price' }]);
+    expect(
+      fetchCalls.filter(
+        (c) =>
+          /\/v1\/admin\/owner\/pricing\/api_scale$/.test(c.url) &&
+          String(c.init?.method ?? '').toUpperCase() === 'PATCH',
+      ),
+    ).toHaveLength(1);
+    expect(input.disabled).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('owner pricing cancellation restores controls without PATCHing', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      confirmReturns: false,
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        pricingStatus: 200,
+        pricing: { tiers: [{ tier: 'team_manual', monthly_cents: 24900 }] },
+      }),
+    });
+    win = window;
+    await flush();
+    const input = window.document.querySelector(
+      '[data-edit-tier="team_manual"]',
+    ) as HTMLInputElement;
+    const button = window.document.querySelector(
+      '[data-save-tier="team_manual"]',
+    ) as HTMLButtonElement;
+    input.value = '27500';
+    button.click();
+    await flush();
+
+    expect(fetchCalls.some((c) => /\/v1\/admin\/owner\/pricing\/team_manual$/.test(c.url))).toBe(
+      false,
+    );
+    expect(input.disabled).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Save');
+  });
+
   it('owner edit shows an error when the edit route rejects (non-200)', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',

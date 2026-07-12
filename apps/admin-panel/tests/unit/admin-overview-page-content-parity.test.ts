@@ -74,6 +74,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/pricing'");
   });
 
+  it('owner pricing saves are confirm-gated and single-flight per tier', () => {
+    expect(body).toMatch(/const pricingSavesInFlight = new Set\(\);/);
+    expect(body).toMatch(/pricingSavesInFlight\.has\(tier\)/);
+    expect(body).toMatch(/confirmLabel: 'Save price'/);
+    expect(body).toMatch(/This changes the price used for future purchases/);
+    expect(body).toMatch(/button\.textContent = 'Saving…'/);
+    expect(body).toMatch(/button\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/pricingSavesInFlight\.delete\(tier\)/);
+  });
+
   it('irreversible owner-secret deletion uses the branded destructive modal and a per-secret single-flight guard', () => {
     expect(body).toMatch(/const secretDeletesInFlight = new Set\(\);/);
     expect(body).toMatch(/secretDeletesInFlight\.has\(name\)/);
