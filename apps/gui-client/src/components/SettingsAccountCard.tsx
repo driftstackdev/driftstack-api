@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
+import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
 
 interface AccountMeResponse {
@@ -96,7 +97,7 @@ export function SettingsAccountCard(): JSX.Element | null {
         if (cancelled) return;
         setState({
           kind: 'error',
-          message: err instanceof Error ? err.message : String(err),
+          message: humanizeError(err, "Couldn't load account info. Try again."),
         });
       }
     })();

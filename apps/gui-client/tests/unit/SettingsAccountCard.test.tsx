@@ -124,12 +124,15 @@ describe('V-534.L SettingsAccountCard — failure paths', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent(/HTTP 401/);
   });
 
-  it('surfaces a network error', async () => {
+  it('humanizes a network error instead of exposing the raw exception', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new Error('offline'))),
     );
     render(<SettingsAccountCard />);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/offline/));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/check your connection/i),
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/offline/i);
   });
 });

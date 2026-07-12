@@ -6,6 +6,7 @@
 // then the app relaunches into the new version.
 
 import { useState } from 'react';
+import { humanizeError } from '../lib/humanize-error';
 import type { AvailableUpdate } from '../lib/updater';
 
 interface UpdateBannerProps {
@@ -28,7 +29,7 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
       // banner simply stays in the (completed) installing state.
     } catch (e) {
       setPhase('error');
-      setError(e instanceof Error ? e.message : 'Update failed.');
+      setError(humanizeError(e, "Update couldn't be installed. Try again."));
     }
   }
 
