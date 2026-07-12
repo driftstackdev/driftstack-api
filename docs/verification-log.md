@@ -24548,3 +24548,25 @@ rotation through 1-10; post-incident within 30 days.
 3 slices, all doc-only (1429/1429 holds; no test count change). Rule
 M satisfied: 3 P-track slices from 3 different tracks (A + C + D). No
 remote operations. No force-push. No private-flip. No SDK publish.
+
+## V-554 — profile Marketplace withdrawal
+
+**Date:** 2026-07-12
+
+Removed the frontend-only profile Marketplace before any backend, inventory, balance, purchase, or transfer implementation existed:
+
+- deleted `MarketplaceView` and its modal tests;
+- removed the `marketplace` route variant, render branch, command-palette action, sidebar destination, and unused storefront icon;
+- removed Marketplace from the marketing homepage's GUI navigation mockup;
+- updated the App and Sidebar source-parity guards to pin the smaller route taxonomy and explicitly reject Marketplace regressions;
+- retained the historical F4 planning document as superseded context, with D-2026-07-12-01 recording the current product decision.
+
+Verification:
+
+- focused node Vitest: 27/27 across App parity, Sidebar parity, and palette actions;
+- focused GUI jsdom: 16/16 across Sidebar behavior and section mapping;
+- GUI TypeScript check: clean;
+- GUI production build: clean (existing Vite chunk-size/dynamic-import advisories only);
+- marketing-site `astro check`: 0 errors (four pre-existing inline-script hints);
+- marketing-site production build: 69 static pages generated successfully;
+- targeted ESLint and TS/docs Prettier checks pass.

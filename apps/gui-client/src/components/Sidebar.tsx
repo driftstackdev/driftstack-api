@@ -26,7 +26,6 @@ export type SidebarViewKind =
   | 'ai'
   | 'recipes'
   | 'profiles'
-  | 'marketplace'
   | 'proxies'
   | 'sessions-history'
   | 'recordings'
@@ -177,16 +176,6 @@ export function Sidebar({
             badge={proxyCount === null ? null : String(proxyCount)}
           >
             Proxies
-          </SidebarItem>
-          {/* F4 (2026-07-01) — frontend-only preview of the profile
-              marketplace; no purchase wiring until the backend + founder
-              sign-off land (docs/internal/2026-06-14-future-initiatives-plan.md). */}
-          <SidebarItem
-            icon={<IconStorefront />}
-            active={current === 'marketplace'}
-            onClick={() => onNavigate('marketplace')}
-          >
-            Marketplace
           </SidebarItem>
         </SidebarSection>
 
@@ -503,17 +492,6 @@ function IconGlobe(): JSX.Element {
       <circle cx="8" cy="8" r="5.75" />
       <path d="M2.25 8h11.5" />
       <path d="M8 2.25c1.7 2 2.5 4 2.5 5.75S9.7 12 8 13.75C6.3 11.75 5.5 9.75 5.5 8s.8-3.75 2.5-5.75Z" />
-    </svg>
-  );
-}
-
-function IconStorefront(): JSX.Element {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
-      <path d="M2 6.25 3.25 2.5h9.5L14 6.25" />
-      <path d="M2 6.25v6.25a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6.25" />
-      <path d="M2 6.25a2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0" />
-      <path d="M6.5 13.5V10h3v3.5" />
     </svg>
   );
 }

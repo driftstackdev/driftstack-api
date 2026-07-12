@@ -455,3 +455,18 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - If customers demand JWTs for federated trust (rare for SaaS API consumers): introduce a JWT format alongside opaque, gate per OAuth-client. Migration is opt-in.
   - If refresh tokens become necessary: add `/v1/oauth/token` with `grant_type=refresh_token`; change is purely additive.
   - If S256 proves insufficient (post-quantum era, ~2030+): add a new `code_challenge_method` option, deprecate S256 with migration window. The route layer's method-allowlist is one constant.
+
+---
+
+## D-2026-07-12-01 — Withdraw the transferable profile Marketplace
+
+- **Decision:** remove the profile Marketplace preview from every product surface and do not build its catalog, balance, purchase, or profile-transfer backend. The historical F4 plan remains as superseded context, not active product direction.
+- **Reasoning:**
+  - Safari blocks third-party cookies by default and limits script-writable first-party storage after extended non-interaction, weakening the idea that passive browser age is a durable cross-site asset.
+  - Checkout history, CAPTCHA outcomes, and site trust generally belong to server-side accounts and their relationship with IP, location, payment identity, and behavior; they are not reliably transferred with a browser-state container.
+  - Moving a genuinely authenticated profile would risk transferring session cookies or other credentials. That creates security, privacy, support, and provenance liabilities disproportionate to the speculative customer value.
+  - The shipped surface was mock inventory with a disabled purchase button. Keeping an unavailable, weakly defensible future product in primary navigation distracted from Profiles, Proxies, and Automation.
+  - Reusable profile templates, customer-owned import/export, and customer-run automation recipes remain valid directions because they do not claim to sell transferable trust.
+- **Tier:** explicit product-direction approval (2026-07-12).
+- **V-log:** V-554.
+- **Revert path:** restore the removed GUI view/navigation only after a new product review defines a technically verifiable asset, safe transfer model, provenance controls, and customer value independent of cross-site tracking.

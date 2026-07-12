@@ -44,6 +44,7 @@ describe('buildPaletteActions — sidebar destination parity (P2 #7)', () => {
 
   it('still carries the existing primary destinations', () => {
     const all = ids(true, true);
+    expect(all).not.toContain('nav-marketplace');
     for (const id of [
       'nav-home',
       'nav-ai',

@@ -26,7 +26,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Marketplace + Proxies) lead, then 'Automate' (AI chat + Saved tasks) + 'History' (Session log + Recordings) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings. 2026-06-19: the 'Diagnostics' (Logs) nav surface was removed — it was a client-side console/error buffer mislabeled as session logs; the floating DevLogPanel keeps it for dev triage. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
+  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Saved tasks) + 'History' (Session log + Recordings) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings. 2026-06-19: the 'Diagnostics' (Logs) nav surface was removed — it was a client-side console/error buffer mislabeled as session logs; the floating DevLogPanel keeps it for dev triage. The speculative Marketplace preview was removed before backend work on 2026-07-12. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
     expect(body).toMatch(/<SidebarSection label="Home">/);
     expect(body).toMatch(/<SidebarSection label="Automate">/);
     expect(body).toMatch(/<SidebarSection label="Browse">/);
@@ -41,10 +41,11 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(body).not.toMatch(/<SidebarSection label="Diagnostics">/);
   });
 
-  it("SidebarViewKind 14-variant union exported: home / ai / recipes / profiles / marketplace / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / billing / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19); 'marketplace' added by the F4 profile-marketplace frontend preview (2026-07-01).", () => {
+  it("SidebarViewKind 13-variant union exported: home / ai / recipes / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / billing / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19); the speculative Marketplace preview was removed before backend work (2026-07-12).", () => {
     expect(body).toMatch(
-      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'marketplace'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'billing'\s*\n?\s*\| 'settings';/,
+      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'billing'\s*\n?\s*\| 'settings';/,
     );
+    expect(body).not.toMatch(/marketplace/i);
     expect(body).not.toMatch(/\| 'logs'/);
   });
 

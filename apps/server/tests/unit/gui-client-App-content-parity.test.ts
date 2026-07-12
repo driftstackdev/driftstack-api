@@ -48,10 +48,11 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("View 15-variant union: home / ai / recipes / sessions / sessions-history / profiles / marketplace / recordings / recording-player{recordingId} / proxies / connectivity / fleet / team / billing / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19); 'live-session' removed when the legacy in-app polling session viewer was retired — the floating Simulator window is the only live-session UI now (2026-06-26); 'marketplace' added by the F4 profile-marketplace frontend preview (2026-07-01).", () => {
+  it("View 14-variant union: home / ai / recipes / sessions / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / team / billing / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19); 'live-session' removed when the legacy in-app polling session viewer was retired — the floating Simulator window is the only live-session UI now (2026-06-26); the speculative profile Marketplace preview was removed before backend work (2026-07-12).", () => {
     expect(body).toMatch(
-      /type View =\s*\n?\s*\| \{ kind: 'home' \}\s*\n?\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recipes' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'marketplace' \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'team' \}\s*\n?\s*\| \{ kind: 'billing' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
+      /type View =\s*\n?\s*\| \{ kind: 'home' \}\s*\n?\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recipes' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'team' \}\s*\n?\s*\| \{ kind: 'billing' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
     );
+    expect(body).not.toMatch(/marketplace/i);
     expect(body).not.toMatch(/\| \{ kind: 'logs' \}/);
     expect(body).not.toMatch(/case 'logs':/);
     expect(body).not.toMatch(/LogsView/);
@@ -133,16 +134,21 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).not.toMatch(/case 'live-session':\s*\n?\s*return 'sessions';/);
   });
 
-  it("loading branch: while settings load, render nothing rather than flashing the wizard — pinned so customers don't see a flash-of-wizard before settings hydrate (which would happen if apiKey===null is evaluated against the pre-hydration default state); Loading… section-label rendered in a centered surface-base wrapper", () => {
+  it("loading branch: while settings load, show a calm spinner rather than flashing the wizard — pinned so customers don't see a flash-of-wizard before settings hydrate (which would happen if apiKey===null is evaluated against the pre-hydration default state); Loading… section-label rendered in a centered surface-base wrapper", () => {
     expect(body).toMatch(
-      /\/\/ While settings load, render nothing rather than flashing the wizard\.\s*\n?\s*if \(loading\) \{/,
+      /\/\/ While settings load, show a calm spinner[\s\S]{0,260}?if \(loading\) \{/,
     );
+    expect(body).toMatch(/role="status"\s*\n?\s*aria-label="Loading"/);
     expect(body).toMatch(/<span className="section-label text-ink-muted">Loading…<\/span>/);
   });
 
-  it("CurrentView switch covers all 14 View variants — pinned so a removed View variant + a missing case doesn't fall through to an exhaustiveness error (and so adding a new variant to the View union forces matching the new case here); 'live-session' removed with the in-app session viewer (2026-06-26)", () => {
+  it("CurrentView switch covers all 14 View variants — pinned so a removed View variant + a missing case doesn't fall through to an exhaustiveness error (and so adding a new variant to the View union forces matching the new case here); 'live-session' removed with the in-app session viewer (2026-06-26), Marketplace removed before backend work (2026-07-12)", () => {
+    expect(body).toMatch(/case 'home':/);
+    expect(body).toMatch(/case 'ai':/);
+    expect(body).toMatch(/case 'recipes':/);
     expect(body).toMatch(/case 'sessions':/);
     expect(body).not.toMatch(/case 'live-session':/);
+    expect(body).not.toMatch(/case 'marketplace':/);
     expect(body).toMatch(/case 'sessions-history':/);
     expect(body).toMatch(/case 'profiles':/);
     expect(body).toMatch(/case 'recordings':/);
