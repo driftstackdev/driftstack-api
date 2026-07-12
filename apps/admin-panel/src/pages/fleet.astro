@@ -332,6 +332,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       function controlActionLabel(cmd) {
         return cmd.charAt(0).toUpperCase() + cmd.slice(1);
       }
+      function controlPendingLabel(cmd) {
+        if (cmd === 'cordon') return 'Cordoning…';
+        if (cmd === 'uncordon') return 'Uncordoning…';
+        if (cmd === 'drain') return 'Draining…';
+        return 'Restarting…';
+      }
       function controlConfirmMessage(cmd) {
         if (cmd === 'restart')
           return 'Restart this worker? It drains (lets active sessions finish) then exits and respawns — any in-flight session on this node is ended.';
@@ -342,12 +348,17 @@ const apiBaseUrl = resolveApiBaseUrl();
         return 'Uncordon this worker? It resumes accepting new sessions.';
       }
       async function runControl(nodeId, cmd, btn) {
-        if (!token) return;
+        // One node-control command at a time. `controlInFlight` previously only
+        // paused auto-refresh; a second button could still open another confirm
+        // and dispatch an overlapping command while the first request was live.
+        if (!token || controlInFlight) return;
         // W2820 (review wxbkih0x2): mark in-flight BEFORE the confirm await so the 15s
         // auto-refresh (below) does NOT rebuild the table — which would detach `btn`
         // (making btn.disabled a no-op on the visible row) and let the same command be
         // re-issued. The finally clears it on every exit path (incl. a cancel).
         controlInFlight = true;
+        let controls = [];
+        const originalText = btn ? btn.textContent : '';
         try {
           const confirmFn = window.driftstackConfirm;
           // drain/restart end-or-finish in-flight sessions → destructive: focus Cancel +
@@ -361,7 +372,18 @@ const apiBaseUrl = resolveApiBaseUrl();
               })
             : window.confirm(controlConfirmMessage(cmd));
           if (!proceed) return;
-          if (btn) btn.disabled = true;
+          // Disable every command in the table while the single-flight request
+          // runs. Otherwise the guard would silently ignore another visible,
+          // apparently-clickable control. The clicked command gets explicit
+          // progress text and aria-busy for assistive technology.
+          controls = tbody ? Array.from(tbody.querySelectorAll('button[data-control]')) : [];
+          controls.forEach(function (control) {
+            control.disabled = true;
+          });
+          if (btn) {
+            btn.textContent = controlPendingLabel(cmd);
+            btn.setAttribute('aria-busy', 'true');
+          }
           const r = await fetch(
             apiBaseUrl + '/v1/mac-nodes/' + encodeURIComponent(nodeId) + '/control',
             {
@@ -397,7 +419,13 @@ const apiBaseUrl = resolveApiBaseUrl();
               '.',
           );
         } finally {
-          if (btn) btn.disabled = false;
+          controls.forEach(function (control) {
+            control.disabled = false;
+          });
+          if (btn) {
+            btn.textContent = originalText;
+            btn.removeAttribute('aria-busy');
+          }
           controlInFlight = false;
         }
       }

@@ -24602,3 +24602,20 @@ Verification:
 - magic-link request source-parity: 7/7 tests pass, including duplicate-guard and in-flight-feedback assertions;
 - customer-dashboard `astro check`: 0 errors;
 - customer-dashboard production build passes with the required `PUBLIC_API_BASE_URL` set.
+
+## V-557 — admin fleet control single-flight integrity
+
+**Date:** 2026-07-12
+
+Closed a re-entry hole in the admin fleet page. `controlInFlight` previously paused the 15-second table refresh but did not reject a second control click, allowing overlapping cordon, drain, or restart confirmations and requests. Fleet controls now:
+
+- reject another command before opening a second confirmation;
+- disable every visible node-control button while the accepted command is in flight;
+- show command-specific progress text and `aria-busy` on the active button;
+- restore controls in the `finally` path on cancellation, error, or non-202 responses.
+
+Verification:
+
+- fleet control source-parity: 3/3 tests pass;
+- admin-panel `astro check`: 0 errors;
+- admin-panel production build passes with the required `PUBLIC_API_BASE_URL` set.
