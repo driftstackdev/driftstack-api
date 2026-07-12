@@ -24570,3 +24570,23 @@ Verification:
 - marketing-site `astro check`: 0 errors (four pre-existing inline-script hints);
 - marketing-site production build: 69 static pages generated successfully;
 - targeted ESLint and TS/docs Prettier checks pass.
+
+## V-555 — frontend diagnostic debt cleanup
+
+**Date:** 2026-07-12
+
+Removed stale or deprecated frontend code that was making type diagnostics noisy across three public surfaces:
+
+- marked the four marketing-site JSON-LD scripts explicitly inline, matching how Astro already treated them and clearing the associated compiler hints;
+- replaced deprecated `navigator.platform` use in docs shortcut detection with `navigator.userAgent`;
+- removed the customer API-key page's unused mock import and duplicate server-frontmatter scope/timestamp helpers, retaining the live hydration script as the single executable source;
+- removed an unused timestamp formatter from customer Settings;
+- updated API-key parity tests so they protect the executable scope map and future-deadline formatter instead of requiring dead duplication.
+
+Verification:
+
+- marketing-site `astro check`: 0 errors, 0 warnings, 0 hints; production build generated 69 pages;
+- docs `astro check`: 0 errors, 0 warnings, 0 hints; production build generated 61 pages and Pagefind indexed 60;
+- customer-dashboard `astro check`: 0 errors and no unused-symbol hints (six non-actionable async-conversion suggestions remain);
+- customer-dashboard production build passes with the required `PUBLIC_API_BASE_URL` set;
+- focused API-key/Settings parity: 52/52 tests pass.

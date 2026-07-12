@@ -83,5 +83,5 @@ const faqStructuredData = {
   </section>
 
   {/* W507 — schema.org FAQPage (derived from the same FAQ_GROUPS the page renders). */}
-  <script type="application/ld+json" set:html={JSON.stringify(faqStructuredData)} />
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(faqStructuredData)} />
 </BaseLayout>

@@ -391,11 +391,6 @@ const EMAIL_EVENTS = [
             })[c],
         );
       }
-      function fmtIso(iso) {
-        if (!iso) return '—';
-        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-      }
-
       // V-352c / V-298a — wire the profile (name + timezone + slug) form.
       const profileForm = root.querySelector('[data-form="profile"]');
       const profileNameInput = root.querySelector('[data-field="profile-name"]');

@@ -1,43 +1,8 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_API_KEYS } from '../data/mocks.ts';
 
 // V-182 — progressive-enhancement wiring against /v1/api-keys.
 // V-270 — wired the New-key form + revoke confirmation flow.
-
-function fmtIso(iso: string | null): string {
-  if (iso === null) return 'never';
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  // S35 2026-07-07 (fable-frontend-audit) — FUTURE timestamps (a rotated
-  // key's grace expiry is now+24h) used to hit the floor()d day math and
-  // render "-1 days ago" for the whole grace window. Render future
-  // deadlines as "in <1h" / "in Nh" / "in N days" instead; past
-  // behavior (today/yesterday/N days ago/absolute) is unchanged.
-  if (diffMs < 0) {
-    const aheadHours = Math.floor(-diffMs / (1000 * 60 * 60));
-    if (aheadHours < 1) return 'in <1h';
-    if (aheadHours < 48) return `in ${aheadHours.toString()}h`;
-    const aheadDays = Math.floor(aheadHours / 24);
-    if (aheadDays < 30) return `in ${aheadDays.toString()} days`;
-    return d.toISOString().slice(0, 10);
-  }
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return 'today';
-  if (diffDays === 1) return 'yesterday';
-  if (diffDays < 30) return `${diffDays.toString()} days ago`;
-  return d.toISOString().slice(0, 10);
-}
-
-const SCOPE_LABEL: Record<string, string> = {
-  read: 'read',
-  write: 'write',
-  admin: 'admin',
-  account_owner: 'account_owner',
-  driftstack_internal_admin: 'internal_admin',
-  gui_control: 'gui',
-};
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -521,7 +486,8 @@ npm i @driftstack/sdk</code></pre>
         // S35 2026-07-07 (fable-frontend-audit) — FUTURE timestamps (a
         // rotated key's grace expiry is now+24h) used to hit the floor()d
         // day math and render "-1 days ago" for the whole grace window.
-        // Mirrors the frontmatter fmtIso above.
+        // Keep future grace deadlines readable instead of rendering negative
+        // "days ago" values while a rotated key is still valid.
         if (diffMs < 0) {
           const aheadHours = Math.floor(-diffMs / (1000 * 60 * 60));
           if (aheadHours < 1) return 'in <1h';

@@ -970,5 +970,5 @@ const pricingStructuredData = {
       API_TIERS in the frontmatter; strictly factual, no ratings/reviews).
       Kept after the is:inline toggle script so the self-closing tag can't
       pair with the toggle's closing tag in source-scanning sweeps. */}
-  <script type="application/ld+json" set:html={JSON.stringify(pricingStructuredData)} />
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(pricingStructuredData)} />
 </BaseLayout>

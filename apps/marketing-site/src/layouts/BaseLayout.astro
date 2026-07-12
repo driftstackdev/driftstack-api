@@ -161,7 +161,7 @@ const structuredData = {
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
     {/* W464 — schema.org structured data (Organization + WebSite + SoftwareApplication). */}
-    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)} />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=4" />
     {/* Self-hosted fonts (Fleet v2 port 2026-07-03) — preload the two
         above-the-fold faces so first paint doesn't flash the system

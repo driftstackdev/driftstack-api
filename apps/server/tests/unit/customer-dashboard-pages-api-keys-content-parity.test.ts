@@ -44,7 +44,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
 
   it("SCOPE_LABEL 6-entry map: read/write/admin/account_owner/driftstack_internal_admin (→ internal_admin) / gui_control (→ gui) — pinned so the scope vocabulary covers ALL emitted scope tokens (drift to dropping driftstack_internal_admin would render staff-emitted scopes as raw token; drift to dropping gui_control mapping would render the GUI client's scope as raw)", () => {
     expect(body).toMatch(
-      /const SCOPE_LABEL: Record<string, string> = \{\s*\n?\s*read: 'read',\s*\n?\s*write: 'write',\s*\n?\s*admin: 'admin',\s*\n?\s*account_owner: 'account_owner',\s*\n?\s*driftstack_internal_admin: 'internal_admin',\s*\n?\s*gui_control: 'gui',\s*\n?\s*\};/,
+      /const SCOPE_LABEL = \{\s*\n?\s*read: 'read',\s*\n?\s*write: 'write',\s*\n?\s*admin: 'admin',\s*\n?\s*account_owner: 'account_owner',\s*\n?\s*driftstack_internal_admin: 'internal_admin',\s*\n?\s*gui_control: 'gui',\s*\n?\s*\};/,
     );
   });
 
