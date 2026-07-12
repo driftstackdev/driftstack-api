@@ -609,6 +609,43 @@ describe('AgentSessionPanel overlay UX', () => {
     }
   });
 
+  it.each([
+    ['max_duration', 'Session time limit reached', 'maximum running time'],
+    ['budget-exhausted', 'Usage limit reached', 'configured usage limit'],
+    ['customer-closed', 'Closed by you', 'closed from Driftstack'],
+    ['browser_crashed', 'Browser stopped unexpectedly', 'stopped unexpectedly'],
+    ['node-restarted', 'Live worker unavailable', 'live worker stopped'],
+    ['session-ended', 'Session completed', 'ended normally'],
+  ])('renders truthful bounded recap copy for %s', async (reason, outcome, explanation) => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const { container } = render(<AgentSessionPanel info={INFO} sessionEnded={{ reason }} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-summary="session-outcome"]')).toHaveTextContent(outcome);
+    expect(container.querySelector('[data-overlay="session-ended"]')).toHaveTextContent(
+      explanation,
+    );
+  });
+
+  it('does not reflect an unknown internal close reason into the rendered overlay', async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const internalReason = 'worker_failed_direct=10.0.0.8_secret=abc';
+    const { container } = render(
+      <AgentSessionPanel info={INFO} sessionEnded={{ reason: internalReason }} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const ended = container.querySelector('[data-overlay="session-ended"]');
+    expect(ended).toHaveTextContent('Live worker unavailable');
+    expect(ended?.outerHTML).not.toContain(internalReason);
+  });
+
   // P1a — a Disconnected AFTER the session ended must NOT schedule the bounded
   // auto-reconnect (the founder-reported "reconnecting forever"). It shows the
   // terminal overlay and stays there — no fresh connect attempts on the backoff.

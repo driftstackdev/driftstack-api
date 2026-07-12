@@ -194,11 +194,59 @@ function formatSessionDuration(totalSeconds: number): string {
   return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
 }
 
-function friendlySessionEndReason(reason: string | null): string {
-  if (reason === 'idle_timeout') return 'Closed after inactivity';
-  if (reason === 'browser-closed') return 'Browser closed';
-  if (reason === 'orphaned-lifetime') return 'Session time limit reached';
-  return 'Session closed';
+function friendlySessionEndCopy(reason: string | null): {
+  outcome: string;
+  explanation: string;
+} {
+  const normalized = reason?.trim().toLowerCase().replaceAll('-', '_') ?? '';
+  if (normalized === 'idle_timeout') {
+    return {
+      outcome: 'Closed after inactivity',
+      explanation: 'This session was closed after a period of inactivity.',
+    };
+  }
+  if (normalized === 'max_duration' || normalized === 'orphaned_lifetime') {
+    return {
+      outcome: 'Session time limit reached',
+      explanation: 'This session reached its maximum running time.',
+    };
+  }
+  if (normalized === 'budget_exhausted') {
+    return {
+      outcome: 'Usage limit reached',
+      explanation: 'This session reached its configured usage limit.',
+    };
+  }
+  if (normalized === 'customer_closed') {
+    return { outcome: 'Closed by you', explanation: 'This session was closed from Driftstack.' };
+  }
+  if (normalized === 'browser_closed') {
+    return {
+      outcome: 'Browser closed',
+      explanation: 'The browser running this session was closed.',
+    };
+  }
+  if (normalized === 'browser_crashed') {
+    return {
+      outcome: 'Browser stopped unexpectedly',
+      explanation: 'The browser running this session stopped unexpectedly.',
+    };
+  }
+  if (
+    /^(node_|worker_|egress_|resource_|shutdown$)/.test(normalized) ||
+    normalized === 'session_errored'
+  ) {
+    return {
+      outcome: 'Live worker unavailable',
+      explanation: 'The live worker stopped, so this session could not continue.',
+    };
+  }
+  if (normalized === 'session_ended') {
+    return { outcome: 'Session completed', explanation: 'This session ended normally.' };
+  }
+  // Unknown reasons may contain internal diagnostics. Keep both rendered strings
+  // generic and never reflect the raw value into the customer-facing DOM.
+  return { outcome: 'Session closed', explanation: 'This session has stopped.' };
 }
 
 const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
@@ -294,6 +342,7 @@ export function AgentSessionPanel({
       ),
     ),
   );
+  const sessionEndCopy = friendlySessionEndCopy(sessionEnded?.reason ?? null);
   // The video element as STATE (not just the ref) so useInputCapture re-runs
   // when it mounts — a ref's `.current` is mutated without re-rendering, so an
   // effect keyed on the ref would attach to the stale (null) element.
@@ -884,7 +933,6 @@ export function AgentSessionPanel({
       {sessionEnded !== null && (
         <div
           data-overlay="session-ended"
-          {...(sessionEnded.reason !== null ? { 'data-reason': sessionEnded.reason } : {})}
           className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center text-sm text-ink-primary"
         >
           <svg
@@ -920,14 +968,12 @@ export function AgentSessionPanel({
                 Finished
               </span>
               <span data-summary="session-outcome" className="mt-0.5 block text-xs font-medium">
-                {friendlySessionEndReason(sessionEnded.reason)}
+                {sessionEndCopy.outcome}
               </span>
             </div>
           </div>
           <span className="max-w-xs text-xs text-ink-secondary">
-            {sessionEnded.reason === 'idle_timeout'
-              ? 'This session was closed after a period of inactivity.'
-              : 'This session has stopped — the browser on the worker closed.'}{' '}
+            {sessionEndCopy.explanation}{' '}
             {/* #8 — concrete next step instead of a dead-end. The standalone Simulator
                 window can't relaunch in place (it holds only the per-session control key,
                 not the account API key/SDK client a fresh session+token needs — that lives
