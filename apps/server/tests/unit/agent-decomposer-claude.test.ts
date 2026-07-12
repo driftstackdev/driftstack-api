@@ -372,6 +372,32 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
         { kind: 'interact', action: 'type', selector: '#name', value: 'Ada' },
       ]);
     });
+
+    it('drops invalid model numeric options before the dispatch contract', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'wait', condition: 'idle', timeoutMs: -1 },
+            { kind: 'scroll', direction: 'down', amount_px: 12.5 },
+            { kind: 'behavioral_pause', duration_ms: Number.MAX_SAFE_INTEGER + 1 },
+            { kind: 'behavioral_pause', reading_word_count: -2 },
+            { kind: 'scroll', direction: 'up', amount_px: 800 },
+            { kind: 'behavioral_pause', duration_ms: 1500, reading_word_count: 120 },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'wait', condition: 'idle' },
+        { kind: 'scroll', direction: 'down' },
+        { kind: 'behavioral_pause' },
+        { kind: 'behavioral_pause' },
+        { kind: 'scroll', direction: 'up', amount_px: 800 },
+        { kind: 'behavioral_pause', duration_ms: 1500, reading_word_count: 120 },
+      ]);
+    });
   });
 
   describe('retry + error handling', () => {

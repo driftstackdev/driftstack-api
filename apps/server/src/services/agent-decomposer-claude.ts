@@ -555,6 +555,10 @@ function normalizeIntentShape(i: Record<string, unknown>): Record<string, unknow
   return i;
 }
 
+function isSafeIntegerAtLeast(value: unknown, minimum: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
+}
+
 function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
   if (!Array.isArray(raw)) {
     throw new Error('Anthropic plan.intents was not an array');
@@ -593,7 +597,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
             kind: 'wait',
             condition: cond,
             ...(typeof i.selector === 'string' ? { selector: i.selector } : {}),
-            ...(typeof i.timeoutMs === 'number' ? { timeoutMs: i.timeoutMs } : {}),
+            ...(isSafeIntegerAtLeast(i.timeoutMs, 0) ? { timeoutMs: i.timeoutMs } : {}),
           });
         }
         break;
@@ -615,7 +619,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
           out.push({
             kind: 'scroll',
             direction: dir,
-            ...(typeof i.amount_px === 'number' ? { amount_px: i.amount_px } : {}),
+            ...(isSafeIntegerAtLeast(i.amount_px, 1) ? { amount_px: i.amount_px } : {}),
           });
         }
         break;
@@ -625,8 +629,8 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
         // wins over duration_ms at the mapper.
         out.push({
           kind: 'behavioral_pause',
-          ...(typeof i.duration_ms === 'number' ? { duration_ms: i.duration_ms } : {}),
-          ...(typeof i.reading_word_count === 'number'
+          ...(isSafeIntegerAtLeast(i.duration_ms, 0) ? { duration_ms: i.duration_ms } : {}),
+          ...(isSafeIntegerAtLeast(i.reading_word_count, 0)
             ? { reading_word_count: i.reading_word_count }
             : {}),
         });
