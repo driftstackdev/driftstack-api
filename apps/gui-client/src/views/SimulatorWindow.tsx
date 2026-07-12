@@ -47,6 +47,11 @@ import {
   DownloadsListSubscriber,
   type DownloadsListStore,
 } from '../components/DownloadsListSubscriber';
+import {
+  CookiesListSubscriber,
+  createCookiesListStore,
+  type CookiesListStore,
+} from '../components/CookiesListSubscriber';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
@@ -4659,7 +4664,9 @@ export function SimulatorWindow(): JSX.Element {
   // calm "pending data source" line for every inert state (control plane off /
   // node offline / node not yet serving cookies / gated 503). Best-effort + guarded
   // — a transient/gated failure just keeps the pending note, never throws.
-  const [cookies, setCookies] = useState<SessionCookie[] | null>(null);
+  const cookiesStoreRef = useRef<CookiesListStore | null>(null);
+  if (cookiesStoreRef.current === null) cookiesStoreRef.current = createCookiesListStore();
+  const cookiesStore = cookiesStoreRef.current;
   const [cookiesNote, setCookiesNote] = useState<string | null>(null);
   // Founder 2026-07-06 "cookies sometimes showing, sometimes not — should show all
   // this profile's cookies at all times". The poll used to setCookies(null) on EVERY
@@ -4680,7 +4687,7 @@ export function SimulatorWindow(): JSX.Element {
     // a page loads" — framed as if a future load can populate them, which can't happen on
     // an ended session. Show an honest terminal note instead.
     if (sessionEnded !== null) {
-      setCookies(null);
+      cookiesStore.set(null);
       hasCookiesRef.current = false; // terminal clear — a new session starts fresh
       setCookiesNote('Session ended — cookies are no longer available.');
       return;
@@ -4702,7 +4709,7 @@ export function SimulatorWindow(): JSX.Element {
           if (cancelled) return;
           if (res.status === 'ok') {
             const jar = res.cookies ?? [];
-            setCookies(jar);
+            cookiesStore.set(jar);
             // ANY successful fetch means we HAVE fetched — an EMPTY jar is a real result
             // ("no cookies yet"), not "nothing fetched yet". Keying on jar.length>0 made an
             // empty-but-ok fetch look un-fetched, so a later transient tick showed "waiting
@@ -5269,7 +5276,7 @@ export function SimulatorWindow(): JSX.Element {
     // Drop the prior session's cookies/downloads so the new session doesn't briefly
     // render the OLD session's jar (the retain-refs would otherwise hold them through
     // the new session's first transient tick).
-    setCookies(null);
+    cookiesStore.set(null);
     hasCookiesRef.current = false;
     setCookiesNote(null);
     downloadsStore.set(null);
@@ -7225,12 +7232,16 @@ export function SimulatorWindow(): JSX.Element {
                       over the control plane; "pending" until the device build serves it.
                       Cross-domain whole-jar arrives later ("this page" → "all"). */}
                     {activePane === 'cookies' && (
-                      <CookiesPane
-                        cookies={cookies}
-                        cookiesNote={cookiesNote}
-                        sessionId={sessionId}
-                        controlAuth={controlAuth}
-                      />
+                      <CookiesListSubscriber store={cookiesStore}>
+                        {(cookies) => (
+                          <CookiesPane
+                            cookies={cookies}
+                            cookiesNote={cookiesNote}
+                            sessionId={sessionId}
+                            controlAuth={controlAuth}
+                          />
+                        )}
+                      </CookiesListSubscriber>
                     )}
 
                     {/* Files — upload a file into the session's isolated 0o700 jail; the
