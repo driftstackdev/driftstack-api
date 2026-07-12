@@ -371,12 +371,19 @@ export function AgentSessionPanel({
   // device, so window-focus naturally scopes the keyboard and there's no other
   // UI to hijack. Non-interactive embeds stay subscriber-only.
   const [room, setRoom] = useState<Room | null>(null);
+  // Optimistic tap feedback must reflect whether input is actually eligible for
+  // publish. Keep the transient congestion bit in a ref so it can gate pointerdown
+  // immediately without adding another panel render on every buffer transition.
+  const inputCongestedRef = useRef(false);
   useInputCapture({
     room,
     videoElement: videoEl,
     enabled: interactive,
     onPublishError,
-    onCongestionChange: onInputCongestionChange,
+    onCongestionChange: (congested) => {
+      inputCongestedRef.current = congested;
+      onInputCongestionChange?.(congested);
+    },
     // Per-archetype captured-frame logical dims so the tap/scroll mapping matches the
     // dispatched device's content-only frame (A3 84de32ad4d); undefined → 402×874.
     logical: inputLogical,
@@ -862,7 +869,13 @@ export function AgentSessionPanel({
         // ripple shows over it — matching where a real tap is actually accepted.
         // Purely visual: useInputCapture (attached to the same <video>) still
         // owns the real InputEvent; this only masks the input→publish round-trip.
-        if (!interactive || room === null || e.target !== videoRef.current) return;
+        if (
+          !interactive ||
+          room === null ||
+          inputCongestedRef.current ||
+          e.target !== videoRef.current
+        )
+          return;
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;

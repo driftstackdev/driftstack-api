@@ -29,6 +29,7 @@ vi.mock('../../src/lib/livekit', () => ({
     Disconnected: 'disconnected',
     Reconnecting: 'reconnecting',
     Reconnected: 'reconnected',
+    DCBufferStatusChanged: 'dcBufferStatusChanged',
   },
 }));
 
@@ -790,6 +791,38 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
     connectMock.mockReset();
     connectMock.mockReturnValueOnce(new Promise(() => {}));
     const { container } = render(<AgentSessionPanel info={INFO} />);
+    const video = container.querySelector('video') as HTMLVideoElement;
+    act(() => {
+      fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }));
+    });
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
+  });
+
+  it('does NOT show false optimistic success while reliable input is congested', async () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValueOnce(new Promise(() => {}));
+    const handlers: Record<string, (...args: unknown[]) => void> = {};
+    createRoomMock.mockReturnValueOnce({
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        handlers[event] = handler;
+      }),
+      off: vi.fn(),
+      disconnect: vi.fn(),
+    });
+    const onInputCongestionChange = vi.fn();
+    const { container } = render(
+      <AgentSessionPanel
+        info={INFO}
+        interactive
+        onInputCongestionChange={onInputCongestionChange}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => handlers.dcBufferStatusChanged?.(false, 0));
+    expect(onInputCongestionChange).toHaveBeenLastCalledWith(true);
+
     const video = container.querySelector('video') as HTMLVideoElement;
     act(() => {
       fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }));

@@ -6683,7 +6683,7 @@ export function SimulatorWindow(): JSX.Element {
                   // video reads as bezel-black, never a light see-through border
                   // (founder 2026-06-23 white-border / A3 W2827).
                   className={`relative min-h-0 flex-1 bg-black ${controlMode === 'ai' ? '' : 'cursor-none'}`}
-                  onPointerDownCapture={showTap}
+                  onPointerDownCapture={inputCongested ? undefined : showTap}
                   onPointerMove={moveTouchPoint}
                   onPointerEnter={moveTouchPoint}
                   onPointerLeave={hideTouchPoint}
@@ -6716,7 +6716,10 @@ export function SimulatorWindow(): JSX.Element {
                     onStateChange={(s) => setConnState(s.kind)}
                     onPublisher={setPublisherState}
                     onPublishError={() => setControlUnreachable(true)}
-                    onInputCongestionChange={setInputCongested}
+                    onInputCongestionChange={(congested) => {
+                      setInputCongested(congested);
+                      if (congested) setDotPressed(false);
+                    }}
                     onVideoEl={(el) => {
                       videoElRef.current = el;
                       if (el !== null) armFpsCounter(el);
