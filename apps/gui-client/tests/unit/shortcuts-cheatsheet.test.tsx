@@ -24,6 +24,8 @@ describe('ShortcutsCheatsheet', () => {
     expect(screen.getByText('Command palette')).toBeTruthy();
     expect(screen.getByText('Toggle light / dark')).toBeTruthy();
     expect(screen.getByText('Send message')).toBeTruthy();
+    // The (previously undocumented) paste-to-device shortcut is now discoverable.
+    expect(screen.getByText('Paste clipboard to the device')).toBeTruthy();
     cleanup();
   });
 

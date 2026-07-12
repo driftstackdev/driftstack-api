@@ -58,6 +58,7 @@ const GROUPS: ReadonlyArray<Group> = [
       { keys: ['Drag'], label: 'Swipe / drag' },
       { keys: ['Scroll'], label: 'Scroll the page' },
       { keys: ['Type'], label: 'Sent to the device' },
+      { keys: [MOD, 'V'], label: 'Paste clipboard to the device' },
     ],
   },
 ];
