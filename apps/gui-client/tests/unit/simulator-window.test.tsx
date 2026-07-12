@@ -339,14 +339,22 @@ describe('SimulatorWindow — floating iPhone', () => {
     const drawer = container.querySelector('[data-component="simulator-drawer"]');
     expect(drawer).not.toBeNull();
     fireEvent.click(drawer?.querySelector('[data-component="sim-rail-session"]') as Element);
-    expect(container.querySelector('[data-component="sim-drawer-panel"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-component="sim-drawer-panel"]')?.getAttribute('data-state'),
+    ).toBe('open');
     // The panel is DOCKED (a sibling of the device), so it does NOT dismiss on an
     // outside pointer-down (that would collapse it on its own clicks).
     fireEvent.pointerDown(document.body);
-    expect(container.querySelector('[data-component="sim-drawer-panel"]')).not.toBeNull();
-    // Escape collapses the pane (the rail stays docked, the panel goes).
+    expect(
+      container.querySelector('[data-component="sim-drawer-panel"]')?.getAttribute('data-state'),
+    ).toBe('open');
+    // Escape collapses the pane (the rail stays docked; the panel transitions
+    // closed and becomes inert before its delayed unmount).
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(container.querySelector('[data-component="sim-drawer-panel"]')).toBeNull();
+    const panel = container.querySelector('[data-component="sim-drawer-panel"]');
+    expect(panel?.getAttribute('data-state')).toBe('closed');
+    expect(panel?.getAttribute('aria-hidden')).toBe('true');
+    expect(panel?.hasAttribute('inert')).toBe(true);
     expect(container.querySelector('[data-component="simulator-drawer"]')).not.toBeNull();
   });
 

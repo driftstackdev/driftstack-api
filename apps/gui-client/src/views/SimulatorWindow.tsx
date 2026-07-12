@@ -359,6 +359,7 @@ const DEVICE_LOGICAL_WIDTH = 402;
 // the open width at the historical 300 so nothing changes when a pane is open.
 const RAIL_W = 48; // always added — the rail is docked beside the phone at all times
 const PANE_W = 252; // added only while a pane is open (RAIL_W + PANE_W === old DRAWER_W)
+const DRAWER_TRANSITION_MS = 200;
 
 // Approach B drawer (founder 2026-06-24) — the section ids for the icon rail +
 // single content pane. Order = the rail's top-to-bottom order. Persisted as a
@@ -3152,8 +3153,30 @@ export function SimulatorWindow(): JSX.Element {
   // re-subscribing. Width = phoneW + drawerExtra; the rail is ALWAYS present (RAIL_W),
   // and an open pane adds PANE_W. Phone dims are derived from (windowWidth − drawerExtra).
   const paneOpen = activePane !== null;
+  const [drawerMounted, setDrawerMounted] = useState(false);
   const drawerExtraRef = useRef(0);
+  const drawerPanelRef = useRef<HTMLDivElement | null>(null);
   drawerExtraRef.current = RAIL_W + (paneOpen ? PANE_W : 0);
+
+  // Keep the panel mounted for one transition after close, then remove it. Native
+  // `inert` prevents its closing controls from receiving focus/events during that
+  // brief exit window; aria-hidden removes them from the accessibility tree.
+  useEffect(() => {
+    if (paneOpen) {
+      setDrawerMounted(true);
+      return;
+    }
+    if (!drawerMounted) return;
+    const timer = window.setTimeout(() => setDrawerMounted(false), DRAWER_TRANSITION_MS);
+    return () => window.clearTimeout(timer);
+  }, [paneOpen, drawerMounted]);
+
+  useEffect(() => {
+    const panel = drawerPanelRef.current;
+    if (panel === null) return;
+    if (paneOpen) panel.removeAttribute('inert');
+    else panel.setAttribute('inert', '');
+  }, [paneOpen, drawerMounted]);
 
   // A rail-icon click TOGGLES its pane: same id → collapse (null); a different id →
   // open that pane. Persists the id (or '' for collapsed) so the choice survives a
@@ -3548,7 +3571,11 @@ export function SimulatorWindow(): JSX.Element {
       didInitialDrawerRef.current = true;
       return;
     }
-    const t = window.setTimeout(() => refitForDrawer(), 0);
+    // Opening needs the host width immediately so the panel has room to slide in.
+    // Closing does the inverse: let the CSS width/opacity transition finish while
+    // the host is still wide, then shrink the Tauri window. Shrinking immediately
+    // clips the panel and turns the intended transition back into an abrupt cut.
+    const t = window.setTimeout(() => refitForDrawer(), paneOpen ? 0 : DRAWER_TRANSITION_MS);
     return () => window.clearTimeout(t);
   }, [paneOpen, info]);
 
@@ -6985,12 +7012,21 @@ export function SimulatorWindow(): JSX.Element {
                   </>
                 )}
               </nav>
-              {/* The PANEL — the status strip + the active pane's content. Renders to
-                the RIGHT of the rail ONLY when a pane is open. */}
-              {paneOpen && (
+              {/* The PANEL — keep its shell mounted so both opening AND closing can
+                animate instead of snapping at conditional mount/unmount. `inert` keeps
+                its mounted controls out of keyboard/pointer flow while collapsed.
+                motion-reduce removes the cosmetic transition without changing sizing. */}
+              {drawerMounted && (
                 <div
+                  ref={drawerPanelRef}
                   data-component="sim-drawer-panel"
-                  className="flex w-[252px] shrink-0 flex-col overflow-hidden border-l border-white/[0.12]"
+                  data-state={paneOpen ? 'open' : 'closed'}
+                  aria-hidden={!paneOpen}
+                  className={`flex shrink-0 flex-col overflow-hidden border-white/[0.12] transition-[width,opacity,border-color] duration-200 ease-out motion-reduce:transition-none ${
+                    paneOpen
+                      ? 'w-[252px] border-l opacity-100'
+                      : 'pointer-events-none w-0 border-l border-transparent opacity-0'
+                  }`}
                 >
                   {/* Pinned status strip: the cross-cutting vitals (mode · link ·
                     transport · fps · latency · egress) on 1–2 compact lines, with the
