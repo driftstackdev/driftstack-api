@@ -2628,12 +2628,15 @@ export function SimulatorWindow(): JSX.Element {
       // masquerading as success (the saved file is blank); surface the honest result and
       // discard the empty recording so it doesn't litter the list.
       const idToStop = recordingId;
+      const noticeSessionId = sessionIdRef.current;
       void stopRecording(idToStop)
         .then((rec) => {
           if (rec !== null && rec.frameCount === 0) {
             void deleteRecording(idToStop).catch(() => {});
-            showNotice('Recording was empty — no video was streaming');
-          } else {
+            if (sessionIdRef.current === noticeSessionId) {
+              showNotice('Recording was empty — no video was streaming');
+            }
+          } else if (sessionIdRef.current === noticeSessionId) {
             showNotice('Recording saved');
           }
         })
@@ -2641,7 +2644,9 @@ export function SimulatorWindow(): JSX.Element {
         // unhandledrejection handler (it blanks the app to a fatal overlay — the
         // 2026-06-18 black-box class); report a soft note instead.
         .catch(() => {
-          showNotice("Couldn't save the recording — check the app's file-access permission.");
+          if (sessionIdRef.current === noticeSessionId) {
+            showNotice("Couldn't save the recording — check the app's file-access permission.");
+          }
         });
       activeRecIdRef.current = null;
       return;
@@ -2672,8 +2677,10 @@ export function SimulatorWindow(): JSX.Element {
     // forget gave NO confirmation on success and silently swallowed a failed write, so
     // Export read as "does nothing / is broken".
     const fn = recordingExportFilename(rec, now);
+    const noticeSessionId = sessionIdRef.current;
     void downloadJson(fn, buildRecordingExport(rec, now))
       .then((ok) => {
+        if (sessionIdRef.current !== noticeSessionId) return;
         showNotice(
           ok
             ? `Exported recording to your Downloads folder (${fn}).`
@@ -2682,7 +2689,9 @@ export function SimulatorWindow(): JSX.Element {
       })
       // Guard the global unhandledrejection fatal-overlay (2026-06-18 black-box class).
       .catch(() => {
-        showNotice("Couldn't save the export — check the app's file-access permission.");
+        if (sessionIdRef.current === noticeSessionId) {
+          showNotice("Couldn't save the export — check the app's file-access permission.");
+        }
       });
   }
   // Two-step confirm for the recording delete — it's PERMANENT (no recycle bin) and the ×
@@ -2700,8 +2709,9 @@ export function SimulatorWindow(): JSX.Element {
     }
     if (deleteRecTimerRef.current !== null) window.clearTimeout(deleteRecTimerRef.current);
     setConfirmingDeleteRecId(null);
+    const noticeSessionId = sessionIdRef.current;
     void deleteRecording(id).catch(() => {
-      showNotice("Couldn't delete the recording.");
+      if (sessionIdRef.current === noticeSessionId) showNotice("Couldn't delete the recording.");
     });
   };
   // Stop the capture loop if the window unmounts mid-recording.
