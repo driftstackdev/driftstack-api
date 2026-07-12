@@ -20,6 +20,9 @@ import {
   boundTabListUpdate,
   isBenignTeardownError,
   MAX_INPUT_EVENT_BYTES,
+  MAX_INPUT_KEY_CHARS,
+  MAX_INPUT_MODIFIERS,
+  MAX_NAVIGATION_URL_BYTES,
   MAX_TAB_FIELD_CHARS,
   MAX_TAB_ID_CHARS,
   MAX_TAB_LIST_COUNT,
@@ -179,9 +182,39 @@ describe('sendInputEvent', () => {
   it('rejects every oversized encoded envelope before it can block the channel', async () => {
     const { room, publishData } = makeRoom();
     await expect(
-      sendInputEvent(room, { type: 'keyDown', key: 'x'.repeat(MAX_INPUT_EVENT_BYTES) }),
+      sendInputEvent(room, {
+        type: 'tabListUpdate',
+        sessionId: 's',
+        tabs: [
+          {
+            id: 't',
+            url: 'https://x.test/',
+            scrollY: 0,
+            title: 'x'.repeat(MAX_INPUT_EVENT_BYTES * 4),
+          },
+        ],
+        activeTabId: 't',
+      }),
     ).rejects.toThrow(/exceeds .* encoded bytes/i);
     expect(publishData).not.toHaveBeenCalled();
+  });
+
+  it('mirrors receiver key, modifier, URL, and paste bounds before publish', async () => {
+    const invalidEvents: InputEvent[] = [
+      { type: 'keyDown', key: 'k'.repeat(MAX_INPUT_KEY_CHARS + 1) },
+      {
+        type: 'keyUp',
+        key: 'A',
+        modifiers: Array.from({ length: MAX_INPUT_MODIFIERS + 1 }, () => 'shift'),
+      },
+      { type: 'navigate', url: `https://x.test/${'a'.repeat(MAX_NAVIGATION_URL_BYTES)}` },
+      { type: 'text', text: '' },
+    ];
+    for (const event of invalidEvents) {
+      const { room, publishData } = makeRoom();
+      await expect(sendInputEvent(room, event)).rejects.toThrow(/invalid/i);
+      expect(publishData).not.toHaveBeenCalled();
+    }
   });
 });
 

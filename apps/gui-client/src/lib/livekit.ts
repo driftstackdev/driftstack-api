@@ -102,10 +102,12 @@ export const MAX_TAB_SNAPSHOT_BYTES = 48 * 1024;
 export const MAX_TAB_URL_BYTES = 4 * 1024;
 export const MAX_TAB_TITLE_BYTES = 1024;
 export const MAX_TAB_ID_BYTES = 256;
-/** Hard ceiling for every JSON input envelope before DataChannel publish. Kept below
- * LiveKit's ~64KiB reliable-buffer congestion threshold so no current or future
- * event type can strand touchEnd/keyUp behind one oversized packet. */
-export const MAX_INPUT_EVENT_BYTES = 48 * 1024;
+/** Mirrors DataChannelInputReceiver's raw-message cap. Tab-list snapshots take the
+ * separate tab-op sidecar path and use MAX_TAB_SNAPSHOT_BYTES instead. */
+export const MAX_INPUT_EVENT_BYTES = 16 * 1024;
+export const MAX_INPUT_KEY_CHARS = 64;
+export const MAX_INPUT_MODIFIERS = 16;
+export const MAX_NAVIGATION_URL_BYTES = 4 * 1024;
 
 const truncateTabField = (value: string, maxChars: number): string =>
   value.length <= maxChars ? value : value.slice(0, maxChars);
@@ -252,12 +254,36 @@ export async function sendInputEvent(
   if (!numericFields.every(Number.isFinite)) {
     throw new RangeError(`Input event ${event.type} contains a non-finite number`);
   }
+  if (event.type === 'keyDown' || event.type === 'keyUp') {
+    if (
+      event.key.length === 0 ||
+      event.key.length > MAX_INPUT_KEY_CHARS ||
+      (event.modifiers?.length ?? 0) > MAX_INPUT_MODIFIERS ||
+      event.modifiers?.some((modifier) => modifier.length > MAX_INPUT_KEY_CHARS) === true
+    ) {
+      throw new RangeError(`Input event ${event.type} contains an invalid key or modifier`);
+    }
+  }
+  if (
+    (event.type === 'navigate' || event.type === 'activateTab') &&
+    (event.url.length === 0 ||
+      new TextEncoder().encode(event.url).byteLength > MAX_NAVIGATION_URL_BYTES)
+  ) {
+    throw new RangeError(`Input event ${event.type} contains an invalid navigation URL`);
+  }
+  if (
+    event.type === 'text' &&
+    (event.text.length === 0 ||
+      new TextEncoder().encode(event.text).byteLength > MAX_DEVICE_TEXT_BYTES)
+  ) {
+    throw new RangeError(`Input event text contains an invalid paste payload`);
+  }
   const reliable = opts.reliable ?? true;
   const data = new TextEncoder().encode(JSON.stringify(event));
-  if (data.byteLength > MAX_INPUT_EVENT_BYTES) {
-    throw new RangeError(
-      `Input event ${event.type} exceeds ${MAX_INPUT_EVENT_BYTES} encoded bytes`,
-    );
+  const maxEncodedBytes =
+    event.type === 'tabListUpdate' ? MAX_TAB_SNAPSHOT_BYTES : MAX_INPUT_EVENT_BYTES;
+  if (data.byteLength > maxEncodedBytes) {
+    throw new RangeError(`Input event ${event.type} exceeds ${maxEncodedBytes} encoded bytes`);
   }
   try {
     await room.localParticipant.publishData(data, { reliable });
