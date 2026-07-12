@@ -1,9 +1,8 @@
 // W340.B — drift guard for the /api-keys page SCOPE_LABEL maps.
-// The page renders two identical SCOPE_LABEL maps (frontmatter +
-// inline script). Three constraints must hold:
+// The page renders API keys only after its client script loads, so the
+// inline script owns the single SCOPE_LABEL map. Three constraints hold:
 //
-//   1. Both maps share exactly the same keys (otherwise SSR + CSR
-//      paint inconsistently).
+//   1. Exactly one map exists (otherwise dead frontmatter can drift).
 //   2. Every key is a valid ApiKeyScope (otherwise a typo silently
 //      breaks the rendering for that scope).
 //   3. Granular V-481 scopes (`read:sessions`, etc) fall through
@@ -30,22 +29,19 @@ describe('W340.B /api-keys SCOPE_LABEL parity', () => {
     (ApiKeyScopeSchema._def as { values: readonly string[] }).values,
   );
 
-  // The page has two SCOPE_LABEL blocks — one in the .astro
-  // frontmatter (typed Record<string,string>) and one inside the
-  // client-side <script is:inline>. Grab the keys of each.
+  // The client-side <script is:inline> owns the only rendered map.
   const blocks = [...page.matchAll(/SCOPE_LABEL[^={]*=\s*\{([^}]*)\}/g)].map((m) => m[1]!);
 
-  it('frontmatter and inline SCOPE_LABEL blocks both exist', () => {
-    expect(blocks.length).toBe(2);
+  it('exactly one client-owned SCOPE_LABEL block exists', () => {
+    expect(blocks.length).toBe(1);
   });
 
   function keysOf(block: string): string[] {
     return [...block.matchAll(/^\s*([a-z_]+):\s*'[^']+',/gm)].map((m) => m[1]!).sort();
   }
 
-  it('frontmatter and inline SCOPE_LABEL maps have identical key sets', () => {
-    const [fmKeys, csrKeys] = blocks.map(keysOf);
-    expect(fmKeys).toEqual(csrKeys);
+  it('the sole SCOPE_LABEL map is inside the client script', () => {
+    expect(page.indexOf('SCOPE_LABEL')).toBeGreaterThan(page.indexOf('<script is:inline>'));
   });
 
   it('every SCOPE_LABEL key is a valid ApiKeyScope', () => {

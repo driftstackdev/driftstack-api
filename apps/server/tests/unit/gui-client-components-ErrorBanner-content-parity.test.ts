@@ -11,7 +11,7 @@
 //     three views during GUI8 polish so all error surfaces look
 //     identical and dismiss the same way.' — pinned so a
 //     refactor doesn't fork the banner back into per-view copies.
-//   • ErrorBannerProps 2-field: message + onDismiss callback.
+//   • Required message + onDismiss fields, with optional retry state.
 //   • Markup: status-error border/bg tints + 'Error' section-label
 //     + truncated message + Dismiss button with btn-secondary
 //     class.
@@ -38,9 +38,9 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
     );
   });
 
-  it('ErrorBannerProps 2-field: message: string + onDismiss: () => void — pinned so the banner stays dismissable and never sticks on screen blocking the workflow after the user has read the error', () => {
+  it('ErrorBannerProps keeps message + onDismiss required while recovery remains optional', () => {
     expect(body).toMatch(
-      /export interface ErrorBannerProps \{\s*\n?\s*message: string;\s*\n?\s*onDismiss: \(\) => void;\s*\n?\s*\}/,
+      /export interface ErrorBannerProps \{[\s\S]*?message: string;\s*\n?\s*onDismiss: \(\) => void;[\s\S]*?onRetry\?: \(\) => void;[\s\S]*?retrying\?: boolean;\s*\n?\s*\}/,
     );
   });
 
@@ -49,14 +49,14 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
     // and the return (every visible error mirrors into Dev Logs), so the
     // signature + JSX shells are pinned separately.
     expect(body).toMatch(
-      /export function ErrorBanner\(\{ message, onDismiss \}: ErrorBannerProps\): JSX\.Element \{/,
+      /export function ErrorBanner\(\{[\s\S]*?message,[\s\S]*?onDismiss,[\s\S]*?onRetry,[\s\S]*?retrying = false,[\s\S]*?\}: ErrorBannerProps\): JSX\.Element \{/,
     );
     // role="alert" so screen readers announce the error (a11y, 2026-06-15).
     expect(body).toMatch(
       /<div\s*\n?\s*role="alert"\s*\n?\s*className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2"\s*\n?\s*>\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>/,
     );
     expect(body).toMatch(
-      /<span className="whitespace-pre-line text-sm text-ink-primary">\{message\}<\/span>\s*\n?\s*<\/div>\s*\n?\s*<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*\n?\s*Dismiss\s*\n?\s*<\/button>/,
+      /<span className="whitespace-pre-line text-sm text-ink-primary">\{message\}<\/span>[\s\S]*?<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*\n?\s*Dismiss\s*\n?\s*<\/button>/,
     );
     expect(body).toMatch(
       /\/\/ 2026-05-20 — whitespace-pre-line so multi-line diagnostic|whitespace-pre-line so multi-line diagnostic/,

@@ -64,7 +64,7 @@ describe('W464.A apps/gui-client/src/lib/api-errors.ts content parity', () => {
 
   it("Catch-block fall-through framing pinned: 'body wasn't JSON; fall through' comment + bare catch (no err binding) + HTTP-status string fallback at function bottom", () => {
     expect(body).toMatch(
-      /\} catch \{\s*\n?\s*\/\* body wasn't JSON; fall through \*\/\s*\n?\s*\}\s*\n?\s*return `HTTP \$\{res\.status\.toString\(\)\}`;/,
+      /\} catch \{\s*\n?\s*\/\* body wasn't JSON; fall through \*\/\s*\n?\s*\}[\s\S]*?return `HTTP \$\{res\.status\.toString\(\)\}`;/,
     );
   });
 

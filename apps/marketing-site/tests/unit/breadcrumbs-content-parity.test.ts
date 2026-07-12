@@ -33,7 +33,7 @@ describe('S19 Breadcrumbs component + adoption', () => {
     expect(body).toMatch(/<nav aria-label="Breadcrumb"/);
     expect(body).toMatch(/aria-current="page"/);
     expect(body).toMatch(
-      /<script type="application\/ld\+json" set:html=\{JSON\.stringify\(breadcrumbLd\)\} \/>/,
+      /<script is:inline type="application\/ld\+json" set:html=\{JSON\.stringify\(breadcrumbLd\)\} \/>/,
     );
     // dead-inline-script trap guard (this is a set:html script, not a body)
     expect(body).not.toMatch(/<script[^>]*>\s*\{`/);

@@ -12,7 +12,7 @@
 //   • Pure presentational (no fetching / no actions framing).
 //   • Replaces inline <dl> from CryptoOrderDetailView (refactor
 //     framing).
-//   • Imports CryptoOrderStatusBadge + formatCents + CryptoOrderData.
+//   • Imports CryptoOrderStatusBadge + shared crypto formatters + CryptoOrderData.
 //   • Optional footer slot + optional nowFn testing seam.
 //   • <dl> 2-col grid: Product / Amount / Payment id (conditional)
 //     / Created / Updated / Pay by (conditional).
@@ -46,9 +46,11 @@ describe('W386.C gui-client CryptoOrderSummaryCard content parity', () => {
     );
   });
 
-  it('imports: CryptoOrderStatusBadge + formatCents + CryptoOrderData', () => {
+  it('imports: CryptoOrderStatusBadge + shared crypto formatters + CryptoOrderData', () => {
     expect(body).toMatch(/import \{ CryptoOrderStatusBadge \} from '\.\/CryptoOrderStatusBadge';/);
-    expect(body).toMatch(/import \{ formatCents \} from '\.\.\/lib\/crypto-format';/);
+    expect(body).toMatch(
+      /import \{ formatCents, formatProduct, formatTimestamp \} from '\.\.\/lib\/crypto-format';/,
+    );
     expect(body).toMatch(/import type \{ CryptoOrderData \} from '\.\.\/lib\/use-crypto-order';/);
   });
 
@@ -93,9 +95,9 @@ describe('W386.C gui-client CryptoOrderSummaryCard content parity', () => {
     expect(body).toMatch(/\{formatCents\(order\.price_cents, order\.price_currency\)\}/);
   });
 
-  it('Pay by row shows expires_at + describeExpiry parenthetical countdown', () => {
+  it('Pay by row shows the shared formatted timestamp + describeExpiry parenthetical countdown', () => {
     expect(body).toMatch(/\{showExpiry && \(/);
-    expect(body).toMatch(/<span className="font-mono text-xs">\{order\.expires_at\}<\/span>/);
+    expect(body).toMatch(/<span>\{formatTimestamp\(order\.expires_at as string\)\}<\/span>/);
     expect(body).toMatch(
       /\(\{describeExpiry\(order\.expires_at as string, \(nowFn \?\? Date\.now\)\(\)\)\}\)/,
     );

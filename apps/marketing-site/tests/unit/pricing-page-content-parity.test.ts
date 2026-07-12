@@ -90,7 +90,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
 
   it('Product + AggregateOffer JSON-LD: figures derived from API_TIERS, strictly factual (no ratings/reviews)', () => {
     expect(body).toMatch(
-      /<script type="application\/ld\+json" set:html=\{JSON\.stringify\(pricingStructuredData\)\} \/>/,
+      /<script is:inline type="application\/ld\+json" set:html=\{JSON\.stringify\(pricingStructuredData\)\} \/>/,
     );
     expect(body).toMatch(/'@type': 'Product'/);
     expect(body).toMatch(/'@type': 'AggregateOffer'/);

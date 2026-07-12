@@ -74,11 +74,14 @@ describe('W478.C apps/gui-client/src/views/BillingCostView.tsx content parity', 
     );
   });
 
-  it("State-machine render: loading → SkeletonRows label='Loading cost breakdown…' + idle 'Select a billing cycle to load the breakdown.' + error 'Could not load cost data: ${message}' role='alert' + ready → <CostPanel breakdown={state.data.breakdown} billingCycle={state.data.billing_cycle} /> (snake_case server field passed as billingCycle camelCase prop)", () => {
-    // Loading uses the shared SkeletonRows primitive (consistent with the other
-    // list views) rather than a bare text line; the copy survives via its label.
+  it('State-machine render: loading → layout-matched CostPanelSkeleton + idle/error/ready states', () => {
+    // The first-load skeleton mirrors the real cost panel rather than presenting
+    // generic rows whose geometry jumps when the result arrives.
     expect(body).toContain("state.kind === 'loading'");
-    expect(body).toContain('<SkeletonRows rows={4} label="Loading cost breakdown…" />');
+    expect(body).toContain("state.kind === 'loading' && <CostPanelSkeleton />");
+    expect(body).toMatch(/function CostPanelSkeleton\(\): JSX\.Element \{/);
+    expect(body).toMatch(/<SkeletonRegion label="Loading cost breakdown…">/);
+    expect(body).toMatch(/data-component="cost-panel-skeleton"/);
     expect(body).toMatch(
       /\{state\.kind === 'idle' && \(\s*\n?\s*<p className="text-sm text-ink-secondary">Select a billing cycle to load the breakdown\.<\/p>\s*\n?\s*\)\}/,
     );

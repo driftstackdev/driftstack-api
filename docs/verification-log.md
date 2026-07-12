@@ -24619,3 +24619,17 @@ Verification:
 - fleet control source-parity: 3/3 tests pass;
 - admin-panel `astro check`: 0 errors;
 - admin-panel production build passes with the required `PUBLIC_API_BASE_URL` set.
+
+## V-558 — frontend verifier alignment and broad gate
+
+**Date:** 2026-07-12
+
+Updated source-parity guards that still described superseded frontend implementations. The guards now protect the shipped behavior: dirty-draft-safe profile closing, optional single-flight error recovery, shared crypto formatting, the layout-matched cost skeleton, one client-owned API-key scope map, and explicitly inline Astro JSON-LD.
+
+Verification:
+
+- focused verifier run: 116/116 tests pass across ten affected files;
+- full GUI jsdom suite: 1,191 passed and 6 skipped across 147 files;
+- status-site production build: 7 static pages generated successfully;
+- repository-wide Vitest audit enumerated only the known stale generated Python SDK OpenAPI snapshot after the frontend verifier updates;
+- root workspace typecheck reaches every frontend workspace successfully, then remains non-green on unrelated server-test fixture typing debt recorded in the handoff.

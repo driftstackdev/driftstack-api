@@ -90,7 +90,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(page).toMatch(/mainEntity: FAQ_GROUPS\.flatMap\(\(group\) => group\.entries\)/);
     expect(page).toMatch(/text: faqPlainText\(entry\.a\)/);
     expect(page).toMatch(
-      /<script type="application\/ld\+json" set:html=\{JSON\.stringify\(faqStructuredData\)\} \/>/,
+      /<script is:inline type="application\/ld\+json" set:html=\{JSON\.stringify\(faqStructuredData\)\} \/>/,
     );
     // No fabricated structured data: FAQPage carries Question/Answer only.
     expect(page).not.toMatch(/aggregateRating|reviewCount|ratingValue/i);

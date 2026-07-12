@@ -90,11 +90,12 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it("CreateProfileModal: ESC-to-close (Escape key + !submitting gate) + backdrop-click-to-close (target === currentTarget && !submitting) — pinned so both close paths are submission-safe; modal is role='dialog' aria-modal='true' aria-labelledby='create-profile-title' for screen-reader semantics", () => {
+  it('CreateProfileModal: all close paths use the submission-safe dirty-draft guard; modal keeps dialog semantics', () => {
     expect(body).toMatch(
-      /if \(e\.key === 'Escape' && !submitting\) \{\s*\n?\s*e\.preventDefault\(\);\s*\n?\s*onClose\(\);\s*\n?\s*\}/,
+      /const requestClose = useCallback\(\(\): void => \{\s*\n?\s*if \(submitting \|\| confirmOpenRef\.current\) return;[\s\S]*?if \(!dirty\) \{\s*\n?\s*onClose\(\);/,
     );
-    expect(body).toMatch(/if \(e\.target === e\.currentTarget && !submitting\) onClose\(\);/);
+    expect(body).toMatch(/useFocusTrap\(true, dialogRef, requestClose\);/);
+    expect(body).toMatch(/if \(e\.target === e\.currentTarget\) requestClose\(\);/);
     expect(body).toMatch(
       /role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-labelledby="create-profile-title"/,
     );

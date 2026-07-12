@@ -131,7 +131,7 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
 
   it("Product + AggregateOffer JSON-LD pinned: '@type Product' + '@type AggregateOffer' with lowPrice/highPrice/offerCount DERIVED from API_TIERS (String(freeTier.monthlyUsd) / String(Math.max(...listedMonthlyUsd)) / String(API_TIERS.length)) and NO aggregateRating/review keys — pinned so the structured data stays data-bound (hand-typed dollars would diverge from pricing.ts) and strictly factual (fabricated ratings are a hard guardrail violation + a Google structured-data penalty risk)", () => {
     expect(body).toMatch(
-      /<script type="application\/ld\+json" set:html=\{JSON\.stringify\(pricingStructuredData\)\} \/>/,
+      /<script is:inline type="application\/ld\+json" set:html=\{JSON\.stringify\(pricingStructuredData\)\} \/>/,
     );
     expect(body).toMatch(/'@type': 'Product'/);
     expect(body).toMatch(/'@type': 'AggregateOffer'/);
