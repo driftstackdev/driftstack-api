@@ -27,7 +27,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -210,6 +210,52 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
         (c.init?.method || '').toUpperCase() === 'POST',
     );
     expect(portalCall).toBeTruthy();
+  });
+
+  it('serializes both portal entry buttons and shows honest in-flight feedback', async () => {
+    let resolvePortal!: (response: Response) => void;
+    const pendingPortal = new Promise<Response>((resolve) => {
+      resolvePortal = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing\/portal-session$/.test(call.url)) return pendingPortal;
+        return json({
+          subscription: {
+            tier: 'api_builder',
+            status: 'active',
+            current_period_end: '2026-06-30T00:00:00.000Z',
+            cancel_at_period_end: false,
+          },
+        });
+      },
+    });
+    win = window;
+    await flush();
+    const portalBtn = window.document.querySelector('[data-action="portal"]') as HTMLButtonElement;
+    const cancelBtn = window.document.querySelector('[data-action="cancel"]') as HTMLButtonElement;
+    portalBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    cancelBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(1);
+
+    expect(
+      fetchCalls.filter((call) => /\/v1\/billing\/portal-session$/.test(call.url)),
+    ).toHaveLength(1);
+    expect(portalBtn.disabled).toBe(true);
+    expect(cancelBtn.disabled).toBe(true);
+    expect(portalBtn.getAttribute('aria-busy')).toBe('true');
+    expect(cancelBtn.getAttribute('aria-busy')).toBe('true');
+    expect(portalBtn.textContent).toContain('Opening Stripe');
+    expect(cancelBtn.textContent).toContain('Opening Stripe');
+
+    resolvePortal(json({ portal_url: 'https://billing.stripe.com/p/session_test' }));
+    await flush();
+    expect(portalBtn.disabled).toBe(false);
+    expect(cancelBtn.disabled).toBe(false);
+    expect(portalBtn.getAttribute('aria-busy')).toBe('false');
+    expect(portalBtn.textContent).toBe('Manage in Stripe portal');
+    expect(cancelBtn.textContent).toBe('Cancel in Stripe portal');
   });
 
   it('crypto orders: renders tier label, price, created day + a Receipt button ONLY on paid orders (slice 3.3)', async () => {

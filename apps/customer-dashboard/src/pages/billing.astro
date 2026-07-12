@@ -287,23 +287,43 @@ const apiBaseUrl = resolveApiBaseUrl();
       const cancelBtn = root.querySelector('[data-action="cancel"]');
       const cancelHint = root.querySelector('[data-field="cancel-hint"]');
 
-      function handlePortal() {
+      let portalLoading = false;
+      function setPortalLoading(loading) {
+        portalLoading = loading;
+        [portalBtn, cancelBtn].forEach((btn) => {
+          if (!btn) return;
+          btn.disabled = loading;
+          btn.setAttribute('aria-busy', loading ? 'true' : 'false');
+        });
+        if (portalBtn) {
+          portalBtn.textContent = loading ? 'Opening Stripe…' : 'Manage in Stripe portal';
+        }
+        if (cancelBtn) {
+          cancelBtn.textContent = loading ? 'Opening Stripe…' : 'Cancel in Stripe portal';
+        }
+      }
+
+      async function handlePortal() {
         if (!token) {
           showBanner('Sign in to manage billing.');
           return;
         }
-        authedFetch('/v1/billing/portal-session', { method: 'POST', body: '{}' })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then((body) => {
-            if (body.portal_url) window.location.href = body.portal_url;
-          })
-          .catch((err) => {
-            showBanner(
-              "Couldn't open Stripe portal (" +
-                (err && err.message ? err.message : 'network error') +
-                ').',
-            );
+        if (portalLoading) return;
+        setPortalLoading(true);
+        try {
+          const response = await authedFetch('/v1/billing/portal-session', {
+            method: 'POST',
+            body: '{}',
           });
+          if (!response.ok) throw new Error('portal unavailable');
+          const body = await response.json();
+          if (!body || !body.portal_url) throw new Error('portal URL missing');
+          window.location.href = body.portal_url;
+        } catch {
+          showBanner("Couldn't open Stripe right now — check your connection and try again.");
+        } finally {
+          setPortalLoading(false);
+        }
       }
 
       if (portalBtn) portalBtn.addEventListener('click', handlePortal);
