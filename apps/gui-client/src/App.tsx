@@ -6,7 +6,7 @@
 // single-window desktop app, and Tauri's window doesn't have a real
 // history stack to integrate with.
 
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ConnectionPill } from './components/ConnectionPill';
 import { Sidebar, type SidebarViewKind } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
@@ -18,29 +18,56 @@ import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
 import { isCloudBaseUrl } from './lib/telemetry';
 import { useAppVersion } from './lib/app-version';
-import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider, useToasts } from './lib/toasts';
-import { AgentChatView } from './views/AgentChatView';
 import { CommandCenterView } from './views/CommandCenterView';
-import { RecipesView } from './views/RecipesView';
-import { ProfilesView } from './views/ProfilesView';
-import { ProxiesView } from './views/ProxiesView';
-import { RecordingPlayerView } from './views/RecordingPlayerView';
-import { RecordingsView } from './views/RecordingsView';
-import { FleetView } from './views/FleetView';
-import { SessionsHistoryView } from './views/SessionsHistoryView';
-import { TeamView } from './views/TeamView';
-import { SessionsView } from './views/SessionsView';
-import { SettingsView } from './views/SettingsView';
-import { BillingView } from './views/BillingView';
 import { UpdateBanner } from './components/UpdateBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 import { buildClient } from './lib/client';
 import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
+
+// The default Command Center and boot/first-run surfaces stay eager. Every other
+// destination is loaded only when selected, keeping crypto/billing, profile tooling,
+// recordings, and admin/team code out of the initial Tauri window parse. Each module
+// exposes named exports, so adapt them to React.lazy's default-export contract.
+const AgentChatView = lazy(async () => ({
+  default: (await import('./views/AgentChatView')).AgentChatView,
+}));
+const RecipesView = lazy(async () => ({
+  default: (await import('./views/RecipesView')).RecipesView,
+}));
+const ProfilesView = lazy(async () => ({
+  default: (await import('./views/ProfilesView')).ProfilesView,
+}));
+const ProxiesView = lazy(async () => ({
+  default: (await import('./views/ProxiesView')).ProxiesView,
+}));
+const RecordingPlayerView = lazy(async () => ({
+  default: (await import('./views/RecordingPlayerView')).RecordingPlayerView,
+}));
+const RecordingsView = lazy(async () => ({
+  default: (await import('./views/RecordingsView')).RecordingsView,
+}));
+const FleetView = lazy(async () => ({ default: (await import('./views/FleetView')).FleetView }));
+const SessionsHistoryView = lazy(async () => ({
+  default: (await import('./views/SessionsHistoryView')).SessionsHistoryView,
+}));
+const TeamView = lazy(async () => ({ default: (await import('./views/TeamView')).TeamView }));
+const SessionsView = lazy(async () => ({
+  default: (await import('./views/SessionsView')).SessionsView,
+}));
+const SettingsView = lazy(async () => ({
+  default: (await import('./views/SettingsView')).SettingsView,
+}));
+const BillingView = lazy(async () => ({
+  default: (await import('./views/BillingView')).BillingView,
+}));
+const ConnectivityView = lazy(async () => ({
+  default: (await import('./views/ConnectivityView')).ConnectivityView,
+}));
 
 export type View =
   | { kind: 'home' }
@@ -613,7 +640,20 @@ function Shell(): JSX.Element {
                 </div>
               )}
             >
-              <CurrentView view={view} onNavigate={setView} />
+              <Suspense
+                fallback={
+                  <div
+                    role="status"
+                    aria-label="Loading view"
+                    className="flex h-full items-center justify-center gap-3 text-sm text-ink-muted"
+                  >
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-surface-divider border-t-ink-primary" />
+                    Loading…
+                  </div>
+                }
+              >
+                <CurrentView view={view} onNavigate={setView} />
+              </Suspense>
             </ErrorBoundary>
           </main>
         </div>
