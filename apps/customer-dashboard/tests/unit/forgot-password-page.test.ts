@@ -26,7 +26,8 @@ interface MockFetchCall {
 }
 
 interface SetUpOpts {
-  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+  requestTimeoutImmediately?: boolean;
+  fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
 function setUpDom(
@@ -60,6 +61,18 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  if (opts.requestTimeoutImmediately) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 15_000) {
+        window.queueMicrotask(() => {
+          if (typeof handler === 'function') handler(...args);
+        });
+        return 42;
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+  }
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="forgot-password"'));
   if (!pageScript) throw new Error('forgot-password inline script not found');
@@ -161,5 +174,33 @@ describe('forgot-password page — local integration', () => {
     expect(textOf(window, '[data-banner]')).toMatch(/Too many reset requests/);
     expect(isHidden(window, '[data-form]')).toBe(false);
     expect(isHidden(window, '[data-success]')).toBe(true);
+  });
+
+  it('serializes duplicate submits and recovers when the bounded request times out', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      requestTimeoutImmediately: true,
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    submit(window, 'recover@example.com');
+    submit(window, 'recover@example.com');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    const submitBtn = window.document.querySelector(
+      '[data-form] button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.getAttribute('aria-busy')).toBe('false');
+    expect(submitBtn.textContent).toBe('Send reset link');
+    expect(textOf(window, '[data-banner]')).toMatch(/took too long.*check your connection/i);
   });
 });

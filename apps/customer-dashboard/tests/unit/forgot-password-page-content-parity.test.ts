@@ -98,6 +98,21 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
     );
   });
 
+  it('reset-link request has a real single-flight lease and bounded network deadline', () => {
+    expect(body).toMatch(/const RESET_LINK_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/let resetLinkRequestInFlight = false/);
+    expect(body).toMatch(/if \(resetLinkRequestInFlight\) return/);
+    expect(body).toMatch(/resetLinkRequestInFlight = true/);
+    expect(body).toMatch(/const controller = new AbortController\(\)/);
+    expect(body).toMatch(
+      /setTimeout\([\s\S]*?controller\.abort\(\)[\s\S]*?RESET_LINK_REQUEST_TIMEOUT_MS/,
+    );
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\)/);
+    expect(body).toMatch(/resetLinkRequestInFlight = false/);
+    expect(body).toMatch(/Sending the reset link took too long/);
+  });
+
   it('downstream /reset-password page exists (debug_token deep-link target)', () => {
     expect(existsSync(RESET_PAGE)).toBe(true);
   });
