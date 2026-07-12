@@ -94,6 +94,7 @@ describe('services/agent-decomposer content parity', () => {
     expect(body).toMatch(
       /kind: 'interact';[\s\S]*?action: 'tap' \| 'type' \| 'scroll' \| 'swipe' \| 'press';/,
     );
+    expect(body).toMatch(/sensitive\?: boolean;/);
     expect(body).toMatch(
       /\{ kind: 'wait'; condition: 'idle' \| 'selector_visible'; selector\?: string; timeoutMs\?: number \}/,
     );

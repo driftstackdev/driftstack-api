@@ -127,7 +127,7 @@ const SYSTEM_PROMPT = [
   'invent new verbs.',
   '',
   '  - navigate { url: string }',
-  '  - interact { action: "tap"|"type"|"scroll"|"swipe"|"press", selector?: string, value?: string } (press: value = key name, e.g. "Enter")',
+  '  - interact { action: "tap"|"type"|"scroll"|"swipe"|"press", selector?: string, value?: string, sensitive?: boolean } (type: sensitive=true for OTP/PIN/card values; press: value = key name, e.g. "Enter")',
   '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number }',
   '  - capture { capture: "screenshot"|"dom_snapshot"|"pdf" }',
   '  - scroll { direction: "up"|"down", amount_px?: number }',
@@ -581,6 +581,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
             action,
             ...(typeof i.selector === 'string' ? { selector: i.selector } : {}),
             ...(typeof i.value === 'string' ? { value: i.value } : {}),
+            ...(typeof i.sensitive === 'boolean' ? { sensitive: i.sensitive } : {}),
           });
         }
         break;

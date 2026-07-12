@@ -342,6 +342,36 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents).toHaveLength(2);
       expect(res.intents.map((i) => i.kind)).toEqual(['navigate', 'capture']);
     });
+
+    it('preserves boolean sensitive typing and drops spoof string values', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            {
+              kind: 'interact',
+              action: 'type',
+              selector: '#otp',
+              value: '123456',
+              sensitive: true,
+            },
+            {
+              kind: 'interact',
+              action: 'type',
+              selector: '#name',
+              value: 'Ada',
+              sensitive: 'true',
+            },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'interact', action: 'type', selector: '#otp', value: '123456', sensitive: true },
+        { kind: 'interact', action: 'type', selector: '#name', value: 'Ada' },
+      ]);
+    });
   });
 
   describe('retry + error handling', () => {

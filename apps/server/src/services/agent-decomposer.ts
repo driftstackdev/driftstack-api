@@ -142,6 +142,8 @@ export type AgentIntent =
       action: 'tap' | 'type' | 'scroll' | 'swipe' | 'press';
       selector?: string;
       value?: string;
+      /** Type-only: suppress behavioral typo correction for OTP/PIN/card values. */
+      sensitive?: boolean;
     }
   | { kind: 'wait'; condition: 'idle' | 'selector_visible'; selector?: string; timeoutMs?: number }
   | { kind: 'capture'; capture: 'screenshot' | 'dom_snapshot' | 'pdf' }

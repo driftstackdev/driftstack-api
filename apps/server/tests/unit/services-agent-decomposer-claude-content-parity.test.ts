@@ -111,7 +111,7 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/'invent new verbs\.',/);
     expect(body).toMatch(/' {2}- navigate \{ url: string \}',/);
     expect(body).toMatch(
-      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"swipe"\|"press", selector\?: string, value\?: string \} \(press: value = key name, e\.g\. "Enter"\)',/,
+      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"swipe"\|"press", selector\?: string, value\?: string, sensitive\?: boolean \} \(type: sensitive=true for OTP\/PIN\/card values; press: value = key name, e\.g\. "Enter"\)',/,
     );
     expect(body).toMatch(
       /' {2}- wait \{ condition: "idle"\|"selector_visible", selector\?: string, timeoutMs\?: number \}',/,
