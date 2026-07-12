@@ -42,6 +42,11 @@ import {
   LiveFpsSubscriber,
   type LiveFpsStore,
 } from '../components/LiveFpsSubscriber';
+import {
+  createDownloadsListStore,
+  DownloadsListSubscriber,
+  type DownloadsListStore,
+} from '../components/DownloadsListSubscriber';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
@@ -67,7 +72,6 @@ import {
   type ControlAuth,
   type SessionCookie,
   type SessionFileHandle,
-  type SessionDownloadEntry,
 } from '../lib/agent-session-control';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -1292,7 +1296,7 @@ function BrowserBar({
   liveUrl,
   pageLoading,
   loadProgress,
-  downloadCount,
+  downloadsStore,
   onOpenDownloads,
 }: {
   canNavigate: boolean;
@@ -1306,8 +1310,8 @@ function BrowserBar({
   loadProgress: number | null;
   // Mocked iOS download-bar indicator — GUI chrome only (like the address bar; it
   // never touches the rendered iPhone/fingerprint). Count of the session's downloads
-  // (reuses the Downloads pane's shared `downloads` state — no second fetch).
-  downloadCount: number;
+  // (reuses the Downloads pane's shared store — no second fetch).
+  downloadsStore: DownloadsListStore;
   // Opens the Downloads drawer pane (mirrors the rail buttons' pane switch).
   onOpenDownloads: () => void;
 }): JSX.Element {
@@ -1676,39 +1680,44 @@ function BrowserBar({
           affects the rendered iPhone/fingerprint). A down-arrow-into-tray button with a
           small count pill; clicking opens the Downloads drawer pane. Hidden when there
           are no downloads (mirrors copy-URL's disabled-when-empty convention). */}
-      {downloadCount > 0 && (
-        <button
-          type="button"
-          data-component="simulator-download-indicator"
-          aria-label={`Downloads (${downloadCount})`}
-          title={`Downloads (${downloadCount}) — open the Downloads panel`}
-          onClick={onOpenDownloads}
-          className="relative shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M4 15v4h16v-4" />
-            <line x1="12" y1="3" x2="12" y2="14" />
-            <polyline points="8,10 12,14 16,10" />
-          </svg>
-          <span
-            data-component="simulator-download-count"
-            aria-hidden="true"
-            className="absolute -right-1 -top-1 flex min-w-[14px] items-center justify-center rounded-full bg-accent px-1 text-[9px] font-semibold leading-[14px] text-white"
-          >
-            {downloadCount > 99 ? '99+' : downloadCount}
-          </span>
-        </button>
-      )}
+      <DownloadsListSubscriber store={downloadsStore}>
+        {(downloads) => {
+          const downloadCount = downloads?.length ?? 0;
+          return downloadCount > 0 ? (
+            <button
+              type="button"
+              data-component="simulator-download-indicator"
+              aria-label={`Downloads (${downloadCount})`}
+              title={`Downloads (${downloadCount}) — open the Downloads panel`}
+              onClick={onOpenDownloads}
+              className="relative shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 15v4h16v-4" />
+                <line x1="12" y1="3" x2="12" y2="14" />
+                <polyline points="8,10 12,14 16,10" />
+              </svg>
+              <span
+                data-component="simulator-download-count"
+                aria-hidden="true"
+                className="absolute -right-1 -top-1 flex min-w-[14px] items-center justify-center rounded-full bg-accent px-1 text-[9px] font-semibold leading-[14px] text-white"
+              >
+                {downloadCount > 99 ? '99+' : downloadCount}
+              </span>
+            </button>
+          ) : null;
+        }}
+      </DownloadsListSubscriber>
       {/* Live loading bar — realistic browser-style trickle (founder W2719/2740).
           Climbs toward ~90% while loading, snaps to 100% + fades on completion. */}
       {barVisible && (
@@ -4851,7 +4860,9 @@ export function SimulatorWindow(): JSX.Element {
   // File-control DOWNLOAD (A3 W2856). Poll the session's download jar like cookies;
   // fetching one saves it to the user's machine via an <a download>. The jar is empty
   // until A3's fork download-delegate populates it → "No downloads yet".
-  const [downloads, setDownloads] = useState<SessionDownloadEntry[] | null>(null);
+  const downloadsStoreRef = useRef<DownloadsListStore | null>(null);
+  if (downloadsStoreRef.current === null) downloadsStoreRef.current = createDownloadsListStore();
+  const downloadsStore = downloadsStoreRef.current;
   const [downloadsNote, setDownloadsNote] = useState<string | null>(null);
   // Twin of hasCookiesRef (#134) — audit wb1w3015f found the downloads poll had the
   // IDENTICAL flicker (blanked the list + the browser-bar count badge on every
@@ -4864,7 +4875,7 @@ export function SimulatorWindow(): JSX.Element {
   // touches the rendered iPhone/fingerprint) shows a count badge whenever there are
   // downloads, so the poll must also run while it's visible (browser mode), not only
   // while the Downloads PANE is open. ONE poll feeds both — the indicator reuses this
-  // same `downloads` state, no second fetch path.
+  // same downloads store, no second fetch path.
   const downloadsPollActive = downloadsPaneActive || browserMode;
   useEffect(() => {
     // Approach B perf — poll while the Downloads pane is the active section OR the
@@ -4890,7 +4901,7 @@ export function SimulatorWindow(): JSX.Element {
           if (cancelled) return;
           if (res.status === 'ok') {
             const files = res.files ?? [];
-            setDownloads(files);
+            downloadsStore.set(files);
             // Empty-but-ok is a real fetch ("no downloads yet"), not "nothing fetched yet"
             // — twin of the cookies flag; keying on length>0 wrongly re-showed "waiting for
             // the device…" over a successfully-read empty list. (Audit wm0hhkq30.)
@@ -5261,7 +5272,7 @@ export function SimulatorWindow(): JSX.Element {
     setCookies(null);
     hasCookiesRef.current = false;
     setCookiesNote(null);
-    setDownloads(null);
+    downloadsStore.set(null);
     hasDownloadsRef.current = false;
     setDownloadsNote(null);
     // Clear in-flight upload/download UI flags too (audit 2026-07-08): a swap while a
@@ -6322,7 +6333,7 @@ export function SimulatorWindow(): JSX.Element {
               liveUrl={liveUrl}
               pageLoading={pageLoading}
               loadProgress={loadProgress}
-              downloadCount={downloads?.length ?? 0}
+              downloadsStore={downloadsStore}
               onOpenDownloads={() => openPane('downloads')}
             />
           )}
@@ -7364,100 +7375,104 @@ export function SimulatorWindow(): JSX.Element {
                       (A3 W2856 / founder "control files"). Click one to save it to your
                       machine. Empty until A3's fork download-delegate populates the jail. */}
                     {activePane === 'downloads' && (
-                      <section
-                        data-component="simulator-downloads"
-                        className="space-y-2.5 text-[11px] text-white/80"
-                      >
-                        <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
-                          <span aria-hidden="true" className="text-accent">
-                            <svg
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M4 15v4h16v-4" />
-                              <line x1="12" y1="3" x2="12" y2="14" />
-                              <polyline points="8,10 12,14 16,10" />
-                            </svg>
-                          </span>
-                          <span>Downloads</span>
-                          {downloads !== null && downloads.length > 0 && (
-                            <span className="text-white/40">· {downloads.length}</span>
-                          )}
-                          {downloads !== null && (
-                            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-ink-secondary">
-                              <span
-                                aria-hidden="true"
-                                className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
-                              />
-                              live
-                            </span>
-                          )}
-                        </div>
-
-                        {/* One-line caption (audit #37) — matches the Files pane's
-                            explanatory subtitle density so the pane isn't a bare list. */}
-                        <div className="text-[10px] text-white/35">
-                          Files the page saved · click Save to keep one on your machine
-                        </div>
-
-                        {downloadsNote !== null && (
-                          <div className="font-mono text-[10px] text-amber-300/80">
-                            {downloadsNote}
-                          </div>
-                        )}
-
-                        {downloads === null || downloads.length === 0 ? (
-                          <div className="font-mono text-[10px] text-white/40">
-                            {sessionId === ''
-                              ? 'Start the session to receive downloads from the device.'
-                              : 'no downloads yet'}
-                          </div>
-                        ) : (
-                          <div className="max-h-48 space-y-2 overflow-y-auto pr-0.5">
-                            {downloads.map((d) => {
-                              const g = fileGlyph(d.name, d.mime);
-                              return (
-                                <div
-                                  key={d.name}
-                                  className="flex items-center gap-2.5 rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2"
+                      <DownloadsListSubscriber store={downloadsStore}>
+                        {(downloads) => (
+                          <section
+                            data-component="simulator-downloads"
+                            className="space-y-2.5 text-[11px] text-white/80"
+                          >
+                            <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
+                              <span aria-hidden="true" className="text-accent">
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
                                 >
+                                  <path d="M4 15v4h16v-4" />
+                                  <line x1="12" y1="3" x2="12" y2="14" />
+                                  <polyline points="8,10 12,14 16,10" />
+                                </svg>
+                              </span>
+                              <span>Downloads</span>
+                              {downloads !== null && downloads.length > 0 && (
+                                <span className="text-white/40">· {downloads.length}</span>
+                              )}
+                              {downloads !== null && (
+                                <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-ink-secondary">
                                   <span
                                     aria-hidden="true"
-                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[13px]"
-                                    style={{ backgroundColor: `${g.color}22`, color: g.color }}
-                                  >
-                                    {g.icon}
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="truncate text-[11.5px] font-semibold text-white">
-                                      {d.name}
+                                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
+                                  />
+                                  live
+                                </span>
+                              )}
+                            </div>
+
+                            {/* One-line caption (audit #37) — matches the Files pane's
+                            explanatory subtitle density so the pane isn't a bare list. */}
+                            <div className="text-[10px] text-white/35">
+                              Files the page saved · click Save to keep one on your machine
+                            </div>
+
+                            {downloadsNote !== null && (
+                              <div className="font-mono text-[10px] text-amber-300/80">
+                                {downloadsNote}
+                              </div>
+                            )}
+
+                            {downloads === null || downloads.length === 0 ? (
+                              <div className="font-mono text-[10px] text-white/40">
+                                {sessionId === ''
+                                  ? 'Start the session to receive downloads from the device.'
+                                  : 'no downloads yet'}
+                              </div>
+                            ) : (
+                              <div className="max-h-48 space-y-2 overflow-y-auto pr-0.5">
+                                {downloads.map((d) => {
+                                  const g = fileGlyph(d.name, d.mime);
+                                  return (
+                                    <div
+                                      key={d.name}
+                                      className="flex items-center gap-2.5 rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2"
+                                    >
+                                      <span
+                                        aria-hidden="true"
+                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[13px]"
+                                        style={{ backgroundColor: `${g.color}22`, color: g.color }}
+                                      >
+                                        {g.icon}
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="truncate text-[11.5px] font-semibold text-white">
+                                          {d.name}
+                                        </div>
+                                        <div className="truncate text-[10px] text-white/40">
+                                          {formatFileSize(d.size)}
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        aria-label={`Save ${d.name}`}
+                                        title="Save this file to your machine"
+                                        disabled={downloadingName !== null}
+                                        onClick={() => onDownloadFile(d.name)}
+                                        className="shrink-0 rounded-md border border-white/15 bg-white/5 px-2 py-1 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                                      >
+                                        {downloadingName === d.name ? 'Saving…' : '⬇ Save'}
+                                      </button>
                                     </div>
-                                    <div className="truncate text-[10px] text-white/40">
-                                      {formatFileSize(d.size)}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    aria-label={`Save ${d.name}`}
-                                    title="Save this file to your machine"
-                                    disabled={downloadingName !== null}
-                                    onClick={() => onDownloadFile(d.name)}
-                                    className="shrink-0 rounded-md border border-white/15 bg-white/5 px-2 py-1 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
-                                  >
-                                    {downloadingName === d.name ? 'Saving…' : '⬇ Save'}
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </section>
                         )}
-                      </section>
+                      </DownloadsListSubscriber>
                     )}
 
                     {/* Recording — SLICE 3 (founder-approved drawer-full-demo
