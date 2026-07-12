@@ -428,11 +428,12 @@ describe('sendTabListUpdate', () => {
 });
 
 describe('sendActivateTab', () => {
-  it('publishes {type:"activateTab", requestId, sessionId, tabId, url, scrollY} reliably', async () => {
+  it('publishes {type:"activateTab", requestId, sessionId, tabId, prevTabId, url, scrollY} reliably', async () => {
     const { room, publishData } = makeRoom();
     const requestId = await sendActivateTab(room, {
       sessionId: 'agt_x',
       tabId: 't2',
+      prevTabId: 't1',
       url: 'https://b.example/',
       scrollY: 300,
     });
@@ -444,6 +445,7 @@ describe('sendActivateTab', () => {
       requestId,
       sessionId: 'agt_x',
       tabId: 't2',
+      prevTabId: 't1',
       url: 'https://b.example/',
       scrollY: 300,
     });
@@ -455,6 +457,7 @@ describe('sendActivateTab', () => {
     const requestId = await sendActivateTab(room, {
       sessionId: 's',
       tabId: 't',
+      prevTabId: 'prior',
       url: 'about:blank',
       scrollY: 0,
     });
@@ -468,8 +471,20 @@ describe('sendActivateTab', () => {
 
   it('mints a UNIQUE requestId per call', async () => {
     const { room } = makeRoom();
-    const a = await sendActivateTab(room, { sessionId: 's', tabId: 't', url: 'u', scrollY: 0 });
-    const b = await sendActivateTab(room, { sessionId: 's', tabId: 't', url: 'u', scrollY: 0 });
+    const a = await sendActivateTab(room, {
+      sessionId: 's',
+      tabId: 't',
+      prevTabId: 'prior',
+      url: 'u',
+      scrollY: 0,
+    });
+    const b = await sendActivateTab(room, {
+      sessionId: 's',
+      tabId: 't',
+      prevTabId: 'prior',
+      url: 'u',
+      scrollY: 0,
+    });
     expect(a).not.toBe(b);
   });
 });

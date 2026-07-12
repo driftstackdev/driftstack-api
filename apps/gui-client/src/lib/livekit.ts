@@ -64,6 +64,7 @@ export type InputEvent =
       requestId: string;
       sessionId: string;
       tabId: string;
+      prevTabId: string;
       url: string;
       scrollY: number;
     }
@@ -88,6 +89,7 @@ export type TabListUpdatePayload = {
 export type ActivateTabPayload = {
   sessionId: string;
   tabId: string;
+  prevTabId: string;
   url: string;
   scrollY: number;
 };

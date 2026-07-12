@@ -5961,6 +5961,7 @@ export function SimulatorWindow(): JSX.Element {
       void sendActivateTab(room, {
         sessionId,
         tabId: ctx.tabId,
+        prevTabId: ctx.prevTabId,
         url: ctx.url,
         scrollY: ctx.scrollY,
       }).then(

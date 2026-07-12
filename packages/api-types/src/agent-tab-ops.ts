@@ -12,8 +12,9 @@
 //     new / close / switch / reorder so the harness reconciles its per-tab
 //     pages. Last-write-wins; consumed at session-end tab-set assembly.
 //   - `activateTab`    : GUI → box, CORRELATED request (`requestId`); the
-//     harness reloads the target tab's page (iOS-faithful: switching to a
-//     background tab RELOADS it) and replies `activateTabResult { ok?, error? }`.
+//     harness brings a cached live target to front without navigation; a first-touch
+//     or evicted target takes the bounded cold-load fallback. Replies
+//     `activateTabResult { ok?, error?, wasWarm? }`.
 //   - `tabListRestore` : box → GUI, FIRE-AND-FORGET push over the SAME
 //     page_state data channel on profile reopen; the harness is the only
 //     party that can decrypt `ProfileBlob.openTabs` (server-opaque, AES-GCM
@@ -53,10 +54,10 @@ const MAX_ID_LENGTH = 128;
 
 /**
  * A single logical browser tab (doc-150 §7.2 — the TabDescriptor the harness
- * defines as a Swift struct). Background tabs are PERSISTED STATE, not live
- * processes: `{ url, scrollY, title }` + a stable `id` for GUI reorder/close
- * correlation. Switching to one reloads the (single) live WebContent to that
- * url and restores scroll — exactly what iOS does on a tab tap.
+ * defines as a Swift struct): `{ url, scrollY, title }` + a stable `id` for GUI
+ * reorder/close correlation. The harness may also retain a bounded live background
+ * browsing context for this id; the descriptor remains the persistence/fallback
+ * state when that context is cold or evicted.
  *
  * `scrollY` is a finite, non-negative number (a scroll offset can't be
  * negative; NaN/Infinity are rejected).
@@ -85,13 +86,19 @@ export type TabListUpdate = z.infer<typeof TabListUpdateSchema>;
 /**
  * `activateTab` — GUI → box CORRELATED request (doc-150 §7.3). Carries a
  * `requestId` so the harness's `activateTabResult` reply can be matched for
- * revert-on-reject. The harness re-validates `url` through the navigate
- * allowlist (customer-controlled → SSRF gate) before reloading the page.
+ * revert-on-reject, plus the optional outgoing `prevTabId` needed to cache the
+ * first live context before an optimistic switch. The harness re-validates `url`
+ * through the navigate allowlist (customer-controlled → SSRF gate) before any
+ * first-touch/eviction cold-load fallback.
  */
 export const ActivateTabRequestSchema = z.object({
   requestId: z.string().min(1).max(MAX_ID_LENGTH),
   sessionId: z.string().min(1).max(MAX_ID_LENGTH),
   tabId: z.string().min(1).max(MAX_ID_LENGTH),
+  // Optional for compatibility with older GUI bundles. The current GUI sends the tab it was showing before
+  // its optimistic local flip so the harness can cache that outgoing live window even when the first list
+  // update is already active on the target.
+  prevTabId: z.string().min(1).max(MAX_ID_LENGTH).optional(),
   url: z.string().max(MAX_TAB_URL_LENGTH),
   scrollY: z.number().finite().nonnegative(),
 });
@@ -108,6 +115,7 @@ export type ActivateTabRequest = z.infer<typeof ActivateTabRequestSchema>;
 export const ActivateTabResultSchema = z.object({
   ok: z.boolean().optional(),
   error: z.string().optional(),
+  wasWarm: z.boolean().optional(),
 });
 export type ActivateTabResult = z.infer<typeof ActivateTabResultSchema>;
 
