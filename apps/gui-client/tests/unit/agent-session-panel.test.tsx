@@ -146,6 +146,28 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(dims).toEqual([]);
   });
 
+  it('keeps the live video ref attached across routine re-renders (no null/node churn)', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValueOnce(new Promise(() => {}));
+    const onVideoEl = vi.fn();
+    const { container, rerender, unmount } = render(
+      <AgentSessionPanel info={INFO} onVideoEl={onVideoEl} switching={false} />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    expect(onVideoEl).toHaveBeenCalledTimes(1);
+    expect(onVideoEl).toHaveBeenLastCalledWith(video);
+
+    // A normal state/prop render must not detach + reattach the unchanged media node.
+    rerender(<AgentSessionPanel info={INFO} onVideoEl={onVideoEl} switching />);
+    expect(container.querySelector('video')).toBe(video);
+    expect(onVideoEl).toHaveBeenCalledTimes(1);
+
+    // A real unmount still clears the parent handle exactly once.
+    unmount();
+    expect(onVideoEl).toHaveBeenCalledTimes(2);
+    expect(onVideoEl).toHaveBeenLastCalledWith(null);
+  });
+
   // P1b — the panel box uses the `aspectRatio` prop (the simulator drives it with the
   // LIVE content aspect, e.g. 402/714) so box == screen-host == <video> → no bottom
   // black band. Passing the content aspect must set the box's style aspectRatio to it.

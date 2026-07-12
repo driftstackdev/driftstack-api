@@ -16,7 +16,7 @@
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import {
   RoomEvent,
@@ -409,6 +409,23 @@ export function AgentSessionPanel({
   useEffect(() => {
     onVideoDimensionsRef.current = onVideoDimensions;
   }, [onVideoDimensions]);
+  // Keep the DOM ref callback stable. An inline callback ref is a new function on
+  // every render, so React calls the previous ref with null and the new one with the
+  // SAME <video> node. AgentSessionPanel re-renders during routine connection,
+  // publisher, ripple, and recovery state changes; that ref churn transiently cleared
+  // the parent video handle and re-fired its FPS arming path even though the media node
+  // never changed. Read the latest consumer callback through a ref, matching the other
+  // callback identity decoupling above, while the stable callback fires only on a real
+  // mount/remount/unmount.
+  const onVideoElRef = useRef(onVideoEl);
+  useEffect(() => {
+    onVideoElRef.current = onVideoEl;
+  }, [onVideoEl]);
+  const handleVideoRef = useCallback((el: HTMLVideoElement | null): void => {
+    videoRef.current = el;
+    setVideoEl(el);
+    onVideoElRef.current?.(el);
+  }, []);
   // The <video> intrinsic (videoWidth/videoHeight) can CHANGE after the first
   // loadedmetadata frame: the worker first publishes a frame at one aspect, then the
   // content-only steady state settles a beat later at the real content aspect (e.g. the
@@ -804,11 +821,7 @@ export function AgentSessionPanel({
       }}
     >
       <video
-        ref={(el) => {
-          videoRef.current = el;
-          setVideoEl(el);
-          onVideoEl?.(el);
-        }}
+        ref={handleVideoRef}
         autoPlay
         playsInline
         muted
