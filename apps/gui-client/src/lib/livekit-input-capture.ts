@@ -246,13 +246,20 @@ const devY = (y: number): number => Math.max(0, y - TAP_Y_OFFSET);
  *  over-drove the fork's per-move scroll (A3 W2736 warned of this), so a click-drag
  *  scroll kept moving after release. A click-drag scroll now stops dead on release
  *  (reliable > over-scroll). The pure computeFlingPath + the cancellable runtime are
- *  kept for a future re-enable (ideally native fork momentum). FLING_MIN_SPEED =
- *  release speed (px/ms) to trigger; FLING_STALE_MS = a settle pause that cancels it;
- *  FLING_STEP_MS = the move cadence during the glide. */
+ *  kept for a future box-smoked re-enable. Its dormant safety envelope is deliberately
+ *  short: release velocity, each frame, total duration, and total distance are all
+ *  capped before any touchMove reaches the reliable channel. FLING_MIN_SPEED = release
+ *  speed (px/ms) to trigger; FLING_STALE_MS = a settle pause that cancels it. */
 const FLING_ENABLED = false;
 const FLING_MIN_SPEED = 0.45;
 const FLING_STALE_MS = 60;
 const FLING_STEP_MS = 16;
+const FLING_FRICTION = 0.86;
+const FLING_STOP_SPEED = 0.05;
+const FLING_MAX_SPEED = 1.25;
+const FLING_MAX_STEP_DISTANCE = 20;
+const FLING_MAX_DURATION_MS = 240;
+const FLING_MAX_DISTANCE = 160;
 
 /** Squared Euclidean distance between two points — squared so the deadzone
  *  comparison avoids a sqrt per move event (we compare against MOVE_DEADZONE²). */
@@ -267,9 +274,12 @@ function distSq(ax: number, ay: number, bx: number, by: number): number {
  *  to a stop under friction — replayed as touchMove events so a fast flick keeps
  *  scrolling + settles like iOS rather than stopping dead. Pure + hard-bounded
  *  (caps on both step count and total distance) so it's deterministic, unit-testable
- *  and can never run away. Empty when the release velocity is already below the stop
- *  threshold (→ caller just ends the touch). Operates in raw video-px; the caller
- *  applies devY + surface clamping when it sends each point. */
+ *  and can never run away. The default envelope is intentionally conservative because
+ *  the fork turns every move into scroll: ≤1.25 px/ms release speed, ≤20 px/frame,
+ *  ≤240 ms, and ≤160 px total. Distance is truncated at the cap (never one-step
+ *  overshot). Empty when the release velocity is already below the stop threshold
+ *  (→ caller just ends the touch). Operates in raw video-px; the caller applies devY
+ *  + surface clamping when it sends each point. */
 export function computeFlingPath(
   x0: number,
   y0: number,
@@ -281,26 +291,58 @@ export function computeFlingPath(
     stopSpeed?: number;
     maxSteps?: number;
     maxDist?: number;
+    maxSpeed?: number;
+    maxStepDist?: number;
+    maxDurationMs?: number;
   } = {},
 ): Array<{ x: number; y: number }> {
-  const friction = opts.friction ?? 0.93;
-  const stepMs = opts.stepMs ?? FLING_STEP_MS;
-  const stopSpeed = opts.stopSpeed ?? 0.05;
-  const maxSteps = opts.maxSteps ?? 38;
-  const maxDist = opts.maxDist ?? 1000;
+  if (![x0, y0, vx, vy].every(Number.isFinite)) return [];
+  const nonNegativeOr = (value: number | undefined, fallback: number): number =>
+    value === undefined || Number.isNaN(value) ? fallback : Math.max(0, value);
+  const requestedFriction = opts.friction;
+  const friction =
+    requestedFriction !== undefined && Number.isFinite(requestedFriction)
+      ? Math.max(0, Math.min(0.99, requestedFriction))
+      : FLING_FRICTION;
+  const requestedStepMs = opts.stepMs;
+  const stepMs =
+    requestedStepMs !== undefined && Number.isFinite(requestedStepMs) && requestedStepMs > 0
+      ? requestedStepMs
+      : FLING_STEP_MS;
+  const stopSpeed = nonNegativeOr(opts.stopSpeed, FLING_STOP_SPEED);
+  const maxDist = nonNegativeOr(opts.maxDist, FLING_MAX_DISTANCE);
+  const maxSpeed = nonNegativeOr(opts.maxSpeed, FLING_MAX_SPEED);
+  const maxStepDist = nonNegativeOr(opts.maxStepDist, FLING_MAX_STEP_DISTANCE);
+  const maxDurationMs = nonNegativeOr(opts.maxDurationMs, FLING_MAX_DURATION_MS);
+  const requestedMaxSteps = Math.floor(nonNegativeOr(opts.maxSteps, Infinity));
+  const durationMaxSteps = Math.max(0, Math.floor(maxDurationMs / stepMs));
+  const maxSteps = Math.min(requestedMaxSteps, durationMaxSteps);
   const pts: Array<{ x: number; y: number }> = [];
   let x = x0;
   let y = y0;
-  let velX = vx;
-  let velY = vy;
+  const releaseSpeed = Math.hypot(vx, vy);
+  if (releaseSpeed < stopSpeed || maxSpeed === 0 || maxStepDist === 0 || maxDist === 0) {
+    return pts;
+  }
+  const speedScale = releaseSpeed > maxSpeed ? maxSpeed / releaseSpeed : 1;
+  let velX = vx * speedScale;
+  let velY = vy * speedScale;
   let dist = 0;
   for (let i = 0; i < maxSteps; i++) {
     if (Math.hypot(velX, velY) < stopSpeed) break;
-    const dx = velX * stepMs;
-    const dy = velY * stepMs;
+    let dx = velX * stepMs;
+    let dy = velY * stepMs;
+    const rawStepDist = Math.hypot(dx, dy);
+    if (rawStepDist === 0) break;
+    const remainingDist = maxDist - dist;
+    if (remainingDist <= 0) break;
+    const boundedStepDist = Math.min(rawStepDist, maxStepDist, remainingDist);
+    const stepScale = boundedStepDist / rawStepDist;
+    dx *= stepScale;
+    dy *= stepScale;
     x += dx;
     y += dy;
-    dist += Math.hypot(dx, dy);
+    dist += boundedStepDist;
     pts.push({ x: Math.round(x), y: Math.round(y) });
     if (dist >= maxDist) break;
     velX *= friction;

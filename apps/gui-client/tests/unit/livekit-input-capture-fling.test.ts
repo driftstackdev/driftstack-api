@@ -3,11 +3,11 @@
 // release point + velocity it returns the decelerating touch positions replayed
 // as touchMove events so a fast flick keeps gliding + settles like iOS. Pins:
 //
-//   - decelerates: successive step distances strictly shrink (friction < 1)
+//   - decelerates: step distances trend down under friction (allowing integer rounding)
 //   - empty when the release velocity is already below the stop threshold
 //     (→ the caller just ends the touch, no glide)
-//   - hard-bounded: never exceeds maxSteps, and stops once maxDist is covered
-//     (can never run away — it's injected into the live input path)
+//   - hard-bounded: release speed, per-step distance, duration/step count, and total
+//     distance are capped (can never run away — it's injected into the live input path)
 //   - travels along the velocity vector and overall in its direction
 //   - integer coords (the Mac-side decoder expects ints)
 import { describe, expect, it } from 'vitest';
@@ -30,8 +30,9 @@ describe('computeFlingPath', () => {
     const gaps: number[] = [];
     for (let i = 1; i < steps.length; i++) gaps.push(dist(steps[i - 1], steps[i]));
     for (let i = 1; i < gaps.length; i++) {
-      // friction < 1 → strictly shrinking gaps (allow equality only at rounding floor)
-      expect(gaps[i]).toBeLessThanOrEqual(gaps[i - 1]);
+      // Friction shrinks the unrounded step. Integer wire coordinates can make two
+      // neighboring rounded gaps differ by one pixel in either direction.
+      expect(gaps[i]).toBeLessThanOrEqual(gaps[i - 1] + 1);
     }
     expect(gaps[gaps.length - 1]).toBeLessThan(gaps[0]);
   });
@@ -52,17 +53,44 @@ describe('computeFlingPath', () => {
 
   it('never exceeds maxSteps', () => {
     // Huge velocity + no distance cap → bounded purely by maxSteps.
-    const path = computeFlingPath(0, 0, 50, 0, { maxDist: Infinity, maxSteps: 38 });
+    const path = computeFlingPath(0, 0, 50, 0, {
+      maxDist: Infinity,
+      maxSpeed: Infinity,
+      maxStepDist: Infinity,
+      maxDurationMs: Infinity,
+      maxSteps: 38,
+    });
     expect(path.length).toBeLessThanOrEqual(38);
   });
 
-  it('stops once the distance cap is reached', () => {
-    const path = computeFlingPath(0, 0, 5, 0, { maxDist: 300 });
+  it('stops exactly at the distance cap instead of overshooting it by one fast step', () => {
+    const path = computeFlingPath(0, 0, 50, 0, {
+      maxDist: 300,
+      maxSpeed: Infinity,
+      maxStepDist: Infinity,
+      maxDurationMs: Infinity,
+    });
     const last = path[path.length - 1];
-    // The final point is at/just past the cap; the loop breaks the step it crosses it.
-    expect(last.x).toBeGreaterThanOrEqual(300);
-    // And it didn't keep going far beyond (one step's overshoot at most).
-    expect(last.x).toBeLessThan(300 + 5 * 16 + 2);
+    expect(last.x).toBe(300);
+  });
+
+  it('defaults to the conservative re-enable envelope (speed/frame/duration/distance)', () => {
+    const path = computeFlingPath(0, 0, 1_000, 0);
+    const steps = [{ x: 0, y: 0 }, ...path];
+    // 240ms / 16ms = at most 15 emitted frames.
+    expect(path.length).toBeLessThanOrEqual(15);
+    for (let i = 1; i < steps.length; i++) {
+      // Integer rounding can add at most a pixel to the 20px internal cap.
+      expect(dist(steps[i - 1], steps[i])).toBeLessThanOrEqual(21);
+    }
+    const last = path[path.length - 1];
+    // Integer rounding can add at most a pixel to the 160px internal cap.
+    expect(dist({ x: 0, y: 0 }, last)).toBeLessThanOrEqual(161);
+  });
+
+  it('rejects non-finite input instead of emitting NaN/Infinity touch coordinates', () => {
+    expect(computeFlingPath(0, 0, Number.POSITIVE_INFINITY, 0)).toEqual([]);
+    expect(computeFlingPath(Number.NaN, 0, 1, 0)).toEqual([]);
   });
 
   it('emits integer coordinates', () => {
