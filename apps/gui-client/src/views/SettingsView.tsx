@@ -23,6 +23,7 @@ import { ConnectivityView } from './ConnectivityView';
 import { RelativeTime } from '../components/RelativeTime';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { friendlySettingsActionError } from '../lib/settings-error-copy';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
 import { DEFAULT_SETTINGS, rememberedKeyFor } from '../lib/settings';
@@ -154,7 +155,7 @@ export function SettingsView(): JSX.Element {
       setBundledLlmSavedAt(Date.now());
       pushToast({ title: 'AI billing settings saved', tone: 'success' });
     } catch (err) {
-      setBundledLlmSaveError(err instanceof Error ? err.message : 'Save failed — try again.');
+      setBundledLlmSaveError(friendlySettingsActionError(err, 'save-ai-billing'));
     } finally {
       setBundledLlmSaving(false);
     }
@@ -172,7 +173,7 @@ export function SettingsView(): JSX.Element {
       setByokKeyDraft('');
       pushToast({ title: 'Your Anthropic key is saved', tone: 'success' });
     } catch (err) {
-      setByokSaveError(err instanceof Error ? err.message : 'Save failed — try again.');
+      setByokSaveError(friendlySettingsActionError(err, 'save-provider-key'));
       setByokSaving(false);
       return;
     }
@@ -192,7 +193,7 @@ export function SettingsView(): JSX.Element {
     } catch (err) {
       setByokTestState({
         kind: 'fail',
-        reason: err instanceof Error ? err.message : 'Test failed — try again.',
+        reason: friendlySettingsActionError(err, 'test-provider-key'),
       });
     }
   }
@@ -215,7 +216,7 @@ export function SettingsView(): JSX.Element {
     } catch (err) {
       pushToast({
         title: 'Could not clear key',
-        body: err instanceof Error ? err.message : undefined,
+        body: friendlySettingsActionError(err, 'clear-provider-key'),
         tone: 'error',
       });
     } finally {
