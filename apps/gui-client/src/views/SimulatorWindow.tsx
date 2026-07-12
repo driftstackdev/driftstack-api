@@ -5631,7 +5631,7 @@ export function SimulatorWindow(): JSX.Element {
   const onHandback = (): void => {
     const request = beginControlAction({ kind: 'handback' });
     if (request === null) return;
-    void handbackSession(request.sessionId, controlAuth)
+    void handbackSession(request.sessionId, clientIdRef.current, controlAuth)
       .then((kind) => {
         if (ownsControlAction(request)) setPairKind(kind);
       })

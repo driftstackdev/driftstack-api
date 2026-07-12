@@ -1904,7 +1904,7 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
     expect(takeover.statusCode).toBe(200);
   });
 
-  it('control key drives handback on its OWN pair session (seeded human-driving) — NO account Authorization header', async () => {
+  it('control-key handback requires the exact human-driving controller', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const id = await createSession('pair');
     const key = await mintKey(id);
@@ -1918,11 +1918,28 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
       clientId: 'sim_client_1',
       sinceAt: new Date().toISOString(),
     });
-    const handback = await fx.app.inject({
+    const missingOwner = await fx.app.inject({
       method: 'POST',
       url: `/v1/agent-sessions/${id}/handback`,
       headers: { [GCK_HEADER]: key },
       payload: {},
+    });
+    expect(missingOwner.statusCode).toBe(400);
+
+    const sibling = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/handback`,
+      headers: { [GCK_HEADER]: key },
+      payload: { client_id: 'sim_client_2' },
+    });
+    expect(sibling.statusCode).toBe(409);
+    expect(sibling.json<{ winner_client_id: string }>().winner_client_id).toBe('sim_client_1');
+
+    const handback = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/handback`,
+      headers: { [GCK_HEADER]: key },
+      payload: { client_id: 'sim_client_1' },
     });
     expect(handback.statusCode).toBe(200);
   });

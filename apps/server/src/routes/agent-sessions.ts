@@ -3379,6 +3379,9 @@ export function registerAgentSessionsRoutes(
     // browser tab / window initiated the takeover. UUID-shape is
     // typical; 128 cap matches OAuth client_id cap in oauth.ts.
     const TakeoverBodySchema = z.object({ client_id: z.string().min(1).max(128) });
+    const HandbackBodySchema = z.object({
+      client_id: z.string().min(1).max(128).optional(),
+    });
     app.post<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/takeover',
       // Control-auth path (b): the separate simulator app's "grab
@@ -3496,6 +3499,18 @@ export function registerAgentSessionsRoutes(
       // control to agent" button presents the per-session gui_control_key.
       { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
       async (req, reply) => {
+        const parsed = HandbackBodySchema.safeParse(req.body ?? {});
+        if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+        if (req.guiControlKeyAuthorized === true && parsed.data.client_id === undefined) {
+          throw new ValidationError({
+            formErrors: [],
+            fieldErrors: {
+              client_id: [
+                'client_id is required for GUI handback and must match the client that owns human-driving',
+              ],
+            },
+          });
+        }
         const rec = await sessions.get(req.params.id);
         if (rec === null) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -3514,6 +3529,18 @@ export function registerAgentSessionsRoutes(
         try {
           const currentState =
             (rec.pairModeState as PairModeState | null) ?? initialPairModeState();
+          // The per-session GUI control key can legitimately be shared by a main
+          // window and a detached simulator. It authorizes the session, not the
+          // winning window, so preserve controller ownership with client_id.
+          // Account-authenticated SDK callers retain their explicit administrative
+          // handback capability by omitting client_id (backward compatible).
+          if (
+            currentState.kind === 'human-driving' &&
+            parsed.data.client_id !== undefined &&
+            parsed.data.client_id !== currentState.clientId
+          ) {
+            throw new PairModeConflictError(currentState.clientId);
+          }
           const nextState = applyPairModeTransition(currentState, {
             kind: 'handback-request',
             at: new Date().toISOString(),
@@ -3537,7 +3564,13 @@ export function registerAgentSessionsRoutes(
               actorType: 'customer',
               action: 'agent_session.pair_mode.handback',
               targetResourceId: `agent_session_${req.params.id}`,
-              payload: { from: currentState.kind, to: nextState.kind },
+              payload: {
+                from: currentState.kind,
+                to: nextState.kind,
+                ...(parsed.data.client_id !== undefined
+                  ? { client_id: parsed.data.client_id }
+                  : {}),
+              },
               ipAddress: readClientIp(req),
             });
           } catch {

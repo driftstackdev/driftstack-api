@@ -567,11 +567,12 @@ export async function heartbeatPairSession(
 /** Return control to the agent in pair mode. Returns the new pair kind. */
 export async function handbackSession(
   id: string,
+  clientId: string,
   auth: ControlAuth = null,
 ): Promise<string | null> {
   const body = (await authedFetch(
     `/v1/agent-sessions/${encodeURIComponent(id)}/handback`,
-    { method: 'POST', body: JSON.stringify({}) },
+    { method: 'POST', body: JSON.stringify({ client_id: clientId }) },
     auth,
   )) as ApiSession;
   return pairKindOf(body);

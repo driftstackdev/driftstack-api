@@ -83,8 +83,10 @@ describe('agent-session-control transport', () => {
 
   it('handbackSession POSTs /handback + returns the pair kind', async () => {
     mockFetch.mockResolvedValue(ok({ pair_mode_state: { kind: 'ai-driving' } }));
-    expect(await handbackSession('agt_1')).toBe('ai-driving');
-    expect((mockFetch.mock.calls[0] as [string])[0]).toContain('/handback');
+    expect(await handbackSession('agt_1', 'client-9')).toBe('ai-driving');
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/handback');
+    expect(JSON.parse(init.body as string)).toEqual({ client_id: 'client-9' });
   });
 
   it('sendAgentMessage POSTs /message {user_message}', async () => {
@@ -264,7 +266,7 @@ describe('agent-session-control transport', () => {
 
   it('falls back to the bearer when controlKey is null (in-app window)', async () => {
     mockFetch.mockResolvedValue(ok({ pair_mode_state: { kind: 'ai-driving' } }));
-    await handbackSession('agt_1', null);
+    await handbackSession('agt_1', 'client-9', null);
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer ds_test');
