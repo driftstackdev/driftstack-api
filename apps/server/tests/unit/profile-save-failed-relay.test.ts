@@ -28,7 +28,9 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 describe('A3-W1364 makeProfileSaveFailedRelay', () => {
   it('resolves accountId from the session + enqueues session.profile_save_failed', async () => {
-    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9' }) };
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1' }),
+    };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(2) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     relay(FRAME, 'node_1');
@@ -43,7 +45,9 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
   });
 
   it('omits detail from the payload when the frame carries none (no undefined key)', async () => {
-    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9' }) };
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1' }),
+    };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     const { detail: _detail, ...noDetail } = FRAME;
@@ -94,13 +98,13 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
 
-  it('M1 — a NULL node_id session is NOT gated', async () => {
+  it('M1 — DROPS when an authenticated node targets a NULL-owner session', async () => {
     const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: null }) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     relay(FRAME, 'node-anything');
     await flush();
-    expect(webhooks.enqueueEvent).toHaveBeenCalledTimes(1);
+    expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
 
   // audit M2 — scrub the node egress IP from the free-form detail before the webhook.

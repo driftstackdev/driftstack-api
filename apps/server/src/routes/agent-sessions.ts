@@ -1062,10 +1062,10 @@ export async function dispatchSessionAssignOnCreate(args: {
     //
     // Persist BEFORE sending the assign (review w7eu5sw7n). If the assign went first,
     // the row is status='active' with node_id=NULL until this DB write commits — and
-    // the terminal-close cross-node guard ALLOWS a close on a NULL node_id (legacy /
-    // manual rows), so in that window another authenticated node could close this
-    // owned session, and a swallowed write failure would strand it active+NULL
-    // forever (a phantom concurrency slot the disconnect-reaper can't attribute).
+    // a NULL owner cannot safely accept any fleet-origin terminal/state frame. The
+    // exact-owner guards now fail closed there, but a swallowed write failure would
+    // still strand it active+NULL forever (a phantom concurrency slot the disconnect
+    // reaper cannot attribute), so assignment remains strictly after persistence.
     // So: persist first; if the write fails or the row was deleted mid-dispatch, do
     // NOT send the assign — leave the session unowned (no node holds it) for the 12h
     // orphan_reap backstop, never owned-but-NULL. setNodeId returns null when the id

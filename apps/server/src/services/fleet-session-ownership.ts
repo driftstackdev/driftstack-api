@@ -9,20 +9,14 @@
 
 /**
  * True when a frame must be DROPPED because the reporting node is NOT the
- * session's owning node. Drop ONLY on a CONFIRMED mismatch (the row's node_id is
- * set AND differs); a NULL node_id (legacy / never-dispatched / manual session)
- * is ALLOWED, and an absent reportingNodeId (legacy caller / no gate wired) is
- * ALLOWED — so neither path regresses a legitimate relay. Identical predicate to
- * the terminal-close guard so the whole fleet-inbound boundary is consistent.
+ * session's owning node. An authenticated fleet frame requires exact equality:
+ * NULL/undefined node ownership proves no connected node owns the session, so a
+ * reporting node must not be allowed to target it. An absent reportingNodeId is
+ * retained only for legacy callers that do not enter through FleetControlRegistry.
  */
 export function isCrossNodeSpoof(
   sessionNodeId: string | null | undefined,
   reportingNodeId: string | undefined,
 ): boolean {
-  return (
-    reportingNodeId !== undefined &&
-    sessionNodeId !== null &&
-    sessionNodeId !== undefined &&
-    sessionNodeId !== reportingNodeId
-  );
+  return reportingNodeId !== undefined && sessionNodeId !== reportingNodeId;
 }

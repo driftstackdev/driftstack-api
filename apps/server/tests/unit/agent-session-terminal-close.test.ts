@@ -343,16 +343,16 @@ describe('closeAgentSessionOnTerminalStatus — cross-node ownership guard (audi
     expect((await repo.get(created.id))?.status).toBe('closed');
   });
 
-  it('ALLOWS a terminal frame when node_id is NULL (legacy/never-dispatched) — no teardown regression', async () => {
+  it('DROPS an authenticated terminal frame when node_id is NULL', async () => {
     const repo = new InMemoryAgentSessionsRepo();
     const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
-    // node_id left NULL (no setNodeId). The guard must NOT drop this.
+    // node_id left NULL (no setNodeId). The reporting node has no ownership proof.
     await closeAgentSessionOnTerminalStatus({
       agentSessions: repo,
       frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
       reportingNodeId: 'node-B',
       logger: noopLogger,
     });
-    expect((await repo.get(created.id))?.status).toBe('closed');
+    expect((await repo.get(created.id))?.status).toBe('active');
   });
 });

@@ -1,7 +1,6 @@
-// audit M1 — isCrossNodeSpoof: drop a fleet frame only on a CONFIRMED cross-node
-// mismatch (owning node set AND differs). NULL node_id (legacy / manual) and an
-// absent reportingNodeId (legacy caller) are both permissive so a legitimate
-// relay never regresses. Same predicate the terminal-close guard uses.
+// audit M1 — authenticated fleet frames require exact session-node ownership.
+// NULL/undefined node_id means no fleet node owns the session and must fail
+// closed; only an absent reportingNodeId keeps legacy non-registry behavior.
 
 import { describe, expect, it } from 'vitest';
 import { isCrossNodeSpoof } from '../../src/services/fleet-session-ownership.js';
@@ -15,12 +14,12 @@ describe('isCrossNodeSpoof', () => {
     expect(isCrossNodeSpoof('node-1', 'node-1')).toBe(false);
   });
 
-  it('FALSE — NULL owning node (legacy / never-dispatched / manual session) is allowed', () => {
-    expect(isCrossNodeSpoof(null, 'node-1')).toBe(false);
+  it('TRUE — NULL owning node cannot authorize an authenticated reporting node', () => {
+    expect(isCrossNodeSpoof(null, 'node-1')).toBe(true);
   });
 
-  it('FALSE — undefined owning node is allowed (treated like NULL)', () => {
-    expect(isCrossNodeSpoof(undefined, 'node-1')).toBe(false);
+  it('TRUE — undefined owning node cannot authorize an authenticated reporting node', () => {
+    expect(isCrossNodeSpoof(undefined, 'node-1')).toBe(true);
   });
 
   it('FALSE — absent reportingNodeId (legacy caller / no gate wired) never gates', () => {

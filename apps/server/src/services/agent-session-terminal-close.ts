@@ -43,6 +43,7 @@ import type { SessionLivenessStore } from './session-liveness-store.js';
 import type { SessionPageStateStore } from './session-page-state-store.js';
 import type { SessionStatus } from '../schemas/harness-control-protocol.js';
 import type { Logger } from '../lib/logger.js';
+import { isCrossNodeSpoof } from './fleet-session-ownership.js';
 
 export interface CloseAgentSessionOnTerminalStatusDeps {
   readonly agentSessions: AgentSessionsRepo;
@@ -92,16 +93,11 @@ export async function closeAgentSessionOnTerminalStatus(
   const reason = frame.reason ?? `session-${frame.status}`;
   try {
     const existing = await agentSessions.get(frame.sessionId);
-    // #5 — only the session's OWNING node may terminate it. Drop ONLY on a CONFIRMED
-    // cross-node mismatch (the row's node_id is set AND differs from the reporting
-    // node); a NULL node_id (legacy / never-dispatched / manual session) is ALLOWED, or
-    // legit teardown regresses. An absent reportingNodeId (legacy caller) → no gate.
-    if (
-      existing &&
-      reportingNodeId !== undefined &&
-      existing.nodeId !== null &&
-      existing.nodeId !== reportingNodeId
-    ) {
+    // #5 — only the session's exact OWNING node may terminate it. An authenticated
+    // fleet frame targeting a NULL-owner row has no ownership proof and fails closed;
+    // dispatch persists node_id before sending the assignment. An absent reporting
+    // node remains accepted only for legacy non-registry callers.
+    if (existing && isCrossNodeSpoof(existing.nodeId, reportingNodeId)) {
       logger.warn?.(
         {
           component: 'agent-session-terminal-close',

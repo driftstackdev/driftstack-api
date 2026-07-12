@@ -24,7 +24,9 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 describe('W393 makeChallengeRelay', () => {
   it('resolves accountId from the session + enqueues session.challenge_detected', async () => {
-    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9' }) };
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1' }),
+    };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(2) };
     const relay = makeChallengeRelay(sessions, webhooks, logger);
     relay(FRAME, 'node_1');
@@ -75,13 +77,13 @@ describe('W393 makeChallengeRelay', () => {
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
 
-  it('M1 — a NULL node_id session (legacy / never-dispatched / manual) is NOT gated', async () => {
+  it('M1 — DROPS when an authenticated node targets a NULL-owner session', async () => {
     const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: null }) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeChallengeRelay(sessions, webhooks, logger);
     relay(FRAME, 'node-anything');
     await flush();
-    expect(webhooks.enqueueEvent).toHaveBeenCalledTimes(1);
+    expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
 
   // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`) from
