@@ -401,6 +401,31 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       ]);
     });
 
+    it('drops non-HTTP navigation and selector-visible waits without a target', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'navigate', url: '/relative' },
+            { kind: 'navigate', url: 'file:///etc/passwd' },
+            { kind: 'navigate', url: 'javascript:alert(1)' },
+            { kind: 'navigate', url: 'https://example.com/path' },
+            { kind: 'wait', condition: 'selector_visible' },
+            { kind: 'wait', condition: 'selector_visible', selector: '' },
+            { kind: 'wait', condition: 'selector_visible', selector: '#ready', timeoutMs: 2500 },
+            { kind: 'wait', condition: 'idle', selector: '#irrelevant', timeoutMs: 500 },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'navigate', url: 'https://example.com/path' },
+        { kind: 'wait', condition: 'selector_visible', selector: '#ready', timeoutMs: 2500 },
+        { kind: 'wait', condition: 'idle', timeoutMs: 500 },
+      ]);
+    });
+
     it('drops model swipe intents because the live harness mapper cannot execute them', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({

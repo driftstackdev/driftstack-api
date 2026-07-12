@@ -126,9 +126,9 @@ const SYSTEM_PROMPT = [
   'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT',
   'invent new verbs.',
   '',
-  '  - navigate { url: string }',
+  '  - navigate { url: absolute http(s) URL string }',
   '  - interact { action: "tap"|"type"|"scroll"|"press", selector?: string, value?: string, sensitive?: boolean } (tap requires selector; type requires selector+value and sensitive=true for OTP/PIN/card values; press requires value = key name, e.g. "Enter"; use the top-level scroll verb for directional human scrolling)',
-  '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number }',
+  '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number } (selector_visible requires a nonempty selector)',
   '  - capture { capture: "screenshot"|"dom_snapshot" } (PDF is not executable on the live harness)',
   '  - scroll { direction: "up"|"down", amount_px?: number }',
   '  - behavioral_pause { duration_ms?: number, reading_word_count?: number }',
@@ -559,6 +559,16 @@ function isSafeIntegerAtLeast(value: unknown, minimum: number): value is number 
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
 }
 
+function isAbsoluteHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
   if (!Array.isArray(raw)) {
     throw new Error('Anthropic plan.intents was not an array');
@@ -569,7 +579,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
     const i = normalizeIntentShape(item as Record<string, unknown>);
     switch (i.kind) {
       case 'navigate':
-        if (typeof i.url === 'string') out.push({ kind: 'navigate', url: i.url });
+        if (isAbsoluteHttpUrl(i.url)) out.push({ kind: 'navigate', url: i.url });
         break;
       case 'interact': {
         const action = i.action;
@@ -602,11 +612,21 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
       }
       case 'wait': {
         const cond = i.condition;
-        if (cond === 'idle' || cond === 'selector_visible') {
+        if (cond === 'idle') {
           out.push({
             kind: 'wait',
             condition: cond,
-            ...(typeof i.selector === 'string' ? { selector: i.selector } : {}),
+            ...(isSafeIntegerAtLeast(i.timeoutMs, 0) ? { timeoutMs: i.timeoutMs } : {}),
+          });
+        } else if (
+          cond === 'selector_visible' &&
+          typeof i.selector === 'string' &&
+          i.selector.length > 0
+        ) {
+          out.push({
+            kind: 'wait',
+            condition: cond,
+            selector: i.selector,
             ...(isSafeIntegerAtLeast(i.timeoutMs, 0) ? { timeoutMs: i.timeoutMs } : {}),
           });
         }
