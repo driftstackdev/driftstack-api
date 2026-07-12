@@ -15938,13 +15938,16 @@
                               },
                               "allowed_ips": {
                                 "type": "string",
+                                "maxLength": 1024,
                                 "default": "0.0.0.0/0"
                               },
                               "address": {
-                                "type": "string"
+                                "type": "string",
+                                "maxLength": 128
                               },
                               "dns": {
-                                "type": "string"
+                                "type": "string",
+                                "maxLength": 256
                               }
                             },
                             "required": ["private_key", "peer_public_key", "endpoint"]

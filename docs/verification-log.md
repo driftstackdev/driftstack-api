@@ -24703,3 +24703,14 @@ Verification:
 - LogsView GUI jsdom: 4/4 tests pass, including rejected clipboard access;
 - DevLogPanel/main source-parity: 11/11 tests pass;
 - GUI TypeScript check passes.
+
+## V-564 — Python SDK OpenAPI snapshot synchronization
+
+**Date:** 2026-07-12
+
+Regenerated the committed Python SDK OpenAPI snapshot from the current server generator. This clears the repository-wide test gate without changing runtime route or schema source.
+
+Verification:
+
+- OpenAPI integration and snapshot-sync suites: 26/26 tests pass;
+- generation used the canonical `npm run sdk:python:dump-spec` command.
