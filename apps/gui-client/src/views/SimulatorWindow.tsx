@@ -3778,6 +3778,12 @@ export function SimulatorWindow(): JSX.Element {
   const activationRetryRef = useRef<
     Map<string, { tabId: string; prevTabId: string; attempts: number; timer: number }>
   >(new Map());
+  const deferredActivationAfterCongestionRef = useRef<{
+    tabId: string;
+    prevTabId: string;
+    url: string;
+    scrollY: number;
+  } | null>(null);
   const loadWatchdogRef = useRef<{
     timer: number | null;
     target: string;
@@ -3848,6 +3854,7 @@ export function SimulatorWindow(): JSX.Element {
   const clearAllActivationRetries = useCallback((): void => {
     for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
     activationRetryRef.current.clear();
+    deferredActivationAfterCongestionRef.current = null;
     setSwitchingTabId(null);
   }, []);
   useEffect(() => () => clearAllActivationRetries(), [clearAllActivationRetries]);
@@ -5972,10 +5979,18 @@ export function SimulatorWindow(): JSX.Element {
           // active-tab CLOSE the previous id was removed; retain the bounded retry so
           // the remaining neighbour can converge once the channel drains.
           const prevTabStillExists = tabsRef.current.some((tab) => tab.id === ctx.prevTabId);
-          if (!prevTabStillExists || activeTabIdRef.current !== ctx.tabId) return;
           const retry = activationRetryRef.current.get(ctx.tabId);
           if (retry !== undefined) window.clearTimeout(retry.timer);
           activationRetryRef.current.delete(ctx.tabId);
+          if (!prevTabStillExists) {
+            // Active-tab close: the previous tab was intentionally removed, so it
+            // cannot be restored. Keep one latest deferred activation and send it
+            // when the shared congestion signal drains instead of burning all retry
+            // attempts while publish is guaranteed to reject.
+            deferredActivationAfterCongestionRef.current = ctx;
+            return;
+          }
+          if (activeTabIdRef.current !== ctx.tabId) return;
           setSwitchingTabId((current) => (current === ctx.tabId ? null : current));
           setActiveTabId(ctx.prevTabId);
           resetPageChromeForSwitch();
@@ -6793,6 +6808,11 @@ export function SimulatorWindow(): JSX.Element {
                     onInputCongestionChange={(congested) => {
                       setInputCongested(congested);
                       if (congested) setDotPressed(false);
+                      else if (deferredActivationAfterCongestionRef.current !== null) {
+                        const deferred = deferredActivationAfterCongestionRef.current;
+                        deferredActivationAfterCongestionRef.current = null;
+                        sendActivateAttemptRef.current(deferred);
+                      }
                     }}
                     onVideoEl={(el) => {
                       videoElRef.current = el;

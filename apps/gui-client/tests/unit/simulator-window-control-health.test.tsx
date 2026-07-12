@@ -209,6 +209,40 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     expect(container.textContent).toContain('Connection catching up — navigation paused');
   });
 
+  it('defers active-tab-close convergence until congestion drains', async () => {
+    const { ReliableInputCongestedError } = await import('../../src/lib/livekit-input-congestion');
+    localStorage.setItem('ds-sim-browser-mode', '1');
+    const { container } = renderSim();
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' });
+      panelCbs.onPublisher?.('publishing');
+    });
+
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    sendActivateTab.mockClear();
+    sendActivateTab.mockRejectedValueOnce(new ReliableInputCongestedError());
+    const active = [...container.querySelectorAll('[data-component="simulator-tab"]')].find(
+      (tab) => tab.getAttribute('data-active') === 'true',
+    );
+    fireEvent.click(active?.querySelector('[aria-label="Close tab"]') as HTMLButtonElement);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.querySelectorAll('[data-component="simulator-tab"]')).toHaveLength(1);
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+
+    act(() => panelCbs.onInputCongestionChange?.(true));
+    act(() => panelCbs.onInputCongestionChange?.(false));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(sendActivateTab).toHaveBeenCalledTimes(2);
+  });
+
   it('does not optimistically create a tab or navigate while input is paused', () => {
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
