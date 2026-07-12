@@ -32,7 +32,11 @@ function friendlyTeamError(err: unknown, fallback: string): string {
   return msg.length > 0 ? msg : fallback;
 }
 
-export function TeamView(): JSX.Element {
+export interface TeamViewProps {
+  onGoToSettings: () => void;
+}
+
+export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
   const { client } = useSettings();
   const confirm = useConfirm();
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -172,6 +176,11 @@ export function TeamView(): JSX.Element {
         <EmptyState
           title="Connect to manage your team"
           description="Add your API key in Settings to invite teammates and manage member roles."
+          action={
+            <button type="button" className="btn-primary" onClick={onGoToSettings}>
+              Open Settings
+            </button>
+          }
         />
       </div>
     );

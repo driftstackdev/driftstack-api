@@ -709,7 +709,7 @@ function CurrentView({
     case 'fleet':
       return <FleetView />;
     case 'team':
-      return <TeamView />;
+      return <TeamView onGoToSettings={() => onNavigate({ kind: 'settings' })} />;
     case 'billing':
       return <BillingView />;
   }

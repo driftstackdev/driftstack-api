@@ -1,6 +1,6 @@
 // Team management view — invite, list, remove (founder 2026-06-16).
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const invite = vi.fn((_email: string, _opts: unknown) => Promise.resolve({ message: 'ok' }));
@@ -42,8 +42,9 @@ const listInvites = vi.fn(() =>
 // identity and never let the load effect settle.
 const STABLE_CLIENT = { team: { invite, removeMember, listMembers, listInvites } };
 const STABLE_SETTINGS = { apiKey: 'ds_x', baseUrl: 'http://localhost:3000' };
+let currentClient: typeof STABLE_CLIENT | null = STABLE_CLIENT;
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ client: STABLE_CLIENT, settings: STABLE_SETTINGS }),
+  useSettings: () => ({ client: currentClient, settings: STABLE_SETTINGS }),
 }));
 
 vi.mock('../../src/components/ConfirmProvider', () => ({
@@ -53,8 +54,12 @@ vi.mock('../../src/components/ConfirmProvider', () => ({
 const { TeamView } = await import('../../src/views/TeamView');
 
 describe('TeamView', () => {
+  beforeEach(() => {
+    currentClient = STABLE_CLIENT;
+  });
+
   it('lists members + pending invites, sends an invite, and removes a member', async () => {
-    render(<TeamView />);
+    render(<TeamView onGoToSettings={vi.fn()} />);
     // members + pending invites render
     expect(await screen.findByText('alice@co.com')).toBeTruthy();
     expect(screen.getByText('newhire@co.com')).toBeTruthy();
@@ -73,7 +78,7 @@ describe('TeamView', () => {
 
   it('rejects a malformed email without calling invite', async () => {
     invite.mockClear();
-    render(<TeamView />);
+    render(<TeamView onGoToSettings={vi.fn()} />);
     await screen.findByText('alice@co.com');
     fireEvent.change(screen.getByLabelText('Invitee email'), { target: { value: 'not-an-email' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
@@ -83,7 +88,7 @@ describe('TeamView', () => {
 
   it('resets the role select back to member after a successful invite (no admin carry-over)', async () => {
     invite.mockClear();
-    render(<TeamView />);
+    render(<TeamView onGoToSettings={vi.fn()} />);
     await screen.findByText('alice@co.com');
     const roleSelect: HTMLSelectElement = screen.getByLabelText('Invitee role');
     fireEvent.change(roleSelect, { target: { value: 'admin' } });
@@ -98,12 +103,22 @@ describe('TeamView', () => {
   it('renders a failed invite as a distinct error alert (not a success status)', async () => {
     invite.mockClear();
     invite.mockRejectedValueOnce(Object.assign(new Error('seat limit reached'), { status: 402 }));
-    render(<TeamView />);
+    render(<TeamView onGoToSettings={vi.fn()} />);
     await screen.findByText('alice@co.com');
     fireEvent.change(screen.getByLabelText('Invitee email'), { target: { value: 'carol@co.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toMatch(/seat limit/i);
     expect(alert.className).toContain('text-status-error');
+  });
+
+  it('offers a direct Settings recovery action when signed out', () => {
+    currentClient = null;
+    const onGoToSettings = vi.fn();
+
+    render(<TeamView onGoToSettings={onGoToSettings} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
+    expect(onGoToSettings).toHaveBeenCalledOnce();
   });
 });
