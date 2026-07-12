@@ -17,6 +17,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
+const sendActivateTab = vi.fn(() => Promise.resolve('req_test'));
 
 // Browser mode defaults ON (founder 2026-06-21), which hosts the URL bar in the
 // toolbar and hides the panel's NavigateAddressBar. These tests exercise the
@@ -24,6 +25,8 @@ const sendNavigate = vi.fn(() => Promise.resolve());
 // working localStorage stub (jsdom's is non-functional here).
 beforeEach(() => {
   sendNavigate.mockClear();
+  sendActivateTab.mockReset();
+  sendActivateTab.mockResolvedValue('req_test');
   const store = new Map<string, string>([
     ['ds-sim-browser-mode', '0'],
     ['ds-sim-navigated', '1'],
@@ -48,7 +51,7 @@ vi.mock('../../src/lib/livekit', () => ({
   sendInputEvent: vi.fn(() => Promise.resolve()),
   sendNavigate,
   sendTabListUpdate: vi.fn(() => Promise.resolve()),
-  sendActivateTab: vi.fn(() => Promise.resolve('req_test')),
+  sendActivateTab,
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
     Disconnected: 'disconnected',
@@ -146,6 +149,33 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
 
     act(() => panelCbs.onInputCongestionChange?.(false));
     expect(container.querySelector('[data-component="input-congestion-badge"]')).toBeNull();
+  });
+
+  it('rolls back an optimistic tab switch when congestion wins the publish race', async () => {
+    const { ReliableInputCongestedError } = await import('../../src/lib/livekit-input-congestion');
+    localStorage.setItem('ds-sim-browser-mode', '1');
+    const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom));
+
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const tabs = [...container.querySelectorAll('[data-component="simulator-tab"]')];
+    expect(tabs).toHaveLength(2);
+    const previouslyActive = tabs.find((tab) => tab.getAttribute('data-active') === 'true');
+    const target = tabs.find((tab) => tab !== previouslyActive);
+    expect(previouslyActive).toBeDefined();
+    expect(target).toBeDefined();
+
+    sendActivateTab.mockRejectedValueOnce(new ReliableInputCongestedError());
+    fireEvent.click(target as Element);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(previouslyActive?.getAttribute('data-active')).toBe('true');
+    expect(target?.getAttribute('data-active')).toBe('false');
+    expect(container.textContent).toContain('Connection catching up — tab switch paused');
   });
 
   it('does not optimistically create a tab or navigate while input is paused', () => {

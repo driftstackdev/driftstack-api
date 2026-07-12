@@ -28,6 +28,7 @@ import {
   RoomEvent,
   type Room,
 } from '../lib/livekit';
+import { ReliableInputCongestedError } from '../lib/livekit-input-congestion';
 import { useRecordings, type Recording } from '../lib/recordings';
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { exportCookies } from '../lib/cookie-export';
@@ -5960,8 +5961,24 @@ export function SimulatorWindow(): JSX.Element {
             prevTabId: ctx.prevTabId,
           });
         },
-        () => {
-          /* benign teardown — swallowed in the wrapper; nothing to track */
+        (err: unknown) => {
+          if (!(err instanceof ReliableInputCongestedError)) return;
+          // Congestion can begin in the narrow gap after the GUI's local guard but
+          // before publish. If the previous tab still exists (normal switch/new-tab),
+          // cancel the ack retry and immediately undo the optimistic switch: the box
+          // never received it, so it is still publishing that previous tab. For an
+          // active-tab CLOSE the previous id was removed; retain the bounded retry so
+          // the remaining neighbour can converge once the channel drains.
+          const prevTabStillExists = tabsRef.current.some((tab) => tab.id === ctx.prevTabId);
+          if (!prevTabStillExists || activeTabIdRef.current !== ctx.tabId) return;
+          const retry = activationRetryRef.current.get(ctx.tabId);
+          if (retry !== undefined) window.clearTimeout(retry.timer);
+          activationRetryRef.current.delete(ctx.tabId);
+          setSwitchingTabId((current) => (current === ctx.tabId ? null : current));
+          setActiveTabId(ctx.prevTabId);
+          resetPageChromeForSwitch();
+          emitTabListRef.current(tabsRef.current, ctx.prevTabId);
+          showNotice('Connection catching up — tab switch paused', 2500);
         },
       );
       const existing = activationRetryRef.current.get(ctx.tabId);
@@ -5994,7 +6011,7 @@ export function SimulatorWindow(): JSX.Element {
         timer,
       });
     },
-    [room, sessionId],
+    [room, sessionId, resetPageChromeForSwitch, showNotice],
   );
   // Stable self-reference so the setTimeout closure always re-issues via the latest
   // sendActivateAttempt (it captures room/sessionId) without a forward-ref cycle.
