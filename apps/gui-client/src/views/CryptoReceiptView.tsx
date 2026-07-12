@@ -11,7 +11,7 @@
 // formatReceiptForClipboard. Empty / loading / error / ready states
 // rendered consistently with the rest of the V-534.* view family.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { formatCents, formatProduct, formatTimestamp } from '../lib/crypto-format';
@@ -28,19 +28,27 @@ interface CryptoReceiptViewProps {
 }
 
 function ReceiptBody({ data }: { data: CryptoReceiptData }): JSX.Element {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle');
   const pdf = useReceiptPdfDownload();
+
+  useEffect(() => {
+    if (copyState !== 'copied') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
   const onCopy = async (): Promise<void> => {
+    if (copyState === 'copying') return;
+    setCopyState('copying');
     try {
       await navigator.clipboard.writeText(formatReceiptForClipboard(data));
-      setCopied(true);
-      // Reset after 2s so the user sees the confirmation but the
-      // button returns to its default state.
-      setTimeout(() => setCopied(false), 2_000);
+      setCopyState('copied');
     } catch {
-      /* clipboard write can fail in iframes / locked-down envs; silent */
+      setCopyState('failed');
     }
   };
+  const downloadingPdf = pdf.state.kind === 'downloading' && pdf.state.format === 'pdf';
+  const downloadingText = pdf.state.kind === 'downloading' && pdf.state.format === 'txt';
   return (
     <div className="flex flex-col gap-4 rounded-md border border-surface-divider bg-surface-inset p-4">
       <header className="flex items-center justify-between">
@@ -50,32 +58,47 @@ function ReceiptBody({ data }: { data: CryptoReceiptData }): JSX.Element {
             type="button"
             onClick={() => void pdf.download(data.order_id, 'pdf')}
             disabled={pdf.state.kind === 'downloading'}
+            aria-busy={downloadingPdf}
             className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-base disabled:opacity-50"
           >
-            {pdf.state.kind === 'downloading' ? 'Downloading…' : 'Download PDF'}
+            {downloadingPdf ? 'Downloading PDF…' : 'Download PDF'}
           </button>
           <button
             type="button"
             onClick={() => void pdf.download(data.order_id, 'txt')}
             disabled={pdf.state.kind === 'downloading'}
+            aria-busy={downloadingText}
             className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-base disabled:opacity-50"
           >
-            {pdf.state.kind === 'downloading' ? 'Downloading…' : 'Download .txt'}
+            {downloadingText ? 'Downloading text…' : 'Download .txt'}
           </button>
           <button
             type="button"
             onClick={() => void onCopy()}
+            disabled={copyState === 'copying'}
+            aria-busy={copyState === 'copying'}
             className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-base"
           >
-            {copied ? 'Copied' : 'Copy to clipboard'}
+            {copyState === 'copying'
+              ? 'Copying…'
+              : copyState === 'copied'
+                ? 'Copied'
+                : copyState === 'failed'
+                  ? 'Retry copy'
+                  : 'Copy to clipboard'}
           </button>
         </div>
       </header>
       {pdf.state.kind === 'failed' && (
         <ErrorBanner
-          message={`PDF download failed: ${pdf.state.message}`}
+          message={`${pdf.state.format === 'pdf' ? 'PDF' : 'Text receipt'} download failed: ${pdf.state.message}`}
           onDismiss={() => pdf.reset()}
         />
+      )}
+      {copyState === 'failed' && (
+        <p role="alert" className="text-xs text-status-error">
+          Couldn’t copy the receipt. Check clipboard permission and try again.
+        </p>
       )}
       <dl className="grid grid-cols-2 gap-y-1 text-sm">
         <dt className="text-ink-secondary">Order</dt>

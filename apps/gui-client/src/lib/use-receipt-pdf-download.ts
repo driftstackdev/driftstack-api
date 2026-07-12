@@ -21,8 +21,8 @@ const FORMAT_ACCEPT: Record<ReceiptDownloadFormat, string> = {
 
 export type ReceiptPdfDownloadState =
   | { kind: 'idle' }
-  | { kind: 'downloading' }
-  | { kind: 'failed'; message: string };
+  | { kind: 'downloading'; format: ReceiptDownloadFormat }
+  | { kind: 'failed'; format: ReceiptDownloadFormat; message: string };
 
 export interface UseReceiptPdfDownloadResult {
   state: ReceiptPdfDownloadState;
@@ -37,10 +37,10 @@ export function useReceiptPdfDownload(): UseReceiptPdfDownloadResult {
   const download = useCallback(
     async (orderId: string, format: ReceiptDownloadFormat = 'pdf'): Promise<void> => {
       if (!settings.apiKey) {
-        setState({ kind: 'failed', message: 'No API key configured.' });
+        setState({ kind: 'failed', format, message: 'No API key configured.' });
         return;
       }
-      setState({ kind: 'downloading' });
+      setState({ kind: 'downloading', format });
       try {
         const baseUrl = settings.baseUrl.replace(/\/+$/, '');
         const res = await fetch(
@@ -54,7 +54,7 @@ export function useReceiptPdfDownload(): UseReceiptPdfDownloadResult {
           },
         );
         if (!res.ok) {
-          setState({ kind: 'failed', message: await readApiErrorMessage(res) });
+          setState({ kind: 'failed', format, message: await readApiErrorMessage(res) });
           return;
         }
         const blob = await res.blob();
@@ -71,6 +71,7 @@ export function useReceiptPdfDownload(): UseReceiptPdfDownloadResult {
       } catch (err) {
         setState({
           kind: 'failed',
+          format,
           message: err instanceof Error ? err.message : String(err),
         });
       }

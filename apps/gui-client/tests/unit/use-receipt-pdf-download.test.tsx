@@ -101,9 +101,33 @@ describe('V-534.BM useReceiptPdfDownload', () => {
     URL.revokeObjectURL = vi.fn();
     const { result } = renderHook(() => useReceiptPdfDownload());
     await act(async () => {
-      await result.current.download('ord_x');
+      await result.current.download('ord_x', 'txt');
     });
     expect(result.current.state.kind).toBe('failed');
+    expect(result.current.state).toMatchObject({ format: 'txt' });
+  });
+
+  it('names the active format while a download is in flight', async () => {
+    let resolveFetch: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve;
+          }),
+      ),
+    );
+    URL.createObjectURL = vi.fn(() => 'blob:mock');
+    URL.revokeObjectURL = vi.fn();
+    const { result } = renderHook(() => useReceiptPdfDownload());
+    let pending: Promise<void> | undefined;
+    act(() => {
+      pending = result.current.download('ord_x', 'txt');
+    });
+    expect(result.current.state).toEqual({ kind: 'downloading', format: 'txt' });
+    resolveFetch?.(pdfResponse());
+    await act(async () => pending);
   });
 
   it('reset() returns state to idle after a failure', async () => {

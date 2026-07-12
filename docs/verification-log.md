@@ -24633,3 +24633,18 @@ Verification:
 - status-site production build: 7 static pages generated successfully;
 - repository-wide Vitest audit enumerated only the known stale generated Python SDK OpenAPI snapshot after the frontend verifier updates;
 - root workspace typecheck reaches every frontend workspace successfully, then remains non-green on unrelated server-test fixture typing debt recorded in the handoff.
+
+## V-559 — receipt action feedback integrity
+
+**Date:** 2026-07-12
+
+Made receipt export and clipboard actions report their real state instead of failing ambiguously:
+
+- download state now retains the requested PDF/text format, so only the active action shows a format-specific busy label and failures identify the correct artifact;
+- download buttons expose `aria-busy` while their request is active;
+- clipboard copy is single-flight, shows “Copying…”/“Copied”, cleans up its reset timer on unmount, and turns clipboard denial into visible retry guidance instead of swallowing it.
+
+Verification:
+
+- focused GUI jsdom: 14/14 tests pass across the receipt view and download hook;
+- regression coverage includes format-aware in-flight state, text-download failures, and rejected clipboard permission.

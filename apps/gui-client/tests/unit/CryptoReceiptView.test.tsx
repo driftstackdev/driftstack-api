@@ -111,6 +111,37 @@ describe('V-534.AB CryptoReceiptView', () => {
     expect(text).toContain('Amount: 25.00 EUR');
   });
 
+  it('surfaces clipboard denial and turns the action into an explicit retry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              order_id: 'ord_42',
+              issued_at: '2026-05-11T10:00:00.000Z',
+              status: 'paid',
+              product: 'solo_manual',
+              price_cents: 2500,
+              price_currency: 'EUR',
+              payment_id: null,
+              paid_at: '2026-05-11T09:55:00.000Z',
+              created_at: '2026-05-11T09:00:00.000Z',
+            }),
+        } as unknown as Response),
+      ),
+    );
+    vi.stubGlobal('navigator', {
+      clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) },
+    });
+    render(<CryptoReceiptView orderId="ord_42" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Copy to clipboard/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/clipboard permission/i);
+    expect(screen.getByRole('button', { name: /Retry copy/i })).toBeInTheDocument();
+  });
+
   it('renders the error banner on HTTP failure', async () => {
     vi.stubGlobal(
       'fetch',
