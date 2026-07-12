@@ -23,6 +23,7 @@ export const TapRippleOverlay = forwardRef<TapRippleOverlayHandle>(
       ref,
       () => ({
         show: (x, y) => {
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
           const id = (nextIdRef.current += 1);
           setRipples((current) => [...current, { id, x, y }]);
           const timer = window.setTimeout(() => {

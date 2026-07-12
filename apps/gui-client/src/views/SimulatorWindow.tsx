@@ -5119,7 +5119,17 @@ export function SimulatorWindow(): JSX.Element {
     const r = host.getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
-    if (r.width === 0 || x < 0 || y < 0 || x > r.width || y > r.height) return;
+    if (
+      r.width <= 0 ||
+      r.height <= 0 ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      x < 0 ||
+      y < 0 ||
+      x > r.width ||
+      y > r.height
+    )
+      return;
     // Off-surface guard: gate the ripple/cursor on the SAME surface test the wire uses.
     // A click in the object-contain letterbox bars (or anywhere the device receives
     // nothing) returns null from pointerToViewport — render NO ripple/dot there, so the

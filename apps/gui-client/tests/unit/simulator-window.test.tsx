@@ -365,7 +365,15 @@ describe('SimulatorWindow — floating iPhone', () => {
       ({ left: 0, top: 0, width: 300, height: 600 }) as DOMRect;
     // No ripple before any tap.
     expect(container.querySelector('[data-component="tap-ripple"]')).toBeNull();
-    fireEvent.pointerDown(host as Element, { clientX: 120, clientY: 240 });
+    // jsdom has no native PointerEvent constructor, so create the bubbling event and
+    // stamp finite coordinates explicitly (the production handler rejects non-finite
+    // geometry instead of emitting a React `left: NaN` style warning).
+    const pointerDown = new Event('pointerdown', { bubbles: true });
+    Object.defineProperties(pointerDown, {
+      clientX: { value: 120 },
+      clientY: { value: 240 },
+    });
+    fireEvent(host as Element, pointerDown);
     const ripple = container.querySelector('[data-component="tap-ripple"]');
     expect(ripple).not.toBeNull();
     // The ring renders inside the screen host and never intercepts the tap

@@ -28,6 +28,10 @@ describe('TapRippleOverlay', () => {
     expect(screen.getByText('stable video host')).not.toBeNull();
     expect(parentRenders).toBe(1);
 
+    act(() => overlayRef.current?.show(Number.NaN, 240));
+    expect(container.querySelector('[data-component="tap-ripple"]')).toBeNull();
+    expect(parentRenders).toBe(1);
+
     act(() => overlayRef.current?.show(120, 240));
     const ripple = container.querySelector('[data-component="tap-ripple"]') as HTMLElement;
     expect(ripple).not.toBeNull();
