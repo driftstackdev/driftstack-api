@@ -535,6 +535,13 @@ describe('AgentSessionPanel overlay UX', () => {
     const ended = container.querySelector('[data-overlay="session-ended"]');
     expect(ended).not.toBeNull();
     expect(ended?.textContent).toMatch(/session ended/i);
+    expect(container.querySelector('[data-component="session-end-recap"]')).not.toBeNull();
+    expect(container.querySelector('[data-summary="session-duration"]')?.textContent).toMatch(
+      /less than a minute/i,
+    );
+    expect(container.querySelector('[data-summary="session-outcome"]')?.textContent).toMatch(
+      /session closed/i,
+    );
     // Finding #8 — the standalone Simulator can't relaunch in place (no account
     // API key / SDK client to mint a fresh session+token; that lives in the main
     // app), so the overlay must give the concrete next step instead of a dead-end
@@ -549,6 +556,35 @@ describe('AgentSessionPanel overlay UX', () => {
       container.querySelector('[data-action="close-ended-session"]') as HTMLButtonElement,
     );
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('recaps the elapsed live-view time and maps close reasons to friendly copy', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-07-12T12:00:00Z'));
+      connectMock.mockReset();
+      connectMock.mockResolvedValue(undefined);
+      createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+      const { container, rerender } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      vi.setSystemTime(new Date('2026-07-12T13:07:00Z'));
+      rerender(<AgentSessionPanel info={INFO} sessionEnded={{ reason: 'orphaned-lifetime' }} />);
+
+      expect(container.querySelector('[data-summary="session-duration"]')?.textContent).toMatch(
+        /1 hr 7 min/i,
+      );
+      expect(container.querySelector('[data-summary="session-outcome"]')?.textContent).toMatch(
+        /session time limit reached/i,
+      );
+      expect(container.querySelector('[data-overlay="session-ended"]')?.textContent).not.toMatch(
+        /orphaned-lifetime/i,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // P1a — a Disconnected AFTER the session ended must NOT schedule the bounded

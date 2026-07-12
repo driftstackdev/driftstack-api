@@ -184,6 +184,21 @@ export function isAuthConnectError(message: string): boolean {
   return /video link expired/i.test(message);
 }
 
+function formatSessionDuration(totalSeconds: number): string {
+  if (totalSeconds < 60) return 'Less than a minute';
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  if (hours === 0) return `${minutes} min`;
+  return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
+}
+
+function friendlySessionEndReason(reason: string | null): string {
+  if (reason === 'idle_timeout') return 'Closed after inactivity';
+  if (reason === 'browser-closed') return 'Browser closed';
+  if (reason === 'orphaned-lifetime') return 'Session time limit reached';
+  return 'Session closed';
+}
+
 const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
 
 /**
@@ -249,6 +264,33 @@ export function AgentSessionPanel({
   onClose,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Wave 2 recap — the terminal poll currently exposes only the close reason (no
+  // billing/cost metadata), while tab count belongs to the parent simulator. Track
+  // this panel's live-view lifetime locally and latch the end timestamp so the recap
+  // stays stable across any final transport/cleanup re-renders.
+  const sessionTimingRef = useRef<{
+    identity: string;
+    startedAtMs: number;
+    endedAtMs: number | null;
+  }>({ identity: info.room, startedAtMs: Date.now(), endedAtMs: null });
+  if (sessionTimingRef.current.identity !== info.room) {
+    sessionTimingRef.current = { identity: info.room, startedAtMs: Date.now(), endedAtMs: null };
+  }
+  if (sessionEnded === null) {
+    sessionTimingRef.current.endedAtMs = null;
+  } else if (sessionTimingRef.current.endedAtMs === null) {
+    sessionTimingRef.current.endedAtMs = Date.now();
+  }
+  const sessionDuration = formatSessionDuration(
+    Math.max(
+      0,
+      Math.floor(
+        ((sessionTimingRef.current.endedAtMs ?? Date.now()) -
+          sessionTimingRef.current.startedAtMs) /
+          1_000,
+      ),
+    ),
+  );
   // The video element as STATE (not just the ref) so useInputCapture re-runs
   // when it mounts — a ref's `.current` is mutated without re-rendering, so an
   // effect keyed on the ref would attach to the stale (null) element.
@@ -826,7 +868,7 @@ export function AgentSessionPanel({
         <div
           data-overlay="session-ended"
           {...(sessionEnded.reason !== null ? { 'data-reason': sessionEnded.reason } : {})}
-          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center text-sm text-ink-primary"
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center text-sm text-ink-primary"
         >
           <svg
             viewBox="0 0 24 24"
@@ -844,6 +886,27 @@ export function AgentSessionPanel({
             <path d="M9 9l6 6M15 9l-6 6" />
           </svg>
           <span className="font-medium">Session ended</span>
+          <div
+            data-component="session-end-recap"
+            className="grid w-full max-w-xs grid-cols-2 gap-2"
+          >
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+              <span className="block text-[10px] uppercase tracking-wide text-ink-secondary">
+                Session length
+              </span>
+              <span data-summary="session-duration" className="mt-0.5 block text-xs font-medium">
+                {sessionDuration}
+              </span>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+              <span className="block text-[10px] uppercase tracking-wide text-ink-secondary">
+                Finished
+              </span>
+              <span data-summary="session-outcome" className="mt-0.5 block text-xs font-medium">
+                {friendlySessionEndReason(sessionEnded.reason)}
+              </span>
+            </div>
+          </div>
           <span className="max-w-xs text-xs text-ink-secondary">
             {sessionEnded.reason === 'idle_timeout'
               ? 'This session was closed after a period of inactivity.'
