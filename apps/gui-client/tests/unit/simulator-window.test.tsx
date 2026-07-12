@@ -395,17 +395,19 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(host).not.toBeNull();
     // The PC cursor is hidden over the device screen (the fingertip replaces it).
     expect(host?.className).toContain('cursor-none');
-    // No fingertip until the pointer is over the screen.
-    expect(container.querySelector('[data-component="touch-cursor"]')).toBeNull();
+    // The isolated overlay stays mounted but hidden so pointer entry never
+    // rerenders the simulator host.
+    const cursor = container.querySelector('[data-component="touch-cursor"]') as HTMLElement;
+    expect(cursor.hidden).toBe(true);
     (host as HTMLElement).getBoundingClientRect = () =>
       ({ left: 0, top: 0, width: 300, height: 600 }) as DOMRect;
     fireEvent.pointerMove(host as Element, { clientX: 120, clientY: 240 });
-    const dot = container.querySelector('[data-component="touch-cursor"]');
-    expect(dot).not.toBeNull();
-    expect(dot?.className).toContain('pointer-events-none');
+    const dot = container.querySelector('[data-component="touch-cursor"]') as HTMLElement;
+    expect(dot.hidden).toBe(false);
+    expect(dot.className).toContain('pointer-events-none');
     // Leaving the screen hides the fingertip again.
     fireEvent.pointerLeave(host as Element);
-    expect(container.querySelector('[data-component="touch-cursor"]')).toBeNull();
+    expect(dot.hidden).toBe(true);
   });
 
   it('shows a Connecting indicator on bind — not Live — until the stream connects (founder Track A)', () => {
