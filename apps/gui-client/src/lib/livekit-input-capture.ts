@@ -457,15 +457,18 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // threshold crossing, and it starts "low"), so behavior is byte-identical to
     // before; it only changes the actual failure case.
     let reliableCongested = false;
+    const setCongested = (congested: boolean): void => {
+      reliableCongested = congested;
+      setReliableInputCongested(room, congested);
+      onCongestionChangeRef.current?.(congested);
+    };
     const onDCBufferStatus = (isLow: boolean, kind: number): void => {
       // DataChannelKind.RELIABLE === 0 (livekit-client internal enum, stable). The
       // lossy channel already self-drops under congestion, so we gate only on
       // reliable; if livekit ever renumbered the enum the flag simply never trips and
       // we degrade safely to the prior (no-backpressure) behavior.
       if (kind !== 0) return;
-      reliableCongested = !isLow;
-      setReliableInputCongested(room, reliableCongested);
-      onCongestionChangeRef.current?.(reliableCongested);
+      setCongested(!isLow);
       if (!reliableCongested) return;
 
       // Stop any gesture already in progress as soon as congestion is reported. A
@@ -478,6 +481,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       endWheelDrag();
       releaseForwardedKeys();
     };
+    // A reconnect can replace the underlying DataChannel with a fresh, empty one.
+    // Its buffer begins low, so no low-threshold crossing is guaranteed; explicitly
+    // clear the prior channel's latch or input could remain paused forever.
+    const onRoomReconnected = (): void => setCongested(false);
 
     const send = (event: InputEvent, reliable: boolean): void => {
       lastSend.current = sendInputEvent(room, event, { reliable }).catch((err: unknown) => {
@@ -1084,6 +1091,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         RoomEvent.DCBufferStatusChanged,
         onDCBufferStatus,
       );
+      (room as { on: (e: string, cb: () => void) => void }).on(
+        RoomEvent.Reconnected,
+        onRoomReconnected,
+      );
     }
     // Move + release on WINDOW, not just the video: the streamed phone is small
     // (~330px wide), so a drag easily wanders off it. onMouseMove no-ops unless a
@@ -1116,6 +1127,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         (room as { off: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).off(
           RoomEvent.DCBufferStatusChanged,
           onDCBufferStatus,
+        );
+        (room as { off: (e: string, cb: () => void) => void }).off(
+          RoomEvent.Reconnected,
+          onRoomReconnected,
         );
       }
       setReliableInputCongested(room, false);

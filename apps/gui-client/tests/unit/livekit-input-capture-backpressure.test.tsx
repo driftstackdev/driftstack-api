@@ -20,7 +20,10 @@ const sendInputEvent = vi.fn(() => Promise.resolve());
 // real event string for faithfulness while stubbing the network send.
 vi.mock('../../src/lib/livekit', () => ({
   sendInputEvent,
-  RoomEvent: { DCBufferStatusChanged: 'dcBufferStatusChanged' },
+  RoomEvent: {
+    DCBufferStatusChanged: 'dcBufferStatusChanged',
+    Reconnected: 'reconnected',
+  },
 }));
 
 const { useInputCapture } = await import('../../src/lib/livekit-input-capture');
@@ -39,27 +42,33 @@ function stubVideo(el: HTMLVideoElement): void {
 function makeRoom(): {
   room: Room;
   fireDC: (isLow: boolean, kind: number) => void;
+  fireReconnected: () => void;
   state: { on: number; off: number; hasHandler: boolean };
 } {
-  let handler: ((isLow: boolean, kind: number) => void) | null = null;
+  const handlers = new Map<string, (...args: unknown[]) => void>();
   const state = {
     on: 0,
     off: 0,
     get hasHandler() {
-      return handler !== null;
+      return handlers.has('dcBufferStatusChanged');
     },
   };
   const room = {
     on(_e: string, cb: (isLow: boolean, kind: number) => void): void {
       state.on += 1;
-      handler = cb;
+      handlers.set(_e, cb as (...args: unknown[]) => void);
     },
     off(_e: string, _cb: unknown): void {
       state.off += 1;
-      handler = null;
+      handlers.delete(_e);
     },
   } as unknown as Room;
-  return { room, state, fireDC: (isLow, kind) => handler?.(isLow, kind) };
+  return {
+    room,
+    state,
+    fireDC: (isLow, kind) => handlers.get('dcBufferStatusChanged')?.(isLow, kind),
+    fireReconnected: () => handlers.get('reconnected')?.(),
+  };
 }
 
 function mount(
@@ -110,7 +119,7 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
   it('registers a DCBufferStatusChanged listener on the room', () => {
     const { room, state } = makeRoom();
     mount(room);
-    expect(state.on).toBe(1);
+    expect(state.on).toBe(2);
     expect(state.hasHandler).toBe(true);
   });
 
@@ -159,6 +168,19 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     const types = emitted().map((e) => e.type);
     expect(types).toContain('touchStart'); // scroll works again
     expect(types.filter((t) => t === 'touchMove').length).toBeGreaterThan(0);
+  });
+
+  it('clears stale congestion when LiveKit reconnects with a fresh data channel', () => {
+    const { room, fireDC, fireReconnected } = makeRoom();
+    const onCongestionChange = vi.fn();
+    const { video } = mount(room, onCongestionChange);
+    fireDC(false, 0);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+
+    fireReconnected();
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    scroll(video);
+    expect(emitted().map((e) => e.type)).toContain('touchStart');
   });
 
   it('ignores a NON-reliable (lossy, kind 1) buffer-status event — only reliable gates the shed', () => {
@@ -229,9 +251,9 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
   it('unregisters the buffer-status listener on unmount', () => {
     const { room, state } = makeRoom();
     const { unmount } = mount(room);
-    expect(state.on).toBe(1);
+    expect(state.on).toBe(2);
     unmount();
-    expect(state.off).toBe(1);
+    expect(state.off).toBe(2);
     expect(state.hasHandler).toBe(false);
   });
 });
