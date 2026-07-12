@@ -41,7 +41,14 @@ APP_DIR="$REPO_ROOT/apps/$APP"
 cd "$APP_DIR"
 
 echo "[deploy-frontend] building $APP (PUBLIC_API_BASE_URL=$API_BASE)..."
-PUBLIC_API_BASE_URL="$API_BASE" npm run build
+if [ "$APP" = "errors-site" ]; then
+  # errors-site is intentionally dependency-free and has no package.json.
+  # Running `npm run build` from this directory walks up to the workspace root
+  # and rebuilds every package instead of this site specifically.
+  node build.mjs
+else
+  PUBLIC_API_BASE_URL="$API_BASE" npm run build
+fi
 
 if [ "$NEEDS_API" = "1" ]; then
   # ABORT if the build still embeds a localhost API base (the W586 footgun).

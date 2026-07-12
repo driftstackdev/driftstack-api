@@ -28,6 +28,12 @@ describe('W587 deploy-frontend.sh safe-deploy wrapper', () => {
     expect(src).toMatch(/PUBLIC_API_BASE_URL="\$API_BASE" npm run build/);
   });
 
+  it('builds the dependency-free errors site directly instead of falling through to the root workspace', () => {
+    expect(src).toMatch(
+      /if \[ "\$APP" = "errors-site" \]; then\s+# errors-site[^]*?node build\.mjs\s+else\s+PUBLIC_API_BASE_URL="\$API_BASE" npm run build\s+fi/,
+    );
+  });
+
   it('ABORTS the deploy if the built output still embeds a localhost API base', () => {
     expect(src).toMatch(/grep -rqE 'apiBaseUrl = "https\?:\/\/localhost' dist\//);
     // CRITICAL: status-site's Astro pages embed the API base as `API_BASE`,

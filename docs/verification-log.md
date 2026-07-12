@@ -24755,3 +24755,19 @@ Verification:
 - production-shaped admin-panel build succeeds with `PUBLIC_API_BASE_URL=https://api.driftstack.dev`;
 - focused admin Cost and Atlas-priority suites: 12/12 tests pass, including deferred-response duplicate-click coverage;
 - admin Astro check reports zero errors and zero warnings (18 existing suggestions only).
+
+## V-568 — isolated errors-site deployment build
+
+**Date:** 2026-07-12
+
+Corrected the shared Pages deployment wrapper for the dependency-free errors site. That
+site intentionally has no `package.json`; running `npm run build` from its directory
+therefore walked up to the repository root and rebuilt the entire workspace before
+deploying the static site. The wrapper now invokes its owned `node build.mjs` generator
+directly while retaining the existing production API-base guard for package-backed apps.
+
+Verification:
+
+- focused deploy-wrapper guard passes, including the errors-site direct-builder branch;
+- the dependency-free generator recreates `apps/errors-site/dist` successfully;
+- shell syntax validation and repository diff checks pass.
