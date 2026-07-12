@@ -129,7 +129,7 @@ const SYSTEM_PROMPT = [
   '  - navigate { url: string }',
   '  - interact { action: "tap"|"type"|"scroll"|"press", selector?: string, value?: string, sensitive?: boolean } (type: sensitive=true for OTP/PIN/card values; press: value = key name, e.g. "Enter"; use the top-level scroll verb for directional human scrolling)',
   '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number }',
-  '  - capture { capture: "screenshot"|"dom_snapshot"|"pdf" }',
+  '  - capture { capture: "screenshot"|"dom_snapshot" } (PDF is not executable on the live harness)',
   '  - scroll { direction: "up"|"down", amount_px?: number }',
   '  - behavioral_pause { duration_ms?: number, reading_word_count?: number }',
   '',
@@ -598,7 +598,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
       }
       case 'capture': {
         const cap = i.capture;
-        if (cap === 'screenshot' || cap === 'dom_snapshot' || cap === 'pdf') {
+        if (cap === 'screenshot' || cap === 'dom_snapshot') {
           out.push({ kind: 'capture', capture: cap });
         }
         break;

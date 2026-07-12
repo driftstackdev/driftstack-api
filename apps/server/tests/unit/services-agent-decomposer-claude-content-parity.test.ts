@@ -116,7 +116,9 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(
       /' {2}- wait \{ condition: "idle"\|"selector_visible", selector\?: string, timeoutMs\?: number \}',/,
     );
-    expect(body).toMatch(/' {2}- capture \{ capture: "screenshot"\|"dom_snapshot"\|"pdf" \}',/);
+    expect(body).toMatch(
+      /' {2}- capture \{ capture: "screenshot"\|"dom_snapshot" \} \(PDF is not executable on the live harness\)',/,
+    );
     // W140 behavioural verbs.
     expect(body).toMatch(/' {2}- scroll \{ direction: "up"\|"down", amount_px\?: number \}',/);
     expect(body).toMatch(

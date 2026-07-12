@@ -388,6 +388,25 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents).toEqual([{ kind: 'scroll', direction: 'down', amount_px: 600 }]);
     });
 
+    it('drops model PDF capture because the live harness mapper cannot execute it', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'capture', capture: 'pdf' },
+            { kind: 'capture', capture: 'screenshot' },
+            { kind: 'capture', capture: 'dom_snapshot' },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'capture', capture: 'screenshot' },
+        { kind: 'capture', capture: 'dom_snapshot' },
+      ]);
+    });
+
     it('drops invalid model numeric options before the dispatch contract', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({
