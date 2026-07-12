@@ -44,6 +44,7 @@ import {
 import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
+import { humanizeError } from '../lib/humanize-error';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -359,7 +360,7 @@ export function ProxiesView(): JSX.Element {
         auth_ok: false,
         udp_associate: false,
         latency_ms: 0,
-        message: err instanceof Error ? err.message : String(err),
+        message: humanizeError(err, "Couldn't test this proxy. Check the details and try again."),
       };
       setTestResults((r) => ({ ...r, [p.id]: result }));
       setExitResults((r) => dropKey(r, p.id));
@@ -1158,7 +1159,10 @@ export function ProxyForm({
       setResolveResult({
         resolved: false,
         ip: '',
-        message: err instanceof Error ? err.message : String(err),
+        message: humanizeError(
+          err,
+          "Couldn't resolve this endpoint. Check the details and try again.",
+        ),
       });
     } finally {
       setResolving(false);
@@ -1184,7 +1188,7 @@ export function ProxyForm({
         auth_ok: false,
         udp_associate: false,
         latency_ms: 0,
-        message: err instanceof Error ? err.message : String(err),
+        message: humanizeError(err, "Couldn't test this proxy. Check the details and try again."),
       });
     } finally {
       setTesting(false);

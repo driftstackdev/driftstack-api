@@ -186,6 +186,16 @@ describe('ProxiesView add-form "Test connection" button', () => {
     expect(await screen.findByText('✗ Failed')).toBeTruthy();
     expect(screen.getByText('TCP connect failed: timed out')).toBeTruthy();
   });
+
+  it('humanizes a thrown probe exception without changing structured verdict messages', async () => {
+    testProxy.mockRejectedValue(new Error('offline socket helper /private/tmp/probe'));
+    render(<ProxiesView />);
+    await openAddForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText('✗ Failed')).toBeTruthy();
+    expect(screen.getByText('Check your connection and try again.')).toBeTruthy();
+    expect(screen.queryByText(/private\/tmp|offline socket helper/i)).toBeNull();
+  });
 });
 
 describe('capability board (approved proxy-health port)', () => {

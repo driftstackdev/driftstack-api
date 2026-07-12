@@ -84,6 +84,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { normalizeNavigateUrl } from '../lib/address-bar';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { humanizeError } from '../lib/humanize-error';
 import {
   clearSession as clearProfileSession,
   deleteBinding,
@@ -3924,7 +3925,7 @@ function CreateProfileModal({
         auth_ok: false,
         udp_associate: false,
         latency_ms: 0,
-        message: err instanceof Error ? err.message : String(err),
+        message: humanizeError(err, "Couldn't test this proxy. Check the details and try again."),
       });
     } finally {
       setTesting(false);

@@ -7,7 +7,7 @@
 // path that forwards a filled draft to testProxy.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const testProxy = vi.fn(() =>
   Promise.resolve({
@@ -102,6 +102,19 @@ describe('create-profile modal "Test proxy" draft validation', () => {
     expect(testProxy).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'proxy.example.com', port: 1080 }),
     );
+  });
+
+  it('humanizes a thrown native probe exception', async () => {
+    testProxy.mockRejectedValueOnce(new Error('offline helper stack /private/tmp/proxy'));
+    await openCreateModal();
+    const host = await screen.findByPlaceholderText(/Host \(e\.g\. proxy\.example\.com\)/);
+    fireEvent.change(host, { target: { value: 'proxy.example.com' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Test proxy' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Check your connection and try again.')).toBeTruthy(),
+    );
+    expect(screen.queryByText(/private\/tmp|offline helper stack/i)).toBeNull();
   });
 
   it('the device picker makes ALL selectable (launch+available) archetypes clickable — not only iPhone 17', async () => {
