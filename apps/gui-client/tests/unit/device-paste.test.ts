@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { pasteClipboardToDevice } from '../../src/lib/device-paste';
+import { ReliableInputCongestedError } from '../../src/lib/livekit-input-congestion';
 
 describe('pasteClipboardToDevice', () => {
   it('does not send after an in-place session swap during clipboard read', async () => {
@@ -35,6 +36,17 @@ describe('pasteClipboardToDevice', () => {
         8_192,
       ),
     ).resolves.toBe('send_error');
+  });
+
+  it('distinguishes temporary reliable-channel congestion from a real send failure', async () => {
+    await expect(
+      pasteClipboardToDevice(
+        () => Promise.resolve('hello'),
+        () => Promise.reject(new ReliableInputCongestedError()),
+        () => true,
+        8_192,
+      ),
+    ).resolves.toBe('congested');
   });
 
   it('enforces the UTF-8 byte limit before sending', async () => {

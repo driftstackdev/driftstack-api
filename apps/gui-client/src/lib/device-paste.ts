@@ -1,9 +1,12 @@
+import { ReliableInputCongestedError } from './livekit-input-congestion';
+
 export type DevicePasteResult =
   | 'ok'
   | 'empty'
   | 'too_large'
   | 'clipboard_error'
   | 'send_error'
+  | 'congested'
   | 'stale';
 
 /** Read the host clipboard and deliver one bounded text event to the current device.
@@ -27,7 +30,10 @@ export async function pasteClipboardToDevice(
 
   try {
     await send(value);
-  } catch {
+  } catch (err) {
+    if (err instanceof ReliableInputCongestedError) {
+      return isCurrent() ? 'congested' : 'stale';
+    }
     return isCurrent() ? 'send_error' : 'stale';
   }
   return isCurrent() ? 'ok' : 'stale';

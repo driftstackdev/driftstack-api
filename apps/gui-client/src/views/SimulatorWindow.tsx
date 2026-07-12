@@ -3507,6 +3507,8 @@ export function SimulatorWindow(): JSX.Element {
           showNotice('Clipboard is too large — paste up to 8 KB at a time', 3500);
         } else if (result === 'clipboard_error') {
           showNotice("Couldn't read the clipboard", 2500);
+        } else if (result === 'congested') {
+          showNotice('Connection catching up — paste again in a moment', 3000);
         } else if (result === 'send_error') {
           showNotice("Couldn't paste to the device — reconnect and try again", 3500);
         }
