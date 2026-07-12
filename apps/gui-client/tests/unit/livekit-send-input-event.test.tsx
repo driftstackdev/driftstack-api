@@ -150,6 +150,25 @@ describe('sendInputEvent', () => {
     const result = await sendInputEvent(room, { type: 'mouseMove', x: 0, y: 0 });
     expect(result).toBeUndefined();
   });
+
+  it('rejects non-finite numeric payloads before they reach LiveKit', async () => {
+    const invalidEvents: InputEvent[] = [
+      { type: 'touchStart', x: Number.NaN, y: 20, touchId: 1 },
+      { type: 'wheel', x: 10, y: 20, deltaX: 0, deltaY: Number.POSITIVE_INFINITY },
+      { type: 'ping', timestamp: Number.NaN },
+      {
+        type: 'tabListUpdate',
+        sessionId: 'agt_x',
+        tabs: [{ id: 't1', url: 'https://x.test/', scrollY: Number.NaN, title: 'X' }],
+        activeTabId: 't1',
+      },
+    ];
+    for (const event of invalidEvents) {
+      const { room, publishData } = makeRoom();
+      await expect(sendInputEvent(room, event)).rejects.toThrow(/non-finite number/i);
+      expect(publishData).not.toHaveBeenCalled();
+    }
+  });
 });
 
 // Teardown-race safety: a publish that lands after the LiveKit RTCEngine is

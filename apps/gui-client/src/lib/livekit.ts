@@ -143,6 +143,37 @@ export async function sendInputEvent(
   event: InputEvent,
   opts: { reliable?: boolean } = {},
 ): Promise<void> {
+  const numericFields: number[] = (() => {
+    switch (event.type) {
+      case 'mouseMove':
+      case 'mouseDown':
+      case 'mouseUp':
+      case 'tap':
+        return [event.x, event.y];
+      case 'touchStart':
+      case 'touchMove':
+      case 'touchEnd':
+        return [event.x, event.y, event.touchId];
+      case 'wheel':
+        return [event.x, event.y, event.deltaX, event.deltaY];
+      case 'swipe':
+        return [event.x1, event.y1, event.x2, event.y2, event.durationMs];
+      case 'tabListUpdate':
+        return event.tabs.map((tab) => tab.scrollY);
+      case 'activateTab':
+        return [event.scrollY];
+      case 'ping':
+        return [event.timestamp];
+      case 'keyDown':
+      case 'keyUp':
+      case 'navigate':
+      case 'text':
+        return [];
+    }
+  })();
+  if (!numericFields.every(Number.isFinite)) {
+    throw new RangeError(`Input event ${event.type} contains a non-finite number`);
+  }
   const reliable = opts.reliable ?? true;
   const data = new TextEncoder().encode(JSON.stringify(event));
   try {
