@@ -62,7 +62,9 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
   it('pointerToViewport letterbox-aware coord math pinned (#7): elementAspect/videoAspect object-contain fit → displayed sub-rect, pointer offset by the centering bars, null when outside the contained region (a bar click), then (px/dispW)*nw + (py/dispH)*nh + Math.round — pinned so the object-contain mapping + bar-rejection stays documented (drift back to the full-rect ratio mis-places every click on an aspect-mismatched stream; dropping Math.round lets fractional CGEvent coords slip through)', () => {
     expect(body).toMatch(/const elementAspect = rect\.width \/ rect\.height;/);
     expect(body).toMatch(/const videoAspect = nw \/ nh;/);
-    expect(body).toMatch(/if \(px < 0 \|\| px > dispW \|\| py < 0 \|\| py > dispH\) return null;/);
+    expect(body).toMatch(
+      /if \(!Number\.isFinite\(px\) \|\| !Number\.isFinite\(py\) \|\| px < 0 \|\| px > dispW \|\| py < 0 \|\| py > dispH\)\s*\n?\s*return null;/,
+    );
     expect(body).toMatch(
       /const x = \(px \/ dispW\) \* nw;\s*\n?\s*const y = \(py \/ dispH\) \* nh;\s*\n?\s*return \{ x: Math\.round\(x\), y: Math\.round\(y\) \};/,
     );

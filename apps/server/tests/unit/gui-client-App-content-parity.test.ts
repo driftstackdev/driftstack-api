@@ -161,8 +161,11 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(/case 'settings':/);
   });
 
-  it("Billing route wired: BillingView imported, the 'billing' case returns <BillingView />, and the nav-billing command-palette action exists (revenue path — the customer crypto-checkout cluster was previously built but unreachable, 2026-06-19)", () => {
-    expect(body).toMatch(/import \{ BillingView \} from '\.\/views\/BillingView';/);
+  it("Billing route wired: BillingView is lazy-loaded, the 'billing' case returns <BillingView />, and the nav-billing command-palette action exists (revenue path — the customer crypto-checkout cluster was previously built but unreachable, 2026-06-19)", () => {
+    expect(body).toMatch(
+      /const BillingView = lazy\(async \(\) => \(\{\s*\n?\s*default: \(await import\('\.\/views\/BillingView'\)\)\.BillingView,\s*\n?\s*\}\)\);/,
+    );
+    expect(body).not.toMatch(/import \{ BillingView \} from '\.\/views\/BillingView';/);
     expect(body).toMatch(/case 'billing':\s*\n?\s*return <BillingView \/>;/);
     expect(body).toMatch(/id: 'nav-billing'/);
   });
