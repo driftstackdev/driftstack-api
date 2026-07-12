@@ -159,4 +159,15 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     const usages = body.match(/\.then\(mutationJson\)/g) ?? [];
     expect(usages.length).toBe(6);
   });
+
+  it('quota override apply is single-flight and locks the whole form accessibly', () => {
+    expect(body).toMatch(/let overrideSubmitting = false;/);
+    expect(body).toMatch(/if \(!token \|\| overrideSubmitting\)/);
+    expect(body).toMatch(/overrideSubmitting = true;/);
+    expect(body).toMatch(/form\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/const controls = Array\.from\(form\.elements\)/);
+    expect(body).toMatch(/if \(submit\) submit\.textContent = 'Applying…'/);
+    expect(body).toMatch(/\.finally\(\(\) => \{\s*overrideSubmitting = false;/);
+    expect(body).toMatch(/if \(overrideSubmitting && !force\) return;/);
+  });
 });

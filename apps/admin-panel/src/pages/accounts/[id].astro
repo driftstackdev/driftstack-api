@@ -710,10 +710,12 @@ const accountId = account.id;
       }
 
       const overrideForm = root.querySelector('[data-field="override-form"]');
+      let overrideSubmitting = false;
       function showOverrideForm() {
         if (overrideForm) overrideForm.classList.remove('hidden');
       }
-      function hideOverrideForm() {
+      function hideOverrideForm(force) {
+        if (overrideSubmitting && !force) return;
         if (overrideForm) {
           overrideForm.classList.add('hidden');
           if (overrideForm instanceof HTMLFormElement) overrideForm.reset();
@@ -721,8 +723,8 @@ const accountId = account.id;
       }
 
       function submitOverride(form) {
-        if (!token) {
-          showBanner('Sign in with a staff admin account to perform this action.');
+        if (!token || overrideSubmitting) {
+          if (!token) showBanner('Sign in with a staff admin account to perform this action.');
           return;
         }
         const data = new FormData(form);
@@ -743,20 +745,41 @@ const accountId = account.id;
           showBanner('All fields required (reason is audited).');
           return;
         }
+        overrideSubmitting = true;
+        form.setAttribute('aria-busy', 'true');
+        const controls = Array.from(form.elements);
+        const disabledBefore = controls.map((control) => control.disabled);
+        controls.forEach((control) => {
+          control.disabled = true;
+        });
+        const submit = form.querySelector('button[type="submit"]');
+        const submitText = submit ? submit.textContent : '';
+        if (submit) submit.textContent = 'Applying…';
         showBanner('Applying override…');
-        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/quota-override', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        })
+        return authedFetch(
+          '/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/quota-override',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          },
+        )
           .then(mutationJson)
           .then(() => {
             showBanner('Override applied for bucket "' + payload.bucket_key + '".');
-            hideOverrideForm();
+            hideOverrideForm(true);
             load();
           })
           .catch((err) => {
             const msg = err && err.message ? err.message : 'network error';
             showBanner("Couldn't apply override (" + msg + ').');
+          })
+          .finally(() => {
+            overrideSubmitting = false;
+            form.removeAttribute('aria-busy');
+            controls.forEach((control, index) => {
+              control.disabled = disabledBefore[index];
+            });
+            if (submit) submit.textContent = submitText;
           });
       }
 
@@ -784,7 +807,7 @@ const accountId = account.id;
         else if (action === 'suspend') suspend();
         else if (action === 'unsuspend') unsuspend();
         else if (action === 'set-override') showOverrideForm();
-        else if (action === 'cancel-override') hideOverrideForm();
+        else if (action === 'cancel-override') hideOverrideForm(false);
         else if (action === 'add-note') addSupportNote();
         else if (action === 'record-refund') recordRefund();
       });
