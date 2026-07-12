@@ -24648,3 +24648,18 @@ Verification:
 
 - focused GUI jsdom: 14/14 tests pass across the receipt view and download hook;
 - regression coverage includes format-aware in-flight state, text-download failures, and rejected clipboard permission.
+
+## V-560 — recording export single-flight feedback
+
+**Date:** 2026-07-12
+
+Closed two silent-action gaps in the recordings gallery:
+
+- export now becomes single-flight before frame hydration/file writing begins, disables repeat activation, exposes `aria-busy`, and reads “Exporting…” until the confirmed save settles;
+- copying a session ID now reports clipboard permission failure with actionable retry guidance instead of swallowing the exception.
+
+Verification:
+
+- focused RecordingsView GUI jsdom: 6/6 tests pass;
+- GUI TypeScript check passes;
+- regression coverage holds a file write open to verify the busy/duplicate guard and exercises rejected clipboard access.

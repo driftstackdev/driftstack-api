@@ -21,6 +21,7 @@ const recording: Recording = {
 };
 
 const deleteRecording = vi.fn(() => Promise.resolve(true));
+const downloadJson = vi.fn(() => Promise.resolve(true));
 // Configurable per-test so we can render a still-LIVE (endedAt:null) recording.
 let mockRecordings = new Map<string, Recording>([[recording.id, recording]]);
 
@@ -36,6 +37,11 @@ vi.mock('../../src/lib/recordings', () => ({
   formatBytes: (n: number) => n + ' B',
 }));
 
+vi.mock('../../src/lib/download', () => ({
+  downloadJson,
+  timestampedFilename: (base: string, ext: string) => `${base}.${ext}`,
+}));
+
 const { RecordingsView } = await import('../../src/views/RecordingsView');
 const { ToastProvider } = await import('../../src/lib/toasts');
 
@@ -44,6 +50,8 @@ afterEach(() => {
   vi.clearAllMocks();
   deleteRecording.mockReset();
   deleteRecording.mockResolvedValue(true);
+  downloadJson.mockReset();
+  downloadJson.mockResolvedValue(true);
   mockRecordings = new Map<string, Recording>([[recording.id, recording]]);
 });
 
@@ -67,6 +75,18 @@ describe('RecordingsView — copy session id', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('ses_copy_me'));
     expect(await view.findByText('Copied')).toBeInTheDocument();
+  });
+
+  it('surfaces clipboard permission failures instead of failing silently', async () => {
+    vi.stubGlobal('navigator', {
+      clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) },
+    });
+
+    const view = renderView();
+    fireEvent.click(view.getByRole('button', { name: /copy session id/i }));
+
+    expect(await view.findByText('Could not copy session ID')).toBeInTheDocument();
+    expect(view.getByText(/clipboard permission/i)).toBeInTheDocument();
   });
 });
 
@@ -107,5 +127,26 @@ describe('RecordingsView — export safety', () => {
     const exportBtn = view.getByRole('button', { name: 'Export' });
     expect((exportBtn as HTMLButtonElement).disabled).toBe(true);
     expect(exportBtn.getAttribute('title')).toMatch(/Stop recording before exporting/i);
+  });
+
+  it('keeps export single-flight and exposes honest in-progress feedback', async () => {
+    let finish: ((saved: boolean) => void) | undefined;
+    downloadJson.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = renderView();
+
+    fireEvent.click(view.getByRole('button', { name: 'Export' }));
+    const busy = await view.findByRole('button', { name: 'Exporting…' });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(busy);
+    expect(downloadJson).toHaveBeenCalledTimes(1);
+
+    finish?.(true);
+    await waitFor(() => expect(view.getByRole('button', { name: 'Export' })).toBeEnabled());
   });
 });

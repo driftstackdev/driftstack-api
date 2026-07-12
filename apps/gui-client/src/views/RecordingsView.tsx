@@ -36,6 +36,7 @@ export interface RecordingsViewProps {
 export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
   const { push: pushToast } = useToasts();
   const { recordings, deleteRecording, hydrateFrames, loading } = useRecordings();
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   // Copy the selected recording's session id so the operator can correlate it
   // with the dashboard / API without retyping. Clipboard writes can fail in
@@ -45,7 +46,11 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
       await navigator.clipboard.writeText(sessionId);
       pushToast({ title: 'Copied', tone: 'success' });
     } catch {
-      /* clipboard write can fail in locked-down envs; silent */
+      pushToast({
+        title: 'Could not copy session ID',
+        body: 'Check clipboard permission and try again.',
+        tone: 'error',
+      });
     }
   }
 
@@ -55,6 +60,8 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
   // envelope would be empty. (Founder-approved: recordings export is fine; only
   // PROFILE export stays hidden for its abuse surface.)
   async function handleExport(rec: Recording): Promise<void> {
+    if (exportingId !== null) return;
+    setExportingId(rec.id);
     try {
       let full = rec;
       if (rec.hydrated && rec.frames.length === 0) {
@@ -101,6 +108,8 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
       }
     } catch {
       pushToast({ title: 'Export failed', tone: 'error' });
+    } finally {
+      setExportingId(null);
     }
   }
   const list = Array.from(recordings.values()).sort((a, b) => b.startedAt - a.startedAt);
@@ -322,17 +331,21 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                   // hint capture was ongoing — the user believed they had the
                   // whole recording. Stop it first, then export.
                   disabled={
+                    exportingId !== null ||
                     selected.endedAt === null ||
                     (selected.frames.length === 0 &&
                       !(selected.hydrated && selected.frameCount > 0))
                   }
                   title={
-                    selected.endedAt === null
-                      ? 'Stop recording before exporting (it’s still capturing)'
-                      : 'Download this recording as a JSON file'
+                    exportingId !== null
+                      ? 'A recording export is already in progress'
+                      : selected.endedAt === null
+                        ? 'Stop recording before exporting (it’s still capturing)'
+                        : 'Download this recording as a JSON file'
                   }
+                  aria-busy={exportingId === selected.id}
                 >
-                  Export
+                  {exportingId === selected.id ? 'Exporting…' : 'Export'}
                 </button>
                 <button
                   type="button"
