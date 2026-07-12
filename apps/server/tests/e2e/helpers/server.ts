@@ -304,6 +304,7 @@ export async function startTestServer(): Promise<TestServer> {
   const cliAuthorizeService = new CliAuthorizeService({
     store: new InMemoryCliAuthorizeStore(),
     dashboardOrigin: 'http://localhost:5173',
+    secretEncryptionKeyBase64: Buffer.alloc(32, 7).toString('base64'),
   });
 
   // 2026-05-20 — wire MFA + AuthFlows services so the /v1/account/mfa/*

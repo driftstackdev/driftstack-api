@@ -89,9 +89,10 @@ concurrent bound polls exactly one wins; the loser gets `expired`.
 
 The key is stored in Redis as an AES-256-GCM blob under the shared
 `MFA_ENCRYPTION_KEY` envelope (same as MFA/BYOK/platform secrets),
-decrypted only at delivery. Encryption is **optional with a plaintext
-fallback** (availability-first — a missing key degrades rather than breaking
-desktop sign-in). Post-bind TTL shortened 5 min → 2 min.
+decrypted only at delivery. Encryption is mandatory: when the envelope key
+is absent, bootstrap omits the CLI-authorization service and its routes rather
+than storing a recoverable API key in Redis. Legacy `encrypted:false` bound
+entries fail closed as expired. Post-bind TTL shortened 5 min → 2 min.
 
 ## Residual risk (honest)
 

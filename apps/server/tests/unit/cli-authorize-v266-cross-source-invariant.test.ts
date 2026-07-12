@@ -150,13 +150,14 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     expect(p).toMatch(/created_at: number;/);
   });
 
-  // ─── CliAuthorizeStore 4-method interface ────────────────────
+  // ─── CliAuthorizeStore interface ────────────────────────
 
-  it('CRITICAL CliAuthorizeStore has 4 methods — get + setEx + del + getDel (atomic one-shot claim, C2). The KV-store contract; tests pass InMemoryCliAuthorizeStore.', () => {
+  it('CRITICAL CliAuthorizeStore includes atomic bind CAS and one-shot exchange claim.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/export interface CliAuthorizeStore \{/);
     expect(p).toMatch(/get\(key: string\): Promise<string \| null>;/);
     expect(p).toMatch(/setEx\(key: string, value: string, ttlSeconds: number\): Promise<void>;/);
+    expect(p).toMatch(/compareAndSetEx\([\s\S]*?\): Promise<boolean>;/);
     expect(p).toMatch(/del\(key: string\): Promise<void>;/);
     expect(p).toMatch(/getDel\(key: string\): Promise<string \| null>;/);
   });
@@ -180,6 +181,15 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     const store = new InMemoryCliAuthorizeStore();
     await store.setEx('k', 'v', 60);
     expect(await store.get('k')).toBe('v');
+  });
+
+  it('CRITICAL InMemoryCliAuthorizeStore compareAndSetEx permits exactly one expected-value transition.', async () => {
+    const store = new InMemoryCliAuthorizeStore();
+    await store.setEx('k', 'pending', 60);
+    expect(await store.compareAndSetEx('k', 'wrong', 'bound-a', 60)).toBe(false);
+    expect(await store.compareAndSetEx('k', 'pending', 'bound-a', 60)).toBe(true);
+    expect(await store.compareAndSetEx('k', 'pending', 'bound-b', 60)).toBe(false);
+    expect(await store.get('k')).toBe('bound-a');
   });
 
   it('CRITICAL InMemoryCliAuthorizeStore del removes entry. After del, subsequent get returns null.', async () => {
@@ -207,13 +217,14 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
 
   // ─── CliAuthorizeServiceOptions shape ────────────────────────
 
-  it("CRITICAL CliAuthorizeServiceOptions framing — 'Either a Redis client (production) or an explicit store (tests)' + required dashboardOrigin + optional dashboardPath. The 2-option dependency-injection lets test bootstrap skip Redis without separate factories.", () => {
+  it('CRITICAL CliAuthorizeServiceOptions requires the at-rest encryption key in addition to the store and dashboard origin.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/Either a Redis client \(production\) or an explicit store \(tests\)/);
     expect(p).toMatch(/redis\?: Redis;/);
     expect(p).toMatch(/store\?: CliAuthorizeStore;/);
     expect(p).toMatch(/dashboardOrigin: string;/);
     expect(p).toMatch(/dashboardPath\?: string;/);
+    expect(p).toMatch(/secretEncryptionKeyBase64: string;/);
   });
 
   // ─── BindInput 5-field shape ─────────────────────────────────

@@ -1111,19 +1111,18 @@ export async function createProductionDeps(
   });
   await enqueueNextScheduledJobsPrune({ scheduledJobs: scheduledJobsService });
 
-  // V-266: browser-OAuth-style CLI / GUI activation flow. Pure
-  // Redis state — no schema migration needed. Always wired (no
-  // configuration gate); the dashboard-side handler is what gates
-  // actual binding.
-  const cliAuthorizeService = new CliAuthorizeService({
-    redis,
-    dashboardOrigin: config.dashboardOrigin,
-    // D1 — encrypt the minted key at rest in Redis under the shared
-    // MFA_ENCRYPTION_KEY envelope (same as MFA / BYOK / platform
-    // secrets). Optional: when unset the service stores plaintext so a
-    // misconfigured deploy degrades rather than breaking desktop login.
-    secretEncryptionKeyBase64: config.mfaEncryptionKey ?? undefined,
-  });
+  // V-266: browser-OAuth-style CLI / GUI activation flow. The bind step
+  // temporarily stores a freshly minted API key in Redis, so the feature
+  // fails closed when MFA_ENCRYPTION_KEY is absent instead of falling back
+  // to plaintext at rest. buildApp already omits these routes when the
+  // optional service is absent.
+  const cliAuthorizeService = config.mfaEncryptionKey
+    ? new CliAuthorizeService({
+        redis,
+        dashboardOrigin: config.dashboardOrigin,
+        secretEncryptionKeyBase64: config.mfaEncryptionKey,
+      })
+    : undefined;
 
   // V-080: inbound Stripe webhook handler. Optional — only wired when
   // STRIPE_WEBHOOK_SECRET is configured. When absent, /v1/webhooks/stripe
@@ -1838,7 +1837,7 @@ export async function createProductionDeps(
     accountLifecycleService,
     scheduledJobsService,
     authFlowsService,
-    cliAuthorizeService,
+    ...(cliAuthorizeService !== undefined ? { cliAuthorizeService } : {}),
     profilesService,
     profileSnapshotsService,
     // V-100: admin force-actions take direct repo + driver access.

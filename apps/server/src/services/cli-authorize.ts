@@ -158,13 +158,10 @@ interface StoredCode {
    * Set when status='bound'. The minted API key held for the CLI / GUI's
    * next exchange poll. When `encrypted` is true this is base64 of the
    * AES-256-GCM `[IV|tag|ciphertext]` blob (D1 — the plaintext key never
-   * sits in Redis at rest); when false it is the raw plaintext (only when
-   * no encryption key is configured — a degraded, availability-first
-   * fallback so a missing key can never break desktop sign-in).
+   * sits in Redis at rest).
    */
   secret_blob: string | null;
-  /** D1 — whether `secret_blob` is an encrypted blob (true) or raw
-   *  plaintext (false, the no-key fallback). */
+  /** D1 — true for every bound entry; false only while pending. */
   encrypted: boolean;
   /** Set when status='bound'. */
   account_id: string | null;
@@ -184,11 +181,10 @@ export interface CliAuthorizeServiceOptions {
    * D1 — base64 32-byte key used to encrypt the minted API key while it
    * waits in Redis for the CLI / GUI's exchange poll. Wired from
    * MFA_ENCRYPTION_KEY (the same envelope as MFA / BYOK / platform
-   * secrets). Optional: when absent the key is stored as plaintext (a
-   * degraded fallback) so a misconfigured deploy never breaks desktop
-   * sign-in.
+   * secrets). Required so a freshly minted API key can never be stored
+   * in plaintext. Deployments without the key omit CLI authorization.
    */
-  secretEncryptionKeyBase64?: string;
+  secretEncryptionKeyBase64: string;
 }
 
 export interface InitiateInput {
@@ -245,7 +241,7 @@ export class CliAuthorizeService {
   private readonly store: CliAuthorizeStore;
   private readonly dashboardOrigin: string;
   private readonly dashboardPath: string;
-  private readonly secretEncryptionKey: string | null;
+  private readonly secretEncryptionKey: string;
 
   constructor(opts: CliAuthorizeServiceOptions) {
     if (opts.store !== undefined) {
@@ -257,7 +253,7 @@ export class CliAuthorizeService {
     }
     this.dashboardOrigin = opts.dashboardOrigin.replace(/\/+$/, '');
     this.dashboardPath = opts.dashboardPath ?? '/cli/authorize';
-    this.secretEncryptionKey = opts.secretEncryptionKeyBase64 ?? null;
+    this.secretEncryptionKey = opts.secretEncryptionKeyBase64;
   }
 
   async initiate(input: InitiateInput): Promise<InitiateResult> {
@@ -303,20 +299,17 @@ export class CliAuthorizeService {
       );
     }
 
-    // D1 — encrypt the minted key for at-rest storage in Redis when an
-    // encryption key is configured (production always is, via
-    // MFA_ENCRYPTION_KEY). Fall back to plaintext only when no key is
-    // wired, so a misconfigured deploy degrades rather than breaking
-    // desktop sign-in.
-    const encrypt = this.secretEncryptionKey !== null;
-    const secretBlob = encrypt
-      ? encryptPlatformSecret(input.api_key_plaintext, this.secretEncryptionKey).toString('base64')
-      : input.api_key_plaintext;
+    // D1 — encrypt the minted key before it enters Redis. Construction
+    // requires the envelope key, so there is no plaintext fallback.
+    const secretBlob = encryptPlatformSecret(
+      input.api_key_plaintext,
+      this.secretEncryptionKey,
+    ).toString('base64');
     const updated: StoredCode = {
       ...stored,
       status: 'bound',
       secret_blob: secretBlob,
-      encrypted: encrypt,
+      encrypted: true,
       account_id: input.account_id,
     };
     // Reset the TTL from bind time so the GUI has the full post-bind
@@ -400,18 +393,17 @@ export class CliAuthorizeService {
       // from under a bound code) surfaces as expired rather than a 500,
       // so the CLI simply restarts the flow.
       let apiKey: string;
-      if (claimed.encrypted) {
-        if (this.secretEncryptionKey === null) return { status: 'expired' };
-        try {
-          apiKey = decryptPlatformSecret(
-            Buffer.from(claimed.secret_blob, 'base64'),
-            this.secretEncryptionKey,
-          );
-        } catch {
-          return { status: 'expired' };
-        }
-      } else {
-        apiKey = claimed.secret_blob;
+      // Fail closed for any legacy/malformed plaintext-bound entry. Correct
+      // deployments have always written encrypted=true; accepting false here
+      // would keep recoverable credentials live after the activation fix.
+      if (!claimed.encrypted) return { status: 'expired' };
+      try {
+        apiKey = decryptPlatformSecret(
+          Buffer.from(claimed.secret_blob, 'base64'),
+          this.secretEncryptionKey,
+        );
+      } catch {
+        return { status: 'expired' };
       }
       return {
         status: 'bound',

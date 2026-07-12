@@ -1205,6 +1205,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const cliAuthorizeService = new CliAuthorizeService({
     store: new InMemoryCliAuthorizeStore(),
     dashboardOrigin: 'http://localhost:5173',
+    secretEncryptionKeyBase64: Buffer.alloc(32, 7).toString('base64'),
   });
 
   // V-168 — bridge web sessions issued by AuthFlowsService into the auth

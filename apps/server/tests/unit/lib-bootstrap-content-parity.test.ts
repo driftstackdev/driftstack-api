@@ -51,6 +51,16 @@ function read(p: string): string {
 describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
   const body = read(LIB);
 
+  it('CLI authorization is activation-gated on MFA_ENCRYPTION_KEY so Redis never receives plaintext API keys', () => {
+    expect(body).toMatch(
+      /const cliAuthorizeService = config\.mfaEncryptionKey\s*\n?\s*\? new CliAuthorizeService\(\{/,
+    );
+    expect(body).toMatch(/secretEncryptionKeyBase64: config\.mfaEncryptionKey,/);
+    expect(body).toMatch(
+      /\.\.\.\(cliAuthorizeService !== undefined \? \{ cliAuthorizeService \} : \{\}\),/,
+    );
+  });
+
   it('header framing pinned: pure-factory; pass-in deps NOT lazy; every external connection (Postgres pool, Redis, R2, Sentry, Postmark) opened HERE so SIGTERM handler closes them deterministically', () => {
     expect(body).toMatch(/\/\/ Production bootstrap\./);
     expect(body).toMatch(

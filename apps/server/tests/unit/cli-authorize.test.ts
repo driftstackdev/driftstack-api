@@ -13,12 +13,18 @@ import {
   InMemoryCliAuthorizeStore,
 } from '../../src/services/cli-authorize.js';
 
+const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64');
+
 function makeService(dashboardOrigin = 'https://app.driftstack.local'): {
   svc: CliAuthorizeService;
   store: InMemoryCliAuthorizeStore;
 } {
   const store = new InMemoryCliAuthorizeStore();
-  const svc = new CliAuthorizeService({ store, dashboardOrigin });
+  const svc = new CliAuthorizeService({
+    store,
+    dashboardOrigin,
+    secretEncryptionKeyBase64: TEST_ENCRYPTION_KEY,
+  });
   return { svc, store };
 }
 
@@ -44,6 +50,7 @@ describe('V-553.B-2 CliAuthorizeService — initiate', () => {
       store,
       dashboardOrigin: 'https://app.driftstack.local',
       dashboardPath: '/custom/cli-bind',
+      secretEncryptionKeyBase64: TEST_ENCRYPTION_KEY,
     });
     const r = await svc.initiate({ state: 'st_' + 'x'.repeat(20) });
     expect(new URL(r.browser_url).pathname).toBe('/custom/cli-bind');
@@ -61,6 +68,7 @@ describe('V-553.B-2 CliAuthorizeService — initiate', () => {
       () =>
         new CliAuthorizeService({
           dashboardOrigin: 'https://app.driftstack.local',
+          secretEncryptionKeyBase64: TEST_ENCRYPTION_KEY,
         }),
     ).toThrow(/either `store` or `redis`/);
   });

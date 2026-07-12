@@ -120,7 +120,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(/status: CliCodeStatus;/);
     expect(body).toMatch(/client_label: string \| null;/);
     // D1 — the minted key is stored as an encrypted base64 blob (not
-    // plaintext); `encrypted` disambiguates the no-key fallback.
+    // plaintext); false is valid only for a still-pending entry.
     expect(body).toMatch(/secret_blob: string \| null;/);
     expect(body).toMatch(/encrypted: boolean;/);
     expect(body).toMatch(
@@ -137,7 +137,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(/this\.name = 'CliAuthorizeError';/);
   });
 
-  it('Constructor: store/redis exclusive-or; dashboardOrigin trailing-slash strip; dashboardPath default /cli/authorize', () => {
+  it('Constructor: store/redis exclusive-or; required encryption key; origin/path normalization', () => {
     expect(body).toMatch(/if \(opts\.store !== undefined\) \{\s*\n?\s*this\.store = opts\.store;/);
     expect(body).toMatch(
       /\} else if \(opts\.redis !== undefined\) \{\s*\n?\s*this\.store = new RedisStore\(opts\.redis\);/,
@@ -149,6 +149,8 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
       /this\.dashboardOrigin = opts\.dashboardOrigin\.replace\(\/\\\/\+\$\/, ''\);/,
     );
     expect(body).toMatch(/this\.dashboardPath = opts\.dashboardPath \?\? '\/cli\/authorize';/);
+    expect(body).toMatch(/secretEncryptionKeyBase64: string;/);
+    expect(body).toMatch(/this\.secretEncryptionKey = opts\.secretEncryptionKeyBase64;/);
   });
 
   it('initiate: 32-byte randomBytes base64url code + setEx with TTL + browser URL via URL class with code+state params', () => {
@@ -180,6 +182,8 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
     expect(body).toMatch(/const didBind = await this\.store\.compareAndSetEx\(/);
     expect(body).toMatch(/if \(!didBind\) \{/);
+    expect(body).toMatch(/const secretBlob = encryptPlatformSecret\(/);
+    expect(body).toMatch(/encrypted: true,/);
   });
 
   it('exchange: raw=null → expired; pending short-circuit; bound uses atomic getDel claim + D1 decrypt (no leak, no double-deliver)', () => {
@@ -196,7 +200,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
     expect(body).toMatch(/if \(claimedRaw === null\) \{\s*\n?\s*return \{ status: 'expired' \};/);
     // D1 — decrypt the at-rest blob only at delivery; decrypt failure → expired.
-    expect(body).toMatch(/if \(claimed\.encrypted\) \{/);
+    expect(body).toMatch(/if \(!claimed\.encrypted\) return \{ status: 'expired' \};/);
     expect(body).toMatch(/apiKey = decryptPlatformSecret\(/);
     expect(body).toMatch(
       /return \{\s*\n?\s*status: 'bound',\s*\n?\s*api_key: apiKey,\s*\n?\s*account_id: claimed\.account_id,\s*\n?\s*\};/,
