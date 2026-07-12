@@ -58,7 +58,12 @@ const SEARCH_ICON = (
 
 const RECIPES_SPLIT_LAYOUT_CLASS = 'flex min-h-0 flex-1 gap-4';
 
-export function RecipesView(): JSX.Element {
+export interface RecipesViewProps {
+  onGoToAI: () => void;
+  onGoToSettings: () => void;
+}
+
+export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX.Element {
   const { client } = useSettings();
   const [list, setList] = useState<ListState>({
     recipes: [],
@@ -132,11 +137,16 @@ export function RecipesView(): JSX.Element {
 
   if (!client) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
-        <span className="section-label">Configure API access</span>
-        <p className="max-w-md text-sm text-ink-secondary">
-          Set up your API key in Settings to browse saved tasks.
-        </p>
+      <div className="flex h-full flex-col justify-center p-6">
+        <EmptyState
+          title="Connect to browse saved tasks"
+          description="Add your API key in Settings to browse and replay tasks saved from AI chats."
+          action={
+            <button type="button" className="btn-primary" onClick={onGoToSettings}>
+              Open Settings
+            </button>
+          }
+        />
       </div>
     );
   }
@@ -179,6 +189,11 @@ export function RecipesView(): JSX.Element {
           icon={SEARCH_ICON}
           title="No saved tasks yet"
           description="Saved tasks come from finished AI chats. Once you save a chat as a task, it shows up here ready to browse and replay."
+          action={
+            <button type="button" className="btn-primary" onClick={onGoToAI}>
+              Open AI Browser Automation
+            </button>
+          }
         />
       ) : (
         <div className={RECIPES_SPLIT_LAYOUT_CLASS}>

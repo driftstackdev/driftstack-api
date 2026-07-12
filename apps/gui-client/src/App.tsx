@@ -661,7 +661,12 @@ function CurrentView({
         />
       );
     case 'recipes':
-      return <RecipesView />;
+      return (
+        <RecipesView
+          onGoToAI={() => onNavigate({ kind: 'ai' })}
+          onGoToSettings={() => onNavigate({ kind: 'settings' })}
+        />
+      );
     case 'sessions':
       return (
         <SessionsView
