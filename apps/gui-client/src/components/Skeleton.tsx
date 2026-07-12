@@ -8,12 +8,37 @@
 // (the prefers-reduced-motion block near-instants all animations), so motion-
 // sensitive users get a static placeholder rather than a pulse.
 
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 
 /** A single pulsing placeholder block. Size/shape via `className`. */
 export function Skeleton({ className = '' }: { className?: string }): JSX.Element {
   return (
     <div className={`animate-pulse rounded bg-surface-inset ${className}`} aria-hidden="true" />
+  );
+}
+
+/**
+ * Accessible loading region for composite skeletons. The visual silhouette is
+ * hidden from assistive technology while the loading label remains announced.
+ */
+export function SkeletonRegion({
+  label = 'Loading…',
+  children,
+  className,
+  contentClassName,
+}: {
+  label?: string;
+  children: ReactNode;
+  className?: string;
+  contentClassName?: string;
+}): JSX.Element {
+  return (
+    <div role="status" aria-label={label} className={className}>
+      <span className="sr-only">{label}</span>
+      <div aria-hidden="true" className={contentClassName}>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -24,18 +49,21 @@ export function Skeleton({ className = '' }: { className?: string }): JSX.Elemen
 export function SkeletonRows({
   rows = 4,
   label = 'Loading…',
+  layoutClassName,
+  rowClassName,
 }: {
   rows?: number;
   label?: string;
+  /** Replaces the default stacked-row layout when provided. */
+  layoutClassName?: string;
+  /** Replaces the default row dimensions when provided. */
+  rowClassName?: string;
 }): JSX.Element {
   return (
-    <div role="status" aria-label={label}>
-      <span className="sr-only">{label}</span>
-      <div className="flex flex-col gap-2" aria-hidden="true">
-        {Array.from({ length: rows }).map((_, i) => (
-          <Skeleton key={i} className="h-9 w-full" />
-        ))}
-      </div>
-    </div>
+    <SkeletonRegion label={label} contentClassName={layoutClassName ?? 'flex flex-col gap-2'}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} className={rowClassName ?? 'h-9 w-full'} />
+      ))}
+    </SkeletonRegion>
   );
 }

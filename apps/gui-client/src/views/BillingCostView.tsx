@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import { CostPanel } from '../components/CostPanel';
-import { SkeletonRows } from '../components/Skeleton';
+import { Skeleton, SkeletonRegion } from '../components/Skeleton';
 import { useAccountCost } from '../lib/use-account-cost';
 
 /**
@@ -94,7 +94,7 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
         </div>
       </header>
 
-      {state.kind === 'loading' && <SkeletonRows rows={4} label="Loading cost breakdown…" />}
+      {state.kind === 'loading' && <CostPanelSkeleton />}
       {state.kind === 'idle' && (
         <p className="text-sm text-ink-secondary">Select a billing cycle to load the breakdown.</p>
       )}
@@ -110,5 +110,53 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
         <CostPanel breakdown={state.data.breakdown} billingCycle={state.data.billing_cycle} />
       )}
     </div>
+  );
+}
+
+/** First-load silhouette aligned with CostPanel's header, five rows, and total. */
+function CostPanelSkeleton(): JSX.Element {
+  const rows = [
+    ['compute', 'w-44'],
+    ['storage', 'w-40'],
+    ['egress', 'w-32'],
+    ['email', 'w-40'],
+    ['llm', 'w-24'],
+  ] as const;
+
+  return (
+    <SkeletonRegion label="Loading cost breakdown…">
+      <section
+        data-component="cost-panel-skeleton"
+        className="rounded border border-surface-divider bg-surface-raised p-4"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Skeleton className="h-2.5 w-20" />
+            <Skeleton className="h-5 w-24" />
+          </div>
+          <Skeleton className="h-5 w-20 rounded-full" />
+        </div>
+
+        <Skeleton className="mt-3 h-3 w-64 max-w-full" />
+
+        <div className="mt-4 grid gap-x-4 gap-y-2">
+          {rows.map(([key, width]) => (
+            <div
+              key={key}
+              data-component="cost-panel-skeleton-row"
+              className="flex items-center justify-between gap-3"
+            >
+              <Skeleton className={`h-3 max-w-[65%] ${width}`} />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-surface-divider pt-3">
+          <Skeleton className="h-3.5 w-12" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+      </section>
+    </SkeletonRegion>
   );
 }

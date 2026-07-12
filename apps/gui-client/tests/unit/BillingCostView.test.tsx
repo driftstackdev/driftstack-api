@@ -29,8 +29,16 @@ afterEach(() => {
 describe('V-534.I BillingCostView — state rendering', () => {
   it('shows a loading message while the hook is loading', () => {
     setHookState({ kind: 'loading' });
-    render(<BillingCostView nowFn={() => new Date('2026-05-11T00:00:00Z')} />);
-    expect(screen.getByRole('status')).toHaveTextContent(/loading/i);
+    const { container } = render(
+      <BillingCostView nowFn={() => new Date('2026-05-11T00:00:00Z')} />,
+    );
+    expect(screen.getByRole('status', { name: 'Loading cost breakdown…' })).toHaveTextContent(
+      /loading/i,
+    );
+    expect(container.querySelector('[data-component="cost-panel-skeleton"]')).toBeInTheDocument();
+    expect(container.querySelectorAll('[data-component="cost-panel-skeleton-row"]')).toHaveLength(
+      5,
+    );
   });
 
   it('shows an alert message when the hook errors', () => {

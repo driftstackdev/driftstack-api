@@ -53,6 +53,21 @@ async function clickTestAndSettle(): Promise<void> {
   fireEvent.click(btn);
 }
 
+describe('ProxiesView first-load silhouette', () => {
+  it('uses the same responsive card grid as the loaded proxy list', async () => {
+    const { container } = render(<ProxiesView />);
+
+    expect(screen.getByRole('status', { name: 'Loading proxies' })).toBeInTheDocument();
+    const skeleton = container.querySelector('[data-component="proxy-list-skeleton"]');
+    expect(skeleton).toHaveClass('grid', 'gap-3', 'sm:grid-cols-2', 'lg:grid-cols-3');
+    expect(skeleton?.querySelectorAll('article')).toHaveLength(4);
+
+    // The silhouette is first-load-only and yields to the real card topology.
+    expect(await screen.findByRole('button', { name: 'Test' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading proxies' })).not.toBeInTheDocument();
+  });
+});
+
 describe('ProxiesView "Test" button result card', () => {
   beforeEach(() => {
     testProxy.mockReset();

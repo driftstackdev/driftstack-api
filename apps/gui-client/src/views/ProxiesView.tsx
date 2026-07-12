@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
-import { SkeletonRows } from '../components/Skeleton';
+import { Skeleton, SkeletonRegion } from '../components/Skeleton';
 import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
 import {
   addProxy,
@@ -526,7 +526,7 @@ export function ProxiesView(): JSX.Element {
 
 function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX.Element {
   if (loading) {
-    return <SkeletonRows rows={4} label="Loading proxies" />;
+    return <ProxyListSkeleton />;
   }
   return (
     <EmptyState
@@ -553,6 +553,52 @@ function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX
         </button>
       }
     />
+  );
+}
+
+/** Card-shaped first-load state that occupies the same responsive grid as ProxyList. */
+function ProxyListSkeleton(): JSX.Element {
+  return (
+    <SkeletonRegion label="Loading proxies">
+      <div
+        data-component="proxy-list-skeleton"
+        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        {Array.from({ length: 4 }).map((_, index) => (
+          <article
+            key={index}
+            className="flex min-h-40 flex-col gap-2.5 rounded-lg border border-surface-divider bg-surface-raised p-3"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <Skeleton className="h-3.5 w-2/3" />
+                <Skeleton className="h-2.5 w-2/5" />
+              </div>
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-lg border border-surface-divider/60 p-2">
+              <div className="flex items-center justify-between gap-3">
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-2.5 w-14" />
+              </div>
+              <Skeleton className="h-2.5 w-3/4" />
+              <div className="flex gap-1.5">
+                <Skeleton className="h-4 w-14 rounded-sm" />
+                <Skeleton className="h-4 w-10 rounded-sm" />
+                <Skeleton className="h-4 w-12 rounded-sm" />
+              </div>
+            </div>
+
+            <div className="mt-auto flex items-center gap-2 pt-1">
+              <Skeleton className="h-7 flex-1" />
+              <Skeleton className="h-7 w-10" />
+              <Skeleton className="h-7 w-14" />
+            </div>
+          </article>
+        ))}
+      </div>
+    </SkeletonRegion>
   );
 }
 
