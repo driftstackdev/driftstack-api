@@ -7,8 +7,8 @@
 // input goes dead and replays in a flurry when the link recovers.
 //
 // The fix watches RoomEvent.DCBufferStatusChanged (RELIABLE kind === 0) and, WHILE the
-// reliable channel is congested, SHEDS the high-frequency scroll flood at its source
-// (onWheel returns early) so the backlog drains instead of growing. These tests drive the
+// reliable channel is congested, SHEDS new staleable input at its source while preserving
+// mandatory releases for already-sent gestures/keys. These tests drive the
 // REAL hook in jsdom with a Room stub whose `.on` captures the buffer-status handler, so
 // we can toggle congestion and assert the wheel path is shed / resumes / stays untouched.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -151,14 +151,51 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(emitted().map((e) => e.type)).toContain('touchStart');
   });
 
-  it('does NOT shed discrete TAPS while congested (each tap is user intent; only the scroll flood is shed)', () => {
+  it('sheds a new tap while congested so it cannot replay against a later page', () => {
     const { room, fireDC } = makeRoom();
     const { video } = mount(room);
     fireDC(false, 0); // congested
     fireMouse(video, 'mousedown', 100, 200, 1000);
     fireMouse(window, 'pointerup', 100, 200, 1080); // quick press→release = a tap
-    const types = emitted().map((e) => e.type);
-    expect(types).toEqual(['touchStart', 'touchEnd']); // the tap still goes through
+    expect(emitted()).toHaveLength(0);
+  });
+
+  it('lifts an already-committed drag exactly once when congestion begins', () => {
+    const { room, fireDC } = makeRoom();
+    const { video } = mount(room);
+    fireMouse(video, 'mousedown', 100, 200, 1000);
+    fireMouse(window, 'mousemove', 100, 240, 1200); // hard-distance commit
+    expect(emitted().map((e) => e.type)).toEqual(['touchStart', 'touchMove']);
+
+    fireDC(false, 0);
+    expect(emitted().map((e) => e.type)).toEqual(['touchStart', 'touchMove', 'touchEnd']);
+    fireMouse(window, 'pointerup', 100, 240, 1250);
+    expect(emitted().map((e) => e.type)).toEqual(['touchStart', 'touchMove', 'touchEnd']);
+  });
+
+  it('sheds new key intent while congested and resumes after drain', () => {
+    const { room, fireDC } = makeRoom();
+    mount(room);
+    fireDC(false, 0);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a', code: 'KeyA' }));
+    expect(emitted()).toHaveLength(0);
+
+    fireDC(true, 0);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a', code: 'KeyA' }));
+    expect(emitted().map((e) => e.type)).toEqual(['keyDown', 'keyUp']);
+  });
+
+  it('still sends keyUp for a key pressed before congestion so it cannot stick remotely', () => {
+    const { room, fireDC } = makeRoom();
+    mount(room);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
+    expect(emitted().map((e) => e.type)).toEqual(['keyDown']);
+
+    fireDC(false, 0);
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft' }));
+    expect(emitted().map((e) => e.type)).toEqual(['keyDown', 'keyUp']);
   });
 
   it('unregisters the buffer-status listener on unmount', () => {

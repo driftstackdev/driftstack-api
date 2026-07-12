@@ -440,8 +440,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // ride it, they queue head-of-line: input goes dead, then replays in a jarring
     // flurry when the link recovers (and a delayed touchEnd strands a finger "down",
     // freezing the page). We watch the reliable buffer status and, WHILE CONGESTED,
-    // shed the high-frequency SCROLL flood at its source (see onWheel) so the backlog
-    // DRAINS instead of growing — a stale mid-scroll position is worthless to replay.
+    // shed NEW user intent at its source (see pointer/wheel/keyboard handlers) so the
+    // backlog DRAINS instead of growing — a stale tap, key, or mid-scroll position is
+    // worse than dropping it because it can replay against a different page after recovery.
+    // Releases for gestures/keys that were already sent remain mandatory.
     // On a healthy link this flag never leaves `false` (livekit only emits on a
     // threshold crossing, and it starts "low"), so behavior is byte-identical to
     // before; it only changes the actual failure case.
@@ -451,7 +453,18 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // lossy channel already self-drops under congestion, so we gate only on
       // reliable; if livekit ever renumbered the enum the flag simply never trips and
       // we degrade safely to the prior (no-backpressure) behavior.
-      if (kind === 0) reliableCongested = !isLow;
+      if (kind !== 0) return;
+      reliableCongested = !isLow;
+      if (!reliableCongested) return;
+
+      // Stop any gesture already in progress as soon as congestion is reported. A
+      // committed finger MUST still receive its release; an uncommitted tap has put
+      // nothing on the wire and is simply discarded. This bounds the stale tail at one
+      // essential touchEnd instead of allowing later moves/re-centres/taps to queue.
+      liftActiveFinger();
+      cancelFling(true);
+      window.clearTimeout(wheelTimer);
+      endWheelDrag();
     };
 
     const send = (event: InputEvent, reliable: boolean): void => {
@@ -540,6 +553,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // wire — a residual wheel touch + a fresh press = a spurious multi-touch/pinch.
       window.clearTimeout(wheelTimer);
       endWheelDrag();
+      // Do not enqueue a new press behind a stalled ordered channel. Replaying a
+      // seconds-old tap after the page has changed is actively unsafe; the next press
+      // works normally once DCBufferStatusChanged reports the buffer low again.
+      if (reliableCongested) return;
       const p = pointerToViewport(e, video, logical);
       if (p === null) return;
       try {
@@ -640,6 +657,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // Never committed = a TAP → clean touchStart+touchEnd at the press point (no
       // move, so the box can NEVER scroll it).
       if (!g.committed) {
+        // Congestion may begin between press and release. No touchStart was emitted
+        // yet, so discard the whole pending tap rather than enqueueing stale intent.
+        if (reliableCongested) return;
         send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         return;
@@ -999,18 +1019,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (editingLocally()) return;
       if (isBareEscape(e)) return;
-      // BACKPRESSURE shed (mirrors onWheel): a HELD key OS-auto-repeats at
-      // ~15-30Hz and each repeat is a RELIABLE keyDown publish — a flood that
-      // head-of-line-blocks taps + navigation on a stalled ordered channel (the
-      // founder's "tapping does nothing"; A3 sweep 2026-07-10). While the reliable
-      // channel is congested, DROP auto-repeat keyDowns: the ORIGINAL (non-repeat)
-      // keyDown already registered in forwardedKeys so its keyUp still fires (no
-      // stuck key), a repeat carries no keyUp (dropping it strands nothing), and the
-      // video is frozen during the stall anyway so a lost repeat is invisible. A
-      // NON-repeat keystroke is never dropped (that would lose a real character).
-      // Held-key repeat is unaffected on a healthy link (the flag stays false).
-      // Self-heals on the next DCBufferStatusChanged.
-      if (e.repeat && reliableCongested) return;
+      // BACKPRESSURE shed (mirrors pointer/wheel): do not put a NEW keyDown behind a
+      // stalled ordered channel. Even a single delayed character or Enter can replay
+      // into the wrong field/page after recovery. Keys whose down was sent before the
+      // stall remain in forwardedKeys, so their keyUp is still delivered below and no
+      // remote modifier/key is stranded. Self-heals when the buffer reports low again.
+      if (reliableCongested) return;
       forwardedKeys.add(keyId(e));
       const modifiers = modifiersFromEvent(e);
       send(
