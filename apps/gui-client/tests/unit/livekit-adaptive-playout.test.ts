@@ -1,5 +1,51 @@
 import { describe, expect, it } from 'vitest';
-import { ADAPTIVE_PLAYOUT, nextPlayoutDelay } from '../../src/lib/livekit-adaptive-playout';
+import {
+  ADAPTIVE_PLAYOUT,
+  nextPlayoutDelay,
+  recentPacketLossPct,
+} from '../../src/lib/livekit-adaptive-playout';
+
+describe('recentPacketLossPct — adaptive playout sampling', () => {
+  it('surfaces a fresh burst that a lifetime average would dilute', () => {
+    expect(
+      recentPacketLossPct(
+        { packetsLost: 10, packetsReceived: 9_990 },
+        { packetsLost: 30, packetsReceived: 10_970 },
+      ),
+    ).toBe(2);
+  });
+
+  it('returns null for the first sample, missing counters, resets, and idle intervals', () => {
+    expect(recentPacketLossPct(null, { packetsLost: 4, packetsReceived: 96 })).toBeNull();
+    expect(
+      recentPacketLossPct(
+        { packetsLost: 4, packetsReceived: 96 },
+        { packetsLost: null, packetsReceived: 120 },
+      ),
+    ).toBeNull();
+    expect(
+      recentPacketLossPct(
+        { packetsLost: 4, packetsReceived: 96 },
+        { packetsLost: 0, packetsReceived: 10 },
+      ),
+    ).toBeNull();
+    expect(
+      recentPacketLossPct(
+        { packetsLost: 4, packetsReceived: 96 },
+        { packetsLost: 4, packetsReceived: 96 },
+      ),
+    ).toBeNull();
+  });
+
+  it('handles a signed WebRTC loss baseline when counters advance', () => {
+    expect(
+      recentPacketLossPct(
+        { packetsLost: -4, packetsReceived: 96 },
+        { packetsLost: -2, packetsReceived: 198 },
+      ),
+    ).toBe(1.9);
+  });
+});
 
 describe('nextPlayoutDelay — adaptive jitter-buffer control law', () => {
   it('holds at 0 on a clean link (no freeze, low loss + jitter)', () => {

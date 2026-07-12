@@ -27,7 +27,7 @@ import {
 } from '../lib/livekit';
 import { useInputCapture } from '../lib/livekit-input-capture';
 import { parseConnectionStats } from '../lib/livekit-connection-stats';
-import { nextPlayoutDelay } from '../lib/livekit-adaptive-playout';
+import { nextPlayoutDelay, recentPacketLossPct } from '../lib/livekit-adaptive-playout';
 
 export interface AgentSessionPanelProps {
   /** The LiveKit join info returned by the server — either from the
@@ -758,6 +758,8 @@ export function AgentSessionPanel({
     if (room === null) return;
     let cancelled = false;
     let prevFreeze = 0;
+    let prevPacketCounters: { packetsLost: number | null; packetsReceived: number | null } | null =
+      null;
     let delay = 0;
     const tick = (): void => {
       if (cancelled) return;
@@ -769,9 +771,19 @@ export function AgentSessionPanel({
           const s = parseConnectionStats(report);
           const freezeDelta = s.freezeCount !== null ? Math.max(0, s.freezeCount - prevFreeze) : 0;
           if (s.freezeCount !== null) prevFreeze = s.freezeCount;
+          const counters = {
+            packetsLost: s.packetsLost,
+            packetsReceived: s.packetsReceived,
+          };
+          const recentLoss = recentPacketLossPct(prevPacketCounters, counters);
+          prevPacketCounters = counters;
           delay = nextPlayoutDelay(delay, {
             freezeDelta,
-            packetLossPct: s.packetLossPct,
+            // A fresh burst must build buffer immediately; the cumulative
+            // lifetime average can remain deceptively low for minutes. The
+            // first/reset sample has no valid interval, so retain the lifetime
+            // value as its safe fallback.
+            packetLossPct: recentLoss ?? s.packetLossPct,
             jitterMs: s.jitterMs,
           });
           // Re-apply every tick (idempotent): a TrackSubscribed on a freeze

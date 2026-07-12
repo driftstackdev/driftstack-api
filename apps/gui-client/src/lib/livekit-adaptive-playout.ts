@@ -49,6 +49,39 @@ export interface PlayoutSignals {
   jitterMs: number | null;
 }
 
+export interface PacketCounters {
+  packetsLost: number | null;
+  packetsReceived: number | null;
+}
+
+/**
+ * Packet loss over the interval between two cumulative WebRTC samples.
+ * Returns null for the first sample, missing counters, a counter reset, or an
+ * interval with no packets so callers can fall back to the lifetime figure.
+ */
+export function recentPacketLossPct(
+  previous: PacketCounters | null,
+  current: PacketCounters,
+): number | null {
+  if (
+    previous === null ||
+    previous.packetsLost === null ||
+    previous.packetsReceived === null ||
+    current.packetsLost === null ||
+    current.packetsReceived === null ||
+    current.packetsLost < previous.packetsLost ||
+    current.packetsReceived < previous.packetsReceived
+  ) {
+    return null;
+  }
+
+  const lost = current.packetsLost - previous.packetsLost;
+  const received = current.packetsReceived - previous.packetsReceived;
+  const total = lost + received;
+  if (total <= 0) return null;
+  return Math.max(0, Math.round((lost / total) * 1000) / 10);
+}
+
 /**
  * Next playout delay (seconds) given the current delay + this sample's signals.
  * Stressed (any freeze, or loss/jitter over the stress thresholds) → step up.
