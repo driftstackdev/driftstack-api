@@ -118,6 +118,33 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
     expect(result.account_id).toBe('acc_99');
     expect(result.expires_at).toBeInstanceOf(Date);
   });
+
+  it('atomically permits exactly one of two overlapping binds', async () => {
+    const { svc } = makeSvc();
+    const { code } = await svc.initiate({ state: 's' });
+    const bind = (suffix: string) =>
+      svc.bind({
+        code,
+        state: 's',
+        account_id: `acc_${suffix}`,
+        api_key_plaintext: `ds_live_${suffix}`,
+        scopes: ['read'],
+      });
+
+    const results = await Promise.allSettled([bind('first'), bind('second')]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected).toMatchObject({
+      status: 'rejected',
+      reason: expect.objectContaining({ code: 'already_bound' }),
+    });
+
+    const exchange = await svc.exchange({ code, state: 's' });
+    expect(exchange.status).toBe('bound');
+    if (exchange.status === 'bound') {
+      expect(['ds_live_first', 'ds_live_second']).toContain(exchange.api_key);
+    }
+  });
 });
 
 describe('V-553.B-22 CliAuthorizeService.exchange', () => {

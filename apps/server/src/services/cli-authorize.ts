@@ -36,6 +36,16 @@ const BIND_TTL_SECONDS = 2 * 60;
 export interface CliAuthorizeStore {
   get(key: string): Promise<string | null>;
   setEx(key: string, value: string, ttlSeconds: number): Promise<void>;
+  /**
+   * Atomically replace `expectedValue` with `value` and reset its TTL.
+   * Returns false when the key expired or another writer changed it first.
+   */
+  compareAndSetEx(
+    key: string,
+    expectedValue: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<boolean>;
   del(key: string): Promise<void>;
   /**
    * C2 — atomic read-and-delete. Returns the value and removes the key
@@ -55,6 +65,22 @@ class RedisStore implements CliAuthorizeStore {
   }
   async setEx(key: string, value: string, ttlSeconds: number): Promise<void> {
     await this.redis.set(key, value, 'EX', ttlSeconds);
+  }
+  async compareAndSetEx(
+    key: string,
+    expectedValue: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
+    const result = await this.redis.eval(
+      "local current = redis.call('get', KEYS[1]); if current ~= ARGV[1] then return 0 end; redis.call('set', KEYS[1], ARGV[2], 'EX', ARGV[3]); return 1",
+      1,
+      key,
+      expectedValue,
+      value,
+      ttlSeconds,
+    );
+    return result === 1;
   }
   async del(key: string): Promise<void> {
     await this.redis.del(key);
@@ -89,6 +115,21 @@ export class InMemoryCliAuthorizeStore implements CliAuthorizeStore {
   // eslint-disable-next-line @typescript-eslint/require-await
   async setEx(key: string, value: string, ttlSeconds: number): Promise<void> {
     this.entries.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async compareAndSetEx(
+    key: string,
+    expectedValue: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
+    const entry = this.entries.get(key);
+    if (!entry || entry.expiresAt <= Date.now() || entry.value !== expectedValue) {
+      if (entry && entry.expiresAt <= Date.now()) this.entries.delete(key);
+      return false;
+    }
+    this.entries.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+    return true;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async del(key: string): Promise<void> {
@@ -282,7 +323,31 @@ export class CliAuthorizeService {
     // window to poll exchange even if the user took ~4:30 to log in and
     // click Authorize. The post-bind window (D1) is deliberately shorter
     // than the pre-bind one — the client is now actively polling.
-    await this.store.setEx(this.key(input.code), JSON.stringify(updated), BIND_TTL_SECONDS);
+    const key = this.key(input.code);
+    const didBind = await this.store.compareAndSetEx(
+      key,
+      raw,
+      JSON.stringify(updated),
+      BIND_TTL_SECONDS,
+    );
+    if (!didBind) {
+      // Another bind won between our read and write, or the pending code
+      // expired. Re-read only to preserve the existing public error split.
+      // The route revokes the just-minted key on either error, so a losing
+      // concurrent request cannot leave an active orphaned device key.
+      const latestRaw = await this.store.get(key);
+      if (latestRaw === null) {
+        throw new CliAuthorizeError('not_found', 'Authorization code not found or expired.');
+      }
+      const latest = JSON.parse(latestRaw) as StoredCode;
+      if (!constantTimeStringEqual(latest.state, input.state)) {
+        throw new CliAuthorizeError('state_mismatch', 'State parameter does not match.');
+      }
+      throw new CliAuthorizeError(
+        'already_bound',
+        'Authorization code has already been bound to an account.',
+      );
+    }
 
     return {
       account_id: input.account_id,

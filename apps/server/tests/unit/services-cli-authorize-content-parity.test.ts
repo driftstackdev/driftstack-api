@@ -71,19 +71,22 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(/const BIND_TTL_SECONDS = 2 \* 60;/);
   });
 
-  it('CliAuthorizeStore: 4-method KV contract (get/setEx/del/getDel)', () => {
+  it('CliAuthorizeStore: KV contract includes atomic compare-and-set bind and read-delete exchange', () => {
     expect(body).toMatch(/export interface CliAuthorizeStore \{/);
     expect(body).toMatch(/get\(key: string\): Promise<string \| null>;/);
     expect(body).toMatch(/setEx\(key: string, value: string, ttlSeconds: number\): Promise<void>;/);
+    expect(body).toMatch(/compareAndSetEx\([\s\S]*?\): Promise<boolean>;/);
     expect(body).toMatch(/del\(key: string\): Promise<void>;/);
     // C2 — atomic read-and-delete backs the one-shot exchange claim.
     expect(body).toMatch(/getDel\(key: string\): Promise<string \| null>;/);
   });
 
-  it('RedisStore: ioredis SET EX wrapper + del passthrough + getDel via version-independent Lua get+del', () => {
+  it('RedisStore: SET EX plus Lua compare-set bind and get-delete exchange', () => {
     expect(body).toMatch(/class RedisStore implements CliAuthorizeStore \{/);
     expect(body).toMatch(/return this\.redis\.get\(key\);/);
     expect(body).toMatch(/await this\.redis\.set\(key, value, 'EX', ttlSeconds\);/);
+    expect(body).toMatch(/current ~= ARGV\[1\]/);
+    expect(body).toMatch(/redis\.call\('set', KEYS\[1\], ARGV\[2\], 'EX', ARGV\[3\]\)/);
     expect(body).toMatch(/await this\.redis\.del\(key\);/);
     // C2 — Lua EVAL (not GETDEL) so we never depend on Redis >= 6.2.
     expect(body).toMatch(/const result = await this\.redis\.eval\(/);
@@ -102,6 +105,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(
       /this\.entries\.set\(key, \{ value, expiresAt: Date\.now\(\) \+ ttlSeconds \* 1000 \}\);/,
     );
+    expect(body).toMatch(/entry\.value !== expectedValue/);
     // C2 — atomic getDel: read, delete, then TTL-check (no await between
     // read and delete, so concurrent callers can't both see a value).
     expect(body).toMatch(
@@ -174,6 +178,8 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(
       /\/\/ Reset the TTL from bind time so the GUI has the full post-bind\s*\n?\s*\/\/ window to poll exchange even if the user took ~4:30 to log in and\s*\n?\s*\/\/ click Authorize\. The post-bind window \(D1\) is deliberately shorter\s*\n?\s*\/\/ than the pre-bind one — the client is now actively polling\./,
     );
+    expect(body).toMatch(/const didBind = await this\.store\.compareAndSetEx\(/);
+    expect(body).toMatch(/if \(!didBind\) \{/);
   });
 
   it('exchange: raw=null → expired; pending short-circuit; bound uses atomic getDel claim + D1 decrypt (no leak, no double-deliver)', () => {

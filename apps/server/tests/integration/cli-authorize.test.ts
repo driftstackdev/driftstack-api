@@ -357,4 +357,35 @@ describe('V-266 — security + edge cases', () => {
     });
     expect(second.statusCode).toBe(400);
   });
+
+  it('concurrent binds leave exactly one active device key', async () => {
+    fx = await buildTestApp();
+    const { token: sessionToken } = await freshSessionToken(fx);
+    await acceptAllLegal(fx, sessionToken);
+
+    const initiate = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/initiate',
+      headers,
+      payload: { state: STATE },
+    });
+    const { code } = initiate.json<InitiateResponse>();
+    const bindRequest = () =>
+      fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/cli-authorize/bind',
+        headers: { ...headers, authorization: `Bearer ${sessionToken}` },
+        payload: { code, state: STATE },
+      });
+
+    const [first, second] = await Promise.all([bindRequest(), bindRequest()]);
+    expect([first.statusCode, second.statusCode].sort()).toEqual([200, 400]);
+
+    const deviceKeys = (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items.filter(
+      (key) => key.provenance === 'cli_device',
+    );
+    expect(deviceKeys).toHaveLength(2);
+    expect(deviceKeys.filter((key) => key.revokedAt === null)).toHaveLength(1);
+    expect(deviceKeys.filter((key) => key.revokedAt !== null)).toHaveLength(1);
+  });
 });
