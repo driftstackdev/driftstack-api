@@ -37,6 +37,7 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
     },
     checkedAtIso: null,
     busy: false,
+    launching: false,
     anyBusy: false,
     testing: false,
     testDisabled: false,
@@ -70,6 +71,24 @@ describe('ProfilePhoneCard', () => {
     render(<ProfilePhoneCard {...props({ running: true })} />);
     expect(screen.getByText('Live')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open session' })).toBeTruthy();
+    cleanup();
+  });
+
+  it('shows an inline, accessible launch spinner only for the launch action', () => {
+    const { container, rerender } = render(
+      <ProfilePhoneCard {...props({ busy: true, launching: true })} />,
+    );
+    const starting = screen.getByRole('button', { name: 'Starting…' });
+    expect(starting).toBeDisabled();
+    expect(starting).toHaveAttribute('aria-busy', 'true');
+    expect(container.querySelector('[data-component="launch-spinner"]')).not.toBeNull();
+
+    // `busy` also covers trim/delete/clone/reopen. Those actions must not make
+    // the primary button falsely claim that a launch is underway.
+    rerender(<ProfilePhoneCard {...props({ busy: true, launching: false })} />);
+    expect(screen.getByRole('button', { name: 'Launch' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Launch' })).toHaveAttribute('aria-busy', 'false');
+    expect(container.querySelector('[data-component="launch-spinner"]')).toBeNull();
     cleanup();
   });
 

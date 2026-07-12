@@ -6,7 +6,7 @@
 // addProxy exactly once across both attempts.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 const addProxy = vi.fn<(d: unknown) => Promise<{ id: string }>>(() =>
   Promise.resolve({ id: 'p_minted' }),
@@ -102,6 +102,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 }));
 
 const { ProfilesView } = await import('../../src/views/ProfilesView');
+const { ConfirmProvider } = await import('../../src/components/ConfirmProvider');
 
 async function openModalAndFill(): Promise<void> {
   render(<ProfilesView onGoToSettings={vi.fn()} />);
@@ -192,5 +193,60 @@ describe('create-profile modal — client-side name validation (specific message
     expect(await screen.findByText(/start and end with a letter or digit/i)).toBeInTheDocument();
     // The server create was never attempted (pure client-side pre-flight).
     expect(profilesCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('create-profile modal — unsaved draft close guard', () => {
+  function renderWithConfirm(): void {
+    render(
+      <ConfirmProvider>
+        <ProfilesView onGoToSettings={vi.fn()} />
+      </ConfirmProvider>,
+    );
+  }
+
+  async function openCreate(): Promise<HTMLElement> {
+    fireEvent.click(await screen.findByRole('button', { name: 'Create your first profile' }));
+    return screen.findByPlaceholderText('my-recurring-workflow');
+  }
+
+  it('a pristine form closes on backdrop without a false dirty prompt after proxy hydration', async () => {
+    renderWithConfirm();
+    await openCreate();
+    fireEvent.click(await screen.findByRole('tab', { name: '🌍 Proxy' }));
+    // Zero saved proxies auto-selects the inline create-new path. Waiting for
+    // its controls proves hydration completed before we test the dirty baseline.
+    await screen.findByPlaceholderText(/Label \(e\.g\./i);
+    const formDialog = screen.getByRole('dialog', { name: 'New profile' });
+    fireEvent.click(formDialog);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New profile' })).toBeNull());
+    expect(screen.queryByText(/Discard your unsaved profile changes/i)).toBeNull();
+  });
+
+  it('backdrop asks before discarding and Cancel preserves the exact typed draft', async () => {
+    renderWithConfirm();
+    const name = await openCreate();
+    fireEvent.change(name, { target: { value: 'Keep this draft' } });
+
+    fireEvent.click(screen.getByRole('dialog', { name: 'New profile' }));
+    const confirmDialog = await screen.findByRole('dialog', {
+      name: /Discard your unsaved profile changes/i,
+    });
+    expect(screen.getByDisplayValue('Keep this draft')).toBeInTheDocument();
+
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: /Discard your unsaved profile changes/i }),
+      ).toBeNull(),
+    );
+    expect(screen.getByDisplayValue('Keep this draft')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('dialog', { name: 'New profile' }));
+    const secondConfirm = await screen.findByRole('dialog', {
+      name: /Discard your unsaved profile changes/i,
+    });
+    fireEvent.click(within(secondConfirm).getByRole('button', { name: 'Discard changes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New profile' })).toBeNull());
   });
 });

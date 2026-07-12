@@ -47,6 +47,8 @@ export interface ProfileTableRow {
   lastUsedIso: string | null;
   selected: boolean;
   busy: boolean;
+  /** True only while this row is creating a session. */
+  launching: boolean;
   testing: boolean;
   testDisabled: boolean;
   launchDisabled: boolean;
@@ -419,9 +421,21 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               className="rounded bg-accent px-2 py-1 text-[11px] font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
               onClick={stop(() => p.onPrimary(r.id))}
               disabled={r.busy || r.launchDisabled}
+              aria-busy={r.launching}
               title={r.launchDisabled ? r.launchDisabledReason : undefined}
             >
-              {r.busy ? 'Launching…' : 'Launch'}
+              {r.launching ? (
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    data-component="launch-spinner"
+                    className="h-3 w-3 animate-spin rounded-full border-2 border-white/35 border-t-white"
+                  />
+                  Launching…
+                </span>
+              ) : (
+                'Launch'
+              )}
             </button>
           )}
           <button

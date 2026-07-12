@@ -11,7 +11,7 @@
 // effects don't loop, plus spied stores/clients so we can assert the wiring.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 const profilesUpdate = vi.fn<(id: string, body: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'prof_1' }),
@@ -69,6 +69,7 @@ const META: Record<string, { folder: string; tags: string[]; note: string; icon:
   prof_1: { folder: 'Work', tags: ['aged'], note: '', icon: '' },
   prof_2: { folder: 'Work', tags: [], note: '', icon: '' },
 };
+const loadProfilesMeta = vi.fn(() => Promise.resolve({ ...META }));
 const saveProfilesMetaBulk = vi.fn(
   (ids: string[], meta: { folder?: string; tags?: string[] }, mode: string) => {
     for (const id of ids) {
@@ -86,7 +87,7 @@ const saveProfilesMetaBulk = vi.fn(
 );
 const saveProfileMeta = vi.fn(() => Promise.resolve({ ...META }));
 vi.mock('../../src/lib/profiles-meta', () => ({
-  loadProfilesMeta: () => Promise.resolve({ ...META }),
+  loadProfilesMeta: () => loadProfilesMeta(),
   persistProfilesMeta: vi.fn(() => Promise.resolve()),
   saveProfileMeta: (...a: unknown[]) => saveProfileMeta(...(a as [])),
   saveProfilesMetaBulk: (...a: unknown[]) =>
@@ -161,6 +162,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 }));
 
 const { ProfilesView } = await import('../../src/views/ProfilesView');
+const { ConfirmProvider } = await import('../../src/components/ConfirmProvider');
 
 function reseedMeta(): void {
   META.prof_1 = { folder: 'Work', tags: ['aged'], note: '', icon: '' };
@@ -182,6 +184,8 @@ describe('ProfilesView organization management', () => {
     saveProfileMeta.mockClear();
     saveProfilesMetaBulk.mockClear();
     reseedMeta();
+    loadProfilesMeta.mockReset();
+    loadProfilesMeta.mockResolvedValue({ ...META });
   });
 
   describe('folder/tag delete + re-icon (with org push)', () => {
@@ -277,8 +281,16 @@ describe('ProfilesView organization management', () => {
   });
 
   describe('post-create proxy rebind', () => {
-    async function openEdit(): Promise<void> {
-      render(<ProfilesView onGoToSettings={vi.fn()} />);
+    async function openEdit(withConfirm = false): Promise<void> {
+      render(
+        withConfirm ? (
+          <ConfirmProvider>
+            <ProfilesView onGoToSettings={vi.fn()} />
+          </ConfirmProvider>
+        ) : (
+          <ProfilesView onGoToSettings={vi.fn()} />
+        ),
+      );
       fireEvent.click((await screen.findAllByRole('button', { name: 'More actions' }))[0]!);
       fireEvent.click(await screen.findByRole('button', { name: 'Edit Demo' }));
       await screen.findByRole('heading', { name: 'Edit profile' });
@@ -347,6 +359,59 @@ describe('ProfilesView organization management', () => {
       await waitFor(() =>
         expect(screen.queryByRole('heading', { name: 'Edit profile' })).toBeNull(),
       );
+    });
+
+    it('Escape and Close share the dirty guard; Cancel preserves edits and Discard closes', async () => {
+      await openEdit(true);
+      fireEvent.change(screen.getByDisplayValue('Demo'), { target: { value: 'Keep renamed' } });
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await screen.findByRole('dialog', {
+        name: /Discard your unsaved profile changes/i,
+      });
+      // Escape again dismisses the branded confirmation. The underlying form's
+      // Escape trap sees the same event, so this also pins the re-entrancy guard:
+      // no replacement confirm may appear and the exact draft must remain.
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('dialog', { name: /Discard your unsaved profile changes/i }),
+        ).toBeNull(),
+      );
+      expect(screen.getByDisplayValue('Keep renamed')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      const closeConfirm = await screen.findByRole('dialog', {
+        name: /Discard your unsaved profile changes/i,
+      });
+      fireEvent.click(within(closeConfirm).getByRole('button', { name: 'Discard changes' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('heading', { name: 'Edit profile' })).toBeNull(),
+      );
+      expect(profilesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('keeps a pristine baseline when profile metadata finishes loading behind the open modal', async () => {
+      let resolveMeta: ((value: typeof META) => void) | undefined;
+      const delayedMeta = new Promise<typeof META>((resolve) => {
+        resolveMeta = resolve;
+      });
+      loadProfilesMeta.mockReturnValueOnce(delayedMeta);
+
+      await openEdit(true);
+      // The modal opened before metadata arrived, so its snapshot is the blank
+      // baseline visible at that moment. A background metadata refresh must not
+      // silently rewrite that baseline and make the untouched form dirty.
+      await act(async () => {
+        resolveMeta?.({ ...META });
+        await delayedMeta;
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('heading', { name: 'Edit profile' })).toBeNull(),
+      );
+      expect(screen.queryByText(/Discard your unsaved profile changes/i)).toBeNull();
     });
   });
 

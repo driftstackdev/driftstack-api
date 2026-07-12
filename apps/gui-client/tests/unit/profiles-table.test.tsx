@@ -34,6 +34,7 @@ function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
     lastUsedIso: null,
     selected: false,
     busy: false,
+    launching: false,
     testing: false,
     testDisabled: false,
     launchDisabled: false,
@@ -145,6 +146,22 @@ describe('ProfilesTable', () => {
     expect(screen.getByRole('button', { name: 'Live view' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Launch' })).toBeNull();
+    cleanup();
+  });
+
+  it('shows an inline, accessible spinner only while the row is launching', () => {
+    const { container, rerender } = render(
+      <ProfilesTable {...props({ rows: [row({ busy: true, launching: true })] })} />,
+    );
+    const launching = screen.getByRole('button', { name: 'Launching…' });
+    expect(launching).toBeDisabled();
+    expect(launching).toHaveAttribute('aria-busy', 'true');
+    expect(container.querySelector('[data-component="launch-spinner"]')).not.toBeNull();
+
+    rerender(<ProfilesTable {...props({ rows: [row({ busy: true, launching: false })] })} />);
+    expect(screen.getByRole('button', { name: 'Launch' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Launch' })).toHaveAttribute('aria-busy', 'false');
+    expect(container.querySelector('[data-component="launch-spinner"]')).toBeNull();
     cleanup();
   });
 

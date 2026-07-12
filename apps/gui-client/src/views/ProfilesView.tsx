@@ -8,7 +8,15 @@
 // Mirrors SessionsView shape: 15-second poll (REFRESH_MS), inline error
 // banner, busy state per row.
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import {
   folderList,
   aggregateTags,
@@ -327,6 +335,11 @@ export function ProfilesView({
     progressNotice: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+  // `busyId` is shared by launch, stop, reopen, clone, trim, and delete. Keep the
+  // launch identity separate so only a REAL launch shows the long-running
+  // "Starting…" treatment; otherwise an unrelated action on this row could make
+  // its disabled Launch button claim the wrong work is happening.
+  const [launchingId, setLaunchingId] = useState<string | null>(null);
   // V-238 — create-form modal state. Lives here (not lifted to App.tsx)
   // because every other ProfilesView interaction is local; the modal
   // is a transient overlay scoped to this view's lifecycle.
@@ -1654,6 +1667,7 @@ export function ProfilesView({
       return;
     }
     setBusyId(profile.id);
+    setLaunchingId(profile.id);
     try {
       const proxy = pickProxy(profile.id);
       if (proxy === null) {
@@ -1879,6 +1893,7 @@ export function ProfilesView({
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
+      setLaunchingId(null);
       setBusyId(null);
       // Always retire the in-flight launch progress line once the launch settles
       // (success, any error branch, or a throw) so it can't linger past the probe;
@@ -3178,6 +3193,7 @@ export function ProfilesView({
                             probe?.at !== undefined ? new Date(probe.at).toISOString() : null
                           }
                           busy={busyId === profile.id}
+                          launching={launchingId === profile.id}
                           anyBusy={busyId !== null}
                           testing={px !== null && testingProxyId === px.id}
                           testDisabled={testingProxyId !== null}
@@ -3282,6 +3298,7 @@ export function ProfilesView({
                       lastUsedIso: profile.last_used_at,
                       selected: selectedIds.has(profile.id),
                       busy: busyId === profile.id,
+                      launching: launchingId === profile.id,
                       testing: px !== null && testingProxyId === px.id,
                       testDisabled: testingProxyId !== null,
                       // Launch blocks NON-admin team members (the server lets
@@ -3444,6 +3461,63 @@ export function ProfilesView({
   );
 }
 
+/**
+ * Route every profile-form exit through one guard. A backdrop click, Escape,
+ * Close, and Cancel must all behave identically: pristine forms close at once,
+ * dirty forms ask before discarding, and an in-flight submit cannot be closed.
+ *
+ * The ref closes a small re-entrancy hole: while the branded confirmation is
+ * open, its Escape event also reaches the underlying form's focus trap. Without
+ * the ref, that second Escape could open a replacement confirmation and orphan
+ * the first promise.
+ */
+function useProfileDraftCloseGuard({
+  dirty,
+  submitting,
+  dialogRef,
+  onClose,
+}: {
+  dirty: boolean;
+  submitting: boolean;
+  dialogRef: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}): { requestClose: () => void; discardConfirmOpen: boolean } {
+  const confirm = useConfirm();
+  const confirmOpenRef = useRef(false);
+  const mountedRef = useRef(true);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const requestClose = useCallback((): void => {
+    if (submitting || confirmOpenRef.current) return;
+    if (!dirty) {
+      onClose();
+      return;
+    }
+
+    confirmOpenRef.current = true;
+    setDiscardConfirmOpen(true);
+    void confirm('Discard your unsaved profile changes?', {
+      confirmLabel: 'Discard changes',
+      tone: 'danger',
+    }).then((discard) => {
+      if (!mountedRef.current) return;
+      confirmOpenRef.current = false;
+      setDiscardConfirmOpen(false);
+      if (discard) onClose();
+    });
+  }, [confirm, dirty, onClose, submitting]);
+
+  useFocusTrap(true, dialogRef, requestClose);
+  return { requestClose, discardConfirmOpen };
+}
+
 // V-238 — Create-profile modal. Form has name (required, 1-120 chars),
 // optional description (max 500 chars per server schema), and archetype
 // picker (currently single-option; expands when V-136+ adds more).
@@ -3471,13 +3545,11 @@ function CreateProfileModal({
   initialTag?: string;
 }): JSX.Element {
   const { client, settings } = useSettings();
+  const initialArchetype = KNOWN_ARCHETYPES[0]?.id ?? '';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [archetype, setArchetype] = useState(KNOWN_ARCHETYPES[0]?.id ?? '');
+  const [archetype, setArchetype] = useState(initialArchetype);
   const dialogRef = useRef<HTMLDivElement>(null);
-  // Trap focus in the modal + restore it to the opener on close (a11y). Escape /
-  // backdrop-close stay handled below; useFocusTrap adds only the missing pieces.
-  useFocusTrap(true, dialogRef);
   // Icon at create (founder 2026-06-16: "same for new Profile" — the icon
   // picker existed only for bulk-edit; offer it up-front too). Saved into
   // profilesMeta alongside folder/tags after create.
@@ -3515,6 +3587,10 @@ function CreateProfileModal({
   // for OpenVPN / WireGuard.
   const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
   const [proxyChoice, setProxyChoice] = useState<string>('first-available');
+  // Hydration can automatically switch an account with zero proxies to the
+  // inline "create new" form. Record that hydrated value as the baseline so the
+  // automatic switch does not falsely make a pristine form look dirty.
+  const initialProxyChoiceRef = useRef<string | null>(null);
   const [newProxy, setNewProxy] = useState<{
     scheme: NonNullable<ProxyDraft['scheme']>;
     label: string;
@@ -3532,6 +3608,27 @@ function CreateProfileModal({
     username: '',
     password: '',
     configBlob: '',
+  });
+  const dirty =
+    name !== '' ||
+    description !== '' ||
+    archetype !== initialArchetype ||
+    icon !== '' ||
+    folder !== (initialFolder ?? '') ||
+    tags !== (initialTag ?? '') ||
+    (initialProxyChoiceRef.current !== null && proxyChoice !== initialProxyChoiceRef.current) ||
+    newProxy.scheme !== 'socks5' ||
+    newProxy.label !== '' ||
+    newProxy.host !== '' ||
+    newProxy.port !== '1080' ||
+    newProxy.username !== '' ||
+    newProxy.password !== '' ||
+    newProxy.configBlob !== '';
+  const { requestClose, discardConfirmOpen } = useProfileDraftCloseGuard({
+    dirty,
+    submitting,
+    dialogRef,
+    onClose,
   });
   // VPN paste-parse feedback (✓ endpoint host:port, or the parse error).
   const [newProxyVpnHint, setNewProxyVpnHint] = useState<string | null>(null);
@@ -3565,7 +3662,9 @@ function CreateProfileModal({
     void (async () => {
       const list = await listProxies();
       setProxies(list);
-      if (list.length === 0) setProxyChoice('create-new');
+      const initialChoice = list.length === 0 ? 'create-new' : 'first-available';
+      initialProxyChoiceRef.current = initialChoice;
+      if (list.length === 0) setProxyChoice(initialChoice);
     })();
   }, []);
 
@@ -3608,18 +3707,6 @@ function CreateProfileModal({
       setTesting(false);
     }
   }
-
-  // ESC-to-close — matches the macOS Cmd+W / standard modal convention.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape' && !submitting) {
-        e.preventDefault();
-        onClose();
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -3808,8 +3895,7 @@ function CreateProfileModal({
       aria-modal="true"
       aria-labelledby="create-profile-title"
       onClick={(e) => {
-        // Click the backdrop (not the modal itself) closes — unless mid-submit.
-        if (e.target === e.currentTarget && !submitting) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
     >
       <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-md border border-surface-divider bg-surface-raised p-5 shadow-lg">
@@ -3821,8 +3907,8 @@ function CreateProfileModal({
             <button
               type="button"
               className="btn-secondary text-xs"
-              onClick={onClose}
-              disabled={submitting}
+              onClick={requestClose}
+              disabled={submitting || discardConfirmOpen}
               aria-label="Close"
             >
               ✕
@@ -4339,8 +4425,8 @@ function CreateProfileModal({
               <button
                 type="button"
                 className="btn-secondary"
-                onClick={onClose}
-                disabled={submitting}
+                onClick={requestClose}
+                disabled={submitting || discardConfirmOpen}
               >
                 Cancel
               </button>
@@ -4460,33 +4546,65 @@ function EditProfileModal({
   onSaved: (meta: Partial<ProfileMeta>) => void;
 }): JSX.Element {
   const { client, settings } = useSettings();
-  const [name, setName] = useState(profile.name);
+  // Freeze the edit baseline when the modal opens. Profiles metadata and proxy
+  // bindings refresh behind the modal; comparing the draft to live props would
+  // make a pristine form suddenly look dirty (or change what a Save diff means)
+  // when one of those background reads settles.
+  const baselineRef = useRef({
+    name: profile.name,
+    description: profile.description ?? '',
+    icon: meta?.icon ?? '',
+    folder: meta?.folder ?? '',
+    tags: [...(meta?.tags ?? [])],
+    note: meta?.note ?? '',
+    proxyId: currentProxyId,
+    proxyChoice: currentProxyId ?? 'first-available',
+    geoLat: meta?.geolocation ? String(meta.geolocation.latitude) : '',
+    geoLon: meta?.geolocation ? String(meta.geolocation.longitude) : '',
+    geoAccuracy: meta?.geolocation?.accuracy !== undefined ? String(meta.geolocation.accuracy) : '',
+  });
+  const baseline = baselineRef.current;
+  const initialTags = baseline.tags.join(', ');
+  const [name, setName] = useState(baseline.name);
   const dialogRef = useRef<HTMLDivElement>(null);
-  // Trap focus in the modal + restore it to the opener on close (a11y).
-  useFocusTrap(true, dialogRef);
-  const [description, setDescription] = useState(profile.description ?? '');
-  const [icon, setIcon] = useState(meta?.icon ?? '');
-  const [folder, setFolder] = useState(meta?.folder ?? '');
-  const [tags, setTags] = useState((meta?.tags ?? []).join(', '));
-  const [note, setNote] = useState(meta?.note ?? '');
+  const [description, setDescription] = useState(baseline.description);
+  const [icon, setIcon] = useState(baseline.icon);
+  const [folder, setFolder] = useState(baseline.folder);
+  const [tags, setTags] = useState(initialTags);
+  const [note, setNote] = useState(baseline.note);
   // 2026-06-19 (founder GUI-improvement audit) — post-create proxy REBIND.
   // setDefaultProxy was only ever called from the create modal; a profile's
   // proxy binding couldn't be changed afterward. The select mirrors the create
   // modal's saved-proxy picker ('first-available' = null binding); on save we
   // setDefaultProxy when it changed, and the parent's refresh(false) reloads
   // bindings so pickProxy re-renders the card/table with the rebound proxy.
-  const [proxyChoice, setProxyChoice] = useState<string>(currentProxyId ?? 'first-available');
+  const [proxyChoice, setProxyChoice] = useState<string>(baseline.proxyChoice);
   // Advanced geolocation override (A3-approved per-session contract 2026-07-01).
   // Held as strings so a partially-typed value doesn't fight a numeric input;
   // parsed + range-validated on submit. Empty lat AND lon = "no override" (clear
   // → the device auto-derives its location from the proxy exit IP, the default).
-  const [geoLat, setGeoLat] = useState(meta?.geolocation ? String(meta.geolocation.latitude) : '');
-  const [geoLon, setGeoLon] = useState(meta?.geolocation ? String(meta.geolocation.longitude) : '');
-  const [geoAccuracy, setGeoAccuracy] = useState(
-    meta?.geolocation?.accuracy !== undefined ? String(meta.geolocation.accuracy) : '',
-  );
+  const [geoLat, setGeoLat] = useState(baseline.geoLat);
+  const [geoLon, setGeoLon] = useState(baseline.geoLon);
+  const [geoAccuracy, setGeoAccuracy] = useState(baseline.geoAccuracy);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirty =
+    name !== baseline.name ||
+    description !== baseline.description ||
+    icon !== baseline.icon ||
+    folder !== baseline.folder ||
+    tags !== initialTags ||
+    note !== baseline.note ||
+    proxyChoice !== baseline.proxyChoice ||
+    geoLat !== baseline.geoLat ||
+    geoLon !== baseline.geoLon ||
+    geoAccuracy !== baseline.geoAccuracy;
+  const { requestClose, discardConfirmOpen } = useProfileDraftCloseGuard({
+    dirty,
+    submitting,
+    dialogRef,
+    onClose,
+  });
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -4551,18 +4669,17 @@ function EditProfileModal({
       }
     }
     const diff: UpdateProfileRequest = {};
-    if (trimmedName !== profile.name) diff.name = trimmedName;
-    if (nextDescription !== (profile.description ?? '')) {
+    if (trimmedName !== baseline.name) diff.name = trimmedName;
+    if (nextDescription !== baseline.description) {
       diff.description = nextDescription.length > 0 ? nextDescription : null;
     }
-    if (nextFolder !== (meta?.folder ?? ''))
-      diff.folder = nextFolder.length > 0 ? nextFolder : null;
-    const prevTags = meta?.tags ?? [];
+    if (nextFolder !== baseline.folder) diff.folder = nextFolder.length > 0 ? nextFolder : null;
+    const prevTags = baseline.tags;
     const tagsChanged =
       tagList.length !== prevTags.length || tagList.some((t, i) => t !== prevTags[i]);
     if (tagsChanged) diff.tags = tagList;
-    if (icon !== (meta?.icon ?? '')) diff.icon = icon.length > 0 ? icon : null;
-    if (nextNote !== (meta?.note ?? '')) diff.note = nextNote.length > 0 ? nextNote : null;
+    if (icon !== baseline.icon) diff.icon = icon.length > 0 ? icon : null;
+    if (nextNote !== baseline.note) diff.note = nextNote.length > 0 ? nextNote : null;
     try {
       // Skip the round-trip when nothing changed — still mirror meta so the
       // local cache stays the source of truth for the hub render.
@@ -4581,7 +4698,7 @@ function EditProfileModal({
       // below always runs; the proxy binding is independently recoverable from
       // the row. (audit)
       const nextProxyId = proxyChoice === 'first-available' ? null : proxyChoice;
-      if (nextProxyId !== currentProxyId) {
+      if (nextProxyId !== baseline.proxyId) {
         await setDefaultProxy(profile.id, nextProxyId).catch((err: unknown) => {
           console.warn('[profiles] setDefaultProxy failed (profile updated):', err);
         });
@@ -4611,7 +4728,7 @@ function EditProfileModal({
       aria-modal="true"
       aria-labelledby="edit-profile-title"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !submitting) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
     >
       <form
@@ -4625,8 +4742,8 @@ function EditProfileModal({
           <button
             type="button"
             className="btn-secondary text-xs"
-            onClick={onClose}
-            disabled={submitting}
+            onClick={requestClose}
+            disabled={submitting || discardConfirmOpen}
             aria-label="Close"
           >
             Close
@@ -4815,8 +4932,8 @@ function EditProfileModal({
           <button
             type="button"
             className="btn-secondary text-xs"
-            onClick={onClose}
-            disabled={submitting}
+            onClick={requestClose}
+            disabled={submitting || discardConfirmOpen}
           >
             Cancel
           </button>

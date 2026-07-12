@@ -7,7 +7,7 @@
 // retry-able error — never open an in-app page (the legacy polling viewer was
 // removed). Pins the create-profile → launch → simulator path + its failure mode.
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { openSimulatorWindow } from '../../src/lib/open-simulator';
 
@@ -139,6 +139,40 @@ const LIVEKIT = {
 };
 
 describe('ProfilesView launch → stream', () => {
+  beforeEach(() => {
+    agentCreate.mockClear();
+    agentClose.mockClear();
+    clearSession.mockClear();
+    agentSessionsList.mockClear();
+    listBindingsMock.mockClear();
+    vi.mocked(openSimulatorWindow).mockClear();
+  });
+
+  it('keeps the clicked row visibly busy throughout the slow proxy-probe create', async () => {
+    let resolveCreate: ((value: unknown) => void) | undefined;
+    agentCreate.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+    const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+
+    await waitFor(() => expect(agentCreate).toHaveBeenCalled());
+    const starting = screen.getByRole('button', { name: 'Starting…' });
+    expect(starting).toBeDisabled();
+    expect(starting).toHaveAttribute('aria-busy', 'true');
+    expect(container.querySelector('[data-component="launch-spinner"]')).not.toBeNull();
+    expect(
+      screen.getByText(/this can take about 10 seconds while we check your proxy/i),
+    ).toBeInTheDocument();
+
+    resolveCreate?.({ id: 'agt_slow', livekit: LIVEKIT });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Launch' })).toBeEnabled());
+    expect(screen.queryByText(/this can take about 10 seconds/i)).toBeNull();
+  });
+
   it('Launch creates an agent session and hands the session to the SEPARATE simulator window when livekit is returned', async () => {
     agentCreate.mockResolvedValueOnce({ id: 'agt_1', livekit: LIVEKIT });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
@@ -168,7 +202,7 @@ describe('ProfilesView launch → stream', () => {
     // scaled in-app overlay was removed). Launch hands the session + livekit
     // join info to the opener; no in-app overlay renders.
     await waitFor(() => expect(vi.mocked(openSimulatorWindow)).toHaveBeenCalled());
-    expect(vi.mocked(openSimulatorWindow).mock.calls[0]?.[0]).toMatchObject({
+    expect(vi.mocked(openSimulatorWindow).mock.calls.at(-1)?.[0]).toMatchObject({
       sessionId: 'agt_1',
       info: LIVEKIT,
     });
@@ -177,9 +211,8 @@ describe('ProfilesView launch → stream', () => {
 
   it('no livekit block → closes the unused agent session, clears the binding, and surfaces a retry-able error WITHOUT opening any in-app view (the polling viewer was removed)', async () => {
     agentCreate.mockResolvedValueOnce({ id: 'agt_2' });
-    // The opener mock isn't reset between tests in this file (no shared
-    // beforeEach), so snapshot its call count to assert THIS launch opened
-    // nothing rather than against a global zero.
+    // Snapshot this test's call count so the assertion remains local even if a
+    // future setup step legitimately opens another window first.
     const openCallsBefore = vi.mocked(openSimulatorWindow).mock.calls.length;
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));

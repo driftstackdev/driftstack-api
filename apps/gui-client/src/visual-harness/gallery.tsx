@@ -44,6 +44,7 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
     },
     checkedAtIso: '2026-06-15T06:30:00.000Z',
     busy: false,
+    launching: false,
     anyBusy: false,
     testing: false,
     testDisabled: false,
@@ -62,6 +63,10 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
 // The meaningful visual states. Label each so the screenshot is self-describing.
 const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
   { label: 'idle · UDP ok', props: base({}) },
+  {
+    label: 'launching · proxy check',
+    props: base({ busy: true, launching: true }),
+  },
   {
     label: 'running · live',
     props: base({
@@ -356,7 +361,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     tags: ['aged'],
     lastUsedIso: '2026-06-15T06:30:00.000Z',
     selected: false,
-    busy: false,
+    busy: true,
+    launching: true,
     testing: false,
     testDisabled: false,
     launchDisabled: false,
@@ -383,6 +389,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     lastUsedIso: '2026-06-14T20:00:00.000Z',
     selected: true,
     busy: false,
+    launching: false,
     testing: false,
     testDisabled: false,
     launchDisabled: false,
@@ -409,6 +416,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     lastUsedIso: null,
     selected: false,
     busy: false,
+    launching: false,
     testing: false,
     testDisabled: false,
     launchDisabled: false,
@@ -435,6 +443,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     lastUsedIso: '2026-06-10T12:00:00.000Z',
     selected: false,
     busy: false,
+    launching: false,
     testing: false,
     testDisabled: false,
     launchDisabled: false,
@@ -461,6 +470,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     lastUsedIso: null,
     selected: false,
     busy: false,
+    launching: false,
     testing: false,
     testDisabled: false,
     launchDisabled: false,

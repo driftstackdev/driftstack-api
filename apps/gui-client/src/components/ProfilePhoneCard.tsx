@@ -50,6 +50,9 @@ export interface ProfilePhoneCardProps {
   checkedAtIso: string | null;
   // actions
   busy: boolean;
+  /** This row is specifically creating a session. `busy` also covers stop,
+   *  reopen, clone, trim, and delete, so it cannot safely drive launch copy. */
+  launching: boolean;
   /** True when SOME OTHER profile is busy (a global single-flight is held, e.g.
    *  another row launching through the ~12s server probe). The mutate actions
    *  (Duplicate / Trim / Delete) early-return on that global guard, so they're
@@ -598,13 +601,27 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover'
               }`}
               disabled={p.busy || (!p.running && p.launchDisabled)}
+              aria-busy={!p.running && p.launching}
               title={!p.running && p.launchDisabled ? p.launchDisabledReason : undefined}
               onClick={(e) => {
                 e.stopPropagation();
                 p.onPrimary();
               }}
             >
-              {p.running ? 'Open session' : p.busy ? 'Starting…' : 'Launch'}
+              {p.running ? (
+                'Open session'
+              ) : p.launching ? (
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    data-component="launch-spinner"
+                    className="h-3 w-3 animate-spin rounded-full border-2 border-white/35 border-t-white"
+                  />
+                  Starting…
+                </span>
+              ) : (
+                'Launch'
+              )}
             </button>
             <button
               type="button"
