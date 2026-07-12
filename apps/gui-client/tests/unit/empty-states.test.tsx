@@ -11,7 +11,7 @@
 // Mock surfaces per view differ (each consumes different hooks +
 // modules), so this is three describe blocks instead of describe.each.
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 // ─── ProfilesView ─────────────────────────────────────────────────
@@ -82,6 +82,43 @@ const { ProxiesView } = await import('../../src/views/ProxiesView');
 const { ToastProvider } = await import('../../src/lib/toasts');
 
 describe('V-275 ProfilesView empty state', () => {
+  const viewModeKey = 'ds-profiles-view-mode';
+  const storageValues = new Map<string, string>();
+  const testStorage: Storage = {
+    get length() {
+      return storageValues.size;
+    },
+    clear() {
+      storageValues.clear();
+    },
+    getItem(key) {
+      return storageValues.get(key) ?? null;
+    },
+    key(index) {
+      return [...storageValues.keys()][index] ?? null;
+    },
+    removeItem(key) {
+      storageValues.delete(key);
+    },
+    setItem(key, value) {
+      storageValues.set(key, value);
+    },
+  };
+
+  beforeEach(() => {
+    // Keep first-paint mode restoration deterministic under Node's incomplete
+    // experimental localStorage implementation.
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: testStorage,
+    });
+    testStorage.clear();
+  });
+
+  afterEach(() => {
+    testStorage.clear();
+  });
+
   it('renders oxblood-tinted icon + heading + body + CTA + footnote', async () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
 
@@ -104,13 +141,34 @@ describe('V-275 ProfilesView empty state', () => {
     expect(screen.getByText(/ephemeral/i)).toBeInTheDocument();
   });
 
-  it('shows a loading skeleton on mount, NOT the "No profiles yet" empty state (no flash)', () => {
+  it('first-paints the default grid as folder rail + phone-card silhouettes', () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     // Synchronously after mount — the initial refresh is still in flight (its
     // async resolution hasn't run). The skeleton is shown and the empty state
     // must NOT flash (it used to render for a beat on every open, reading as
     // data loss). No await here: we assert the FIRST paint.
-    expect(screen.getByLabelText('Loading profiles')).toBeInTheDocument();
+    const loading = screen.getByLabelText('Loading profiles');
+    expect(loading.querySelector('[data-component="profiles-loading-rail"]')).not.toBeNull();
+    expect(loading.querySelector('[data-component="profiles-loading-grid"]')).not.toBeNull();
+    expect(loading.querySelectorAll('[data-component="profiles-loading-phone-card"]')).toHaveLength(
+      6,
+    );
+    expect(loading.querySelector('[data-component="profiles-loading-list"]')).toBeNull();
+    expect(screen.queryByRole('heading', { name: /no profiles yet/i })).toBeNull();
+  });
+
+  it('first-paints a persisted list choice as a table header + six realistic rows', () => {
+    window.localStorage.setItem(viewModeKey, 'list');
+
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+
+    const loading = screen.getByLabelText('Loading profiles');
+    const table = loading.querySelector('[data-component="profiles-loading-table"]');
+    expect(loading.querySelector('[data-component="profiles-loading-rail"]')).not.toBeNull();
+    expect(loading.querySelector('[data-component="profiles-loading-list"]')).not.toBeNull();
+    expect(table?.querySelector('thead')).not.toBeNull();
+    expect(table?.querySelectorAll('tbody tr')).toHaveLength(6);
+    expect(loading.querySelector('[data-component="profiles-loading-grid"]')).toBeNull();
     expect(screen.queryByRole('heading', { name: /no profiles yet/i })).toBeNull();
   });
 });

@@ -53,7 +53,7 @@ import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { useOnboardingDismissed, buildOnboardingSteps } from '../lib/use-onboarding-steps';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
-import { SkeletonRows } from '../components/Skeleton';
+import { Skeleton, SkeletonRegion } from '../components/Skeleton';
 import {
   ProfilesActionBar,
   type ProfileSortBy,
@@ -118,6 +118,17 @@ const REFRESH_MS = 15_000;
 const PROFILES_VIEW_MODE_KEY = 'ds-profiles-view-mode';
 
 type ProfilesViewMode = 'list' | 'grid';
+
+// Keep the initial-loading silhouette and the loaded workspace on the same
+// geometry. These are intentionally shared rather than copied into the
+// skeleton: the folder rail width and responsive phone-card grid should not
+// jump when the first profile page resolves.
+const PROFILES_WORKSPACE_CLASS = 'flex min-h-0 flex-1 gap-4';
+const PROFILES_RAIL_CLASS =
+  'flex min-h-0 w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-surface-divider pr-3';
+const PROFILES_CONTENT_CLASS = 'flex min-h-0 min-w-0 flex-1 flex-col gap-3';
+const PROFILES_SCROLL_CLASS = 'min-h-0 min-w-0 flex-1 overflow-y-auto';
+const PROFILES_GRID_CLASS = 'grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3';
 
 function loadProfilesViewMode(): ProfilesViewMode {
   try {
@@ -256,6 +267,179 @@ function mapSortByToTableKey(by: ProfileSortBy): ProfilesTableSortKey {
 // ascending (A→Z, idle→live, country A→Z).
 function defaultSortDir(by: ProfileSortBy): ProfileSortDir {
   return by === 'created' || by === 'last-used' ? 'desc' : 'asc';
+}
+
+function ProfilesLoadingRail(): JSX.Element {
+  return (
+    <aside data-component="profiles-loading-rail" className={PROFILES_RAIL_CLASS}>
+      <Skeleton className="mx-2.5 mb-1 h-2.5 w-14" />
+      {['w-16', 'w-12', 'w-14', 'w-11'].map((width) => (
+        <div key={width} className="flex h-7 items-center gap-2 rounded-lg px-2.5">
+          <Skeleton className="h-3.5 w-3.5 shrink-0 rounded" />
+          <Skeleton className={`h-2.5 ${width}`} />
+          <Skeleton className="ml-auto h-3 w-5 rounded-full" />
+        </div>
+      ))}
+      <Skeleton className="mx-1.5 mt-1 h-8 rounded-lg" />
+      <Skeleton className="mx-2.5 mb-1 mt-3 h-2.5 w-9" />
+      {['w-12', 'w-16'].map((width) => (
+        <div key={width} className="flex h-7 items-center gap-2 rounded-lg px-2.5">
+          <Skeleton className="h-1.5 w-1.5 shrink-0 rounded-full" />
+          <Skeleton className={`h-2.5 ${width}`} />
+          <Skeleton className="ml-auto h-3 w-5 rounded-full" />
+        </div>
+      ))}
+      <Skeleton className="mx-1.5 mt-1 h-8 rounded-lg" />
+      <Skeleton className="mx-1.5 mt-3 h-8 rounded-lg" />
+    </aside>
+  );
+}
+
+function ProfilePhoneCardSkeleton(): JSX.Element {
+  return (
+    <div
+      data-component="profiles-loading-phone-card"
+      className="rounded-[24px] border border-[#0a0d12] bg-[#0a0e14] p-1.5"
+    >
+      <div className="relative flex aspect-[9/18.5] flex-col overflow-hidden rounded-[17px] bg-surface-raised px-2.5 pb-2 pt-[26px]">
+        <Skeleton className="h-3.5 w-20" />
+        <div className="flex flex-col items-center gap-2 pt-5">
+          <Skeleton className="h-11 w-11 rounded-full" />
+          <Skeleton className="h-3.5 w-24" />
+        </div>
+        <div className="mt-3 flex flex-col gap-2 rounded-[12px] border border-surface-divider p-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-4 rounded-full" />
+            <Skeleton className="h-2.5 flex-1" />
+          </div>
+          <Skeleton className="h-2 w-3/4" />
+        </div>
+        <div className="mt-auto flex flex-col gap-2">
+          <Skeleton className="h-2.5 w-2/3" />
+          <Skeleton className="h-8 w-full rounded-lg" />
+          <div className="flex justify-center gap-2">
+            <Skeleton className="h-5 w-10 rounded-full" />
+            <Skeleton className="h-5 w-10 rounded-full" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const LOADING_TABLE_COLUMNS: ReadonlyArray<{ width: string; className?: string }> = [
+  { width: 'w-24' },
+  { width: 'w-12', className: 'ds-col-l' },
+  { width: 'w-12', className: 'ds-col-m' },
+  { width: 'w-20' },
+  { width: 'w-9', className: 'ds-col-m' },
+  { width: 'w-14', className: 'ds-col-l' },
+  { width: 'w-16', className: 'ds-col-l' },
+  { width: 'w-14', className: 'ds-col-l' },
+  { width: 'w-16', className: 'ds-col-l' },
+  { width: 'w-20' },
+];
+
+function ProfilesTableSkeleton(): JSX.Element {
+  return (
+    <div
+      data-component="profiles-loading-table"
+      className="ds-table-shell overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised"
+    >
+      <table className="w-full border-collapse text-left text-xs">
+        <thead>
+          <tr className="border-b border-surface-divider">
+            <th className="w-9 px-3 py-2">
+              <Skeleton className="h-3.5 w-3.5 rounded" />
+            </th>
+            {LOADING_TABLE_COLUMNS.map((column, index) => (
+              <th key={index} className={`px-3 py-2 ${column.className ?? ''}`}>
+                <Skeleton className={`h-2.5 ${column.width}`} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: 6 }).map((_, row) => (
+            <tr key={row} className="border-b border-surface-divider/60 last:border-0">
+              <td className="px-3 py-2">
+                <Skeleton className="h-3.5 w-3.5 rounded" />
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex items-start gap-2">
+                  <Skeleton className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" />
+                  <div className="flex flex-col gap-1.5">
+                    <Skeleton className={`h-3 ${row % 2 === 0 ? 'w-24' : 'w-20'}`} />
+                    <Skeleton className="h-2 w-28" />
+                  </div>
+                </div>
+              </td>
+              <td className="ds-col-l px-3 py-2">
+                <Skeleton className="h-4 w-12 rounded" />
+              </td>
+              <td className="ds-col-m px-3 py-2">
+                <Skeleton className="h-4 w-10 rounded" />
+              </td>
+              <td className="px-3 py-2">
+                <div className="flex flex-col gap-1.5">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-2 w-14" />
+                </div>
+              </td>
+              <td className="ds-col-m px-3 py-2">
+                <Skeleton className="h-3 w-8" />
+              </td>
+              <td className="ds-col-l px-3 py-2">
+                <Skeleton className="h-3 w-14" />
+              </td>
+              <td className="ds-col-l px-3 py-2">
+                <Skeleton className="h-3 w-16" />
+              </td>
+              <td className="ds-col-l px-3 py-2">
+                <Skeleton className="h-3 w-12" />
+              </td>
+              <td className="ds-col-l px-3 py-2">
+                <Skeleton className="h-3 w-20" />
+              </td>
+              <td className="px-3 py-2">
+                <div className="ml-auto flex w-max gap-1.5">
+                  <Skeleton className="h-6 w-12 rounded" />
+                  <Skeleton className="h-6 w-8 rounded" />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ProfilesInitialSkeleton({ viewMode }: { viewMode: ProfilesViewMode }): JSX.Element {
+  return (
+    <SkeletonRegion
+      label="Loading profiles"
+      className="min-h-0 flex-1"
+      contentClassName={`${PROFILES_WORKSPACE_CLASS} h-full`}
+    >
+      <ProfilesLoadingRail />
+      <div className={PROFILES_CONTENT_CLASS}>
+        <div className={PROFILES_SCROLL_CLASS}>
+          {viewMode === 'grid' ? (
+            <div data-component="profiles-loading-grid" className={PROFILES_GRID_CLASS}>
+              {Array.from({ length: 6 }).map((_, index) => (
+                <ProfilePhoneCardSkeleton key={index} />
+              ))}
+            </div>
+          ) : (
+            <div data-component="profiles-loading-list">
+              <ProfilesTableSkeleton />
+            </div>
+          )}
+        </div>
+      </div>
+    </SkeletonRegion>
+  );
 }
 
 export interface ProfilesViewProps {
@@ -2887,7 +3071,7 @@ export function ProfilesView({
         // success with genuinely zero profiles, or on error (the error banner
         // above explains it; we don't strand the user on a spinner). Subsequent
         // refreshes keep refreshedAt set, so they never re-show the skeleton. (audit)
-        <SkeletonRows rows={6} label="Loading profiles" />
+        <ProfilesInitialSkeleton viewMode={viewMode} />
       ) : state.profiles.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
@@ -2937,15 +3121,12 @@ export function ProfilesView({
           </p>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 gap-4">
+        <div className={PROFILES_WORKSPACE_CLASS}>
           {/* S3 (GUI-rework 2026-06-15, founder) — FOLDERS as a permanent left
               NAV rail (vertical, full-width rows) instead of the old horizontal
               shelf + the redundant filter dropdown. Counts derive from the same
               organization map; selection drives folderFilter unchanged. */}
-          <aside
-            aria-label="Folders and tags"
-            className="flex min-h-0 w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-surface-divider pr-3"
-          >
+          <aside aria-label="Folders and tags" className={PROFILES_RAIL_CLASS}>
             <span className="section-label px-2.5 pb-1">Folders</span>
             <FolderItem
               variant="rail"
@@ -3152,17 +3333,13 @@ export function ProfilesView({
               ) : null}
             </button>
           </aside>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          <div className={PROFILES_CONTENT_CLASS}>
             {/* min-h-0 + overflow-y-auto so the grid/table scrolls WITHIN the
                 view on small screens instead of overflowing off-screen
                 (founder: "profile list isn't fully in view, should auto-scale").
                 When the fixed bulk-action bar is shown, reserve bottom padding
                 so the last grid/table row can scroll clear of it. */}
-            <div
-              className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${
-                selectedIds.size > 0 ? 'pb-20' : ''
-              }`}
-            >
+            <div className={`${PROFILES_SCROLL_CLASS} ${selectedIds.size > 0 ? 'pb-20' : ''}`}>
               {trashView ? (
                 <TrashPanel
                   trashed={trashed}
@@ -3177,7 +3354,7 @@ export function ProfilesView({
                   onBack={() => setTrashView(false)}
                 />
               ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
+                <div className={PROFILES_GRID_CLASS}>
                   {filteredProfiles.length === 0 ? (
                     <div className="col-span-full">
                       <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
