@@ -3236,8 +3236,23 @@ export function registerAgentSessionsRoutes(
             `AgentSession ${req.params.id} pair-mode state is ${currentState.kind}; wait for the transition to settle before forwarding input-events.`,
           );
         }
-        // currentState.kind === 'human-driving' falls through to
-        // the harness-forward path below.
+        if (currentState.kind === 'human-driving') {
+          if (!parsed.data.client_id) {
+            throw new ValidationError({
+              formErrors: [],
+              fieldErrors: {
+                client_id: [
+                  'client_id is required for pair-mode input and must match the client that owns human-driving',
+                ],
+              },
+            });
+          }
+          if (parsed.data.client_id !== currentState.clientId) {
+            throw new PairModeConflictError(currentState.clientId);
+          }
+        }
+        // Exact controlling client in human-driving falls through to the
+        // harness-forward path below. Sibling tabs cannot inject input.
       }
 
       // Manual mode OR pair-mode + human-driving: forward to the

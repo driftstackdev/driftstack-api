@@ -143,13 +143,11 @@ export const SendInputEventRequestSchema = z.object({
   event: InputEventSchema,
   /**
    * Slice 5 (Wave 29-NNN ARC 3) — pair-mode takeover-trigger
-   * attribution. Required when the session is in mode='pair' AND
-   * the current pair_mode_state.kind === 'ai-driving' (the first
-   * customer-side input in this configuration fires the
-   * takeover-request transition; client_id identifies which
-   * browser tab / window initiated). Optional in all other shapes
-   * (manual mode + already-human-driving pair mode just forward
-   * the event to the harness without consulting client_id).
+   * attribution and ownership. Required whenever mode='pair': in
+   * ai-driving the first input fires takeover-request; in human-driving
+   * every input must match the clientId that won takeover. This prevents
+   * a sibling tab from injecting events into another tab's control turn.
+   * Optional only in manual mode.
    * UUID-shape is typical; 128 cap matches the OAuth client_id
    * cap.
    */

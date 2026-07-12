@@ -1617,6 +1617,48 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
+  it('pair human-driving input requires the exact controlling client_id', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    const id = create.json<{ id: string }>().id;
+    await fx.agentSessionsRepo!.setPairModeState(id, {
+      kind: 'human-driving',
+      clientId: 'cli_owner',
+      sinceAt: '2026-07-12T19:00:00.000Z',
+    });
+    const event = { type: 'mouseMove' as const, x: 100, y: 200 };
+
+    const missing = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event },
+    });
+    expect(missing.statusCode).toBe(400);
+
+    const sibling = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event, client_id: 'cli_sibling' },
+    });
+    expect(sibling.statusCode).toBe(409);
+    expect(sibling.json<{ winner_client_id: string }>().winner_client_id).toBe('cli_owner');
+
+    const owner = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event, client_id: 'cli_owner' },
+    });
+    expect(owner.statusCode).toBe(503); // auth/ownership passed; harness stub is next
+  });
+
   it('Slice 5 POST /:id/input-event on mode=pair + takeover-pending → 409 Conflict (mid-transition; wait for settle)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
