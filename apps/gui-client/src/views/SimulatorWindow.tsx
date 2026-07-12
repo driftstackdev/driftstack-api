@@ -4844,14 +4844,20 @@ export function SimulatorWindow(): JSX.Element {
       setUploadNote(`${file.name} is too large (max 64 MiB).`);
       return;
     }
+    // Own the upload at SELECTION time, before FileReader's async boundary. Capturing
+    // inside onload would let a file selected in session A finish reading after an
+    // in-place relaunch and then upload its bytes into session B's jail.
+    const reqSessionId = sessionIdRef.current;
     setUploading(true);
     setUploadNote(null);
     const reader = new FileReader();
     reader.onerror = (): void => {
+      if (reqSessionId !== sessionIdRef.current) return;
       setUploading(false);
       setUploadNote('Could not read the file.');
     };
     reader.onload = (): void => {
+      if (reqSessionId !== sessionIdRef.current) return;
       // readAsDataURL → "data:<mime>;base64,<b64>"; take the part after the comma.
       const dataUrl = typeof reader.result === 'string' ? reader.result : '';
       const dataB64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
@@ -4860,7 +4866,6 @@ export function SimulatorWindow(): JSX.Element {
       // below is guarded on it still being current — else the OLD session's handle/note
       // bleeds into the NEW session (audit 2026-07-08; same sessionIdRef guard the
       // cookies/downloads polls already use).
-      const reqSessionId = sessionId;
       void uploadAgentSessionFile(
         reqSessionId,
         { name: file.name, mime: file.type || 'application/octet-stream', dataB64 },
@@ -5036,6 +5041,7 @@ export function SimulatorWindow(): JSX.Element {
               new Blob([bytes], { type: f.mime || 'application/octet-stream' }),
             )
               .then((ok) => {
+                if (reqSessionId !== sessionIdRef.current) return;
                 setDownloadsNote(
                   ok
                     ? `Saved ${f.name} to your Downloads folder.`
@@ -5043,7 +5049,9 @@ export function SimulatorWindow(): JSX.Element {
                 );
               })
               .catch(() => {
-                setDownloadsNote('Could not save the file.');
+                if (reqSessionId === sessionIdRef.current) {
+                  setDownloadsNote('Could not save the file.');
+                }
               });
           } catch {
             setDownloadsNote('Could not save the file.');

@@ -145,6 +145,49 @@ describe('SimulatorWindow — file-upload Files section (A3 W2851)', () => {
     });
   });
 
+  it('never uploads a file selected before a session swap when FileReader finishes afterward', async () => {
+    const NativeFileReader = FileReader;
+    let pendingReader: {
+      result: string | null;
+      onload: (() => void) | null;
+      onerror: (() => void) | null;
+    } | null = null;
+    class DelayedFileReader {
+      result: string | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        // Test seam: expose the exact instance SimulatorWindow owns so this test can
+        // release its delayed onload after the in-place relaunch.
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        pendingReader = this;
+      }
+      readAsDataURL(): void {
+        // Deliberately held until after the ds-session swap below.
+      }
+    }
+    vi.stubGlobal('FileReader', DelayedFileReader);
+    try {
+      const { container } = renderSim();
+      openDrawer(container);
+      fireEvent.change(fileInput(container), {
+        target: { files: [new File(['private'], 'old-session.txt', { type: 'text/plain' })] },
+      });
+      expect(pendingReader).not.toBeNull();
+      await waitFor(() => expect(dsSessionCb).not.toBeNull());
+
+      act(() => {
+        dsSessionCb?.({ payload: btoa('?window=simulator&ws=wss://lk&token=tok&session=agt_y') });
+      });
+      pendingReader!.result = 'data:text/plain;base64,cHJpdmF0ZQ==';
+      act(() => pendingReader!.onload?.());
+
+      expect(uploadMock).not.toHaveBeenCalled();
+    } finally {
+      vi.stubGlobal('FileReader', NativeFileReader);
+    }
+  });
+
   it("an 'unavailable' upload result shows the honest 'not live on a device' note (not an error)", async () => {
     uploadMock.mockResolvedValue({ status: 'unavailable', handle: null });
     const { container } = renderSim();
