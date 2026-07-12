@@ -98,17 +98,40 @@ export type ActivateTabPayload = {
 export const MAX_TAB_LIST_COUNT = 64;
 export const MAX_TAB_FIELD_CHARS = 8 * 1024;
 export const MAX_TAB_ID_CHARS = 256;
+export const MAX_TAB_SNAPSHOT_BYTES = 48 * 1024;
+export const MAX_TAB_URL_BYTES = 4 * 1024;
+export const MAX_TAB_TITLE_BYTES = 1024;
+export const MAX_TAB_ID_BYTES = 256;
 
 const truncateTabField = (value: string, maxChars: number): string =>
   value.length <= maxChars ? value : value.slice(0, maxChars);
 
+const truncateUtf8 = (value: string, maxBytes: number): string => {
+  const encoder = new TextEncoder();
+  if (encoder.encode(value).byteLength <= maxBytes) return value;
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (encoder.encode(value.slice(0, mid)).byteLength <= maxBytes) low = mid;
+    else high = mid - 1;
+  }
+  // Never return half of a UTF-16 surrogate pair.
+  const end = low > 0 && /[\uD800-\uDBFF]/u.test(value.charAt(low - 1)) ? low - 1 : low;
+  return value.slice(0, end);
+};
+
 export function boundTabListUpdate(payload: TabListUpdatePayload): TabListUpdatePayload {
-  const activeTabId = truncateTabField(payload.activeTabId, MAX_TAB_ID_CHARS);
+  const sessionId = truncateUtf8(payload.sessionId, MAX_TAB_ID_BYTES);
+  const activeTabId = truncateUtf8(
+    truncateTabField(payload.activeTabId, MAX_TAB_ID_CHARS),
+    MAX_TAB_ID_BYTES,
+  );
   const bounded = payload.tabs.map((tab) => ({
-    id: truncateTabField(tab.id, MAX_TAB_ID_CHARS),
-    url: truncateTabField(tab.url, MAX_TAB_FIELD_CHARS),
+    id: truncateUtf8(truncateTabField(tab.id, MAX_TAB_ID_CHARS), MAX_TAB_ID_BYTES),
+    url: truncateUtf8(truncateTabField(tab.url, MAX_TAB_FIELD_CHARS), MAX_TAB_URL_BYTES),
     scrollY: tab.scrollY,
-    title: truncateTabField(tab.title, MAX_TAB_FIELD_CHARS),
+    title: truncateUtf8(truncateTabField(tab.title, MAX_TAB_FIELD_CHARS), MAX_TAB_TITLE_BYTES),
   }));
   const tabs = bounded.slice(0, MAX_TAB_LIST_COUNT);
   // Match the receiver's active-retention rule: if the active tab lies beyond the
@@ -119,7 +142,27 @@ export function boundTabListUpdate(payload: TabListUpdatePayload): TabListUpdate
     if (tabs.length === MAX_TAB_LIST_COUNT) tabs[tabs.length - 1] = active;
     else tabs.push(active);
   }
-  return { ...payload, tabs, activeTabId };
+
+  const encodedSize = (candidateTabs: typeof tabs): number =>
+    new TextEncoder().encode(
+      JSON.stringify({ type: 'tabListUpdate', sessionId, tabs: candidateTabs, activeTabId }),
+    ).byteLength;
+  const selected: typeof tabs = [];
+  for (const tab of tabs) {
+    const candidate = [...selected, tab];
+    if (encodedSize(candidate) <= MAX_TAB_SNAPSHOT_BYTES) {
+      selected.push(tab);
+      continue;
+    }
+    if (tab.id !== activeTabId) continue;
+    // The active tab is mandatory. Remove trailing non-active tabs until it fits;
+    // per-field bounds guarantee the active entry itself fits under the envelope cap.
+    while (selected.length > 0 && encodedSize([...selected, tab]) > MAX_TAB_SNAPSHOT_BYTES) {
+      selected.pop();
+    }
+    selected.push(tab);
+  }
+  return { sessionId, tabs: selected, activeTabId };
 }
 
 /** Connection-state machine surfaces to the UI layer. LK.6.c

@@ -22,6 +22,7 @@ import {
   MAX_TAB_FIELD_CHARS,
   MAX_TAB_ID_CHARS,
   MAX_TAB_LIST_COUNT,
+  MAX_TAB_SNAPSHOT_BYTES,
   MAX_DEVICE_TEXT_BYTES,
   sendInputEvent,
   sendNavigate,
@@ -261,11 +262,24 @@ describe('sendTabListUpdate', () => {
       }),
     );
     const bounded = boundTabListUpdate({ sessionId: 's', tabs, activeTabId: longId });
-    expect(bounded.tabs).toHaveLength(MAX_TAB_LIST_COUNT);
+    expect(bounded.tabs.length).toBeGreaterThan(0);
+    expect(bounded.tabs.length).toBeLessThanOrEqual(MAX_TAB_LIST_COUNT);
     expect(bounded.activeTabId).toHaveLength(MAX_TAB_ID_CHARS);
     expect(bounded.tabs.at(-1)?.id).toBe(bounded.activeTabId);
     expect(bounded.tabs.every((tab) => tab.url.length <= MAX_TAB_FIELD_CHARS)).toBe(true);
     expect(bounded.tabs.every((tab) => tab.title.length <= MAX_TAB_FIELD_CHARS)).toBe(true);
+    expect(
+      new TextEncoder().encode(JSON.stringify({ type: 'tabListUpdate', ...bounded })).byteLength,
+    ).toBeLessThanOrEqual(MAX_TAB_SNAPSHOT_BYTES);
+  });
+
+  it('keeps ordinary snapshots byte-identical', () => {
+    const payload: TabListUpdatePayload = {
+      sessionId: 's',
+      tabs: [{ id: 't1', url: 'https://x.test/', scrollY: 42, title: 'Example' }],
+      activeTabId: 't1',
+    };
+    expect(boundTabListUpdate(payload)).toEqual(payload);
   });
 
   it('publishes {type:"tabListUpdate", sessionId, tabs, activeTabId} reliably (full list)', async () => {
