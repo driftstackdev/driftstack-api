@@ -70,7 +70,7 @@ import {
 } from '../components/TouchCursorOverlay';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { pointerToViewport } from '../lib/livekit-input-capture';
-import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
+import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson } from '../lib/download';
 import { persistBaseUrl } from '../lib/settings';
@@ -4542,22 +4542,28 @@ export function SimulatorWindow(): JSX.Element {
           // payload as the data-channel path); 'errored' shows the overlay ONLY before
           // the page ever loaded (#72), any other state clears it. A blank new-tab
           // whose branded page couldn't load through the proxy is graceful (no overlay).
-          setPageError((prev) =>
-            ps.state === 'errored' &&
-            !isNewTabLoadError(ps.url) &&
-            !pageReachedLoadedRef.current &&
-            pollNavTargetOk
-              ? // #7 — within the post-navigate / post-switch grace window a stale
-                // 'errored' from the un-correlated store must NOT re-raise the overlay
-                // the operator just dismissed (keep `prev`); the live data-channel push
-                // surfaces a REAL post-nav error immediately, and the next out-of-grace
-                // poll still raises it (the store keeps the latest 'errored', so it is
-                // deferred, not lost — mirroring the 'loading' grace below).
-                inGrace
-                ? prev
-                : (ps.error ?? {})
-              : null,
-          );
+          setPageError((prev) => {
+            if (
+              ps.state !== 'errored' ||
+              isNewTabLoadError(ps.url) ||
+              pageReachedLoadedRef.current ||
+              !pollNavTargetOk
+            ) {
+              return null;
+            }
+            // #7 — within the post-navigate / post-switch grace window a stale
+            // 'errored' from the un-correlated store must NOT re-raise the overlay
+            // the operator just dismissed (keep `prev`); the live data-channel push
+            // surfaces a REAL post-nav error immediately, and the next out-of-grace
+            // poll still raises it (the store keeps the latest 'errored', so it is
+            // deferred, not lost — mirroring the 'loading' grace below).
+            if (inGrace) return prev;
+            const next = ps.error ?? {};
+            // The poll returns a fresh envelope every ~2s. Reusing the prior snapshot
+            // when its fields are unchanged prevents an otherwise permanent parent
+            // rerender (including the video host + tab strip) while an error is shown.
+            return prev !== null && pageErrorInfoEqual(prev, next) ? prev : next;
+          });
           // #135 — clear the soft load-stall advisory from the POLL too. A3's timeout
           // stall arrives ONLY over the data channel (publishPageStateToRoom), so the
           // poll never SETS pageLoadStalled — but the terminal 'loaded'/'errored' that

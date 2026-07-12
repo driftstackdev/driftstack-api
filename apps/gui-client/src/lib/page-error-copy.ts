@@ -16,6 +16,14 @@ export interface PageErrorInfo {
   message?: string;
 }
 
+/** True when two page-state error envelopes carry the same operator-visible and
+ *  diagnostic fields. The control-plane poll returns a newly allocated object on
+ *  every tick; preserving the existing React state for an unchanged envelope keeps
+ *  that routine poll from repainting the entire live simulator/video subtree. */
+export function pageErrorInfoEqual(a: PageErrorInfo, b: PageErrorInfo): boolean {
+  return a.kind === b.kind && a.http_status === b.http_status && a.message === b.message;
+}
+
 /** Friendly, action-oriented copy per page-error kind. Used by BOTH LiveSessionView
  *  and SimulatorWindow so the error treatment is identical across surfaces. */
 export function pageErrorCopy(err: PageErrorInfo): string {

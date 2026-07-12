@@ -5,7 +5,7 @@
 // number.
 
 import { describe, expect, it } from 'vitest';
-import { pageErrorCopy } from '../../src/lib/page-error-copy';
+import { pageErrorCopy, pageErrorInfoEqual } from '../../src/lib/page-error-copy';
 
 describe('pageErrorCopy', () => {
   it('gives friendly per-kind copy for the known kinds', () => {
@@ -34,5 +34,20 @@ describe('pageErrorCopy', () => {
 
   it('falls back to the generic line when there is no kind and no message', () => {
     expect(pageErrorCopy({})).toMatch(/couldn't be loaded/i);
+  });
+
+  it('compares poll snapshots by their meaningful fields', () => {
+    expect(
+      pageErrorInfoEqual(
+        { kind: 'http', http_status: 503, message: 'upstream unavailable' },
+        { kind: 'http', http_status: 503, message: 'upstream unavailable' },
+      ),
+    ).toBe(true);
+    expect(
+      pageErrorInfoEqual({ kind: 'dns', message: 'first' }, { kind: 'dns', message: 'next' }),
+    ).toBe(false);
+    expect(
+      pageErrorInfoEqual({ kind: 'http', http_status: 502 }, { kind: 'http', http_status: 503 }),
+    ).toBe(false);
   });
 });
