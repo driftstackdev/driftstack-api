@@ -35,7 +35,7 @@ interface AdminKey {
 }
 interface SetUpOpts {
   promptReturns?: string | null;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -182,5 +182,38 @@ describe('admin api-keys page — force-revoke (operator security)', () => {
     await flush();
     expect(bannerText(window)).toMatch(/Revoke cancelled — reason is required\./);
     expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
+  });
+
+  it('single-flights revoke before the prompt resolves and stays visibly busy through the POST', async () => {
+    const keys = [mkKey({ id: 'key_active', revoked_at: null })];
+    let finishPost: (response: Response) => void = () => {};
+    const pendingPost = new Promise<Response>((resolve) => {
+      finishPost = resolve;
+    });
+    const fallback = makeRouter(keys);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      promptReturns: 'confirmed leak',
+      route: (call) => (call.init?.method === 'POST' ? pendingPost : fallback(call)),
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-action="revoke"][data-id="key_active"]',
+    ) as HTMLButtonElement;
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush(2);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.textContent).toBe('Revoking…');
+
+    keys[0]!.revoked_at = '2026-05-29T12:00:00.000Z';
+    finishPost(new Response(null, { status: 204 }));
+    await flush();
+    expect(
+      window.document.querySelector('[data-action="revoke"][data-id="key_active"]'),
+    ).toBeNull();
   });
 });

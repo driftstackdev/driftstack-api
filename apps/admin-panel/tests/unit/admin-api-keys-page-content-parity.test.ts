@@ -86,10 +86,12 @@ describe('W362.C admin-panel /api-keys page content parity', () => {
 
   it('required-reason gate in revoke() handler (branded driftstackPrompt + non-empty trim)', () => {
     expect(body).toMatch(
-      /await window\.driftstackPrompt\('Reason for revoking ' \+ id \+ ' \(required\):', \{/,
+      /await window\.driftstackPrompt\(\s*'Reason for revoking ' \+ id \+ ' \(required\):',\s*\{/,
     );
     expect(body).toMatch(/Revoke cancelled — reason is required/);
     expect(body).toMatch(/body: JSON\.stringify\(\{ reason: reason\.trim\(\) \}\)/);
+    expect(body).toMatch(/if \(!token \|\| revokesInFlight\.has\(id\)\) return;/);
+    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\)/);
   });
 
   it('filter wiring: account_id text input + hide-revoked checkbox', () => {

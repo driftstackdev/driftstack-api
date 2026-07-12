@@ -372,38 +372,58 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      async function revoke(id) {
-        if (!token) return;
-        const reason = await window.driftstackPrompt('Reason for revoking ' + id + ' (required):', {
-          placeholder: 'e.g. suspected leak',
-          confirmLabel: 'Revoke',
-        });
-        if (!reason || !reason.trim()) {
-          showBanner('Revoke cancelled — reason is required.');
-          return;
+      const revokesInFlight = new Set();
+      async function revoke(id, btn) {
+        if (!token || revokesInFlight.has(id)) return;
+        revokesInFlight.add(id);
+        const originalText = btn ? btn.textContent : 'Revoke';
+        if (btn) {
+          btn.disabled = true;
+          btn.setAttribute('aria-busy', 'true');
+          btn.textContent = 'Reason…';
         }
-        showBanner('Revoking ' + id + '…');
-        fetch(apiBaseUrl + '/v1/admin/api-keys/' + encodeURIComponent(id) + '/revoke', {
-          method: 'POST',
-          headers: {
-            authorization: 'Bearer ' + token,
-            'content-type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ reason: reason.trim() }),
-        })
-          .then((r) => {
-            if (r.status === 204 || r.ok) return null;
-            return Promise.reject(new Error('HTTP ' + r.status));
-          })
-          .then(() => {
-            showBanner('Revoked ' + id + '. Refreshing…');
-            load();
-          })
-          .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't revoke (" + msg + ').');
-          });
+        try {
+          const reason = await window.driftstackPrompt(
+            'Reason for revoking ' + id + ' (required):',
+            {
+              placeholder: 'e.g. suspected leak',
+              confirmLabel: 'Revoke',
+            },
+          );
+          if (!reason || !reason.trim()) {
+            showBanner('Revoke cancelled — reason is required.');
+            return;
+          }
+          if (btn) btn.textContent = 'Revoking…';
+          showBanner('Revoking ' + id + '…');
+          const response = await fetch(
+            apiBaseUrl + '/v1/admin/api-keys/' + encodeURIComponent(id) + '/revoke',
+            {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ reason: reason.trim() }),
+            },
+          );
+          if (response.status !== 204 && !response.ok) {
+            throw new Error('HTTP ' + response.status);
+          }
+          showBanner('Revoked ' + id + '. Refreshing…');
+          await load();
+        } catch (err) {
+          const msg = err && err.message ? err.message : 'network error';
+          showBanner("Couldn't revoke (" + msg + ').');
+        } finally {
+          revokesInFlight.delete(id);
+          if (btn) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.textContent = originalText;
+          }
+        }
       }
 
       root.addEventListener('click', (ev) => {
@@ -413,7 +433,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!btn) return;
         ev.preventDefault();
         const id = btn.getAttribute('data-id');
-        if (id) revoke(id);
+        if (id) revoke(id, btn);
       });
 
       let debounce = 0;
