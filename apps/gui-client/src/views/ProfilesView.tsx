@@ -188,6 +188,10 @@ interface ProfilesState {
   profiles: Profile[];
   refreshedAt: number | null;
   loading: boolean;
+  /** Failure from fetching the profile list and its supporting hub data. Kept
+   *  separate from action errors so it can offer an honest in-place Retry. */
+  loadError: string | null;
+  /** User-action failures are dismiss-only; a list refresh must not erase one. */
   error: string | null;
   /** Transient success message (e.g. "Exported …") shown in a dismissible
    *  banner; null when there's nothing to report. Auto-dismisses after ~5s. */
@@ -342,6 +346,7 @@ export function ProfilesView({
     profiles: [],
     refreshedAt: null,
     loading: false,
+    loadError: null,
     error: null,
     notice: null,
     progressNotice: null,
@@ -629,6 +634,7 @@ export function ProfilesView({
           profiles: [],
           refreshedAt: null,
           loading: false,
+          loadError: null,
           error: null,
           notice: null,
           progressNotice: null,
@@ -682,6 +688,7 @@ export function ProfilesView({
           profiles: profilesPage,
           refreshedAt: Date.now(),
           loading: false,
+          loadError: null,
           // Preserve the existing error: unlike SessionsView, ProfilesView's
           // `error` also carries LAUNCH errors (e.g. "didn't get a video
           // channel — try again"), which must survive the background 15s poll
@@ -712,7 +719,7 @@ export function ProfilesView({
         setState((s) => ({
           ...s,
           loading: false,
-          error: friendlyError(err, settings.baseUrl),
+          loadError: friendlyError(err, settings.baseUrl),
         }));
       }
     },
@@ -2822,11 +2829,20 @@ export function ProfilesView({
           </button>
         </div>
       )}
-      {state.error !== null && (
+      {state.loadError !== null ? (
         <ErrorBanner
-          message={state.error}
-          onDismiss={() => setState((s) => ({ ...s, error: null }))}
+          message={state.loadError}
+          onRetry={() => void refresh(true)}
+          retrying={state.loading}
+          onDismiss={() => setState((s) => ({ ...s, loadError: null }))}
         />
+      ) : (
+        state.error !== null && (
+          <ErrorBanner
+            message={state.error}
+            onDismiss={() => setState((s) => ({ ...s, error: null }))}
+          />
+        )
       )}
       {state.notice !== null && (
         <div

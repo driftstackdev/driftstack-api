@@ -7,9 +7,19 @@ import { record } from '../lib/log-buffer';
 export interface ErrorBannerProps {
   message: string;
   onDismiss: () => void;
+  /** Optional recovery action for request-scoped failures. Existing callers
+   *  remain dismiss-only unless they explicitly provide it. */
+  onRetry?: () => void;
+  /** Keeps the retry action single-flight and names the work in progress. */
+  retrying?: boolean;
 }
 
-export function ErrorBanner({ message, onDismiss }: ErrorBannerProps): JSX.Element {
+export function ErrorBanner({
+  message,
+  onDismiss,
+  onRetry,
+  retrying = false,
+}: ErrorBannerProps): JSX.Element {
   // W609 — Dev Logs productivity: every error a user SEES also lands in
   // the Dev Logs panel (views render friendly messages without touching
   // console.*, so before this the panel was empty during visible errors).
@@ -31,9 +41,22 @@ export function ErrorBanner({ message, onDismiss }: ErrorBannerProps): JSX.Eleme
             banner we'd rather wrap. */}
         <span className="whitespace-pre-line text-sm text-ink-primary">{message}</span>
       </div>
-      <button type="button" className="btn-secondary" onClick={onDismiss}>
-        Dismiss
-      </button>
+      <div className="flex shrink-0 items-center gap-2">
+        {onRetry !== undefined && (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={onRetry}
+            disabled={retrying}
+            aria-busy={retrying}
+          >
+            {retrying ? 'Retrying…' : 'Retry'}
+          </button>
+        )}
+        <button type="button" className="btn-secondary" onClick={onDismiss}>
+          Dismiss
+        </button>
+      </div>
     </div>
   );
 }
