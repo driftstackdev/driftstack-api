@@ -32,7 +32,7 @@ interface DlqEntry {
 interface SetUpOpts {
   confirmReturns?: boolean;
   confirmCalls?: unknown[];
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -196,5 +196,64 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
       (c) => c.init?.method === 'POST' && /\/v1\/admin\/webhook-dlq\/whd_1\/requeue$/.test(c.url),
     );
     expect(post).toBeTruthy();
+  });
+
+  it('locks both entry actions and sends only one requeue while the mutation is pending', async () => {
+    let resolveMutation: ((response: Response) => void) | undefined;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (method === 'POST') {
+          return new Promise<Response>((resolve) => {
+            resolveMutation = resolve;
+          });
+        }
+        return json({ data: [mkEntry({ id: 'whd_1' })] });
+      },
+    });
+    win = window;
+    await flush();
+    const requeue = window.document.querySelector(
+      '[data-action="requeue"][data-id="whd_1"]',
+    ) as HTMLButtonElement;
+    const discard = window.document.querySelector(
+      '[data-action="discard"][data-id="whd_1"]',
+    ) as HTMLButtonElement;
+
+    requeue.click();
+    requeue.click();
+    await flush(1);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(requeue.disabled).toBe(true);
+    expect(requeue.textContent).toBe('Requeueing…');
+    expect(requeue.getAttribute('aria-busy')).toBe('true');
+    expect(discard.disabled).toBe(true);
+
+    resolveMutation?.(json({ ok: true }));
+    await flush();
+  });
+
+  it('single-flights discard before its async confirmation resolves', async () => {
+    const confirmCalls: unknown[] = [];
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      confirmCalls,
+      route: makeRouter([mkEntry({ id: 'whd_1' })]),
+    });
+    win = window;
+    await flush();
+    const discard = window.document.querySelector(
+      '[data-action="discard"][data-id="whd_1"]',
+    ) as HTMLButtonElement;
+
+    discard.click();
+    discard.click();
+    await flush();
+
+    expect(confirmCalls).toHaveLength(1);
+    expect(
+      fetchCalls.filter((call) => call.init?.method === 'POST' && /\/discard$/.test(call.url)),
+    ).toHaveLength(1);
   });
 });

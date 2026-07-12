@@ -196,6 +196,24 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch(() => ({}))
           .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
       }
+      const pendingMutations = new Set();
+      function setEntryBusy(id, action, busy, pendingLabel) {
+        if (!list) return;
+        list.querySelectorAll('button[data-id]').forEach(function (button) {
+          if (button.getAttribute('data-id') !== id) return;
+          if (!button.hasAttribute('data-idle-label')) {
+            button.setAttribute('data-idle-label', button.textContent || '');
+          }
+          button.disabled = busy;
+          if (busy && button.getAttribute('data-action') === action) {
+            button.textContent = pendingLabel;
+            button.setAttribute('aria-busy', 'true');
+          } else {
+            button.textContent = button.getAttribute('data-idle-label') || button.textContent;
+            button.removeAttribute('aria-busy');
+          }
+        });
+      }
       function escapeHtml(s) {
         return String(s).replace(
           /[&<>"']/g,
@@ -263,10 +281,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div class="mt-4 flex flex-wrap gap-3">' +
           '<button type="button" data-action="requeue" data-id="' +
           escapeHtml(d.id) +
-          '" class="text-sm font-medium text-tk-accent hover:underline">Requeue</button>' +
+          '" class="text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50">Requeue</button>' +
           '<button type="button" data-action="discard" data-id="' +
           escapeHtml(d.id) +
-          '" class="text-sm font-medium text-rose-700 hover:underline">Discard</button>' +
+          '" class="text-sm font-medium text-rose-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50">Discard</button>' +
           '</div></li>'
         );
       }
@@ -335,9 +353,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function requeue(id) {
-        if (!token) return;
+        if (!token || pendingMutations.has(id)) return Promise.resolve();
+        pendingMutations.add(id);
+        setEntryBusy(id, 'requeue', true, 'Requeueing…');
         showBanner('Requeueing ' + id + '…');
-        fetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/requeue', {
+        return fetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/requeue', {
           method: 'POST',
           headers: {
             authorization: 'Bearer ' + token,
@@ -349,11 +369,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((r) => (r.ok ? r.json() : mutationError(r)))
           .then(() => {
             showBanner('Requeued ' + id + '. Refreshing list…');
-            load();
+            return load();
           })
           .catch((err) => {
             const msg = err && err.message ? err.message : 'network error';
             showBanner("Couldn't requeue " + id + ' (' + msg + ').');
+          })
+          .finally(() => {
+            pendingMutations.delete(id);
+            setEntryBusy(id, 'requeue', false, '');
           });
       }
 
@@ -362,41 +386,46 @@ const apiBaseUrl = resolveApiBaseUrl();
       // is the only forensic trace. Confirm() before firing so a
       // mis-click doesn't destroy evidence.
       async function discard(id) {
-        if (!token) return;
+        if (!token || pendingMutations.has(id)) return;
+        pendingMutations.add(id);
+        setEntryBusy(id, 'discard', true, 'Confirming…');
         // destructive: true — this is the one hard-delete action on this page
         // (payload is irrecoverable). Without it the Discard button auto-
         // focuses and Enter isn't swallowed, so a stray Enter right after the
         // dialog opens fires the delete with no click required, same bug class
         // as the suspend confirm on accounts/[id].astro (audit waefer6wu).
-        if (
-          !(await window.driftstackConfirm(
+        try {
+          const confirmed = await window.driftstackConfirm(
             'Discard webhook delivery ' +
               id +
               '? This is irrecoverable — the payload + retry history are deleted. The action is audit-logged.',
             { confirmLabel: 'Discard', destructive: true },
-          ))
-        ) {
-          return;
+          );
+          if (!confirmed) return;
+          setEntryBusy(id, 'discard', true, 'Discarding…');
+          showBanner('Discarding ' + id + '…');
+          const r = await fetch(
+            apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/discard',
+            {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              credentials: 'include',
+              body: '{}',
+            },
+          );
+          await (r.ok ? r.json() : mutationError(r));
+          showBanner('Discarded ' + id + '. Refreshing list…');
+          await load();
+        } catch (err) {
+          const msg = err && err.message ? err.message : 'network error';
+          showBanner("Couldn't discard " + id + ' (' + msg + ').');
+        } finally {
+          pendingMutations.delete(id);
+          setEntryBusy(id, 'discard', false, '');
         }
-        showBanner('Discarding ' + id + '…');
-        fetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/discard', {
-          method: 'POST',
-          headers: {
-            authorization: 'Bearer ' + token,
-            'content-type': 'application/json',
-          },
-          credentials: 'include',
-          body: '{}',
-        })
-          .then((r) => (r.ok ? r.json() : mutationError(r)))
-          .then(() => {
-            showBanner('Discarded ' + id + '. Refreshing list…');
-            load();
-          })
-          .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't discard " + id + ' (' + msg + ').');
-          });
       }
 
       // Event delegation for dynamically-rendered Requeue + Discard buttons.
