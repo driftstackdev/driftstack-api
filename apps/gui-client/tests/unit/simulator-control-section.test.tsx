@@ -8,8 +8,10 @@ import { SessionControlSection } from '../../src/views/SimulatorWindow';
 
 const base = {
   pairKind: null,
-  busy: false,
+  action: null,
   composerText: '',
+  controlError: null,
+  onRetryControl: vi.fn(),
   onSetMode: vi.fn(),
   onTakeover: vi.fn(),
   onHandback: vi.fn(),
@@ -95,7 +97,45 @@ describe('SessionControlSection', () => {
   it('segments are disabled before the mode loads (null) and while a control call is busy', () => {
     const { rerender } = render(<SessionControlSection {...base} mode={null} />);
     expect(screen.getByRole('radio', { name: 'Agent mode' }).disabled).toBe(true);
-    rerender(<SessionControlSection {...base} mode="manual" busy />);
+    rerender(<SessionControlSection {...base} mode="manual" action={{ kind: 'message' }} />);
     expect(screen.getByRole('radio', { name: 'Manual mode' }).disabled).toBe(true);
+  });
+
+  it('names the active takeover, handback, mode, and send operations', () => {
+    const { rerender } = render(
+      <SessionControlSection
+        {...base}
+        mode="pair"
+        pairKind="ai-driving"
+        action={{ kind: 'takeover' }}
+      />,
+    );
+    expect(screen.getAllByText('Taking control…')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /taking control/i })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    rerender(
+      <SessionControlSection
+        {...base}
+        mode="pair"
+        pairKind="human-driving"
+        action={{ kind: 'handback' }}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /handing back/i })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    rerender(
+      <SessionControlSection {...base} mode="manual" action={{ kind: 'mode', target: 'ai' }} />,
+    );
+    expect(screen.getByText('Switching to Agent…')).not.toBeNull();
+    expect(screen.getByRole('radio', { name: 'Agent mode' })).toHaveAttribute('aria-busy', 'true');
+
+    rerender(<SessionControlSection {...base} mode="ai" action={{ kind: 'message' }} />);
+    expect(screen.getByRole('button', { name: 'Send to agent' })).toHaveTextContent('Sending…');
   });
 });

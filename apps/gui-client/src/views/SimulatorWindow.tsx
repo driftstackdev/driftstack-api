@@ -931,10 +931,29 @@ const MODE_OPTIONS: { value: SessionMode; label: string }[] = [
   { value: 'manual', label: 'Manual' },
 ];
 
+export type SessionControlAction =
+  | { kind: 'mode'; target: SessionMode }
+  | { kind: 'takeover' | 'handback' | 'message' | 'end' };
+
+type OwnedSessionControlAction = SessionControlAction & {
+  sessionId: string;
+  requestId: number;
+};
+
+function ControlActionSpinner(): JSX.Element {
+  return (
+    <span
+      data-component="control-action-spinner"
+      aria-hidden="true"
+      className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border border-current border-r-transparent motion-reduce:animate-none"
+    />
+  );
+}
+
 export function SessionControlSection({
   mode,
   pairKind,
-  busy,
+  action,
   composerText,
   controlError,
   onRetryControl,
@@ -946,7 +965,7 @@ export function SessionControlSection({
 }: {
   mode: SessionMode | null;
   pairKind: string | null;
-  busy: boolean;
+  action: SessionControlAction | null;
   composerText: string;
   /** Last getAgentSession failure, classified — null when controls loaded /
    *  loading. Drives the "controls unavailable — Retry" caption instead of a
@@ -962,23 +981,38 @@ export function SessionControlSection({
   // One source of truth for the caption + the take-over/hand-back verb: the
   // pair_mode_state.kind carries 'human' when the human holds the pair lock.
   const humanDriving = pairKind !== null && /human/i.test(pairKind);
+  const busy = action !== null;
+  const messageBusy = action?.kind === 'message';
+  const pairAction =
+    action?.kind === 'takeover' || action?.kind === 'handback' ? action.kind : null;
   // Three control states: loaded (mode set) → mode caption; failed
   // (controlError set, mode still null) → unavailable + Retry; genuine first
   // load (mode null, no error) → "Connecting…".
   const failed = mode === null && controlError !== null;
-  const caption = failed
-    ? controlError
-    : mode === null
-      ? 'Connecting…'
-      : mode === 'manual'
-        ? 'Manual — tap the screen to drive'
-        : mode === 'pair'
-          ? humanDriving
-            ? "You're driving — agent is paused"
-            : 'Pair — agent drives, tap to take over'
-          : 'Agent is driving — watching live';
+  const caption =
+    action?.kind === 'mode'
+      ? `Switching to ${MODE_OPTIONS.find((opt) => opt.value === action.target)?.label ?? action.target}…`
+      : action?.kind === 'takeover'
+        ? 'Taking control…'
+        : action?.kind === 'handback'
+          ? 'Handing back to agent…'
+          : action?.kind === 'message'
+            ? 'Sending to agent…'
+            : action?.kind === 'end'
+              ? 'Ending session…'
+              : failed
+                ? controlError
+                : mode === null
+                  ? 'Connecting…'
+                  : mode === 'manual'
+                    ? 'Manual — tap the screen to drive'
+                    : mode === 'pair'
+                      ? humanDriving
+                        ? "You're driving — agent is paused"
+                        : 'Pair — agent drives, tap to take over'
+                      : 'Agent is driving — watching live';
   return (
-    <div data-component="simulator-control-section">
+    <div data-component="simulator-control-section" aria-busy={busy}>
       <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
         Mode
       </div>
@@ -986,6 +1020,7 @@ export function SessionControlSection({
       <div
         role="group"
         aria-label="Session control mode"
+        aria-busy={action?.kind === 'mode'}
         className="mx-3 flex gap-0.5 rounded-lg bg-black/40 p-0.5 ring-1 ring-white/10"
       >
         {MODE_OPTIONS.map((opt) => {
@@ -997,20 +1032,25 @@ export function SessionControlSection({
               role="radio"
               aria-checked={active}
               aria-label={`${opt.label} mode`}
+              aria-busy={action?.kind === 'mode' && action.target === opt.value}
               disabled={busy || mode === null}
               onClick={() => onSetMode(opt.value)}
-              className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+              className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
                 active
                   ? 'bg-white/15 text-ink-primary ring-1 ring-white/20'
                   : 'text-ink-secondary hover:bg-white/[0.06] hover:text-ink-primary'
               }`}
             >
+              {action?.kind === 'mode' && action.target === opt.value && <ControlActionSpinner />}
               {opt.label}
             </button>
           );
         })}
       </div>
-      <div className="flex items-center gap-1.5 px-3 pt-1.5 text-[10.5px] text-ink-muted">
+      <div
+        aria-live="polite"
+        className="flex items-center gap-1.5 px-3 pt-1.5 text-[10.5px] text-ink-muted"
+      >
         <span
           aria-hidden="true"
           className={`${failed ? 'text-amber-400' : 'text-accent'} ${mode === 'ai' ? 'animate-pulse' : ''}`}
@@ -1033,14 +1073,21 @@ export function SessionControlSection({
         <button
           type="button"
           disabled={busy}
+          aria-busy={pairAction !== null}
           onClick={humanDriving ? onHandback : onTakeover}
           className="mt-1.5 flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11.5px] text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary disabled:opacity-50"
         >
           <span className="w-4 shrink-0 text-center leading-none" aria-hidden="true">
-            {humanDriving ? '⤺' : '⤿'}
+            {pairAction !== null ? <ControlActionSpinner /> : humanDriving ? '⤺' : '⤿'}
           </span>
           <span className="leading-none">
-            {humanDriving ? 'Hand back to agent' : 'Take control'}
+            {pairAction === 'takeover'
+              ? 'Taking control…'
+              : pairAction === 'handback'
+                ? 'Handing back…'
+                : humanDriving
+                  ? 'Hand back to agent'
+                  : 'Take control'}
           </span>
         </button>
       )}
@@ -1048,6 +1095,7 @@ export function SessionControlSection({
           panel-only so it never collides with the on-screen keyboard. */}
       {(mode === 'ai' || mode === 'pair') && (
         <form
+          aria-busy={messageBusy}
           className="mx-3 mt-1.5 flex items-center gap-1 rounded-lg bg-black/40 px-2 py-1 ring-1 ring-white/10"
           onSubmit={(e) => {
             e.preventDefault();
@@ -1067,9 +1115,17 @@ export function SessionControlSection({
             type="submit"
             disabled={busy || composerText.trim() === ''}
             aria-label="Send to agent"
-            className="shrink-0 rounded p-1 text-accent transition hover:bg-white/10 disabled:opacity-40"
+            aria-busy={messageBusy}
+            className="flex shrink-0 items-center gap-1 rounded p-1 text-accent transition hover:bg-white/10 disabled:opacity-40"
           >
-            ➤
+            {messageBusy ? (
+              <>
+                <ControlActionSpinner />
+                <span className="text-[10px]">Sending…</span>
+              </>
+            ) : (
+              '➤'
+            )}
           </button>
         </form>
       )}
@@ -4483,6 +4539,7 @@ export function SimulatorWindow(): JSX.Element {
     let cancelled = false;
     const reqSessionId = sessionId;
     const tick = (): void => {
+      const reqControlEpoch = controlRequestIdRef.current;
       void getAgentSession(reqSessionId, controlAuth)
         .then((s) => {
           // Drop a result that resolved after an in-place session swap.
@@ -4501,7 +4558,10 @@ export function SimulatorWindow(): JSX.Element {
           // action. Apply it when the session is non-terminal and no mutation is in
           // flight (guard like refreshControl, so it never clobbers an optimistic
           // onSetMode/onTakeover/onHandback). Zero extra network cost.
-          if (!controlBusyRef.current) {
+          if (
+            controlActionRef.current === null &&
+            reqControlEpoch === controlRequestIdRef.current
+          ) {
             setPairKind(s.pairKind);
             setControlMode(s.mode);
             setControlModeConfirmed(true);
@@ -5041,8 +5101,49 @@ export function SimulatorWindow(): JSX.Element {
   // can't confirm is human-only" intent). Reset to false on every session swap.
   const [controlModeConfirmed, setControlModeConfirmed] = useState(false);
   const [pairKind, setPairKind] = useState<string | null>(null);
-  const [controlBusy, setControlBusy] = useState(false);
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const [controlAction, setControlAction] = useState<OwnedSessionControlAction | null>(null);
+  const controlActionRef = useRef<OwnedSessionControlAction | null>(null);
+  const controlRequestIdRef = useRef(0);
+  const controlBusy = controlAction !== null;
   const [composerText, setComposerText] = useState('');
+  const [endArmed, setEndArmed] = useState(false);
+  const endArmTimerRef = useRef<number | null>(null);
+
+  // A control mutation belongs to one exact session + request. The standalone
+  // Simulator can receive a ds-session relaunch without remounting, so a scalar
+  // busy flag lets the OLD request's late then/finally mutate (or unlock) the NEW
+  // session. Claim synchronously through a ref to reject same-tick double clicks;
+  // only the current owner may publish a result or clear the in-flight state.
+  const beginControlAction = (action: SessionControlAction): OwnedSessionControlAction | null => {
+    if (sessionIdRef.current === '' || controlActionRef.current !== null) return null;
+    const owned: OwnedSessionControlAction = {
+      ...action,
+      sessionId: sessionIdRef.current,
+      requestId: ++controlRequestIdRef.current,
+    };
+    controlActionRef.current = owned;
+    setControlAction(owned);
+    return owned;
+  };
+  const ownsControlAction = (action: OwnedSessionControlAction): boolean => {
+    const current = controlActionRef.current;
+    return (
+      current?.requestId === action.requestId &&
+      current.sessionId === action.sessionId &&
+      sessionIdRef.current === action.sessionId
+    );
+  };
+  const finishControlAction = (action: OwnedSessionControlAction): void => {
+    if (!ownsControlAction(action)) return;
+    controlActionRef.current = null;
+    // Invalidate control reads that began while this mutation was in flight.
+    // Otherwise a slow pre-confirmation snapshot could arrive just after the
+    // spinner clears and overwrite the newly confirmed mode/pair ownership.
+    controlRequestIdRef.current += 1;
+    setControlAction(null);
+  };
   // CRITICAL session-switch reset. The relaunch listener swaps sessionId IN PLACE
   // (no remount — to keep the live Room), so per-session UI state would otherwise
   // carry over. Two real bugs that causes (audit wqhvarsb9): (1) a stale controlMode
@@ -5066,6 +5167,14 @@ export function SimulatorWindow(): JSX.Element {
     setControlMode(null);
     setControlModeConfirmed(false);
     setPairKind(null);
+    controlActionRef.current = null;
+    controlRequestIdRef.current += 1;
+    setControlAction(null);
+    setComposerText('');
+    if (endArmTimerRef.current !== null) window.clearTimeout(endArmTimerRef.current);
+    endArmTimerRef.current = null;
+    setEndArmed(false);
+    setNotice(null);
     // P1a — a fresh/relaunched session starts NON-terminal; clear any prior
     // "Session ended" state so the new session's first frame isn't covered by the
     // old session's terminal overlay (in-place relaunch swaps sessionId without
@@ -5146,9 +5255,11 @@ export function SimulatorWindow(): JSX.Element {
             ? 'Sign in to control the session'
             : err.message
       : 'Control request failed';
-  const noticeControlError = (err: unknown): void => {
+  const noticeControlError = (err: unknown, reqSessionId = sessionIdRef.current): void => {
     setNotice(controlErrorMessage(err));
-    window.setTimeout(() => setNotice(null), 4000);
+    window.setTimeout(() => {
+      if (sessionIdRef.current === reqSessionId) setNotice(null);
+    }, 4000);
   };
   // The LiveKit room handle, surfaced by the panel after a (re)connect. Wrap
   // setRoom so a fresh/reconnected room CLEARS the latched controlUnreachable
@@ -5165,18 +5276,15 @@ export function SimulatorWindow(): JSX.Element {
   // so a URL typed then trickled a fake loading bar and silently did nothing). Mirrors
   // the box readiness the navigate actually needs.
   const canNavigate = connState === 'connected' && publisherState === 'publishing';
-  // Keep the current session + busy state readable from late async callbacks so a
+  // Keep the current session + action ownership readable from late async callbacks so a
   // getAgentSession result can't apply to the WRONG session (in-place relaunch
   // swaps sessionId without remount) or clobber an in-flight mode mutation —
   // either would let a stale 'manual' mode make window-close wrongly END the
   // now-active agent session (adversarial review wza0t39g8 #2/#3).
-  const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
-  const controlBusyRef = useRef(controlBusy);
-  controlBusyRef.current = controlBusy;
   const refreshControl = useCallback((): void => {
     if (sessionId === '') return;
     const reqSessionId = sessionId; // epoch: the session this fetch is for
+    const reqControlEpoch = controlRequestIdRef.current;
     setControlError(null); // clear any prior failure while this attempt is in flight
     void getAgentSession(sessionId, controlAuth)
       .then((s) => {
@@ -5184,7 +5292,12 @@ export function SimulatorWindow(): JSX.Element {
         // OR while a mode mutation (onSetMode) is in flight — applying a stale mode
         // would clobber the optimistic/confirmed mutation and could make
         // window-close end the wrong session.
-        if (reqSessionId !== sessionIdRef.current || controlBusyRef.current) return;
+        if (
+          reqSessionId !== sessionIdRef.current ||
+          controlActionRef.current !== null ||
+          reqControlEpoch !== controlRequestIdRef.current
+        )
+          return;
         setControlMode(s.mode);
         // The mode was actually fetched from the server — CONFIRMED. Only a
         // confirmed 'manual' lets window-close end the session (see the close
@@ -5319,11 +5432,13 @@ export function SimulatorWindow(): JSX.Element {
   }, [sessionId, countryCode, profileName]);
   const onSetMode = (target: SessionMode): void => {
     if (sessionId === '' || target === controlMode) return;
+    const request = beginControlAction({ kind: 'mode', target });
+    if (request === null) return;
     const prev = controlMode;
     setControlMode(target); // optimistic
-    setControlBusy(true);
-    void setSessionMode(sessionId, target, controlAuth)
+    void setSessionMode(request.sessionId, target, controlAuth)
       .then((s) => {
+        if (!ownsControlAction(request)) return;
         setControlMode(s.mode);
         // The founder explicitly set the mode and the server confirmed it — a
         // confirmed mode (so a deliberate switch to manual lets close end it).
@@ -5331,39 +5446,60 @@ export function SimulatorWindow(): JSX.Element {
         setPairKind(s.pairKind);
       })
       .catch((err: unknown) => {
+        if (!ownsControlAction(request)) return;
         setControlMode(prev); // revert on rejection
-        noticeControlError(err);
+        noticeControlError(err, request.sessionId);
       })
-      .finally(() => setControlBusy(false));
+      .finally(() => finishControlAction(request));
   };
   const onTakeover = (): void => {
-    if (sessionId === '') return;
-    setControlBusy(true);
-    void takeoverSession(sessionId, clientIdRef.current, controlAuth)
-      .then((kind) => setPairKind(kind))
-      .catch(noticeControlError)
-      .finally(() => setControlBusy(false));
+    const request = beginControlAction({ kind: 'takeover' });
+    if (request === null) return;
+    void takeoverSession(request.sessionId, clientIdRef.current, controlAuth)
+      .then((kind) => {
+        if (ownsControlAction(request)) setPairKind(kind);
+      })
+      .catch((err: unknown) => {
+        if (ownsControlAction(request)) noticeControlError(err, request.sessionId);
+      })
+      .finally(() => finishControlAction(request));
   };
   const onHandback = (): void => {
-    if (sessionId === '') return;
-    setControlBusy(true);
-    void handbackSession(sessionId, controlAuth)
-      .then((kind) => setPairKind(kind))
-      .catch(noticeControlError)
-      .finally(() => setControlBusy(false));
+    const request = beginControlAction({ kind: 'handback' });
+    if (request === null) return;
+    void handbackSession(request.sessionId, controlAuth)
+      .then((kind) => {
+        if (ownsControlAction(request)) setPairKind(kind);
+      })
+      .catch((err: unknown) => {
+        if (ownsControlAction(request)) noticeControlError(err, request.sessionId);
+      })
+      .finally(() => finishControlAction(request));
   };
   const onSendMessage = (): void => {
-    const text = composerText.trim();
-    if (sessionId === '' || text === '') return;
-    setControlBusy(true);
-    void sendAgentMessage(sessionId, text, controlAuth)
+    const draft = composerText;
+    const text = draft.trim();
+    if (text === '') return;
+    const request = beginControlAction({ kind: 'message' });
+    if (request === null) return;
+    // Clear on submit so the click is immediately visible. A rejection restores
+    // the exact draft (including intentional surrounding whitespace) while this
+    // request still owns the same session.
+    setComposerText('');
+    void sendAgentMessage(request.sessionId, text, controlAuth)
       .then(() => {
-        setComposerText('');
+        if (!ownsControlAction(request)) return;
         setNotice('Sent to agent');
-        window.setTimeout(() => setNotice(null), 3000);
+        window.setTimeout(() => {
+          if (sessionIdRef.current === request.sessionId) setNotice(null);
+        }, 3000);
       })
-      .catch(noticeControlError)
-      .finally(() => setControlBusy(false));
+      .catch((err: unknown) => {
+        if (!ownsControlAction(request)) return;
+        setComposerText(draft);
+        noticeControlError(err, request.sessionId);
+      })
+      .finally(() => finishControlAction(request));
   };
   // Explicit Stop/End (founder Track A) — END the agent session no matter the
   // mode (in ai/pair the OS-close only HIDES the window, leaving the session
@@ -5377,10 +5513,8 @@ export function SimulatorWindow(): JSX.Element {
   // tears down the worker browser + fork with NO undo, and this rail icon sits next to
   // everyday controls, so a stray single click must not kill a live session (audit 2026-07-08,
   // mirrors RecordingsView's permanent-delete two-step).
-  const [endArmed, setEndArmed] = useState(false);
-  const endArmTimerRef = useRef<number | null>(null);
   const onEndSession = (): void => {
-    if (sessionId === '' || controlBusy) return;
+    if (sessionId === '' || controlActionRef.current !== null) return;
     if (!endArmed) {
       setEndArmed(true);
       setNotice('Click End again to end the session — this stops the device (no undo).');
@@ -5392,16 +5526,26 @@ export function SimulatorWindow(): JSX.Element {
       return;
     }
     if (endArmTimerRef.current !== null) window.clearTimeout(endArmTimerRef.current);
+    endArmTimerRef.current = null;
     setEndArmed(false);
-    setControlBusy(true);
+    const request = beginControlAction({ kind: 'end' });
+    if (request === null) return;
     // The session is ending either way — drop its persisted control key so the
     // 24h credential doesn't linger in localStorage + entries don't accumulate.
-    clearPersistedControlKey(sessionId);
-    void endAgentSession(sessionId, controlAuth)
-      .then(() => {
-        void withCurrentWindow((w) => w.destroy());
+    clearPersistedControlKey(request.sessionId);
+    void endAgentSession(request.sessionId, controlAuth)
+      .then(async () => {
+        if (!ownsControlAction(request)) return;
+        // Keep the session guard INSIDE the async window callback as well. The
+        // dynamic Tauri import yields; a ds-session relaunch can land in that
+        // gap, and destroying by window label after the swap would close the
+        // newly bound session's Simulator.
+        await withCurrentWindow((w) =>
+          sessionIdRef.current === request.sessionId ? w.destroy() : Promise.resolve(),
+        );
       })
       .catch(() => {
+        if (!ownsControlAction(request)) return;
         // Control HTTP couldn't reach the server to DELETE the session (e.g. a
         // reopened window with no control key). Closing the window still ENDS the
         // session: dropping the LiveKit connection trips the worker-disconnect
@@ -5410,10 +5554,13 @@ export function SimulatorWindow(): JSX.Element {
         // (founder 2026-06-23 "still cant end session"). Best-effort notice first.
         setNotice('Ending — closing the window (the session will stop on the box).');
         window.setTimeout(() => {
-          void withCurrentWindow((w) => w.destroy());
+          if (sessionIdRef.current !== request.sessionId) return;
+          void withCurrentWindow((w) =>
+            sessionIdRef.current === request.sessionId ? w.destroy() : Promise.resolve(),
+          );
         }, 600);
       })
-      .finally(() => setControlBusy(false));
+      .finally(() => finishControlAction(request));
   };
   // Address-bar navigation (founder 2026-06-19: "can't press the URL bar"). The
   // fork's rendered URL bar is un-tappable chrome, so the GUI's own address bar
@@ -6586,13 +6733,20 @@ export function SimulatorWindow(): JSX.Element {
                     <button
                       type="button"
                       data-component="sim-rail-end"
-                      aria-label={endArmed ? 'Confirm — end session' : 'End session'}
+                      aria-label={
+                        controlAction?.kind === 'end'
+                          ? 'Ending session'
+                          : endArmed
+                            ? 'Confirm — end session'
+                            : 'End session'
+                      }
                       title={
                         endArmed
                           ? 'Click again to end the session (no undo)'
                           : 'End the session — stops the worker and tears down the browser'
                       }
                       disabled={controlBusy}
+                      aria-busy={controlAction?.kind === 'end'}
                       onClick={onEndSession}
                       className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors disabled:opacity-50 ${
                         endArmed
@@ -6600,7 +6754,9 @@ export function SimulatorWindow(): JSX.Element {
                           : 'text-red-400 hover:bg-red-500/20 hover:text-red-300'
                       }`}
                     >
-                      <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
+                      <span aria-hidden="true">
+                        {controlAction?.kind === 'end' ? <ControlActionSpinner /> : '◼'}
+                      </span>
                     </button>
                   </>
                 )}
@@ -6704,7 +6860,7 @@ export function SimulatorWindow(): JSX.Element {
                         <SessionControlSection
                           mode={controlMode}
                           pairKind={pairKind}
-                          busy={controlBusy}
+                          action={controlAction}
                           composerText={composerText}
                           controlError={controlError}
                           onRetryControl={refreshControl}
