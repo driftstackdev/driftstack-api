@@ -16,11 +16,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 
+const sendNavigate = vi.fn(() => Promise.resolve());
+
 // Browser mode defaults ON (founder 2026-06-21), which hosts the URL bar in the
 // toolbar and hides the panel's NavigateAddressBar. These tests exercise the
 // panel address bar's connecting affordance, so pin Browser mode OFF with a
 // working localStorage stub (jsdom's is non-functional here).
 beforeEach(() => {
+  sendNavigate.mockClear();
   const store = new Map<string, string>([
     ['ds-sim-browser-mode', '0'],
     ['ds-sim-navigated', '1'],
@@ -43,7 +46,9 @@ vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
   connectToAgentSession: () => new Promise(() => {}),
   sendInputEvent: vi.fn(() => Promise.resolve()),
-  sendNavigate: vi.fn(() => Promise.resolve()),
+  sendNavigate,
+  sendTabListUpdate: vi.fn(() => Promise.resolve()),
+  sendActivateTab: vi.fn(() => Promise.resolve('req_test')),
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
     Disconnected: 'disconnected',
@@ -141,6 +146,23 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
 
     act(() => panelCbs.onInputCongestionChange?.(false));
     expect(container.querySelector('[data-component="input-congestion-badge"]')).toBeNull();
+  });
+
+  it('does not optimistically create a tab or navigate while input is paused', () => {
+    localStorage.setItem('ds-sim-browser-mode', '1');
+    const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom));
+    expect(container.querySelectorAll('[data-component="simulator-tab"]')).toHaveLength(1);
+
+    act(() => panelCbs.onInputCongestionChange?.(true));
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
+    expect(container.querySelectorAll('[data-component="simulator-tab"]')).toHaveLength(1);
+
+    const address = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(address, { target: { value: 'example.com' } });
+    fireEvent.keyDown(address, { key: 'Enter' });
+    expect(sendNavigate).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Connection catching up — try again in a moment');
   });
 });
 

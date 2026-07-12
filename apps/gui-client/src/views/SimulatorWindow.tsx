@@ -5790,6 +5790,10 @@ export function SimulatorWindow(): JSX.Element {
   // drives it onward via the address bar afterward. The stored url/title seed from
   // NEW_TAB_URL so the tab label + address bar read sensibly before the box reports.
   const onNewTab = useCallback((): void => {
+    if (inputCongested) {
+      showNotice('Connection catching up — try again in a moment', 2500);
+      return;
+    }
     const tab: SimTab = { id: makeTabId(), url: NEW_TAB_URL, scrollY: 0, title: NEW_TAB_TITLE };
     const prevActive = activeTabId;
     // SUPERSEDE any in-flight switch to a DIFFERENT tab (same guard onActivateTab L~5702 +
@@ -5845,12 +5849,16 @@ export function SimulatorWindow(): JSX.Element {
         setSwitchingTabId((s) => (s === tab.id ? null : s));
       }, SWITCH_AFFORDANCE_TIMEOUT_MS);
     }
-  }, [emitTabList, resetPageChromeForSwitch, activeTabId, room]);
+  }, [emitTabList, resetPageChromeForSwitch, activeTabId, room, inputCongested, showNotice]);
   // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
   // the one to the left, else the right). NEVER drops below one tab (the close button
   // is hidden on the last tab too, but guard here as well).
   const onCloseTab = useCallback(
     (id: string): void => {
+      if (inputCongested) {
+        showNotice('Connection catching up — try again in a moment', 2500);
+        return;
+      }
       // Cancel any in-flight switch retry for the tab being CLOSED so its ack-miss
       // timer can't re-issue activateTab for a tab that no longer exists (the box
       // would try to switch its published page to a removed tab). Same root cause
@@ -5927,7 +5935,7 @@ export function SimulatorWindow(): JSX.Element {
         }, SWITCH_AFFORDANCE_TIMEOUT_MS);
       }
     },
-    [activeTabId, emitTabList, resetPageChromeForSwitch, room, tabs],
+    [activeTabId, emitTabList, resetPageChromeForSwitch, room, tabs, inputCongested, showNotice],
   );
   // Send a single activateTab attempt for a switch + arm the ack-miss re-issue timer
   // (founder 2026-06-25 softer "could not switch tab" handling). On a missed ack the
@@ -6001,6 +6009,10 @@ export function SimulatorWindow(): JSX.Element {
   // reject reverts + notifies; a dropped ack retries then soft-fails (see onData).
   const onActivateTab = useCallback(
     (id: string): void => {
+      if (inputCongested) {
+        showNotice('Connection catching up — try again in a moment', 2500);
+        return;
+      }
       const target = tabs.find((t) => t.id === id);
       if (target === undefined || id === activeTabId) return;
       const prevActive = activeTabId;
@@ -6077,6 +6089,8 @@ export function SimulatorWindow(): JSX.Element {
       sendActivateAttempt,
       reconcilePageState,
       resetPageChromeForSwitch,
+      inputCongested,
+      showNotice,
     ],
   );
   // DERIVE the address-bar view (liveUrl/liveTitle) from the ACTIVE tab's stored
@@ -6125,6 +6139,10 @@ export function SimulatorWindow(): JSX.Element {
   }, [liveTitle, liveUrl, deviceName, profileName]);
   const onNavigate = (raw: string): void => {
     if (room === null) return;
+    if (inputCongested) {
+      showNotice('Connection catching up — try again in a moment', 2500);
+      return;
+    }
     // Omnibox behaviour: a URL navigates, anything else becomes a web search —
     // null only for empty input or a rejected dangerous scheme.
     const url = resolveAddressBarInput(raw);
