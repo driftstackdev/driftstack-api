@@ -373,6 +373,21 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       ]);
     });
 
+    it('drops model swipe intents because the live harness mapper cannot execute them', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'interact', action: 'swipe', value: 'up' },
+            { kind: 'scroll', direction: 'down', amount_px: 600 },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([{ kind: 'scroll', direction: 'down', amount_px: 600 }]);
+    });
+
     it('drops invalid model numeric options before the dispatch contract', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({

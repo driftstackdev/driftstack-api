@@ -127,7 +127,7 @@ const SYSTEM_PROMPT = [
   'invent new verbs.',
   '',
   '  - navigate { url: string }',
-  '  - interact { action: "tap"|"type"|"scroll"|"swipe"|"press", selector?: string, value?: string, sensitive?: boolean } (type: sensitive=true for OTP/PIN/card values; press: value = key name, e.g. "Enter")',
+  '  - interact { action: "tap"|"type"|"scroll"|"press", selector?: string, value?: string, sensitive?: boolean } (type: sensitive=true for OTP/PIN/card values; press: value = key name, e.g. "Enter"; use the top-level scroll verb for directional human scrolling)',
   '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number }',
   '  - capture { capture: "screenshot"|"dom_snapshot"|"pdf" }',
   '  - scroll { direction: "up"|"down", amount_px?: number }',
@@ -573,13 +573,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
         break;
       case 'interact': {
         const action = i.action;
-        if (
-          action === 'tap' ||
-          action === 'type' ||
-          action === 'scroll' ||
-          action === 'swipe' ||
-          action === 'press'
-        ) {
+        if (action === 'tap' || action === 'type' || action === 'scroll' || action === 'press') {
           out.push({
             kind: 'interact',
             action,

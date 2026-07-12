@@ -104,14 +104,14 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
-  it("SYSTEM_PROMPT 6-verb constraint pinned (interact gained the press action W540): 'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT invent new verbs.' + 6-verb shape list (navigate / interact / wait / capture / scroll / behavioral_pause, W140). Drift to dropping the can-only-emit-the-listed-verbs constraint would let the model invent verbs the executor can't dispatch", () => {
+  it("SYSTEM_PROMPT 6-verb constraint pins only executable model actions: 'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT invent new verbs.' + 6-verb shape list (navigate / interact / wait / capture / scroll / behavioral_pause, W140). Swipe remains legacy API vocabulary but is not advertised because the live harness mapper cannot execute it", () => {
     expect(body).toMatch(
       /'CONSTRAINT: you can only emit the six intent verbs below\. You CANNOT',/,
     );
     expect(body).toMatch(/'invent new verbs\.',/);
     expect(body).toMatch(/' {2}- navigate \{ url: string \}',/);
     expect(body).toMatch(
-      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"swipe"\|"press", selector\?: string, value\?: string, sensitive\?: boolean \} \(type: sensitive=true for OTP\/PIN\/card values; press: value = key name, e\.g\. "Enter"\)',/,
+      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"press", selector\?: string, value\?: string, sensitive\?: boolean \} \(type: sensitive=true for OTP\/PIN\/card values; press: value = key name, e\.g\. "Enter"; use the top-level scroll verb for directional human scrolling\)',/,
     );
     expect(body).toMatch(
       /' {2}- wait \{ condition: "idle"\|"selector_visible", selector\?: string, timeoutMs\?: number \}',/,
