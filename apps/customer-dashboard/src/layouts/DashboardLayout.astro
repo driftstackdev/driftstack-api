@@ -822,12 +822,15 @@ const navSections: NavSection[] = [
                 var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
                 if (msg) msg.textContent = message;
                 if (ok) ok.textContent = (opts && opts.confirmLabel) || 'Confirm';
+                var destructive = !!(opts && opts.destructive);
                 // Remember what was focused (the trigger) so we can return
                 // focus there on close — keyboard users keep their place.
                 var prevFocus = document.activeElement;
                 overlay.classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
-                if (ok && ok.focus) ok.focus();
+                if (destructive) {
+                  if (cancel && cancel.focus) cancel.focus();
+                } else if (ok && ok.focus) ok.focus();
                 function done(result) {
                   confirmOpen = false;
                   overlay.classList.add('hidden');
@@ -844,6 +847,7 @@ const navSections: NavSection[] = [
                 function onOverlay(e) { if (e.target === overlay) done(false); }
                 function onKey(e) {
                   if (e.key === 'Escape') { done(false); return; }
+                  if (destructive && e.key === 'Enter') { e.preventDefault(); return; }
                   if (e.key === 'Tab') {
                     var f = [cancel, ok].filter(function (el) { return el; });
                     if (!f.length) return;

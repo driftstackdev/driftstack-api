@@ -895,7 +895,7 @@ const EMAIL_EVENTS = [
           if (
             !(await window.driftstackConfirm(
               'Clear your stored Anthropic key? Agent sessions will fall back to the bundled key (if available on your tier).',
-              { confirmLabel: 'Clear key' },
+              { confirmLabel: 'Clear key', destructive: true },
             ))
           )
             return;

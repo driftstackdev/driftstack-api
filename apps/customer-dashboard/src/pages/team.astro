@@ -385,7 +385,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               'Remove ' +
                 email +
                 ' from the team? They keep their Driftstack account but lose team access.',
-              { confirmLabel: 'Remove' },
+              { confirmLabel: 'Remove', destructive: true },
             );
             if (!ok) return;
             const token = getToken();

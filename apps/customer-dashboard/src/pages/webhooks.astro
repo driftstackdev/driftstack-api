@@ -1206,7 +1206,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (!id) return;
             const confirmed = await window.driftstackConfirm(
               'Delete webhook endpoint ' + id + '? This cannot be undone.',
-              { confirmLabel: 'Delete' },
+              { confirmLabel: 'Delete', destructive: true },
             );
             if (!confirmed) {
               return;
@@ -1312,7 +1312,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 'Rotate signing secret for ' +
                   id +
                   '?\n\nThe new secret is shown ONCE. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries.',
-                { confirmLabel: 'Rotate secret' },
+                { confirmLabel: 'Rotate secret', destructive: true },
               ))
             ) {
               return;

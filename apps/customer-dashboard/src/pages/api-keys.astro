@@ -606,7 +606,7 @@ npm i @driftstack/sdk</code></pre>
               'Revoke "' +
                 name +
                 '"? Apps using this key will start receiving 401 immediately. This cannot be undone.',
-              { confirmLabel: 'Revoke' },
+              { confirmLabel: 'Revoke', destructive: true },
             );
             if (!ok) return;
             btn.disabled = true;
@@ -701,7 +701,7 @@ npm i @driftstack/sdk</code></pre>
               'Rotate "' +
                 name +
                 '"? A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime.',
-              { confirmLabel: 'Rotate' },
+              { confirmLabel: 'Rotate', destructive: true },
             );
             if (!ok) return;
             btn.disabled = true;

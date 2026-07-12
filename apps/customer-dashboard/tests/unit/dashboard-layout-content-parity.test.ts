@@ -70,6 +70,16 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/function done\(result\) \{\s*promptOpen = false;/);
   });
 
+  it('destructive confirms require an explicit OK click: focus Cancel and swallow Enter', () => {
+    expect(body).toMatch(/var destructive = !!\(opts && opts\.destructive\);/);
+    expect(body).toMatch(
+      /if \(destructive\) \{\s*if \(cancel && cancel\.focus\) cancel\.focus\(\);/,
+    );
+    expect(body).toMatch(
+      /if \(destructive && e\.key === 'Enter'\) \{ e\.preventDefault\(\); return; \}/,
+    );
+  });
+
   it('page-title pattern: "${title} · Driftstack"', () => {
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
