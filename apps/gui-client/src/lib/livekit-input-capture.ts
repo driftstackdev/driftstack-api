@@ -122,10 +122,21 @@ export function pointerToViewport(
   },
 ): { x: number; y: number } | null {
   const rect = video.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return null;
+  if (
+    !Number.isFinite(rect.left) ||
+    !Number.isFinite(rect.top) ||
+    !Number.isFinite(rect.width) ||
+    !Number.isFinite(rect.height) ||
+    rect.width <= 0 ||
+    rect.height <= 0 ||
+    !Number.isFinite(event.clientX) ||
+    !Number.isFinite(event.clientY)
+  )
+    return null;
   // FIXED logical frame, not the (SFU-downscaled) track px — see above + A3 W2811.
   const nw = logical.width;
   const nh = logical.height;
+  if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) return null;
   // object-contain: the stream is scaled to fit the element while
   // preserving aspect ratio, so when the stream aspect differs from the
   // element aspect it is bar-boxed within the rect. Compute the displayed
@@ -144,7 +155,8 @@ export function pointerToViewport(
   }
   const px = event.clientX - rect.left - (rect.width - dispW) / 2;
   const py = event.clientY - rect.top - (rect.height - dispH) / 2;
-  if (px < 0 || px > dispW || py < 0 || py > dispH) return null;
+  if (!Number.isFinite(px) || !Number.isFinite(py) || px < 0 || px > dispW || py < 0 || py > dispH)
+    return null;
   const x = (px / dispW) * nw;
   const y = (py / dispH) * nh;
   return { x: Math.round(x), y: Math.round(y) };

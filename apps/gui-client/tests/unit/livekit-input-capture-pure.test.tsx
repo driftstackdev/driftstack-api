@@ -106,6 +106,32 @@ describe('LK.6.d pure-function tests', () => {
       expect(pointerToViewport(event, video, { width: 640, height: 480 })).toBeNull();
     });
 
+    it('returns null for non-finite pointer, element, or logical geometry', () => {
+      const video = fakeVideo({
+        rect: { left: 0, top: 0, width: 640, height: 480 },
+        videoWidth: 640,
+        videoHeight: 480,
+      });
+      expect(
+        pointerToViewport(fakeMouseEvent(Number.NaN, 100), video, { width: 640, height: 480 }),
+      ).toBeNull();
+      expect(
+        pointerToViewport(fakeMouseEvent(100, 100), video, { width: Number.NaN, height: 480 }),
+      ).toBeNull();
+
+      const invalidRectVideo = fakeVideo({
+        rect: { left: Number.NaN, top: 0, width: 640, height: 480 },
+        videoWidth: 640,
+        videoHeight: 480,
+      });
+      expect(
+        pointerToViewport(fakeMouseEvent(100, 100), invalidRectVideo, {
+          width: 640,
+          height: 480,
+        }),
+      ).toBeNull();
+    });
+
     it('maps client coords into the logical px frame (1:1 when rect matches logical size)', () => {
       const video = fakeVideo({
         rect: { left: 0, top: 0, width: 640, height: 480 },
