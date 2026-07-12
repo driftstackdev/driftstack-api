@@ -37,6 +37,11 @@ import { startSimulatorCrashMarker } from '../lib/simulator-crash-marker';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
+import {
+  createLiveFpsStore,
+  LiveFpsSubscriber,
+  type LiveFpsStore,
+} from '../components/LiveFpsSubscriber';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
@@ -2717,8 +2722,11 @@ export function SimulatorWindow(): JSX.Element {
   }, [sessionEnded]);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   // fps: rolling 1s counter via requestVideoFrameCallback (browser-native;
-  // no LiveKit internals). null until the first full window.
-  const [fps, setFps] = useState<number | null>(null);
+  // no LiveKit internals). It lives in an external store so each 1Hz sample
+  // repaints only the two metric readouts, not this entire simulator host.
+  const fpsStoreRef = useRef<LiveFpsStore | null>(null);
+  if (fpsStoreRef.current === null) fpsStoreRef.current = createLiveFpsStore();
+  const fpsStore = fpsStoreRef.current;
   const fpsCounterRef = useRef({ frames: 0, windowStart: 0 });
   // Guard: React ref callbacks re-fire on every parent re-render (inline
   // identity), and the panel re-renders constantly while streaming — without
@@ -2744,7 +2752,7 @@ export function SimulatorWindow(): JSX.Element {
       if (c.windowStart === 0) c.windowStart = now;
       c.frames += 1;
       if (now - c.windowStart >= 1000) {
-        setFps(Math.round((c.frames * 1000) / (now - c.windowStart)));
+        fpsStore.set(Math.round((c.frames * 1000) / (now - c.windowStart)));
         c.frames = 0;
         c.windowStart = now;
       }
@@ -2892,7 +2900,7 @@ export function SimulatorWindow(): JSX.Element {
       // last live value (e.g. 30) and contradict the "Video frozen" badge in the status
       // strip, the Diagnostics Render tile, AND Copy-diagnostics (all read this state).
       // The rVFC chain repopulates it the moment frames resume.
-      if (frozen) setFps(null);
+      if (frozen) fpsStore.set(null);
     };
     tick();
     const handle = window.setInterval(tick, 1000);
@@ -3023,7 +3031,7 @@ export function SimulatorWindow(): JSX.Element {
       deviceName,
       link: info ? wsHost(info.ws_url) : null,
       egress: proxyLabel,
-      fps,
+      fps: fpsStore.getSnapshot(),
       latencyMs: latency.rttMs,
       linkRttMs: conn.rttMs,
       transport: conn.transport,
@@ -6856,7 +6864,9 @@ export function SimulatorWindow(): JSX.Element {
                           )}
                         </div>
                         <div className="truncate">
-                          {fps !== null && <span>{fps}fps · </span>}
+                          <LiveFpsSubscriber store={fpsStore}>
+                            {(fps) => (fps !== null ? <span>{fps}fps · </span> : null)}
+                          </LiveFpsSubscriber>
                           {latency.rttMs !== null ? (
                             <span
                               className={
@@ -7060,12 +7070,16 @@ export function SimulatorWindow(): JSX.Element {
                                 <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
                                   Render
                                 </div>
-                                <div className="mt-0.5 text-[16px] font-bold leading-none">
-                                  {fps !== null ? fps : '—'}
-                                  <span className="ml-0.5 text-[10px] font-medium text-white/45">
-                                    fps
-                                  </span>
-                                </div>
+                                <LiveFpsSubscriber store={fpsStore}>
+                                  {(fps) => (
+                                    <div className="mt-0.5 text-[16px] font-bold leading-none">
+                                      {fps ?? '—'}
+                                      <span className="ml-0.5 text-[10px] font-medium text-white/45">
+                                        fps
+                                      </span>
+                                    </div>
+                                  )}
+                                </LiveFpsSubscriber>
                               </div>
                               <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
                                 <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
