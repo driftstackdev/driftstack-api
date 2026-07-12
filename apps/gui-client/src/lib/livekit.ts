@@ -176,13 +176,49 @@ export async function sendNavigate(room: Room, url: string): Promise<void> {
   await sendInputEvent(room, { type: 'navigate', url }, { reliable: true });
 }
 
+interface TabListSendState {
+  pending: TabListUpdatePayload | null;
+  drain: Promise<void> | null;
+}
+
+const tabListSendStates = new WeakMap<Room, TabListSendState>();
+
 /** Send the FULL tab list to the harness (doc-150 item 4; locked A2↔A3 contract).
  *  Fire-and-forget — the GUI emits this on EVERY new / close / switch / reorder so
  *  the harness reconciles its per-tab pages (create missing, drop closed) and knows
  *  which tab (`activeTabId`) is published. reliable=true (a dropped list would leave
- *  the harness's tab set stale); teardown races are swallowed (shared codepath). */
-export async function sendTabListUpdate(room: Room, payload: TabListUpdatePayload): Promise<void> {
-  await sendInputEvent(room, { type: 'tabListUpdate', ...payload }, { reliable: true });
+ *  the harness's tab set stale); teardown races are swallowed (shared codepath).
+ *
+ *  Reliable publishes wait when the send buffer is congested. A burst of page-state,
+ *  title, or scroll writes used to enqueue every full snapshot behind that wait and
+ *  replay obsolete lists before the latest truth. Keep at most one publish in flight
+ *  and one latest-wins pending snapshot per Room: ordering and reliability remain,
+ *  while queue growth is bounded and stale intermediate state is never replayed. */
+export function sendTabListUpdate(room: Room, payload: TabListUpdatePayload): Promise<void> {
+  let state = tabListSendStates.get(room);
+  if (state === undefined) {
+    state = { pending: null, drain: null };
+    tabListSendStates.set(room, state);
+  }
+  state.pending = payload;
+  if (state.drain !== null) return state.drain;
+
+  const drain = async (): Promise<void> => {
+    try {
+      while (state.pending !== null) {
+        const latest = state.pending;
+        state.pending = null;
+        await sendInputEvent(room, { type: 'tabListUpdate', ...latest }, { reliable: true });
+      }
+    } finally {
+      // A genuine publish failure must not leave stale state armed for an
+      // unrelated future edit. The next invocation starts a fresh drain.
+      state.pending = null;
+      state.drain = null;
+    }
+  };
+  state.drain = drain();
+  return state.drain;
 }
 
 /** Switch the PUBLISHED page to another tab (doc-150 item 4; locked A2↔A3 contract).

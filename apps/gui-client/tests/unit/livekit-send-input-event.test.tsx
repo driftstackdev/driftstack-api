@@ -25,6 +25,7 @@ import {
   sendActivateTab,
   type InputEvent,
   type Room,
+  type TabListUpdatePayload,
 } from '../../src/lib/livekit';
 
 interface MinimalRoom {
@@ -257,6 +258,44 @@ describe('sendTabListUpdate', () => {
     } else {
       throw new Error('expected a tabListUpdate event');
     }
+  });
+
+  it('bounds a congested reliable queue to the in-flight snapshot plus the latest truth', async () => {
+    const releases: Array<() => void> = [];
+    const publishData = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releases.push(resolve);
+        }),
+    );
+    const room = { localParticipant: { publishData } } as unknown as Room;
+    const snapshot = (activeTabId: string): TabListUpdatePayload => ({
+      sessionId: 'agt_x',
+      tabs: [{ id: activeTabId, url: `https://${activeTabId}.example/`, scrollY: 0, title: '' }],
+      activeTabId,
+    });
+
+    const first = sendTabListUpdate(room, snapshot('first'));
+    const obsolete = sendTabListUpdate(room, snapshot('obsolete'));
+    const latest = sendTabListUpdate(room, snapshot('latest'));
+    expect(publishData).toHaveBeenCalledTimes(1);
+    expect(decodeEvent(firstCall(publishData))).toMatchObject({ activeTabId: 'first' });
+
+    releases.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(publishData).toHaveBeenCalledTimes(2);
+    const calls = publishData.mock.calls as unknown as Array<[Uint8Array, { reliable: boolean }]>;
+    const second = calls[1];
+    if (second === undefined) throw new Error('second publishData call missing');
+    expect(decodeEvent({ data: second[0], opts: second[1] })).toMatchObject({
+      activeTabId: 'latest',
+    });
+
+    releases.shift()?.();
+    await Promise.all([first, obsolete, latest]);
+    expect(publishData).toHaveBeenCalledTimes(2);
   });
 });
 
