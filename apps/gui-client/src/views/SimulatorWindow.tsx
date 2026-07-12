@@ -20,6 +20,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import {
+  MAX_DEVICE_TEXT_BYTES,
   sendNavigate,
   sendText,
   sendTabListUpdate,
@@ -3485,6 +3486,11 @@ export function SimulatorWindow(): JSX.Element {
           if (navigator.clipboard === undefined) return;
           const text = await navigator.clipboard.readText();
           if (text === '') return;
+          if (new TextEncoder().encode(text).byteLength > MAX_DEVICE_TEXT_BYTES) {
+            setNotice('Clipboard is too large — paste up to 8 KB at a time');
+            window.setTimeout(() => setNotice(null), 3500);
+            return;
+          }
           await sendText(room, text);
           setNotice('Pasted to the device');
           window.setTimeout(() => setNotice(null), 2500);

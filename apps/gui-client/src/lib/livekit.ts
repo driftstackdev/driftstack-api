@@ -232,12 +232,20 @@ export async function sendActivateTab(room: Room, payload: ActivateTabPayload): 
   return requestId;
 }
 
+// Mirrors harness InputEvent.maxTextBytes. Keeping the bound client-side avoids
+// publishing a packet the receiver must reject and prevents a large clipboard
+// blob from occupying the ordered control channel.
+export const MAX_DEVICE_TEXT_BYTES = 8 * 1024;
+
 /** Paste-into-device (QW1) — type `text` into the device's focused field over the
  *  SAME reliable channel as taps. ONE atomic `text` event (the harness types it with a
  *  per-key human hold) rather than per-char keyDown/keyUp, so a long password/URL never
  *  floods the reliable channel. reliable=true (a dropped paste silently loses the
  *  text); teardown races are swallowed (shared sendInputEvent codepath). */
 export async function sendText(room: Room, text: string): Promise<void> {
+  if (new TextEncoder().encode(text).byteLength > MAX_DEVICE_TEXT_BYTES) {
+    throw new RangeError(`Device paste exceeds ${MAX_DEVICE_TEXT_BYTES} UTF-8 bytes`);
+  }
   await sendInputEvent(room, { type: 'text', text }, { reliable: true });
 }
 

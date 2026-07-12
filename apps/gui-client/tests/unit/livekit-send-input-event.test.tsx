@@ -18,6 +18,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   isBenignTeardownError,
+  MAX_DEVICE_TEXT_BYTES,
   sendInputEvent,
   sendNavigate,
   sendText,
@@ -365,6 +366,21 @@ describe('sendText', () => {
       type: 'text',
       text: 'café\n日本語\ttab',
     });
+  });
+
+  it('rejects oversized UTF-8 text before it can occupy the reliable channel', async () => {
+    const { room, publishData } = makeRoom();
+    await expect(sendText(room, 'é'.repeat(MAX_DEVICE_TEXT_BYTES / 2 + 1))).rejects.toThrow(
+      /exceeds 8192 UTF-8 bytes/,
+    );
+    expect(publishData).not.toHaveBeenCalled();
+  });
+
+  it('accepts text exactly at the harness 8 KiB boundary', async () => {
+    const { room, publishData } = makeRoom();
+    const text = 'é'.repeat(MAX_DEVICE_TEXT_BYTES / 2);
+    await sendText(room, text);
+    expect(decodeEvent(firstCall(publishData))).toEqual({ type: 'text', text });
   });
 });
 
