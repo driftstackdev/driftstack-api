@@ -388,8 +388,16 @@
         } catch (e) {}
 
         // Same-origin Cloudflare trace → exit IP, country, negotiated protocol, TLS.
-        fetch('/cdn-cgi/trace', { cache: 'no-store' })
+        // Keep this diagnostic bounded: the new-tab page is also the Simulator's
+        // recovery surface, so a stalled edge request must not leave "Checking…"
+        // on screen forever.
+        var traceController = new AbortController();
+        var traceTimeout = window.setTimeout(function () {
+          traceController.abort();
+        }, 5000);
+        fetch('/cdn-cgi/trace', { cache: 'no-store', signal: traceController.signal })
           .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.text();
           })
           .then(function (t) {
@@ -413,6 +421,9 @@
             set('v-loc', '—');
             set('v-proto', protoLabel(hop));
             setQuic(hop === 'h3');
+          })
+          .finally(function () {
+            window.clearTimeout(traceTimeout);
           });
       })();
     </script>

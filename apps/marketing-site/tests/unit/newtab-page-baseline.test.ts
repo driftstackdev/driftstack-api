@@ -75,4 +75,14 @@ describe('newtab page baseline', () => {
     // UDP/QUIC is derived from the negotiated HTTP/3 protocol.
     expect(body).toMatch(/h3|quic/i);
   });
+
+  it('bounds the edge trace and always clears its deadline', () => {
+    expect(body).toMatch(/var traceController = new AbortController\(\);/);
+    expect(body).toMatch(/traceController\.abort\(\);\s*\}, 5000\);/);
+    expect(body).toMatch(
+      /fetch\('\/cdn-cgi\/trace', \{ cache: 'no-store', signal: traceController\.signal \}\)/,
+    );
+    expect(body).toMatch(/if \(!r\.ok\) throw new Error\('HTTP ' \+ r\.status\);/);
+    expect(body).toMatch(/\.finally\(function \(\) \{\s*window\.clearTimeout\(traceTimeout\);/);
+  });
 });
