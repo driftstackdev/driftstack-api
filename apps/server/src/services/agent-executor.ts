@@ -82,8 +82,6 @@ export interface ExecutorRunResult {
   awaitingConfirmation?: boolean;
 }
 
-const EMPTY_APPROVED: ReadonlySet<string> = new Set<string>();
-
 /** Stable signature of a consequential action, for the approve → re-run carry
  *  (the confirmation_required result echoes back as an approved signature). */
 export function consequentialSignature(
@@ -94,18 +92,20 @@ export function consequentialSignature(
 }
 
 /** If `intent` is a consequential action not yet approved, returns the
- *  confirmation_required result to halt on; else null. Exported so every
+ *  confirmation_required result to halt on. A matching approval is consumed
+ *  before returning null, so one human decision releases one action only. Exported so every
  *  AgentExecutor implementation (Stub / Real / ControlPlane) applies the SAME
  *  human-confirmation gate — swapping executors must never drop it (#139/#130). */
 export function consequentialHalt(
   intent: AgentIntent,
-  approved: ReadonlySet<string>,
+  approved: Set<string>,
 ): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
   const v = classifyConsequentialAction(intent);
   if (!v.requiresConfirmation || v.category === undefined || v.matchedText === undefined) {
     return null;
   }
-  if (approved.has(consequentialSignature(v.category, v.matchedText))) return null;
+  const signature = consequentialSignature(v.category, v.matchedText);
+  if (approved.delete(signature)) return null;
   return {
     kind: 'confirmation_required',
     intent,
@@ -143,8 +143,8 @@ export interface ExecuteArgs {
    */
   account?: AccountContext;
   /** W443/W445 — signatures (consequentialSignature) of consequential actions
-   *  the customer has already approved this run. The executor skips the
-   *  confirmation halt for these so the re-run after approval proceeds. */
+   *  the customer has already approved this run. Executors copy and consume
+   *  one signature per matching action so a repeated target re-prompts. */
   approvedConsequentialActions?: ReadonlySet<string>;
 }
 
@@ -179,7 +179,9 @@ export interface AgentExecutor {
 export class StubAgentExecutor implements AgentExecutor {
   execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
-    const approved = args.approvedConsequentialActions ?? EMPTY_APPROVED;
+    // Treat approvals as one-shot capabilities. Copy so execution consumes its
+    // local grant without mutating the caller-owned set.
+    const approved = new Set(args.approvedConsequentialActions ?? []);
     for (const intent of args.plan.intents) {
       const halt = consequentialHalt(intent, approved);
       if (halt) {
@@ -270,7 +272,7 @@ export class RealAgentExecutor implements AgentExecutor {
       return { results, ok: results.length === 0 };
     }
     const results: IntentResult[] = [];
-    const approved = args.approvedConsequentialActions ?? EMPTY_APPROVED;
+    const approved = new Set(args.approvedConsequentialActions ?? []);
     for (const intent of args.plan.intents) {
       // W443/W445 — halt BEFORE dispatching an unapproved consequential action
       // so the harness never executes it until the customer confirms.

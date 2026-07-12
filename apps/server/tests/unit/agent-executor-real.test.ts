@@ -127,6 +127,25 @@ describe('AI-B2.b RealAgentExecutor — clean dispatch', () => {
 });
 
 describe('AI-B2.b RealAgentExecutor — vocab gaps + guards', () => {
+  it('consumes one consequential approval before dispatching a repeated match', async () => {
+    const { port, interact } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    const callerApprovals = new Set(['purchase:buy now']);
+    const r = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([
+        { kind: 'interact', action: 'tap', selector: '#primary', value: 'Buy Now' },
+        { kind: 'interact', action: 'tap', selector: '#secondary', value: 'Buy Now' },
+      ]),
+      approvedConsequentialActions: callerApprovals,
+    });
+    expect(interact).toHaveBeenCalledTimes(1);
+    expect(r.results.map((item) => item.kind)).toEqual(['success', 'confirmation_required']);
+    expect(r.awaitingConfirmation).toBe(true);
+    expect(callerApprovals.size).toBe(1);
+  });
+
   it('wait:idle → time-bounded driver wait (idle has no driver predicate)', async () => {
     const { port, wait } = makePort();
     const exec = new RealAgentExecutor({ sessions: port });

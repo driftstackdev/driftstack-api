@@ -317,4 +317,24 @@ describe('AI-B2 runResultToTranscriptEntry', () => {
     expect(result.results).toHaveLength(2);
     expect(result.results.every((r) => r.kind === 'success')).toBe(true);
   });
+
+  it('consumes one approval once and halts on a repeated matching action', async () => {
+    const exec = new StubAgentExecutor();
+    const callerApprovals = new Set([consequentialSignature('purchase', 'Buy Now')]);
+    const result = await exec.execute({
+      sessionId: 'sess_1',
+      plan: {
+        kind: 'plan',
+        intents: [
+          { kind: 'interact', action: 'tap', selector: '#primary', value: 'Buy Now' },
+          { kind: 'interact', action: 'tap', selector: '#secondary', value: 'Buy Now' },
+        ],
+        tokensConsumed: 1,
+      },
+      approvedConsequentialActions: callerApprovals,
+    });
+    expect(result.results.map((item) => item.kind)).toEqual(['success', 'confirmation_required']);
+    expect(result.awaitingConfirmation).toBe(true);
+    expect(callerApprovals.size).toBe(1);
+  });
 });

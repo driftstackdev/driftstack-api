@@ -511,6 +511,28 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       expect(res.awaitingConfirmation).toBeUndefined();
       expect(got.map((d) => d.intentName)).toEqual(['click']); // the approved tap WAS dispatched
     });
+
+    it('uses one approval for one matching dispatch and halts before a repeated target', async () => {
+      const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+      const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+      const callerApprovals = new Set(['purchase:buy now']);
+      const res = await exec.execute({
+        sessionId: 'ses_x',
+        plan: {
+          kind: 'plan',
+          intents: [
+            { kind: 'interact', action: 'tap', selector: '#primary', value: 'Buy Now' },
+            { kind: 'interact', action: 'tap', selector: '#secondary', value: 'Buy Now' },
+          ],
+          tokensConsumed: 0,
+        },
+        approvedConsequentialActions: callerApprovals,
+      });
+      expect(got.map((d) => d.intentName)).toEqual(['click']);
+      expect(res.results.map((item) => item.kind)).toEqual(['success', 'confirmation_required']);
+      expect(res.awaitingConfirmation).toBe(true);
+      expect(callerApprovals.size).toBe(1);
+    });
   });
 });
 

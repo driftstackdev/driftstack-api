@@ -83,8 +83,6 @@ const DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS = 1500;
 // (returns well under) from "hung" (never returns) so the read-back degrades to
 // "no answer, plan result stands" fast instead of freezing the turn.
 const DEFAULT_OBSERVE_TIMEOUT_MS = 10_000;
-const EMPTY_APPROVED: ReadonlySet<string> = new Set<string>();
-
 export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly maxRetries: number;
   private readonly retryDelayMs: number;
@@ -115,7 +113,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
-    const approved = args.approvedConsequentialActions ?? EMPTY_APPROVED;
+    const approved = new Set(args.approvedConsequentialActions ?? []);
     // #139 — dispatch on the AGENT session id (the box + agent_sessions.node_id
     // routing key). Fall back to `sessionId` only if the runtime didn't thread it
     // (legacy callers) — never dispatch on the `unattached` sentinel.
