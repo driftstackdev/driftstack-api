@@ -111,7 +111,7 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/'invent new verbs\.',/);
     expect(body).toMatch(/' {2}- navigate \{ url: absolute http\(s\) URL string \}',/);
     expect(body).toMatch(
-      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"press", selector\?: string, value\?: string, sensitive\?: boolean \} \(tap requires selector; type requires selector\+value and sensitive=true for OTP\/PIN\/card values; press requires value = key name, e\.g\. "Enter"; use the top-level scroll verb for directional human scrolling\)',/,
+      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"press", selector\?: string, value\?: string, sensitive\?: boolean \} \(tap requires selector and should include visible button text in value; type requires selector\+value and sensitive=true for OTP\/PIN\/card values; press requires value = key name, e\.g\. "Enter"; use the top-level scroll verb for directional human scrolling\)',/,
     );
     expect(body).toMatch(
       /' {2}- wait \{ condition: "idle"\|"selector_visible", selector\?: string, timeoutMs\?: number \} \(selector_visible requires a nonempty selector\)',/,

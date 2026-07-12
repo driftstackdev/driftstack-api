@@ -21,6 +21,7 @@ import {
   ClaudeAgentDecomposer,
   __TEST_ONLY__,
 } from '../../src/services/agent-decomposer-claude.js';
+import { classifyConsequentialAction } from '../../src/services/agent-consequential-action.js';
 import type { DecomposeArgs } from '../../src/services/agent-decomposer.js';
 
 function defaultArgs(overrides: Partial<DecomposeArgs> = {}): DecomposeArgs {
@@ -399,6 +400,21 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
         { kind: 'interact', action: 'scroll' },
         { kind: 'interact', action: 'press', value: 'Enter' },
       ]);
+    });
+
+    it('preserves a tap visible label for the consequential-action confirmation gate', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [{ kind: 'interact', action: 'tap', selector: '#submit', value: 'Buy Now' }],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'interact', action: 'tap', selector: '#submit', value: 'Buy Now' },
+      ]);
+      expect(classifyConsequentialAction(res.intents[0]!).category).toBe('purchase');
     });
 
     it('drops non-HTTP navigation and selector-visible waits without a target', async () => {
