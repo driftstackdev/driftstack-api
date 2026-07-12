@@ -15,6 +15,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { useFocusTrap } from '../lib/use-focus-trap';
+import { useModalPresence } from '../lib/use-modal-presence';
 import { ARCHETYPE_REGISTRY } from '@driftstack/sdk';
 
 type WarmthTier = 'cold' | 'warming' | 'aged' | 'trusted';
@@ -248,9 +249,11 @@ export function MarketplaceView(): JSX.Element {
         </div>
       )}
 
-      {selected !== undefined && (
-        <DetailModal listing={selected} onClose={() => setSelectedId(null)} />
-      )}
+      <DetailModal
+        open={selected !== undefined}
+        listing={selected}
+        onClose={() => setSelectedId(null)}
+      />
     </div>
   );
 }
@@ -296,43 +299,64 @@ function ListingCard({
 }
 
 function DetailModal({
+  open,
   listing,
   onClose,
 }: {
-  listing: MarketplaceListing;
+  open: boolean;
+  listing: MarketplaceListing | undefined;
   onClose: () => void;
-}): JSX.Element {
-  const archetype = ARCHETYPE_REGISTRY.find((a) => a.id === listing.archetypeId);
+}): JSX.Element | null {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const retainedListingRef = useRef<MarketplaceListing | undefined>(listing);
+  const { shouldRender, isExiting } = useModalPresence(open);
+
+  // Keep the listing content stable for the short retained exit tree. A reopen
+  // updates this synchronously and cancels the pending removal in the shared
+  // presence hook, so a quick second click never flashes stale details.
+  if (listing !== undefined) retainedListingRef.current = listing;
+
   // Focus-trap the dialog, close on Escape, and restore focus to the opener on
   // close — a keyboard user could otherwise tab out into the grid behind it and
   // had no Escape affordance.
-  useFocusTrap(true, dialogRef, onClose);
+  useFocusTrap(open, dialogRef, onClose);
+
+  const visibleListing = listing ?? retainedListingRef.current;
+  if (!shouldRender || visibleListing === undefined) return null;
+
+  const archetype = ARCHETYPE_REGISTRY.find((a) => a.id === visibleListing.archetypeId);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
-      onClick={onClose}
+      data-component="marketplace-detail-modal"
+      {...(isExiting ? { 'aria-hidden': true, inert: '' } : {})}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6 backdrop-blur-[2px] ${
+        isExiting ? 'pointer-events-none animate-modal-backdrop-out' : 'animate-modal-backdrop-in'
+      }`}
+      onMouseDown={(e) => {
+        if (open && e.target === e.currentTarget) onClose();
+      }}
     >
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Profile listing details"
-        onClick={(e) => e.stopPropagation()}
-        className="flex w-full max-w-md flex-col gap-4 rounded-lg border border-surface-divider bg-surface-raised p-6"
+        className={`flex w-full max-w-md flex-col gap-4 rounded-lg border border-surface-divider bg-surface-raised p-6 ${
+          isExiting ? 'animate-modal-panel-out' : 'animate-modal-panel-in'
+        }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-medium text-ink-primary">
               {archetype?.displayLabel ?? 'Unknown device'}
             </h3>
-            <p className="mt-0.5 text-xs text-ink-muted">{fmtAge(listing.ageDays)}</p>
+            <p className="mt-0.5 text-xs text-ink-muted">{fmtAge(visibleListing.ageDays)}</p>
           </div>
           <div className="flex shrink-0 items-start gap-2">
             <span
-              className={`rounded-full border px-2 py-0.5 text-2xs font-medium ${WARMTH_CLASSES[listing.warmthTier]}`}
+              className={`rounded-full border px-2 py-0.5 text-2xs font-medium ${WARMTH_CLASSES[visibleListing.warmthTier]}`}
             >
-              {WARMTH_LABEL[listing.warmthTier]}
+              {WARMTH_LABEL[visibleListing.warmthTier]}
             </span>
             <button
               type="button"
@@ -346,14 +370,14 @@ function DetailModal({
         </div>
 
         <ul className="flex flex-col gap-1.5 rounded-md bg-surface-inset px-3 py-2.5 text-sm text-ink-secondary">
-          {listing.signals.map((s, i) => (
+          {visibleListing.signals.map((s, i) => (
             <li key={i}>· {s}</li>
           ))}
         </ul>
 
         <div className="flex items-center justify-between">
           <span className="mono text-lg font-medium text-ink-primary">
-            {fmtPrice(listing.priceCents)}
+            {fmtPrice(visibleListing.priceCents)}
           </span>
         </div>
 
