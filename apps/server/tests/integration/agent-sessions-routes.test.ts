@@ -1650,6 +1650,24 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(sibling.statusCode).toBe(409);
     expect(sibling.json<{ winner_client_id: string }>().winner_client_id).toBe('cli_owner');
 
+    const heartbeat = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'ping', timestamp: Date.now() }, client_id: 'cli_owner' },
+    });
+    expect(heartbeat.statusCode).toBe(200);
+    expect(heartbeat.json<{ kind: string; duration_ms: number }>()).toEqual({
+      kind: 'forwarded',
+      duration_ms: 0,
+    });
+    expect(
+      fx.pairModeHeartbeatTracker.findStaleSessions({
+        now: new Date(Date.now() + 29_000),
+        ttlMs: 30_000,
+      }),
+    ).not.toContain(id);
+
     const owner = await fx.app.inject({
       method: 'POST',
       url: `/v1/agent-sessions/${id}/input-event`,

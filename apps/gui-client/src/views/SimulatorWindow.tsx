@@ -4689,7 +4689,9 @@ export function SimulatorWindow(): JSX.Element {
     const reqSessionId = sessionId;
     const tick = (): void => {
       const reqControlEpoch = controlRequestIdRef.current;
-      void getAgentSession(reqSessionId, controlAuth)
+      void getAgentSession(reqSessionId, controlAuth, {
+        heartbeatClientId: clientIdRef.current,
+      })
         .then((s) => {
           // Drop a result that resolved after an in-place session swap.
           if (cancelled || reqSessionId !== sessionIdRef.current) return;

@@ -219,13 +219,14 @@ export async function reportTransport(
 export async function getAgentSession(
   id: string,
   auth: ControlAuth = null,
+  options: { heartbeatClientId?: string } = {},
 ): Promise<AgentSessionControlState> {
   const body = (await authedFetch(
     `/v1/agent-sessions/${encodeURIComponent(id)}`,
     { method: 'GET' },
     auth,
   )) as ApiSession;
-  return {
+  const state: AgentSessionControlState = {
     mode: isMode(body.mode) ? body.mode : 'ai',
     pairKind: pairKindOf(body),
     terminal: isTerminalSession(body),
@@ -235,6 +236,18 @@ export async function getAgentSession(
         ? body.closed_reason
         : null,
   };
+  // The simulator already polls this lifecycle endpoint every five seconds.
+  // When that exact window owns pair-mode control, reuse the poll to refresh
+  // the API heartbeat. Keep it best-effort so liveness telemetry can never make
+  // a successful lifecycle read fail.
+  if (
+    state.mode === 'pair' &&
+    state.pairKind === 'human-driving' &&
+    options.heartbeatClientId !== undefined
+  ) {
+    void heartbeatPairSession(id, options.heartbeatClientId, auth).catch(() => undefined);
+  }
+  return state;
 }
 
 /** The device's latest page-state (live URL + load state) for the browser-mode
@@ -529,6 +542,26 @@ export async function takeoverSession(
     auth,
   )) as ApiSession;
   return pairKindOf(body);
+}
+
+/** Refresh pair-mode human-control ownership. The server accepts this only
+ * when clientId matches the current human-driving controller. */
+export async function heartbeatPairSession(
+  id: string,
+  clientId: string,
+  auth: ControlAuth = null,
+): Promise<void> {
+  await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/input-event`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        event: { type: 'ping', timestamp: Date.now() },
+        client_id: clientId,
+      }),
+    },
+    auth,
+  );
 }
 
 /** Return control to the agent in pair mode. Returns the new pair kind. */

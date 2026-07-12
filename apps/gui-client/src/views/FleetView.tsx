@@ -56,6 +56,8 @@ export function FleetView(): JSX.Element {
     visible: false,
   });
   const formRef = useRef<HTMLFormElement | null>(null);
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -133,11 +135,14 @@ export function FleetView(): JSX.Element {
   }
 
   async function submitForm(): Promise<void> {
+    if (savingRef.current) return;
     const v = validateDraft(form.draft);
     if (!v.ok) {
       setForm({ ...form, errors: v.errors });
       return;
     }
+    savingRef.current = true;
+    setSaving(true);
     try {
       setActionError(null);
       if (form.editingId) {
@@ -151,6 +156,9 @@ export function FleetView(): JSX.Element {
       setActionError(
         `Could not save the fleet member: ${err instanceof Error ? err.message : 'unknown error'}. Try again.`,
       );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -299,6 +307,7 @@ export function FleetView(): JSX.Element {
             <Field label="Label" error={form.errors.label}>
               <input
                 type="text"
+                disabled={saving}
                 placeholder="mac-mini-eu-west-1"
                 value={form.draft.label}
                 onChange={(e) =>
@@ -310,6 +319,7 @@ export function FleetView(): JSX.Element {
             <Field label="Base URL" error={form.errors.baseUrl}>
               <input
                 type="text"
+                disabled={saving}
                 placeholder="http://10.0.0.5:3000"
                 value={form.draft.baseUrl}
                 onChange={(e) =>
@@ -322,6 +332,7 @@ export function FleetView(): JSX.Element {
               <Field label="Notes (optional)" error={undefined}>
                 <input
                   type="text"
+                  disabled={saving}
                   placeholder="rack 3, port 8 — workflow A"
                   value={form.draft.notes ?? ''}
                   onChange={(e) =>
@@ -336,11 +347,11 @@ export function FleetView(): JSX.Element {
             </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
-            <button type="button" className="btn-secondary" onClick={cancelForm}>
+            <button type="button" className="btn-secondary" onClick={cancelForm} disabled={saving}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
-              {form.editingId ? 'Save' : 'Add'}
+            <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving}>
+              {saving ? 'Saving…' : form.editingId ? 'Save' : 'Add'}
             </button>
           </div>
         </form>

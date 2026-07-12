@@ -3250,6 +3250,16 @@ export function registerAgentSessionsRoutes(
           if (parsed.data.client_id !== currentState.clientId) {
             throw new PairModeConflictError(currentState.clientId);
           }
+          pairModeHeartbeatTracker?.recordHeartbeat({
+            sessionId: req.params.id,
+            at: new Date(),
+          });
+          // HTTP ping is the API/control-plane liveness signal, distinct from
+          // the LiveKit RTT ping that terminates at the Mac harness. It refreshes
+          // pair ownership without depending on the (optional) input dispatcher.
+          if (parsed.data.event.type === 'ping') {
+            return reply.code(200).send({ kind: 'forwarded' as const, duration_ms: 0 });
+          }
         }
         // Exact controlling client in human-driving falls through to the
         // harness-forward path below. Sibling tabs cannot inject input.

@@ -12,6 +12,7 @@ import {
   getAgentSession,
   setSessionMode,
   takeoverSession,
+  heartbeatPairSession,
   handbackSession,
   sendAgentMessage,
   endAgentSession,
@@ -66,6 +67,20 @@ describe('agent-session-control transport', () => {
     expect(JSON.parse(init.body as string)).toEqual({ client_id: 'client-9' });
   });
 
+  it('heartbeatPairSession POSTs an owner-attributed ping input-event', async () => {
+    mockFetch.mockResolvedValue(ok({ kind: 'forwarded', duration_ms: 0 }));
+    await heartbeatPairSession('agt_1', 'client-9');
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/v1/agent-sessions/agt_1/input-event');
+    const body = JSON.parse(init.body as string) as {
+      event: { type: string; timestamp: number };
+      client_id: string;
+    };
+    expect(body.client_id).toBe('client-9');
+    expect(body.event.type).toBe('ping');
+    expect(Number.isSafeInteger(body.event.timestamp)).toBe(true);
+  });
+
   it('handbackSession POSTs /handback + returns the pair kind', async () => {
     mockFetch.mockResolvedValue(ok({ pair_mode_state: { kind: 'ai-driving' } }));
     expect(await handbackSession('agt_1')).toBe('ai-driving');
@@ -105,6 +120,24 @@ describe('agent-session-control transport', () => {
       closedReason: null,
     });
     expect((mockFetch.mock.calls[0] as [string, RequestInit])[1].method).toBe('GET');
+  });
+
+  it('getAgentSession refreshes the exact pair controller heartbeat after a human-driving read', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        ok({ mode: 'pair', pair_mode_state: { kind: 'human-driving' }, status: 'active' }),
+      )
+      .mockResolvedValueOnce(ok({ kind: 'forwarded', duration_ms: 0 }));
+
+    const state = await getAgentSession('agt_1', null, { heartbeatClientId: 'client-9' });
+    expect(state.pairKind).toBe('human-driving');
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    const [url, init] = mockFetch.mock.calls[1] as [string, RequestInit];
+    expect(url).toContain('/v1/agent-sessions/agt_1/input-event');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      event: { type: 'ping' },
+      client_id: 'client-9',
+    });
   });
 
   // P1a — terminal-end detection: the session lifecycle status going 'closed' (or a
