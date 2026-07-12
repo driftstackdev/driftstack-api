@@ -66,6 +66,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 </StatusLayout>
 
 <script is:inline define:vars={{ API_BASE }}>
+  function fetchWithDeadline(input, init, timeoutMs = 10_000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  }
   const SEVERITY_BADGE = {
     minor: ['bg-amber-50', 'text-amber-700'],
     major: ['bg-orange-50', 'text-orange-700'],
@@ -173,7 +178,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/v1/status/incidents/${encodeURIComponent(id)}`, {
+      const res = await fetchWithDeadline(`${API_BASE}/v1/status/incidents/${encodeURIComponent(id)}`, {
         headers: { accept: 'application/json' },
         cache: 'no-store',
       });

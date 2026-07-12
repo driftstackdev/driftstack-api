@@ -87,6 +87,11 @@ const R2_FALLBACK_URL =
 </StatusLayout>
 
 <script is:inline define:vars={{ API_BASE, R2_FALLBACK_URL }}>
+  function fetchWithDeadline(input, init, timeoutMs = 10_000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  }
   const SEVERITY_BADGE = {
     minor: ['bg-amber-50', 'text-amber-700'],
     major: ['bg-orange-50', 'text-orange-700'],
@@ -218,7 +223,7 @@ const R2_FALLBACK_URL =
     // is up to ~60s stale (V-295c2 poller cadence) but stays available
     // when the API is unreachable.
     try {
-      const res = await fetch(`${API_BASE}/v1/status/incidents`, {
+      const res = await fetchWithDeadline(`${API_BASE}/v1/status/incidents`, {
         headers: { accept: 'application/json' },
         cache: 'no-store',
       });
@@ -226,7 +231,7 @@ const R2_FALLBACK_URL =
       return { source: 'live', body: await res.json() };
     } catch (apiErr) {
       try {
-        const r2 = await fetch(R2_FALLBACK_URL, {
+        const r2 = await fetchWithDeadline(R2_FALLBACK_URL, {
           headers: { accept: 'application/json' },
           cache: 'no-store',
         });

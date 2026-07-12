@@ -81,6 +81,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 </StatusLayout>
 
 <script is:inline define:vars={{ API_BASE }}>
+  function fetchWithDeadline(input, init, timeoutMs = 10_000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  }
   const pending = document.getElementById('confirm-pending');
   const success = document.getElementById('confirm-success');
   const errorPane = document.getElementById('confirm-error');
@@ -106,7 +111,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       return;
     }
     try {
-      const res = await fetch(
+      const res = await fetchWithDeadline(
         `${API_BASE}/v1/status/subscribe/confirm?token=${encodeURIComponent(token)}`,
         { method: 'GET', headers: { accept: 'application/json' } },
       );
