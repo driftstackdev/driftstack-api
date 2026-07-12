@@ -64,10 +64,10 @@ describe('W540.C /tsconfig.eslint.json content parity', () => {
     expect(body).toMatch(/"types": \["node", "vitest\/globals", "react", "react-dom"\]/);
   });
 
-  it("include-array framing pinned: 'eslint.config.js' + 'vitest.config.ts' + 'vitest.workspace.ts' + 'drizzle.config.ts' + 'apps/**/playwright.config.ts' + 'apps/**/src/**/*.ts' + 'apps/**/src/**/*.tsx' + 'apps/**/tests/**/*.ts' + 'apps/**/tests/**/*.tsx' + 'apps/**/vite.config.ts' + 'apps/**/vitest.config.ts' + 'apps/**/tailwind.config.ts' + 'apps/**/postcss.config.js' + 'packages/**/src/**/*.ts' + 'packages/**/tests/**/*.ts' + 'packages/**/examples/**/*.ts' + 'packages/**/tsup.config.ts' + 'perf/**/*.ts' — pinned so the workspace-root-configs + 4-apps-glob (src.ts + src.tsx + tests.ts + tests.tsx) + 4-apps-tool-config (playwright + vite + vitest + tailwind/postcss) + 3-packages-glob (src + tests + examples + tsup) + perf/ commitment survives", () => {
+  it("include-array framing pinned: 'eslint.config.js' + Vitest root/node configs + 'drizzle.config.ts' + app/package/perf globs — pinned so workspace configs and source/test/tooling surfaces remain in the typed ESLint project", () => {
     expect(body).toMatch(/"eslint\.config\.js"/);
     expect(body).toMatch(/"vitest\.config\.ts"/);
-    expect(body).toMatch(/"vitest\.workspace\.ts"/);
+    expect(body).toMatch(/"vitest\.node\.config\.ts"/);
     expect(body).toMatch(/"drizzle\.config\.ts"/);
     expect(body).toMatch(/"apps\/\*\*\/playwright\.config\.ts"/);
     expect(body).toMatch(/"apps\/\*\*\/src\/\*\*\/\*\.ts"/);

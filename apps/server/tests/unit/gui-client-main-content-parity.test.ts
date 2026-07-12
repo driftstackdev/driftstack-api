@@ -36,10 +36,10 @@ function read(p: string): string {
 describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
   const body = read(LIB);
 
-  it("Imports pinned: StrictMode + Component/ReactNode from 'react' + createRoot from 'react-dom/client' + App from './App' + './styles/index.css' Tailwind entry — pinned so the bootstrap can't silently lose StrictMode (which catches double-invoke side-effects), the error-boundary base (Component), or the styles import (which would render an unstyled tree)", () => {
+  it('Bootstrap imports pinned: StrictMode + Component/ReactNode, createRoot, and styles remain eager; App stays lazy in the main-window branch so simulator startup does not download main-app code', () => {
     expect(body).toMatch(/import \{ Component, StrictMode, type ReactNode \} from 'react';/);
     expect(body).toMatch(/import \{ createRoot \} from 'react-dom\/client';/);
-    expect(body).toMatch(/import \{ App \} from '\.\/App';/);
+    expect(body).toMatch(/import\('\.\/App'\)/);
     expect(body).toMatch(/import '\.\/styles\/index\.css';/);
   });
 
@@ -50,30 +50,21 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     );
   });
 
-  it('Render tree pinned: createRoot(root).render with StrictMode > RootErrorBoundary > (simulator ? RecordingsProvider > SimulatorWindow : ConfirmProvider > App) — pinned so StrictMode stays at the top, the error boundary stays wrapping the app, ConfirmProvider keeps useConfirm working, and the floating-iPhone simulator window (founder 2026-06-11) renders bare (no app chrome) under the same boundary', () => {
-    expect(body).toMatch(/import \{ ConfirmProvider \} from '\.\/components\/ConfirmProvider';/);
-    expect(body).toMatch(/import \{ SimulatorWindow \} from '\.\/views\/SimulatorWindow';/);
+  it('Render trees pinned: each lazy branch renders StrictMode > RootErrorBoundary; simulator gets RecordingsProvider > SimulatorWindow, while main gets ConfirmProvider > App plus the resilient DevLogPanel', () => {
+    expect(body).toMatch(/import\('\.\/components\/ConfirmProvider'\)/);
+    expect(body).toMatch(/import\('\.\/views\/SimulatorWindow'\)/);
     expect(body).toMatch(/createRoot\(root\)\.render\(/);
-    // Discrete ordered pins (NOT one long backtracking regex): StrictMode wraps
-    // the error boundary, which wraps the conditional. The simulator window
-    // (?window=simulator) renders bare; otherwise ConfirmProvider > App.
     expect(body).toMatch(/<StrictMode>\s*<RootErrorBoundary>/);
-    // Night-arc I: the simulator window mounts RecordingsProvider too (the
-    // Record pill writes the shared Rust-side store) — still bare of app
-    // chrome (no ConfirmProvider/App).
-    expect(body).toMatch(/<RootErrorBoundary>\s*\{isSimulator \? \(/);
     expect(body).toMatch(/<RecordingsProvider>\s*<SimulatorWindow \/>\s*<\/RecordingsProvider>/);
     expect(body).toMatch(/<ConfirmProvider>\s*<App \/>/);
     // DevLogPanel (GUI W232 d) renders OUTSIDE the error boundary but inside
     // StrictMode (gated off in the bare simulator window), so the dev-log view
     // survives an App-tree throw.
-    expect(body).toMatch(
-      /<\/RootErrorBoundary>[\s\S]*?\{!isSimulator && <DevLogPanel \/>\}\s*<\/StrictMode>/,
-    );
+    expect(body).toMatch(/<\/RootErrorBoundary>[\s\S]*?<DevLogPanel \/>\s*<\/StrictMode>/);
   });
 
-  it('Dev-log capture wired (GUI W232 d): imports installLogCapture + DevLogPanel, calls installLogCapture at module top (so startup logs are retained) with a PER-WINDOW file tag so the simulator crash trail cannot clobber the main window (#137), renders <DevLogPanel /> — pinned so the in-app log view + console/error capture cannot silently regress', () => {
-    expect(body).toMatch(/import \{ DevLogPanel \} from '\.\/components\/DevLogPanel';/);
+  it('Dev-log capture wired (GUI W232 d): installLogCapture stays eager and per-window; DevLogPanel stays lazy with the main app so simulator bootstrap remains small', () => {
+    expect(body).toMatch(/import\('\.\/components\/DevLogPanel'\)/);
     expect(body).toMatch(/import \{ installLogCapture \} from '\.\/lib\/log-buffer';/);
     // #137 — the simulator window mirrors to its own dev-log-simulator.txt so a
     // self-close leaves a crash trail the main window can't overwrite. Pin the

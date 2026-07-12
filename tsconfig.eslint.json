@@ -20,7 +20,7 @@
   "include": [
     "eslint.config.js",
     "vitest.config.ts",
-    "vitest.workspace.ts",
+    "vitest.node.config.ts",
     "drizzle.config.ts",
     "apps/**/playwright.config.ts",
     "apps/**/src/**/*.ts",

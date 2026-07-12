@@ -36,43 +36,39 @@ describe('keyPrefixFromPlaintext', () => {
   });
 });
 
-describe(
-  'hashApiKey + verifyApiKey',
-  () => {
-    it('hashes a key and verifies the same plaintext as valid', async () => {
-      const plaintext = generateApiKey('test');
-      const hash = await hashApiKey(plaintext);
-      expect(hash).not.toBe(plaintext);
-      expect(hash.length).toBeGreaterThan(0);
+describe('hashApiKey + verifyApiKey', { timeout: 15_000 }, () => {
+  it('hashes a key and verifies the same plaintext as valid', async () => {
+    const plaintext = generateApiKey('test');
+    const hash = await hashApiKey(plaintext);
+    expect(hash).not.toBe(plaintext);
+    expect(hash.length).toBeGreaterThan(0);
 
-      const ok = await verifyApiKey(plaintext, hash);
-      expect(ok).toBe(true);
-    });
+    const ok = await verifyApiKey(plaintext, hash);
+    expect(ok).toBe(true);
+  });
 
-    it('rejects a different plaintext', async () => {
-      const plaintext = generateApiKey('test');
-      const hash = await hashApiKey(plaintext);
-      const otherKey = generateApiKey('test');
-      const ok = await verifyApiKey(otherKey, hash);
-      expect(ok).toBe(false);
-    });
+  it('rejects a different plaintext', async () => {
+    const plaintext = generateApiKey('test');
+    const hash = await hashApiKey(plaintext);
+    const otherKey = generateApiKey('test');
+    const ok = await verifyApiKey(otherKey, hash);
+    expect(ok).toBe(false);
+  });
 
-    it('rejects a tampered hash', async () => {
-      const plaintext = generateApiKey('test');
-      const hash = await hashApiKey(plaintext);
-      const tampered = `${hash.slice(0, -4)}AAAA`;
-      const ok = await verifyApiKey(plaintext, tampered);
-      expect(ok).toBe(false);
-    });
+  it('rejects a tampered hash', async () => {
+    const plaintext = generateApiKey('test');
+    const hash = await hashApiKey(plaintext);
+    const tampered = `${hash.slice(0, -4)}AAAA`;
+    const ok = await verifyApiKey(plaintext, tampered);
+    expect(ok).toBe(false);
+  });
 
-    it('produces different hashes for the same plaintext (random salt)', async () => {
-      const plaintext = generateApiKey('test');
-      const h1 = await hashApiKey(plaintext);
-      const h2 = await hashApiKey(plaintext);
-      expect(h1).not.toBe(h2);
-      expect(await verifyApiKey(plaintext, h1)).toBe(true);
-      expect(await verifyApiKey(plaintext, h2)).toBe(true);
-    });
-  },
-  { timeout: 15_000 },
-);
+  it('produces different hashes for the same plaintext (random salt)', async () => {
+    const plaintext = generateApiKey('test');
+    const h1 = await hashApiKey(plaintext);
+    const h2 = await hashApiKey(plaintext);
+    expect(h1).not.toBe(h2);
+    expect(await verifyApiKey(plaintext, h1)).toBe(true);
+    expect(await verifyApiKey(plaintext, h2)).toBe(true);
+  });
+});

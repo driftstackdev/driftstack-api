@@ -1,4 +1,4 @@
-// W528.A — drift guard for /vitest.config.ts (workspace root).
+// W528.A — drift guard for /vitest.node.config.ts (node project).
 // V-107 coverage regression-gate + V-086 e2e-only-Drizzle-repos +
 // V-120 benchmark separation. Drift here either changes test discovery
 // scope (would silently drop test files from the suite), test/hook
@@ -24,14 +24,15 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const LIB = resolve(REPO_ROOT, 'vitest.config.ts');
+const LIB = resolve(REPO_ROOT, 'vitest.node.config.ts');
+const ROOT_CONFIG = resolve(REPO_ROOT, 'vitest.config.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W528.A /vitest.config.ts content parity', () => {
-  const body = read(LIB);
+describe('W528.A /vitest.node.config.ts content parity', () => {
+  const body = read(LIB) + read(ROOT_CONFIG);
 
   it("test-discovery framing pinned: 'globals: false' + 'environment: \"node\"' + 3-pattern include glob (apps/**/tests/**/*.test.ts + packages/**/tests/**/*.test.ts + scripts/tests/**/*.test.ts) + 3-pattern exclude (node_modules + dist + tests/e2e) + 10s test/hook timeouts — pinned so the test-discovery scope + 10s-timeouts commitment survives (drift to dropping any include pattern would silently exclude that subtree from CI; drift to tightening timeouts would flake legitimately slow tests)", () => {
     expect(body).toMatch(/globals: false,/);
@@ -67,7 +68,8 @@ describe('W528.A /vitest.config.ts content parity', () => {
     );
     expect(body).toMatch(/'apps\/server\/src\/db\/\*\*', \/\/ Drizzle repos — e2e only/);
     expect(body).toMatch(/'apps\/server\/src\/index\.ts', \/\/ bootstrap entry/);
-    expect(body).toMatch(/'apps\/server\/src\/dump-openapi\.ts', \/\/ CLI tool/);
+    expect(body).toMatch(/'apps\/server\/src\/lib\/dump-openapi\.ts', \/\/ CLI tool/);
+    expect(body).toMatch(/excludeAfterRemap: true,/);
   });
 
   it("V-107 regression-gate threshold framing pinned: 'V-107: regression gate, not aspirational target. Thresholds are set ~5% below current baseline so a meaningful drop fails CI but small noise doesn't false-positive. Ratchet upward as coverage improves; never ratchet downward to mask a regression.' + 'lines: 80' + 'statements: 80' + 'functions: 80' + 'branches: 75' — pinned so the V-107 anchor + regression-gate-posture + 4-threshold (80/80/80/75) + ratchet-upward-only commitment survives (drift to lowering any threshold without parallel ratchet-upward would silently mask coverage regressions)", () => {

@@ -2,16 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    globals: false,
-    environment: 'node',
-    include: [
-      'apps/**/tests/**/*.test.ts',
-      'packages/**/tests/**/*.test.ts',
-      'scripts/tests/**/*.test.ts',
-    ],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/tests/e2e/**'],
-    testTimeout: 10_000,
-    hookTimeout: 10_000,
+    projects: ['./vitest.node.config.ts', './apps/gui-client/vitest.config.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
@@ -31,8 +22,12 @@ export default defineConfig({
         '**/tests/**',
         'apps/server/src/db/**', // Drizzle repos — e2e only
         'apps/server/src/index.ts', // bootstrap entry
-        'apps/server/src/dump-openapi.ts', // CLI tool
+        'apps/server/src/lib/dump-openapi.ts', // CLI tool
       ],
+      // Vitest 4's V8 provider remaps instrumented paths after the initial
+      // include/exclude pass. Re-apply exclusions so generated/bootstrap
+      // sources cannot leak back into the report after source-map remapping.
+      excludeAfterRemap: true,
       // V-107: regression gate, not aspirational target. Thresholds are
       // set ~5% below current baseline so a meaningful drop fails CI but
       // small noise doesn't false-positive. Ratchet upward as coverage
@@ -44,11 +39,5 @@ export default defineConfig({
         branches: 75,
       },
     },
-  },
-  benchmark: {
-    // V-120: bench files run via `npm run bench`. Excluded from the
-    // standard `npm test` `include` glob above so unit tests stay fast.
-    include: ['apps/**/tests/bench/**/*.bench.ts', 'packages/**/tests/bench/**/*.bench.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**'],
   },
 });

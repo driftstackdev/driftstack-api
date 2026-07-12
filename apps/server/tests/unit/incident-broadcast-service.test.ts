@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   IncidentBroadcastService,
   type BroadcastChannelsConfig,
+  type Fetcher,
 } from '../../src/services/incident-broadcast.js';
 import type { IncidentRow, IncidentUpdateRow } from '../../src/services/incidents.js';
 import type { Logger } from '../../src/lib/logger.js';
@@ -82,10 +83,10 @@ function makeBaseConfig(overrides: Partial<BroadcastChannelsConfig> = {}): Broad
 }
 
 describe('V-553.B-30 IncidentBroadcastService.notifyCreated/Resolved', () => {
-  let fetcher: ReturnType<typeof vi.fn>;
+  let fetcher: ReturnType<typeof vi.fn<Fetcher>>;
 
   beforeEach(() => {
-    fetcher = vi.fn();
+    fetcher = vi.fn<Fetcher>();
   });
 
   afterEach(() => {

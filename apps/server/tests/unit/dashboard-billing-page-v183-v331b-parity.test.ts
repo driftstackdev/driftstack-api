@@ -79,13 +79,17 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     expect(p).toMatch(/credentials: 'include',/);
   });
 
-  it("CRITICAL POST /v1/billing/portal-session pinned with body:'{}'. Drift would lose Stripe portal hand-off + force customers to update card details outside the dashboard. The empty-object body satisfies application/json content-type.", () => {
+  it("CRITICAL serialized POST /v1/billing/portal-session pinned with body:'{}', validated portal URL, and redirect. Drift would lose Stripe portal hand-off or allow duplicate portal creation.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /authedFetch\('\/v1\/billing\/portal-session', \{ method: 'POST', body: '\{\}' \}\)/,
+      /const response = await authedFetch\('\/v1\/billing\/portal-session', \{\s*\n\s+method: 'POST',\s*\n\s+body: '\{\}',\s*\n\s+\}\);/,
     );
-    expect(p).toMatch(/if \(body\.portal_url\) window\.location\.href = body\.portal_url;/);
+    expect(p).toMatch(
+      /if \(!body \|\| !body\.portal_url\) throw new Error\('portal URL missing'\);/,
+    );
+    expect(p).toMatch(/window\.location\.href = body\.portal_url;/);
+    expect(p).toMatch(/if \(portalLoading\) return;/);
   });
 
   it('CRITICAL Cancel button → handlePortal pinned. The "cancellation goes through Stripe portal" inline comment is the load-bearing PCI framing: we never cancel directly.', () => {
@@ -128,11 +132,12 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     expect(p).not.toMatch(/finishing Stripe setup\. Showing preview data below/);
   });
 
-  it("CRITICAL portal-error banner framing pinned — `Couldn't open Stripe portal (<error>)` with HTTP status surfacing. Drift to silent error would leave customers stranded on a non-responding button.", () => {
+  it('CRITICAL friendly portal-error banner framing pinned. Drift to silent error would leave customers stranded on a non-responding button.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /"Couldn't open Stripe portal \(" \+\s*\n\s+\(err && err\.message \? err\.message : 'network error'\) \+\s*\n\s+'\)\.'/,
+      /showBanner\("Couldn't open Stripe right now — check your connection and try again\."\);/,
     );
+    expect(p).toMatch(/finally \{\s*\n\s+setPortalLoading\(false\);/);
   });
 
   it("CRITICAL action-buttons wired regardless of token framing pinned. The 'Wire action buttons regardless of token state — they show a banner if no token rather than silently no-oping' inline comment is the load-bearing zero-confusion-state framing.", () => {

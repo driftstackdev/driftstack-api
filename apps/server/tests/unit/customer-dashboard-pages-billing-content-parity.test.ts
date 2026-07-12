@@ -63,11 +63,15 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     );
   });
 
-  it("POST /v1/billing/portal-session contract: empty {} body + redirect to body.portal_url — pinned so the portal handoff stays minimal (no client-provided URLs, drift to adding params would couple the dashboard to Stripe's portal options API)", () => {
+  it('POST /v1/billing/portal-session contract: serialized action, empty {} body, validated portal URL, and redirect — pinned so the portal handoff stays minimal and duplicate clicks cannot create concurrent sessions', () => {
     expect(body).toMatch(
-      /authedFetch\('\/v1\/billing\/portal-session', \{ method: 'POST', body: '\{\}' \}\)/,
+      /const response = await authedFetch\('\/v1\/billing\/portal-session', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: '\{\}',\s*\n?\s*\}\);/,
     );
-    expect(body).toMatch(/if \(body\.portal_url\) window\.location\.href = body\.portal_url;/);
+    expect(body).toMatch(
+      /if \(!body \|\| !body\.portal_url\) throw new Error\('portal URL missing'\);/,
+    );
+    expect(body).toMatch(/window\.location\.href = body\.portal_url;/);
+    expect(body).toMatch(/if \(portalLoading\) return;/);
   });
 
   it("Cancel-at-period-end visibility: SSG class:list shows cancelBtn iff MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end + inline sub.cancel_at_period_end → hidden / else → visible — pinned so a subscription that's already set to cancel doesn't show the cancel button again (drift would let customers re-click cancel on an already-canceling sub)", () => {

@@ -15,7 +15,11 @@
 // path where an operator supplies the payment_id by hand).
 
 import { describe, expect, it, vi } from 'vitest';
-import { CryptoOrdersService, InMemoryCryptoOrdersRepo } from '../../src/services/crypto-orders.js';
+import {
+  CryptoOrdersService,
+  InMemoryCryptoOrdersRepo,
+  type CryptoOrderPaidEmailNotifier,
+} from '../../src/services/crypto-orders.js';
 
 // A realistic $99 order quoted as 0.0015 BTC. price_amount in the IPN is FIAT
 // (99.0 USD); pay_amount + actually_paid are CRYPTO (BTC) — incomparable units.
@@ -23,8 +27,8 @@ const ORDER_PRICE_AMOUNT_FIAT = 99.0;
 const ORDER_PAY_AMOUNT_BTC = 0.0015;
 
 async function seed(opts?: {
-  paidNotifier?: { notifyOrderPaid: ReturnType<typeof vi.fn> };
-  logger?: { error: ReturnType<typeof vi.fn> };
+  paidNotifier?: CryptoOrderPaidEmailNotifier;
+  logger?: { error: (obj: Record<string, unknown>, msg: string) => void };
   /** Bind the crypto-denominated quote (payment_id + pay_amount + pay_currency)
    *  on the order, mirroring the billing-crypto createPayment recordPaymentId
    *  call. Default false (the #9 tests bind their own payment_id). */
@@ -77,7 +81,9 @@ describe('crypto IPN amount reconciliation (#1, crypto-denominated)', () => {
   });
 
   it('routes a HALF-PAY (finished but actually_paid < pay_amount) to PARTIAL, never paid', async () => {
-    const paidNotifier = { notifyOrderPaid: vi.fn(() => Promise.resolve()) };
+    const paidNotifier: CryptoOrderPaidEmailNotifier = {
+      notifyOrderPaid: vi.fn(() => Promise.resolve()),
+    };
     const { svc } = await seed({ paidNotifier });
     const updated = await svc.applyIpnStatus({
       order_id: 'ord_t',
@@ -140,7 +146,9 @@ describe('crypto IPN amount reconciliation (#1, crypto-denominated)', () => {
 
   it('routes a pay_currency MISMATCH to partial + raises an integrity alarm (never unlocks)', async () => {
     const logger = { error: vi.fn() };
-    const paidNotifier = { notifyOrderPaid: vi.fn(() => Promise.resolve()) };
+    const paidNotifier: CryptoOrderPaidEmailNotifier = {
+      notifyOrderPaid: vi.fn(() => Promise.resolve()),
+    };
     const { svc } = await seed({ logger, paidNotifier, bindQuote: true });
     const updated = await svc.applyIpnStatus({
       order_id: 'ord_t',

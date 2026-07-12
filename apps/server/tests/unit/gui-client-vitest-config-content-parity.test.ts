@@ -1,13 +1,13 @@
 // W536.B — drift guard for apps/gui-client/vitest.config.ts.
-// V-288 jsdom-needing GUI client tests project. Pairs with workspace
-// root vitest.workspace.ts (W528.B). Drift here either widens the
+// V-288 jsdom-needing GUI client tests project. Registered by the
+// root vitest.config.ts (W528.B). Drift here either widens the
 // include glob from .tsx (would double-run pure-function .test.ts in
 // both node + jsdom — the ts/tsx discriminator is load-bearing) or
 // enables coverage (would conflict with the root project's load-
 // bearing coverage report).
 //
 //   • V-288 anchor + 'apps/gui-client/tests/**/*.test.tsx' scope.
-//   • Pairs with workspace vitest.workspace.ts.
+//   • Registered by root vitest.config.ts.
 //   • environment: jsdom + name: 'gui-jsdom'.
 //   • include: tests/**/*.test.tsx only (NOT .test.ts — node project
 //     handles those).
@@ -32,12 +32,12 @@ function read(p: string): string {
 describe('W536.B apps/gui-client/vitest.config.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-288 framing + .tsx-discriminator + workspace-pairing pinned: 'V-288 — Vitest project config for jsdom-needing GUI client tests.' + 'Scoped to `apps/gui-client/tests/**/*.test.tsx` (the .tsx extension is the discriminator). Pure-function `.test.ts` files in this dir continue to run in the root project's node environment — no DOM overhead for tests that don't need it.' + 'Pairs with `vitest.workspace.ts` at the repo root.' — pinned so the V-288 anchor + .tsx-discriminator + .ts-stays-in-node + no-DOM-overhead-for-pure-fn + workspace-pairing commitment survives (drift to including .test.ts here would double-run those tests in both environments)", () => {
+  it('V-288 framing + .tsx-discriminator + root-project registration pinned — pinned so the V-288 anchor + .tsx-discriminator + .ts-stays-in-node + no-DOM-overhead-for-pure-fn commitment survives', () => {
     expect(body).toMatch(/\/\/ V-288 — Vitest project config for jsdom-needing GUI client tests\./);
     expect(body).toMatch(
       /\/\/ Scoped to `apps\/gui-client\/tests\/\*\*\/\*\.test\.tsx` \(the \.tsx extension\s*\n?\s*\/\/ is the discriminator\)\. Pure-function `\.test\.ts` files in this dir\s*\n?\s*\/\/ continue to run in the root project's node environment — no DOM\s*\n?\s*\/\/ overhead for tests that don't need it\./,
     );
-    expect(body).toMatch(/\/\/ Pairs with `vitest\.workspace\.ts` at the repo root\./);
+    expect(body).toMatch(/\/\/ Registered by the root `vitest\.config\.ts` project list\./);
   });
 
   it("jsdom-project + include + setup framing pinned: 'plugins: [react()]' (transforms .tsx via @vitejs/plugin-react) + 'name: \"gui-jsdom\"' + 'environment: \"jsdom\"' + 'include: [\"tests/**/*.test.tsx\"]' (.tsx-only — parity with V-288 ts/tsx discriminator) + 'exclude: [\"**/node_modules/**\", \"**/dist/**\"]' + 'setupFiles: [\"./tests/setup.ts\"]' + 'testTimeout: 10_000' + 'hookTimeout: 10_000' (parity with root project) — pinned so the gui-jsdom-project-name + jsdom-environment + tsx-include + 2-exclude + setup-file + 10s-timeouts (matches root config) commitment survives", () => {

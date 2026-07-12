@@ -1,13 +1,12 @@
-// W528.B — drift guard for /vitest.workspace.ts.
-// V-288 two-project workspace: root vitest.config.ts (node) +
+// W528.B — drift guard for the Vitest 4 root project orchestrator.
+// V-288 two-project setup: vitest.node.config.ts (node) +
 // apps/gui-client/vitest.config.ts (jsdom). Drift here either drops
 // the gui-client jsdom project (would break all component/hook tests)
 // or removes the .ts vs .tsx discriminator (would double-run tests
 // in both environments).
 //
-//   • V-288 anchor doc-comment.
 //   • Two projects:
-//     1. Root vitest.config.ts (node, .test.ts).
+//     1. vitest.node.config.ts (node, .test.ts).
 //     2. apps/gui-client/vitest.config.ts (jsdom, .test.tsx).
 //   • .ts vs .tsx extension is the discriminator (no double-runs).
 
@@ -18,37 +17,25 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const LIB = resolve(REPO_ROOT, 'vitest.workspace.ts');
+const LIB = resolve(REPO_ROOT, 'vitest.config.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W528.B /vitest.workspace.ts content parity', () => {
+describe('W528.B /vitest.config.ts project orchestration parity', () => {
   const body = read(LIB);
 
-  it("V-288 two-project framing pinned: 'V-288 — Vitest workspace entry point.' + 'Two projects:' + '1. Root `vitest.config.ts` — node environment, covers `apps/**/tests/**/*.test.ts` + `packages/**/tests/**/*.test.ts`. Existing scope; unchanged.' + '2. `apps/gui-client/vitest.config.ts` — jsdom environment, covers ONLY `apps/gui-client/tests/**/*.test.tsx`. Component + hook-lifecycle tests live here; pure-function `.test.ts` files in the same dir keep running in the node project.' — pinned so the V-288 anchor + 2-project setup + node-vs-jsdom split commitment survives (drift to dropping the jsdom project would break all component/hook tests)", () => {
-    expect(body).toMatch(/\/\/ V-288 — Vitest workspace entry point\./);
-    expect(body).toMatch(/\/\/ Two projects:/);
+  it('registers the node and GUI projects in order', () => {
+    expect(body).toMatch(/import \{ defineConfig \} from 'vitest\/config';/);
     expect(body).toMatch(
-      /\/\/\s+1\. Root `vitest\.config\.ts` — node environment, covers\s*\n?\s*\/\/\s+`apps\/\*\*\/tests\/\*\*\/\*\.test\.ts` \+ `packages\/\*\*\/tests\/\*\*\/\*\.test\.ts`\.\s*\n?\s*\/\/\s+Existing scope; unchanged\./,
-    );
-    expect(body).toMatch(
-      /\/\/\s+2\. `apps\/gui-client\/vitest\.config\.ts` — jsdom environment, covers\s*\n?\s*\/\/\s+ONLY `apps\/gui-client\/tests\/\*\*\/\*\.test\.tsx`\. Component \+\s*\n?\s*\/\/\s+hook-lifecycle tests live here; pure-function `\.test\.ts` files\s*\n?\s*\/\/\s+in the same dir keep running in the node project\./,
+      /projects: \[\s*'\.\/vitest\.node\.config\.ts',\s*'\.\/apps\/gui-client\/vitest\.config\.ts',?\s*\],/,
     );
   });
 
-  it("ts-vs-tsx discriminator + no-double-runs framing pinned: 'The .ts vs .tsx extension is the discriminator. No double-runs.' — pinned so the extension-based environment-routing + no-double-runs commitment survives (drift to overlapping include globs would double-run tests in both node + jsdom)", () => {
-    expect(body).toMatch(
-      /\/\/ The \.ts vs \.tsx extension is the discriminator\. No double-runs\./,
-    );
-  });
-
-  it('defineWorkspace 2-entry framing pinned: \'import { defineWorkspace } from "vitest/config"\' + \'export default defineWorkspace(["./vitest.config.ts", "./apps/gui-client/vitest.config.ts"])\' — pinned so the 2-entry workspace + project-order (root first, gui-client second) commitment survives', () => {
-    expect(body).toMatch(/import \{ defineWorkspace \} from 'vitest\/config';/);
-    expect(body).toMatch(
-      /export default defineWorkspace\(\['\.\/vitest\.config\.ts', '\.\/apps\/gui-client\/vitest\.config\.ts'\]\);/,
-    );
+  it('uses the Vitest 4 projects API instead of the removed workspace API', () => {
+    expect(body).not.toMatch(/defineWorkspace/);
+    expect(existsSync(resolve(REPO_ROOT, 'vitest.workspace.ts'))).toBe(false);
   });
 
   it('file exists at canonical path', () => {

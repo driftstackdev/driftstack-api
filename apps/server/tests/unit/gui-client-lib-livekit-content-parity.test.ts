@@ -85,7 +85,6 @@ describe('gui-client/lib/livekit content parity', () => {
 
   it("sendInputEvent swallows benign LiveKit teardown errors (PC manager closed) so a fire-and-forget publish after room teardown can't blank the app, and re-throws genuine failures", () => {
     expect(body).toContain('if (isBenignTeardownError(err)) return;');
-    expect(body).toContain('export function isBenignTeardownError(');
-    expect(body).toContain('PC manager is closed');
+    expect(body).toContain("import { isBenignTeardownError } from './livekit-errors';");
   });
 });

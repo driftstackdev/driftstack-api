@@ -5,7 +5,7 @@
 // continue to run in the root project's node environment — no DOM
 // overhead for tests that don't need it.
 //
-// Pairs with `vitest.workspace.ts` at the repo root.
+// Registered by the root `vitest.config.ts` project list.
 
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
