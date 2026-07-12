@@ -45,7 +45,11 @@
 import { useEffect, useRef } from 'react';
 import { type CanonicalModifier } from '@driftstack/sdk';
 import { sendInputEvent, RoomEvent, type InputEvent, type Room } from './livekit';
-import { ReliableInputCongestedError, setReliableInputCongested } from './livekit-input-congestion';
+import {
+  isReliableInputCongested,
+  ReliableInputCongestedError,
+  setReliableInputCongested,
+} from './livekit-input-congestion';
 
 export interface UseInputCaptureOpts {
   /** The LiveKit room — null when not connected. Capture is a
@@ -432,8 +436,16 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   const logicalW = opts.logical?.width ?? DEVICE_LOGICAL_WIDTH;
   const logicalH = opts.logical?.height ?? DEVICE_LOGICAL_HEIGHT;
   useEffect(() => {
+    // A deliberate capture-off transition has no listener to observe a later buffer
+    // drain. Clear the old latch now so a future takeover on this same Room starts
+    // from the replacement/current channel state, not a historical pause.
+    if (room !== null && (!enabled || video === null)) {
+      setReliableInputCongested(room, false);
+      onCongestionChangeRef.current?.(false);
+    }
+  }, [room, video, enabled]);
+  useEffect(() => {
     if (!enabled || room === null || video === null) return;
-    onCongestionChangeRef.current?.(false);
     // The captured-frame logical frame the injector addresses (per-archetype). Used
     // for the pointer mapping AND the scroll/glide clamps so both adapt together.
     const logical = { width: logicalW, height: logicalH };
@@ -456,7 +468,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // On a healthy link this flag never leaves `false` (livekit only emits on a
     // threshold crossing, and it starts "low"), so behavior is byte-identical to
     // before; it only changes the actual failure case.
-    let reliableCongested = false;
+    // Congestion belongs to the Room, not this particular listener effect. The effect
+    // legitimately reattaches when first-frame logical dimensions settle; inherit the
+    // same Room's latch so that re-key cannot accidentally resume input mid-stall.
+    let reliableCongested = isReliableInputCongested(room);
+    onCongestionChangeRef.current?.(reliableCongested);
     const setCongested = (congested: boolean): void => {
       reliableCongested = congested;
       setReliableInputCongested(room, congested);
@@ -1133,7 +1149,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
           onRoomReconnected,
         );
       }
-      setReliableInputCongested(room, false);
+      // Do not clear the room-owned latch here: this cleanup can be a same-Room
+      // logical-dimension reattach, not a disconnect. WeakSet ownership means an
+      // actually discarded Room is collectible without explicit deletion.
       onCongestionChangeRef.current?.(false);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', finishGesture);

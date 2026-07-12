@@ -183,6 +183,53 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(emitted().map((e) => e.type)).toContain('touchStart');
   });
 
+  it('preserves room congestion across a same-room logical-dimension reattach', () => {
+    const { room, fireDC } = makeRoom();
+    const video = document.createElement('video');
+    document.body.appendChild(video);
+    stubVideo(video);
+    const onCongestionChange = vi.fn();
+    function Wired({ width }: { width: number }): JSX.Element {
+      useInputCapture({
+        room,
+        videoElement: video,
+        enabled: true,
+        logical: { width, height: 874 },
+        onCongestionChange,
+      });
+      return <span />;
+    }
+    const mounted = render(<Wired width={402} />);
+    fireDC(false, 0);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+
+    mounted.rerender(<Wired width={390} />);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+    scroll(video);
+    expect(emitted()).toHaveLength(0);
+  });
+
+  it('clears historical congestion across an intentional capture-off mode flip', () => {
+    const { room, fireDC } = makeRoom();
+    const video = document.createElement('video');
+    document.body.appendChild(video);
+    stubVideo(video);
+    const onCongestionChange = vi.fn();
+    function Wired({ enabled }: { enabled: boolean }): JSX.Element {
+      useInputCapture({ room, videoElement: video, enabled, onCongestionChange });
+      return <span />;
+    }
+    const mounted = render(<Wired enabled />);
+    fireDC(false, 0);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+
+    mounted.rerender(<Wired enabled={false} />);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    mounted.rerender(<Wired enabled />);
+    scroll(video);
+    expect(emitted().map((e) => e.type)).toContain('touchStart');
+  });
+
   it('ignores a NON-reliable (lossy, kind 1) buffer-status event — only reliable gates the shed', () => {
     const { room, fireDC } = makeRoom();
     const { video } = mount(room);
