@@ -74,6 +74,7 @@ import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/pa
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson } from '../lib/download';
 import { persistBaseUrl } from '../lib/settings';
+import { useTransientNotice } from '../lib/use-transient-notice';
 import {
   getAgentSession,
   getAgentSessionPageState,
@@ -2630,18 +2631,16 @@ export function SimulatorWindow(): JSX.Element {
         .then((rec) => {
           if (rec !== null && rec.frameCount === 0) {
             void deleteRecording(idToStop).catch(() => {});
-            setNotice('Recording was empty — no video was streaming');
+            showNotice('Recording was empty — no video was streaming');
           } else {
-            setNotice('Recording saved');
+            showNotice('Recording saved');
           }
-          window.setTimeout(() => setNotice(null), 4000);
         })
         // Never let a rejected recording-store write reach the global
         // unhandledrejection handler (it blanks the app to a fatal overlay — the
         // 2026-06-18 black-box class); report a soft note instead.
         .catch(() => {
-          setNotice("Couldn't save the recording — check the app's file-access permission.");
-          window.setTimeout(() => setNotice(null), 4000);
+          showNotice("Couldn't save the recording — check the app's file-access permission.");
         });
       activeRecIdRef.current = null;
       return;
@@ -2652,8 +2651,7 @@ export function SimulatorWindow(): JSX.Element {
     // gate the capture, so check the live element directly.
     const el = videoElRef.current;
     if (publisherState !== 'publishing' || el === null || el.videoWidth === 0) {
-      setNotice('No video yet — wait for the stream before recording');
-      window.setTimeout(() => setNotice(null), 4000);
+      showNotice('No video yet — wait for the stream before recording');
       return;
     }
     // Orphan-guard: never leave a prior interval running when starting a new one.
@@ -2675,17 +2673,15 @@ export function SimulatorWindow(): JSX.Element {
     const fn = recordingExportFilename(rec, now);
     void downloadJson(fn, buildRecordingExport(rec, now))
       .then((ok) => {
-        setNotice(
+        showNotice(
           ok
             ? `Exported recording to your Downloads folder (${fn}).`
             : "Couldn't save the export — check the app's file-access permission.",
         );
-        window.setTimeout(() => setNotice(null), 4000);
       })
       // Guard the global unhandledrejection fatal-overlay (2026-06-18 black-box class).
       .catch(() => {
-        setNotice("Couldn't save the export — check the app's file-access permission.");
-        window.setTimeout(() => setNotice(null), 4000);
+        showNotice("Couldn't save the export — check the app's file-access permission.");
       });
   }
   // Two-step confirm for the recording delete — it's PERMANENT (no recycle bin) and the ×
@@ -2704,8 +2700,7 @@ export function SimulatorWindow(): JSX.Element {
     if (deleteRecTimerRef.current !== null) window.clearTimeout(deleteRecTimerRef.current);
     setConfirmingDeleteRecId(null);
     void deleteRecording(id).catch(() => {
-      setNotice("Couldn't delete the recording.");
-      window.setTimeout(() => setNotice(null), 4000);
+      showNotice("Couldn't delete the recording.");
     });
   };
   // Stop the capture loop if the window unmounts mid-recording.
@@ -2792,7 +2787,7 @@ export function SimulatorWindow(): JSX.Element {
     };
     el.requestVideoFrameCallback?.((t) => tick(t));
   }
-  const [notice, setNotice] = useState<string | null>(null);
+  const { notice, showNotice, clearNotice } = useTransientNotice();
   // Non-fatal control-channel health: set when the FIRST input publish fails
   // (the LiveKit data channel is effectively dead, so taps/keys aren't reaching
   // the device). Surfaced as a small badge rather than blocking the view.
@@ -3487,22 +3482,19 @@ export function SimulatorWindow(): JSX.Element {
           const text = await navigator.clipboard.readText();
           if (text === '') return;
           if (new TextEncoder().encode(text).byteLength > MAX_DEVICE_TEXT_BYTES) {
-            setNotice('Clipboard is too large — paste up to 8 KB at a time');
-            window.setTimeout(() => setNotice(null), 3500);
+            showNotice('Clipboard is too large — paste up to 8 KB at a time', 3500);
             return;
           }
           await sendText(room, text);
-          setNotice('Pasted to the device');
-          window.setTimeout(() => setNotice(null), 2500);
+          showNotice('Pasted to the device', 2500);
         } catch {
-          setNotice("Couldn't read the clipboard");
-          window.setTimeout(() => setNotice(null), 2500);
+          showNotice("Couldn't read the clipboard", 2500);
         }
       })();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [info, room]);
+  }, [info, room, showNotice]);
 
   // Escape collapses the open pane back to the always-docked rail (the drawer is a
   // docked side panel, NOT an overlay — so an outside-pointer-down must NOT close
@@ -4140,8 +4132,7 @@ export function SimulatorWindow(): JSX.Element {
                 scrollY: prevTab.scrollY,
               });
             }
-            setNotice('Could not switch tab');
-            window.setTimeout(() => setNotice(null), 3000);
+            showNotice('Could not switch tab', 3000);
           } else if (
             pending !== undefined &&
             pending.tabId === activeTabIdRef.current &&
@@ -4436,7 +4427,7 @@ export function SimulatorWindow(): JSX.Element {
         /* ignore */
       }
     };
-  }, [room, writeTabPageState, applyStalledState]);
+  }, [room, writeTabPageState, applyStalledState, showNotice]);
 
   // Live URL via the page-state API (A3 W2730): the box reports pageState over the
   // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
@@ -5260,7 +5251,7 @@ export function SimulatorWindow(): JSX.Element {
     if (endArmTimerRef.current !== null) window.clearTimeout(endArmTimerRef.current);
     endArmTimerRef.current = null;
     setEndArmed(false);
-    setNotice(null);
+    clearNotice();
     // P1a — a fresh/relaunched session starts NON-terminal; clear any prior
     // "Session ended" state so the new session's first frame isn't covered by the
     // old session's terminal overlay (in-place relaunch swaps sessionId without
@@ -5322,7 +5313,7 @@ export function SimulatorWindow(): JSX.Element {
     for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
     activationRetryRef.current.clear();
     setSwitchingTabId(null);
-  }, [sessionId, stopRecording]);
+  }, [sessionId, stopRecording, clearNotice]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
   // the error was swallowed). null = no error; a classified message = the last
@@ -5347,10 +5338,7 @@ export function SimulatorWindow(): JSX.Element {
             : err.message
       : 'Control request failed';
   const noticeControlError = (err: unknown, reqSessionId = sessionIdRef.current): void => {
-    setNotice(controlErrorMessage(err));
-    window.setTimeout(() => {
-      if (sessionIdRef.current === reqSessionId) setNotice(null);
-    }, 4000);
+    if (sessionIdRef.current === reqSessionId) showNotice(controlErrorMessage(err));
   };
   // The LiveKit room handle, surfaced by the panel after a (re)connect. Wrap
   // setRoom so a fresh/reconnected room CLEARS the latched controlUnreachable
@@ -5580,10 +5568,7 @@ export function SimulatorWindow(): JSX.Element {
     void sendAgentMessage(request.sessionId, text, controlAuth)
       .then(() => {
         if (!ownsControlAction(request)) return;
-        setNotice('Sent to agent');
-        window.setTimeout(() => {
-          if (sessionIdRef.current === request.sessionId) setNotice(null);
-        }, 3000);
+        showNotice('Sent to agent', 3000);
       })
       .catch((err: unknown) => {
         if (!ownsControlAction(request)) return;
@@ -5608,11 +5593,10 @@ export function SimulatorWindow(): JSX.Element {
     if (sessionId === '' || controlActionRef.current !== null) return;
     if (!endArmed) {
       setEndArmed(true);
-      setNotice('Click End again to end the session — this stops the device (no undo).');
+      showNotice('Click End again to end the session — this stops the device (no undo).');
       if (endArmTimerRef.current !== null) window.clearTimeout(endArmTimerRef.current);
       endArmTimerRef.current = window.setTimeout(() => {
         setEndArmed(false);
-        setNotice(null);
       }, 4000);
       return;
     }
@@ -5643,7 +5627,7 @@ export function SimulatorWindow(): JSX.Element {
         // reaper, which closes it on the box. So End-session does the right thing
         // even without control auth, instead of a dead "control request failed"
         // (founder 2026-06-23 "still cant end session"). Best-effort notice first.
-        setNotice('Ending — closing the window (the session will stop on the box).');
+        showNotice('Ending — closing the window (the session will stop on the box).');
         window.setTimeout(() => {
           if (sessionIdRef.current !== request.sessionId) return;
           void withCurrentWindow((w) =>
@@ -5946,8 +5930,7 @@ export function SimulatorWindow(): JSX.Element {
             if (p.tabId === ctx.tabId) pendingActivationsRef.current.delete(rid);
           }
           setSwitchingTabId((s) => (s === ctx.tabId ? null : s));
-          setNotice('Still switching tabs…');
-          window.setTimeout(() => setNotice(null), 3000);
+          showNotice('Still switching tabs…', 3000);
         }
       }, ACTIVATE_ACK_TIMEOUT_MS);
       activationRetryRef.current.set(ctx.tabId, {
@@ -6100,8 +6083,7 @@ export function SimulatorWindow(): JSX.Element {
     // null only for empty input or a rejected dangerous scheme.
     const url = resolveAddressBarInput(raw);
     if (url === null) {
-      setNotice('Enter an address or a search term');
-      window.setTimeout(() => setNotice(null), 3000);
+      showNotice('Enter an address or a search term', 3000);
       return;
     }
     // A fresh navigate supersedes a prior failed-send banner (incl. our own Retry).
@@ -6175,8 +6157,7 @@ export function SimulatorWindow(): JSX.Element {
     setPageStalled(false);
     setPageLoading(armLoadWatchdog(true));
     void navigateAgentSessionHistory(sessionId, direction, controlAuth).catch(() => {
-      setNotice(`Could not go ${direction}`);
-      window.setTimeout(() => setNotice(null), 3000);
+      showNotice(`Could not go ${direction}`, 3000);
       setPageLoading(false);
       clearLoadWatchdog();
     });
