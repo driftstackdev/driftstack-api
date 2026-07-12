@@ -79,6 +79,15 @@ describe('agent-session response schema parity', () => {
     // The closed verb vocabulary parses under the schema.
     expect(AgentIntentSchema.safeParse({ kind: 'navigate', url: 'https://x' }).success).toBe(true);
     expect(AgentIntentSchema.safeParse({ kind: 'capture', capture: 'pdf' }).success).toBe(true);
+    expect(
+      AgentIntentSchema.safeParse({ kind: 'wait', condition: 'idle', timeoutMs: 0 }).success,
+    ).toBe(true);
+    expect(
+      AgentIntentSchema.safeParse({ kind: 'wait', condition: 'idle', timeoutMs: -1 }).success,
+    ).toBe(false);
+    expect(
+      AgentIntentSchema.safeParse({ kind: 'wait', condition: 'idle', timeoutMs: 1.5 }).success,
+    ).toBe(false);
     // W140 behavioural intents.
     expect(
       AgentIntentSchema.safeParse({ kind: 'scroll', direction: 'down', amount_px: 800 }).success,

@@ -538,7 +538,8 @@
                 "type": "string"
               },
               "timeoutMs": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 0
               }
             },
             "required": ["kind", "condition"]
@@ -657,7 +658,8 @@
                         "type": "string"
                       },
                       "timeoutMs": {
-                        "type": "integer"
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": ["kind", "condition"]
@@ -783,7 +785,8 @@
                         "type": "string"
                       },
                       "timeoutMs": {
-                        "type": "integer"
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": ["kind", "condition"]
@@ -929,7 +932,8 @@
                         "type": "string"
                       },
                       "timeoutMs": {
-                        "type": "integer"
+                        "type": "integer",
+                        "minimum": 0
                       }
                     },
                     "required": ["kind", "condition"]
@@ -1119,7 +1123,8 @@
                       "type": "string"
                     },
                     "timeoutMs": {
-                      "type": "integer"
+                      "type": "integer",
+                      "minimum": 0
                     }
                   },
                   "required": ["kind", "condition"]
@@ -17233,7 +17238,8 @@
                                     "type": "string"
                                   },
                                   "timeoutMs": {
-                                    "type": "integer"
+                                    "type": "integer",
+                                    "minimum": 0
                                   }
                                 },
                                 "required": ["kind", "condition"]
@@ -17355,7 +17361,8 @@
                                             "type": "string"
                                           },
                                           "timeoutMs": {
-                                            "type": "integer"
+                                            "type": "integer",
+                                            "minimum": 0
                                           }
                                         },
                                         "required": ["kind", "condition"]
@@ -17481,7 +17488,8 @@
                                             "type": "string"
                                           },
                                           "timeoutMs": {
-                                            "type": "integer"
+                                            "type": "integer",
+                                            "minimum": 0
                                           }
                                         },
                                         "required": ["kind", "condition"]
@@ -17627,7 +17635,8 @@
                                             "type": "string"
                                           },
                                           "timeoutMs": {
-                                            "type": "integer"
+                                            "type": "integer",
+                                            "minimum": 0
                                           }
                                         },
                                         "required": ["kind", "condition"]
@@ -20184,7 +20193,8 @@
                                 "type": "string"
                               },
                               "timeoutMs": {
-                                "type": "integer"
+                                "type": "integer",
+                                "minimum": 0
                               }
                             },
                             "required": ["kind", "condition"]

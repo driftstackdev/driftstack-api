@@ -31,7 +31,10 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
     kind: z.literal('wait'),
     condition: z.enum(['idle', 'selector_visible']),
     selector: z.string().optional(),
-    timeoutMs: z.number().int().optional(),
+    /** Optional wait budget in milliseconds. Negative time is not meaningful and
+     * live decomposers/executors already omit or clamp it, so reject it at the
+     * canonical public boundary too. */
+    timeoutMs: z.number().int().nonnegative().optional(),
   }),
   z.object({
     kind: z.literal('capture'),
