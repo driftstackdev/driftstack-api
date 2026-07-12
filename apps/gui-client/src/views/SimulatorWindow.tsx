@@ -197,6 +197,12 @@ const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 // one-shot reconcile gate their url write on this (the title still applies; titles
 // self-heal). A tabId-bearing frame routes precisely and is never suppressed.
 const PAGE_STATE_GRACE_MS = 2500;
+// Client-side fallback for a load whose terminal page_state is dropped. A3 emits
+// its own timeout-stall advisory at ~40s; keep the browser bar truthful until just
+// after that window, then replace it with the same actionable Retry treatment.
+// This is deliberately far beyond the old 6s cutoff, which made the bar announce
+// completion while the page was still loading.
+const PAGE_LOAD_FALLBACK_MS = 45_000;
 // flip true when A3's navigateHistory handler deploys — bus W2870
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 // Finding #6 — throttle for the unrecognized-data-frame breadcrumb (below). One warn at
@@ -1329,16 +1335,25 @@ function BrowserBar({
   const trickleRef = useRef<number | null>(null);
   const hideRef = useRef<number | null>(null);
   const loadingActiveRef = useRef(false);
+  const loadProgressRef = useRef(loadProgress);
+  loadProgressRef.current = loadProgress;
   useEffect(() => {
     if (pageLoading) {
+      const startingNewLoad = !loadingActiveRef.current;
       loadingActiveRef.current = true;
       if (hideRef.current !== null) {
         window.clearTimeout(hideRef.current);
         hideRef.current = null;
       }
       setBarVisible(true);
-      // Seed from the reported progress (≥ a small visible base); never go backwards.
-      setBarProgress((p) => Math.max(p, loadProgress ?? 0, 0.08));
+      if (startingNewLoad) {
+        // A completion leaves progress at 100% during its 300ms fade. A new
+        // navigation inside that window must RESET (not max with the old 1), or
+        // the new bar stays fully transparent for its entire load. Seed once,
+        // capped low; after that the trickle owns smoothness and page_state
+        // progress updates cannot make the bar jump mid-flight.
+        setBarProgress(Math.max(0.08, Math.min(loadProgressRef.current ?? 0, 0.15)));
+      }
       if (trickleRef.current === null) {
         trickleRef.current = window.setInterval(() => {
           setBarProgress((p) => (p >= 0.9 ? p : p + (0.9 - p) * 0.12));
@@ -1358,7 +1373,7 @@ function BrowserBar({
         hideRef.current = null;
       }, 300);
     }
-  }, [pageLoading, loadProgress]);
+  }, [pageLoading]);
   useEffect(
     () => () => {
       if (trickleRef.current !== null) window.clearInterval(trickleRef.current);
@@ -3664,6 +3679,12 @@ export function SimulatorWindow(): JSX.Element {
   const [pageLoadStalled, setPageLoadStalled] = useState<{ url: string; message: string } | null>(
     null,
   );
+  // Client fallback when the box's ~40s timeout-stall frame itself is dropped.
+  // Kept separate from pageLoadStalled so repeated same-target `loading` frames
+  // cannot erase it; both feed the same gentle Retry banner below.
+  const [pageLoadTimeout, setPageLoadTimeout] = useState<{ url: string; message: string } | null>(
+    null,
+  );
   // #72 — has the CURRENT navigation already reached a painted 'loaded' state? The box
   // emits page_state{state:'errored'} for a navigation failure, but a LATE 'errored'
   // frame that arrives AFTER the page already loaded+painted is a SUB-RESOURCE / late
@@ -3737,7 +3758,11 @@ export function SimulatorWindow(): JSX.Element {
   const activationRetryRef = useRef<
     Map<string, { tabId: string; prevTabId: string; attempts: number; timer: number }>
   >(new Map());
-  const loadWatchdogRef = useRef<number | null>(null);
+  const loadWatchdogRef = useRef<{
+    timer: number | null;
+    target: string;
+    expired: boolean;
+  }>({ timer: null, target: '', expired: false });
   // Timestamp of the last operator navigate. The ~2s page-state poll can fire before
   // the box has seen a just-submitted navigate and would read the PREVIOUS page as
   // 'loaded' → kill the optimistic spinner instantly (audit wqhvarsb9). For a short
@@ -3909,26 +3934,64 @@ export function SimulatorWindow(): JSX.Element {
   // reconcilePageState is defined later too; a ref lets the data-channel onData handler
   // (the activateTabResult path) trigger a one-shot reconcile without a forward cycle.
   const reconcilePageStateRef = useRef<() => void>(() => {});
-  const clearLoadWatchdog = (): void => {
-    if (loadWatchdogRef.current !== null) {
-      window.clearTimeout(loadWatchdogRef.current);
-      loadWatchdogRef.current = null;
+  const cancelLoadWatchdog = (): void => {
+    if (loadWatchdogRef.current.timer !== null) {
+      window.clearTimeout(loadWatchdogRef.current.timer);
     }
+    loadWatchdogRef.current = { timer: null, target: '', expired: false };
   };
-  // Centralized load-watchdog arming. EVERY transition into loading=true (re)arms the
-  // 6s safety net so the loading bar self-terminates if the box never reports a terminal
-  // frame — not just operator navigates. Box-reported loading (data-channel page_state,
-  // the ~2s poll) is the dominant path in AI mode (agent navigations) + for redirects /
-  // sub-navigations / SPA route changes; without arming here the bar trickles to ~90%
-  // and sticks forever when the box drops a terminal frame or a session ends mid-load.
-  const armLoadWatchdog = (): void => {
-    clearLoadWatchdog();
-    loadWatchdogRef.current = window.setTimeout(() => {
+  const clearLoadWatchdog = (): void => {
+    cancelLoadWatchdog();
+    setPageLoadTimeout(null);
+  };
+  // One non-sliding deadline per top-level target. Repeated `loading` frames from
+  // the data channel / 2s poll must NOT restart the clock forever. At expiry the
+  // bar turns into an explicit Retry advisory; the expired latch then prevents a
+  // stale same-target loading frame from relighting it. A changed target (redirect /
+  // link navigation), or a forceNew operator action, owns a fresh cycle.
+  const armLoadWatchdog = (forceNew = false): boolean => {
+    const target = currentNavTargetRef.current;
+    const current = loadWatchdogRef.current;
+    if (forceNew || current.target !== target) {
+      cancelLoadWatchdog();
+      loadWatchdogRef.current = { timer: null, target, expired: false };
+      setPageLoadTimeout(null);
+    }
+    const cycle = loadWatchdogRef.current;
+    if (cycle.expired) return false;
+    if (cycle.timer !== null) return true;
+
+    let timer = 0;
+    timer = window.setTimeout(() => {
+      const owned = loadWatchdogRef.current;
+      if (owned.timer !== timer || owned.target !== target) return;
+      loadWatchdogRef.current = { timer: null, target, expired: true };
       setPageLoading(false);
-      loadWatchdogRef.current = null;
-    }, 6000);
+      setPageLoadTimeout({
+        // `target` is normalized for identity matching (and intentionally lossy:
+        // fragments removed, case folded). Retry falls back to liveUrl so the
+        // exact path/query/fragment the user or box supplied is preserved.
+        url: '',
+        message: 'This page is taking longer than usual to load.',
+      });
+    }, PAGE_LOAD_FALLBACK_MS);
+    loadWatchdogRef.current = { timer, target, expired: false };
+    return true;
   };
-  useEffect(() => () => clearLoadWatchdog(), []);
+  useEffect(() => () => cancelLoadWatchdog(), []);
+  useEffect(() => {
+    if (sessionEnded === null) return;
+    // Terminal is one-way. Do not let an already-armed load deadline fire later
+    // and paint a contradictory "taking longer — Retry" banner over the ended
+    // session (the page-state data/poll effects stop as soon as terminal latches).
+    if (loadWatchdogRef.current.timer !== null) {
+      window.clearTimeout(loadWatchdogRef.current.timer);
+    }
+    loadWatchdogRef.current = { timer: null, target: '', expired: false };
+    setPageLoading(false);
+    setPageLoadTimeout(null);
+    setPageLoadStalled(null);
+  }, [sessionEnded]);
   // Optimistically reset the per-page chrome (error overlay / loading bar / stalled
   // badge / progress) on a tab switch/open/close. These four pieces of state are
   // currently GLOBAL to the window (not per-tab), so without this reset a prior tab's
@@ -4329,12 +4392,12 @@ export function SimulatorWindow(): JSX.Element {
           const staleClear =
             !loading && !navTargetOk && Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
           if (!staleClear) {
-            setPageLoading(loading);
-            // Finding #1 — a box-reported loading=true arms the watchdog too (not just
-            // operator navigates), so it self-terminates if the box never pushes a
-            // terminal frame (session ends mid-load, renderer wedges, dropped frame).
-            if (loading) armLoadWatchdog();
-            else clearLoadWatchdog();
+            if (loading) {
+              setPageLoading(armLoadWatchdog());
+            } else {
+              setPageLoading(false);
+              clearLoadWatchdog();
+            }
           }
         }
         setLoadProgress(typeof msg.progress === 'number' ? msg.progress : null);
@@ -4507,14 +4570,15 @@ export function SimulatorWindow(): JSX.Element {
           const loading = ps.state === 'loading';
           // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
           // navigate yet) kill the optimistic spinner. Within the grace window after
-          // a navigate, only ESCALATE to loading; the 6s watchdog still bounds it.
+          // a navigate, only ESCALATE to loading; the target-owned fallback still
+          // bounds it and turns a dropped terminal frame into an explicit Retry.
           if (!loading && Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS) return;
-          setPageLoading(loading);
-          // Finding #1 — arm the watchdog on a box-reported loading=true here too, so a
-          // poll-driven load (the dominant path in AI mode) self-terminates if the box
-          // never reports completion (renderer wedge / dropped terminal frame).
-          if (loading) armLoadWatchdog();
-          else clearLoadWatchdog();
+          if (loading) {
+            setPageLoading(armLoadWatchdog());
+          } else {
+            setPageLoading(false);
+            clearLoadWatchdog();
+          }
         })
         .catch(() => {
           /* best-effort poll — transient errors are non-fatal */
@@ -5200,6 +5264,11 @@ export function SimulatorWindow(): JSX.Element {
     setLiveUrl('');
     setPageLoading(false);
     setLoadProgress(null);
+    if (loadWatchdogRef.current.timer !== null) {
+      window.clearTimeout(loadWatchdogRef.current.timer);
+    }
+    loadWatchdogRef.current = { timer: null, target: '', expired: false };
+    setPageLoadTimeout(null);
     // A3 W2845 / audit pre-push (w83xq1aht): clear the frozen-renderer badge on a
     // per-session reset so a previous session's "stalled" overlay can't persist
     // over a NEW session's live frame after an in-place session swap.
@@ -6041,9 +6110,9 @@ export function SimulatorWindow(): JSX.Element {
     }
     // Optimistic loading state for the browser bar. If the harness emits
     // page_state it overrides this (and clears it on {loading:false}); otherwise
-    // the watchdog clears the sweep so it never spins forever.
+    // the target-owned fallback replaces the sweep with a Retry advisory if the
+    // harness never emits a terminal frame.
     setLiveUrl(url);
-    setPageLoading(true);
     setLoadProgress(null);
     // The navigate happens in the ACTIVE tab — point its url at the new address +
     // re-send the full list so the harness's per-tab page tracks the address bar
@@ -6066,11 +6135,7 @@ export function SimulatorWindow(): JSX.Element {
     // page we just left will no longer match → no false "PAGE FAILED TO LOAD".
     currentNavTargetRef.current = normalizeNavUrl(url);
     lastNavAtRef.current = Date.now();
-    clearLoadWatchdog();
-    loadWatchdogRef.current = window.setTimeout(() => {
-      setPageLoading(false);
-      loadWatchdogRef.current = null;
-    }, 6000);
+    setPageLoading(armLoadWatchdog(true));
     void sendNavigate(room, url).catch(() => {
       // Persistent + actionable rather than a 3s auto-toast — the send can fail on a
       // congested/dropped data channel and the user should be able to Retry (M5).
@@ -6090,6 +6155,7 @@ export function SimulatorWindow(): JSX.Element {
     // grace window) so an 'errored' on the navigated-to page can surface, while a late
     // sub-resource error after it loads stays suppressed. Clear any stale overlay too.
     setPageError(null);
+    setPageLoadStalled(null);
     pageReachedLoadedRef.current = false;
     // #135 — history nav's target is box-determined; untrack, the box's next 'loading'
     // frame for the resulting page sets it.
@@ -6098,12 +6164,11 @@ export function SimulatorWindow(): JSX.Element {
     // Finding #2 — back/forward is enabled (BACK_FORWARD_ENABLED) but gave zero loading
     // feedback, so a click read as a dead button (and a cached/instant step never lit
     // the bar at all). Mirror onNavigate's optimistic affordance: light the loading bar
-    // immediately + arm the shared watchdog so it self-clears if the box's history step
-    // produces no page_state (e.g. a cached step the box doesn't report as 'loading').
-    setPageLoading(true);
+    // immediately + arm the shared deadline so it becomes an actionable Retry if the
+    // box's history step produces no terminal page_state.
     setLoadProgress(null);
     setPageStalled(false);
-    armLoadWatchdog();
+    setPageLoading(armLoadWatchdog(true));
     void navigateAgentSessionHistory(sessionId, direction, controlAuth).catch(() => {
       setNotice(`Could not go ${direction}`);
       window.setTimeout(() => setNotice(null), 3000);
@@ -6204,6 +6269,8 @@ export function SimulatorWindow(): JSX.Element {
     landscapeRef.current = next;
     resetToActualSize();
   };
+
+  const pageLoadAdvisory = pageLoadStalled ?? pageLoadTimeout;
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-transparent">
@@ -6407,19 +6474,19 @@ export function SimulatorWindow(): JSX.Element {
                       nav that hasn't finished in ~40s). NON-blocking — the page is still
                       trying, so a gentle banner with a Retry, NOT the full-screen
                       "failed" overlay. Suppressed while the hard error overlay is up. */}
-                  {pageLoadStalled !== null && pageError === null && (
+                  {pageLoadAdvisory !== null && pageError === null && (
                     <div
                       role="status"
                       data-component="page-load-stalled-banner"
                       className="pointer-events-auto flex max-w-[min(90%,26rem)] items-center gap-2.5 rounded-lg bg-black/85 px-3.5 py-2 text-[12px] font-medium leading-snug text-white shadow-lg ring-1 ring-amber-400/40 backdrop-blur"
                     >
                       <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
-                      <span className="min-w-0">{pageLoadStalled.message}</span>
+                      <span className="min-w-0">{pageLoadAdvisory.message}</span>
                       <button
                         type="button"
                         data-action="retry-stalled-navigate"
                         onClick={() =>
-                          onNavigate(pageLoadStalled.url !== '' ? pageLoadStalled.url : liveUrl)
+                          onNavigate(pageLoadAdvisory.url !== '' ? pageLoadAdvisory.url : liveUrl)
                         }
                         className="ml-1 shrink-0 rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-white/20"
                       >

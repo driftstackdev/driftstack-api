@@ -9,10 +9,19 @@
 // address bar is connected/enabled) doesn't leak into the base simulator suite.
 
 import { useEffect } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, fireEvent } from '@testing-library/react';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
+let terminalSession = false;
+const getAgentSession = vi.fn(() =>
+  Promise.resolve({
+    mode: 'manual' as const,
+    pairKind: null,
+    terminal: terminalSession,
+    closedReason: terminalSession ? 'browser-closed' : null,
+  }),
+);
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
   connectToAgentSession: () => new Promise(() => {}),
@@ -28,6 +37,7 @@ vi.mock('../../src/lib/livekit', () => ({
     Disconnected: 'disconnected',
     Reconnecting: 'reconnecting',
     Reconnected: 'reconnected',
+    DataReceived: 'dataReceived',
   },
 }));
 
@@ -64,7 +74,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
+  getAgentSession,
   getAgentSessionPageState: () => Promise.resolve(null),
   // The cookies drawer poll (founder #48) calls this once the room connects; the
   // mock must export it or the poll's tick throws + crashes the component.
@@ -101,10 +111,24 @@ function openControlPanel(container: HTMLElement): void {
   if (rail) fireEvent.click(rail);
 }
 
+function fireDataFrame(frame: unknown): void {
+  const payload = new TextEncoder().encode(JSON.stringify(frame));
+  fakeRoom.on.mock.calls
+    .filter((call) => call[0] === 'dataReceived')
+    .forEach((call) => {
+      (call[1] as (data: Uint8Array) => void)(payload);
+    });
+}
+
 describe('SimulatorWindow — address bar navigate', () => {
   beforeEach(() => {
     sendNavigate.mockClear();
+    getAgentSession.mockClear();
+    terminalSession = false;
+    fakeRoom.on.mockClear();
+    fakeRoom.off.mockClear();
   });
+  afterEach(() => vi.useRealTimers());
 
   it('expanding the panel reveals an address bar; submitting a URL publishes {type:navigate} via the data channel', () => {
     const { container } = renderSim();
@@ -181,6 +205,147 @@ describe('SimulatorWindow — address bar navigate', () => {
     const width = parseFloat(bar.style.width);
     expect(width).toBeGreaterThan(0); // seeded to a visible base, not 0
     expect(width).toBeLessThan(100); // climbs toward ~90%, never a 0→100 jump
+  });
+
+  it('keeps a slow load active past 6s, then replaces it with Retry at the non-sliding 45s deadline', () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'slow.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+
+    act(() => {
+      vi.advanceTimersByTime(6_001);
+    });
+    let bar = container.querySelector('[data-component="simulator-loadbar"]') as HTMLElement;
+    expect(bar).not.toBeNull();
+    expect(bar.style.opacity).toBe('1');
+
+    // A same-target loading frame at 40s must not slide the original deadline.
+    act(() => {
+      vi.advanceTimersByTime(33_999);
+      fireDataFrame({
+        type: 'page_state',
+        state: 'loading',
+        url: 'https://slow.example.com/',
+        progress: 0,
+      });
+      vi.advanceTimersByTime(4_999);
+    });
+    expect(container.querySelector('[data-component="page-load-stalled-banner"]')).toBeNull();
+    expect(container.querySelector('[data-component="simulator-loadbar"]')).not.toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(
+      container.querySelector('[data-component="page-load-stalled-banner"]'),
+    ).toHaveTextContent(/taking longer than usual/i);
+    bar = container.querySelector('[data-component="simulator-loadbar"]') as HTMLElement;
+    expect(bar.style.opacity).toBe('0');
+
+    // A stale same-target loading frame after expiry cannot erase the fallback
+    // advisory or relight the progress bar.
+    act(() => {
+      fireDataFrame({
+        type: 'page_state',
+        state: 'loading',
+        url: 'https://slow.example.com/',
+        progress: 0.8,
+      });
+      vi.advanceTimersByTime(300);
+    });
+    expect(container.querySelector('[data-component="page-load-stalled-banner"]')).not.toBeNull();
+    expect(container.querySelector('[data-component="simulator-loadbar"]')).toBeNull();
+  });
+
+  it('gives a changed box target its own load deadline', () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'first.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    act(() => {
+      fireDataFrame({
+        type: 'page_state',
+        state: 'loading',
+        url: 'https://redirected.example.com/',
+        progress: 0,
+      });
+    });
+    expect(addressInput.value).toContain('redirected.example.com');
+    act(() => {
+      // Cross the first target's old 45s deadline.
+      vi.advanceTimersByTime(5_001);
+    });
+
+    expect(container.querySelector('[data-component="page-load-stalled-banner"]')).toBeNull();
+    const bar = container.querySelector('[data-component="simulator-loadbar"]') as HTMLElement;
+    expect(bar).not.toBeNull();
+    expect(bar.style.opacity).toBe('1');
+  });
+
+  it('cancels the load deadline when the session terminally ends', async () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'still-loading.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+
+    terminalSession = true;
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => {
+      vi.advanceTimersByTime(45_300);
+    });
+
+    expect(container.querySelector('[data-component="page-load-stalled-banner"]')).toBeNull();
+    expect(container.querySelector('[data-component="simulator-loadbar"]')).toBeNull();
+  });
+
+  it('resets a completed bar when a new navigation starts during the 300ms fade', () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'first.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    act(() => {
+      fireDataFrame({
+        type: 'page_state',
+        state: 'loaded',
+        url: 'https://first.example.com/',
+        progress: 1,
+      });
+      vi.advanceTimersByTime(150);
+    });
+
+    fireEvent.change(addressInput, { target: { value: 'second.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    let bar = container.querySelector('[data-component="simulator-loadbar"]') as HTMLElement;
+    expect(parseFloat(bar.style.width)).toBeGreaterThan(0);
+    expect(parseFloat(bar.style.width)).toBeLessThan(100);
+    expect(bar.style.opacity).toBe('1');
+
+    // A mid-load external progress sample cannot jump the trickle to 80%.
+    act(() => {
+      fireDataFrame({
+        type: 'page_state',
+        state: 'loading',
+        url: 'https://second.example.com/',
+        progress: 0.8,
+      });
+      vi.advanceTimersByTime(150);
+    });
+    bar = container.querySelector('[data-component="simulator-loadbar"]') as HTMLElement;
+    expect(parseFloat(bar.style.width)).toBeLessThan(80);
+    expect(bar.style.opacity).toBe('1');
   });
 
   it('Copy URL writes the live address to the clipboard', () => {
