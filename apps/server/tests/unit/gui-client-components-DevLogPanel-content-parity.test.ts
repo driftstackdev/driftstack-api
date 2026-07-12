@@ -30,6 +30,8 @@ describe('gui-client components/DevLogPanel content parity', () => {
 
   it('Copy + Clear + Close affordances pinned (operator needs to extract / reset the log)', () => {
     expect(body).toMatch(/formatLogEntries\(\)/);
+    expect(body).toMatch(/setCopyState\('failed'\)/);
+    expect(body).toMatch(/'Copy failed — retry'/);
     expect(body).toMatch(/clearLogEntries\(\)/);
     expect(body).toMatch(/setOpen\(false\)/);
   });

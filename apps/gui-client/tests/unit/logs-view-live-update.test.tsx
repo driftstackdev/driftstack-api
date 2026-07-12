@@ -6,7 +6,7 @@
 // drives the real staleness path: push into the in-place array, fire the
 // subscriber, and assert the new entry + updated error count appear.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import type { LogEntry } from '../../src/lib/log-buffer';
 
@@ -47,6 +47,10 @@ describe('LogsView live updates (in-place buffer)', () => {
     nextId = 1;
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('renders log lines pushed AFTER mount (memo busts on subscriber notify)', () => {
     render(<LogsView />);
     // Empty state first.
@@ -80,5 +84,16 @@ describe('LogsView live updates (in-place buffer)', () => {
     // A new error arriving while filtered must still appear.
     pushLog('error', 'a fresh error');
     expect(screen.getByText('a fresh error')).toBeTruthy();
+  });
+
+  it('surfaces clipboard denial as a retryable Copy failure', async () => {
+    vi.stubGlobal('navigator', {
+      clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) },
+    });
+    render(<LogsView />);
+    pushLog('error', 'copy me');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    expect(await screen.findByRole('button', { name: /Copy failed — retry/i })).toBeEnabled();
   });
 });

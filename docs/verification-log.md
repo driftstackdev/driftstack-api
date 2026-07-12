@@ -24691,3 +24691,15 @@ Verification:
 - focused CryptoCheckoutFlowView GUI jsdom: 6/6 tests pass;
 - GUI TypeScript check passes;
 - regression coverage exercises a real checkout result with a payment address and a rejected clipboard promise.
+
+## V-563 — diagnostic log copy honesty
+
+**Date:** 2026-07-12
+
+Made both diagnostic-log copy surfaces report rejected or unavailable clipboard access. The full Logs view and floating Dev Logs panel now show “Copy failed — retry” instead of leaving a dead-looking Copy button, and their success-reset timers are cleaned up on unmount.
+
+Verification:
+
+- LogsView GUI jsdom: 4/4 tests pass, including rejected clipboard access;
+- DevLogPanel/main source-parity: 11/11 tests pass;
+- GUI TypeScript check passes.

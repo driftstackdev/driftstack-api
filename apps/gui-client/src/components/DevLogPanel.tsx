@@ -24,13 +24,39 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
 
 export function DevLogPanel(): JSX.Element {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copyTimerRef = useRef<number | null>(null);
   // The buffer mutates in place, so subscribe + force a re-render on change
   // rather than relying on reference identity.
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => subscribeLogs(forceRender), []);
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
+
+  const copyLogs = (): void => {
+    const write = navigator.clipboard?.writeText(formatLogEntries());
+    if (write === undefined) {
+      setCopyState('failed');
+      return;
+    }
+    void write.then(
+      () => {
+        setCopyState('copied');
+        if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = window.setTimeout(() => {
+          copyTimerRef.current = null;
+          setCopyState('idle');
+        }, 1200);
+      },
+      () => setCopyState('failed'),
+    );
+  };
 
   const entries = getLogEntries();
 
@@ -67,21 +93,14 @@ export function DevLogPanel(): JSX.Element {
         <div className="ml-auto flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => {
-              // Only flip to "Copied" if the write actually succeeds — a
-              // rejected clipboard write (locked-down WKWebView / denied
-              // permission) otherwise falsely claimed success.
-              navigator.clipboard.writeText(formatLogEntries()).then(
-                () => {
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1200);
-                },
-                () => undefined,
-              );
-            }}
+            onClick={copyLogs}
             className="rounded border border-white/15 px-2 py-0.5 text-white/70 hover:text-white"
           >
-            {copied ? 'Copied' : 'Copy'}
+            {copyState === 'copied'
+              ? 'Copied'
+              : copyState === 'failed'
+                ? 'Copy failed — retry'
+                : 'Copy'}
           </button>
           <button
             type="button"

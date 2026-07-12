@@ -93,10 +93,17 @@ export function LogsView(): JSX.Element {
   const [version, forceRender] = useReducer((n: number) => n + 1, 0);
   const [filter, setFilter] = useState<LevelFilter>('all');
   const [query, setQuery] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle');
+  const copyTimerRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => subscribeLogs(forceRender), []);
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
 
   const entries = getLogEntries();
 
@@ -132,16 +139,24 @@ export function LogsView(): JSX.Element {
   );
 
   function handleCopy(): void {
-    // Only flip to "Copied" on a RESOLVED write — a locked-down WebView can reject
-    // clipboard access, and the old unconditional setCopied falsely showed success on a
-    // failed copy (audit 2026-07-08). On rejection we leave the label at "Copy".
-    void navigator.clipboard.writeText(formatLogEntries()).then(
+    if (copyState === 'copying') return;
+    setCopyState('copying');
+    const write = navigator.clipboard?.writeText(formatLogEntries());
+    if (write === undefined) {
+      setCopyState('failed');
+      return;
+    }
+    void write.then(
       () => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1200);
+        setCopyState('copied');
+        if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = window.setTimeout(() => {
+          copyTimerRef.current = null;
+          setCopyState('idle');
+        }, 1200);
       },
       () => {
-        /* clipboard denied — don't claim success */
+        setCopyState('failed');
       },
     );
   }
@@ -188,9 +203,16 @@ export function LogsView(): JSX.Element {
               type="button"
               className="btn-secondary"
               onClick={handleCopy}
-              disabled={entries.length === 0}
+              disabled={entries.length === 0 || copyState === 'copying'}
+              aria-busy={copyState === 'copying'}
             >
-              {copied ? 'Copied' : 'Copy'}
+              {copyState === 'copying'
+                ? 'Copying…'
+                : copyState === 'copied'
+                  ? 'Copied'
+                  : copyState === 'failed'
+                    ? 'Copy failed — retry'
+                    : 'Copy'}
             </button>
             <button
               type="button"
