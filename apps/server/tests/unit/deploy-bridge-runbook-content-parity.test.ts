@@ -13,6 +13,7 @@ const RUNBOOK = join(REPO, 'docs', 'runbooks', 'deploy-bridge.md');
 const VERIFY = join(REPO, 'scripts', 'post-deploy-verify.mjs');
 const REVERT = join(REPO, 'scripts', 'revert-bridge.sh');
 const STATUS = join(REPO, 'scripts', 'deploy-status.sh');
+const BRIDGE = join(REPO, 'scripts', 'deploy-bridge.sh');
 const MIGRATE = join(REPO, 'apps', 'server', 'src', 'db', 'migrate.ts');
 
 function read(path: string): string {
@@ -24,7 +25,27 @@ describe('deploy-bridge runbook content parity', () => {
   const verify = read(VERIFY);
   const revert = read(REVERT);
   const status = read(STATUS);
+  const bridge = read(BRIDGE);
   const migrate = read(MIGRATE);
+
+  it('fails closed before a staging deploy when staging and production DB hosts match', () => {
+    expect(bridge).toMatch(/if \[ "\$PROD_DB_HOST" = "\$STAGING_DB_HOST" \]; then/);
+    expect(bridge).toMatch(/ERROR: staging\+prod DBs match — refusing staging deploy/);
+    expect(bridge).toMatch(/DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK/);
+    const refusal = bridge.indexOf('ERROR: staging+prod DBs match');
+    const exit = bridge.indexOf('exit 3', refusal);
+    const clone = bridge.indexOf('cloning…');
+    expect(refusal).toBeGreaterThan(-1);
+    expect(exit).toBeGreaterThan(refusal);
+    expect(clone).toBeGreaterThan(exit);
+  });
+
+  it('also fails closed when either live DB host cannot be read', () => {
+    expect(bridge).toMatch(/if \[ -z "\$PROD_DB_HOST" \] \|\| \[ -z "\$STAGING_DB_HOST" \]; then/);
+    expect(bridge).toMatch(
+      /ERROR: could not verify staging DB isolation — refusing staging deploy/,
+    );
+  });
 
   it('runbook invariant count matches the post-deploy-verify.mjs checks[] length', () => {
     // checks[] in post-deploy-verify.mjs is a flat array literal of

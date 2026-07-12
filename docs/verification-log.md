@@ -24771,3 +24771,29 @@ Verification:
 - focused deploy-wrapper guard passes, including the errors-site direct-builder branch;
 - the dependency-free generator recreates `apps/errors-site/dist` successfully;
 - shell syntax validation and repository diff checks pass.
+
+## V-569 — staging database isolation restored and fail-closed
+
+**Date:** 2026-07-12
+
+Restored staging after its live `DATABASE_URL` regressed from the isolated
+`ep-lingering-math` Neon project to production's `ep-aged-pond` project. The
+known-good staging credential remained available and connected successfully, so
+only that one environment line was restored; current secrets and service settings
+were preserved. All 101 migrations applied idempotently to the isolated database,
+staging restarted healthy, and live host comparison again proves distinct Neon
+endpoints.
+
+The deploy bridge now refuses a staging deploy with exit 3 when the staging and
+production DB hosts match or either host cannot be read. The explicit emergency
+override remains available for a deliberate one-shot rehearsal. The checked-in
+staging template and its drift guards now pin the isolated endpoint rather than
+the obsolete shared-database posture.
+
+Verification:
+
+- isolated staging database connection and 101-entry migration apply succeed;
+- staging public `/health` is green and `/version` reports simulated execution;
+- live staging and production DB hosts differ (`ep-lingering-math` versus
+  `ep-aged-pond`);
+- focused deploy/template parity, shell syntax, formatting, and diff checks pass.

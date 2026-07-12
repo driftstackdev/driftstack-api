@@ -462,28 +462,24 @@ describe('W614 infra/ content parity', () => {
     expect(existsSync(I('env-templates/production.env.template'))).toBe(true);
   });
 
-  it('env-templates/staging.env.template: V-278.F mirror + shared Neon (until V-278.K split) + REDIS_KEY_PREFIX=stg: + driftstack-staging-* R2 + SENTRY_ENVIRONMENT=staging + SENTRY_TRACES_SAMPLE_RATE=1.0 + DIFFERENT-from-prod auth secrets + staging.driftstack.dev DASHBOARD_BASE_URL pinned', () => {
+  it('env-templates/staging.env.template: V-278.F mirror + isolated Neon + REDIS_KEY_PREFIX=stg: + driftstack-staging-* R2 + SENTRY_ENVIRONMENT=staging + SENTRY_TRACES_SAMPLE_RATE=1.0 + DIFFERENT-from-prod auth secrets + staging.driftstack.dev DASHBOARD_BASE_URL pinned', () => {
     const body = read(I('env-templates/staging.env.template'));
     expect(body).toMatch(/^# V-278\.F — staging \.env template\.$/m);
+    expect(body).toMatch(/^# Mirrors production\.env\.template\. V-278\.K split Postgres into a$/m);
     expect(body).toMatch(
-      /^# Mirrors production\.env\.template\. Until V-278\.K splits Postgres \/$/m,
+      /^# separate staging Neon project; Redis remains shared with production$/m,
     );
-    expect(body).toMatch(
-      /^# Redis into separate projects, staging shares the prod Neon database$/m,
-    );
-    expect(body).toMatch(
-      /^# \(separate schema\) and prod Upstash database \(`stg:` key prefix\)\.$/m,
-    );
+    expect(body).toMatch(/^# behind the `stg:` key prefix\.$/m);
     expect(body).toMatch(/^NODE_ENV=production$/m);
     expect(body).toMatch(/^PORT=7780$/m);
     expect(body).toMatch(/^LOG_LEVEL=debug$/m);
     expect(body).toMatch(/^DRIFTSTACK_DEPLOY_ENV=staging$/m);
-    expect(body).toMatch(/Postgres \(shared with prod until V-278\.K\)/);
-    expect(body).toMatch(/Shared single Neon database with prod \(public schema\) per founder/);
-    expect(body).toMatch(/brief: "Migrations on shared Neon database; staging-mode uses key/);
-    expect(body).toMatch(/prefix discipline until V-278\.K split"\. Pre-launch, staging traffic/);
-    expect(body).toMatch(/is synthetic-only — data pollution risk acceptable\. V-278\.K/);
-    expect(body).toMatch(/post-launch slice splits into a separate Neon project\./);
+    expect(body).toMatch(/Postgres \(isolated staging Neon project\)/);
+    expect(body).toMatch(
+      /^DATABASE_URL=postgresql:\/\/neondb_owner:REDACTED@ep-lingering-math-alnalhby-pooler\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require$/m,
+    );
+    expect(body).toMatch(/V-278\.K isolation: staging migrations and test writes must never land/);
+    expect(body).toMatch(/deploy-bridge\.sh fails closed/);
     expect(body).toMatch(/Redis \(shared with prod, key prefix\)/);
     expect(body).toMatch(/^REDIS_KEY_PREFIX=stg:$/m);
     expect(body).toMatch(/^R2_BUCKET_AVATARS=driftstack-staging-avatars$/m);

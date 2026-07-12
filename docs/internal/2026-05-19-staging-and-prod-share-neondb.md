@@ -173,3 +173,27 @@ override (e.g. one-shot rehearsal against prod's schema).
 - Both `neondb` database name + `neondb_owner` role.
 - 60 migrations applied on both as of 2026-05-19.
 - Cross-contamination empirically impossible going forward.
+
+## RECURRENCE 2026-07-12 — restored and fail-closed
+
+The live staging `.env` had drifted back to production's
+`ep-aged-pond-al77cutb` endpoint. The deploy bridge detected the match but its
+post-remediation WARN posture still allowed the staging migration gate and
+migration apply to run against production.
+
+Remediation:
+
+1. Restored only the staging `DATABASE_URL` from the known-good
+   `.env.bak.pre-stmttimeout` copy; all other current environment settings were
+   preserved.
+2. Connected to `ep-lingering-math-alnalhby-pooler`, applied the full 101-entry
+   migration journal idempotently, restarted staging, and verified public
+   `/health` plus simulated `/version`.
+3. Rechecked both live hosts: staging resolves to `ep-lingering-math`; production
+   resolves to `ep-aged-pond`.
+4. Restored the deploy bridge to fail-closed (`exit 3`) on matching DB hosts or
+   an unreadable host check. An intentional one-shot rehearsal now requires the explicit
+   `DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK=1` escape hatch.
+5. Updated the committed staging environment template and its parity guards to
+   the isolated Neon endpoint so repository guidance can no longer direct an
+   operator back to production storage.

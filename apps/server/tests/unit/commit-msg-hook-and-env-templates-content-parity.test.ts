@@ -141,12 +141,13 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
     expect(read(ENV_STG)).toMatch(/^DRIFTSTACK_DEPLOY_ENV=staging$/m);
   });
 
-  it('CRITICAL both env-templates Neon Postgres URL pinned to ep-aged-pond-al77cutb in eu-central-1 + sslmode=require. The shared Neon project (different schemas pre-V-278.K) is the canonical DATABASE_URL convention.', () => {
-    for (const f of [ENV_PROD, ENV_STG]) {
-      expect(read(f)).toMatch(
-        /DATABASE_URL=postgresql:\/\/neondb_owner:REDACTED@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require/,
-      );
-    }
+  it('CRITICAL env templates pin different Neon hosts: production ep-aged-pond and staging ep-lingering-math. Drift to one host destroys staging isolation.', () => {
+    expect(read(ENV_PROD)).toMatch(
+      /DATABASE_URL=postgresql:\/\/neondb_owner:REDACTED@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require/,
+    );
+    expect(read(ENV_STG)).toMatch(
+      /DATABASE_URL=postgresql:\/\/neondb_owner:REDACTED@ep-lingering-math-alnalhby-pooler\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require/,
+    );
   });
 
   it('CRITICAL Upstash Redis REST URL pinned to welcome-antelope-114301; staging uses REDIS_KEY_PREFIX=stg: to share the prod database (pre-V-278.K split). Drift would either cause prod/staging key collision or break Redis access.', () => {
@@ -157,7 +158,7 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
       /UPSTASH_REDIS_REST_URL=https:\/\/welcome-antelope-114301\.upstash\.io/,
     );
     expect(read(ENV_STG)).toMatch(/^REDIS_KEY_PREFIX=stg:$/m);
-    expect(read(ENV_STG)).toMatch(/Shared single Neon database with prod[\s\S]*?V-278\.K/);
+    expect(read(ENV_STG)).toMatch(/V-278\.K isolation[\s\S]*?deploy-bridge\.sh fails closed/);
   });
 
   it('CRITICAL R2_ACCOUNT_ID pinned to 7260371ac521e2a08a27ba8c7bdd5f43 cross-env; prod buckets driftstack-prod-{avatars,uploads} + staging driftstack-staging-{avatars,uploads}. The bucket-name namespacing matches the V-NNN convention; drift would collide prod/staging blob storage.', () => {
