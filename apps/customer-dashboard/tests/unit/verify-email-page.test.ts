@@ -30,7 +30,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   url?: string;
-  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+  fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
 function setUpDom(
@@ -163,5 +163,34 @@ describe('verify-email page — local integration', () => {
     const post = fetchCalls.find((c) => /\/v1\/auth\/verify-email$/.test(c.url));
     expect(JSON.parse(String(post?.init?.body))).toEqual({ token: 'pasted_tok_456' });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MANUAL');
+  });
+
+  it('single-flights auto and manual verification against the same one-time token', async () => {
+    let finishVerify: (response: Response) => void = () => {};
+    const pendingVerify = new Promise<Response>((resolve) => {
+      finishVerify = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [() => pendingVerify],
+    });
+    win = window;
+    const form = window.document.querySelector('[data-form="verify"]') as HTMLFormElement;
+    // Bypass the native disabled-control suppression to exercise the request
+    // lease itself (e.g. a queued/synthetic submit already dispatched).
+    (form.querySelector('input[name="token"]') as HTMLInputElement).disabled = false;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(2);
+
+    expect(fetchCalls.filter((call) => /\/v1\/auth\/verify-email$/.test(call.url))).toHaveLength(1);
+    expect(form.getAttribute('aria-busy')).toBe('true');
+    expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).textContent).toBe(
+      'Verifying…',
+    );
+
+    finishVerify(json({ session: { token: 'ds_web_ONCE' } }));
+    await flush();
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_ONCE');
+    expect(form.getAttribute('aria-busy')).toBe('false');
   });
 });

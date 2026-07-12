@@ -47,6 +47,15 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/data-form-fallback/);
   });
 
+  it('auto and manual verification share one accessible request lease', () => {
+    expect(body).toMatch(/let verifyInFlight = false;/);
+    expect(body).toMatch(/if \(verifyInFlight\) return Promise\.resolve\(false\);/);
+    expect(body).toMatch(/verifyInFlight = true;/);
+    expect(body).toMatch(/form\.setAttribute\('aria-busy', busy \? 'true' : 'false'\)/);
+    expect(body).toMatch(/verifySubmit\.textContent = busy \? 'Verifying…' : verifySubmitText/);
+    expect(body).toMatch(/\.finally\(\(\) => \{\s*verifyInFlight = false;/);
+  });
+
   it('POST /v1/auth/verify-email wired client + registered server-side (credentials:"include")', () => {
     expect(existsSync(AUTH_ROUTE)).toBe(true);
     expect(read(AUTH_ROUTE)).toContain("'/v1/auth/verify-email'");

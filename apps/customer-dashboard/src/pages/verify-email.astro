@@ -148,10 +148,25 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      const verifySubmit = form.querySelector('button[type="submit"]');
+      const verifySubmitText = verifySubmit ? verifySubmit.textContent : '';
+      let verifyInFlight = false;
+      function setVerifyBusy(busy) {
+        form.setAttribute('aria-busy', busy ? 'true' : 'false');
+        if (tokenInput) tokenInput.disabled = busy;
+        if (verifySubmit) {
+          verifySubmit.disabled = busy;
+          verifySubmit.textContent = busy ? 'Verifying…' : verifySubmitText;
+        }
+      }
+
       function submitToken(token) {
+        if (verifyInFlight) return Promise.resolve(false);
+        verifyInFlight = true;
+        setVerifyBusy(true);
         banner.classList.add('hidden');
 
-        fetch(apiBaseUrl + '/v1/auth/verify-email', {
+        return fetch(apiBaseUrl + '/v1/auth/verify-email', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ token }),
@@ -190,6 +205,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             // If auto-verify (link-click) failed, reveal the manual
             // fallback form so the user has a recovery path.
             showFallback();
+          })
+          .finally(() => {
+            verifyInFlight = false;
+            setVerifyBusy(false);
           });
       }
 
