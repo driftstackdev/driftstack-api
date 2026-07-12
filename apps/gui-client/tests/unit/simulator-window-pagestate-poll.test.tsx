@@ -38,12 +38,14 @@ const fakeRoom = {
   off: vi.fn(),
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
+let panelRenderCount = 0;
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
     onRoom?: (room: unknown) => void;
     onStateChange?: (s: { kind: string }) => void;
     onPublisher?: (p: string) => void;
   }) => {
+    panelRenderCount += 1;
     useEffect(() => {
       props.onRoom?.(fakeRoom);
       props.onStateChange?.({ kind: 'connected' });
@@ -124,6 +126,7 @@ describe('SimulatorWindow — page-state poll error grace gate (Finding #7)', ()
   beforeEach(() => {
     vi.useFakeTimers();
     fakeRoom.on.mockClear();
+    panelRenderCount = 0;
     sendNavigate.mockClear();
     pageStateMock.mockReset();
     pageStateMock.mockResolvedValue(null);
@@ -199,6 +202,31 @@ describe('SimulatorWindow — page-state poll error grace gate (Finding #7)', ()
     pageStateMock.mockResolvedValue({ state: 'loaded', url: 'https://x/' });
     await advance(2000);
     expect(overlay(container)).toBeNull();
+  });
+
+  it('repeated identical live error and timeout-stall frames preserve parent snapshots', async () => {
+    renderSim();
+    await flush();
+
+    const errorFrame = {
+      state: 'errored',
+      url: 'https://same-error.invalid/',
+      error: { kind: 'dns', message: 'lookup failed' },
+    };
+    act(() => fireDataFrame(errorFrame));
+    const rendersAfterError = panelRenderCount;
+    act(() => fireDataFrame(errorFrame));
+    expect(panelRenderCount).toBe(rendersAfterError);
+
+    const stallFrame = {
+      state: 'stalled',
+      url: 'https://same-stall.invalid/',
+      error: { kind: 'timeout', message: 'navigation is still pending' },
+    };
+    act(() => fireDataFrame(stallFrame));
+    const rendersAfterStall = panelRenderCount;
+    act(() => fireDataFrame(stallFrame));
+    expect(panelRenderCount).toBe(rendersAfterStall);
   });
 });
 

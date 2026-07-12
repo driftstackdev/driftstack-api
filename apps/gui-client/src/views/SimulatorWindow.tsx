@@ -4339,7 +4339,13 @@ export function SimulatorWindow(): JSX.Element {
             !pageReachedLoadedRef.current &&
             navTargetOk
           ) {
-            setPageError(typeof msg.error === 'object' && msg.error !== null ? msg.error : {});
+            const nextError =
+              typeof msg.error === 'object' && msg.error !== null
+                ? (msg.error as PageErrorInfo)
+                : {};
+            setPageError((prev) =>
+              prev !== null && pageErrorInfoEqual(prev, nextError) ? prev : nextError,
+            );
           } else {
             // A real error overlay, OR a blank new-tab whose branded page couldn't load
             // through the proxy, OR a late post-load sub-resource error (#72) → clear/
@@ -4354,13 +4360,16 @@ export function SimulatorWindow(): JSX.Element {
         // matching A3's "a later loaded clears it, errored upgrades it" contract.
         if (isHarnessState) {
           if (isLoadTimeoutStall && navTargetOk && !pageReachedLoadedRef.current) {
-            setPageLoadStalled({
+            const nextStall = {
               url: typeof msg.url === 'string' ? msg.url : '',
               message:
                 typeof stallErr?.message === 'string' && stallErr.message.length > 0
                   ? stallErr.message
                   : 'This page is taking longer than usual to load.',
-            });
+            };
+            setPageLoadStalled((prev) =>
+              prev?.url === nextStall.url && prev.message === nextStall.message ? prev : nextStall,
+            );
           } else {
             setPageLoadStalled(null);
           }
