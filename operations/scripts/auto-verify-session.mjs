@@ -9,11 +9,12 @@
 //                         (the "launch but no video" bug).
 //   CHECK 2 — NAVIGATE  : a `navigate` data-channel command lands a page_state
 //                         frame carrying the new URL (the address-bar path).
-//   CHECK 3 — TAB SWITCH: a `tabListUpdate` + `activateTab` is ACKED by the box
-//                         (activateTabResult{ok} — the switch handler fired);
-//                         proxy-INDEPENDENT. A real page_state url change (the
-//                         tab content actually loading) is a STRONGER tier that
-//                         needs egress (see the two-tier note at the check).
+//   CHECK 3 — TAB SWITCH: the GUI's exact optimistic wire order
+//                         (`tabListUpdate(active=B)` then
+//                         `activateTab(B,prevTabId=A)`) is ACKED by the box.
+//   CHECK 3a— TAB_WARM_RETURN: the decisive B→A return is ACKED with
+//                         `wasWarm:true`, proving the preserved live context was
+//                         selected instead of a cold `/window/new` + `/url` path.
 //   CHECK 3b— TAB_NO_RELOAD : opening a NEW TAB (the GUI's onNewTab path —
 //                         a `tabListUpdate` that ADDS a tab and sets it active,
 //                         byte-mirroring SimulatorWindow.onNewTab) must NOT make
@@ -22,8 +23,8 @@
 //                         reloads the page (the old page lingers / the current tab
 //                         reloads — founder bug). PASS = no reload (warm switch);
 //                         FAIL = the prior tab reloaded (current single-WebContent
-//                         box). Goes GREEN automatically once A3 ships warm tabs
-//                         (W2946). Proxy-INDEPENDENT: a reload emits a `loading`
+//                         box before the warm-context repair). Proxy-INDEPENDENT:
+//                         a reload emits a `loading`
 //                         page_state regardless of egress.
 //   CHECK 4 — SCROLL    : a `touchStart→touchMove…→touchEnd` finger drag (the
 //                         EXACT wire shape the GUI's wheel→touch path emits) is
@@ -542,11 +543,12 @@ async function main() {
     }
   }
 
-  // ── CHECK 1/2/3/3b/4/5 require LiveKit + WebRTC (data-channel ops) ──
+  // ── CHECK 1/2/3/3a/3b/4/5 require LiveKit + WebRTC (data-channel ops) ──
   if (info === null) {
     record('STREAM', 'SKIP', 'no LiveKit join info on this deployment');
     record('NAVIGATE', 'SKIP', 'no LiveKit join info');
     record('TAB_SWITCH', 'SKIP', 'no LiveKit join info');
+    record('TAB_WARM_RETURN', 'SKIP', 'no LiveKit join info');
     record('TAB_NO_RELOAD', 'SKIP', 'no LiveKit join info');
     record('SCROLL', 'SKIP', 'no LiveKit join info');
     record('TAP', 'SKIP', 'no LiveKit join info');
@@ -554,6 +556,7 @@ async function main() {
     record('STREAM', 'SKIP', 'WebRTC not installed (npm install --no-save @roamhq/wrtc)');
     record('NAVIGATE', 'SKIP', 'WebRTC not installed');
     record('TAB_SWITCH', 'SKIP', 'WebRTC not installed');
+    record('TAB_WARM_RETURN', 'SKIP', 'WebRTC not installed');
     record('TAB_NO_RELOAD', 'SKIP', 'WebRTC not installed');
     record('SCROLL', 'SKIP', 'WebRTC not installed');
     record('TAP', 'SKIP', 'WebRTC not installed');
@@ -585,7 +588,7 @@ async function runLiveKitChecks(info) {
 
   // Wire data-channel + track listeners BEFORE connect so nothing is missed.
   const pageStates = []; // { url, title, state, at }
-  const activateResults = new Map(); // requestId → { ok, error }
+  const activateResults = new Map(); // requestId → { ok, error, wasWarm }
   let videoTrack = null;
   // The box may PUBLISH a video track that the Node-WebRTC shim (@roamhq/wrtc)
   // cannot fully subscribe/decode. A published video track is proof the box is
@@ -606,6 +609,7 @@ async function runLiveKitChecks(info) {
         activateResults.set(msg.requestId, {
           ok: msg.ok !== false && typeof msg.error !== 'string',
           error: typeof msg.error === 'string' ? msg.error : undefined,
+          wasWarm: msg.wasWarm === true,
         });
         return;
       }
@@ -648,6 +652,7 @@ async function runLiveKitChecks(info) {
     record('STREAM', 'FAIL', `room.connect failed: ${m.slice(0, 160)}`);
     record('NAVIGATE', 'SKIP', 'no LiveKit connection');
     record('TAB_SWITCH', 'SKIP', 'no LiveKit connection');
+    record('TAB_WARM_RETURN', 'SKIP', 'no LiveKit connection');
     record('TAB_NO_RELOAD', 'SKIP', 'no LiveKit connection');
     record('SCROLL', 'SKIP', 'no LiveKit connection');
     record('TAP', 'SKIP', 'no LiveKit connection');
@@ -724,7 +729,7 @@ async function runLiveKitChecks(info) {
     );
   }
 
-  // ── CHECK 3 TAB SWITCH — tabListUpdate(2 tabs) → activateTab(2nd) ──
+  // ── CHECK 3/3a TAB SWITCH — exact GUI A→B→A wire + warm return ──
   // Settle after the NAVIGATE above before issuing the tab switch. A3 (W2926)
   // found that firing `navigate` then `activateTab` within ~2ms collides two
   // concurrent `wd.navigate` calls on one WebContent → the activateTab WD /url
@@ -743,34 +748,48 @@ async function runLiveKitChecks(info) {
   // and treat a real page_state url change as a STRONGER (full-content) tier.
   //   tier "ack"          : activateTabResult{ok} received (handler ran)
   //   tier "full-content" : ack AND the published page_state url == tabB.url
+  //
+  // The GUI optimistically publishes the TARGET as active before it sends the
+  // correlated activation. `prevTabId` is therefore load-bearing: it tells the
+  // harness which outgoing live context to cache even though the list snapshot
+  // already says B. After the first-touch A→B succeeds, B→A MUST reply
+  // `wasWarm:true`; that is the explicit product-level proof that A's DOM/session
+  // context survived and no cold fallback was taken.
   await delay(2_000);
   const tabA = { id: 'tab_a', url: NAV_URL, scrollY: 0, title: '' };
   const tabB = { id: 'tab_b', url: TAB_TWO_URL, scrollY: 0, title: '' };
   const tabBaseline = pageStates.length;
+  let firstTouchOk = false;
   try {
     await sendTabListUpdate(room, {
       sessionId,
       tabs: [tabA, tabB],
-      activeTabId: tabA.id,
+      activeTabId: tabB.id,
     });
     const reqId = await sendActivateTab(room, {
       sessionId,
       tabId: tabB.id,
+      prevTabId: tabA.id,
       url: tabB.url,
       scrollY: 0,
     });
-    log(`sent tabListUpdate(2) + activateTab(${tabB.id} → ${tabB.url}) req=${reqId}`);
-    // Wait until EITHER the ack lands OR the page fully switches (whichever
-    // first); then keep waiting briefly to see if a full-content switch follows
-    // an ack, so the verdict reports the strongest tier actually observed.
+    log(
+      `sent tabListUpdate(active=${tabB.id}) + activateTab(${tabB.id}, prev=${tabA.id} → ${tabB.url}) req=${reqId}`,
+    );
+    // A page_state can race ahead of the correlated ack. Never advance to the
+    // next operation on content alone: doing so can cancel the still-running
+    // first-touch `/url` and manufacture an NSURLErrorCancelled failure.
     const switched = () => pageStates.slice(tabBaseline).some((p) => urlMatches(p.url, tabB.url));
     const acked = () => {
       const a = activateResults.get(reqId);
       return a !== undefined && a.ok === true;
     };
-    // First wait for ANY positive signal (ack or full switch) — proxy-independent
-    // success is the ack, so this resolves fast even with no egress.
+    // First wait for any signal so a healthy fast content switch is visible,
+    // then still require the correlated ack before deciding or continuing.
     await waitFor(() => acked() || switched(), TAB_TIMEOUT_MS, 250);
+    if (!activateResults.has(reqId)) {
+      await waitFor(() => activateResults.has(reqId), TAB_TIMEOUT_MS, 200);
+    }
     // If we have an ack but not yet a content switch, give egress a short extra
     // grace to upgrade to the full-content tier (no-op when egress is absent).
     if (acked() && !switched()) {
@@ -778,11 +797,18 @@ async function runLiveKitChecks(info) {
     }
     const ack = activateResults.get(reqId);
     const didSwitch = switched();
-    if (didSwitch) {
+    firstTouchOk = ack?.ok === true;
+    if (ack !== undefined && !ack.ok) {
+      record(
+        'TAB_SWITCH',
+        'FAIL',
+        `activateTabResult rejected: ${ack.error ?? 'unknown'} (contentChanged=${didSwitch})`,
+      );
+    } else if (ack?.ok === true && didSwitch) {
       record(
         'TAB_SWITCH',
         'PASS',
-        `[tier=full-content] page switched to ${tabB.url}${ack?.ok ? ' (activateTabResult ok)' : ''}`,
+        `[tier=full-content] exact optimistic A→B wire switched to ${tabB.url} (activateTabResult ok, wasWarm=${ack.wasWarm})`,
       );
     } else if (ack !== undefined && ack.ok === true) {
       // The switch HANDLER fired and acked — proxy-independent success. The full
@@ -790,34 +816,88 @@ async function runLiveKitChecks(info) {
       record(
         'TAB_SWITCH',
         'PASS',
-        `[tier=ack] handler acked (activateTabResult ok); full content-switch to ${tabB.url} needs egress`,
-      );
-    } else if (ack !== undefined && ack.ok === false) {
-      record(
-        'TAB_SWITCH',
-        'FAIL',
-        `activateTabResult rejected: ${ack.error ?? 'unknown'} (the switch handler ran but refused — a real handler fault)`,
+        `[tier=ack] exact optimistic A→B wire acked (wasWarm=${ack.wasWarm}); full content-switch to ${tabB.url} needs egress`,
       );
     } else {
-      // No ack AND no switch → the handler never reacted on this channel. This is
-      // the genuine "tab switching dead" regression (not an egress artefact).
+      // Content movement without a correlated ack is not enough: the GUI needs
+      // the ack to settle/revert its optimistic state, and the runner needs it
+      // before issuing a dependent operation.
       record(
         'TAB_SWITCH',
         'FAIL',
-        `no activateTabResult ack AND no page switch within ${TAB_TIMEOUT_MS / 1000}s (the switch handler did not react on the data channel)`,
+        `no activateTabResult ack within ${TAB_TIMEOUT_MS / 1000}s (contentChanged=${didSwitch})`,
       );
     }
   } catch (e) {
     record('TAB_SWITCH', 'FAIL', `tab ops failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // ── CHECK 3a TAB_WARM_RETURN — B→A must select A's preserved live handle ──
+  if (!firstTouchOk) {
+    record(
+      'TAB_WARM_RETURN',
+      'SKIP',
+      'first-touch A→B did not ACK, so no resident B→A pair exists',
+    );
+  } else {
+    try {
+      // Mirror the GUI's optimistic switch order again: list snapshot first,
+      // correlated activate second, with the outgoing B identity attached.
+      await sendTabListUpdate(room, {
+        sessionId,
+        tabs: [tabA, tabB],
+        activeTabId: tabA.id,
+      });
+      const returnReqId = await sendActivateTab(room, {
+        sessionId,
+        tabId: tabA.id,
+        prevTabId: tabB.id,
+        url: tabA.url,
+        scrollY: tabA.scrollY,
+      });
+      log(
+        `sent tabListUpdate(active=${tabA.id}) + activateTab(${tabA.id}, prev=${tabB.id}) req=${returnReqId}`,
+      );
+      await waitFor(() => activateResults.has(returnReqId), TAB_TIMEOUT_MS, 200);
+      const returnAck = activateResults.get(returnReqId);
+      if (returnAck === undefined) {
+        record(
+          'TAB_WARM_RETURN',
+          'FAIL',
+          `no B→A activateTabResult within ${TAB_TIMEOUT_MS / 1000}s`,
+        );
+      } else if (!returnAck.ok) {
+        record(
+          'TAB_WARM_RETURN',
+          'FAIL',
+          `B→A activateTabResult rejected: ${returnAck.error ?? 'unknown'}`,
+        );
+      } else if (!returnAck.wasWarm) {
+        record(
+          'TAB_WARM_RETURN',
+          'FAIL',
+          'B→A ACK omitted wasWarm:true — the box downgraded to a cold tab path',
+        );
+      } else {
+        record(
+          'TAB_WARM_RETURN',
+          'PASS',
+          'B→A activateTabResult ok + wasWarm:true (preserved live context selected; no cold fallback)',
+        );
+      }
+    } catch (e) {
+      record(
+        'TAB_WARM_RETURN',
+        'FAIL',
+        `warm-return ops failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   // ── CHECK 3b TAB_NO_RELOAD — opening a new tab must NOT reload the prior tab ──
-  // Founder bug: opening a NEW TAB (or switching tabs) makes the box RELOAD the
-  // currently-active tab. The box keeps only ONE live WebContent today, so making
-  // a different tab active forces the single renderer to navigate — the old page
-  // lingers / the current tab reloads. A3's warm-tab fix (W2946) is queued; this
-  // check BASELINES the bug now (expected FAIL on the current box) and flips GREEN
-  // automatically once warm tabs ship.
+  // Regression guard for the founder bug: a list-only new-tab snapshot must not
+  // reload the currently-published tab. Runtime activation happens only through
+  // the correlated activateTab request above; tabListUpdate is state seeding.
   //
   // METHOD (proxy-independent — a reload emits a page_state regardless of egress):
   //   1. Settle tab A's page (we just navigated to NAV_URL above; wait for its
@@ -837,10 +917,8 @@ async function runLiveKitChecks(info) {
   // PAGE_STATE_GRACE_MS). So we CANNOT attribute the 'loading' to tab A by id; we
   // treat ANY fresh 'loading' page_state right after the new-tab op as the reload,
   // and SAY SO. (If a frame DOES carry a tabId for tab A, that's an even stronger
-  // confirmation — noted in the reason.) A new-tab op that warm-switches would
-  // emit at most a 'loading' for the NEW tab's url, not the prior tab's; either
-  // way, on a single-WebContent box ANY in-wake 'loading' means the live renderer
-  // navigated away from tab A's page — the founder's bug.
+  // confirmation — noted in the reason.) A new-tab op may later load the NEW
+  // tab's own url, but it must never emit a fresh load for the prior tab.
   try {
     // Step 1 — let tab A (NAV_URL) settle so the box is idle before we act. Best-
     // effort: if it never reports a page_state, the data channel is too quiet to
@@ -910,7 +988,7 @@ async function runLiveKitChecks(info) {
         record(
           'TAB_NO_RELOAD',
           'FAIL',
-          `opening a new tab reloaded the active tab (box single-WebContent; A3 warm-tab W2946 pending) — saw a fresh state:'loading' page_state [${which}] within ${TAB_NO_RELOAD_WATCH_MS / 1000}s of the new-tab op`,
+          `opening a new tab reloaded the prior active tab — saw a fresh state:'loading' page_state [${which}] within ${TAB_NO_RELOAD_WATCH_MS / 1000}s of the new-tab op`,
         );
       } else {
         // No fresh 'loading' for the prior tab → the box did NOT reload it (a warm

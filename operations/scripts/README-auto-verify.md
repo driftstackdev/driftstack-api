@@ -18,7 +18,9 @@ that isn't wired on the deployment is reported as `SKIP` (with the reason), not
 | `CREATE`                  | `POST /v1/agent-sessions` returns a session id                                                         | account/auth/dispatch broken         |
 | `STREAM`                  | the box **publishes** a video track (or inbound bytes flow)                                            | "launch but no video"                |
 | `NAVIGATE`                | a `navigate` data-channel op lands a `page_state` carrying the new URL                                 | address bar / nav path dead          |
-| `TAB_SWITCH`              | `tabListUpdate` + `activateTab` is **acked** by the box (`activateTabResult{ok}`); proxy-INDEPENDENT   | tab-switch handler dead              |
+| `TAB_SWITCH`              | the exact optimistic `tabListUpdate(active=B)` + `activateTab(B,prev=A)` wire is acked                 | tab-switch handler / prior-id dead   |
+| `TAB_WARM_RETURN`         | B→A replies `activateTabResult{ok,wasWarm:true}`                                                       | cold fallback / full-page reload     |
+| `TAB_NO_RELOAD`           | a list-only new-tab snapshot does not reload the prior active page                                     | eager list reconciliation reload     |
 | `SCROLL`                  | a `touchStart→touchMove…→touchEnd` finger drag (the GUI's wheel→touch wire shape) is accepted          | "scroll does nothing" / dead input   |
 | `TAP`                     | a `touchStart+touchEnd` is **received + injected** (box reacts with a `page_state`); proxy-INDEPENDENT | "taps do nothing"                    |
 | `COOKIES`                 | `GET /:id/cookies` returns a live jar (`status:'ok'`), **account-Bearer** auth                         | cookie jar not served                |
@@ -32,7 +34,7 @@ Exit code: **0** when no check failed, **1** when any did. Missing-dependency or
 deployment-gated conditions are reported as `SKIP` (not `FAIL`) so a missing local
 WebRTC build or a LiveKit-less deployment doesn't read as a product regression.
 
-### `TAB_SWITCH` / `TAP` — proxy-independent, two-tier
+### `TAB_SWITCH` / `TAB_WARM_RETURN` / `TAP`
 
 `TAB_SWITCH` and `TAP` verify the box's **handler** WITHOUT requiring working
 egress, and report **which tier** passed so the verdict is honest about what was
@@ -50,6 +52,13 @@ assert:
     whose url == the target tab (the page actually switched; needs egress).
   - FAIL only when the box **rejects** (`activateTabResult{ok:false}`/`error`) or
     sends **no ack at all** (the handler never reacted — the real regression).
+
+- **`TAB_WARM_RETURN`** — after the first-touch A→B succeeds, the runner sends
+  the shipping client's optimistic B→A order with `prevTabId:B`. PASS requires
+  the correlated reply to carry both `ok:true` and `wasWarm:true`. Unlike a URL
+  observation, `wasWarm:true` is the harness's explicit proof that it selected
+  A's cached live browsing context and returned before the cold
+  `/window/new` + `/url` fallback. Missing/false `wasWarm` is a hard FAIL.
 
 - **`TAP`** — the input-event contract has **no input-ack message**, so the only
   control-plane-observable proof a tap landed is the box **reacting** (emitting a
@@ -85,7 +94,7 @@ same contract:
 
 - session create / livekit-token / delete — `packages/sdk-typescript/src/resources/agent-sessions.ts`
 - Room config + connect — `apps/gui-client/src/lib/livekit.ts` (`createLivekitRoom` / `connectToAgentSession`)
-- `navigate` / `tabListUpdate` / `activateTab` — `apps/gui-client/src/lib/livekit.ts` + `packages/api-types/src/agent-tab-ops.ts`
+- `navigate` / optimistic `tabListUpdate` / `activateTab(prevTabId)` — `apps/gui-client/src/lib/livekit.ts` + `packages/api-types/src/agent-tab-ops.ts`
 - `tap` / `scroll` touch wire shape — `apps/gui-client/src/lib/livekit-input-capture.ts` (tap = `touchStart`+`touchEnd`; wheel → a `touchStart`/`touchMove`/`touchEnd` finger drag) + `packages/api-types/src/agent-input-event.ts`
 - `page_state` / `activateTabResult` consumer — `apps/gui-client/src/views/SimulatorWindow.tsx` (`onData`)
 - cookies result shape — `apps/gui-client/src/lib/agent-session-control.ts` + `apps/server/src/routes/agent-sessions.ts`
@@ -105,8 +114,8 @@ same contract:
   npm install --no-save @roamhq/wrtc      # from the repo root
   ```
 
-  Without it, `STREAM` / `NAVIGATE` / `TAB_SWITCH` are reported `SKIP` with the
-  install command; `CREATE` and `COOKIES` still run.
+  Without it, `STREAM` / `NAVIGATE` / `TAB_SWITCH` / `TAB_WARM_RETURN` are
+  reported `SKIP` with the install command; `CREATE` and `COOKIES` still run.
 
 ## Environment variables
 
@@ -161,7 +170,9 @@ self-verify proxy-independently):
 [16:32:28.987] PASS — STREAM: box is streaming video (video track PUBLISHED by box)
 [16:32:29.239] PASS — NAVIGATE: page_state url == https://example.com
 [16:32:35.509] PASS — TAB_SWITCH: [tier=ack] handler acked (activateTabResult ok); full content-switch to https://example.org/ needs egress
-[16:32:36.414] PASS — SCROLL: scroll drag accepted by box (no channel error, no stalled/errored frame)
+[16:32:35.712] PASS — TAB_WARM_RETURN: B→A activateTabResult ok + wasWarm:true (preserved live context selected; no cold fallback)
+[16:32:40.813] PASS — TAB_NO_RELOAD: no reload of the prior tab after the new-tab op (warm switch)
+[16:32:41.414] PASS — SCROLL: scroll drag accepted by box (no channel error, no stalled/errored frame)
 [16:32:58.248] SKIP — TAP: tap could not be self-verified without egress: https://example.com/ never rendered a tappable link (loaded as a no-egress error page) and the input contract has no ack message — re-run with DRIFTSTACK_PROXY_ID to render the link and prove the tap
 [16:32:58.717] PASS — COOKIES: jar returned (0 cookies)
 [16:32:59.087] PASS — COOKIES_VIA_CONTROL_KEY: control-key auth OK (HTTP 200) + jar returned (0 cookies)
@@ -174,6 +185,8 @@ self-verify proxy-independently):
   PASS  STREAM        box is streaming video (video track PUBLISHED by box)
   PASS  NAVIGATE      page_state url == https://example.com
   PASS  TAB_SWITCH    [tier=ack] handler acked (activateTabResult ok); full content-switch needs egress
+  PASS  TAB_WARM_RETURN  B→A activateTabResult ok + wasWarm:true
+  PASS  TAB_NO_RELOAD  no reload of the prior tab after the new-tab op
   PASS  SCROLL        scroll drag accepted by box
   SKIP  TAP           tap could not be self-verified without egress (no-egress error page; re-run with a proxy)
   PASS  COOKIES       jar returned (0 cookies)
@@ -181,7 +194,7 @@ self-verify proxy-independently):
   SKIP  RECORDINGS    no recordings endpoint on this API
   PASS  FILE_UPLOAD   upload ack'd — handle id=… name=auto-verify.txt size=11
 ─────────────────────────────────
-  8 pass · 0 fail · 2 skip
+  10 pass · 0 fail · 2 skip
   OVERALL: PASS
 ```
 
