@@ -5,7 +5,7 @@
 // order. These tests prove the chosen sort + direction SURVIVE a grid↔list
 // switch (the regression that motivated the unification).
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 
 // Three profiles whose name order (Alpha < Mango < Zeta) is the REVERSE of
@@ -114,6 +114,28 @@ vi.mock('../../src/lib/open-simulator', () => ({
 }));
 
 const { ProfilesView } = await import('../../src/views/ProfilesView');
+const VIEW_MODE_KEY = 'ds-profiles-view-mode';
+const storageValues = new Map<string, string>();
+const testStorage: Storage = {
+  get length() {
+    return storageValues.size;
+  },
+  clear() {
+    storageValues.clear();
+  },
+  getItem(key) {
+    return storageValues.get(key) ?? null;
+  },
+  key(index) {
+    return [...storageValues.keys()][index] ?? null;
+  },
+  removeItem(key) {
+    storageValues.delete(key);
+  },
+  setItem(key, value) {
+    storageValues.set(key, value);
+  },
+};
 
 // Read the DOM order of the three profile names from whatever view is rendered
 // (grid card or table row — both render the bare name as text).
@@ -128,6 +150,22 @@ function nameOrder(): string[] {
 }
 
 describe('ProfilesView unified sort persists across grid↔list', () => {
+  beforeEach(() => {
+    // Node 22 exposes an incomplete experimental global localStorage when no
+    // --localstorage-file is configured; install a real Storage-shaped test
+    // double on the jsdom window so this browser behavior is deterministic.
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: testStorage,
+    });
+    window.localStorage.removeItem(VIEW_MODE_KEY);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.removeItem(VIEW_MODE_KEY);
+  });
+
   it('a name sort chosen in the grid still applies after switching to the list', async () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     await waitFor(() => expect(screen.getByText('Zeta')).toBeTruthy());
@@ -181,6 +219,46 @@ describe('ProfilesView unified sort persists across grid↔list', () => {
     fireEvent.click(screen.getByRole('button', { name: /List/ }));
     await waitFor(() => expect(screen.getByRole('table')).toBeTruthy());
     expect(nameOrder()).toEqual(['Zeta', 'Mango', 'Alpha']);
+    cleanup();
+  });
+
+  it('restores an explicitly chosen list view across an unmount/relaunch', async () => {
+    const first = render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Zeta')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /List/ }));
+    await waitFor(() => expect(screen.getByRole('table')).toBeTruthy());
+    expect(window.localStorage.getItem(VIEW_MODE_KEY)).toBe('list');
+
+    first.unmount();
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /List/ })).toHaveAttribute('aria-pressed', 'true');
+    cleanup();
+  });
+
+  it('ignores a malformed saved mode and falls back to grid', async () => {
+    window.localStorage.setItem(VIEW_MODE_KEY, 'sideways');
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Zeta')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /Grid/ })).toHaveAttribute('aria-pressed', 'true');
+    cleanup();
+  });
+
+  it('keeps working when WebView storage throws on read or write', async () => {
+    const readSpy = vi.spyOn(window.localStorage, 'getItem').mockImplementationOnce(() => {
+      throw new Error('storage unavailable');
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Zeta')).toBeTruthy());
+    expect(screen.getByRole('button', { name: /Grid/ })).toHaveAttribute('aria-pressed', 'true');
+    readSpy.mockRestore();
+
+    const writeSpy = vi.spyOn(window.localStorage, 'setItem').mockImplementationOnce(() => {
+      throw new Error('storage unavailable');
+    });
+    fireEvent.click(screen.getByRole('button', { name: /List/ }));
+    await waitFor(() => expect(screen.getByRole('table')).toBeTruthy());
+    writeSpy.mockRestore();
     cleanup();
   });
 });

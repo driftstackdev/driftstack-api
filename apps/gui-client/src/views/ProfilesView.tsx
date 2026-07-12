@@ -115,6 +115,18 @@ import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 // visible loading flicker on tick refreshes so the panel doesn't
 // constantly re-flash.
 const REFRESH_MS = 15_000;
+const PROFILES_VIEW_MODE_KEY = 'ds-profiles-view-mode';
+
+type ProfilesViewMode = 'list' | 'grid';
+
+function loadProfilesViewMode(): ProfilesViewMode {
+  try {
+    const stored = window.localStorage.getItem(PROFILES_VIEW_MODE_KEY);
+    return stored === 'list' || stored === 'grid' ? stored : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
 // P2 #8 — folder/tag name caps, unified to the SERVER binding caps (api-types
 // ProfileFolderSchema max 32, ProfileTagSchema max 24) so every rail input,
 // create/edit slice, the taxonomy stores, and the per-profile meta agree. A name
@@ -368,8 +380,19 @@ export function ProfilesView({
   const deferredSearchQuery = useDeferredValue(searchQuery);
   // Fleet hub (2026-06-12, demo-concepts greenlight): grid/list toggle.
   // Grid is the DEFAULT (founder directive 2026-06-12 night arc) — the
-  // visual workspace is the product; list remains a toggle for dense ops.
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
+  // visual workspace is the product; list remains a toggle for dense ops. Keep
+  // the operator's explicit choice across relaunches (validated so a stale or
+  // hand-edited storage value cannot put the view into an impossible state).
+  const [viewMode, setViewMode] = useState<ProfilesViewMode>(loadProfilesViewMode);
+  const changeViewMode = useCallback((next: ProfilesViewMode): void => {
+    setViewMode(next);
+    try {
+      window.localStorage.setItem(PROFILES_VIEW_MODE_KEY, next);
+    } catch {
+      // Storage can be unavailable in a hardened WebView. The in-memory choice
+      // still applies for this window; persistence is a convenience, not a gate.
+    }
+  }, []);
   // Increment 2 — client-persisted organization (folders/tags/notes).
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
   // Night-arc B: last probe result per proxy id (written by the Proxies
@@ -2666,7 +2689,7 @@ export function ProfilesView({
                   ? 'rounded bg-accent-subtle px-2 py-1 text-xs font-medium text-ink-primary'
                   : 'rounded px-2 py-1 text-xs text-ink-muted hover:text-ink-primary'
               }
-              onClick={() => setViewMode('list')}
+              onClick={() => changeViewMode('list')}
             >
               ☰ List
             </button>
@@ -2678,7 +2701,7 @@ export function ProfilesView({
                   ? 'rounded bg-accent-subtle px-2 py-1 text-xs font-medium text-ink-primary'
                   : 'rounded px-2 py-1 text-xs text-ink-muted hover:text-ink-primary'
               }
-              onClick={() => setViewMode('grid')}
+              onClick={() => changeViewMode('grid')}
             >
               ▦ Grid
             </button>

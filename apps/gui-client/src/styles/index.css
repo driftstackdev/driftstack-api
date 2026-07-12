@@ -69,6 +69,7 @@
            bg-status-error/15 text-status-error
            hover:bg-status-error/25
            focus-visible:ring-2 focus-visible:ring-status-error/40
+           disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors;
   }
 
