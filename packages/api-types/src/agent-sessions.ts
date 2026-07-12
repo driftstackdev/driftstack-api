@@ -2,6 +2,10 @@ import { z } from 'zod';
 import { AgentModelSchema } from './agent-models.js';
 import { LiveKitInfoSchema } from './livekit.js';
 
+const AGENT_PAGE_STATE_ID_MAX_LENGTH = 256;
+const AGENT_PAGE_STATE_URL_MAX_LENGTH = 8192;
+const AGENT_PAGE_STATE_TEXT_MAX_LENGTH = 4096;
+
 /**
  * Agent (AI-chat) session resource — the read shape returned by
  * `POST /v1/agent-sessions` (201), `GET /v1/agent-sessions` (each list
@@ -78,13 +82,13 @@ export type AgentSession = z.infer<typeof AgentSessionSchema>;
  */
 export const AgentPageStateSchema = z.object({
   state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
-  url: z.string().nullable(),
-  title: z.string().nullable(),
-  tabId: z.string().nullable().optional(),
+  url: z.string().max(AGENT_PAGE_STATE_URL_MAX_LENGTH).nullable(),
+  title: z.string().max(AGENT_PAGE_STATE_TEXT_MAX_LENGTH).nullable(),
+  tabId: z.string().min(1).max(AGENT_PAGE_STATE_ID_MAX_LENGTH).nullable().optional(),
   error: z
     .object({
-      kind: z.string(),
-      message: z.string(),
+      kind: z.string().min(1).max(AGENT_PAGE_STATE_ID_MAX_LENGTH),
+      message: z.string().max(AGENT_PAGE_STATE_TEXT_MAX_LENGTH),
     })
     .nullable(),
 });

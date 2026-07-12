@@ -31,7 +31,9 @@ import type { Logger } from '../lib/logger.js';
  * AgentSessionsRepo (`get`) + ProfilesRepo (`findById`).
  */
 export interface ProfileSavedOwnershipDeps {
-  agentSessions: { get(id: string): Promise<{ accountId: string } | null> };
+  agentSessions: {
+    get(id: string): Promise<{ accountId: string; nodeId: string | null } | null>;
+  };
   profiles: {
     findById(args: { id: string; accountId: string }): Promise<unknown>;
     // doc-150 item 5 — stamp last_saved_at (+ size_bytes when the harness
@@ -60,8 +62,8 @@ export function makeProfileSavedPersister(
   r2: R2,
   logger: Logger,
   ownership?: ProfileSavedOwnershipDeps,
-): (frame: ProfileSaved) => void {
-  return (frame: ProfileSaved): void => {
+): (frame: ProfileSaved, reportingNodeId?: string) => void {
+  return (frame: ProfileSaved, reportingNodeId?: string): void => {
     const sealedBlob = frame.sealed_blob;
     // doc-150 item 5 — the size + save-back metadata rides BOTH shapes (inline
     // `sealed_blob` and the presigned `stored:true` ack), while only the inline
@@ -91,6 +93,23 @@ export function makeProfileSavedPersister(
                 profileId: frame.profile_id,
               },
               'profileSaved refused: unknown session for profile-blob write',
+            );
+            return;
+          }
+          // Fleet-origin profile saves fail closed unless the authenticated
+          // reporting node exactly owns the session. A NULL node_id is never a
+          // legitimate save-back source: dispatch persists node_id before it
+          // sends sessionAssign, so allowing NULL would recreate the spoof gap.
+          if (reportingNodeId === undefined || session.nodeId !== reportingNodeId) {
+            logger.warn(
+              {
+                component: 'profile-store',
+                sessionId: frame.sessionId,
+                profileId: frame.profile_id,
+                ownerNodeId: session.nodeId,
+                reportingNodeId,
+              },
+              'profileSaved refused: reporting node does not own the session',
             );
             return;
           }
@@ -140,6 +159,9 @@ export function makeProfileSavedPersister(
               },
               'failed to persist profile sealed-blob to R2',
             );
+            // Do not stamp last_saved_at for an inline save whose blob never
+            // reached R2; metadata must describe durable state, not an attempt.
+            return;
           }
         }
 

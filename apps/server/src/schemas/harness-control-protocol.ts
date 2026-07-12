@@ -83,6 +83,16 @@ export const HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS = 30;
 // reconnect/migration windows.
 export const HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES = 500;
 
+// Inbound fleet frames share a 96 MiB socket allowance, so every string that is
+// retained or persisted must have its own much smaller semantic bound.
+export const HARNESS_FRAME_ID_MAX_LENGTH = 256;
+export const PAGE_STATE_URL_MAX_LENGTH = 8192;
+export const PAGE_STATE_TEXT_MAX_LENGTH = 4096;
+export const PROFILE_SAVED_INLINE_MAX_BYTES = 256 * 1024;
+export const PROFILE_SAVED_MAX_BYTES = 256 * 1024 * 1024;
+const PROFILE_SAVED_INLINE_MAX_BASE64_LENGTH = 4 * Math.ceil(PROFILE_SAVED_INLINE_MAX_BYTES / 3);
+const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
 // ── Per-intent param schemas (the `inputParams` JSON object) ──────────
 // snake_case field names: these are the dict the Swift IntentExecutor case
 // reads, not the camelCase envelope below.
@@ -214,10 +224,10 @@ export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAn
 };
 
 // ── Wire envelope (A3 bus W122, commit 2a5639dc) ──────────────────────
-// Both directions are a FLAT discriminated union keyed on `type` (camelCase =
+// Both directions are a FLAT tagged union keyed on `type` (camelCase =
 // the Swift enum case names): `{ "type": "<variant>", <payload fields flat…> }`.
 // NO `_0` nesting (the prior Swift synthesized-Codable artifact — killed). Maps
-// 1:1 to a Zod discriminatedUnion('type', …). `inputParams`/`outputData` are the
+// 1:1 to a Zod union of typed objects. `inputParams`/`outputData` are the
 // BASE64 string of the UTF-8 JSON payload (A3-confirmed).
 //   ControlInbound (server ENCODES → harness): sessionAssign / intentDispatch /
 //     sessionEnd / ping.
@@ -503,10 +513,13 @@ export const SessionStatusSchema = z.object({
   // idle_timeout / max_duration / browser_crashed). Optional: non-terminal
   // status frames omit it, and a provisioning-failure errored frame carries
   // `reason: nil` (cause in detail). The terminal-close consumer falls back to
-  // a synthesized `session-<status>` when absent. Bounded (.max(512), matching
-  // ControlCommandSchema.reason) — this value is persisted verbatim into the
-  // customer-facing `closed_reason`, so cap it as every sibling result field is.
-  reason: z.string().min(1).max(512).optional(),
+  // a synthesized `session-<status>` when absent. This value is persisted
+  // verbatim into customer-visible `closed_reason`, so accept only the emitted
+  // snake_case token contract rather than arbitrary diagnostic text.
+  reason: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,127}$/)
+    .optional(),
 });
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
@@ -645,20 +658,40 @@ export const CapabilityReportSchema = z.object({
 // snake_case (mirrors the inbound profile block). MUST-DELIVER on the harness
 // side (queued across disconnects) — a dropped profileSaved loses the
 // customer's saved storage. Consumed by the step-(d) consumer (persist).
-export const ProfileSavedSchema = z.object({
-  type: z.literal('profileSaved'),
-  sessionId: z.string(),
-  profile_id: z.string(),
-  sealed_blob: z.string().optional(),
-  stored: z.boolean().optional(),
-  // doc-150 item 5 (A3 emit) — byte size of the sealed store the harness just
-  // saved (the LZFSE + AES-GCM-256 blob, before/independent of the inline-vs-
-  // presigned transport). Optional/forward-compat: a pre-emit harness omits it
-  // and the consumer leaves size_bytes NULL. The save-back persists it (plus
-  // last_saved_at) on the profile row so the dashboard can surface per-profile
-  // storage + an account total.
-  size_bytes: z.number().int().nonnegative().optional(),
-});
+export const ProfileSavedSchema = z
+  .object({
+    type: z.literal('profileSaved'),
+    sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+    profile_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+    sealed_blob: z
+      .string()
+      .min(1)
+      .max(PROFILE_SAVED_INLINE_MAX_BASE64_LENGTH)
+      .regex(BASE64_RE)
+      .refine(
+        (value) => Buffer.byteLength(value, 'base64') <= PROFILE_SAVED_INLINE_MAX_BYTES,
+        `sealed_blob must decode to at most ${PROFILE_SAVED_INLINE_MAX_BYTES} bytes`,
+      )
+      .optional(),
+    stored: z.literal(true).optional(),
+    // doc-150 item 5 (A3 emit) — byte size of the sealed store the harness just
+    // saved (the LZFSE + AES-GCM-256 blob, before/independent of the inline-vs-
+    // presigned transport). Optional/forward-compat: a pre-emit harness omits it
+    // and the consumer leaves size_bytes NULL. The save-back persists it (plus
+    // last_saved_at) on the profile row so the dashboard can surface per-profile
+    // storage + an account total.
+    size_bytes: z.number().int().nonnegative().max(PROFILE_SAVED_MAX_BYTES).optional(),
+  })
+  .superRefine((frame, ctx) => {
+    const inline = frame.sealed_blob !== undefined;
+    const presigned = frame.stored === true;
+    if (inline === presigned) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'profileSaved must carry exactly one of sealed_blob or stored:true',
+      });
+    }
+  });
 
 // ── HarnessOutbound.challengeDetected (harness → server; W393, A3 W717) ──
 // Emitted when the harness ChallengeDetector flags a bot-check (DataDome /
@@ -670,7 +703,7 @@ export const ProfileSavedSchema = z.object({
 // (not .strict) like the other outbound frames — lenient forward-compat.
 export const ChallengeDetectedSchema = z.object({
   type: z.literal('challengeDetected'),
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   challengeId: z.string().min(1),
   challenge: z.object({
     // Security-audit hardening (2026-06-30) — bounded like the sibling
@@ -736,7 +769,7 @@ export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
 // (A2 bus W650). Plain object (lenient forward-compat), like the sibling frames.
 export const PageStateFrameSchema = z.object({
   type: z.literal('pageState'),
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   // A3 W2845 — `stalled` added alongside loading/loaded/errored: the harness
   // `sweepStreamingHealth` watchdog detected a frozen-but-alive renderer (hung JS
   // / compositor deadlock — NOT a crash, so no crash-marker; the LiveKit pump
@@ -767,13 +800,13 @@ export const PageStateFrameSchema = z.object({
   // per tab instead of per session. Optional → backward-compatible (frames
   // without it validate + are carried as null downstream); the store stays a
   // per-session record until the per-tab keying contract is locked.
-  url: z.string().nullable().optional(),
-  title: z.string().nullable().optional(),
-  tabId: z.string().optional(),
+  url: z.string().max(PAGE_STATE_URL_MAX_LENGTH).nullable().optional(),
+  title: z.string().max(PAGE_STATE_TEXT_MAX_LENGTH).nullable().optional(),
+  tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
   error: z
     .object({
-      kind: z.string().min(1),
-      message: z.string(),
+      kind: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+      message: z.string().max(PAGE_STATE_TEXT_MAX_LENGTH),
       http_status: z.null().optional(),
     })
     .nullable()
@@ -1077,7 +1110,7 @@ export type TrimProfileResult = z.infer<typeof TrimProfileResultSchema>;
 // trimResult (doc-150 §8.3, profile storage eviction) is the OUT-OF-SESSION sibling
 // — correlated by `requestId` inside the connection's TrimProfileRequestCorrelator
 // (keyed by `profileId`, not sessionId), settling a pending POST /:id/trim.
-export const HarnessOutboundSchema = z.discriminatedUnion('type', [
+export const HarnessOutboundSchema = z.union([
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
   HeartbeatSchema,

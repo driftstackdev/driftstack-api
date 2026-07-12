@@ -17,7 +17,6 @@
 import type { PageStateFrame } from '../schemas/harness-control-protocol.js';
 import type { SessionPageStateStore } from './session-page-state-store.js';
 import type { Logger } from '../lib/logger.js';
-import { isCrossNodeSpoof } from './fleet-session-ownership.js';
 
 /** Narrow structural dep — the real agent-sessions repo satisfies this. */
 interface PageStateRelaySessions {
@@ -26,10 +25,10 @@ interface PageStateRelaySessions {
 
 /**
  * Build the gated `onPageState` consumer wired into FleetControlRegistry. Looks
- * up the session's owning node and drops a frame from a non-owning node; an
- * unknown session (no row — e.g. a late frame after close) is stored as before
- * (no real session to spoof into a reader's view, so the threat model — only an
- * owned, live session can be hijacked — does not apply).
+ * up the session's owning node and stores only an exact owner match. Unknown
+ * sessions and NULL-node sessions fail closed: neither can have a legitimate
+ * fleet producer, and retaining their attacker-controlled strings only creates
+ * memory/DB pressure without a customer-visible use case.
  */
 export function makeSessionPageStateRelay(
   sessions: PageStateRelaySessions,
@@ -51,15 +50,15 @@ export function makeSessionPageStateRelay(
 
   const process = async (frame: PageStateFrame, reportingNodeId: string): Promise<void> => {
     const session = await sessions.get(frame.sessionId);
-    if (session !== null && isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
+    if (session === null || session.nodeId !== reportingNodeId) {
       logger.warn(
         {
           component: 'session-page-state-relay',
           sessionId: frame.sessionId,
-          ownerNodeId: session.nodeId,
+          ownerNodeId: session?.nodeId ?? null,
           reportingNodeId,
         },
-        'dropped pageState from a non-owning node (cross-node spoof guard)',
+        'dropped pageState without an exact session-owner node match',
       );
       return;
     }

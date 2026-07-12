@@ -122,6 +122,7 @@ describe('makeProfileSavedPersister', () => {
 });
 
 describe('makeProfileSavedPersister — cross-account ownership guard', () => {
+  const ownerNodeId = 'node-owner';
   const frame: ProfileSaved = {
     type: 'profileSaved',
     sessionId: 'ses_x',
@@ -132,13 +133,15 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
   it('writes when the session account owns the profile', async () => {
     const putObject = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
-      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
         recordSave: vi.fn().mockResolvedValue(undefined),
       },
     });
-    persist(frame);
+    persist(frame, ownerNodeId);
     await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
   });
 
@@ -148,10 +151,12 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     const findById = vi.fn().mockResolvedValue(null); // profile not owned by this account
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
-      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_attacker' }) },
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_attacker', nodeId: ownerNodeId }),
+      },
       profiles: { findById, recordSave },
     });
-    persist(frame);
+    persist(frame, ownerNodeId);
     await vi.waitFor(() => expect(findById).toHaveBeenCalledTimes(1));
     expect(putObject).not.toHaveBeenCalled();
     // doc-150 item 5 — a refused (cross-account) save must NOT stamp size/time.
@@ -167,7 +172,7 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
       agentSessions: { get },
       profiles: { findById: vi.fn(), recordSave },
     });
-    persist(frame);
+    persist(frame, ownerNodeId);
     await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(1));
     expect(putObject).not.toHaveBeenCalled();
     expect(recordSave).not.toHaveBeenCalled();
@@ -191,7 +196,7 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
         agentSessions: { get },
         profiles: { findById: vi.fn(), recordSave },
       });
-      expect(() => persist(frame)).not.toThrow();
+      expect(() => persist(frame, ownerNodeId)).not.toThrow();
       const errSpy = (logger as unknown as { error: ReturnType<typeof vi.fn> }).error;
       await vi.waitFor(() => expect(errSpy).toHaveBeenCalledTimes(1));
       expect(errSpy.mock.calls[0]![1]).toMatch(/ownership resolution/);
@@ -211,14 +216,53 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     const logger = fakeLogger();
     const findById = vi.fn().mockRejectedValue(new Error('db connection reset'));
     const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
-      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
       profiles: { findById, recordSave: vi.fn().mockResolvedValue(undefined) },
     });
-    expect(() => persist(frame)).not.toThrow();
+    expect(() => persist(frame, ownerNodeId)).not.toThrow();
     const errSpy = (logger as unknown as { error: ReturnType<typeof vi.fn> }).error;
     await vi.waitFor(() => expect(errSpy).toHaveBeenCalledTimes(1));
     expect(errSpy.mock.calls[0]![1]).toMatch(/ownership resolution/);
     expect(putObject).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES a profile save from a non-owning reporting node before profile lookup or R2', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const findById = vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' });
+    const recordSave = vi.fn().mockResolvedValue(undefined);
+    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
+      profiles: { findById, recordSave },
+    });
+
+    persist(frame, 'node-attacker');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(putObject).not.toHaveBeenCalled();
+    expect(recordSave).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for a NULL-node session or missing reporting-node identity', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const recordSave = vi.fn().mockResolvedValue(undefined);
+    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: null }),
+      },
+      profiles: { findById: vi.fn(), recordSave },
+    });
+
+    persist(frame, ownerNodeId);
+    persist(frame);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(putObject).not.toHaveBeenCalled();
+    expect(recordSave).not.toHaveBeenCalled();
   });
 });
 
@@ -228,23 +272,29 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
 // when ownership deps are present (the resolved session-owner account scopes the
 // write); a missing size_bytes leaves the column untouched (no clobber-with-NULL).
 describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc-150 item 5)', () => {
+  const ownerNodeId = 'node-owner';
   it('inline shape with size_bytes: records the save (size_bytes + last_saved_at) scoped to the owner account', async () => {
     const putObject = vi.fn().mockResolvedValue(undefined);
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
-      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
         recordSave,
       },
     });
-    persist({
-      type: 'profileSaved',
-      sessionId: 'ses_x',
-      profile_id: 'p1',
-      sealed_blob: Buffer.from('opaque').toString('base64'),
-      size_bytes: 4096,
-    });
+    persist(
+      {
+        type: 'profileSaved',
+        sessionId: 'ses_x',
+        profile_id: 'p1',
+        sealed_blob: Buffer.from('opaque').toString('base64'),
+        size_bytes: 4096,
+      },
+      ownerNodeId,
+    );
     await vi.waitFor(() => expect(recordSave).toHaveBeenCalledTimes(1));
     const arg = recordSave.mock.calls[0]![0] as {
       id: string;
@@ -263,24 +313,29 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const putObject = vi.fn().mockResolvedValue(undefined);
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
-      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p2', accountId: 'acc_owner' }),
         recordSave,
       },
     });
-    persist({
-      type: 'profileSaved',
-      sessionId: 'ses_y',
-      profile_id: 'p2',
-      stored: true,
-      size_bytes: 9_000_000_000, // > 2^31 — bigint territory
-    });
+    persist(
+      {
+        type: 'profileSaved',
+        sessionId: 'ses_y',
+        profile_id: 'p2',
+        stored: true,
+        size_bytes: 200_000_000,
+      },
+      ownerNodeId,
+    );
     await vi.waitFor(() => expect(recordSave).toHaveBeenCalledTimes(1));
     expect(recordSave.mock.calls[0]![0]).toMatchObject({
       id: 'p2',
       accountId: 'acc_owner',
-      sizeBytes: 9_000_000_000,
+      sizeBytes: 200_000_000,
     });
     expect(putObject).not.toHaveBeenCalled();
   });
@@ -289,18 +344,23 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const putObject = vi.fn().mockResolvedValue(undefined);
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
-      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p3', accountId: 'acc_owner' }),
         recordSave,
       },
     });
-    persist({
-      type: 'profileSaved',
-      sessionId: 'ses_z',
-      profile_id: 'p3',
-      sealed_blob: 'YmxvYg==',
-    });
+    persist(
+      {
+        type: 'profileSaved',
+        sessionId: 'ses_z',
+        profile_id: 'p3',
+        sealed_blob: 'YmxvYg==',
+      },
+      ownerNodeId,
+    );
     await vi.waitFor(() => expect(recordSave).toHaveBeenCalledTimes(1));
     const arg = recordSave.mock.calls[0]![0] as { sizeBytes?: number; at: Date };
     expect(arg.sizeBytes).toBeUndefined();
@@ -326,24 +386,57 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const logger = fakeLogger();
     const recordSave = vi.fn().mockRejectedValue(new Error('db down'));
     const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
-      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
         recordSave,
       },
     });
     expect(() =>
-      persist({
-        type: 'profileSaved',
-        sessionId: 'ses_x',
-        profile_id: 'p1',
-        sealed_blob: 'YmxvYg==',
-        size_bytes: 1,
-      }),
+      persist(
+        {
+          type: 'profileSaved',
+          sessionId: 'ses_x',
+          profile_id: 'p1',
+          sealed_blob: 'YmxvYg==',
+          size_bytes: 1,
+        },
+        ownerNodeId,
+      ),
     ).not.toThrow();
     const errSpy = (logger as unknown as { error: ReturnType<typeof vi.fn> }).error;
     await vi.waitFor(() => expect(errSpy).toHaveBeenCalledTimes(1));
     expect(errSpy.mock.calls[0]![1]).toMatch(/failed to record profile save metadata/);
+  });
+
+  it('does not stamp save metadata when an inline R2 write fails', async () => {
+    const putObject = vi.fn().mockRejectedValue(new Error('r2 down'));
+    const recordSave = vi.fn().mockResolvedValue(undefined);
+    const logger = fakeLogger();
+    const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
+      agentSessions: {
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+      },
+      profiles: {
+        findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
+        recordSave,
+      },
+    });
+
+    persist(
+      {
+        type: 'profileSaved',
+        sessionId: 'ses_x',
+        profile_id: 'p1',
+        sealed_blob: 'YmxvYg==',
+      },
+      ownerNodeId,
+    );
+
+    await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
+    expect(recordSave).not.toHaveBeenCalled();
   });
 });
 

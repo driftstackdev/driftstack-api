@@ -122,6 +122,25 @@ describe('SessionPageStateStore', () => {
     store.set(frame('agt_b', { state: 'loading', url: null }));
     expect(AgentPageStateSchema.safeParse(store.get('agt_b')).success).toBe(true);
   });
+
+  it('the shared response schema rejects oversized retained strings', () => {
+    const base = {
+      state: 'loaded',
+      url: 'https://example.com',
+      title: 'Example',
+      tabId: 'tab_1',
+      error: null,
+    } as const;
+    for (const oversized of [
+      { url: 'u'.repeat(8193) },
+      { title: 't'.repeat(4097) },
+      { tabId: 't'.repeat(257) },
+      { error: { kind: 'k'.repeat(257), message: 'm' } },
+      { error: { kind: 'net', message: 'm'.repeat(4097) } },
+    ]) {
+      expect(AgentPageStateSchema.safeParse({ ...base, ...oversized }).success).toBe(false);
+    }
+  });
 });
 
 // Audit 2026-07-01 (MEDIUM) — GET /:id/page-state has no way to distinguish

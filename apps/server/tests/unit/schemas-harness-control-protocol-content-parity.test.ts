@@ -34,6 +34,11 @@ import {
   HARNESS_SCROLL_DEFAULT_DISTANCE_PX,
   HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS,
   HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES,
+  HARNESS_FRAME_ID_MAX_LENGTH,
+  PAGE_STATE_URL_MAX_LENGTH,
+  PAGE_STATE_TEXT_MAX_LENGTH,
+  PROFILE_SAVED_INLINE_MAX_BYTES,
+  PROFILE_SAVED_MAX_BYTES,
   HARNESS_INTENT_PARAM_SCHEMAS,
   TERMINAL_SESSION_STATUSES,
   HarnessIntentNameSchema,
@@ -213,8 +218,8 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('flat {type,…} wire envelope (no _0) pinned + SessionStatus + HarnessOutbound discriminated union (A3 W122 / 2a5639dc)', () => {
-    expect(body).toMatch(/FLAT discriminated union keyed on `type`/);
+  it('flat {type,…} wire envelope (no _0) pinned + SessionStatus + HarnessOutbound tagged union (A3 W122 / 2a5639dc)', () => {
+    expect(body).toMatch(/FLAT tagged union keyed on `type`/);
     expect(body).toMatch(/NO `_0` nesting/);
     // SessionStatus shape — toContain fragments (not a closed multi-line regex)
     // so the A3 W2682 inline doc comment between `detail` and `reason` doesn't
@@ -228,13 +233,13 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // an unbounded string that persists into the customer-facing close reason.
     expect(body).toContain('detail: z.string().max(4096).optional(),');
     // A3 W2682 — the optional snake_case close reason on a terminal frame.
-    expect(body).toContain('reason: z.string().min(1).max(512).optional(),');
+    expect(body).toContain('.regex(/^[a-z][a-z0-9_]{0,127}$/)');
     // A3 W2682 terminal-status vocabulary — the EXACT close-on set (drift-guarded).
     expect(body).toMatch(
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*SetCookiesResultSchema,\s*\n?\s*NavigateHistoryResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*TrimProfileResultSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.union\(\[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*SetCookiesResultSchema,\s*\n?\s*NavigateHistoryResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*TrimProfileResultSchema,\s*\n?\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
@@ -379,11 +384,13 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   });
 
   it('profileSaved (A3 W417 + doc-150 item 5) pinned to the outbound union + shape (sessionId camelCase + profile_id/sealed_blob snake_case + stored + size_bytes optional)', () => {
-    expect(body).toMatch(
-      /export const ProfileSavedSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('profileSaved'\),\s*\n?\s*sessionId: z\.string\(\),\s*\n?\s*profile_id: z\.string\(\),\s*\n?\s*sealed_blob: z\.string\(\)\.optional\(\),\s*\n?\s*stored: z\.boolean\(\)\.optional\(\),/,
+    expect(body).toContain('export const ProfileSavedSchema = z');
+    expect(body).toContain('sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('profile_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('stored: z.literal(true).optional(),');
+    expect(body).toContain(
+      'size_bytes: z.number().int().nonnegative().max(PROFILE_SAVED_MAX_BYTES)',
     );
-    // doc-150 item 5 — optional/forward-compat size_bytes (int, >= 0).
-    expect(body).toContain('size_bytes: z.number().int().nonnegative().optional(),');
     // inline + large shapes both parse via the union; sessionId required.
     expect(
       HarnessOutboundSchema.safeParse({
@@ -408,7 +415,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         sessionId: 's1',
         profile_id: 'p1',
         stored: true,
-        size_bytes: 9_000_000_000,
+        size_bytes: 200_000_000,
       }).success,
     ).toBe(true);
     // a negative size_bytes is rejected (nonnegative).
@@ -424,6 +431,46 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(
       HarnessOutboundSchema.safeParse({ type: 'profileSaved', profile_id: 'p1' }).success,
     ).toBe(false);
+    // Exact transport shape: inline XOR stored:true. Neither, both, and false
+    // acknowledgements must not reach persistence or stamp last_saved_at.
+    for (const invalid of [
+      { type: 'profileSaved', sessionId: 's1', profile_id: 'p1' },
+      {
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        sealed_blob: 'YmxvYg==',
+        stored: true,
+      },
+      { type: 'profileSaved', sessionId: 's1', profile_id: 'p1', stored: false },
+    ]) {
+      expect(HarnessOutboundSchema.safeParse(invalid).success).toBe(false);
+    }
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        sealed_blob: Buffer.alloc(PROFILE_SAVED_INLINE_MAX_BYTES).toString('base64'),
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        sealed_blob: Buffer.alloc(PROFILE_SAVED_INLINE_MAX_BYTES + 1).toString('base64'),
+      }).success,
+    ).toBe(false);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        stored: true,
+        size_bytes: PROFILE_SAVED_MAX_BYTES + 1,
+      }).success,
+    ).toBe(false);
   });
 
   it('pageState (A3 W2730 wire spec) pinned to the outbound union + the RELAXED shape (Swift encodeIfPresent OMITS nil keys): url/title/error all optional, kind lenient, http_status optional+null-only. The previous REQUIRED url/error/http_status dropped EVERY real frame at safeParse → empty store → no live URL', () => {
@@ -432,12 +479,14 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('export const PageStateFrameSchema = z.object({');
     expect(body).toContain("type: z.literal('pageState'),");
     expect(body).toContain("state: z.enum(['loading', 'loaded', 'errored', 'stalled']),");
-    expect(body).toContain('url: z.string().nullable().optional(),');
-    expect(body).toContain('title: z.string().nullable().optional(),');
+    expect(body).toContain('url: z.string().max(PAGE_STATE_URL_MAX_LENGTH).nullable().optional(),');
+    expect(body).toContain(
+      'title: z.string().max(PAGE_STATE_TEXT_MAX_LENGTH).nullable().optional(),',
+    );
     // Forward-compat per-tab attribution (A3 contract pending) — optional so a
     // frame without it still validates + is carried as null downstream.
-    expect(body).toContain('tabId: z.string().optional(),');
-    expect(body).toContain('kind: z.string().min(1),');
+    expect(body).toContain('tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),');
+    expect(body).toContain('kind: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
     expect(body).toContain('http_status: z.null().optional(),');
     // The exact A3 W2730 wire shapes must ALL parse (these are what the box sends):
     // loading: url present, NO error key.
@@ -536,6 +585,27 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         url: 'https://example.com',
       }).success,
     ).toBe(true);
+    for (const oversized of [
+      { sessionId: 's'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1) },
+      { url: 'u'.repeat(PAGE_STATE_URL_MAX_LENGTH + 1) },
+      { title: 't'.repeat(PAGE_STATE_TEXT_MAX_LENGTH + 1) },
+      { tabId: 't'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1) },
+      {
+        error: {
+          kind: 'k'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1),
+          message: 'm'.repeat(PAGE_STATE_TEXT_MAX_LENGTH + 1),
+        },
+      },
+    ]) {
+      expect(
+        HarnessOutboundSchema.safeParse({
+          type: 'pageState',
+          sessionId: 'agt_1',
+          state: 'loaded',
+          ...oversized,
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it('all 6 HarnessOutbound payloads pinned to A3 W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {
@@ -1026,15 +1096,17 @@ describe('harness-control-protocol behavioral contract', () => {
     ).toBe(false);
   });
 
-  it('SessionStatus reason/detail are bounded — an oversized value from a JWT-authed node (persisted verbatim into the customer-facing closed_reason) is rejected', () => {
+  it('SessionStatus reason is a bounded snake_case token and detail is bounded', () => {
     const base = { type: 'sessionStatus', sessionId: 'agt_a', status: 'ended', timestamp: 't' };
-    // reason bounded at 512 (matches ControlCommandSchema.reason).
-    expect(HarnessOutboundSchema.safeParse({ ...base, reason: 'x'.repeat(512) }).success).toBe(
+    expect(HarnessOutboundSchema.safeParse({ ...base, reason: 'x'.repeat(128) }).success).toBe(
       true,
     );
-    expect(HarnessOutboundSchema.safeParse({ ...base, reason: 'x'.repeat(513) }).success).toBe(
+    expect(HarnessOutboundSchema.safeParse({ ...base, reason: 'x'.repeat(129) }).success).toBe(
       false,
     );
+    for (const reason of ['browser crashed', 'browser_crashed direct=10.0.0.8', '<b>oops</b>']) {
+      expect(HarnessOutboundSchema.safeParse({ ...base, reason }).success).toBe(false);
+    }
     // detail bounded at 4096 (matches every sibling detail in this file).
     expect(HarnessOutboundSchema.safeParse({ ...base, detail: 'x'.repeat(4096) }).success).toBe(
       true,

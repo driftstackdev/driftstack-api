@@ -153,12 +153,12 @@ describe('FleetControlConnection', () => {
     expect((await p).success).toBe(true);
   });
 
-  it('routes an inbound profileSaved frame → invokes the onProfileSaved handler (inline + large shapes)', () => {
-    const seen: unknown[] = [];
+  it('routes profileSaved with the authenticated reporting node (inline + large shapes)', () => {
+    const seen: unknown[][] = [];
     const conn = new FleetControlConnection(
       'node-1',
       () => {},
-      (f) => seen.push(f),
+      (...args) => seen.push(args),
     );
     // inline (small) shape
     conn.handleInbound(
@@ -174,8 +174,11 @@ describe('FleetControlConnection', () => {
       JSON.stringify({ type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true }),
     );
     expect(seen).toEqual([
-      { type: 'profileSaved', sessionId: 'ses_x', profile_id: 'p1', sealed_blob: 'YmxvYg==' },
-      { type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true },
+      [
+        { type: 'profileSaved', sessionId: 'ses_x', profile_id: 'p1', sealed_blob: 'YmxvYg==' },
+        'node-1',
+      ],
+      [{ type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true }, 'node-1'],
     ]);
   });
 
@@ -406,21 +409,30 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
-  // audit M1 — the challenge / pageState / profileSaveFailed hooks must receive
+  // audit M1 — every session-addressed one-way hook must receive
   // the CONNECTION's JWT-authenticated nodeId as the 2nd arg so the consumer can
   // drop a frame spoofed for another node's session. Verify the threading here
   // (the gate logic itself is unit-tested per-relay).
-  it('M1 — threads the connection nodeId to onChallengeDetected / onPageState / onProfileSaveFailed', () => {
+  it('M1 — threads nodeId to profileSaved / challenge / pageState / profileSaveFailed', () => {
+    const profileSavedArgs: unknown[][] = [];
     const challengeArgs: unknown[][] = [];
     const pageStateArgs: unknown[][] = [];
     const profileFailArgs: unknown[][] = [];
     const conn = new FleetControlConnection(
       'node-77',
       () => {},
-      undefined, // onProfileSaved
+      (...a) => profileSavedArgs.push(a), // onProfileSaved
       (...a) => challengeArgs.push(a), // onChallengeDetected
       (...a) => pageStateArgs.push(a), // onPageState
       (...a) => profileFailArgs.push(a), // onProfileSaveFailed
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaved',
+        sessionId: 'agt_x',
+        profile_id: 'p',
+        stored: true,
+      }),
     );
     conn.handleInbound(
       JSON.stringify({
@@ -447,6 +459,7 @@ describe('FleetControlConnection', () => {
         reason: 'upload_failed',
       }),
     );
+    expect(profileSavedArgs[0]?.[1]).toBe('node-77');
     expect(challengeArgs[0]?.[1]).toBe('node-77');
     expect(pageStateArgs[0]?.[1]).toBe('node-77');
     expect(profileFailArgs[0]?.[1]).toBe('node-77');

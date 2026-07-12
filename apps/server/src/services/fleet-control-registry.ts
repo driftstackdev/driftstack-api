@@ -112,7 +112,7 @@ export class FleetControlConnection {
    *  OUT-OF-SESSION sibling of the others; owned here like above. */
   readonly trimProfileCorrelator: TrimProfileRequestCorrelator;
   private readonly send: FleetNodeSocketSend;
-  private readonly onProfileSaved?: (frame: ProfileSaved) => void;
+  private readonly onProfileSaved?: (frame: ProfileSaved, reportingNodeId: string) => void;
   // audit M1 — the cross-node frames now carry the connection's authenticated
   // reportingNodeId so the consumer can drop a frame spoofed for another node's
   // session (mirrors onSessionStatus, hardened earlier as #5).
@@ -152,7 +152,7 @@ export class FleetControlConnection {
   constructor(
     readonly nodeId: string,
     send: FleetNodeSocketSend,
-    onProfileSaved?: (frame: ProfileSaved) => void,
+    onProfileSaved?: (frame: ProfileSaved, reportingNodeId: string) => void,
     onChallengeDetected?: (frame: ChallengeDetected, reportingNodeId: string) => void,
     onPageState?: (frame: PageStateFrame, reportingNodeId: string) => void,
     onProfileSaveFailed?: (frame: ProfileSaveFailed, reportingNodeId: string) => void,
@@ -454,7 +454,7 @@ export class FleetControlConnection {
           // the R2 write + error-logs internally); absent handler (no R2 / stateless
           // deploy) → ignored. MUST-DELIVER on the harness side, so a dropped frame
           // is a harness-queue concern, not a server-receive one.
-          this.onProfileSaved?.(frame);
+          this.onProfileSaved?.(frame, this.nodeId);
           break;
         case 'challengeDetected':
           // Challenge-handling (W393): the harness ChallengeDetector flagged a
@@ -633,7 +633,7 @@ export class FleetControlRegistry {
    *   webhook (see makeChallengeRelay).
    */
   constructor(
-    private readonly onProfileSaved?: (frame: ProfileSaved) => void,
+    private readonly onProfileSaved?: (frame: ProfileSaved, reportingNodeId: string) => void,
     // audit M1 — these three carry the reporting node's authenticated id so the
     // consumer can drop a cross-node-spoofed frame (see fleet-session-ownership).
     private readonly onChallengeDetected?: (

@@ -1,7 +1,7 @@
 // audit M1 — makeSessionPageStateRelay gates pageState writes by the reporting
 // node's ownership of the session, so a non-owning node can't fake another
-// customer's live page overlay (loading bar / error). An unknown session (no
-// row) is still stored (no live session to hijack). Wraps the pure
+// customer's live page overlay (loading bar / error). Unknown and NULL-node
+// sessions fail closed and retain no attacker-controlled page strings. Wraps the pure
 // SessionPageStateStore (read by GET /v1/agent-sessions/:id/page-state).
 
 import { describe, expect, it, vi } from 'vitest';
@@ -44,20 +44,22 @@ describe('audit-M1 makeSessionPageStateRelay', () => {
     expect(store.size).toBe(0);
   });
 
-  it('a NULL node_id session (legacy) is NOT gated — stores normally', async () => {
+  it('DROPS a NULL node_id session because no fleet node owns it', async () => {
     const store = new SessionPageStateStore();
     const sessions = { get: vi.fn().mockResolvedValue({ nodeId: null }) };
     makeSessionPageStateRelay(sessions, store, logger)(FRAME, 'node-anything');
     await flush();
-    expect(store.get('agt_1')).not.toBeNull();
+    expect(store.get('agt_1')).toBeNull();
+    expect(store.size).toBe(0);
   });
 
-  it('an unknown session (no row — e.g. a late frame after close) is still stored', async () => {
+  it('DROPS an unknown session instead of retaining attacker-controlled strings', async () => {
     const store = new SessionPageStateStore();
     const sessions = { get: vi.fn().mockResolvedValue(null) };
     makeSessionPageStateRelay(sessions, store, logger)(FRAME, 'node-1');
     await flush();
-    expect(store.get('agt_1')).not.toBeNull();
+    expect(store.get('agt_1')).toBeNull();
+    expect(store.size).toBe(0);
   });
 
   it('preserves per-session ORDER even when the first frame lookup resolves SLOWER than the second (no stale clobber)', async () => {
