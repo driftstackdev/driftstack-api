@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
-import { SkeletonRows } from '../components/Skeleton';
+import { Skeleton, SkeletonRegion, SkeletonRows } from '../components/Skeleton';
 import { RelativeTime } from '../components/RelativeTime';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type DriftstackClient } from '../lib/client';
@@ -55,6 +55,8 @@ const SEARCH_ICON = (
     <path d="m21.5 21.5-1.5-1.5" />
   </svg>
 );
+
+const RECIPES_SPLIT_LAYOUT_CLASS = 'flex min-h-0 flex-1 gap-4';
 
 export function RecipesView(): JSX.Element {
   const { client } = useSettings();
@@ -171,7 +173,7 @@ export function RecipesView(): JSX.Element {
       )}
 
       {list.loading && list.recipes.length === 0 ? (
-        <SkeletonRows rows={6} label="Loading saved tasks" />
+        <RecipesInitialSkeleton />
       ) : list.recipes.length === 0 && list.error === null ? (
         <EmptyState
           icon={SEARCH_ICON}
@@ -179,7 +181,7 @@ export function RecipesView(): JSX.Element {
           description="Saved tasks come from finished AI chats. Once you save a chat as a task, it shows up here ready to browse and replay."
         />
       ) : (
-        <div className="flex min-h-0 flex-1 gap-4">
+        <div className={RECIPES_SPLIT_LAYOUT_CLASS}>
           {/* Master — searchable list */}
           <div className="flex w-80 shrink-0 flex-col gap-3">
             <input
@@ -242,6 +244,53 @@ export function RecipesView(): JSX.Element {
         </div>
       )}
     </div>
+  );
+}
+
+function RecipesInitialSkeleton(): JSX.Element {
+  return (
+    <SkeletonRegion
+      label="Loading saved tasks"
+      className={RECIPES_SPLIT_LAYOUT_CLASS}
+      contentClassName="contents"
+    >
+      <div className="flex w-80 shrink-0 flex-col gap-3">
+        <Skeleton className="h-9 w-full" />
+        <div
+          className="min-h-0 flex-1 divide-y divide-surface-divider overflow-hidden rounded border border-surface-divider bg-surface-raised"
+          data-component="recipes-skeleton-master"
+        >
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="flex flex-col gap-1 px-4 py-3"
+              data-component="recipes-skeleton-row"
+            >
+              <Skeleton className="h-3.5 w-3/4" />
+              <Skeleton className="h-2.5 w-1/2" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div
+        className="min-w-0 flex-1 overflow-hidden rounded border border-surface-divider bg-surface-raised p-6"
+        data-component="recipes-skeleton-detail"
+      >
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-2.5 w-20" />
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-2.5 w-32" />
+          </div>
+          <div className="grid grid-cols-3 gap-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    </SkeletonRegion>
   );
 }
 
