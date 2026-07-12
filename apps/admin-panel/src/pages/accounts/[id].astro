@@ -608,6 +608,30 @@ const accountId = account.id;
           });
       }
 
+      const actionRow = root.querySelector('[data-field="action-row"]');
+      const accountActionButtons = actionRow
+        ? Array.from(actionRow.querySelectorAll('[data-action]'))
+        : [];
+      let accountMutationInFlight = false;
+      function beginAccountMutation(activeButton) {
+        if (accountMutationInFlight) return false;
+        accountMutationInFlight = true;
+        if (actionRow) actionRow.setAttribute('aria-busy', 'true');
+        accountActionButtons.forEach((button) => {
+          button.disabled = true;
+        });
+        if (activeButton) activeButton.setAttribute('aria-busy', 'true');
+        return true;
+      }
+      function endAccountMutation(activeButton) {
+        accountMutationInFlight = false;
+        if (actionRow) actionRow.removeAttribute('aria-busy');
+        accountActionButtons.forEach((button) => {
+          button.disabled = false;
+        });
+        if (activeButton) activeButton.removeAttribute('aria-busy');
+      }
+
       async function changeTier() {
         const tier = await window.driftstackPrompt(
           'New tier (one of free / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise):',
@@ -629,7 +653,7 @@ const accountId = account.id;
         const body = { tier: tier.trim() };
         if (reason.trim()) body.reason = reason.trim();
         showBanner('Changing tier to ' + tier + '…');
-        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/tier', {
+        return authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/tier', {
           method: 'POST',
           body: JSON.stringify(body),
         })
@@ -668,7 +692,7 @@ const accountId = account.id;
         const body = {};
         if (reason.trim()) body.reason = reason.trim();
         showBanner('Suspending account…');
-        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/suspend', {
+        return authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/suspend', {
           method: 'POST',
           body: JSON.stringify(body),
         })
@@ -693,7 +717,7 @@ const accountId = account.id;
         const body = {};
         if (reason.trim()) body.reason = reason.trim();
         showBanner('Unsuspending account…');
-        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/unsuspend', {
+        return authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/unsuspend', {
           method: 'POST',
           body: JSON.stringify(body),
         })
@@ -723,7 +747,7 @@ const accountId = account.id;
       }
 
       function submitOverride(form) {
-        if (!token || overrideSubmitting) {
+        if (!token || overrideSubmitting || accountMutationInFlight) {
           if (!token) showBanner('Sign in with a staff admin account to perform this action.');
           return;
         }
@@ -754,6 +778,7 @@ const accountId = account.id;
         });
         const submit = form.querySelector('button[type="submit"]');
         const submitText = submit ? submit.textContent : '';
+        if (!beginAccountMutation(submit)) return;
         if (submit) submit.textContent = 'Applying…';
         showBanner('Applying override…');
         return authedFetch(
@@ -780,6 +805,7 @@ const accountId = account.id;
               control.disabled = disabledBefore[index];
             });
             if (submit) submit.textContent = submitText;
+            endAccountMutation(submit);
           });
       }
 
@@ -803,13 +829,23 @@ const accountId = account.id;
           showBanner('Sign in with a staff admin account to perform this action.');
           return;
         }
-        if (action === 'change-tier') changeTier();
-        else if (action === 'suspend') suspend();
-        else if (action === 'unsuspend') unsuspend();
-        else if (action === 'set-override') showOverrideForm();
+        const mutationHandler =
+          action === 'change-tier'
+            ? changeTier
+            : action === 'suspend'
+              ? suspend
+              : action === 'unsuspend'
+                ? unsuspend
+                : action === 'add-note'
+                  ? addSupportNote
+                  : action === 'record-refund'
+                    ? recordRefund
+                    : null;
+        if (mutationHandler) {
+          if (!beginAccountMutation(btn)) return;
+          mutationHandler().finally(() => endAccountMutation(btn));
+        } else if (action === 'set-override') showOverrideForm();
         else if (action === 'cancel-override') hideOverrideForm(false);
-        else if (action === 'add-note') addSupportNote();
-        else if (action === 'record-refund') recordRefund();
       });
 
       // V-281 — audit-only support tooling.
@@ -820,7 +856,7 @@ const accountId = account.id;
         );
         if (!note || !note.trim()) return;
         showBanner('Recording support note…');
-        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/audit-note', {
+        return authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/audit-note', {
           method: 'POST',
           body: JSON.stringify({ note: note.trim() }),
         })
@@ -858,7 +894,7 @@ const accountId = account.id;
           return;
         }
         showBanner('Recording refund (audit-only)…');
-        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/refund-record', {
+        return authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/refund-record', {
           method: 'POST',
           body: JSON.stringify({
             external_reference: externalRef.trim(),
