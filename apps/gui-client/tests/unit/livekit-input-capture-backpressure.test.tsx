@@ -205,14 +205,24 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(emitted().map((e) => e.type)).toEqual(['keyDown', 'keyUp']);
   });
 
-  it('still sends keyUp for a key pressed before congestion so it cannot stick remotely', () => {
+  it('synthesizes keyUp immediately for a key pressed before congestion, exactly once', () => {
     const { room, fireDC } = makeRoom();
     mount(room);
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
     expect(emitted().map((e) => e.type)).toEqual(['keyDown']);
 
     fireDC(false, 0);
+    expect(emitted().map((e) => e.type)).toEqual(['keyDown', 'keyUp']);
     window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft' }));
+    expect(emitted().map((e) => e.type)).toEqual(['keyDown', 'keyUp']);
+  });
+
+  it('releases a held remote key during teardown', () => {
+    const { room } = makeRoom();
+    const { unmount } = mount(room);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
+    expect(emitted().map((e) => e.type)).toEqual(['keyDown']);
+    unmount();
     expect(emitted().map((e) => e.type)).toEqual(['keyDown', 'keyUp']);
   });
 

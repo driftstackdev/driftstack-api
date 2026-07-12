@@ -476,6 +476,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       cancelFling(true);
       window.clearTimeout(wheelTimer);
       endWheelDrag();
+      releaseForwardedKeys();
     };
 
     const send = (event: InputEvent, reliable: boolean): void => {
@@ -1028,8 +1029,17 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // true, so re-checking there would forward keyDown but drop keyUp → a stuck
     // key (or stuck Shift corrupting every later key) on the remote device (Fable
     // GUI LiveKit re-audit). Always forward the keyUp iff we forwarded its keyDown.
-    const forwardedKeys = new Set<string>();
+    const forwardedKeys = new Map<
+      string,
+      { key: string; modifiers?: readonly CanonicalModifier[] }
+    >();
     const keyId = (e: KeyboardEvent): string => (e.code !== '' ? e.code : e.key);
+    const releaseForwardedKeys = (): void => {
+      for (const forwarded of forwardedKeys.values()) {
+        send({ type: 'keyUp', ...forwarded }, true);
+      }
+      forwardedKeys.clear();
+    };
     const onKeyDown = (e: KeyboardEvent): void => {
       if (editingLocally()) return;
       if (isBareEscape(e)) return;
@@ -1039,16 +1049,13 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // stall remain in forwardedKeys, so their keyUp is still delivered below and no
       // remote modifier/key is stranded. Self-heals when the buffer reports low again.
       if (reliableCongested) return;
-      forwardedKeys.add(keyId(e));
       const modifiers = modifiersFromEvent(e);
-      send(
-        {
-          type: 'keyDown',
-          key: e.key,
-          ...(modifiers !== undefined ? { modifiers } : {}),
-        },
-        true,
-      );
+      const forwarded = {
+        key: e.key,
+        ...(modifiers !== undefined ? { modifiers } : {}),
+      };
+      forwardedKeys.set(keyId(e), forwarded);
+      send({ type: 'keyDown', ...forwarded }, true);
     };
     const onKeyUp = (e: KeyboardEvent): void => {
       // Mirror the keyDown decision: only forward the up for a key whose down we
@@ -1120,6 +1127,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       window.removeEventListener('blur', onLostGesture);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      // A mode flip/unmount can remove the keyup listener while a remote key is
+      // still held. Release every forwarded down before teardown so modifiers and
+      // focus-moving keys cannot remain latched on the device.
+      releaseForwardedKeys();
       // Lift any in-flight finger so a control-flip (manual→AI, which re-runs this
       // effect with enabled=false while the room is still up) or teardown never
       // leaves a STUCK touch on the live phone: end an in-progress committed drag,
