@@ -147,6 +147,32 @@ describe('V-534.AC CryptoCheckoutFlowView', () => {
     });
   });
 
+  it('surfaces payment-address clipboard denial and offers an explicit retry', async () => {
+    setupFetch({
+      onCheckout: () => ({
+        order_id: 'ord_new',
+        product: 'solo_manual',
+        price_cents: 2500,
+        price_currency: 'EUR',
+        status: 'pending',
+        provider: 'nowpayments',
+        payment_address: '0x123456789',
+        pay_currency: 'usdt',
+        created_at: '2026-05-11T10:00:00.000Z',
+      }),
+    });
+    vi.stubGlobal('navigator', {
+      clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) },
+    });
+    render(<CryptoCheckoutFlowView defaultProduct="solo_manual" />);
+    await screen.findByText('25.00 EUR');
+    fireEvent.click(screen.getByRole('button', { name: /Start checkout/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Copy payment address/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/clipboard permission/i);
+    expect(screen.getByRole('button', { name: /Retry copy/i })).toBeInTheDocument();
+  });
+
   it('refetches the quote when the product selector changes', async () => {
     const fetchMock = setupFetch({});
     render(<CryptoCheckoutFlowView defaultProduct="solo_manual" />);

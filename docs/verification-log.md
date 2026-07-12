@@ -24675,3 +24675,19 @@ Verification:
 - focused GUI jsdom: 19/19 tests pass across Sessions, Proxies, and Saved tasks;
 - focused source-parity: 34/34 tests pass across Sessions, Session history, and Proxies;
 - GUI TypeScript check passes.
+
+## V-562 — payment-address clipboard failure safety
+
+**Date:** 2026-07-12
+
+Stopped the crypto checkout flow from silently swallowing a rejected payment-address clipboard write. The high-stakes copy action now:
+
+- becomes single-flight and announces `aria-busy` while the clipboard promise is pending;
+- distinguishes copying, copied, and failed states in both visible and accessible labels;
+- surfaces clipboard-permission guidance and leaves an explicit retry action beside the fully selectable address.
+
+Verification:
+
+- focused CryptoCheckoutFlowView GUI jsdom: 6/6 tests pass;
+- GUI TypeScript check passes;
+- regression coverage exercises a real checkout result with a payment address and a rejected clipboard promise.

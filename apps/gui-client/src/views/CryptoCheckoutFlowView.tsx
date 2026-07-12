@@ -38,9 +38,9 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
   const checkout = useCryptoCheckout();
   const orderId = checkout.state.kind === 'ready' ? checkout.state.order.order_id : null;
   const order = useCryptoOrder(orderId, { pollIntervalMs: 5_000 });
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle');
   // Track the "Copied ✓" reset timer so a torn-down address block (Start-another-checkout
-  // unmounts the copy button) or a rapid re-copy can't fire setCopied on a stale subtree
+  // unmounts the copy button) or a rapid re-copy can't update stale copy state
   // or stack overlapping timers (audit 2026-07-08 #19).
   const copiedTimerRef = useRef<number | null>(null);
   useEffect(() => {
@@ -65,18 +65,20 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
   const copyAddress = (addr: string): void => {
     // The payment address is the highest-stakes copy in the app — a truncated hand-select
     // loses funds. Give one-click copy + a transient confirm (audit 2026-07-08).
+    if (copyState === 'copying') return;
+    setCopyState('copying');
     void navigator.clipboard.writeText(addr).then(
       () => {
-        setCopied(true);
+        setCopyState('copied');
         // Clear any in-flight reset before arming a fresh one so rapid copies don't stack timers.
         if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
         copiedTimerRef.current = window.setTimeout(() => {
           copiedTimerRef.current = null;
-          setCopied(false);
+          setCopyState('idle');
         }, 2000);
       },
       () => {
-        /* clipboard blocked in a locked-down WebView — the address stays selectable */
+        setCopyState('failed');
       },
     );
   };
@@ -163,13 +165,32 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
                     <span className="min-w-0 flex-1 break-all font-mono text-xs">{addr}</span>
                     <button
                       type="button"
-                      aria-label="Copy payment address"
+                      aria-label={
+                        copyState === 'copying'
+                          ? 'Copying payment address'
+                          : copyState === 'failed'
+                            ? 'Retry copying payment address'
+                            : 'Copy payment address'
+                      }
                       onClick={() => copyAddress(addr)}
+                      disabled={copyState === 'copying'}
+                      aria-busy={copyState === 'copying'}
                       className="shrink-0 rounded border border-surface-divider bg-surface-inset px-2 py-0.5 text-xs text-ink-secondary transition-colors hover:text-ink-primary"
                     >
-                      {copied ? 'Copied ✓' : 'Copy'}
+                      {copyState === 'copying'
+                        ? 'Copying…'
+                        : copyState === 'copied'
+                          ? 'Copied ✓'
+                          : copyState === 'failed'
+                            ? 'Retry copy'
+                            : 'Copy'}
                     </button>
                   </div>
+                )}
+                {addr !== null && copyState === 'failed' && (
+                  <p role="alert" className="text-xs text-status-error">
+                    Couldn’t copy the payment address. Check clipboard permission and try again.
+                  </p>
                 )}
                 {order.provider === 'stub' && (
                   <div className="text-ink-secondary">
