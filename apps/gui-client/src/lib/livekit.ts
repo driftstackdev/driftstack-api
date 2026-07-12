@@ -91,6 +91,37 @@ export type ActivateTabPayload = {
   scrollY: number;
 };
 
+// Mirrors HarnessCoordinator's semi-trusted tab-list trust boundary. Applying the
+// same bounds BEFORE LiveKit prevents pathological page titles/URLs or an unbounded
+// local list from occupying the ordered reliable channel merely to be truncated by
+// the receiver afterward.
+export const MAX_TAB_LIST_COUNT = 64;
+export const MAX_TAB_FIELD_CHARS = 8 * 1024;
+export const MAX_TAB_ID_CHARS = 256;
+
+const truncateTabField = (value: string, maxChars: number): string =>
+  value.length <= maxChars ? value : value.slice(0, maxChars);
+
+export function boundTabListUpdate(payload: TabListUpdatePayload): TabListUpdatePayload {
+  const activeTabId = truncateTabField(payload.activeTabId, MAX_TAB_ID_CHARS);
+  const bounded = payload.tabs.map((tab) => ({
+    id: truncateTabField(tab.id, MAX_TAB_ID_CHARS),
+    url: truncateTabField(tab.url, MAX_TAB_FIELD_CHARS),
+    scrollY: tab.scrollY,
+    title: truncateTabField(tab.title, MAX_TAB_FIELD_CHARS),
+  }));
+  const tabs = bounded.slice(0, MAX_TAB_LIST_COUNT);
+  // Match the receiver's active-retention rule: if the active tab lies beyond the
+  // prefix, replace the final retained slot so a capped snapshot never points at a
+  // tab it omitted.
+  const active = bounded.find((tab) => tab.id === activeTabId);
+  if (active !== undefined && !tabs.some((tab) => tab.id === activeTabId)) {
+    if (tabs.length === MAX_TAB_LIST_COUNT) tabs[tabs.length - 1] = active;
+    else tabs.push(active);
+  }
+  return { ...payload, tabs, activeTabId };
+}
+
 /** Connection-state machine surfaces to the UI layer. LK.6.c
  *  consumes this to render the connecting / connected / disconnected
  *  / error badge above the video element. */
@@ -231,7 +262,7 @@ export function sendTabListUpdate(room: Room, payload: TabListUpdatePayload): Pr
     state = { pending: null, drain: null };
     tabListSendStates.set(room, state);
   }
-  state.pending = payload;
+  state.pending = boundTabListUpdate(payload);
   if (state.drain !== null) return state.drain;
 
   const drain = async (): Promise<void> => {

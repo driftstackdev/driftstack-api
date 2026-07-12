@@ -17,7 +17,11 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+  boundTabListUpdate,
   isBenignTeardownError,
+  MAX_TAB_FIELD_CHARS,
+  MAX_TAB_ID_CHARS,
+  MAX_TAB_LIST_COUNT,
   MAX_DEVICE_TEXT_BYTES,
   sendInputEvent,
   sendNavigate,
@@ -244,6 +248,26 @@ describe('sendNavigate', () => {
 // full tab list on every change + an activateTab (with a correlation requestId) on a
 // switch, both over the SAME reliable data channel as taps/navigate.
 describe('sendTabListUpdate', () => {
+  it('bounds semi-trusted tab fields/count before publish and retains an active tab beyond the prefix', () => {
+    const longId = 'i'.repeat(MAX_TAB_ID_CHARS + 50);
+    const longField = 'x'.repeat(MAX_TAB_FIELD_CHARS + 500);
+    const tabs: TabListUpdatePayload['tabs'] = Array.from(
+      { length: MAX_TAB_LIST_COUNT + 5 },
+      (_, index) => ({
+        id: index === MAX_TAB_LIST_COUNT + 4 ? longId : `t${index}`,
+        url: longField,
+        scrollY: index,
+        title: longField,
+      }),
+    );
+    const bounded = boundTabListUpdate({ sessionId: 's', tabs, activeTabId: longId });
+    expect(bounded.tabs).toHaveLength(MAX_TAB_LIST_COUNT);
+    expect(bounded.activeTabId).toHaveLength(MAX_TAB_ID_CHARS);
+    expect(bounded.tabs.at(-1)?.id).toBe(bounded.activeTabId);
+    expect(bounded.tabs.every((tab) => tab.url.length <= MAX_TAB_FIELD_CHARS)).toBe(true);
+    expect(bounded.tabs.every((tab) => tab.title.length <= MAX_TAB_FIELD_CHARS)).toBe(true);
+  });
+
   it('publishes {type:"tabListUpdate", sessionId, tabs, activeTabId} reliably (full list)', async () => {
     const { room, publishData } = makeRoom();
     const tabs = [
