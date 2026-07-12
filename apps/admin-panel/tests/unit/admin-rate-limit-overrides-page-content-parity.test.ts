@@ -65,6 +65,16 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
     expect(body).toMatch(/method: 'DELETE'/);
   });
 
+  it('clear-now uses a destructive composite-key lease with accessible busy feedback', () => {
+    expect(body).toMatch(/const clearsInFlight = new Set\(\);/);
+    expect(body).toMatch(/prefixedAccountId \+ '\\u0000' \+ bucketKey/);
+    expect(body).toMatch(/if \(clearsInFlight\.has\(operationKey\)\) return;/);
+    expect(body).toMatch(/\{ confirmLabel: 'Clear', destructive: true \}/);
+    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toContain("btn.textContent = 'Confirming…'");
+    expect(body).toContain("btn.textContent = 'Clearing…'");
+  });
+
   it('bucket-key footnote lists the canonical enum (global + sessions:create + agent_sessions:message)', () => {
     // The canonical SetQuotaOverrideRequestSchema bucket keys the
     // override surface accepts. The prior footnote documented the

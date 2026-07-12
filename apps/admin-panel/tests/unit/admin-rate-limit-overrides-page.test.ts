@@ -30,7 +30,7 @@ interface Override {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -170,5 +170,37 @@ describe('admin rate-limit-overrides page — clear-now (operator)', () => {
     expect(
       window.document.querySelector('[data-action="clear"][data-account-id="acc_a"]'),
     ).toBeTruthy();
+  });
+
+  it('single-flights the account+bucket clear and stays visibly busy through DELETE', async () => {
+    const overrides = [{ ...OV_A }];
+    let finishDelete: (response: Response) => void = () => {};
+    const pendingDelete = new Promise<Response>((resolve) => {
+      finishDelete = resolve;
+    });
+    const fallback = makeRouter(overrides);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => (call.init?.method === 'DELETE' ? pendingDelete : fallback(call)),
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-action="clear"][data-account-id="acc_a"]',
+    ) as HTMLButtonElement;
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush(2);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.textContent).toBe('Clearing…');
+
+    overrides.splice(0, 1);
+    finishDelete(new Response(null, { status: 204 }));
+    await flush();
+    expect(
+      window.document.querySelector('[data-action="clear"][data-account-id="acc_a"]'),
+    ).toBeNull();
   });
 });

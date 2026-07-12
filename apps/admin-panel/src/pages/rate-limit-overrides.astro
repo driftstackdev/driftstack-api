@@ -290,7 +290,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (myReq !== inFlight) return;
             const rows = body.data || [];
             if (rows.length === 0) {
-              if (list) list.classList.add('hidden');
+              if (list) {
+                list.classList.add('hidden');
+                // Remove stale action nodes as well as hiding the list. A
+                // completed clear must not leave a re-enabled old button in DOM.
+                list.innerHTML = '';
+              }
               if (emptyRegion) emptyRegion.classList.remove('hidden');
             } else {
               if (list) {
@@ -319,38 +324,54 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      async function clear(prefixedAccountId, bucketKey) {
+      const clearsInFlight = new Set();
+      async function clear(prefixedAccountId, bucketKey, btn) {
         if (!token) return;
-        const proceed = await window.driftstackConfirm(
-          'Clear the ' + bucketKey + ' override for ' + prefixedAccountId + '?',
-          { confirmLabel: 'Clear' },
-        );
-        if (!proceed) return;
-        showBanner('Clearing override…');
-        fetch(
-          apiBaseUrl +
-            '/v1/admin/accounts/' +
-            encodeURIComponent(prefixedAccountId) +
-            '/quota-override?bucket_key=' +
-            encodeURIComponent(bucketKey),
-          {
-            method: 'DELETE',
-            headers: { authorization: 'Bearer ' + token },
-            credentials: 'include',
-          },
-        )
-          .then((r) => {
-            if (r.status === 204 || r.ok) return null;
-            return Promise.reject(new Error('HTTP ' + r.status));
-          })
-          .then(() => {
-            showBanner('Override cleared. Refreshing…');
-            load();
-          })
-          .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't clear (" + msg + ').');
-          });
+        const operationKey = prefixedAccountId + '\u0000' + bucketKey;
+        if (clearsInFlight.has(operationKey)) return;
+        clearsInFlight.add(operationKey);
+        const originalText = btn ? btn.textContent : 'Clear now';
+        if (btn) {
+          btn.disabled = true;
+          btn.setAttribute('aria-busy', 'true');
+          btn.textContent = 'Confirming…';
+        }
+        try {
+          const proceed = await window.driftstackConfirm(
+            'Clear the ' + bucketKey + ' override for ' + prefixedAccountId + '?',
+            { confirmLabel: 'Clear', destructive: true },
+          );
+          if (!proceed) return;
+          if (btn) btn.textContent = 'Clearing…';
+          showBanner('Clearing override…');
+          const response = await fetch(
+            apiBaseUrl +
+              '/v1/admin/accounts/' +
+              encodeURIComponent(prefixedAccountId) +
+              '/quota-override?bucket_key=' +
+              encodeURIComponent(bucketKey),
+            {
+              method: 'DELETE',
+              headers: { authorization: 'Bearer ' + token },
+              credentials: 'include',
+            },
+          );
+          if (response.status !== 204 && !response.ok) {
+            throw new Error('HTTP ' + response.status);
+          }
+          showBanner('Override cleared. Refreshing…');
+          await load();
+        } catch (err) {
+          const msg = err && err.message ? err.message : 'network error';
+          showBanner("Couldn't clear (" + msg + ').');
+        } finally {
+          clearsInFlight.delete(operationKey);
+          if (btn) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.textContent = originalText;
+          }
+        }
       }
 
       root.addEventListener('click', (ev) => {
@@ -361,7 +382,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         ev.preventDefault();
         const accountId = btn.getAttribute('data-account-id');
         const bucketKey = btn.getAttribute('data-bucket-key');
-        if (accountId && bucketKey) clear(accountId, bucketKey);
+        if (accountId && bucketKey) clear(accountId, bucketKey, btn);
       });
 
       let debounce = 0;
