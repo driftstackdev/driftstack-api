@@ -62,6 +62,7 @@ import {
   LiveConnectionStatsSubscriber,
   type LiveConnectionStatsStore,
 } from '../components/LiveConnectionStatsSubscriber';
+import { TapRippleOverlay, type TapRippleOverlayHandle } from '../components/TapRippleOverlay';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
@@ -5049,8 +5050,7 @@ export function SimulatorWindow(): JSX.Element {
   // preventDefault/stopPropagation) so the real tap still reaches the device's
   // input-capture untouched.
   const screenHostRef = useRef<HTMLDivElement | null>(null);
-  const tapIdRef = useRef(0);
-  const [taps, setTaps] = useState<{ id: number; x: number; y: number }[]>([]);
+  const tapRippleRef = useRef<TapRippleOverlayHandle | null>(null);
   // True when the pointer is on a SIZED live video but maps OFF its object-contain
   // surface (a letterbox/pillarbox bar) — exactly where the wire's input-capture sends
   // nothing. Used to suppress the tap ripple + fingertip dot so the visual feedback
@@ -5095,11 +5095,7 @@ export function SimulatorWindow(): JSX.Element {
     positionDot(x, y);
     setDotPressed(true);
     if (!dotVisible) setDotVisible(true);
-    const id = (tapIdRef.current += 1);
-    setTaps((cur) => [...cur, { id, x, y }]);
-    window.setTimeout(() => {
-      setTaps((cur) => cur.filter((t) => t.id !== id));
-    }, 480);
+    tapRippleRef.current?.show(x, y);
   };
   // iOS touch-point cursor (founder 2026-06-18): over the SCREEN, hide the PC
   // arrow (cursor-none on the host) and show a soft fingertip dot that tracks the
@@ -6709,15 +6705,7 @@ export function SimulatorWindow(): JSX.Element {
                   )}
                   {/* iOS tap cursor — a ring that blooms at each tap point then
                     fades. pointer-events-none so it never intercepts the tap. */}
-                  {taps.map((t) => (
-                    <span
-                      key={t.id}
-                      data-component="tap-ripple"
-                      aria-hidden="true"
-                      className="ds-tap-ring pointer-events-none absolute z-20 h-9 w-9 rounded-full border border-white/55 bg-white/10"
-                      style={{ left: t.x, top: t.y }}
-                    />
-                  ))}
+                  <TapRippleOverlay ref={tapRippleRef} />
                   {/* #75b — OVERLAY keyboard: on a short laptop work area the
                     docked-below keyboard would overflow the screen and trip the
                     screen-clamp, which carves KEYBOARD_H out of the video and narrows
