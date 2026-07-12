@@ -48,4 +48,12 @@ describe('customer-dashboard auth/magic-link-request content parity', () => {
   it('withSidebar={false} on DashboardLayout — unauthenticated landing surface; drift would surface broken sidebar nav to users not yet signed in', () => {
     expect(body).toMatch(/<DashboardLayout title="Magic-link sign-in" withSidebar=\{false\}>/);
   });
+
+  it('shows honest in-flight feedback while preserving the synchronous duplicate-request guard', () => {
+    expect(body).toMatch(/if \(requestInFlight\) return;/);
+    expect(body).toMatch(/setSubmitting\(true\);/);
+    expect(body).toMatch(/submitBtn\.setAttribute\('aria-busy', on \? 'true' : 'false'\);/);
+    expect(body).toMatch(/submitBtn\.textContent = on \? 'Sending…' : submitLabel;/);
+    expect(body).toMatch(/requestInFlight = false;\s*\n?\s*setSubmitting\(false\);/);
+  });
 });

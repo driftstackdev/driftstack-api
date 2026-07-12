@@ -99,6 +99,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const debugLink = root.querySelector('[data-debug-link]');
       const emailInput = root.querySelector('#magic-link-email');
       const submitBtn = form.querySelector('button[type="submit"]');
+      const submitLabel = submitBtn ? submitBtn.textContent : '';
 
       // Honor ?email= prefill — e.g. from a /login bounce after a failed
       // password attempt where the user wants to try magic-link instead.
@@ -111,6 +112,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      function setSubmitting(on) {
+        if (!submitBtn) return;
+        submitBtn.disabled = on;
+        submitBtn.setAttribute('aria-busy', on ? 'true' : 'false');
+        submitBtn.textContent = on ? 'Sending…' : submitLabel;
+      }
+
       let requestInFlight = false;
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
@@ -120,7 +128,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         // two working sign-in links instead of one.
         if (requestInFlight) return;
         requestInFlight = true;
-        if (submitBtn) submitBtn.disabled = true;
+        setSubmitting(true);
         banner.classList.add('hidden');
         const email = (new FormData(form).get('email') || '').toString();
         fetch(apiBaseUrl + '/v1/auth/magic-link/request', {
@@ -160,7 +168,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .finally(() => {
             requestInFlight = false;
-            if (submitBtn) submitBtn.disabled = false;
+            setSubmitting(false);
           });
       });
     })();

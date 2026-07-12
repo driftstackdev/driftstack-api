@@ -24590,3 +24590,15 @@ Verification:
 - customer-dashboard `astro check`: 0 errors and no unused-symbol hints (six non-actionable async-conversion suggestions remain);
 - customer-dashboard production build passes with the required `PUBLIC_API_BASE_URL` set;
 - focused API-key/Settings parity: 52/52 tests pass.
+
+## V-556 — passwordless sign-in request feedback
+
+**Date:** 2026-07-12
+
+Aligned the customer dashboard's magic-link request form with the password-reset flow. The existing synchronous guard still prevents duplicate token issuance, while the submit control now disables, announces `aria-busy`, changes to “Sending…”, and restores its original label on every completion path.
+
+Verification:
+
+- magic-link request source-parity: 7/7 tests pass, including duplicate-guard and in-flight-feedback assertions;
+- customer-dashboard `astro check`: 0 errors;
+- customer-dashboard production build passes with the required `PUBLIC_API_BASE_URL` set.
