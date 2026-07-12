@@ -139,6 +139,17 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
   });
 
+  it('shared confirm + prompt modals reject overlapping calls and release their single-flight locks on close', () => {
+    expect(body).toMatch(/var confirmOpen = false;/);
+    expect(body).toMatch(/if \(confirmOpen\) \{ resolve\(false\); return; \}/);
+    expect(body).toMatch(/confirmOpen = true;/);
+    expect(body).toMatch(/function done\(result\) \{\s*confirmOpen = false;/);
+    expect(body).toMatch(/var promptOpen = false;/);
+    expect(body).toMatch(/if \(promptOpen\) \{ resolve\(null\); return; \}/);
+    expect(body).toMatch(/promptOpen = true;/);
+    expect(body).toMatch(/function done\(result\) \{\s*promptOpen = false;/);
+  });
+
   it('all 10 navItem targets exist as files (no dangling sidebar links)', () => {
     const dir = resolve(REPO_ROOT, 'apps/admin-panel/src/pages');
     expect(existsSync(resolve(dir, 'index.astro'))).toBe(true);

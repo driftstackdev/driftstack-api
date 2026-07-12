@@ -800,6 +800,7 @@ const navSections: NavSection[] = [
           // the modal markup is somehow absent (defensive). Escape / Cancel
           // resolve false; Confirm resolves true.
           (function () {
+            var confirmOpen = false;
             // NOTE: plain code, NOT the {`…`} template-literal wrapper — Astro
             // emits that wrapper literally, which made this whole script a
             // no-op string in the browser (window.driftstackConfirm was
@@ -811,6 +812,11 @@ const navSections: NavSection[] = [
                   resolve(window.confirm(message));
                   return;
                 }
+                if (confirmOpen) {
+                  resolve(false);
+                  return;
+                }
+                confirmOpen = true;
                 var msg = overlay.querySelector('[data-ds-confirm-message]');
                 var ok = overlay.querySelector('[data-ds-confirm-ok]');
                 var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
@@ -823,6 +829,7 @@ const navSections: NavSection[] = [
                 document.body.style.overflow = 'hidden';
                 if (ok && ok.focus) ok.focus();
                 function done(result) {
+                  confirmOpen = false;
                   overlay.classList.add('hidden');
                   document.body.style.overflow = '';
                   if (ok) ok.removeEventListener('click', onOk);
@@ -903,6 +910,7 @@ const navSections: NavSection[] = [
           // no-op string in the browser (window.driftstackPrompt was
           // undefined in production until the 2026-07-02 fix).
           (function () {
+            var promptOpen = false;
             window.driftstackPrompt = function (message, opts) {
               return new Promise(function (resolve) {
                 var overlay = document.querySelector('[data-ds-prompt]');
@@ -910,6 +918,11 @@ const navSections: NavSection[] = [
                   resolve(window.prompt(message, (opts && opts.defaultValue) || ''));
                   return;
                 }
+                if (promptOpen) {
+                  resolve(null);
+                  return;
+                }
+                promptOpen = true;
                 var msg = overlay.querySelector('[data-ds-prompt-message]');
                 var input = overlay.querySelector('[data-ds-prompt-input]');
                 var ok = overlay.querySelector('[data-ds-prompt-ok]');
@@ -929,6 +942,7 @@ const navSections: NavSection[] = [
                   if (input.select) input.select();
                 }
                 function done(result) {
+                  promptOpen = false;
                   overlay.classList.add('hidden');
                   document.body.style.overflow = '';
                   if (ok) ok.removeEventListener('click', onOk);

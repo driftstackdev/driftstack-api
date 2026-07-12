@@ -59,6 +59,17 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/<meta name="robots" content="noindex" \/>/);
   });
 
+  it('shared confirm + prompt modals reject overlapping calls and release their single-flight locks on close', () => {
+    expect(body).toMatch(/var confirmOpen = false;/);
+    expect(body).toMatch(/if \(confirmOpen\) \{\s*resolve\(false\);\s*return;\s*\}/);
+    expect(body).toMatch(/confirmOpen = true;/);
+    expect(body).toMatch(/function done\(result\) \{\s*confirmOpen = false;/);
+    expect(body).toMatch(/var promptOpen = false;/);
+    expect(body).toMatch(/if \(promptOpen\) \{\s*resolve\(null\);\s*return;\s*\}/);
+    expect(body).toMatch(/promptOpen = true;/);
+    expect(body).toMatch(/function done\(result\) \{\s*promptOpen = false;/);
+  });
+
   it('page-title pattern: "${title} · Driftstack"', () => {
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });

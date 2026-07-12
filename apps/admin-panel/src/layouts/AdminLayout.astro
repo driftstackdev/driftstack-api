@@ -246,10 +246,14 @@ const navItems = [
         // production — including the W2820 destructive-confirm guard —
         // until the 2026-07-02 fix).
         (function () {
+          var confirmOpen = false;
+          var promptOpen = false;
           window.driftstackConfirm = function (message, opts) {
             return new Promise(function (resolve) {
               var overlay = document.querySelector('[data-ds-confirm]');
               if (!overlay) { resolve(window.confirm(message)); return; }
+              if (confirmOpen) { resolve(false); return; }
+              confirmOpen = true;
               var msg = overlay.querySelector('[data-ds-confirm-message]');
               var ok = overlay.querySelector('[data-ds-confirm-ok]');
               var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
@@ -266,6 +270,7 @@ const navItems = [
               if (destructive) { if (cancel && cancel.focus) cancel.focus(); }
               else if (ok && ok.focus) ok.focus();
               function done(result) {
+                confirmOpen = false;
                 overlay.classList.add('hidden');
                 document.body.style.overflow = '';
                 if (ok) ok.removeEventListener('click', onOk);
@@ -299,6 +304,8 @@ const navItems = [
             return new Promise(function (resolve) {
               var overlay = document.querySelector('[data-ds-prompt]');
               if (!overlay) { resolve(window.prompt(message, (opts && opts.defaultValue) || '')); return; }
+              if (promptOpen) { resolve(null); return; }
+              promptOpen = true;
               var msg = overlay.querySelector('[data-ds-prompt-message]');
               var input = overlay.querySelector('[data-ds-prompt-input]');
               var ok = overlay.querySelector('[data-ds-prompt-ok]');
@@ -314,6 +321,7 @@ const navItems = [
               document.body.style.overflow = 'hidden';
               if (input && input.focus) { input.focus(); if (input.select) input.select(); }
               function done(result) {
+                promptOpen = false;
                 overlay.classList.add('hidden');
                 document.body.style.overflow = '';
                 if (ok) ok.removeEventListener('click', onOk);
