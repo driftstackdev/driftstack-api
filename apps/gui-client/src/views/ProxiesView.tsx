@@ -53,6 +53,11 @@ interface ListState {
   notice: string | null;
 }
 
+interface TestAllSummary {
+  runId: number;
+  text: string;
+}
+
 /** Per-scheme display label + icon for a saved-proxy card (P2 #3 — the card used to
  *  hardcode "🔒 SOCKS5" so a VPN/HTTP proxy was MISLABELED). `undefined` scheme is the
  *  legacy SOCKS5 default. */
@@ -76,6 +81,21 @@ function schemeLabel(scheme: AccountProxyScheme | undefined): { icon: string; te
  *  gates Test the same way — VPN does an endpoint DNS resolve, not a SOCKS5 probe). */
 function isSocks5Probeable(scheme: AccountProxyScheme | undefined): boolean {
   return scheme === undefined || scheme === 'socks5';
+}
+
+function formatTestAllSummary(results: ProxyTestResult[]): string {
+  if (results.length === 0) {
+    return 'No proxy results landed — run Test all again.';
+  }
+  const healthy = results.filter((result) => result.reachable && result.auth_ok).length;
+  const unreachable = results.filter((result) => !result.reachable).length;
+  const authFailed = results.filter((result) => result.reachable && !result.auth_ok).length;
+  const parts = [`${String(healthy)} healthy`];
+  if (unreachable > 0) parts.push(`${String(unreachable)} unreachable`);
+  if (authFailed > 0) {
+    parts.push(`${String(authFailed)} auth failure${authFailed === 1 ? '' : 's'}`);
+  }
+  return `Tested ${String(results.length)} — ${parts.join(', ')}`;
 }
 
 const EMPTY_DRAFT: ProxyDraft = {
@@ -115,6 +135,28 @@ export function ProxiesView(): JSX.Element {
   // the card can show "tested <relative>" — a green 'healthy' pill is meaningless
   // without knowing whether the test ran 30s or 30 days ago (audit).
   const [testedAt, setTestedAt] = useState<Record<string, number>>({});
+  const [testAllSummary, setTestAllSummary] = useState<TestAllSummary | null>(null);
+  // A ref closes the one-render gap before `testingAll` disables the button. It
+  // also owns the eventual summary, so an abandoned/stale sweep cannot announce
+  // after a newer one has taken its place.
+  const activeTestAllRunRef = useRef<number | null>(null);
+  const nextTestAllRunRef = useRef(1);
+
+  useEffect(() => {
+    if (testAllSummary === null) return;
+    const { runId } = testAllSummary;
+    const id = window.setTimeout(() => {
+      setTestAllSummary((current) => (current?.runId === runId ? null : current));
+    }, 5000);
+    return () => window.clearTimeout(id);
+  }, [testAllSummary]);
+
+  useEffect(
+    () => () => {
+      activeTestAllRunRef.current = null;
+    },
+    [],
+  );
 
   const refresh = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true }));
@@ -263,7 +305,7 @@ export function ProxiesView(): JSX.Element {
     }
   }
 
-  async function handleTest(p: ProxyConfig): Promise<void> {
+  async function handleTest(p: ProxyConfig): Promise<ProxyTestResult | null> {
     const epoch = ++testEpochRef.current; // claim this probe; an edit/remove bumps it
     const stale = (): boolean => testEpochRef.current !== epoch;
     setTestingId(p.id);
@@ -274,7 +316,7 @@ export function ProxiesView(): JSX.Element {
         username: p.username,
         password: p.password,
       });
-      if (stale()) return; // proxy endpoint changed/removed mid-probe → discard
+      if (stale()) return null; // proxy endpoint changed/removed mid-probe → discard
       const probedAt = Date.now();
       setTestResults((r) => ({ ...r, [p.id]: result }));
       setTestedAt((t) => ({ ...t, [p.id]: probedAt }));
@@ -290,7 +332,7 @@ export function ProxiesView(): JSX.Element {
           username: p.username,
           password: p.password,
         });
-        if (stale()) return;
+        if (stale()) return null;
         setExitResults((r) => ({ ...r, [p.id]: exit }));
         if (exit !== null) {
           // Persist the FULL geo enrichment (city/region/timezone/asn), not just
@@ -309,19 +351,19 @@ export function ProxiesView(): JSX.Element {
         // stale "exit IP · country" next to "Auth failed" / "Not reachable".
         setExitResults((r) => dropKey(r, p.id));
       }
+      return result;
     } catch (err) {
-      if (stale()) return;
-      setTestResults((r) => ({
-        ...r,
-        [p.id]: {
-          reachable: false,
-          auth_ok: false,
-          udp_associate: false,
-          latency_ms: 0,
-          message: err instanceof Error ? err.message : String(err),
-        },
-      }));
+      if (stale()) return null;
+      const result: ProxyTestResult = {
+        reachable: false,
+        auth_ok: false,
+        udp_associate: false,
+        latency_ms: 0,
+        message: err instanceof Error ? err.message : String(err),
+      };
+      setTestResults((r) => ({ ...r, [p.id]: result }));
       setExitResults((r) => dropKey(r, p.id));
+      return result;
     } finally {
       // Always clear the spinner for the id THIS probe owns — even when a
       // mid-probe edit/remove bumped the epoch (stale()). The stale-guard's
@@ -338,21 +380,35 @@ export function ProxiesView(): JSX.Element {
   // egress endpoints skew each other's latency numbers.
   const [testingAll, setTestingAll] = useState(false);
   async function handleTestAll(): Promise<void> {
+    // `disabled` is state-driven and therefore takes one render to land. Guard
+    // synchronously too, so a double activation cannot start two socket sweeps.
+    if (activeTestAllRunRef.current !== null) return;
+    const targets = state.proxies.filter((p) => isSocks5Probeable(p.scheme));
+    // Normally unreachable through the disabled button, but keep direct/rapid
+    // invocation honest: zero probes should not flash busy or claim completion.
+    if (targets.length === 0) return;
+
+    const runId = nextTestAllRunRef.current++;
+    activeTestAllRunRef.current = runId;
+    setTestAllSummary(null);
     setTestingAll(true);
+    const results: ProxyTestResult[] = [];
     try {
-      for (const p of state.proxies) {
-        // Only SOCKS5 (or legacy-undefined) proxies have an honest native SOCKS5
-        // probe. Running it against a VPN/HTTP endpoint ALWAYS returns
-        // reachable:false (no SOCKS5 handshake there) — which would (a) flag a
-        // healthy VPN proxy "unreachable" in the pool stats and (b) persist that
-        // false-negative to the probe cache, so the launch path's test-before-open
-        // gate then spuriously warns "was unreachable" every launch. The per-card
-        // Test button already gates on this; Test-all must too.
-        if (!isSocks5Probeable(p.scheme)) continue;
-        await handleTest(p);
+      // Only SOCKS5 (or legacy-undefined) proxies have an honest native SOCKS5
+      // probe. Running it against a VPN/HTTP endpoint always returns a false
+      // negative, so `targets` deliberately excludes them.
+      for (const p of targets) {
+        const result = await handleTest(p);
+        // A proxy edited/removed during its probe returns null. Do not inflate
+        // the completed count with a result that was deliberately discarded.
+        if (result !== null) results.push(result);
       }
     } finally {
-      setTestingAll(false);
+      if (activeTestAllRunRef.current === runId) {
+        activeTestAllRunRef.current = null;
+        setTestingAll(false);
+        setTestAllSummary({ runId, text: formatTestAllSummary(results) });
+      }
     }
   }
 
@@ -496,6 +552,25 @@ export function ProxiesView(): JSX.Element {
             aria-label="Dismiss"
             className="px-1 leading-none text-ink-muted hover:text-ink-primary"
             onClick={() => setState((s) => ({ ...s, notice: null }))}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {testAllSummary !== null && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-component="proxy-test-all-summary"
+          className="flex items-start justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-ink-primary"
+        >
+          <span>{testAllSummary.text}</span>
+          <button
+            type="button"
+            aria-label="Dismiss test summary"
+            className="px-1 leading-none text-ink-muted hover:text-ink-primary"
+            onClick={() => setTestAllSummary(null)}
           >
             ×
           </button>
