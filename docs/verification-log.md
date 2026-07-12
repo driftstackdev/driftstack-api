@@ -24663,3 +24663,15 @@ Verification:
 - focused RecordingsView GUI jsdom: 6/6 tests pass;
 - GUI TypeScript check passes;
 - regression coverage holds a file write open to verify the busy/duplicate guard and exercises rejected clipboard access.
+
+## V-561 — retryable primary-list failures
+
+**Date:** 2026-07-12
+
+Applied the shared ErrorBanner recovery action to four primary desktop lists that previously offered dismissal only after a transient load failure: active sessions, session history, proxies, and saved tasks. Each banner now retries its own refresh path, disables the recovery action while that refresh is running, and retains the separate dismiss path.
+
+Verification:
+
+- focused GUI jsdom: 19/19 tests pass across Sessions, Proxies, and Saved tasks;
+- focused source-parity: 34/34 tests pass across Sessions, Session history, and Proxies;
+- GUI TypeScript check passes.

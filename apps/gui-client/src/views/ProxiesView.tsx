@@ -536,6 +536,8 @@ export function ProxiesView(): JSX.Element {
       {state.error !== null && (
         <ErrorBanner
           message={state.error}
+          onRetry={() => void refresh()}
+          retrying={state.loading}
           onDismiss={() => setState((s) => ({ ...s, error: null }))}
         />
       )}

@@ -87,13 +87,13 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it("Render: 'History' section-label + 'Past sessions' h2 + 'Sessions that have ended (destroyed or errored). Active sessions live under \"Active\" in the sidebar.' subline + Refresh button disabled while loading + ErrorBanner with onDismiss=clear error + empty-state <EmptyState title='No past sessions yet'> (W463 shared primitive, when error===null && !loading)", () => {
+  it('Render: history framing + retryable ErrorBanner + shared empty state', () => {
     expect(body).toMatch(/<h2[\s\S]*?Past sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(
       /Ended sessions \(destroyed or errored\) with their lifetime and final status\. Active\s*\n?\s*sessions live under "Active" in the sidebar\./,
     );
     expect(body).toMatch(
-      /\{state\.error !== null && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{state\.error\}\s*\n?\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}\s*\n?\s*\/>\s*\n?\s*\)\}/,
+      /\{state\.error !== null && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{state\.error\}\s*\n?\s*onRetry=\{\(\) => void refresh\(\)\}\s*\n?\s*retrying=\{state\.loading\}\s*\n?\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}/,
     );
     // W463 — empty state upgraded to the shared <EmptyState> primitive.
     expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);

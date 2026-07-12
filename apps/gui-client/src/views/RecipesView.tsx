@@ -178,6 +178,8 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
       {list.error !== null && (
         <ErrorBanner
           message={list.error}
+          onRetry={() => void refresh()}
+          retrying={list.loading}
           onDismiss={() => setList((s) => ({ ...s, error: null }))}
         />
       )}

@@ -507,6 +507,8 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
         <div className="sticky top-0 z-20 bg-surface-base py-1">
           <ErrorBanner
             message={state.error}
+            onRetry={() => void refresh(true)}
+            retrying={state.loading}
             onDismiss={() => setState((s) => ({ ...s, error: null }))}
           />
         </div>
