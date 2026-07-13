@@ -1002,6 +1002,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaStepUpError = root.querySelector('[data-field="mfa-step-up-error"]');
 
       let pendingStepUpAction = null; // 'disable' | 'regenerate' | null
+      let mfaDisableInFlight = false;
       let mfaRegenerateInFlight = false;
 
       function showHidden(el, hidden) {
@@ -1618,6 +1619,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function performDisable() {
+        if (mfaDisableInFlight) return;
+        mfaDisableInFlight = true;
+        if (mfaDisable) {
+          mfaDisable.disabled = true;
+          mfaDisable.setAttribute('aria-busy', 'true');
+          mfaDisable.textContent = 'Disabling…';
+        }
         authedFetch('/v1/account/mfa', {
           method: 'DELETE',
           body: JSON.stringify({ confirm: 'disable-mfa' }),
@@ -1637,11 +1645,38 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .then(() => {
             showBanner('Two-factor authentication disabled.');
-            loadMfa();
+            return loadMfa();
           })
-          .catch((err) => {
+          .catch(async (err) => {
             if (err && err.message === '__step_up__') return;
+            if (err && err.name === 'AbortError') {
+              const refreshed = await loadMfa(false);
+              const stillEnrolled =
+                mfaStatusBadge && mfaStatusBadge.textContent === 'enrolled';
+              if (refreshed && !stillEnrolled) {
+                showBanner(
+                  'MFA-disable outcome was unknown after the request timed out. MFA status was refreshed and now shows not enrolled; disable likely completed, so do not submit it again.',
+                );
+              } else if (refreshed) {
+                showBanner(
+                  'MFA-disable outcome was unknown after the request timed out. MFA status was refreshed and still shows enrolled; obtain a fresh code before retrying disable.',
+                );
+              } else {
+                showBanner(
+                  "MFA-disable outcome is unknown after the request timed out, and we couldn't refresh MFA status. Reload Security to verify before retrying disable.",
+                );
+              }
+              return;
+            }
             showBanner('Disable failed: ' + (err && err.message ? err.message : 'network'));
+          })
+          .finally(() => {
+            mfaDisableInFlight = false;
+            if (mfaDisable) {
+              mfaDisable.disabled = false;
+              mfaDisable.setAttribute('aria-busy', 'false');
+              mfaDisable.textContent = 'Disable two-factor';
+            }
           });
       }
 

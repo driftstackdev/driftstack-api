@@ -117,6 +117,17 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toContain('replacement codes cannot be recovered');
   });
 
+  it('serializes MFA disable and reconciles ambiguous destructive outcomes', () => {
+    expect(body).toContain('let mfaDisableInFlight = false;');
+    expect(body).toContain('if (mfaDisableInFlight) return;');
+    expect(body).toContain("mfaDisable.setAttribute('aria-busy', 'true')");
+    expect(body).toContain("mfaDisable.textContent = 'Disabling…'");
+    expect(body).toContain('MFA-disable outcome was unknown after the request timed out.');
+    expect(body).toContain('disable likely completed, so do not submit it again');
+    expect(body).toContain('still shows enrolled; obtain a fresh code before retrying disable');
+    expect(body).toContain('Reload Security to verify before retrying disable');
+  });
+
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     expect(body).toContain('ds_web_session_token');
   });

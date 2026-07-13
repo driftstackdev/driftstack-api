@@ -242,6 +242,101 @@ describe('security page — MFA (2FA) disable', () => {
     ).toBe(false);
     expect(isHidden(window, '[data-section="mfa-enrolled"]')).toBe(false);
   });
+
+  it('disable is single-flight while the destructive request is pending', async () => {
+    const mfa = newMfa({ enrolled: true });
+    const base = makeRouter(mfa);
+    let resolveDisable!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveDisable = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) =>
+        call.init?.method === 'DELETE' && /\/v1\/account\/mfa$/.test(call.url)
+          ? pending
+          : base(call),
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-button="mfa-disable"]',
+    ) as HTMLButtonElement;
+    button.dispatchEvent(new window.Event('click'));
+    button.dispatchEvent(new window.Event('click'));
+    await flush(2);
+
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'DELETE' && /\/v1\/account\/mfa$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.textContent).toBe('Disabling…');
+
+    mfa.enrolled = false;
+    resolveDisable(new Response(null, { status: 204 }));
+    await flush();
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Disable two-factor');
+  });
+
+  it('disable timeout reconciles a committed wipe before another attempt', async () => {
+    const mfa = newMfa({ enrolled: true });
+    const base = makeRouter(mfa);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) => {
+        if (call.init?.method === 'DELETE' && /\/v1\/account\/mfa$/.test(call.url)) {
+          mfa.enrolled = false;
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-disable"]') as HTMLButtonElement).click();
+    await flush(12);
+
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'DELETE' && /\/v1\/account\/mfa$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-field="mfa-status-badge"]')?.textContent).toBe(
+      'not enrolled',
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome was unknown.*status was refreshed.*not enrolled.*likely completed.*do not submit it again/i,
+    );
+  });
+
+  it('disable timeout preserves an enrolled live state and gives safe retry guidance', async () => {
+    const mfa = newMfa({ enrolled: true });
+    const base = makeRouter(mfa);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) =>
+        call.init?.method === 'DELETE' && /\/v1\/account\/mfa$/.test(call.url)
+          ? Promise.reject(timeout)
+          : base(call),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-disable"]') as HTMLButtonElement).click();
+    await flush(12);
+
+    expect(window.document.querySelector('[data-field="mfa-status-badge"]')?.textContent).toBe(
+      'enrolled',
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome was unknown.*status was refreshed.*still shows enrolled.*fresh code before retrying/i,
+    );
+  });
 });
 
 // S35 2026-07-07 (fable-frontend-audit) — regenerate-recovery-codes
