@@ -47,7 +47,7 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/method: 'POST'/);
   });
 
-  it('account creation has a real single-flight lease and bounded network deadline', () => {
+  it('account creation has a real single-flight lease and terminal unknown-timeout recovery', () => {
     expect(body).toMatch(/const SIGNUP_REQUEST_TIMEOUT_MS = 15_000/);
     expect(body).toMatch(/let signupInFlight = false/);
     expect(body).toMatch(/if \(signupInFlight\) return/);
@@ -57,7 +57,13 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
     expect(body).toMatch(/signupInFlight = false/);
-    expect(body).toMatch(/Account creation took too long/);
+    expect(body).toMatch(/let signupOutcomeUnknown = false/);
+    expect(body).toMatch(/if \(signupOutcomeUnknown\) return/);
+    expect(body).toContain('Account-creation outcome is unknown after the request timed out.');
+    expect(body).toContain('Do not submit this signup again on this page.');
+    expect(body).toContain('Continue to email verification');
+    expect(body).toMatch(/sessionStorage\.setItem\('ds_signup_email', email\)/);
+    expect(body).toMatch(/continueVerification\.setAttribute\('href', verificationUrl\(\)\)/);
   });
 
   it('OAuth start is group-serialized, visibly busy, and bounded', () => {
@@ -84,13 +90,15 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
   });
 
   it('V-267 ?next= preserved on verify-email redirect (deep-link resume), open-redirect guarded', () => {
+    expect(body).toMatch(/function verificationUrl\(\)/);
     expect(body).toMatch(
-      /const verifyUrl = rawNext\s*\n?\s*\?\s*'\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n?\s*:\s*'\/verify-email';/,
+      /return nextRaw \? '\/verify-email\?next=' \+ encodeURIComponent\(next\) : '\/verify-email';/,
     );
+    expect(body).toMatch(/window\.location\.href = verificationUrl\(\)/);
     expect(body).toMatch(/V-267 — pass through the \?next= deep link/);
     // ?next= sanitized via the inline safeNextPath() (same-origin) before forward.
     expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
-    expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
+    expect(body).toMatch(/const next = safeNextPath\(nextRaw, window\.location\.origin\);/);
   });
 
   it('V-269 ?next= preserved on "Sign in" cross-link, sanitized through safeNextPath()', () => {

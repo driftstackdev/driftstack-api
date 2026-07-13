@@ -82,15 +82,14 @@ describe('W350.B /signup page parity', () => {
   });
 
   it('redirects to /verify-email after a successful signup', () => {
-    expect(body).toMatch(/window\.location\.href\s*=\s*verifyUrl/);
+    expect(body).toMatch(/window\.location\.href\s*=\s*verificationUrl\(\)/);
     expect(body).toContain("'/verify-email'");
   });
 
   it('round-trips ?next= through to /verify-email + /login (deep-link preservation), open-redirect guarded', () => {
-    // The signup page reads ?next= from the URL twice: once to
-    // rewrite the /login fallback link, once to append onto the
-    // /verify-email redirect. Both are now sanitized through the inline
-    // safeNextPath() (same-origin) — pin the sanitized forms.
+    // The signup page reads ?next= once, then uses it for both the /login
+    // fallback and the shared /verify-email success/timeout recovery URL.
+    // Both remain sanitized through inline safeNextPath() (same-origin).
     expect(body).toMatch(
       /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );

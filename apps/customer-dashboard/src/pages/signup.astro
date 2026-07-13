@@ -51,6 +51,23 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
 
+      <div
+        data-signup-unknown
+        class="mb-5 hidden rounded-lg border border-tk-border bg-tk-surface px-4 py-4"
+      >
+        <h2 class="text-sm font-semibold text-tk-ink">Check your inbox first</h2>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          Account creation may already have completed and sent a verification email. Continue to
+          verification to enter or resend the code without submitting this signup again.
+        </p>
+        <a
+          data-continue-verification
+          href="/verify-email"
+          class="btn-primary mt-4 flex w-full items-center justify-center"
+          >Continue to email verification</a
+        >
+      </div>
+
       <form data-form="signup" class="space-y-5">
         <div>
           <label class="form-label" for="signup-email">Email</label>
@@ -94,7 +111,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       <!-- F-7 — divider between password + IDP signup paths. Same
            shape as /login so the surfaces feel uniform. -->
-      <div class="mt-6 flex items-center gap-3 text-xs text-tk-ink-3">
+      <div data-oauth-divider class="mt-6 flex items-center gap-3 text-xs text-tk-ink-3">
         <span class="h-px flex-1 bg-tk-hover"></span>
         <span>or</span>
         <span class="h-px flex-1 bg-tk-hover"></span>
@@ -200,6 +217,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       const form = root.querySelector('[data-form="signup"]');
       const banner = root.querySelector('[data-banner]');
       const loginLink = root.querySelector('[data-login-link]');
+      const unknownRecovery = root.querySelector('[data-signup-unknown]');
+      const continueVerification = root.querySelector('[data-continue-verification]');
+      const oauthButtonsGroup = root.querySelector('[data-oauth-buttons]');
+      const oauthDivider = root.querySelector('[data-oauth-divider]');
 
       // V-269 — preserve ?next= when bouncing the user to /login.
       const params = new URLSearchParams(window.location.search);
@@ -209,6 +230,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           'href',
           '/login?next=' + encodeURIComponent(safeNextPath(nextRaw, window.location.origin)),
         );
+      }
+
+      function verificationUrl() {
+        const next = safeNextPath(nextRaw, window.location.origin);
+        return nextRaw ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email';
       }
 
       function showBanner(text) {
@@ -291,6 +317,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const submitLabel = submitBtn ? submitBtn.textContent : '';
       const SIGNUP_REQUEST_TIMEOUT_MS = 15_000;
       let signupInFlight = false;
+      let signupOutcomeUnknown = false;
       function setSubmitting(on) {
         if (!submitBtn) return;
         submitBtn.disabled = on;
@@ -298,8 +325,30 @@ const apiBaseUrl = resolveApiBaseUrl();
         submitBtn.textContent = on ? 'Creating account…' : submitLabel;
       }
 
+      function showSignupOutcomeUnknown(email) {
+        signupOutcomeUnknown = true;
+        sessionStorage.setItem('ds_signup_email', email);
+        const passwordInput = form.querySelector('input[name="password"]');
+        if (passwordInput) passwordInput.value = '';
+        form.classList.add('hidden');
+        if (oauthDivider) oauthDivider.classList.add('hidden');
+        if (oauthButtonsGroup) oauthButtonsGroup.classList.add('hidden');
+        if (continueVerification) continueVerification.setAttribute('href', verificationUrl());
+        if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.setAttribute('aria-busy', 'false');
+          submitBtn.textContent = 'Check inbox before continuing';
+        }
+        setOauthButtonsDisabled(true);
+        showBanner(
+          'Account-creation outcome is unknown after the request timed out. The server may already have created your account and sent its verification email. Do not submit this signup again on this page. Check your inbox and spam folder, then continue to email verification to enter or resend the code.',
+        );
+      }
+
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
+        if (signupOutcomeUnknown) return;
         if (signupInFlight) return;
         if (oauthStartInFlight) return;
         banner.classList.add('hidden');
@@ -351,13 +400,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             // V-267 — pass through the ?next= deep link so flows that
             // brought the user to signup (e.g. GUI activation at
             // /cli/authorize) can resume after verify-email completes.
-            const params = new URLSearchParams(window.location.search);
-            const rawNext = params.get('next');
-            const next = safeNextPath(rawNext, window.location.origin);
-            const verifyUrl = rawNext
-              ? '/verify-email?next=' + encodeURIComponent(next)
-              : '/verify-email';
-            window.location.href = verifyUrl;
+            window.location.href = verificationUrl();
           })
           .catch((err) => {
             // Email already registered → inline sign-in / reset links that
@@ -366,19 +409,21 @@ const apiBaseUrl = resolveApiBaseUrl();
               showAlreadyRegistered(payload.email);
               return;
             }
+            if (controller.signal.aborted) {
+              showSignupOutcomeUnknown(payload.email);
+              return;
+            }
             showBanner(
-              controller.signal.aborted
-                ? 'Account creation took too long. Check your connection and try again.'
-                : err && err.message
-                  ? err.message
-                  : 'Signup failed.',
+              err && err.message ? err.message : 'Signup failed.',
             );
           })
           .finally(() => {
             clearTimeout(timeoutId);
             signupInFlight = false;
-            setSubmitting(false);
-            setOauthButtonsDisabled(false);
+            if (!signupOutcomeUnknown) {
+              setSubmitting(false);
+              setOauthButtonsDisabled(false);
+            }
           });
       });
 
@@ -400,6 +445,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       oauthButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
           const provider = btn.getAttribute('data-oauth');
+          if (signupOutcomeUnknown) return;
           if (!provider || oauthStartInFlight) return;
           if (signupInFlight) return;
           banner.classList.add('hidden');

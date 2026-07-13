@@ -186,7 +186,7 @@ describe('signup page — local integration', () => {
     expect(window.sessionStorage.getItem('ds_signup_email')).toBeNull();
   });
 
-  it('serializes duplicate submits and recovers after the bounded signup request times out', async () => {
+  it('serializes duplicate submits and makes an ambiguous signup timeout terminal', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       requestTimeoutImmediately: true,
       fetchPlan: [
@@ -208,10 +208,47 @@ describe('signup page — local integration', () => {
     const submitBtn = window.document.querySelector(
       '[data-form="signup"] button[type="submit"]',
     ) as HTMLButtonElement;
-    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.disabled).toBe(true);
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
-    expect(submitBtn.textContent).toBe('Create account');
-    expect(bannerText(window)).toMatch(/account creation took too long.*check your connection/i);
+    expect(submitBtn.textContent).toBe('Check inbox before continuing');
+    expect(bannerText(window)).toMatch(
+      /outcome is unknown.*may already have created your account.*verification email.*do not submit this signup again.*inbox and spam.*continue to email verification/i,
+    );
+    expect(window.sessionStorage.getItem('ds_signup_email')).toBe('newbie@example.com');
+    expect(
+      window.document.querySelector('[data-signup-unknown]')?.classList.contains('hidden'),
+    ).toBe(false);
+    expect(
+      window.document.querySelector('[data-continue-verification]')?.getAttribute('href'),
+    ).toBe('/verify-email');
+
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
+    oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('preserves a safe next target in signup-timeout verification recovery', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      url: 'https://app.driftstack.dev/signup/?next=' + encodeURIComponent('/cli/authorize'),
+      requestTimeoutImmediately: true,
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+
+    expect(
+      window.document.querySelector('[data-continue-verification]')?.getAttribute('href'),
+    ).toBe('/verify-email?next=' + encodeURIComponent('/cli/authorize'));
   });
 
   it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start', async () => {
