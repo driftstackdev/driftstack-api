@@ -27,3 +27,27 @@ describe('DashboardLayout legal acceptance deadline', () => {
     );
   });
 });
+
+describe('DashboardLayout account shell reliability', () => {
+  it('reveals the reserved identity and sign-out block before account transport starts', () => {
+    const revealAt = layout.indexOf(
+      "const signedInBlock = document.querySelector('[data-signed-in-as]')",
+    );
+    const fetchAt = layout.indexOf("fetchAccountShellWithDeadline(apiBaseUrl + '/v1/account/me'");
+    expect(revealAt).toBeGreaterThan(-1);
+    expect(fetchAt).toBeGreaterThan(revealAt);
+    expect(layout.slice(revealAt, fetchAt)).toContain(
+      "signedInBlock.classList.remove('invisible');",
+    );
+  });
+
+  it('bounds account and staff probes with one timer-cleaned helper', () => {
+    expect(layout).toContain('const ACCOUNT_SHELL_TIMEOUT_MS = 10_000;');
+    expect(layout).toContain(
+      "fetchAccountShellWithDeadline(apiBaseUrl + '/v1/admin/audit-log?limit=1'",
+    );
+    expect(layout).toMatch(
+      /function fetchAccountShellWithDeadline[\s\S]*?controller\.abort\(\)[\s\S]*?clearTimeout\(timeoutId\)/,
+    );
+  });
+});

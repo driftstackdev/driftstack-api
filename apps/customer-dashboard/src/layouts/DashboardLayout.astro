@@ -1016,6 +1016,19 @@ const navSections: NavSection[] = [
             }
           }
 
+          const ACCOUNT_SHELL_TIMEOUT_MS = 10_000;
+          function fetchAccountShellWithDeadline(url, init) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(function () {
+              controller.abort();
+            }, ACCOUNT_SHELL_TIMEOUT_MS);
+            return fetch(url, Object.assign({}, init, { signal: controller.signal })).finally(
+              function () {
+                clearTimeout(timeoutId);
+              },
+            );
+          }
+
           function getActiveOwnerId() {
             try {
               return localStorage.getItem('ds_act_as_account') || '';
@@ -1086,7 +1099,15 @@ const navSections: NavSection[] = [
           // regression from pre-V-331 behaviour).
           const token = getToken();
           if (!token || !picker || !wrap) return;
-          fetch(apiBaseUrl + '/v1/account/me', {
+          // The block reserves its layout space with visibility:hidden. Reveal it
+          // before transport starts so Sign out remains reachable even when the
+          // account request rejects or times out; identity fields hydrate later.
+          const signedInBlock = document.querySelector('[data-signed-in-as]');
+          if (signedInBlock) {
+            signedInBlock.classList.remove('invisible');
+            signedInBlock.classList.remove('hidden');
+          }
+          fetchAccountShellWithDeadline(apiBaseUrl + '/v1/account/me', {
             headers: { authorization: 'Bearer ' + token },
           })
             .then(function (r) {
@@ -1120,17 +1141,6 @@ const navSections: NavSection[] = [
               const sa = document.querySelector('[data-signed-in-as]');
               const saName = document.querySelector('[data-signed-in-name]');
               const saAvatar = document.querySelector('[data-signed-in-avatar]');
-              // Reveal the identity block (which holds the ONLY Sign-out
-              // control) UNCONDITIONALLY — a non-401 /account/me failure
-              // (500 / network blip / non-JSON) leaves `me` null, and gating the
-              // reveal on success left the block visibility:hidden + out of tab
-              // order, stranding the user with no way to sign out on a shared
-              // machine. Identity name/avatar are populated lazily below only
-              // when `me` is present.
-              if (sa) {
-                sa.classList.remove('invisible');
-                sa.classList.remove('hidden');
-              }
               if (!me) return;
 
               if (sa && saName && saAvatar) {
@@ -1232,7 +1242,7 @@ const navSections: NavSection[] = [
                 if (cached === '1') {
                   shortcut.classList.remove('hidden');
                 }
-                fetch(apiBaseUrl + '/v1/admin/audit-log?limit=1', {
+                fetchAccountShellWithDeadline(apiBaseUrl + '/v1/admin/audit-log?limit=1', {
                   headers: { authorization: 'Bearer ' + token },
                   credentials: 'include',
                 })
