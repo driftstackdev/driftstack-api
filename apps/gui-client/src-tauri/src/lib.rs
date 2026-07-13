@@ -92,24 +92,24 @@ pub fn run() {
         // duplicate.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             use tauri::Manager;
-            // The relaunch's session payload (b64, ps-safe — carries the LiveKit token)
-            // + the plain, non-secret session label (window key).
-            let b64 = argv
-                .iter()
-                .find(|a| a.starts_with("--ds-session="))
-                .map(|a| a.trim_start_matches("--ds-session=").to_string())
-                .filter(|p| is_valid_b64_payload(p));
+            // argv carries ONLY the plain, non-secret session label. The full
+            // LiveKit/control payload is read-and-unlinked from an owner-only
+            // handoff file; base64 is encoding, not process-list protection.
             let label = argv
                 .iter()
                 .find(|a| a.starts_with("--ds-label="))
                 .map(|a| a.trim_start_matches("--ds-label=").to_string())
                 .filter(|l| is_safe_session_label(l));
+            let b64 = label
+                .as_deref()
+                .and_then(|l| take_sim_payload(l).ok().flatten())
+                .filter(|p| is_valid_b64_payload(p));
 
             // MULTI-WINDOW simulator (founder 2026-06-23: "can't open multiple iPhones at
             // once, only 1 window opens"). A 2nd launch opens a NEW iPhone window for the
             // new session instead of re-pointing the single window; re-opening a session
             // focuses its existing window. The main GUI (different identifier, never
-            // launched with --ds-session) keeps the focus-the-existing-window behaviour.
+            // launched with --ds-label) keeps the focus-the-existing-window behaviour.
             if app.config().identifier == "dev.driftstack.simulator" {
                 match (b64.as_deref(), label.as_deref()) {
                     (Some(payload), Some(lbl)) => open_or_focus_sim_window(app, lbl, payload),
@@ -123,13 +123,9 @@ pub fn run() {
                 return;
             }
 
-            // Main GUI: focus the existing window (legacy re-point via event if a
-            // payload rode along — preserved for the in-app simulator path).
+            // Main GUI: focus the existing window. Session payloads are handled
+            // only by the separate Simulator app through the protected file.
             if let Some(win) = app.get_webview_window("main") {
-                use tauri::Emitter;
-                if let Some(payload) = b64.as_deref() {
-                    let _ = win.emit("ds-session", payload);
-                }
                 let _ = win.unminimize();
                 let _ = win.show();
                 let _ = win.set_focus();
@@ -169,28 +165,22 @@ pub fn run() {
         // (#2). Needs the release `.app` observed to confirm it composites.
         .setup(|app| {
             use tauri::Manager;
-            // Stage 2 (separate Driftstack Simulator app): on FIRST launch the
-            // main app passes the live session as `--ds-session=<b64 query string>`;
-            // decode it into the window's location.search so the existing
-            // SimulatorWindow (which reads window.location.search) connects. b64 is
-            // an injection-safe charset inside the JS string literal. No-op for the
-            // main GUI (never launched with this arg).
-            if let Some(arg) = std::env::args().find(|a| a.starts_with("--ds-session=")) {
-                let b64 = arg.trim_start_matches("--ds-session=").to_string();
-                // SECURITY (audit wf_aa84c103): validate against the strict base64
-                // alphabet BEFORE interpolating into the eval'd JS string literal. A
-                // quote/backslash/newline in the arg would otherwise break out of the
-                // string and run arbitrary JS in the privileged (csp:null) webview that
-                // can invoke secret_load/sim_key_take → keychain API key + control-key
-                // exfil. The single-instance relaunch path already guards this (the
-                // `is_valid_b64_payload` filter above); setup() MUST too — the base64
-                // alphabet contains no JS-breaking chars, so this fully closes the
-                // breakout. (is_valid_b64_payload is unit-tested against the exact
-                // `'); alert(1) //` payload below.)
-                if is_valid_b64_payload(&b64) {
-                    if let Some(win) = app.get_webview_window("main") {
-                        let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
-                    }
+            // Stage 2 (separate Simulator app): on FIRST launch argv carries only
+            // `--ds-label=<non-secret id>`. Consume the complete payload from the
+            // owner-only handoff file before applying it to the internal WebView.
+            // Validation still precedes eval interpolation; malformed/oversized
+            // payloads fail closed and the file has already been unlinked.
+            let initial_label = std::env::args()
+                .find(|a| a.starts_with("--ds-label="))
+                .map(|a| a.trim_start_matches("--ds-label=").to_string())
+                .filter(|l| is_safe_session_label(l));
+            if let Some(b64) = initial_label
+                .as_deref()
+                .and_then(|l| take_sim_payload(l).ok().flatten())
+                .filter(|p| is_valid_b64_payload(p))
+            {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
                 }
             }
             // Multi-window simulator (founder 2026-06-23): record which session `main`
@@ -248,8 +238,6 @@ pub fn run() {
             proxy_exit_probe,
             endpoint_resolve,
             launch_simulator,
-            sim_key_write,
-            sim_key_take,
             set_dock_tile,
             reset_dock_tile,
         ])
@@ -257,14 +245,15 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// Cheap sanity check on a `--ds-session=<payload>` value before we hand it to
-/// the SPA: non-empty and limited to the standard base64 alphabet (the JS side
-/// decodes it with `atob`). This guards the relaunch event from firing with an
-/// empty or obviously-garbled payload (which would leave the window on a blank,
-/// session-less page). It does NOT fully validate the decoded query string —
-/// the SPA re-parses it the same way it parses the initial `location.search`.
+const MAX_SIM_PAYLOAD_B64_BYTES: usize = 128 * 1024;
+
+/// Validate the protected handoff value before writing or interpolating it:
+/// non-empty, bounded, and limited to the standard base64 alphabet (the JS side
+/// decodes it with `atob`). The bound prevents an IPC caller or corrupt handoff
+/// file from turning the privileged WebView eval into an unbounded allocation.
 fn is_valid_b64_payload(payload: &str) -> bool {
     !payload.is_empty()
+        && payload.len() <= MAX_SIM_PAYLOAD_B64_BYTES
         && payload
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
@@ -286,9 +275,9 @@ fn is_safe_session_label(s: &str) -> bool {
 struct MainSession(std::sync::Mutex<Option<String>>);
 
 /// Multi-window simulator: open a NEW per-session iPhone window for `label`, or focus the
-/// existing one (`main` for the first session, else `sim-<label>`). The b64 query (ps-safe
-/// over the launch arg) is decoded HERE and baked into the new window's internal URL — which
-/// is NOT argv-visible — so the window loads the session directly with no eval-timing race.
+/// existing one (`main` for the first session, else `sim-<label>`). The b64 query was consumed
+/// from the single-use handoff file and is decoded HERE into the new window's internal URL —
+/// it is never present in argv — so the window loads directly with no eval-timing race.
 /// Window props mirror tauri.simulator.conf.json's `main`; windows cascade so they don't
 /// stack exactly. Best-effort: a build failure is logged, never panics. (founder 2026-06-23)
 fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
@@ -396,35 +385,43 @@ fn ping() -> &'static str {
     "pong"
 }
 
-/// Stage 2 — launch the separate "Driftstack Simulator" app (its own Dock icon)
-/// and hand off the live session via `--ds-session=<b64 query string>`. macOS
-/// only; returns `Err` when the app isn't installed so the caller falls back to
-/// the in-process simulator window. The API key is NOT passed here (it would be
-/// visible in `ps`) — the sim app reads it from the shared OS keychain
-/// (`KEYRING_SERVICE`) with a one-time macOS allow prompt. `payload` is the
-/// base64 of the simulator query string (window=simulator&ws=…&token=…).
+/// Launch the separate "Driftstack Simulator" app. The complete base64 session
+/// query (LiveKit JWT + session control key) is atomically written to a 0600
+/// single-use handoff file. argv carries only the validated non-secret session
+/// label; the Simulator reads and unlinks the payload before creating/updating
+/// its WebView. Base64 must never be treated as process-list protection.
 #[tauri::command]
 fn launch_simulator(payload: String, session_label: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        if !is_safe_session_label(&session_label) {
+            return Err("invalid simulator session label".to_string());
+        }
+        if !is_valid_b64_payload(&payload) {
+            return Err("invalid or oversized simulator session payload".to_string());
+        }
         let app_path = "/Applications/Driftstack Simulator.app";
         if !std::path::Path::new(app_path).exists() {
             return Err("Driftstack Simulator.app is not installed".to_string());
         }
-        // `--ds-label` = the plain (non-secret) session id, the per-session window KEY
-        // (multi-window, founder 2026-06-23). The single-instance handler opens/focuses
-        // one window per label. `--ds-session` stays the b64 (ps-safe) payload.
-        std::process::Command::new("open")
-            .args([
-                "-n",
-                "-a",
-                app_path,
-                "--args",
-                &format!("--ds-session={payload}"),
-                &format!("--ds-label={session_label}"),
-            ])
+        let handoff_identity = write_sim_payload(&session_label, &payload)?;
+        // `--ds-label` is the only argument: it is the non-secret per-session
+        // window key. The single-instance/startup path consumes the file.
+        let spawn = std::process::Command::new("open")
+            .args(simulator_open_args(app_path, &session_label))
             .spawn()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string());
+        if let Err(error) = spawn {
+            remove_sim_payload_if_identity(&sim_payload_path(&session_label), handoff_identity);
+            return Err(error);
+        }
+        // If `open` spawned but the target never consumed the handoff, bound the
+        // plaintext lifetime. A successful take unlinks earlier; this is a no-op.
+        let cleanup_path = sim_payload_path(&session_label);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(60));
+            remove_sim_payload_if_identity(&cleanup_path, handoff_identity);
+        });
         Ok(())
     }
     #[cfg(not(target_os = "macos"))]
@@ -434,97 +431,148 @@ fn launch_simulator(payload: String, session_label: String) -> Result<(), String
     }
 }
 
-/// Deterministic, collision-free temp path for a session's
-/// gui_control_key handoff file. The session id is sanitised to the
-/// `[A-Za-z0-9._-]` charset (everything else → `_`) so a hostile id
-/// can never escape the temp dir (no `/`, no `..`). Lives in the OS
-/// temp dir (shared between the main app and the separate simulator
-/// app since neither is sandboxed — see Entitlements.plist: no
-/// `com.apple.security.app-sandbox`).
-fn sim_key_path(session_id: &str) -> std::path::PathBuf {
-    let safe: String = session_id
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    std::env::temp_dir().join(format!("driftstack-sim-{safe}.key"))
+fn simulator_open_args(app_path: &str, session_label: &str) -> Vec<String> {
+    vec![
+        "-n".to_string(),
+        "-a".to_string(),
+        app_path.to_string(),
+        "--args".to_string(),
+        format!("--ds-label={session_label}"),
+    ]
 }
 
-/// Write the per-session gui_control_key to a 0600 temp file the
-/// separate simulator app reads (then unlinks) on launch. This keeps
-/// the key OFF argv (`ps`-visible) and OFF the keychain (the separate
-/// app can't read the main app's keychain entry). The key is the
-/// per-session, 24h-TTL gui_control_key — NOT the account API key.
-///
-/// On macOS/Unix the file is created with mode 0600 (owner-only) so
-/// another local user can't read it. Best-effort caller: a failure
-/// just means the simulator falls back to (failing) keychain reads.
-#[tauri::command]
-fn sim_key_write(session_id: String, key: String) -> Result<(), String> {
-    if session_id.is_empty() {
-        return Err("session_id is empty".to_string());
+/// Deterministic path for the validated session label. The writer uses a
+/// create-new temporary sibling + atomic rename, so a pre-existing symlink at
+/// the public path is replaced rather than followed.
+fn sim_payload_path(session_label: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("driftstack-sim-{session_label}.handoff"))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SimPayloadIdentity {
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(not(unix))]
+    len: u64,
+    #[cfg(not(unix))]
+    modified: Option<std::time::SystemTime>,
+}
+
+fn sim_payload_identity(path: &std::path::Path) -> Result<SimPayloadIdentity, String> {
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        Ok(SimPayloadIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        })
     }
-    if key.is_empty() {
-        return Err("key is empty".to_string());
+    #[cfg(not(unix))]
+    {
+        Ok(SimPayloadIdentity {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+        })
     }
-    let path = sim_key_path(&session_id);
+}
+
+/// Delete only the handoff generation written by this launch. A delayed cleanup
+/// thread or failed older spawn must never delete a newer payload for the same
+/// session label.
+fn remove_sim_payload_if_identity(path: &std::path::Path, expected: SimPayloadIdentity) {
+    if sim_payload_identity(path).ok() == Some(expected) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+fn write_sim_payload(session_label: &str, payload: &str) -> Result<SimPayloadIdentity, String> {
+    if !is_safe_session_label(session_label) || !is_valid_b64_payload(payload) {
+        return Err("invalid simulator handoff".to_string());
+    }
+    let path = sim_payload_path(session_label);
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let tmp = std::env::temp_dir().join(format!(
+        ".driftstack-sim-{session_label}-{}-{nonce}.tmp",
+        std::process::id()
+    ));
     #[cfg(unix)]
     {
         use std::io::Write as _;
         use std::os::unix::fs::OpenOptionsExt as _;
-        // O_CREAT|O_TRUNC|O_WRONLY with mode 0600. create(true) +
-        // truncate(true) overwrites a stale file from a prior launch.
         let mut f = std::fs::OpenOptions::new()
             .write(true)
-            .create(true)
-            .truncate(true)
+            .create_new(true)
             .mode(0o600)
-            .open(&path)
+            .open(&tmp)
             .map_err(|e| e.to_string())?;
-        f.write_all(key.as_bytes()).map_err(|e| e.to_string())?;
-        Ok(())
+        if let Err(error) = f.write_all(payload.as_bytes()).and_then(|()| f.sync_all()) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(error.to_string());
+        }
     }
     #[cfg(not(unix))]
     {
-        // Non-Unix: best-effort plain write (the separate-app handoff
-        // is a macOS feature; this branch keeps the command compiling
-        // cross-platform). Windows ACLs already restrict the temp dir
-        // to the current user.
-        std::fs::write(&path, key.as_bytes()).map_err(|e| e.to_string())
+        std::fs::write(&tmp, payload.as_bytes()).map_err(|e| e.to_string())?;
     }
+    std::fs::rename(&tmp, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e.to_string()
+    })?;
+    sim_payload_identity(&path)
 }
 
-/// Read AND delete (unlink) the per-session gui_control_key handoff
-/// file the main app wrote. Single-use: the simulator calls this once
-/// on launch; the unlink ensures the plaintext doesn't linger on disk.
-/// Returns `Ok(None)` when no file exists (in-process window case, or
-/// the handoff wasn't used) so the caller falls back to the API key.
-#[tauri::command]
-fn sim_key_take(session_id: String) -> Result<Option<String>, String> {
-    if session_id.is_empty() {
+/// Open without following symlinks, unlink immediately, then perform a bounded
+/// read of the complete session payload. The writer is 0600; reject broader
+/// Unix permissions and non-regular files before any content reaches a WebView.
+fn take_sim_payload(session_label: &str) -> Result<Option<String>, String> {
+    if !is_safe_session_label(session_label) {
         return Ok(None);
     }
-    let path = sim_key_path(&session_id);
-    match std::fs::read_to_string(&path) {
-        Ok(contents) => {
-            // Unlink immediately (best-effort — a failed unlink must
-            // not lose the key we already read).
-            let _ = std::fs::remove_file(&path);
-            let trimmed = contents.trim();
-            if trimmed.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(trimmed.to_string()))
-            }
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
+    let path = sim_payload_path(session_label);
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.custom_flags(libc::O_NOFOLLOW);
     }
+    let file = match options.open(&path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            // Consume a corrupt/symlink handoff rather than retrying it forever.
+            let _ = std::fs::remove_file(&path);
+            return Err(e.to_string());
+        }
+    };
+    // The open handle remains valid after unlink and is now immune to path swaps.
+    let _ = std::fs::remove_file(&path);
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() {
+        return Err("simulator handoff is not a regular file".to_string());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err("simulator handoff permissions are not owner-only".to_string());
+        }
+    }
+    use std::io::Read as _;
+    let mut contents = String::new();
+    file.take((MAX_SIM_PAYLOAD_B64_BYTES + 1) as u64)
+        .read_to_string(&mut contents)
+        .map_err(|e| e.to_string())?;
+    if !is_valid_b64_payload(&contents) {
+        return Err("invalid or oversized simulator handoff payload".to_string());
+    }
+    Ok(Some(contents))
 }
 
 /// Set the running app's macOS Dock ICON to reflect the live session (founder
@@ -1253,65 +1301,136 @@ mod tests {
         // Spaces / control chars / quotes are not in the base64 alphabet.
         assert!(!is_valid_b64_payload("not valid"));
         assert!(!is_valid_b64_payload("'); alert(1) //"));
+        assert!(!is_valid_b64_payload(
+            &"A".repeat(MAX_SIM_PAYLOAD_B64_BYTES + 1)
+        ));
     }
 
     #[test]
-    fn sim_key_path_stays_in_temp_dir_for_normal_ids() {
+    fn sim_payload_path_stays_in_temp_dir_for_normal_ids() {
         // The canonical agent-session id (`agt_<uuid>`) maps to a clean
         // file name directly under the temp dir.
-        let p = sim_key_path("agt_00000000-0000-4000-8000-000000000001");
+        let p = sim_payload_path("agt_00000000-0000-4000-8000-000000000001");
         assert_eq!(p.parent(), Some(std::env::temp_dir().as_path()));
         assert_eq!(
             p.file_name().and_then(|n| n.to_str()),
-            Some("driftstack-sim-agt_00000000-0000-4000-8000-000000000001.key"),
+            Some("driftstack-sim-agt_00000000-0000-4000-8000-000000000001.handoff"),
         );
     }
 
     #[test]
-    fn sim_key_path_sanitises_traversal_and_separators() {
-        // A hostile id can never escape the temp dir: `/`, `\`, and the
-        // `.` in `..` survive only as the literal allowed `.` (no path
-        // SEPARATOR), so the result is still a single file in temp_dir.
-        let p = sim_key_path("../../etc/passwd");
-        assert_eq!(p.parent(), Some(std::env::temp_dir().as_path()));
-        // The slashes became underscores; no traversal component remains.
-        let name = p.file_name().and_then(|n| n.to_str()).unwrap();
-        assert!(!name.contains('/'));
-        assert!(!name.contains('\\'));
-        assert_eq!(name, "driftstack-sim-.._.._etc_passwd.key");
+    fn sim_payload_label_rejects_traversal_and_separators() {
+        assert!(!is_safe_session_label("../../etc/passwd"));
+        assert!(!is_safe_session_label("agt_x/y"));
+        assert!(!is_safe_session_label("agt_x\\y"));
+        assert!(!is_safe_session_label(""));
     }
 
     #[test]
-    fn sim_key_write_then_take_round_trips_and_unlinks() {
+    fn sim_payload_write_then_take_round_trips_and_unlinks() {
         // Use a unique id so parallel test runs don't collide.
         let id = format!("test-roundtrip-{}", std::process::id());
-        let key = "gck_testkeytestkeytestkeytestkey";
-        sim_key_write(id.clone(), key.to_string()).expect("write");
-        // First take returns the key and unlinks.
-        let got = sim_key_take(id.clone()).expect("take");
-        assert_eq!(got.as_deref(), Some(key));
+        let payload = "d2luZG93PXNpbXVsYXRvcg==";
+        let _ = std::fs::remove_file(sim_payload_path(&id));
+        write_sim_payload(&id, payload).expect("write");
+        // First take returns the complete payload and unlinks.
+        let got = take_sim_payload(&id).expect("take");
+        assert_eq!(got.as_deref(), Some(payload));
         // Second take finds no file → None (single-use).
-        let again = sim_key_take(id).expect("take again");
+        let again = take_sim_payload(&id).expect("take again");
         assert_eq!(again, None);
+    }
+
+    #[test]
+    fn stale_cleanup_never_deletes_a_newer_handoff_generation() {
+        let id = format!("test-generation-{}", std::process::id());
+        let path = sim_payload_path(&id);
+        let _ = std::fs::remove_file(&path);
+        let old = write_sim_payload(&id, "b2xk").expect("old write");
+        let new = write_sim_payload(&id, "bmV3").expect("new write");
+        assert_ne!(old, new);
+
+        remove_sim_payload_if_identity(&path, old);
+        assert!(path.exists());
+        assert_eq!(
+            take_sim_payload(&id).expect("take").as_deref(),
+            Some("bmV3")
+        );
     }
 
     #[cfg(unix)]
     #[test]
-    fn sim_key_write_uses_owner_only_0600_mode() {
+    fn sim_payload_write_uses_owner_only_0600_mode() {
         use std::os::unix::fs::PermissionsExt as _;
         let id = format!("test-perms-{}", std::process::id());
-        sim_key_write(id.clone(), "gck_perm".to_string()).expect("write");
-        let path = sim_key_path(&id);
+        let path = sim_payload_path(&id);
+        let _ = std::fs::remove_file(&path);
+        write_sim_payload(&id, "YWJjMTIz").expect("write");
         let mode = std::fs::metadata(&path).unwrap().permissions().mode();
         // Low 9 bits = rwx for owner/group/other; expect 0600.
         assert_eq!(mode & 0o777, 0o600);
         let _ = std::fs::remove_file(&path);
     }
 
+    #[cfg(unix)]
     #[test]
-    fn sim_key_take_missing_is_none_not_error() {
+    fn sim_payload_take_rejects_and_removes_a_symlink() {
+        use std::os::unix::fs::symlink;
+        let id = format!("test-symlink-{}", std::process::id());
+        let path = sim_payload_path(&id);
+        let target =
+            std::env::temp_dir().join(format!(".driftstack-sim-target-{}", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&target);
+        std::fs::write(&target, "d2luZG93PXNpbXVsYXRvcg==").expect("target");
+        symlink(&target, &path).expect("symlink");
+
+        assert!(take_sim_payload(&id).is_err());
+        assert!(!path.exists());
+        assert!(target.exists());
+        let _ = std::fs::remove_file(target);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sim_payload_take_rejects_non_owner_permissions() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let id = format!("test-open-perms-{}", std::process::id());
+        let path = sim_payload_path(&id);
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, "d2luZG93PXNpbXVsYXRvcg==").expect("write");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
+            .expect("permissions");
+
+        assert!(take_sim_payload(&id).is_err());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn sim_payload_take_missing_is_none_not_error() {
         let id = format!("test-missing-{}", std::process::id());
+        let _ = std::fs::remove_file(sim_payload_path(&id));
         // No file written → Ok(None), never Err.
-        assert_eq!(sim_key_take(id).expect("take"), None);
+        assert_eq!(take_sim_payload(&id).expect("take"), None);
+    }
+
+    #[test]
+    fn simulator_process_args_contain_only_the_non_secret_label() {
+        let args = simulator_open_args(
+            "/Applications/Driftstack Simulator.app",
+            "agt_00000000-0000-4000-8000-000000000001",
+        );
+        assert_eq!(
+            args,
+            vec![
+                "-n",
+                "-a",
+                "/Applications/Driftstack Simulator.app",
+                "--args",
+                "--ds-label=agt_00000000-0000-4000-8000-000000000001",
+            ],
+        );
+        assert!(!args.iter().any(|arg| arg.contains("token=")));
+        assert!(!args.iter().any(|arg| arg.contains("ck=")));
     }
 }

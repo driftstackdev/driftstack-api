@@ -6,11 +6,10 @@
 // command. This test pins exactly which fields land in that payload — including
 // the proxy exit `cc` (country code) that drives the separate app's macOS Dock
 // tile (founder 2026-06-18) — so a future refactor can't silently drop one. The
-// per-session control key (a 24h session-scoped token) rides this payload as the
-// PRIMARY handoff (the SAME in-process location.search channel the LiveKit token
-// already uses) so the separate app authorizes on mount without racing the
-// temp-file read; sim_key_write stays as the secondary fallback (founder
-// 2026-06-18 — this fixed the permanent "Connecting…" stall).
+// complete payload crosses Tauri IPC once; Rust stores it in an owner-only,
+// single-use handoff file and launches the separate app with only the plain
+// session label in argv. This pins that no secondary secret-bearing command is
+// reintroduced.
 //
 // There is NO in-app webview fallback: when `launch_simulator` rejects the
 // opener returns `opened:false` with a reason for the caller to surface (the
@@ -89,25 +88,25 @@ describe('openSimulatorWindow — session handoff payload', () => {
     expect(launchedQuery().get('cc')).toBe('');
   });
 
-  it('hands the control key off in the query payload (primary, race-free on mount) AND via sim_key_write (secondary)', async () => {
+  it('hands the control key off once inside the protected launch payload', async () => {
     await openSimulatorWindow({
       sessionId: 'agt_k',
       info,
       countryCode: 'US',
       controlKey: 'gck_secret',
     });
-    // SECONDARY: the 0600 temp file (belt-and-suspenders fallback).
-    expect(invoke).toHaveBeenCalledWith('sim_key_write', {
-      sessionId: 'agt_k',
-      key: 'gck_secret',
-    });
-    // PRIMARY: in the base64'd launch payload, which Rust applies to the separate
-    // app's window.location.search (the SAME in-process channel the LiveKit token
-    // already rides) so the simulator authorizes the control endpoints on mount
-    // without racing the temp-file read — the cause of the permanent "Connecting…"
-    // stall (founder 2026-06-18). The control key is a 24h session-scoped token.
+    expect(invoke.mock.calls.filter(([command]) => command === 'launch_simulator')).toHaveLength(1);
+    expect(invoke.mock.calls.some(([command]) => command.startsWith('sim_key'))).toBe(false);
+    // Rust persists this complete encoded payload in a 0600 single-use file and
+    // passes only sessionLabel in argv. The WebView gets the token/key without a
+    // second racing handoff.
     const q = launchedQuery();
     expect(q.get('ck')).toBe('gck_secret');
+    const launchArgs = invoke.mock.calls.find(
+      ([command]) => command === 'launch_simulator',
+    )?.[1] as { payload: unknown; sessionLabel: unknown } | undefined;
+    expect(typeof launchArgs?.payload).toBe('string');
+    expect(launchArgs?.sessionLabel).toBe('agt_k');
   });
 
   it('hands the API base URL off in the query payload (base=) so the separate app targets the real server, not localhost (founder 2026-06-23 control-failed root)', () => {

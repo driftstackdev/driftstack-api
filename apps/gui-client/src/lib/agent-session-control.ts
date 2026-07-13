@@ -11,8 +11,8 @@
 // the main app's keychain (different app → different keychain ACL), so
 // loadSettings().apiKey is empty there and every control call used to 401
 // ("Connecting…" forever). When a per-session gui_control_key is available
-// (handed off from the main app via a 0600 temp file — see
-// lib/open-simulator.ts + the Rust sim_key_write/sim_key_take commands), the
+// (handed off from the main app via a complete 0600 single-use payload file —
+// see lib/open-simulator.ts + the Rust launch_simulator command), the
 // transport sends it in the `x-driftstack-gui-control-key` header INSTEAD of
 // the `Authorization: Bearer <apiKey>`. The control key is scoped to this ONE
 // session and expires in 24h; it is NOT the account API key. The in-app
@@ -23,8 +23,8 @@ import { loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
 
-/** Per-session control credential, threaded from the simulator entry
- *  (sim_key_take / query param) through SimulatorWindow into each
+/** Per-session control credential, threaded from the protected internal query
+ *  through SimulatorWindow into each
  *  control call. `null` → use the account API key (in-app window).
  *  `baseUrl` (founder 2026-06-23) — the PUBLIC API host handed off at launch.
  *  The SEPARATE Simulator app's settings store may be empty (→ loadSettings

@@ -105,16 +105,10 @@ export async function openSimulatorWindow({
     // Session id — lets the simulator window attach recordings to the
     // session (night-arc I Record pill).
     session: sessionId,
-    // Per-session gui_control_key carried in the query as the PRIMARY,
-    // race-free handoff so the SEPARATE simulator app authorizes the
-    // control endpoints on mount (without it the temp-file handoff races
-    // the Rust location.search reload → getAgentSession 401s → mode stays
-    // null → "Connecting…" forever, founder-hit 2026-06-18). This rides the
-    // SAME in-process location.search channel as the LiveKit token above —
-    // it is NOT argv-exposed (the launch payload is base64'd, applied to
-    // window.location.search by Rust), so it is no less safe than the token.
-    // The 0600 temp-file handoff (sim_key_write/sim_key_take) is kept as a
-    // secondary path. Empty when no control key is available.
+    // Per-session gui_control_key. Rust atomically writes this COMPLETE encoded
+    // query to a 0600 single-use handoff file; argv carries only sessionId. The
+    // Simulator consumes/unlinks the file before applying the internal query.
+    // Base64 is encoding, never process-list protection.
     ck: controlKey ?? '',
     // PUBLIC API host for the separate app (its store may be empty → would
     // default to localhost:3000 and fail every control call). Non-secret;
@@ -125,42 +119,23 @@ export async function openSimulatorWindow({
   // Launch the SEPARATE "Driftstack Simulator" app (its own Dock icon, founder
   // 2026-06-18) — the ONLY path the simulator opens. The separate app can't read
   // the main app's keychain, so it can't use the account API key; instead the
-  // main app mints a per-session gui_control_key (24h TTL) and hands it off TWO
-  // ways: (1) PRIMARY — in the base64'd launch payload's `ck=` query field above,
-  // which Rust applies to window.location.search (in-process, NOT argv/`ps`-
-  // visible — same channel as the LiveKit token); SimulatorWindow reads it on
-  // mount with no reload race. (2) SECONDARY — a 0600 temp file (sim_key_write
-  // here / sim_key_take in the simulator), kept as a belt-and-suspenders fallback
-  // (this build is NOT sandboxed — Entitlements.plist has no
-  // com.apple.security.app-sandbox — so /tmp is shared between the two apps). See
-  // docs/internal/2026-06-18-separate-simulator-app-plan.md.
+  // main app mints a per-session gui_control_key (24h TTL). launch_simulator
+  // receives the complete encoded query over Tauri IPC, writes it to an
+  // owner-only single-use handoff file, and launches with only the non-secret
+  // session label in argv. The Simulator consumes the file before creating or
+  // updating the session WebView.
   //
   // No in-app webview fallback: a borderless window inside the main GUI read as
   // embedded ("still in the same window as the main GUI") and a silent fallback
   // caused a multi-hour "still the same window" debugging saga (founder
   // 2026-06-12). The separate app is reliably installed now, so a launch failure
   // returns a clean `opened:false` reason for the caller to surface to the user.
-  // Track whether we wrote the temp control-key file so we can remove it if the
-  // launch throws AFTER the write (e.g. simulator not installed): otherwise each
-  // failed retry strands a 24h-TTL credential in the shared 0600 /tmp file.
-  let wroteControlKey = false;
   try {
     const { invoke } = await import('@tauri-apps/api/core');
-    if (controlKey !== undefined && controlKey.length > 0) {
-      // Write the control key to the shared 0600 temp file BEFORE the
-      // launch so the simulator finds it on startup. Best-effort: a
-      // failure just means the simulator falls back to the (failing)
-      // keychain read; we don't block the launch on it.
-      try {
-        await invoke('sim_key_write', { sessionId, key: controlKey });
-        wroteControlKey = true;
-      } catch {
-        // ignore — non-fatal; the simulator degrades to API-key auth.
-      }
-    }
     // `sessionLabel` (the plain session id) is the per-session window KEY in the
     // separate app (multi-window, founder 2026-06-23): each session opens/focuses its
-    // own iPhone window. `payload` stays the b64 (ps-safe) handoff.
+    // own iPhone window. `payload` crosses only Tauri IPC; Rust writes it to an
+    // owner-only single-use file. Base64 is not process-list protection.
     await invoke('launch_simulator', { payload: btoa(params.toString()), sessionLabel: sessionId });
     return { opened: true };
   } catch (err) {
@@ -170,17 +145,6 @@ export async function openSimulatorWindow({
     // window" saga).
     const reason = err instanceof Error ? err.message : String(err);
     console.warn('[simulator] launch_simulator failed; no in-app fallback:', reason);
-    // The simulator never launched to consume it, so drop the temp credential we
-    // wrote above — best-effort; leaving it would accumulate a stale key per
-    // failed retry. sim_key_take reads-and-deletes the shared 0600 /tmp file.
-    if (wroteControlKey) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('sim_key_take', { sessionId });
-      } catch {
-        // ignore — best-effort cleanup; the file carries a 24h TTL regardless.
-      }
-    }
     return { opened: false, reason };
   }
 }

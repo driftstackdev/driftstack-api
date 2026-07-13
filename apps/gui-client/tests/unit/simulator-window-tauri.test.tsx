@@ -122,6 +122,9 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
       '/?window=simulator&ws=wss://lk&token=tok&session=agt_1&cc=US&profile=Amsterdam%20Shopper',
     );
     renderSim();
+    // The join token is parsed into state synchronously, then scrubbed from URL
+    // history by a layout effect before the first paint.
+    expect(window.location.search).toBe('?window=simulator&session=agt_1');
     await waitFor(() => {
       // The flag is derived from the country code; the profile name rides the
       // icon as the caption (founder 2026-06-18).
@@ -130,6 +133,26 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
         profileName: 'Amsterdam Shopper',
       });
     });
+  });
+
+  it('scrubs the LiveKit/control secrets and persists the control key only in Keychain', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=livekit-secret&session=agt_key&ck=gck_secret',
+    );
+    renderSim();
+
+    expect(window.location.search).toBe('?window=simulator&session=agt_key');
+    expect(window.location.href).not.toContain('livekit-secret');
+    expect(window.location.href).not.toContain('gck_secret');
+    await waitFor(() => {
+      expect(invokeArgs('secret_save')).toEqual({
+        key: 'gui_control:agt_key',
+        value: 'gck_secret',
+      });
+    });
+    expect(getAgentSession).toHaveBeenCalledWith('agt_key', { controlKey: 'gck_secret' });
   });
 
   it('sets the Dock tile with an empty profile name when the session has none (flag only)', async () => {

@@ -1,0 +1,87 @@
+// The per-session GUI control key authorizes session reads, control, messages,
+// cookies, files, and termination for up to 24 hours. Keep it out of ordinary
+// WebView storage: each session gets a dedicated OS credential-store item.
+//
+// Older builds wrote `ds-gck-*` values to localStorage. Migration removes every
+// legacy value synchronously before awaiting the credential store. If Keychain
+// is locked, the current process may retain the returned value in memory for
+// this launch, but plaintext is never written back to disk.
+
+const CONTROL_SECRET_PREFIX = 'gui_control:';
+const LEGACY_GCK_STORE_PREFIX = 'ds-gck-';
+
+function isSafeControlSessionId(sessionId: string): boolean {
+  return sessionId.length > 0 && sessionId.length <= 64 && /^[A-Za-z0-9._-]+$/.test(sessionId);
+}
+
+function controlSecretName(sessionId: string): string {
+  return `${CONTROL_SECRET_PREFIX}${sessionId}`;
+}
+
+function takeLegacyControlKeys(): Map<string, string> {
+  const found = new Map<string, string>();
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const name = localStorage.key(i);
+      if (name !== null && name.startsWith(LEGACY_GCK_STORE_PREFIX)) keys.push(name);
+    }
+    for (const name of keys) {
+      const sessionId = name.slice(LEGACY_GCK_STORE_PREFIX.length);
+      const value = localStorage.getItem(name);
+      localStorage.removeItem(name);
+      if (isSafeControlSessionId(sessionId) && value !== null && value.length > 0) {
+        found.set(sessionId, value);
+      }
+    }
+  } catch {
+    // Storage access failed; no disk fallback is created.
+  }
+  return found;
+}
+
+export async function loadProtectedControlKey(sessionId: string): Promise<string> {
+  if (!isSafeControlSessionId(sessionId)) return '';
+  const { invoke } = await import('@tauri-apps/api/core');
+  const value = await invoke<unknown>('secret_load', { key: controlSecretName(sessionId) });
+  return typeof value === 'string' ? value : '';
+}
+
+export async function persistControlKey(sessionId: string, key: string): Promise<void> {
+  if (!isSafeControlSessionId(sessionId) || key === '') return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('secret_save', { key: controlSecretName(sessionId), value: key });
+}
+
+export async function migrateLegacyControlKeys(): Promise<Map<string, string>> {
+  const legacy = takeLegacyControlKeys();
+  for (const [sessionId, value] of legacy) {
+    try {
+      const protectedValue = await loadProtectedControlKey(sessionId);
+      if (protectedValue === '') await persistControlKey(sessionId, value);
+    } catch {
+      // Plaintext was already purged. The current session may use the returned
+      // map in memory for this launch; stale sessions require a fresh reopen.
+    }
+  }
+  return legacy;
+}
+
+/** Drop protected + legacy copies before explicitly ending the session. */
+export async function clearPersistedControlKey(sessionId: string): Promise<void> {
+  if (!isSafeControlSessionId(sessionId)) return;
+  try {
+    localStorage.removeItem(LEGACY_GCK_STORE_PREFIX + sessionId);
+  } catch {
+    // Nothing else to clear on disk.
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('secret_delete', { key: controlSecretName(sessionId) });
+}
+
+/** Retain only the non-secret routing fields after the initial query is parsed. */
+export function safeSimulatorSearch(sessionId: string): string {
+  const params = new URLSearchParams({ window: 'simulator' });
+  if (isSafeControlSessionId(sessionId)) params.set('session', sessionId);
+  return `?${params.toString()}`;
+}

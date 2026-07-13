@@ -225,6 +225,13 @@ describe('SimulatorWindow — floating iPhone', () => {
     on.unmount();
 
     // Explicit opt-out ('0') → identity in the toolbar, no address bar.
+    // A real reopen receives a fresh protected handoff; the first mount scrubbed
+    // its token-bearing URL from history by design.
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017&profile=Amsterdam%20Shopper',
+    );
     localStorage.setItem('ds-sim-browser-mode', '0');
     const off = render(
       <RecordingsProvider>

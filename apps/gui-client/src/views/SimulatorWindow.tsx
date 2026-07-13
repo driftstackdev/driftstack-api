@@ -15,7 +15,7 @@
 // Session join info (LiveKit ws_url + token) + the device label arrive via the
 // window URL query — the opener encodes them when creating the window.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
@@ -75,6 +75,13 @@ import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/pa
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson } from '../lib/download';
 import { persistBaseUrl } from '../lib/settings';
+import {
+  clearPersistedControlKey,
+  loadProtectedControlKey,
+  migrateLegacyControlKeys,
+  persistControlKey,
+  safeSimulatorSearch,
+} from '../lib/simulator-control-key';
 import { useTransientNotice } from '../lib/use-transient-notice';
 import { pasteClipboardToDevice } from '../lib/device-paste';
 import {
@@ -387,11 +394,10 @@ interface SessionQuery {
    *  string → no country (the Dock tile shows no badge). */
   countryCode: string;
   /** Per-session gui_control_key carried in the query as the PRIMARY,
-   *  race-free control handoff (the opener always appends it via `ck=` when a
-   *  key is available — see lib/open-simulator.ts). The 0600 temp-file handoff
-   *  (sim_key_take) is a secondary path. Read on mount so controlAuth is set
-   *  without waiting on the Rust location.search reload. Empty string → no key
-   *  from the query (in-app window → fall back to the account API key). */
+   *  race-free control handoff. Rust consumes the owner-only single-use file,
+   *  then appends `ck=` only to this internal WebView URL. It is parsed into
+   *  memory synchronously and scrubbed from history before paint. Empty string
+   *  → no fresh key; restore the OS credential-store value if available. */
   controlKey: string;
   /** PUBLIC API base URL handed off at launch (`base=`). The SEPARATE Simulator
    *  app's own store may be empty → loadSettings() would default to
@@ -399,36 +405,6 @@ interface SessionQuery {
    *  on mount so authedFetch targets the right server (founder 2026-06-23). Empty
    *  → leave the app's own configured baseUrl alone. */
   baseUrl: string;
-}
-
-/** Parse the simulator session from a query string. Defaults to the window's
- *  own `location.search`; the relaunch `ds-session` event passes a fresh query
- *  string so the window can switch session IN PLACE (without a reload that
- *  would tear down the live LiveKit Room). */
-// Per-session gui_control_key persistence (founder 2026-06-23 "control request
-// failed always"). The separate Simulator app receives its control key ONCE at
-// launch (via the sandboxed `ck=` query OR the single-use temp file). A reopened
-// or relaunched window arrives with neither → controlAuth was null → every control
-// HTTP call (mode / End-session / cookies) failed while manual (LiveKit) kept
-// working. Persisting the key (app-local, same risk class as the query/temp-file
-// handoff; 24h server TTL, a stale one just 401s → graceful manual) lets a reopen
-// restore it. Keyed by the agt_<uuid> session id.
-const GCK_STORE_PREFIX = 'ds-gck-';
-function persistControlKey(sessionId: string, key: string): void {
-  if (sessionId === '' || key === '') return;
-  try {
-    localStorage.setItem(GCK_STORE_PREFIX + sessionId, key);
-  } catch {
-    /* storage disabled — the key just won't survive a reopen */
-  }
-}
-function readPersistedControlKey(sessionId: string): string {
-  if (sessionId === '') return '';
-  try {
-    return localStorage.getItem(GCK_STORE_PREFIX + sessionId) ?? '';
-  } catch {
-    return '';
-  }
 }
 
 /** Build the ControlAuth, attaching the handed-off API host so the separate
@@ -439,19 +415,10 @@ function controlAuthWith(controlKey: string, baseUrl: string): ControlAuth {
   return baseUrl !== '' ? { controlKey, baseUrl } : { controlKey };
 }
 
-/** Drop the persisted key once the session is explicitly ended — the 24h
- *  credential is useless after the session is DELETE'd, and clearing it stops
- *  the per-session entries from accumulating unbounded in localStorage (review
- *  a482b Low-(a)). Best-effort. */
-function clearPersistedControlKey(sessionId: string): void {
-  if (sessionId === '') return;
-  try {
-    localStorage.removeItem(GCK_STORE_PREFIX + sessionId);
-  } catch {
-    /* storage disabled — nothing to clear */
-  }
-}
-
+/** Parse the simulator session from a query string. Defaults to the window's
+ *  own `location.search`; the relaunch `ds-session` event passes a fresh query
+ *  string so the window can switch session IN PLACE (without a reload that
+ *  would tear down the live LiveKit Room). */
 function infoFromQuery(search: string = window.location.search): SessionQuery {
   const q = new URLSearchParams(search);
   const ws_url = q.get('ws');
@@ -462,8 +429,8 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
   const sessionId = q.get('session') ?? '';
   // Proxy exit country (ISO alpha-2) for the macOS Dock tile (empty → no badge).
   const countryCode = q.get('cc') ?? '';
-  // Sandboxed-fallback control key (see SessionQuery.controlKey). The
-  // non-sandboxed handoff is the 0600 temp file, read via sim_key_take.
+  // Control key from the protected handoff query. The Rust layer consumed and
+  // unlinked the 0600 handoff file before creating/updating this WebView.
   const controlKey = q.get('ck') ?? '';
   // PUBLIC API host handed off at launch (see SessionQuery.baseUrl).
   const baseUrl = q.get('base') ?? '';
@@ -977,8 +944,7 @@ const MODE_OPTIONS: { value: SessionMode; label: string }[] = [
 ];
 
 export type SessionControlAction =
-  | { kind: 'mode'; target: SessionMode }
-  | { kind: 'takeover' | 'handback' | 'message' | 'end' };
+  { kind: 'mode'; target: SessionMode } | { kind: 'takeover' | 'handback' | 'message' | 'end' };
 
 type OwnedSessionControlAction = SessionControlAction & {
   sessionId: string;
@@ -2494,6 +2460,15 @@ export function SimulatorWindow(): JSX.Element {
   const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
   const { info, deviceName, profileName, proxyLabel, sessionId, countryCode, controlKey, baseUrl } =
     query;
+  // Join tokens and control credentials are needed only for the synchronous
+  // state initializer above. Remove them from the visible URL/history before
+  // paint so crash reports, screenshots, reload history, and copied URLs retain
+  // only non-secret routing data. A refresh intentionally requires a fresh
+  // opener payload (or the protected per-session control credential).
+  useLayoutEffect(() => {
+    const safeSearch = safeSimulatorSearch(sessionId);
+    if (window.location.search !== safeSearch) window.history.replaceState({}, '', safeSearch);
+  }, [sessionId]);
   // Founder 2026-06-23 — the separate Simulator app starts with an empty settings
   // store (baseUrl → localhost:3000 default), so its control HTTP calls fail. The
   // launch hands off the real API host via `base=`; persist it so authedFetch
@@ -2506,16 +2481,19 @@ export function SimulatorWindow(): JSX.Element {
   // Per-session control credential. The SEPARATE simulator app can't
   // read the main app's keychain, so it authorizes the control
   // endpoints with the per-session gui_control_key instead of the
-  // account API key. Resolution: the `?ck=` query param is the PRIMARY,
-  // race-free handoff — seeded synchronously here so controlAuth is set
-  // on the very first render (no reload race → getAgentSession succeeds →
-  // mode resolves → the mode buttons enable). The 0600 temp-file handoff
-  // (sim_key_take, Tauri command) is checked async below as a secondary
-  // path and only OVERRIDES when it actually returns a key. null → use the
-  // API key (in-app window). Re-loaded when the session switches.
+  // account API key. The protected handoff query is seeded synchronously so
+  // controlAuth exists on the first render. It is then saved to Keychain; a
+  // reopen with no fresh key restores only from Keychain. Legacy plaintext is
+  // purged before the first async credential-store read. null → use the API key
+  // (in-app window). Re-loaded when the session switches.
   const [controlAuth, setControlAuth] = useState<ControlAuth>(() =>
     controlAuthWith(controlKey, baseUrl),
   );
+  // Never expose the prior session's credential during an in-place relaunch.
+  // Layout timing resets it before the switched session can receive input.
+  useLayoutEffect(() => {
+    setControlAuth(controlAuthWith(controlKey, baseUrl));
+  }, [sessionId, controlKey, baseUrl]);
   useEffect(() => {
     // A new room/session starts with a clean control-health slate — never carry
     // a latched controlUnreachable badge across a session switch.
@@ -2526,29 +2504,15 @@ export function SimulatorWindow(): JSX.Element {
     }
     let cancelled = false;
     void (async () => {
-      // Try the temp-file handoff first (Tauri-only). A returned key is
-      // single-use — sim_key_take unlinks it — so we hold it in state.
-      if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-        try {
-          const { invoke } = await import('@tauri-apps/api/core');
-          const fromFile = await invoke<string | null>('sim_key_take', { sessionId });
-          if (!cancelled && typeof fromFile === 'string' && fromFile.length > 0) {
-            setControlAuth(controlAuthWith(fromFile, baseUrl));
-            // Persist so a later REOPEN of this session (temp file already consumed,
-            // no fresh ck=) can restore the key (founder 2026-06-23 control-failed).
-            persistControlKey(sessionId, fromFile);
-            return;
-          }
-        } catch {
-          // No handoff file / not Tauri / command failed → fall through
-          // to the query param (sandboxed) or API key (in-app).
-        }
-      }
+      // Purge every legacy plaintext key before awaiting Keychain. The returned
+      // map is an in-memory, current-launch fallback only when Keychain is locked.
+      const legacy = await migrateLegacyControlKeys();
       if (cancelled) return;
-      // Query-param handoff (sandboxed launch) — persist it for reopens too.
+      // Fresh protected-file handoff — persist it for a later reopen. Failure is
+      // intentionally memory-only; never create a plaintext fallback.
       if (controlKey !== '') {
         setControlAuth(controlAuthWith(controlKey, baseUrl));
-        persistControlKey(sessionId, controlKey);
+        await persistControlKey(sessionId, controlKey).catch(() => undefined);
         return;
       }
       // REOPEN survival (founder 2026-06-23): a relaunched/reopened separate-app
@@ -2558,8 +2522,13 @@ export function SimulatorWindow(): JSX.Element {
       // over LiveKit. Restore the per-session key persisted from a prior launch. A
       // stale (>24h TTL) key just 401s, which now degrades to Manual rather than a
       // blocking error.
-      const stored = readPersistedControlKey(sessionId);
-      setControlAuth(controlAuthWith(stored, baseUrl));
+      let stored = '';
+      try {
+        stored = await loadProtectedControlKey(sessionId);
+      } catch {
+        stored = legacy.get(sessionId) ?? '';
+      }
+      if (!cancelled) setControlAuth(controlAuthWith(stored, baseUrl));
     })();
     return () => {
       cancelled = true;
@@ -2567,8 +2536,8 @@ export function SimulatorWindow(): JSX.Element {
   }, [sessionId, controlKey, baseUrl]);
   // Relaunch session-switch listener (Tauri-only). The Rust side validated the
   // b64 payload before emitting; decode it the same way the initial launch does
-  // (atob → query string) and re-parse. Also sync window.history so a later
-  // reload keeps the new session.
+  // (atob → query string) and re-parse. Immediately scrub the token/key from
+  // history; a later reload must obtain a fresh join token from the opener.
   useEffect(() => {
     if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
     let unlisten: (() => void) | undefined;
@@ -2578,8 +2547,9 @@ export function SimulatorWindow(): JSX.Element {
         try {
           const search = atob(event.payload);
           const qs = search.startsWith('?') ? search : `?${search}`;
-          window.history.replaceState({}, '', qs);
-          setQuery(infoFromQuery(qs));
+          const next = infoFromQuery(qs);
+          window.history.replaceState({}, '', safeSimulatorSearch(next.sessionId));
+          setQuery(next);
         } catch {
           // Garbled payload — ignore; the current session keeps streaming.
         }
@@ -5690,12 +5660,17 @@ export function SimulatorWindow(): JSX.Element {
     setEndArmed(false);
     const request = beginControlAction({ kind: 'end' });
     if (request === null) return;
-    // The session is ending either way — drop its persisted control key so the
-    // 24h credential doesn't linger in localStorage + entries don't accumulate.
-    clearPersistedControlKey(request.sessionId);
+    // Start protected-credential deletion in parallel with the server request.
+    // Normal Keychain deletion finishes before destroy; a locked/prompting store
+    // is bounded so it can never make End unusable.
+    const credentialCleanup = Promise.race([
+      clearPersistedControlKey(request.sessionId).catch(() => undefined),
+      new Promise<void>((resolve) => window.setTimeout(resolve, 750)),
+    ]);
     void endAgentSession(request.sessionId, controlAuth)
       .then(async () => {
         if (!ownsControlAction(request)) return;
+        await credentialCleanup;
         // Keep the session guard INSIDE the async window callback as well. The
         // dynamic Tauri import yields; a ds-session relaunch can land in that
         // gap, and destroying by window label after the swap would close the
