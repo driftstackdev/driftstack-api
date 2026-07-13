@@ -384,6 +384,7 @@ const accountId = account.id;
       const ACCOUNT_DETAIL_TIMEOUT_MS = 15_000;
       let hydrationController = null;
       let hydrationGeneration = 0;
+      let auditEntries = [];
 
       // Derive the live UUID from the URL path rather than the SSG-baked
       // attribute so a fallback / SSR conversion works without changing
@@ -496,6 +497,7 @@ const accountId = account.id;
       }
 
       function renderAudit(entries) {
+        auditEntries = Array.isArray(entries) ? entries : [];
         if (!list) return;
         if (entries.length === 0) {
           list.innerHTML =
@@ -716,6 +718,51 @@ const accountId = account.id;
         } else {
           showBanner(
             'Tier-change outcome is unknown because the response timed out, and the account could not be refreshed. Verify its tier before retrying.',
+          );
+        }
+      }
+
+      function auditPayloadMatches(entry, action, payload) {
+        if (!entry || entry.action !== action || entry.result !== 'success') return false;
+        const input = entry.input_payload;
+        if (!input || typeof input !== 'object') return false;
+        if (action === 'audit_note.added') return input.note === payload.note;
+        return (
+          input.external_reference === payload.external_reference &&
+          Number(input.amount_cents) === payload.amount_cents &&
+          String(input.currency || 'USD').toUpperCase() === 'USD' &&
+          input.reason === payload.reason
+        );
+      }
+
+      async function reconcileAuditOnlyWrite(kind, payload, auditIdsBefore) {
+        const refreshed = await load();
+        const action = kind === 'note' ? 'audit_note.added' : 'refund.recorded';
+        const matched =
+          refreshed &&
+          auditEntries.some(
+            (entry) =>
+              entry.id &&
+              !auditIdsBefore.has(entry.id) &&
+              auditPayloadMatches(entry, action, payload),
+          );
+        if (matched && kind === 'note') {
+          showBanner(
+            'Support-note outcome is unknown because the response timed out. The refreshed audit log contains a new successful entry with the same note, so it was likely recorded; do not submit it again.',
+          );
+        } else if (matched) {
+          showBanner(
+            'Refund-record outcome is unknown because the response timed out. The refreshed audit log contains a new successful entry with the same reference, amount, and reason, so the audit record was likely created; do not submit it again. The actual refund remains a separate Stripe dashboard action.',
+          );
+        } else if (refreshed) {
+          showBanner(
+            (kind === 'note' ? 'Support-note' : 'Refund-record') +
+              ' outcome is unknown because the response timed out. The refreshed audit slice has no new matching successful entry; review the full audit log before retrying to avoid a duplicate record.',
+          );
+        } else {
+          showBanner(
+            (kind === 'note' ? 'Support-note' : 'Refund-record') +
+              ' outcome is unknown because the response timed out, and the audit log could not be refreshed. Verify the full audit log before retrying to avoid a duplicate record.',
           );
         }
       }
@@ -979,17 +1026,23 @@ const accountId = account.id;
           { placeholder: 'note…', confirmLabel: 'Record note' },
         );
         if (!note || !note.trim()) return;
+        const payload = { note: note.trim() };
+        const auditIdsBefore = new Set(auditEntries.map((entry) => entry.id).filter(Boolean));
         showBanner('Recording support note…');
         return authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/audit-note', {
           method: 'POST',
-          body: JSON.stringify({ note: note.trim() }),
+          body: JSON.stringify(payload),
         })
           .then(mutationJson)
           .then(() => {
             showBanner('Support note recorded.');
             load();
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              await reconcileAuditOnlyWrite('note', payload, auditIdsBefore);
+              return;
+            }
             const msg = requestErrorMessage(err);
             showBanner("Couldn't record note (" + msg + ').');
           });
@@ -1017,14 +1070,16 @@ const accountId = account.id;
           showBanner('Refund reason is required.');
           return;
         }
+        const payload = {
+          external_reference: externalRef.trim(),
+          amount_cents,
+          reason: reason.trim(),
+        };
+        const auditIdsBefore = new Set(auditEntries.map((entry) => entry.id).filter(Boolean));
         showBanner('Recording refund (audit-only)…');
         return authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/refund-record', {
           method: 'POST',
-          body: JSON.stringify({
-            external_reference: externalRef.trim(),
-            amount_cents,
-            reason: reason.trim(),
-          }),
+          body: JSON.stringify(payload),
         })
           .then(mutationJson)
           .then(() => {
@@ -1033,7 +1088,11 @@ const accountId = account.id;
             );
             load();
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              await reconcileAuditOnlyWrite('refund', payload, auditIdsBefore);
+              return;
+            }
             const msg = requestErrorMessage(err);
             showBanner("Couldn't record refund (" + msg + ').');
           });

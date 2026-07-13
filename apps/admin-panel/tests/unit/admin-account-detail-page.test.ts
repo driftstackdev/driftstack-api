@@ -158,4 +158,133 @@ describe('admin account detail mutation reconciliation', () => {
     );
     expect(tierButton.disabled).toBe(false);
   });
+
+  it('matches new audit rows before treating timed-out support writes as completed', async () => {
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', () => {});
+    const dom = new JSDOM(
+      `<!doctype html><title>Account</title>
+       <main data-page="admin-account-detail">
+         <div data-banner class="hidden"></div>
+         <span data-field="title-name"></span><span data-field="title-email"></span>
+         <span data-field="tier"></span><span data-field="status">active</span>
+         <span data-field="created"></span><span data-field="updated"></span>
+         <span data-field="status-badge"></span>
+         <div data-field="action-row">
+           <button data-action="add-note">Add support note</button>
+           <button data-action="record-refund">Record refund</button>
+         </div>
+         <form data-field="override-form" class="hidden"></form>
+         <ul data-list="account-audit"></ul>
+         <div data-account-cost-body></div>
+       </main>`,
+      {
+        url: 'https://admin.driftstack.dev/accounts/1234',
+        runScripts: 'dangerously',
+        virtualConsole,
+      },
+    );
+    windowRef = dom.window;
+    const calls: FetchCall[] = [];
+    const auditRows: Array<Record<string, unknown>> = [
+      {
+        id: 'audit-before',
+        admin_account_id: 'acc_admin',
+        action: 'audit_note.added',
+        input_payload: { note: 'older note' },
+        result: 'success',
+        timestamp: '2026-07-13T00:00:00.000Z',
+      },
+    ];
+    let commitNotes = true;
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    // @ts-expect-error -- jsdom's fetch global is intentionally injected.
+    dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+      const call = { url: String(input), init };
+      calls.push(call);
+      if (call.init?.method === 'POST' && /\/audit-note$/.test(call.url)) {
+        const payload = JSON.parse(String(call.init.body));
+        if (commitNotes) {
+          auditRows.unshift({
+            id: 'audit-note-after',
+            admin_account_id: 'acc_admin',
+            action: 'audit_note.added',
+            input_payload: payload,
+            result: 'success',
+            timestamp: '2026-07-13T00:01:00.000Z',
+          });
+        }
+        return Promise.reject(timeout);
+      }
+      if (call.init?.method === 'POST' && /\/refund-record$/.test(call.url)) {
+        const payload = JSON.parse(String(call.init.body));
+        auditRows.unshift({
+          id: 'audit-refund-after',
+          admin_account_id: 'acc_admin',
+          action: 'refund.recorded',
+          input_payload: { ...payload, currency: 'USD' },
+          result: 'success',
+          timestamp: '2026-07-13T00:02:00.000Z',
+        });
+        return Promise.reject(timeout);
+      }
+      if (/\/v1\/admin\/accounts\/acc_1234$/.test(call.url)) {
+        return Promise.resolve(
+          response({
+            name: 'Test Account',
+            email: 'owner@example.test',
+            tier: 'api_builder',
+            status: 'active',
+            created_at: '2026-07-01T00:00:00.000Z',
+            updated_at: '2026-07-13T00:00:00.000Z',
+          }),
+        );
+      }
+      if (/\/v1\/admin\/audit-log\?/.test(call.url)) {
+        return Promise.resolve(response({ data: auditRows }));
+      }
+      return Promise.resolve(response({}, 404));
+    };
+    const prompts = ['investigated customer report', 'ch_test_123', '299', 'duplicate charge'];
+    // @ts-expect-error -- branded modal helpers are injected by AdminLayout.
+    dom.window.driftstackPrompt = () => Promise.resolve(prompts.shift() ?? null);
+    dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
+    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    await flush();
+
+    const noteButton = dom.window.document.querySelector(
+      '[data-action="add-note"]',
+    ) as HTMLButtonElement;
+    noteButton.click();
+    await flush(80);
+
+    expect(calls.filter((call) => /\/audit-note$/.test(call.url))).toHaveLength(1);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /support-note outcome is unknown.*refreshed audit log contains a new successful entry with the same note.*likely recorded.*do not submit it again/i,
+    );
+    expect(noteButton.disabled).toBe(false);
+
+    const refundButton = dom.window.document.querySelector(
+      '[data-action="record-refund"]',
+    ) as HTMLButtonElement;
+    refundButton.click();
+    await flush(100);
+
+    expect(calls.filter((call) => /\/refund-record$/.test(call.url))).toHaveLength(1);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /refund-record outcome is unknown.*new successful entry with the same reference, amount, and reason.*likely created.*do not submit it again.*actual refund remains a separate Stripe dashboard action/i,
+    );
+    expect(refundButton.disabled).toBe(false);
+
+    commitNotes = false;
+    prompts.push('older note');
+    noteButton.click();
+    await flush(80);
+
+    expect(calls.filter((call) => /\/audit-note$/.test(call.url))).toHaveLength(2);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /support-note outcome is unknown.*refreshed audit slice has no new matching successful entry.*review the full audit log before retrying.*avoid a duplicate record/i,
+    );
+  });
 });
