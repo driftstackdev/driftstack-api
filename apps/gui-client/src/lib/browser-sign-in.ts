@@ -23,7 +23,8 @@ import { parseDeepLink } from './deep-link';
 import { diagnosticFetchError } from './diagnostic-fetch-error';
 import { humanizeError } from './humanize-error';
 import { disposeResponseBody } from './dispose-response-body';
-import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
+import { readApiErrorMessage } from './api-errors';
+import { readBoundedApiJson } from './read-bounded-json';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -176,14 +177,11 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         }),
       });
       if (!initiateRes.ok) {
-        const body = await readBoundedDiagnosticJson<{ detail?: string }>(initiateRes).catch(
-          (): { detail?: string } => ({}),
-        );
-        const error = new Error(body.detail ?? `HTTP ${initiateRes.status.toString()}`);
-        if (typeof body.detail === 'string' && body.detail.length > 0) {
-          Object.assign(error, { customerSafe: true });
-        }
-        throw error;
+        // Problem prose is remote diagnostic input. Only stable type/status
+        // crosses the installed-client copy boundary.
+        throw Object.assign(new Error(await readApiErrorMessage(initiateRes)), {
+          customerSafe: true,
+        });
       }
       const initiate = await readBoundedApiJson<InitiateResponse>(initiateRes);
       if (!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(initiate.user_code)) {
@@ -301,12 +299,9 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       if (!res.ok) {
         if (res.status >= 400 && res.status < 500) {
           stop();
-          const body = await readBoundedDiagnosticJson<{ detail?: string }>(res).catch(
-            (): { detail?: string } => ({}),
-          );
           setState({
             kind: 'error',
-            message: body.detail ?? 'Authorization request rejected.',
+            message: await readApiErrorMessage(res),
           });
         } else {
           await disposeResponseBody(res);

@@ -33,11 +33,17 @@ describe('Security dashboard error copy', () => {
     ).toBe('Fallback');
   });
 
-  it('preserves response details only when explicitly marked customer-safe', () => {
+  it('preserves only locally mapped copy explicitly marked customer-safe', () => {
     const error = Object.assign(new Error('That authenticator code is invalid.'), {
-      userSafe: true,
+      customerSafe: true,
     });
     expect(securityErrorMessage(error, 'Fallback')).toBe('That authenticator code is invalid.');
+  });
+
+  it('delegates response classification to the shared fixed-copy boundary', () => {
+    expect(body).toContain('return window.driftstackResponseError(response, body);');
+    expect(body).not.toContain('error.userSafe = true');
+    expect(body).not.toMatch(/new Error\(detail \|\| 'HTTP '/);
   });
 
   it('does not concatenate arbitrary caught messages into visible banners', () => {

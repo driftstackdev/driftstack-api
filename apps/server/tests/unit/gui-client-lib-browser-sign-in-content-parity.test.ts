@@ -102,7 +102,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
     );
   });
 
-  it('Initiate flow opens the browser and exposes the returned user_code only in waiting state', () => {
+  it('Initiate flow maps remote failures safely, opens the browser, and exposes user_code only in waiting state', () => {
     expect(body).toMatch(
       /const trimmedUrl = opts\.baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);/,
     );
@@ -110,7 +110,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /const initiateRes = await fetchWithDeadline\(`\$\{trimmedUrl\}\/v1\/auth\/cli-authorize\/initiate`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*state: stateToken,\s*\n?\s*client_label: opts\.clientLabel \?\? `Driftstack desktop on \$\{navigator\.platform\}`,\s*\n?\s*\}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /throw new Error\(body\.detail \?\? `HTTP \$\{initiateRes\.status\.toString\(\)\}`\);/,
+      /throw Object\.assign\(new Error\(await readApiErrorMessage\(initiateRes\)\), \{\s*customerSafe: true,\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(!\/\^\[A-HJ-NP-Z2-9\]\{4\}-\[A-HJ-NP-Z2-9\]\{4\}\$\/\.test\(initiate\.user_code\)\) \{[\s\S]*?does not support secure browser sign-in[\s\S]*?\}/,
@@ -138,17 +138,23 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
     );
   });
 
-  it("pollOnce branches: POST /v1/auth/cli-authorize/exchange with {code, state: stateToken} + !res.ok 4xx (status>=400 && <500) → stop + setState error with body.detail fallback 'Authorization request rejected.' + body.status==='pending' return + 'expired' → 'Authorization expired. Click \"Sign in with browser\" to try again.' + 'bound' + api_key + account_id → stop + setState success + await opts.onSuccess(api_key, account_id) + outer catch silent retry on network blip", () => {
+  it('pollOnce branches: POST /v1/auth/cli-authorize/exchange with {code, state: stateToken} + !res.ok 4xx → stop + fixed typed/status copy + pending/expired/bound terminal handling + silent network retry', () => {
     expect(body).toMatch(
       /const res = await fetchWithDeadline\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ code, state: stateToken \}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(res\.status >= 400 && res\.status < 500\) \{\s*\n?\s*stop\(\);\s*\n?\s*const body = await readBoundedDiagnosticJson<\{ detail\?: string \}>\(res\)\.catch\([\s\S]*?\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: body\.detail \?\? 'Authorization request rejected\.',\s*\n?\s*\}\);/,
+      /if \(res\.status >= 400 && res\.status < 500\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: await readApiErrorMessage\(res\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(body\.status === 'expired'\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\n?\s*\}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(body\.status === 'bound' && body\.api_key && body\.account_id\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{ kind: 'success' \}\);\s*\n?\s*await opts\.onSuccess\(body\.api_key, body\.account_id\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(/\/\/ network blip — silent retry/);
+  });
+
+  it('never promotes remote problem detail/title to browser sign-in copy', () => {
+    expect(body).not.toMatch(/body\.detail \?\?/);
+    expect(body).not.toContain('readBoundedDiagnosticJson');
+    expect(body).toContain("import { readApiErrorMessage } from './api-errors';");
   });
 
   it('Poll timer wiring: setInterval cadence opts.__pollIntervalMs ?? POLL_INTERVAL_MS + setTimeout backstop opts.__pollTimeoutMs ?? POLL_TIMEOUT_MS firing stop() + setState error \'Authorization expired. Click "Sign in with browser" to try again.\'', () => {

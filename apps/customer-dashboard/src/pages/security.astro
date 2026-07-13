@@ -488,14 +488,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (status >= 500) return 'The service is temporarily unavailable. Try again shortly.';
           return fallback;
         }
-        if (err && err.userSafe === true && message) return message;
+        if (err && err.customerSafe === true && message) return message;
         return fallback;
       }
       function responseError(response, body) {
-        const detail = body && typeof body.detail === 'string' ? body.detail.trim() : '';
-        const error = new Error(detail || 'HTTP ' + response.status);
-        if (detail) error.userSafe = true;
-        return error;
+        return window.driftstackResponseError(response, body);
       }
       function fmtIso(iso) {
         if (!iso) return '—';

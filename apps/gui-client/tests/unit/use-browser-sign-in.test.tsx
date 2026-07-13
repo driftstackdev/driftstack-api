@@ -181,8 +181,10 @@ describe('useBrowserSignIn — error paths', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('initiate rejection → error state with the server-supplied detail', async () => {
-    fetchSpy.mockResolvedValueOnce(makeResponse({ detail: 'rate limited' }, 429));
+  it('initiate rejection maps status without reflecting server detail', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      makeResponse({ detail: 'rate limited at api.private request=req_secret token=secret' }, 429),
+    );
 
     const { result } = renderHook(() => useBrowserSignIn(defaultOpts()));
 
@@ -194,7 +196,10 @@ describe('useBrowserSignIn — error paths', () => {
       expect(result.current.state.kind).toBe('error');
     });
     expect(result.current.state.kind === 'error' && result.current.state.message).toBe(
-      'rate limited',
+      'Too many requests. Wait a moment and try again.',
+    );
+    expect(result.current.state.kind === 'error' && result.current.state.message).not.toMatch(
+      /api\.private|req_secret|token=secret/i,
     );
   });
 
@@ -235,10 +240,12 @@ describe('useBrowserSignIn — error paths', () => {
     );
   });
 
-  it('exchange returns 4xx → error state stops the poll loop', async () => {
+  it('exchange returns 4xx → fixed error state stops the poll loop', async () => {
     fetchSpy
       .mockResolvedValueOnce(makeResponse(initiateBody))
-      .mockResolvedValue(makeResponse({ detail: 'state mismatch' }, 400));
+      .mockResolvedValue(
+        makeResponse({ detail: 'state mismatch at /private/oauth.ts token=secret' }, 400),
+      );
 
     const { result } = renderHook(() => useBrowserSignIn(defaultOpts()));
 
@@ -253,7 +260,10 @@ describe('useBrowserSignIn — error paths', () => {
       { timeout: 200 },
     );
     expect(result.current.state.kind === 'error' && result.current.state.message).toBe(
-      'state mismatch',
+      'The request could not be completed. Check your input and try again.',
+    );
+    expect(result.current.state.kind === 'error' && result.current.state.message).not.toMatch(
+      /private|oauth\.ts|token=secret/i,
     );
   });
 
