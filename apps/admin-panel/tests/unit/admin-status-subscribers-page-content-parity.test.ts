@@ -105,6 +105,14 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toMatch(/submitBtn\.disabled = addOutcomeUnknown/);
   });
 
+  it('re-rendered rows inherit and visibly explain pending or uncertain unsubscribe state', () => {
+    expect(body).toMatch(/const forceUnsubPending = forceUnsubsInFlight\.has\(id\)/);
+    expect(body).toMatch(/const forceUnsubDisabled = forceUnsubPending \|\| forceUnsubUnknown/);
+    expect(body).toContain('Unsubscribe pending…');
+    expect(body).toContain('Wait for the current force-unsubscribe action to finish.');
+    expect(body).toContain('Reload later to verify the previous force-unsubscribe outcome.');
+  });
+
   it('50-default + ?limit=&offset= server-side pagination framing', () => {
     expect(body).toMatch(
       /Subscribers list paginated server-side \(default 50 per page; <code>\?limit=&amp;offset=<\/code>/,

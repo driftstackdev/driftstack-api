@@ -166,6 +166,45 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeNull();
   });
 
+  it('keeps a refreshed replacement row visibly busy and rejects a forced second unsubscribe', async () => {
+    const subscribers = [mkSub({ id: 'sub_active', unsubscribed_at: null })];
+    let finishPost: (response: Response) => void = () => {};
+    const pendingPost = new Promise<Response>((resolve) => {
+      finishPost = resolve;
+    });
+    const fallback = makeRouter(subscribers);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => (call.init?.method === 'POST' ? pendingPost : fallback(call)),
+    });
+    win = window;
+    await flush();
+
+    const original = window.document.querySelector(
+      '[data-force-unsub="sub_active"]',
+    ) as HTMLButtonElement;
+    original.click();
+    await flush(2);
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+
+    const replacement = window.document.querySelector(
+      '[data-force-unsub="sub_active"]',
+    ) as HTMLButtonElement;
+    expect(replacement).not.toBe(original);
+    expect(replacement.disabled).toBe(true);
+    expect(replacement.getAttribute('aria-busy')).toBe('true');
+    expect(replacement.title).toMatch(/wait for the current force-unsubscribe/i);
+    expect(replacement.textContent).toBe('Unsubscribe pending…');
+    replacement.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush(2);
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+
+    subscribers[0]!.unsubscribed_at = '2026-05-29T12:00:00.000Z';
+    finishPost(json({ ok: true }));
+    await flush();
+    expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeNull();
+  });
+
   it('force-unsub timeout refreshes status and blocks replay after likely completion', async () => {
     const subscriber = mkSub({ id: 'sub_timeout', unsubscribed_at: null });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {

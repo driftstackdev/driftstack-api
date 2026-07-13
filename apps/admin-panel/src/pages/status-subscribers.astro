@@ -169,16 +169,28 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function row(sub) {
         const canForceUnsub = !sub.unsubscribed_at && sub.email;
-        const forceUnsubUnknown = uncertainForceUnsubs.has(String(sub.id));
+        const id = String(sub.id);
+        const forceUnsubPending = forceUnsubsInFlight.has(id);
+        const forceUnsubUnknown = uncertainForceUnsubs.has(id);
+        const forceUnsubDisabled = forceUnsubPending || forceUnsubUnknown;
         const action = canForceUnsub
           ? '<button type="button" data-force-unsub="' +
             escapeHtml(sub.id) +
             '" data-email="' +
             escapeHtml(sub.email) +
             '"' +
-            (forceUnsubUnknown ? ' disabled aria-disabled="true"' : '') +
+            (forceUnsubDisabled
+              ? ' disabled aria-disabled="true"' +
+                (forceUnsubPending
+                  ? ' aria-busy="true" title="Wait for the current force-unsubscribe action to finish."'
+                  : ' title="Reload later to verify the previous force-unsubscribe outcome."')
+              : '') +
             ' class="text-sm text-rose-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60">' +
-            (forceUnsubUnknown ? 'Check status' : 'Force unsubscribe') +
+            (forceUnsubPending
+              ? 'Unsubscribe pending…'
+              : forceUnsubUnknown
+                ? 'Check status'
+                : 'Force unsubscribe') +
             '</button>'
           : '<span class="text-xs text-tk-ink-3">no action</span>';
         const emailDisplay = sub.email
@@ -358,11 +370,22 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
             } finally {
               forceUnsubsInFlight.delete(id);
-              if (btn.isConnected) {
-                const outcomeUnknown = uncertainForceUnsubs.has(id);
-                btn.disabled = outcomeUnknown;
-                btn.removeAttribute('aria-busy');
-                btn.textContent = outcomeUnknown ? 'Check status' : idleLabel;
+              const outcomeUnknown = uncertainForceUnsubs.has(id);
+              const current = Array.from(
+                list ? list.querySelectorAll('[data-force-unsub]') : [],
+              ).find((action) => action.getAttribute('data-force-unsub') === id);
+              if (current) {
+                current.disabled = outcomeUnknown;
+                current.removeAttribute('aria-busy');
+                current.setAttribute('aria-disabled', outcomeUnknown ? 'true' : 'false');
+                if (!outcomeUnknown) current.removeAttribute('aria-disabled');
+                if (outcomeUnknown) {
+                  current.title =
+                    'Reload later to verify the previous force-unsubscribe outcome.';
+                } else {
+                  current.removeAttribute('title');
+                }
+                current.textContent = outcomeUnknown ? 'Check status' : idleLabel;
               }
             }
           });

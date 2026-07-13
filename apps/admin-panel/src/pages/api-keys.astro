@@ -255,6 +255,36 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
 
+      const revokesInFlight = new Set();
+      function revokeControlState(id) {
+        const pending = revokesInFlight.has(String(id));
+        return {
+          pending,
+          attrs: pending
+            ? ' disabled aria-disabled="true" aria-busy="true" title="Wait for the current revocation to finish."'
+            : '',
+          label: pending ? 'Revocation pending…' : 'Revoke',
+        };
+      }
+
+      function syncRevokeControls(id) {
+        const state = revokeControlState(id);
+        root.querySelectorAll('[data-action="revoke"]').forEach((control) => {
+          if (control.getAttribute('data-id') !== String(id)) return;
+          control.disabled = state.pending;
+          control.textContent = state.label;
+          if (state.pending) {
+            control.setAttribute('aria-disabled', 'true');
+            control.setAttribute('aria-busy', 'true');
+            control.title = 'Wait for the current revocation to finish.';
+          } else {
+            control.removeAttribute('aria-disabled');
+            control.removeAttribute('aria-busy');
+            control.removeAttribute('title');
+          }
+        });
+      }
+
       function rowHtml(k) {
         const revoked = k.revoked_at !== null;
         const opacityClass = revoked ? 'opacity-60' : '';
@@ -269,10 +299,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         const statusBadge = revoked
           ? '<span class="inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked</span>'
           : '<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-emerald-700">active</span>';
+        const revokeState = revokeControlState(k.id);
         const actionCell = !revoked
           ? '<button type="button" data-action="revoke" data-id="' +
             escapeHtml(k.id) +
-            '" class="text-sm font-medium text-red-700 hover:underline">Revoke</button>'
+            '"' +
+            revokeState.attrs +
+            ' class="text-sm font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60">' +
+            revokeState.label +
+            '</button>'
           : '';
         return (
           '<tr class="hover:bg-tk-bg ' +
@@ -404,11 +439,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      const revokesInFlight = new Set();
       async function revoke(id, btn) {
         if (!token || revokesInFlight.has(id)) return;
         revokesInFlight.add(id);
-        const originalText = btn ? btn.textContent : 'Revoke';
+        syncRevokeControls(id);
         if (btn) {
           btn.disabled = true;
           btn.setAttribute('aria-busy', 'true');
@@ -461,11 +495,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner("Couldn't revoke (" + msg + ').');
         } finally {
           revokesInFlight.delete(id);
-          if (btn) {
-            btn.disabled = false;
-            btn.removeAttribute('aria-busy');
-            btn.textContent = originalText;
-          }
+          syncRevokeControls(id);
         }
       }
 

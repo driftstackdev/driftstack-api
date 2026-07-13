@@ -103,4 +103,12 @@ describe('W361.C admin-panel /sessions page content parity', () => {
     expect(body).toContain('do not submit the action again');
     expect(body).toContain('Verify the session before retrying');
   });
+
+  it('re-rendered rows inherit and visibly explain a pending force-destroy lease', () => {
+    expect(body).toMatch(/function destroyControlState\(id\)/);
+    expect(body).toMatch(/destroysInFlight\.has\(String\(id\)\)/);
+    expect(body).toContain('Destroy pending…');
+    expect(body).toContain('Wait for the current force-destroy action to finish.');
+    expect(body).toMatch(/function syncDestroyControls\(id\)/);
+  });
 });

@@ -223,6 +223,45 @@ describe('admin sessions page — force-destroy (operator)', () => {
     expect(button.hasAttribute('aria-busy')).toBe(false);
   });
 
+  it('keeps a refreshed replacement row visibly busy and rejects a forced second destroy', async () => {
+    const sessions = [mkSession({ id: 'agt_live', status: 'running' })];
+    let finishPost: (response: Response) => void = () => {};
+    const pendingPost = new Promise<Response>((resolve) => {
+      finishPost = resolve;
+    });
+    const fallback = makeRouter(sessions);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => (call.init?.method === 'POST' ? pendingPost : fallback(call)),
+    });
+    win = window;
+    await flush();
+
+    const original = window.document.querySelector(
+      '[data-action="destroy"][data-id="agt_live"]',
+    ) as HTMLButtonElement;
+    original.click();
+    await flush(2);
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+
+    const replacement = window.document.querySelector(
+      '[data-action="destroy"][data-id="agt_live"]',
+    ) as HTMLButtonElement;
+    expect(replacement).not.toBe(original);
+    expect(replacement.disabled).toBe(true);
+    expect(replacement.getAttribute('aria-busy')).toBe('true');
+    expect(replacement.title).toMatch(/wait for the current force-destroy/i);
+    expect(replacement.textContent).toBe('Destroy pending…');
+    replacement.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush(2);
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+
+    sessions[0]!.status = 'destroyed';
+    finishPost(json({ ok: true }));
+    await flush();
+    expect(window.document.querySelector('[data-action="destroy"][data-id="agt_live"]')).toBeNull();
+  });
+
   it('reconciles a committed force-destroy timeout before advising another attempt', async () => {
     const sessions = [mkSession({ id: 'agt_live', status: 'running' })];
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });

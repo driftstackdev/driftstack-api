@@ -265,12 +265,46 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         return (archetypeLabels && archetypeLabels[slug]) || slug;
       }
 
+      function destroyControlState(id) {
+        const pending = destroysInFlight.has(String(id));
+        return {
+          pending,
+          attrs: pending
+            ? ' disabled aria-disabled="true" aria-busy="true" title="Wait for the current force-destroy action to finish."'
+            : '',
+          label: pending ? 'Destroy pending…' : 'Force destroy',
+        };
+      }
+
+      function syncDestroyControls(id) {
+        const state = destroyControlState(id);
+        root.querySelectorAll('[data-action="destroy"]').forEach((control) => {
+          if (control.getAttribute('data-id') !== String(id)) return;
+          control.disabled = state.pending;
+          control.textContent = state.label;
+          if (state.pending) {
+            control.setAttribute('aria-disabled', 'true');
+            control.setAttribute('aria-busy', 'true');
+            control.title = 'Wait for the current force-destroy action to finish.';
+          } else {
+            control.removeAttribute('aria-disabled');
+            control.removeAttribute('aria-busy');
+            control.removeAttribute('title');
+          }
+        });
+      }
+
       function rowHtml(s) {
+        const destroyState = destroyControlState(s.id);
         const destroyBtn =
           s.status !== 'destroyed'
             ? '<button type="button" data-action="destroy" data-id="' +
               escapeHtml(s.id) +
-              '" class="text-sm text-red-700 hover:underline">Force destroy</button>'
+              '"' +
+              destroyState.attrs +
+              ' class="text-sm text-red-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60">' +
+              destroyState.label +
+              '</button>'
             : '';
         return (
           '<tr class="hover:bg-tk-bg">' +
@@ -423,7 +457,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       async function destroy(id, btn) {
         if (!token || destroysInFlight.has(id)) return;
         destroysInFlight.add(id);
-        const originalText = btn ? btn.textContent : '';
+        syncDestroyControls(id);
         if (btn) {
           btn.disabled = true;
           btn.textContent = 'Confirming…';
@@ -495,11 +529,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           }
         } finally {
           destroysInFlight.delete(id);
-          if (btn && btn.isConnected) {
-            btn.disabled = false;
-            btn.textContent = originalText;
-            btn.removeAttribute('aria-busy');
-          }
+          syncDestroyControls(id);
         }
       }
 

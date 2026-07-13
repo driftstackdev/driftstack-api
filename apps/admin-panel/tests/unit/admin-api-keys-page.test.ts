@@ -220,6 +220,48 @@ describe('admin api-keys page — force-revoke (operator security)', () => {
     ).toBeNull();
   });
 
+  it('keeps a refreshed replacement row visibly busy and rejects a forced second revoke', async () => {
+    const keys = [mkKey({ id: 'key_active', revoked_at: null })];
+    let finishPost: (response: Response) => void = () => {};
+    const pendingPost = new Promise<Response>((resolve) => {
+      finishPost = resolve;
+    });
+    const fallback = makeRouter(keys);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      promptReturns: 'confirmed leak',
+      route: (call) => (call.init?.method === 'POST' ? pendingPost : fallback(call)),
+    });
+    win = window;
+    await flush();
+
+    const original = window.document.querySelector(
+      '[data-action="revoke"][data-id="key_active"]',
+    ) as HTMLButtonElement;
+    original.click();
+    await flush(2);
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+
+    const replacement = window.document.querySelector(
+      '[data-action="revoke"][data-id="key_active"]',
+    ) as HTMLButtonElement;
+    expect(replacement).not.toBe(original);
+    expect(replacement.disabled).toBe(true);
+    expect(replacement.getAttribute('aria-busy')).toBe('true');
+    expect(replacement.title).toMatch(/wait for the current revocation/i);
+    expect(replacement.textContent).toBe('Revocation pending…');
+    replacement.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush(2);
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+
+    keys[0]!.revoked_at = '2026-05-29T12:00:00.000Z';
+    finishPost(new Response(null, { status: 204 }));
+    await flush();
+    expect(
+      window.document.querySelector('[data-action="revoke"][data-id="key_active"]'),
+    ).toBeNull();
+  });
+
   it('revoke timeout refreshes committed security state before suggesting any retry', async () => {
     const keys = [mkKey({ id: 'key_active', revoked_at: null })];
     const fallback = makeRouter(keys);

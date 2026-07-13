@@ -113,6 +113,14 @@ describe('W362.C admin-panel /api-keys page content parity', () => {
     expect(body).toMatch(/const refreshed = await load\(\)/);
   });
 
+  it('re-rendered rows inherit and visibly explain a pending revoke lease', () => {
+    expect(body).toMatch(/function revokeControlState\(id\)/);
+    expect(body).toMatch(/revokesInFlight\.has\(String\(id\)\)/);
+    expect(body).toContain('Revocation pending…');
+    expect(body).toContain('Wait for the current revocation to finish.');
+    expect(body).toMatch(/function syncRevokeControls\(id\)/);
+  });
+
   it('page-side fetch uses limit=50 (standard admin paging default)', () => {
     expect(body).toMatch(/params\.set\('limit', '50'\)/);
   });
