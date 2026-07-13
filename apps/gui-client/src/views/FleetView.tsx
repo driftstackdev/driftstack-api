@@ -24,6 +24,7 @@ import {
 } from '../lib/fleet-members';
 import { useConfirm } from '../components/ConfirmProvider';
 import { SkeletonRows } from '../components/Skeleton';
+import { humanizeError } from '../lib/humanize-error';
 
 interface FormState {
   draft: FleetMemberDraft;
@@ -66,7 +67,10 @@ export function FleetView(): JSX.Element {
       setMembers(all);
     } catch (err) {
       setLoadError(
-        err instanceof Error ? err.message : 'Could not read the fleet registry from disk.',
+        humanizeError(
+          err,
+          "Couldn't read the saved fleet. Check the app's file permissions and try again.",
+        ),
       );
     } finally {
       setLoading(false);
@@ -91,7 +95,10 @@ export function FleetView(): JSX.Element {
         [member.id]: {
           ok: false,
           durationMs: 0,
-          error: err instanceof Error ? err.message : 'Ping failed',
+          error: humanizeError(
+            err,
+            "Couldn't reach this fleet member. Check its URL and try again.",
+          ),
         },
       }));
     }
@@ -154,7 +161,10 @@ export function FleetView(): JSX.Element {
       await refresh();
     } catch (err) {
       setActionError(
-        `Could not save the fleet member: ${err instanceof Error ? err.message : 'unknown error'}. Try again.`,
+        humanizeError(
+          err,
+          "Couldn't save the fleet member. Check the app's file permissions and try again.",
+        ),
       );
     } finally {
       savingRef.current = false;
@@ -176,7 +186,10 @@ export function FleetView(): JSX.Element {
       await refresh();
     } catch (err) {
       setActionError(
-        `Could not remove "${member.label}": ${err instanceof Error ? err.message : 'unknown error'}. Try again.`,
+        humanizeError(
+          err,
+          `Couldn't remove "${member.label}". Check the app's file permissions and try again.`,
+        ),
       );
     }
   }

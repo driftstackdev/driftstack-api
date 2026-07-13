@@ -17,6 +17,7 @@ import {
 import { useToasts } from '../lib/toasts';
 import { downloadJson } from '../lib/download';
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
+import { humanizeError } from '../lib/humanize-error';
 
 export interface RecordingPlayerViewProps {
   recordingId: string;
@@ -52,7 +53,10 @@ export function RecordingPlayerView({
     void hydrateFrames(recordingId)
       .catch((err: unknown) => {
         setHydrateError(
-          err instanceof Error ? err.message : 'Could not read the recording from disk.',
+          humanizeError(
+            err,
+            "Couldn't read the saved recording. Check the app's file permissions and try again.",
+          ),
         );
       })
       .finally(() => setHydrating(false));

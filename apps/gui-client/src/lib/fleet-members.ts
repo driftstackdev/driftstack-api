@@ -16,6 +16,7 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedDiagnosticJson } from './read-bounded-json';
+import { humanizeError } from './humanize-error';
 
 export interface FleetMember {
   id: string;
@@ -186,7 +187,10 @@ export async function pingFleetMember(member: FleetMember): Promise<FleetMemberP
     return out;
   } catch (err) {
     const dur = Math.round(performance.now() - start);
-    const message = err instanceof Error ? err.message : 'unknown error';
+    const message = humanizeError(
+      err,
+      "Couldn't reach this fleet member. Check its URL and try again.",
+    );
     return { ok: false, durationMs: dur, error: message };
   } finally {
     clearTimeout(timer);

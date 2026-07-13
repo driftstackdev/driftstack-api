@@ -64,4 +64,47 @@ describe('FleetView form submission', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull());
     expect(fleet.listFleetMembers).toHaveBeenCalledTimes(2);
   });
+
+  it('does not render local store paths when the fleet registry cannot be read', async () => {
+    vi.mocked(fleet.listFleetMembers).mockRejectedValueOnce(
+      new Error('permission denied: /Users/founder/Library/Application Support/settings.json'),
+    );
+
+    render(<FleetView />);
+
+    expect(await screen.findByText("Couldn't load the fleet")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Couldn't read the saved fleet. Check the app's file permissions and try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Users\/founder/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('does not render local store internals when saving a fleet member fails', async () => {
+    vi.mocked(fleet.addFleetMember).mockRejectedValueOnce(
+      new Error('sqlite write failed at /private/var/folders/secret/settings.json'),
+    );
+    render(<FleetView />);
+    await screen.findByRole('button', { name: 'Add member' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    fireEvent.change(screen.getByPlaceholderText('mac-mini-eu-west-1'), {
+      target: { value: 'mac-mini-test' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('http://10.0.0.5:3000'), {
+      target: { value: 'https://fleet.example.test' },
+    });
+    const form = screen.getByRole('button', { name: 'Add' }).closest('form');
+    if (!form) throw new Error('fleet form not found');
+    fireEvent.submit(form);
+
+    expect(
+      await screen.findByText(
+        "Couldn't save the fleet member. Check the app's file permissions and try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/private\/var\/folders/)).toBeNull();
+  });
 });
