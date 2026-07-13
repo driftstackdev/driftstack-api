@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 
 export interface AdminOrderEvent {
@@ -68,7 +69,7 @@ export function useAdminOrderEvents(orderId: string | null): UseAdminOrderEvents
         if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
-      const body = (await res.json()) as { events?: AdminOrderEvent[] };
+      const body = await readBoundedApiJson<{ events?: AdminOrderEvent[] }>(res);
       if (sequence === sequenceRef.current) {
         setState({ kind: 'ready', events: Array.isArray(body.events) ? body.events : [] });
       }

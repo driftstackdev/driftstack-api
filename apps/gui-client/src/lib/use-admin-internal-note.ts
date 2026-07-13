@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 import type { AdminCryptoOrder } from './use-admin-crypto-orders-list';
 
@@ -70,7 +71,7 @@ export function useAdminInternalNote(): UseAdminInternalNoteResult {
           }
           return;
         }
-        const order = (await res.json()) as AdminCryptoOrder;
+        const order = await readBoundedApiJson<AdminCryptoOrder>(res);
         if (sequence === sequenceRef.current) setState({ kind: 'succeeded', orderId, order });
       } catch (err) {
         if (sequence === sequenceRef.current) {

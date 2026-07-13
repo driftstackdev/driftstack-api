@@ -59,6 +59,22 @@ describe('readBoundedDiagnosticJson', () => {
     }
   });
 
+  it('guards every admin GUI API JSON success path', () => {
+    for (const relative of [
+      '../../src/lib/use-admin-crypto-stats.ts',
+      '../../src/lib/use-admin-order-events.ts',
+      '../../src/lib/use-admin-internal-note.ts',
+      '../../src/lib/use-admin-idempotency-metrics.ts',
+      '../../src/lib/use-admin-crypto-pending-age.ts',
+      '../../src/lib/use-admin-crypto-daily.ts',
+      '../../src/lib/use-admin-crypto-orders-list.ts',
+    ]) {
+      const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
+      expect(source, relative).toContain('readBoundedApiJson');
+      expect(source, relative).not.toMatch(/\bres\.json\(/);
+    }
+  });
+
   it('decodes a normal streamed JSON response', async () => {
     const response = new Response(JSON.stringify({ driver: 'webkit', version: 'abc123' }), {
       headers: { 'content-type': 'application/json' },

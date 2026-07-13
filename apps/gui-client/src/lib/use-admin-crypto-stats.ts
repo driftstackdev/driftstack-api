@@ -6,10 +6,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 
 export type AdminCryptoStatsStatus =
-  'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled';
+  | 'pending'
+  | 'confirming'
+  | 'paid'
+  | 'failed'
+  | 'partial'
+  | 'cancelled';
 
 export interface AdminCryptoStatsData {
   total: number;
@@ -76,7 +82,7 @@ export function useAdminCryptoStats(opts: UseAdminCryptoStatsOpts = {}): UseAdmi
         if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
-      const body = (await res.json()) as AdminCryptoStatsData;
+      const body = await readBoundedApiJson<AdminCryptoStatsData>(res);
       if (sequence === sequenceRef.current) setState({ kind: 'ready', data: body });
     } catch (err) {
       if (sequence === sequenceRef.current) {
