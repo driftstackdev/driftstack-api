@@ -446,6 +446,8 @@ npm i @driftstack/sdk</code></pre>
       const API_KEY_TIMEOUT_MS = 15_000;
       const mutationButtonsInFlight = new WeakSet();
       let createInFlight = false;
+      let refreshController = null;
+      let refreshGeneration = 0;
 
       function showBanner(text) {
         if (!banner) return;
@@ -565,7 +567,11 @@ npm i @driftstack/sdk</code></pre>
 
       function refresh() {
         if (!token) return;
+        if (refreshController) refreshController.abort();
         const controller = new AbortController();
+        refreshController = controller;
+        const generation = ++refreshGeneration;
+        const isCurrent = () => generation === refreshGeneration;
         const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
         return fetch(apiBaseUrl + '/v1/api-keys', {
           headers: { authorization: 'Bearer ' + token },
@@ -573,6 +579,7 @@ npm i @driftstack/sdk</code></pre>
         })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
+            if (!isCurrent()) return;
             const keys = body.data || [];
             if (keys.length === 0) {
               ul.classList.add('hidden');
@@ -587,6 +594,7 @@ npm i @driftstack/sdk</code></pre>
             hideBanner();
           })
           .catch((err) => {
+            if (!isCurrent()) return;
             showBanner(
               err && err.name === 'AbortError'
                 ? "Loading API keys took too long. Check your connection and retry."
@@ -597,6 +605,8 @@ npm i @driftstack/sdk</code></pre>
           })
           .finally(function () {
             window.clearTimeout(timeout);
+            if (!isCurrent()) return;
+            refreshController = null;
             // 2026-05-21 — signal the layout's opacity-gate that the
             // /v1/api-keys fetch resolved (success or failure).
             if (typeof window.dashboardHydrated === 'function') {
@@ -604,6 +614,12 @@ npm i @driftstack/sdk</code></pre>
             }
           });
       }
+
+      window.addEventListener('pagehide', () => {
+        refreshGeneration += 1;
+        if (refreshController) refreshController.abort();
+        refreshController = null;
+      });
 
       function wireRevokeButtons() {
         const buttons = ul.querySelectorAll('[data-revoke]');

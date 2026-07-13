@@ -27,7 +27,7 @@ interface MockFetchCall {
 interface SetUpOpts {
   token?: string;
   confirmReturns?: boolean;
-  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+  fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
 function setUpDom(
@@ -98,6 +98,10 @@ async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
+async function flushMicrotasks(times = 20): Promise<void> {
+  for (let i = 0; i < times; i++) await Promise.resolve();
+}
+
 const ACTIVE_KEY = {
   id: 'key_active',
   name: 'CI key',
@@ -157,6 +161,49 @@ describe('api-keys page — local integration', () => {
     expect(window.document.querySelector('[data-rotate="key_revoked"]')).toBeNull();
     expect(window.document.querySelector('[data-revoke="key_revoked"]')).toBeNull();
     expect(text.toLowerCase()).toContain('revoked');
+  });
+
+  it('supersedes an older list read so it cannot overwrite post-create credential state', async () => {
+    let releaseInitial: (response: Response) => void = () => {};
+    const initialRead = new Promise<Response>((resolve) => {
+      releaseInitial = resolve;
+    });
+    const currentKey = { ...ACTIVE_KEY, id: 'key_new', name: 'Current key' };
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => initialRead,
+        () => json({ id: 'key_new', plaintext: 'ds_live_CURRENT_SECRET' }, 201),
+        () => json({ data: [currentKey] }),
+      ],
+    });
+    win = window;
+    const initialSignal = fetchCalls[0]?.init?.signal;
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Current key';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushMicrotasks(40);
+
+    expect(initialSignal?.aborted).toBe(true);
+    expect(window.document.querySelector('[data-list]')?.textContent).toContain('Current key');
+    releaseInitial(json({ data: [{ ...REVOKED_KEY, name: 'Stale key' }] }));
+    await flushMicrotasks(30);
+    const list = window.document.querySelector('[data-list]')?.textContent ?? '';
+    expect(list).toContain('Current key');
+    expect(list).not.toContain('Stale key');
+  });
+
+  it('aborts and invalidates an orphaned list read on pagehide', () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => new Promise(() => {})],
+    });
+    win = window;
+    const signal = fetchCalls[0]?.init?.signal;
+    expect(signal?.aborted).toBe(false);
+    window.dispatchEvent(new window.Event('pagehide'));
+    expect(signal?.aborted).toBe(true);
   });
 
   // S35 2026-07-07 (fable-frontend-audit) — fmtIso used to floor

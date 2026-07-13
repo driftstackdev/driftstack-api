@@ -127,6 +127,15 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toContain('Revoking took too long. Check your connection and try again.');
   });
 
+  it('supersedes stale list reads and cancels hydration on page exit', () => {
+    expect(body).toContain('let refreshController = null;');
+    expect(body).toContain('let refreshGeneration = 0;');
+    expect(body).toMatch(/if \(refreshController\) refreshController\.abort\(\)/);
+    expect(body).toMatch(/const isCurrent = \(\) => generation === refreshGeneration/);
+    expect(body).toMatch(/if \(!isCurrent\(\)\) return;/);
+    expect(body).toMatch(/window\.addEventListener\('pagehide'/);
+  });
+
   it('footer scope summary copy stays accurate (broad scopes only — granular not promoted here)', () => {
     // V-174 — footer summary. Mentions read/write/account_owner
     // explicitly and recommends narrowest-scoped key.
