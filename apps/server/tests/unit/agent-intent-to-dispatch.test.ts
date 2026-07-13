@@ -4,7 +4,7 @@
 // field cases, the wait_for predicate construction (+ injection safety),
 // and that produced params pass the canonical harness param-schema.
 
-import { runInNewContext } from 'node:vm';
+import { createContext, runInContext, runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentIntent } from '@driftstack/api-types';
 import { agentIntentToDispatch } from '../../src/services/agent-intent-to-dispatch.js';
@@ -328,24 +328,95 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.reason).toMatch(/requires a value/);
   });
 
-  it("#139 wait:idle → wait_for with the page-settled predicate (document.readyState === 'complete')", () => {
+  it('#139 wait:idle → wait_for with a bounded DOM/resource/font quiet window', () => {
     // The decomposer inserts an idle-settle after navigate; it must map to a real
     // wait_for predicate, not halt the plan (which lost the following screenshot).
     const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     expect(r.intentName).toBe('wait_for');
-    expect(r.params).toEqual({ predicate: "return document.readyState === 'complete';" });
+    expect(r.params.predicate).toEqual(expect.any(String));
+    expect(r.params.predicate).toContain("document.readyState !== 'complete'");
+    expect(r.params.predicate).toContain('now - state.lastActivity >= 500');
+    expect(r.params.predicate).toContain('now - state.readySince >= 3000');
+    expect(r.params.predicate).toContain("document.fonts.status === 'loaded'");
+    expect(r.params.predicate).toContain("performance.getEntriesByType('resource')");
+  });
+
+  it('wait:idle predicate waits for quiet, extends on DOM/resource activity, cleans up, and has a 3s ceiling', () => {
+    const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('narrow');
+    const predicate = String(r.params.predicate);
+    let now = 1_000;
+    let mutationCallback: (() => void) | undefined;
+    let disconnects = 0;
+    const resources: Array<{ responseEnd: number }> = [];
+    const document = {
+      readyState: 'loading',
+      documentElement: {},
+      fonts: { status: 'loading' },
+    };
+    class TestMutationObserver {
+      constructor(callback: () => void) {
+        mutationCallback = callback;
+      }
+      observe(): void {}
+      disconnect(): void {
+        disconnects += 1;
+      }
+    }
+    const context = createContext({
+      document,
+      MutationObserver: TestMutationObserver,
+      performance: {
+        now: () => now,
+        getEntriesByType: () => resources,
+      },
+    });
+    const evaluate = () => runInContext(`(function () { ${predicate} })()`, context) as boolean;
+
+    expect(evaluate()).toBe(false); // loading never settles
+    document.readyState = 'complete';
+    expect(evaluate()).toBe(false); // starts the post-complete window
+    document.fonts.status = 'loaded';
+    now = 1_400;
+    mutationCallback?.();
+    now = 1_899;
+    expect(evaluate()).toBe(false);
+    now = 1_900;
+    expect(evaluate()).toBe(true); // 500ms after the last DOM mutation
+    expect(disconnects).toBe(1);
+
+    now = 2_000;
+    expect(evaluate()).toBe(false); // success deleted state; a new wait starts fresh
+    // Resource Timing is start-ordered, so the final entry need not have the
+    // latest completion. The predicate takes a bounded max, not array.at(-1).
+    resources.push({ responseEnd: 2_400 }, { responseEnd: 2_200 });
+    now = 2_899;
+    expect(evaluate()).toBe(false);
+    now = 2_900;
+    expect(evaluate()).toBe(true); // resource completion also extends quiet
+    expect(disconnects).toBe(2);
+
+    document.fonts.status = 'loading';
+    now = 3_000;
+    expect(evaluate()).toBe(false);
+    now = 5_999;
+    mutationCallback?.();
+    expect(evaluate()).toBe(false);
+    now = 6_000;
+    mutationCallback?.();
+    expect(evaluate()).toBe(true); // live page/font cannot exceed the 3s ceiling
+    expect(disconnects).toBe(3);
   });
 
   it('#139 wait:idle carries timeout_seconds when timeoutMs ≥ 1s', () => {
     const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle', timeoutMs: 5000 });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
-    expect(r.params).toEqual({
-      predicate: "return document.readyState === 'complete';",
-      timeout_seconds: 5,
-    });
+    expect(r.params.predicate).toEqual(expect.any(String));
+    expect(r.params.timeout_seconds).toBe(5);
   });
 
   it('capture:pdf → unsupported (no harness pdf intent)', () => {

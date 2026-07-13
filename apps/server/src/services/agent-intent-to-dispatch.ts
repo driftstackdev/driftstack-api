@@ -233,19 +233,58 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
 
     case 'idle': {
       // #139 — the decomposer reliably inserts a `wait{condition:idle}` settle
-      // step after a navigate ("let the page finish loading"). Map it to the
-      // canonical page-settled predicate `document.readyState === 'complete'`
-      // (the same wait_for mechanism selector_visible uses). This is what
-      // "idle" means for automation in practice — the document finished loading;
-      // after a navigate it's usually already true, so it resolves near-instantly.
+      // step after a navigate ("let the page finish loading"). `readyState`
+      // alone is insufficient for SPAs: it is commonly already `complete` while
+      // hydration, web fonts, late resources, and DOM-driven layout are moving.
+      // Keep a tiny page-local observer state across the harness's wait_for
+      // polls and require a human-sized 500ms quiet window. A 3s post-complete
+      // ceiling prevents animated/live pages from stalling the plan forever.
       // Previously this returned ok:false → the executor HALTED the whole plan on
       // the settle step, so a "navigate then screenshot" plan lost its screenshot.
       // `return …;` — the box waitFor evaluates the predicate as a function body
-      // (see selector_visible above); a bare expression yields undefined → 5s
-      // timeout. On a loaded page readyState==='complete' resolves on the first
-      // 250ms poll → ~instant.
+      // (see selector_visible above); a bare expression yields undefined.
+      const predicate = [
+        "const key = Symbol.for('driftstack.agent.wait.idle.v1');",
+        'const root = globalThis;',
+        'const now = performance.now();',
+        'let state = root[key];',
+        "if (state === undefined || state.document !== document || typeof state.lastActivity !== 'number') {",
+        'state = { document, lastActivity: now, readySince: null, observer: null };',
+        'root[key] = state;',
+        '}',
+        "if (state.observer === null && typeof MutationObserver === 'function' && document.documentElement !== null) {",
+        'state.observer = new MutationObserver(() => { state.lastActivity = performance.now(); });',
+        'state.observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });',
+        '}',
+        "if (document.readyState !== 'complete') {",
+        'state.readySince = null;',
+        'state.lastActivity = now;',
+        'return false;',
+        '}',
+        'if (state.readySince === null) {',
+        'state.readySince = now;',
+        'state.lastActivity = now;',
+        'return false;',
+        '}',
+        "if (typeof performance.getEntriesByType === 'function') {",
+        "const resources = performance.getEntriesByType('resource');",
+        'let latestResourceEnd = 0;',
+        'for (let index = Math.max(0, resources.length - 64); index < resources.length; index += 1) {',
+        'const responseEnd = resources[index].responseEnd;',
+        "if (typeof responseEnd === 'number' && Number.isFinite(responseEnd)) latestResourceEnd = Math.max(latestResourceEnd, responseEnd);",
+        '}',
+        'state.lastActivity = Math.max(state.lastActivity, latestResourceEnd);',
+        '}',
+        "const fontsReady = !('fonts' in document) || document.fonts.status === 'loaded';",
+        'const quiet = now - state.lastActivity >= 500;',
+        'const ceilingReached = now - state.readySince >= 3000;',
+        'if ((!fontsReady || !quiet) && !ceilingReached) return false;',
+        "if (state.observer !== null && typeof state.observer.disconnect === 'function') state.observer.disconnect();",
+        'delete root[key];',
+        'return true;',
+      ].join(' ');
       const params: Record<string, unknown> = {
-        predicate: "return document.readyState === 'complete';",
+        predicate,
       };
       if (intent.timeoutMs !== undefined) {
         const seconds = Math.ceil(intent.timeoutMs / 1000);
