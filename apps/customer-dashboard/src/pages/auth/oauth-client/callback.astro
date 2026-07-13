@@ -254,12 +254,16 @@ const apiBaseUrl = resolveApiBaseUrl();
                     .json()
                     .catch(() => ({}))
                     .then((problem) =>
-                      Promise.reject(new Error(problem.detail || 'HTTP ' + response.status)),
+                      Promise.reject(window.driftstackResponseError(response, problem)),
                     ),
             )
             .then((body) => {
               const token = body && body.session && body.session.token;
-              if (!token) throw new Error('The server did not return a session. Sign in again.');
+              if (!token)
+                throw Object.assign(
+                  new Error('The server did not return a session. Sign in again.'),
+                  { customerSafe: true },
+                );
               mfaChallengeToken = null;
               completeSession(token, mfaRedirectTo);
             })
@@ -278,7 +282,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                 );
                 return;
               }
-              showBanner(err && err.message ? err.message : 'Verification failed. Try again.');
+              showBanner(
+                window.driftstackRequestErrorMessage(err, 'Verification failed. Try again.'),
+              );
             })
             .finally(() => {
               window.clearTimeout(timeout);
@@ -314,7 +320,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             : r
                 .json()
                 .catch(() => ({}))
-                .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
         )
         .then((body) => {
           if (body.outcome === 'signed-in-existing-link' || body.outcome === 'created-new-account') {
@@ -373,11 +379,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             return;
           }
-          showBanner(
-            err && err.message
-              ? err.message
-              : 'OAuth callback failed.',
-          );
+          showBanner(window.driftstackRequestErrorMessage(err, 'OAuth callback failed.'));
         })
         .finally(() => window.clearTimeout(timeout));
     })();

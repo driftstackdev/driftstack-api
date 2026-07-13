@@ -382,7 +382,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                     // Per-field validation errors take precedence over the
                     // generic detail string (Issue 2 wave 1085+).
                     const specific = formatValidationIssues(b.extensions && b.extensions.issues);
-                    const err = new Error(specific || b.detail || 'HTTP ' + r.status);
+                    const err = specific
+                      ? Object.assign(new Error(specific), { customerSafe: true })
+                      : window.driftstackResponseError(r, b);
                     // Carry the problem type so the catch can branch (e.g.
                     // email-already-registered → inline sign-in/reset links).
                     err.problemType = b.type;
@@ -413,9 +415,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               showSignupOutcomeUnknown(payload.email);
               return;
             }
-            showBanner(
-              err && err.message ? err.message : 'Signup failed.',
-            );
+            showBanner(window.driftstackRequestErrorMessage(err, 'Signup failed.'));
           })
           .finally(() => {
             clearTimeout(timeoutId);
@@ -472,7 +472,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             .then((r) =>
               r.ok
                 ? r.json()
-                : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then((body) => {
               if (body.authorize_url) {
@@ -485,9 +488,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               showBanner(
                 controller.signal.aborted
                   ? 'Signup provider took too long. Check your connection and try again.'
-                  : err && err.message
-                    ? err.message
-                    : 'OAuth start failed.',
+                  : window.driftstackRequestErrorMessage(err, 'OAuth start failed.'),
               );
             })
             .finally(() => {

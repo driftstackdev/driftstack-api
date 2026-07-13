@@ -369,7 +369,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                     // Carry the problem `type` + status on the rejected
                     // error so the catch can branch (e.g. email-not-verified
                     // → resend path) instead of showing a dead banner.
-                    const err = new Error(b.detail || 'HTTP ' + r.status.toString());
+                    const err = window.driftstackResponseError(r, b);
                     err.problemType = b.type;
                     err.status = r.status;
                     err.email = payload.email;
@@ -400,9 +400,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             showBanner(
               controller.signal.aborted
                 ? 'Sign-in took too long. Check your connection and try again.'
-                : err && err.message
-                  ? err.message
-                  : 'Sign-in failed.',
+                : window.driftstackRequestErrorMessage(err, 'Sign-in failed.'),
             );
           })
           .finally(() => {
@@ -588,9 +586,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 ? r.json()
                 : r
                     .json()
-                    .then((b) =>
-                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status.toString())),
-                    ),
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then((body) => completeSession(body))
             .catch((err) => {
@@ -602,9 +598,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 return;
               }
               showBanner(
-                err && err.message
-                  ? err.message
-                  : 'Verification failed. Try again.',
+                window.driftstackRequestErrorMessage(err, 'Verification failed. Try again.'),
               );
             })
             .finally(() => {
@@ -668,7 +662,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 : r
                     .json()
                     .catch(() => ({}))
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then((body) => {
               if (typeof body.authorize_url === 'string') {
@@ -681,9 +675,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               showBanner(
                 controller.signal.aborted
                   ? 'Sign-in provider took too long. Check your connection and try again.'
-                  : err && err.message
-                    ? err.message
-                    : 'OAuth start failed.',
+                  : window.driftstackRequestErrorMessage(err, 'OAuth start failed.'),
               );
             })
             .finally(() => {

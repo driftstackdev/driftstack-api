@@ -202,7 +202,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((r) =>
             r.ok
               ? r.json()
-              : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
           )
           .then((body) => {
             const session = body.session || {};
@@ -247,11 +250,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
               return;
             }
-            showBanner(
-              err && err.message
-                ? err.message
-                : 'Verification failed.',
-            );
+            showBanner(window.driftstackRequestErrorMessage(err, 'Verification failed.'));
             // If auto-verify (link-click) failed, reveal the manual
             // fallback form so the user has a recovery path.
             showFallback();
@@ -325,7 +324,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 ? r.json()
                 : r
                     .json()
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then(() => {
               if (resendStatus) {
@@ -356,11 +355,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 return;
               }
               resendBtn.disabled = false;
-              showBanner(
-                err && err.message
-                  ? err.message
-                  : 'Resend failed.',
-              );
+              showBanner(window.driftstackRequestErrorMessage(err, 'Resend failed.'));
             })
             .finally(() => clearTimeout(timeoutId));
         });
