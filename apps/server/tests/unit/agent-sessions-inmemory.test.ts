@@ -343,7 +343,7 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(same.pairModeState).toBeNull();
   });
 
-  it('v2-#19 closeWithReason: sets closedAt to now on first close; re-closing leaves the original closedAt intact (first-close wins)', async () => {
+  it('v2-#19 closeWithReason: first close owns timestamp AND reason; re-close is an idempotent read', async () => {
     let now = new Date('2026-05-16T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);
     const r0 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
@@ -355,10 +355,24 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
 
     now = new Date('2026-05-16T00:20:00Z');
     const reClosed = await repo.closeWithReason(r0.id, 'budget-exhausted');
-    // Reason updates to the latest close call but closedAt is sticky.
-    expect(reClosed.closedReason).toBe('budget-exhausted');
+    expect(reClosed.closedReason).toBe('customer-closed');
     expect(reClosed.closedAt?.toISOString()).toBe('2026-05-16T00:10:00.000Z');
-    expect(reClosed.updatedAt.toISOString()).toBe('2026-05-16T00:20:00.000Z');
+    expect(reClosed.updatedAt.toISOString()).toBe('2026-05-16T00:10:00.000Z');
+    expect(await repo.get(r0.id)).toEqual(first);
+  });
+
+  it('closeWithReason Promise.all contenders return the same first-winner row', async () => {
+    const repo = new InMemoryAgentSessionsRepo(() => new Date('2026-05-16T00:10:00Z'));
+    const created = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+
+    const [first, sibling] = await Promise.all([
+      repo.closeWithReason(created.id, 'customer-closed'),
+      repo.closeWithReason(created.id, 'budget-exhausted'),
+    ]);
+
+    expect(first.closedReason).toBe('customer-closed');
+    expect(sibling).toEqual(first);
+    expect(await repo.get(created.id)).toEqual(first);
   });
 
   // ─── Worker-disconnect fix (2026-06-19, migration 0086) ─────────────

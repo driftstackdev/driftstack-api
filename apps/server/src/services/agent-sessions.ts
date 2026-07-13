@@ -662,16 +662,21 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {
     const rec = this.records.get(id);
     if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
+    // Mirror the production repo's atomic WHERE status='active' close: the
+    // first terminal transition owns both closedAt and closedReason. A later
+    // customer/worker/runtime closer is an idempotent read, never a reason
+    // overwrite. This in-memory method is synchronous, so checking the current
+    // immutable record also serializes Promise.all callers deterministically.
+    if (rec.status !== 'active') return Promise.resolve(rec);
     const now = this.clock();
     const updated: AgentSessionRecord = {
       ...rec,
       status: 'closed',
       closedReason: reason,
       // v2-#19 — wall-clock close timestamp; distinct from updatedAt
-      // which moves on every transcript append. Set once at the
-      // transition; not advanced if the row is later re-closed (the
-      // first close wins, by Stripe-style timestamp semantics).
-      closedAt: rec.closedAt ?? now,
+      // which moves on every transcript append. This branch is active-only,
+      // so both terminal fields are set exactly once.
+      closedAt: now,
       updatedAt: now,
     };
     this.records.set(id, updated);
