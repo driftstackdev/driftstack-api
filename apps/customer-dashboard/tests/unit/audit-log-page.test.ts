@@ -26,7 +26,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -110,7 +110,7 @@ describe('customer-dashboard Audit Log (audit-log.astro) behaviour', () => {
   });
 
   it('renders entries with friendly labels, per-action payload hints, raw action + UTC timestamp', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: () =>
         json({
@@ -151,6 +151,10 @@ describe('customer-dashboard Audit Log (audit-log.astro) behaviour', () => {
     expect(list).toContain('prof_new1');
     // UTC timestamp formatting (fmtTs: "YYYY-MM-DD HH:MM:SS UTC").
     expect(list).toContain('2026-05-20 10:00:00 UTC');
+    expect(fetchCalls.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(true);
+    expect(
+      window.document.querySelector('[data-page="audit-log"]')?.hasAttribute('aria-busy'),
+    ).toBe(false);
   });
 
   it('empty result: reveals the empty state, hides the list', async () => {
@@ -225,13 +229,81 @@ describe('customer-dashboard Audit Log (audit-log.astro) behaviour', () => {
     // Click Load more → second page fetched with cursor + appended.
     const btn = window.document.querySelector('[data-load-more]') as HTMLButtonElement;
     btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
     await flush();
-    const page2Call = fetchCalls.find((c) => /cursor=cur2/.test(c.url));
+    const page2Calls = fetchCalls.filter((c) => /cursor=cur2/.test(c.url));
+    const page2Call = page2Calls[0];
     expect(page2Call).toBeTruthy();
+    expect(page2Calls).toHaveLength(1);
+    expect(page2Call?.init?.signal).toBeInstanceOf(window.AbortSignal);
     const list = text(window, '[data-list]');
     expect(list).toContain('API key created');
     expect(list).toContain('Session created');
     // Cursor exhausted → load-more hidden again.
     expect(isHidden(window, '[data-load-more-row]')).toBe(true);
+    expect(btn.disabled).toBe(false);
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('filter refresh aborts and ignores the superseded page response', async () => {
+    let resolveInitial: ((value: Response) => void) | undefined;
+    let listCalls = 0;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: () => {
+        listCalls++;
+        if (listCalls === 1) {
+          return new Promise<Response>((resolve) => {
+            resolveInitial = resolve;
+          });
+        }
+        return json({
+          data: [{ action: 'account.login', timestamp: '2026-05-24T00:00:00.000Z' }],
+          next_cursor: null,
+        });
+      },
+    });
+    win = window;
+    const filter = window.document.querySelector('[data-filter]') as HTMLSelectElement;
+    filter.value = 'account.login';
+    filter.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(text(window, '[data-list]')).toContain('Login');
+
+    resolveInitial?.(
+      json({
+        data: [{ action: 'subscription.tier_changed', timestamp: '2026-05-20T00:00:00.000Z' }],
+        next_cursor: null,
+      }),
+    );
+    await flush();
+    expect(text(window, '[data-list]')).toContain('Login');
+    expect(text(window, '[data-list]')).not.toContain('Subscription changed');
+  });
+
+  it('serializes CSV/JSON export attempts and restores both controls', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) =>
+        /\/export\?format=/.test(call.url)
+          ? json({ detail: 'Export temporarily unavailable' }, 503)
+          : json({ data: [], next_cursor: null }),
+    });
+    win = window;
+    await flush();
+    const csv = window.document.querySelector('[data-export-csv]') as HTMLButtonElement;
+    const jsonBtn = window.document.querySelector('[data-export-json]') as HTMLButtonElement;
+    csv.click();
+    jsonBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+    const exports = fetchCalls.filter((call) => /\/export\?format=/.test(call.url));
+    expect(exports).toHaveLength(1);
+    expect(exports[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
+    expect(csv.disabled).toBe(false);
+    expect(jsonBtn.disabled).toBe(false);
+    expect(csv.hasAttribute('aria-busy')).toBe(false);
+    expect(jsonBtn.hasAttribute('aria-busy')).toBe(false);
   });
 });

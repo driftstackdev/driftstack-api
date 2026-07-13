@@ -377,6 +377,25 @@ const FILTER_OPTIONS = [
       let totalRendered = 0;
       let activeFilter = '';
       const PAGE_LIMIT = 50;
+      const AUDIT_TIMEOUT_MS = 15_000;
+      let pageController = null;
+      let loadMoreInFlight = false;
+      let exportInFlight = false;
+
+      function boundedFetch(url, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(() => controller.abort(), AUDIT_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(function () {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       function getToken() {
         try {
@@ -535,14 +554,22 @@ const FILTER_OPTIONS = [
         }
         const isFreshLoad = !cursor;
         const myGeneration = ++fetchGeneration;
-        return fetch(buildUrl(cursor), {
-          headers: {
-            authorization: 'Bearer ' + token,
-            ...(typeof window.driftstackActAsHeaders === 'function'
-              ? window.driftstackActAsHeaders()
-              : {}),
+        if (pageController) pageController.abort();
+        const controller = new AbortController();
+        pageController = controller;
+        root.setAttribute('aria-busy', 'true');
+        return boundedFetch(
+          buildUrl(cursor),
+          {
+            headers: {
+              authorization: 'Bearer ' + token,
+              ...(typeof window.driftstackActAsHeaders === 'function'
+                ? window.driftstackActAsHeaders()
+                : {}),
+            },
           },
-        })
+          controller,
+        )
           .then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
@@ -578,11 +605,15 @@ const FILTER_OPTIONS = [
             if (isFreshLoad) renderLoadError();
             showBanner(
               "Couldn't load audit log (" +
-                (err && err.message ? err.message : 'network error') +
+                requestErrorMessage(err, 'network error') +
                 ').',
             );
           })
           .finally(function () {
+            if (myGeneration === fetchGeneration) {
+              root.removeAttribute('aria-busy');
+              pageController = null;
+            }
             // 2026-05-21 — opacity-gate hydrate signal (same pattern
             // as the other dashboard pages).
             if (typeof window.dashboardHydrated === 'function') {
@@ -660,11 +691,15 @@ const FILTER_OPTIONS = [
 
       if (loadMoreBtn) {
         loadMoreBtn.addEventListener('click', function () {
-          if (!nextCursor) return;
+          if (!nextCursor || loadMoreInFlight) return;
+          loadMoreInFlight = true;
           loadMoreBtn.disabled = true;
+          loadMoreBtn.setAttribute('aria-busy', 'true');
           loadMoreBtn.textContent = 'Loading…';
           fetchPage(nextCursor).finally(function () {
+            loadMoreInFlight = false;
             loadMoreBtn.disabled = false;
+            loadMoreBtn.removeAttribute('aria-busy');
             loadMoreBtn.textContent = 'Load more';
           });
         });
@@ -676,17 +711,27 @@ const FILTER_OPTIONS = [
           showBanner('Sign in to export audit log.');
           return;
         }
+        if (exportInFlight) return;
+        exportInFlight = true;
+        [exportCsvBtn, exportJsonBtn].forEach(function (btn) {
+          if (!btn) return;
+          btn.disabled = true;
+          btn.setAttribute('aria-busy', 'true');
+        });
         // Direct fetch + blob download — keeps the auth header out of
         // the URL (a window.location.assign would leak the bearer in
         // browser history if any redirect chain were involved).
-        fetch(apiBaseUrl + '/v1/account/audit-log/export?format=' + encodeURIComponent(format), {
-          headers: {
-            authorization: 'Bearer ' + token,
-            ...(typeof window.driftstackActAsHeaders === 'function'
-              ? window.driftstackActAsHeaders()
-              : {}),
+        boundedFetch(
+          apiBaseUrl + '/v1/account/audit-log/export?format=' + encodeURIComponent(format),
+          {
+            headers: {
+              authorization: 'Bearer ' + token,
+              ...(typeof window.driftstackActAsHeaders === 'function'
+                ? window.driftstackActAsHeaders()
+                : {}),
+            },
           },
-        })
+        )
           .then(function (r) {
             if (!r.ok) {
               // Error responses are problem+json, not the export blob —
@@ -717,7 +762,15 @@ const FILTER_OPTIONS = [
             });
           })
           .catch(function (err) {
-            showBanner('Export failed (' + (err && err.message ? err.message : 'network error') + ').');
+            showBanner('Export failed (' + requestErrorMessage(err, 'network error') + ').');
+          })
+          .finally(function () {
+            exportInFlight = false;
+            [exportCsvBtn, exportJsonBtn].forEach(function (btn) {
+              if (!btn) return;
+              btn.disabled = false;
+              btn.removeAttribute('aria-busy');
+            });
           });
       }
 
