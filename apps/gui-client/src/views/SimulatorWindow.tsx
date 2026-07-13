@@ -3941,8 +3941,8 @@ export function SimulatorWindow(): JSX.Element {
       // even if a terminal frame never arrives, so this can't hang the affordance.
       if (isAuthoritative && frame.state !== 'loading') resolveSwitchRef.current(targetId);
       // #116 — the founder's "tab switch blinks the new page then REVERTS to the old
-      // tab" + wrong url/title. On prod the box still emits page_state WITHOUT a tabId
-      // (per-tab tagging is A3's held fix), so a tabId-LESS frame that lands in the
+      // tab" + wrong url/title. Current fleet harnesses stamp page_state.tabId; retain
+      // this compatibility net for older/self-hosted nodes where a tabId-LESS frame lands in the
       // ~2.5s AFTER a switch may describe the PRIOR tab — writing its url/title onto the
       // just-switched-to tab is exactly the revert.
       const inSwitchGrace =
@@ -4321,9 +4321,9 @@ export function SimulatorWindow(): JSX.Element {
         // overlay / load-stall advisory / loading bar + watchdog / nav-target gate /
         // progress) is WINDOW-GLOBAL, not per-tab. url/title route per-tab above, but the
         // FOREGROUND chrome must be driven ONLY by a frame for the ACTIVE tab. A tabId-less
-        // or UNRECOGNISED frame is treated as the active tab (today's exact tabId-less prod
-        // behaviour → zero change). The moment A3 stamps page_state.tabId AND warm-tabs
-        // keeps live BACKGROUND renderers, a background tab's 'loading'/'errored'/'stalled'
+        // or UNRECOGNISED frame is treated as the active tab for compatibility with older/
+        // self-hosted nodes. Current fleet tabId stamping plus live BACKGROUND renderers mean
+        // a background tab's 'loading'/'errored'/'stalled'
         // would otherwise pop the foreground's loading bar / "PAGE FAILED TO LOAD" overlay /
         // "page unresponsive" badge and repoint the window-global currentNavTargetRef —
         // which then suppresses the foreground page's OWN real error (the #72/#135 false-
@@ -4508,8 +4508,8 @@ export function SimulatorWindow(): JSX.Element {
           if (cancelled || ps === null) return;
           // Box-sourced url/title → tab storage (the box is the only writer). When
           // the poll frame carries a tabId, route precisely — no grace needed (it
-          // lands on the right tab). When it does NOT (today's prod page-state poll),
-          // it targets the ACTIVE tab and could carry the PRIOR tab's url for ~2s
+          // lands on the right tab). When an older/self-hosted node omits it, the poll
+          // targets the ACTIVE tab and could carry the PRIOR tab's url for ~2s
           // after a switch/navigate (the box hasn't re-reported the new page yet) →
           // the founder's "2nd switch stays on the same url" clobber. So within the
           // grace window suppress BOTH the URL and the TITLE (founder 2026-07-07:
@@ -4517,10 +4517,10 @@ export function SimulatorWindow(): JSX.Element {
           // carries the PRIOR tab's page, so applying its title routes the WRONG
           // tab's title onto the just-switched tab — the persistent inaccuracy. The
           // earlier design let the title through ("self-heals") but that assumption
-          // fails when the box keeps re-asserting the tabId-less prior title; keeping
+          // fails when a legacy node keeps re-asserting the tabId-less prior title; keeping
           // the tab's own last-known title (null ⇒ writeTabPageState skips it) until a
-          // genuine frame arrives is strictly more accurate. Tag tabId box-side to
-          // make this fully precise (A3 #116).
+          // genuine frame arrives is strictly more accurate. Current fleet nodes carry
+          // tabId; this branch remains a compatibility fallback (A3 #116).
           const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
           const inGrace =
             Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
@@ -4542,9 +4542,9 @@ export function SimulatorWindow(): JSX.Element {
           // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
           // page chrome below (freeze badge / error overlay / load-stall advisory / loading
           // bar + watchdog / nav-target gate) must be driven ONLY by a frame for the ACTIVE
-          // tab. tabId-less or UNRECOGNISED ⇒ active (today's exact prod behaviour, zero
-          // change); once A3 stamps page_state.tabId + warm-tabs keeps live BACKGROUND
-          // renderers, a background tab's poll frame routes its url/title above but must not
+          // tab. tabId-less or UNRECOGNISED ⇒ active for older/self-hosted compatibility;
+          // current fleet tabId stamping plus live BACKGROUND renderers mean a background
+          // tab's poll frame routes its url/title above but must not
           // touch the foreground chrome (else the #72/#135 false-error is re-introduced
           // cross-tab). Recognition mirrors writeTabPageState exactly.
           const rawPollChromeTabId =
