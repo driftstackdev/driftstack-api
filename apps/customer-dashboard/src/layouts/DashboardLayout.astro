@@ -252,6 +252,39 @@ const navSections: NavSection[] = [
       // Installed before every slotted page script so dashboard transport
       // deadlines cover response decoding, not only response headers.
       (function () {
+        window.driftstackRequestErrorMessage = function (err, fallback) {
+          var name = err && typeof err.name === 'string' ? err.name : '';
+          var message = err && typeof err.message === 'string' ? err.message.trim() : '';
+          var normalized = (name + ' ' + message).toLowerCase();
+          if (/abort|timed? out|timeout/.test(normalized)) {
+            return 'Request timed out. Check your connection and try again.';
+          }
+          if (
+            /failed to fetch|fetch failed|network(?:error| request)?|load failed|offline|internet|connection (?:failed|lost|refused)|dns|econn|getaddrinfo/.test(
+              normalized,
+            )
+          ) {
+            return 'Check your connection and try again.';
+          }
+          var statusMatch = message.match(/^HTTP\s+(\d{3})$/i);
+          if (statusMatch) {
+            var status = Number(statusMatch[1]);
+            if (status === 401 || status === 403) {
+              return 'Your sign-in has expired. Sign in again and retry.';
+            }
+            if (status === 429) return 'Too many attempts. Wait a moment and try again.';
+            if (status >= 500) return 'The service is temporarily unavailable. Try again shortly.';
+            return fallback;
+          }
+          if (err && err.customerSafe === true && message) return message;
+          return fallback;
+        };
+        window.driftstackResponseError = function (response, body) {
+          var detail = body && typeof body.detail === 'string' ? body.detail.trim() : '';
+          var error = new Error(detail || 'HTTP ' + response.status);
+          if (detail) error.customerSafe = true;
+          return error;
+        };
         window.driftstackFetchWithDeadline = function (url, init, timeoutMs, suppliedController) {
           var controller = suppliedController || new AbortController();
           var callerSignal = init && init.signal;

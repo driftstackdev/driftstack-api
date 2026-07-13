@@ -387,11 +387,7 @@ const FILTER_OPTIONS = [
       }
 
       function requestErrorMessage(err, fallback) {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       function getToken() {
@@ -601,8 +597,8 @@ const FILTER_OPTIONS = [
             if (myGeneration !== fetchGeneration) return; // superseded by a newer fetchPage
             if (isFreshLoad) renderLoadError();
             showBanner(
-              "Couldn't load audit log (" +
-                requestErrorMessage(err, 'network error') +
+                "Couldn't load audit log (" +
+                requestErrorMessage(err, 'Could not load the audit log. Try again.') +
                 ').',
             );
           })
@@ -747,7 +743,7 @@ const FILTER_OPTIONS = [
                   return {};
                 })
                 .then(function (b) {
-                  throw new Error(b.detail || 'HTTP ' + r.status);
+                  throw window.driftstackResponseError(r, b);
                 });
             }
             return r.blob().then(function (blob) {
@@ -765,7 +761,11 @@ const FILTER_OPTIONS = [
             });
           })
           .catch(function (err) {
-            showBanner('Export failed (' + requestErrorMessage(err, 'network error') + ').');
+            showBanner(
+              'Export failed (' +
+                requestErrorMessage(err, 'Could not export the audit log. Try again.') +
+                ').',
+            );
           })
           .finally(function () {
             exportInFlight = false;
