@@ -12,11 +12,12 @@
 //     `%APPDATA%\Driftstack\` on Windows, `~/.config/driftstack/`
 //     on Linux). Non-sensitive config; plain JSON is fine.
 //
-// Migration: a pre-V-241 customer might have an apiKey field in
-// settings.json. `loadSettings` detects this on first call and
-// transparently migrates to the keychain (calls `secret_save` then
-// rewrites settings.json without the apiKey field). One-shot on
-// upgrade; no customer action needed.
+// Migration: older builds could persist a flat `apiKey` and a per-host
+// `apiKeys` map in settings.json, especially for self-hosted deployments.
+// `loadSettings` copies every remembered entry into its host-scoped keychain
+// name and then rewrites settings.json without either plaintext field. A failed
+// keychain write remains usable in memory for this launch but is NEVER retained
+// on disk; the customer can re-enter it after unlocking the credential store.
 
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { invoke } from '@tauri-apps/api/core';
@@ -84,22 +85,12 @@ export function keychainNameFor(baseUrl: string): string {
   return 'api_key:' + hostIdFor(baseUrl);
 }
 
-// GUI W232 (c) — keychain ONLY for the official cloud (`*.driftstack.dev`,
-// where the key is a sensitive `ds_live_…` value worth OS-encrypting). For
-// self-hosted / localhost the key is a local dev value, and the macOS Keychain
-// ACL prompt re-fires on every ad-hoc rebuild (fresh code signature) — so we
-// store it in `settings.json` instead (plaintext in the per-app config dir;
-// acceptable for a local key, and it ENDS the per-build re-prompt). Switching
-// baseUrl re-evaluates this, and loadSettings one-time-migrates a self-hosted
-// key out of the keychain into settings.json on the first load after upgrade.
-export function useKeychainForBaseUrl(baseUrl: string): boolean {
-  const host = baseUrl
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '')
-    .replace(/:\d+$/, '');
-  return host === 'driftstack.dev' || host.endsWith('.driftstack.dev');
+// Every deployment key is a bearer credential. A self-hosted/on-prem key can
+// control production profiles, proxies, sessions, and billing just as a cloud
+// key can; its host is not a security classification. Keep this exported seam
+// for compatibility with callers/tests, but it is intentionally unconditional.
+export function useKeychainForBaseUrl(_baseUrl: string): boolean {
+  return true;
 }
 
 interface PersistedSettings {
@@ -109,7 +100,7 @@ interface PersistedSettings {
   themeAccent?: unknown;
   telemetryOptIn?: unknown;
   startUrl?: unknown;
-  /** W584 — per-deployment self-hosted keys, keyed by hostIdFor(baseUrl). */
+  /** Legacy plaintext map; read only for one-shot keychain migration + purge. */
   apiKeys?: unknown;
 }
 
@@ -146,9 +137,10 @@ async function keychainLoad(name: string): Promise<string | null> {
   }
 }
 
-async function keychainSave(name: string, value: string): Promise<void> {
+async function keychainSave(name: string, value: string): Promise<boolean> {
   try {
     await invoke('secret_save', { key: name, value });
+    return true;
   } catch (err) {
     // Soft-fail like keychainLoad/keychainDelete: a save failure (locked
     // keychain, user dismissed the prompt) must NOT throw — it propagates
@@ -156,6 +148,7 @@ async function keychainSave(name: string, value: string): Promise<void> {
     // caller → the global unhandledrejection handler → the fatal overlay. The
     // in-memory key still works for the session; only persistence is lost.
     console.warn('[settings] keychain save failed (key kept in-memory only):', err);
+    return false;
   }
 }
 
@@ -194,70 +187,30 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       ? persisted.startUrl
       : DEFAULT_SETTINGS.startUrl;
 
-  // GUI W232 (c) — self-hosted / localhost: the API key lives in settings.json
-  // (no keychain → no per-rebuild ACL prompt). Read it straight from the store.
-  // W584 — the per-host map is authoritative; the flat apiKey field is the
-  // pre-map back-compat shape (migrated into the map on first load).
-  if (!useKeychainForBaseUrl(baseUrl)) {
-    const keyMap = keyMapFrom(persisted);
-    const hostId = hostIdFor(baseUrl);
-    let apiKey =
-      keyMap[hostId] ??
-      (persisted && typeof persisted.apiKey === 'string' && persisted.apiKey.length > 0
-        ? persisted.apiKey
-        : null);
-    // One-time migration: a pre-W232 self-hosted install kept the key in the
-    // keychain. Pull it into settings.json + clear the keychain (one last
-    // prompt, then never again).
-    if (apiKey === null) {
-      const scoped = keychainNameFor(baseUrl);
-      const fromKeychain =
-        (await keychainLoad(scoped)) ?? (await keychainLoad(LEGACY_KEYCHAIN_NAME));
-      if (fromKeychain !== null) {
-        apiKey = fromKeychain;
-        await keychainDelete(scoped);
-        await keychainDelete(LEGACY_KEYCHAIN_NAME);
-      }
-    }
-    // W584 — persist the map shape whenever the resolved key isn't in it yet
-    // (flat-field or keychain migration), preserving other hosts' keys.
-    if (apiKey !== null && keyMap[hostId] !== apiKey) {
-      keyMap[hostId] = apiKey;
-      await getStore().set(SETTINGS_KEY, {
-        apiKey,
-        baseUrl,
-        themeMode,
-        themeAccent,
-        telemetryOptIn,
-        startUrl,
-        apiKeys: keyMap,
-      });
-      await getStore().save();
-    }
-    return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl };
-  }
-
   const scopedName = keychainNameFor(baseUrl);
+  const legacyKeyMap = keyMapFrom(persisted);
+  const activeHostId = hostIdFor(baseUrl);
+  const flatLegacyKey =
+    persisted && typeof persisted.apiKey === 'string' && persisted.apiKey.length > 0
+      ? persisted.apiKey
+      : null;
+  let apiKey = await keychainLoad(scopedName);
 
-  // Pre-V-241 customers may have apiKey in settings.json. Migrate
-  // transparently on read: if found there AND not present in the
-  // baseUrl-scoped keychain entry, copy.
-  let migratedApiKey: string | null = null;
-  if (persisted && typeof persisted.apiKey === 'string' && persisted.apiKey.length > 0) {
-    const inKeychain = await keychainLoad(scopedName);
-    if (inKeychain === null) {
-      try {
-        await keychainSave(scopedName, persisted.apiKey);
-        migratedApiKey = persisted.apiKey;
-      } catch {
-        migratedApiKey = persisted.apiKey;
-      }
-    } else {
-      migratedApiKey = inKeychain;
-    }
+  // One-shot plaintext migration. The scoped keychain entry wins when it
+  // already exists; otherwise migrate the active host's map/flat value and keep
+  // it in memory even if the OS store is temporarily locked. Migrate every
+  // other remembered host too so mode-switching remains seamless without a
+  // plaintext multi-host credential inventory on disk.
+  const activeLegacyKey = legacyKeyMap[activeHostId] ?? flatLegacyKey;
+  if (apiKey === null && activeLegacyKey !== null) {
+    await keychainSave(scopedName, activeLegacyKey);
+    apiKey = activeLegacyKey;
   }
-
-  let apiKey = migratedApiKey ?? (await keychainLoad(scopedName));
+  for (const [hostId, legacyKey] of Object.entries(legacyKeyMap)) {
+    if (hostId === activeHostId) continue;
+    const name = `api_key:${hostId}`;
+    if ((await keychainLoad(name)) === null) await keychainSave(name, legacyKey);
+  }
 
   // 2026-05-20 — migrate the legacy single-entry name on first read
   // ONLY when the scoped entry doesn't already exist, so customers
@@ -267,19 +220,17 @@ export async function loadSettings(): Promise<DriftstackSettings> {
   if (apiKey === null) {
     const legacy = await keychainLoad(LEGACY_KEYCHAIN_NAME);
     if (legacy !== null) {
-      try {
-        await keychainSave(scopedName, legacy);
+      if (await keychainSave(scopedName, legacy)) {
         await keychainDelete(LEGACY_KEYCHAIN_NAME);
-        apiKey = legacy;
-      } catch {
-        apiKey = legacy;
       }
+      apiKey = legacy;
     }
   }
 
-  // If migration ran (or settings.json had a stale apiKey that we just
-  // dropped), persist the cleaned-up shape.
-  if (persisted && 'apiKey' in persisted) {
+  // Purge BOTH historical plaintext shapes after the migration attempt. Never
+  // fall back to settings.json on a locked/dismissed keychain: the current
+  // value remains in memory, and a future launch safely asks for it again.
+  if (persisted && ('apiKey' in persisted || 'apiKeys' in persisted)) {
     await getStore().set(SETTINGS_KEY, {
       baseUrl,
       themeMode,
@@ -293,9 +244,8 @@ export async function loadSettings(): Promise<DriftstackSettings> {
   return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl };
 }
 
-// Serialize saves: saveSettings does a get→modify keyMap→set read-modify-write, so two
-// concurrent saves (e.g. theme + accent in quick succession) could lose a host's remembered
-// key. The lock mirrors the folders/tags sibling stores. (#7)
+// Serialize settings writes so rapid theme/accent/base updates cannot overwrite
+// one another. The lock mirrors the folders/tags sibling stores. (#7)
 const settingsWriteLock = makeWriteLock();
 
 export async function saveSettings(s: DriftstackSettings): Promise<void> {
@@ -304,7 +254,7 @@ export async function saveSettings(s: DriftstackSettings): Promise<void> {
 
 /**
  * Founder 2026-06-23 — seed JUST the API base URL into the store, preserving every
- * other key (apiKeys map / theme / startUrl). The SEPARATE Simulator app starts
+ * other non-secret setting (theme / startUrl). The SEPARATE Simulator app starts
  * with an EMPTY store → loadSettings() falls back to DEFAULT_SETTINGS.baseUrl
  * (`http://localhost:3000`), so its control HTTP calls (mode / End-session /
  * cookies) all hit localhost and fail — even though the per-session control key
@@ -323,71 +273,32 @@ export async function persistBaseUrl(baseUrl: string): Promise<void> {
 }
 
 async function saveSettingsUnlocked(s: DriftstackSettings): Promise<void> {
-  const useKeychain = useKeychainForBaseUrl(s.baseUrl);
-  const hasKey = s.apiKey !== null && s.apiKey.length > 0;
-  // W584 — preserve OTHER deployments' remembered keys on every save. The
-  // pre-map shape rewrote settings.json without the apiKey field whenever a
-  // cloud save ran, silently destroying the self-hosted key — the founder's
-  // "switch modes → signed out again" loop. The per-host map survives saves
-  // in any mode; only an explicit sign-out (empty key) removes ITS host.
-  const persisted = await getStore().get<PersistedSettings>(SETTINGS_KEY);
-  const keyMap = keyMapFrom(persisted);
-  const hostId = hostIdFor(s.baseUrl);
-  if (!useKeychain) {
-    if (hasKey) keyMap[hostId] = s.apiKey as string;
-    else delete keyMap[hostId]; // self-hosted sign-out forgets only this host
-  }
-  // GUI W232 (c) — self-hosted keys are persisted IN settings.json; cloud keys
-  // NEVER are (they stay in the OS keychain). On self-hosted sign-out the
-  // apiKey is simply omitted from the store shape.
+  // settings.json is strictly non-secret for EVERY deployment. Per-host
+  // switching remains supported by the scoped keychain entry name.
   await getStore().set(SETTINGS_KEY, {
     baseUrl: s.baseUrl,
     themeMode: s.themeMode,
     themeAccent: s.themeAccent,
     telemetryOptIn: s.telemetryOptIn,
     startUrl: s.startUrl,
-    ...(!useKeychain && hasKey ? { apiKey: s.apiKey } : {}),
-    ...(Object.keys(keyMap).length > 0 ? { apiKeys: keyMap } : {}),
   });
   await getStore().save();
 
   const scopedName = keychainNameFor(s.baseUrl);
-  if (useKeychain && s.apiKey !== null && s.apiKey.length > 0) {
+  if (s.apiKey !== null && s.apiKey.length > 0) {
     await keychainSave(scopedName, s.apiKey);
     return;
   }
-  // Cloud sign-out OR any self-hosted save: ensure no keychain copy lingers —
-  // so a self-hosted key never re-prompts, and a cloud sign-out wipes the
-  // secret + the legacy single-entry name (2026-05-20: "logout keeps pulling
-  // from self-hosted"). Idempotent; delete-when-absent is fine.
+  // Sign-out wipes the current scoped secret + legacy single-entry name.
   await keychainDelete(scopedName);
   await keychainDelete(LEGACY_KEYCHAIN_NAME);
 }
 
 /**
  * W584 — read the remembered key for a deployment WITHOUT mutating any store.
- * Cloud → the baseUrl-scoped keychain entry. Self-hosted → the per-host map
- * (falling back to the flat apiKey field when it belongs to the same host —
- * the pre-map shape). Used by the mode switch to auto-restore the right key
- * so switching cloud↔self-hosted never asks the customer to re-paste.
+ * Every deployment uses its baseUrl-scoped keychain entry. Used by the mode
+ * switch to auto-restore the right key without a plaintext settings map.
  */
 export async function rememberedKeyFor(baseUrl: string): Promise<string | null> {
-  if (useKeychainForBaseUrl(baseUrl)) {
-    return keychainLoad(keychainNameFor(baseUrl));
-  }
-  const persisted = await getStore().get<PersistedSettings>(SETTINGS_KEY);
-  const keyMap = keyMapFrom(persisted);
-  const hostId = hostIdFor(baseUrl);
-  if (keyMap[hostId] !== undefined) return keyMap[hostId];
-  const persistedBaseUrl =
-    persisted && typeof persisted.baseUrl === 'string' ? persisted.baseUrl : '';
-  if (
-    hostIdFor(persistedBaseUrl) === hostId &&
-    persisted &&
-    typeof persisted.apiKey === 'string' &&
-    persisted.apiKey.length > 0
-  ) {
-    return persisted.apiKey;
-  }
-  return null;
+  return keychainLoad(keychainNameFor(baseUrl));
 }

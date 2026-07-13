@@ -69,24 +69,20 @@ describe('keychainNameFor — per-baseUrl scoping', () => {
   });
 });
 
-// GUI W232 (c) — keychain only for the official cloud; self-hosted / localhost
-// keys go to settings.json so the per-rebuild keychain ACL prompt stops firing.
-describe('useKeychainForBaseUrl — cloud-only keychain gate', () => {
-  it('cloud hosts → keychain (sensitive ds_live_ key)', () => {
-    expect(useKeychainForBaseUrl('https://api.driftstack.dev')).toBe(true);
-    expect(useKeychainForBaseUrl('https://staging.driftstack.dev')).toBe(true);
-    expect(useKeychainForBaseUrl('https://driftstack.dev')).toBe(true);
-    expect(useKeychainForBaseUrl('https://api.driftstack.dev/')).toBe(true);
-  });
-
-  it('localhost / self-hosted / IP → settings.json (no keychain prompt)', () => {
-    expect(useKeychainForBaseUrl('http://localhost:3000')).toBe(false);
-    expect(useKeychainForBaseUrl('http://127.0.0.1:7780')).toBe(false);
-    expect(useKeychainForBaseUrl('https://driftstack.internal.acme.com')).toBe(false);
-    expect(useKeychainForBaseUrl('')).toBe(false);
-  });
-
-  it('a look-alike host does NOT match the cloud suffix (no driftstack.dev.evil.com bypass)', () => {
-    expect(useKeychainForBaseUrl('https://driftstack.dev.evil.com')).toBe(false);
+// Every API key is a bearer credential; deployment host is not a security
+// classification. The compatibility seam is deliberately unconditional.
+describe('useKeychainForBaseUrl — all deployments use protected storage', () => {
+  it('cloud, localhost, IP, self-hosted, look-alike, and empty inputs all use keychain', () => {
+    for (const url of [
+      'https://api.driftstack.dev',
+      'https://staging.driftstack.dev',
+      'http://localhost:3000',
+      'http://127.0.0.1:7780',
+      'https://driftstack.internal.acme.com',
+      'https://driftstack.dev.evil.com',
+      '',
+    ]) {
+      expect(useKeychainForBaseUrl(url)).toBe(true);
+    }
   });
 });
