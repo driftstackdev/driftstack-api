@@ -18,9 +18,9 @@
 //     insertAuthToken kind=email_verify with TTL = signupVerification;
 //     fire-and-forget sendSignupVerification.
 //   • V-187 resendSignupVerification: shape-stable (no leak on
-//     unknown/verified account); no expiry of prior tokens.
-//   • verifyEmail: single-use consume + markEmailVerified
-//     idempotent; V-202 signupWelcome fire-and-forget after.
+//     unknown/verified account); first verification retires siblings.
+//   • verifyEmail: account-family first-winner consume + active-status gate +
+//     idempotent markEmailVerified; V-202 signupWelcome fire-and-forget after.
 //   • login: V-353d branch on MFA enrollment → returns mfa_required
 //     with challenge_token (5min TTL).
 //   • V-353d completeMfaChallenge: peek-before-consume (IP mismatch
@@ -98,7 +98,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('V-187 resendSignupVerification: shape-stable (no leak on unknown OR already-verified); prior tokens NOT expired (verify is single-use anyway)', () => {
+  it('V-187 resendSignupVerification: shape-stable and either delivered link may win before family consumption', () => {
     expect(body).toMatch(/\/\/ #187 — self-service resend of the signup verification email\./);
     expect(body).toMatch(
       /\/\/ Shape-stable: response is identical whether the email matches an\s*\n?\s*\/\/ unverified account, an already-verified account, or no account at\s*\n?\s*\/\/ all — clients can't enumerate\./,
@@ -108,10 +108,10 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('verifyEmail: 4-step (find unconsumed token → consume → markEmailVerified → issueWebSession); consume single-use checked (race-loser rejected); V-202 sendSignupWelcome fire-and-forget after', () => {
+  it('verifyEmail: account-family first-winner claim retires siblings and checks active status before session issuance', () => {
     expect(body).toMatch(/if \(row === null\) throw new AuthFlowError\('invalid_auth_token'\);/);
     expect(body).toMatch(
-      /const consumed = await this\.repo\.consumeAuthToken\(\{\s*\n?\s*kind: 'email_verify',\s*\n?\s*id: row\.id,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const firstVerification = await this\.repo\.markEmailVerified\(row\.accountId, now\);/,
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'email_verify',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);\s*\n?\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const firstVerification = await this\.repo\.markEmailVerified\(row\.accountId, now\);/,
     );
     expect(body).toMatch(
       /\/\/ V-202 — fire signup-welcome email after the verify lands\. Derive\s*\n?\s*\/\/ the dashboard origin from `verifyEmailUrl`/,
@@ -173,7 +173,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     const okIdx = body.indexOf(
       'const ok = await verifyPassword(args.password, account.passwordHash);',
     );
-    const suspendedIdx = body.indexOf("if (account.status !== 'active')");
+    const suspendedIdx = body.indexOf("if (account.status !== 'active')", okIdx);
     expect(okIdx).toBeGreaterThan(-1);
     expect(suspendedIdx).toBeGreaterThan(okIdx);
   });

@@ -147,8 +147,9 @@ export interface AuthFlowsRepo {
   /**
    * Atomically consume the presented token and every still-unconsumed sibling
    * of the same kind/account. Returns true only when the presented id was part
-   * of this call's UPDATE, so two different reset links racing for one account
-   * cannot both perform credential-changing side effects.
+   * of this call's UPDATE, so two different verification, magic, or reset
+   * links racing for one account cannot both perform authentication or
+   * credential-changing side effects.
    */
   consumeAuthTokenFamily(args: {
     kind: AuthFlowKind;
@@ -706,10 +707,11 @@ export class AuthFlowsService {
   // all — clients can't enumerate. The IP rate-limiter (3/min, same
   // cap as password-reset) caps abuse independent of account state.
   //
-  // Previously-issued email_verify tokens for the account are NOT
-  // expired here; the verify-email handler is single-use anyway, so a
-  // user who happens to click an old link still works. The new token
-  // is appended.
+  // Previously-issued email_verify tokens are not expired at resend time, so
+  // a user may click either delivered link. Verification atomically consumes
+  // the whole account token family, making whichever link is clicked first
+  // the sole winner and retiring every leaked/stale sibling before session
+  // issuance.
   async resendSignupVerification(args: ResendVerificationArgs): Promise<ResendVerificationResult> {
     const email = args.email.trim().toLowerCase();
     const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS.signupVerification);
@@ -752,18 +754,19 @@ export class AuthFlowsService {
     });
     if (row === null) throw new AuthFlowError('invalid_auth_token');
 
-    // Single-use under concurrency: only the request that actually claims the
-    // token proceeds. A concurrent loser (consume returned false) is rejected
-    // rather than issuing a second session + re-firing the welcome email.
-    const consumed = await this.repo.consumeAuthToken({
+    // Account-family single-use under concurrency: the first live verification
+    // link claims every sibling. A different old/resend link cannot later mint
+    // another passwordless session, and concurrent siblings have one winner.
+    const consumed = await this.repo.consumeAuthTokenFamily({
       kind: 'email_verify',
       id: row.id,
+      accountId: row.accountId,
       at: now,
     });
     if (!consumed) throw new AuthFlowError('invalid_auth_token');
-    const firstVerification = await this.repo.markEmailVerified(row.accountId, now);
-
     const account = await this.requireAccount(row.accountId);
+    if (account.status !== 'active') throw new AuthFlowError('account_suspended');
+    const firstVerification = await this.repo.markEmailVerified(row.accountId, now);
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
 
     await this.emitAuditBestEffort(account.id, 'account.email_verified', {
@@ -776,10 +779,9 @@ export class AuthFlowsService {
     // already lives on the customer dashboard host). Fire-and-forget;
     // matches the email-service posture used elsewhere.
     //
-    // C9 — send ONLY on the first null→verified transition (a re-verification
-    // via a second outstanding token still mints a session but must not
-    // re-welcome), and honor the V-204 'signup-welcome' opt-out when the
-    // email-preferences service is wired.
+    // C9 — send ONLY on the first null→verified transition and honor the
+    // V-204 'signup-welcome' opt-out when the email-preferences service is
+    // wired. Sibling tokens were retired by the family claim above.
     if (firstVerification) {
       void (async (): Promise<void> => {
         if (

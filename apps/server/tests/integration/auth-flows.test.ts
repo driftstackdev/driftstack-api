@@ -378,6 +378,60 @@ describe('POST /v1/auth/verify-email', () => {
     expect(second.statusCode).toBe(400);
     expect(second.json<{ type: string }>().type).toBe(PROBLEM_TYPES.InvalidAuthToken);
   });
+
+  it('two different outstanding verification links racing mint exactly one session', async () => {
+    fx = await buildTestApp();
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: {
+        email: 'verify-family@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    const firstToken = signup.json<SignupResponse>().debug_token!;
+    const resend = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/resend-verification',
+      payload: { email: 'verify-family@driftstack.local' },
+    });
+    const secondToken = resend.json<{ debug_token: string }>().debug_token;
+
+    const results = await Promise.all(
+      [firstToken, secondToken].map((token) =>
+        fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/verify-email',
+          payload: { token },
+        }),
+      ),
+    );
+
+    expect(results.filter((response) => response.statusCode === 200)).toHaveLength(1);
+    const loser = results.find((response) => response.statusCode !== 200);
+    expect(loser?.statusCode).toBe(400);
+    expect(loser?.json<{ type: string }>().type).toBe(PROBLEM_TYPES.InvalidAuthToken);
+  });
+
+  it('a suspended account cannot mint a session through an outstanding verification link', async () => {
+    const { service, repo } = makeDirectService();
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    const signup = await service.signup({
+      email: 'suspended-verify@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    repo.seedAccount({ ...signup.account, status: 'suspended' });
+
+    await expect(
+      service.verifyEmail({
+        token: signup.debugToken as string,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'account_suspended' });
+    expect(insertSession).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /v1/auth/login', () => {

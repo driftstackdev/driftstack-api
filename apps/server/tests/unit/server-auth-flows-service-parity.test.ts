@@ -107,11 +107,11 @@ describe('W745 server AuthFlowsService canonical surface parity', () => {
     );
   });
 
-  it('CRITICAL resendSignupVerification preserves old tokens — "Previously-issued email_verify tokens for the account are NOT expired here; the verify-email handler is single-use anyway". Drift to expiring-old would let an old link the user clicks 5 minutes after resend silently fail.', () => {
+  it('CRITICAL resendSignupVerification lets either delivered link win, then verify retires the whole sibling family.', () => {
     const f = read(FLOWS);
 
     expect(f).toMatch(
-      /Previously-issued email_verify tokens for the account are NOT\s*\n\s+\/\/ expired here; the verify-email handler is single-use anyway, so a\s*\n\s+\/\/ user who happens to click an old link still works\. The new token\s*\n\s+\/\/ is appended/,
+      /Previously-issued email_verify tokens are not expired at resend time, so\s*\n\s+\/\/ a user may click either delivered link\. Verification atomically consumes\s*\n\s+\/\/ the whole account token family, making whichever link is clicked first\s*\n\s+\/\/ the sole winner and retiring every leaked\/stale sibling before session\s*\n\s+\/\/ issuance/,
     );
   });
 

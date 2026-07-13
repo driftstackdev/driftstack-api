@@ -361,7 +361,7 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
     expect(calls).toHaveLength(1); // the welcome
   });
 
-  it('a re-verification via a second outstanding token mints a session but does NOT re-send the welcome', async () => {
+  it('the first verification retires every outstanding sibling token', async () => {
     const repo = new InMemoryAuthFlowsRepo();
     const { client, calls } = makeStubPostmark();
     const service = makeService(repo, client);
@@ -370,7 +370,7 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
       password: 'correct horse battery staple',
       requestedFromIp: null,
     });
-    // A second outstanding verify token — resend does NOT expire the first.
+    // Resend leaves both links eligible until either one wins.
     const resend = await service.resendSignupVerification({
       email: 'reverify@driftstack.local',
       requestedFromIp: null,
@@ -384,14 +384,16 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
     await drain();
     expect(calls).toHaveLength(1); // first verify → one welcome
     calls.length = 0;
-    // The still-valid second token re-verifies: mints a session, no re-welcome.
-    const second = await service.verifyEmail({
-      token: resend.debugToken as string,
-      issuedFromIp: null,
-      userAgent: null,
-    });
+    // The first link's family claim retired the resend sibling, so it cannot
+    // act as a lingering passwordless-login credential.
+    await expect(
+      service.verifyEmail({
+        token: resend.debugToken as string,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
     await drain();
-    expect(second.session).toBeDefined();
     expect(calls).toHaveLength(0);
   });
 
