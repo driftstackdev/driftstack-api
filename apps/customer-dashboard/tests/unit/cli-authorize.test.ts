@@ -352,7 +352,7 @@ describe('cli-authorize page — local integration', () => {
       (c) => c.url.endsWith('/v1/legal/required') || c.url.endsWith('/v1/legal/accept'),
     );
     expect(legalCalls.every((c) => c.init?.signal)).toBe(true);
-    expect(new Set(legalCalls.map((c) => c.init?.signal)).size).toBe(1);
+    expect(new Set(legalCalls.map((c) => c.init?.signal)).size).toBe(legalCalls.length);
     const bodies = acceptCalls.map((c) => JSON.parse(String(c.init?.body)));
     expect(bodies).toEqual([
       { document_key: 'tos', version: '1.2', content_hash: HASH.tos },
@@ -361,6 +361,151 @@ describe('cli-authorize page — local integration', () => {
       { document_key: 'dpa', version: '1.0', content_hash: HASH.dpa },
     ]);
     expect(visibleState(local.window)).toBe('success');
+  });
+
+  it('reconciles a partial legal timeout and retries only the remaining document', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    const tosHash = 'a'.repeat(64);
+    const privacyHash = 'b'.repeat(64);
+    const lost = new Error('privacy response lost');
+    lost.name = 'AbortError';
+    local.setFetchPlan([
+      () =>
+        new local.window.Response(
+          JSON.stringify({
+            pending_acceptances: [
+              { document_key: 'tos', current_version: '1.2' },
+              { document_key: 'privacy', current_version: '1.0' },
+            ],
+          }),
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      () =>
+        new local.window.Response(
+          JSON.stringify({
+            data: [
+              { document_key: 'tos', current_version: '1.2', content_hash: tosHash },
+              { document_key: 'privacy', current_version: '1.0', content_hash: privacyHash },
+            ],
+          }),
+          { status: 200 },
+        ),
+      () => new local.window.Response('{}', { status: 201 }),
+      () => Promise.reject(lost),
+      () =>
+        new local.window.Response(
+          JSON.stringify({
+            data: [{ document_key: 'privacy', current_version: '1.0', content_hash: privacyHash }],
+          }),
+          { status: 200 },
+        ),
+      () =>
+        new local.window.Response(
+          JSON.stringify({
+            data: [{ document_key: 'privacy', current_version: '1.0', content_hash: privacyHash }],
+          }),
+          { status: 200 },
+        ),
+      () => new local.window.Response('{}', { status: 201 }),
+      () => new local.window.Response(JSON.stringify({ status: 'bound' }), { status: 200 }),
+    ]);
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+    const accept = local.window.document.querySelector(
+      '[data-state="legal-accept"] [data-legal-accept-all]',
+    ) as HTMLButtonElement;
+    accept.click();
+    await flush();
+    await flush();
+    await flush();
+
+    expect(accept.textContent).toBe('Accept remaining and authorize');
+    expect(
+      local.window.document.querySelector('[data-state="legal-accept"] [data-legal-status]')
+        ?.textContent,
+    ).toMatch(
+      /1 accepted; 1 document still requires acceptance.*Only the remaining documents will be sent/,
+    );
+    expect(
+      local.window.document.querySelector('[data-state="legal-accept"] [data-legal-pending-list]')
+        ?.textContent,
+    ).toContain('Privacy Policy');
+    expect(
+      local.window.document.querySelector('[data-state="legal-accept"] [data-legal-pending-list]')
+        ?.textContent,
+    ).not.toContain('Terms of Service');
+
+    accept.click();
+    await flush();
+    await flush();
+    await flush();
+    const acceptCalls = local.fetchCalls.filter((call) => call.url.endsWith('/v1/legal/accept'));
+    expect(acceptCalls.map((call) => JSON.parse(String(call.init?.body)).document_key)).toEqual([
+      'tos',
+      'privacy',
+      'privacy',
+    ]);
+    expect(visibleState(local.window)).toBe('success');
+  });
+
+  it('makes a legal timeout plus failed reconciliation reload-only with no second POST', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    const lost = new Error('accept response lost');
+    lost.name = 'AbortError';
+    local.setFetchPlan([
+      () =>
+        new local.window.Response(
+          JSON.stringify({
+            pending_acceptances: [{ document_key: 'tos', current_version: '1.2' }],
+          }),
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      () =>
+        new local.window.Response(
+          JSON.stringify({
+            data: [{ document_key: 'tos', current_version: '1.2', content_hash: 'a'.repeat(64) }],
+          }),
+          { status: 200 },
+        ),
+      () => Promise.reject(lost),
+      () => Promise.reject(new TypeError('required state unavailable')),
+    ]);
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+    const accept = local.window.document.querySelector(
+      '[data-state="legal-accept"] [data-legal-accept-all]',
+    ) as HTMLButtonElement;
+    accept.click();
+    await flush();
+    await flush();
+    await flush();
+
+    expect(accept.textContent).toBe('Reload to verify');
+    expect(
+      local.window.document.querySelector('[data-state="legal-accept"] [data-legal-status]')
+        ?.textContent,
+    ).toMatch(/outcome is unknown.*Reload to check what remains before authorizing/);
+    expect(local.fetchCalls.filter((call) => call.url.endsWith('/v1/legal/accept'))).toHaveLength(
+      1,
+    );
+    accept.dispatchEvent(new local.window.MouseEvent('click'));
+    accept.dispatchEvent(new local.window.MouseEvent('click'));
+    await flush();
+    expect(local.fetchCalls.filter((call) => call.url.endsWith('/v1/legal/accept'))).toHaveLength(
+      1,
+    );
   });
 
   it('on 200 bind success, shows success state', async () => {

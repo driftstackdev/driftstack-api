@@ -284,6 +284,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       let pendingAcceptances = [];
       function showLegalAccept(pending) {
         pendingAcceptances = pending;
+        legalReloadOnly = false;
+        acceptAllBtn.textContent = 'Accept all and authorize';
+        acceptAllBtn.removeAttribute('title');
         const list = sections.legalAccept.querySelector('[data-legal-pending-list]');
         if (!list) return;
         list.innerHTML = '';
@@ -404,121 +407,145 @@ const apiBaseUrl = resolveApiBaseUrl();
       const acceptStatus = sections.legalAccept.querySelector('[data-legal-status]');
       const LEGAL_ACCEPT_TIMEOUT_MS = 15_000;
       let legalAcceptInFlight = false;
-      acceptAllBtn.addEventListener('click', function () {
-        if (pendingAcceptances.length === 0 || legalAcceptInFlight) return;
-        legalAcceptInFlight = true;
-        acceptAllBtn.disabled = true;
-        acceptAllBtn.setAttribute('aria-busy', 'true');
-        acceptStatus.textContent = 'Recording acceptance…';
+      let legalReloadOnly = false;
+
+      function fetchCliLegalWithDeadline(url, init) {
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), LEGAL_ACCEPT_TIMEOUT_MS);
-        // /v1/legal/accept REQUIRES content_hash (64-char SHA-256
-        // hex) — that field isn't in the LegalAcceptanceRequiredError's
-        // pending_acceptances extension, so fetch the canonical
-        // /v1/legal/required entries first to get each hash, then
-        // POST each acceptance with its matching {key, version, hash}.
-        fetch(apiBaseUrl + '/v1/legal/required', {
+        return fetch(url, Object.assign({}, init, { signal: controller.signal })).finally(
+          function () {
+            window.clearTimeout(timeout);
+          },
+        );
+      }
+
+      function fetchCliRequiredLegal() {
+        return fetchCliLegalWithDeadline(apiBaseUrl + '/v1/legal/required', {
           headers: { authorization: 'Bearer ' + sessionToken },
-          signal: controller.signal,
         })
           .then(function (r) {
             if (!r.ok) throw new Error('Failed to load legal documents (HTTP ' + r.status + ').');
             return r.json();
           })
           .then(function (body) {
-            // /v1/legal/required returns { data: [...] } — earlier rev
-            // read body.required which is undefined, so byKey was empty
-            // and every acceptance fell through to the "no canonical
-            // match" rejection branch. Fix verified by integration test.
-            const required = Array.isArray(body && body.data) ? body.data : [];
-            const byKey = {};
-            required.forEach(function (doc) {
-              byKey[doc.document_key] = doc;
-            });
-            return Promise.all(
-              pendingAcceptances.map(function (doc) {
-                const canon = byKey[doc.document_key];
-                if (!canon || !canon.content_hash) {
-                  return Promise.resolve(
-                    new Response(
-                      JSON.stringify({ error: 'no canonical match for ' + doc.document_key }),
-                      { status: 500 },
-                    ),
-                  );
-                }
-                return fetch(apiBaseUrl + '/v1/legal/accept', {
-                  method: 'POST',
-                  headers: {
-                    'content-type': 'application/json',
-                    authorization: 'Bearer ' + sessionToken,
-                  },
-                  body: JSON.stringify({
-                    document_key: canon.document_key,
-                    version: canon.current_version,
-                    content_hash: canon.content_hash,
-                  }),
-                  signal: controller.signal,
-                });
-              }),
-            );
-          })
-          .then(function (responses) {
-            // Capture detailed failure info — collect per-doc results
-            // so the customer sees WHICH acceptance failed + why
-            // (status + problem-detail message). Earlier "one or more
-            // acceptances failed" was opaque and led to 3 round-trips
-            // of guessing.
-            return Promise.all(
-              responses.map(function (r) {
-                if (r.ok) return { ok: true };
-                return r
-                  .text()
-                  .then(function (t) {
-                    let detail = t;
-                    try {
-                      const body = JSON.parse(t);
-                      detail = body.detail || body.title || JSON.stringify(body);
-                    } catch (_) {
-                      /* leave as raw text */
-                    }
-                    return { ok: false, status: r.status, detail: detail };
-                  })
-                  .catch(function () {
-                    return { ok: false, status: r.status, detail: 'unknown' };
-                  });
-              }),
-            );
-          })
-          .then(function (results) {
-            const failures = results.filter(function (x) {
-              return !x.ok;
-            });
-            if (failures.length > 0) {
-              const summary = failures
-                .map(function (f) {
-                  return 'HTTP ' + f.status + ': ' + f.detail;
-                })
-                .join(' · ');
-              acceptStatus.textContent = 'Failed: ' + summary;
-              acceptAllBtn.disabled = false;
+            return Array.isArray(body && body.data) ? body.data : [];
+          });
+      }
+
+      function postCliLegalAcceptance(doc) {
+        return fetchCliLegalWithDeadline(apiBaseUrl + '/v1/legal/accept', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer ' + sessionToken,
+          },
+          body: JSON.stringify({
+            document_key: doc.document_key,
+            version: doc.current_version,
+            content_hash: doc.content_hash,
+          }),
+        });
+      }
+
+      function finishCliLegalAcceptance() {
+        pendingAcceptances = [];
+        acceptStatus.textContent = 'Accepted. Authorizing…';
+        show('confirm');
+        authorize();
+      }
+
+      function requireCliLegalReload() {
+        legalReloadOnly = true;
+        acceptAllBtn.disabled = false;
+        acceptAllBtn.textContent = 'Reload to verify';
+        acceptAllBtn.title = 'Reload before sending any legal acceptance again';
+        acceptStatus.textContent =
+          'Acceptance outcome is unknown. Reload to check what remains before authorizing.';
+      }
+
+      function reconcileCliLegalAcceptance(attempted) {
+        return fetchCliRequiredLegal()
+          .then(function (remaining) {
+            if (remaining.length === 0) {
+              finishCliLegalAcceptance();
               return;
             }
-            acceptStatus.textContent = 'Accepted. Authorizing…';
-            show('confirm');
-            authorize();
+            const remainingKeys = new Set(
+              remaining.map(function (doc) {
+                return doc.document_key;
+              }),
+            );
+            const recordedCount = attempted.filter(function (doc) {
+              return !remainingKeys.has(doc.document_key);
+            }).length;
+            showLegalAccept(remaining);
+            acceptAllBtn.textContent = 'Accept remaining and authorize';
+            acceptStatus.textContent =
+              recordedCount > 0
+                ? recordedCount +
+                  ' accepted; ' +
+                  remaining.length +
+                  (remaining.length === 1
+                    ? ' document still requires acceptance. '
+                    : ' documents still require acceptance. ') +
+                  'Only the remaining documents will be sent.'
+                : 'No acceptance was confirmed. Review the remaining documents before retrying.';
+          })
+          .catch(function () {
+            requireCliLegalReload();
+          });
+      }
+
+      acceptAllBtn.addEventListener('click', function () {
+        if (legalReloadOnly) {
+          window.location.reload();
+          return;
+        }
+        if (pendingAcceptances.length === 0 || legalAcceptInFlight) return;
+        const attempted = pendingAcceptances.slice();
+        legalAcceptInFlight = true;
+        acceptAllBtn.disabled = true;
+        acceptAllBtn.setAttribute('aria-busy', 'true');
+        acceptAllBtn.removeAttribute('title');
+        acceptStatus.textContent = 'Recording acceptance…';
+        // /v1/legal/accept REQUIRES content_hash (64-char SHA-256
+        // hex) — that field isn't in the LegalAcceptanceRequiredError's
+        // pending_acceptances extension, so fetch the canonical
+        // /v1/legal/required entries first to get each hash, then
+        // POST each acceptance with its matching {key, version, hash}.
+        fetchCliRequiredLegal()
+          .then(function (required) {
+            const attemptedKeys = new Set(
+              attempted.map(function (doc) {
+                return doc.document_key;
+              }),
+            );
+            const canonical = required.filter(function (doc) {
+              return attemptedKeys.has(doc.document_key);
+            });
+            return Promise.allSettled(canonical.map(postCliLegalAcceptance));
+          })
+          .then(function (results) {
+            const allOk = results.every(function (result) {
+              return result.status === 'fulfilled' && result.value.ok;
+            });
+            if (allOk) {
+              finishCliLegalAcceptance();
+              return;
+            }
+            return reconcileCliLegalAcceptance(attempted);
           })
           .catch(function (err) {
+            // The only rejection outside allSettled is the initial
+            // canonical GET, so no acceptance POST was sent and retry is safe.
             acceptStatus.textContent =
-              err && err.name === 'AbortError'
-                ? 'Recording acceptance took too long. Check your connection and try again.'
-                : 'Network error — please retry. (' +
-                  (err && err.message ? err.message : err) +
-                  ')';
+              'Could not load the current legal documents. No acceptance was sent; retry is safe. (' +
+              (err && err.message ? err.message : err) +
+              ')';
           })
           .finally(function () {
-            window.clearTimeout(timeout);
             legalAcceptInFlight = false;
-            acceptAllBtn.disabled = false;
+            if (!legalReloadOnly) acceptAllBtn.disabled = false;
             acceptAllBtn.setAttribute('aria-busy', 'false');
           });
       });

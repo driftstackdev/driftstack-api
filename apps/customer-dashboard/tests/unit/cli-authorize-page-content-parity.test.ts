@@ -98,19 +98,22 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/if \(authorizeOutcomeUnknown\) \{\s*returnToDesktop\(0\);\s*return;/);
   });
 
-  it('serializes and bounds the legal-acceptance lookup plus fan-out', () => {
+  it('serializes, independently bounds, and reconciles the legal-acceptance fan-out', () => {
     expect(body).toContain('const LEGAL_ACCEPT_TIMEOUT_MS = 15_000;');
     expect(body).toContain('let legalAcceptInFlight = false;');
+    expect(body).toContain('let legalReloadOnly = false;');
     expect(body).toMatch(/pendingAcceptances\.length === 0 \|\| legalAcceptInFlight/);
     expect(body).toMatch(/acceptAllBtn\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(
       /window\.setTimeout\(\(\) => controller\.abort\(\), LEGAL_ACCEPT_TIMEOUT_MS\)/,
     );
-    expect(body.match(/signal: controller\.signal/g)?.length).toBeGreaterThanOrEqual(3);
-    expect(body).toMatch(/window\.clearTimeout\(timeout\);\s*legalAcceptInFlight = false;/);
-    expect(body).toContain(
-      'Recording acceptance took too long. Check your connection and try again.',
-    );
+    expect(body).toMatch(/function fetchCliLegalWithDeadline\(url, init\)/);
+    expect(body).toMatch(/Promise\.allSettled\(canonical\.map\(postCliLegalAcceptance\)\)/);
+    expect(body).toMatch(/function reconcileCliLegalAcceptance\(attempted\)/);
+    expect(body).toContain('Accept remaining and authorize');
+    expect(body).toContain('Only the remaining documents will be sent.');
+    expect(body).toContain('Acceptance outcome is unknown. Reload to check what remains');
+    expect(body).toMatch(/if \(legalReloadOnly\) \{\s*window\.location\.reload\(\);\s*return;/);
   });
 
   it('V-328e OS deep-link: driftstack://auth/callback?code=…&state=… after 600ms delay', () => {
