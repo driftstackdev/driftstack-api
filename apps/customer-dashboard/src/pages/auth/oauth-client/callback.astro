@@ -6,7 +6,8 @@ import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 // This page POSTs the same query params back to /v1/auth/oauth-client
 // /callback (server-side; the GET endpoint surfaces outcome via JSON)
 // and routes based on the outcome:
-//   signed-in-existing-link / created-new-account → /
+//   signed-in-existing-link / created-new-account → session or mfa_required
+//   mfa_required → verify TOTP/recovery, then continue to redirect_to
 //   collision-pending-verification → /auth/oauth-client/check-email
 //   existing-link-revoked → /login with "re-link or password" prompt
 //
@@ -31,6 +32,51 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
+
+      <form
+        data-form="oauth-mfa"
+        novalidate
+        class="hidden space-y-5"
+        aria-label="Two-factor verification"
+      >
+        <div>
+          <h2 class="text-base font-semibold text-tk-ink">Finish two-factor verification</h2>
+          <p class="mt-2 text-sm text-tk-ink-2">
+            Your identity provider is verified. Enter the code from your authenticator app.
+            This challenge expires in <span data-mfa-expiry class="font-mono">5 minutes</span>.
+          </p>
+        </div>
+        <div data-mfa-code-row>
+          <label class="form-label" for="oauth-mfa-code">Authentication code</label>
+          <input
+            id="oauth-mfa-code"
+            name="mfa-code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            class="form-input font-mono tracking-widest"
+            placeholder="123456"
+          />
+        </div>
+        <div data-mfa-recovery-row class="hidden">
+          <label class="form-label" for="oauth-mfa-recovery">Recovery code</label>
+          <input
+            id="oauth-mfa-recovery"
+            name="mfa-recovery"
+            type="text"
+            autocomplete="one-time-code"
+            class="form-input font-mono uppercase tracking-wider"
+            placeholder="ABCD-EFGHJK"
+          />
+        </div>
+        <button type="submit" class="btn-primary w-full">Verify and sign in</button>
+        <button
+          type="button"
+          data-mfa-toggle-recovery
+          class="w-full text-sm text-tk-accent-text underline underline-offset-4"
+        >Use a recovery code instead</button>
+      </form>
 
       <div
         data-callback-unknown
@@ -92,12 +138,161 @@ const apiBaseUrl = resolveApiBaseUrl();
       const successMerge = root.querySelector('[data-success-merge]');
       const mergeProvider = root.querySelector('[data-merge-provider]');
       const mergeWindow = root.querySelector('[data-merge-window]');
+      const mfaForm = root.querySelector('[data-form="oauth-mfa"]');
+      const mfaCodeRow = root.querySelector('[data-mfa-code-row]');
+      const mfaRecoveryRow = root.querySelector('[data-mfa-recovery-row]');
+      const mfaCodeInput = root.querySelector('#oauth-mfa-code');
+      const mfaRecoveryInput = root.querySelector('#oauth-mfa-recovery');
+      const mfaToggle = root.querySelector('[data-mfa-toggle-recovery]');
+      const mfaExpiry = root.querySelector('[data-mfa-expiry]');
       const CALLBACK_TIMEOUT_MS = 15_000;
+      const MFA_TIMEOUT_MS = 15_000;
+      let mfaChallengeToken = null;
+      let mfaRedirectTo = '/';
+      let mfaUsingRecovery = false;
+      let mfaInFlight = false;
+      let mfaOutcomeUnknown = false;
 
       function showBanner(text) {
         if (intro) intro.textContent = '';
         banner.textContent = text;
         banner.classList.remove('hidden');
+      }
+
+      function completeSession(token, redirectTo) {
+        try {
+          localStorage.setItem('ds_web_session_token', token);
+          // A fresh session must not inherit a previous user's per-session
+          // acting-as or cached authorization flags on a shared browser.
+          localStorage.removeItem('ds_act_as_account');
+          localStorage.removeItem('ds_is_team_user');
+          localStorage.removeItem('ds_is_staff_user');
+        } catch (_) {
+          // Storage-disabled browsers will be sent back through sign-in by
+          // the dashboard if the session cannot be persisted locally.
+        }
+        window.location.href = redirectTo;
+      }
+
+      function startMfaChallenge(body) {
+        if (!body.challenge_token) {
+          showBanner('Two-factor verification could not start. Return to sign-in and try again.');
+          return;
+        }
+        mfaChallengeToken = body.challenge_token;
+        mfaRedirectTo = safeNextPath(body.redirect_to, window.location.origin);
+        mfaOutcomeUnknown = false;
+        banner.classList.add('hidden');
+        if (intro) {
+          intro.textContent = 'Your identity provider is verified. Finish with your second factor.';
+        }
+        if (body.challenge_expires_at && mfaExpiry) {
+          const minutes = Math.max(
+            1,
+            Math.round((new Date(body.challenge_expires_at).getTime() - Date.now()) / 60000),
+          );
+          mfaExpiry.textContent = minutes + (minutes === 1 ? ' minute' : ' minutes');
+        }
+        mfaForm.classList.remove('hidden');
+        if (mfaCodeInput) mfaCodeInput.focus();
+      }
+
+      if (mfaToggle) {
+        mfaToggle.addEventListener('click', () => {
+          if (mfaInFlight || mfaOutcomeUnknown) return;
+          mfaUsingRecovery = !mfaUsingRecovery;
+          mfaCodeRow.classList.toggle('hidden', mfaUsingRecovery);
+          mfaRecoveryRow.classList.toggle('hidden', !mfaUsingRecovery);
+          mfaToggle.textContent = mfaUsingRecovery
+            ? 'Use an authenticator code instead'
+            : 'Use a recovery code instead';
+          const activeInput = mfaUsingRecovery ? mfaRecoveryInput : mfaCodeInput;
+          if (activeInput) activeInput.focus();
+        });
+      }
+
+      if (mfaForm) {
+        const mfaSubmit = mfaForm.querySelector('button[type="submit"]');
+        const mfaSubmitLabel = mfaSubmit ? mfaSubmit.textContent : '';
+        mfaForm.addEventListener('submit', (event) => {
+          event.preventDefault();
+          if (!mfaChallengeToken || mfaInFlight || mfaOutcomeUnknown) return;
+          const code = mfaCodeInput ? mfaCodeInput.value.trim() : '';
+          const recoveryCode = mfaRecoveryInput ? mfaRecoveryInput.value.trim() : '';
+          if (mfaUsingRecovery ? recoveryCode.length === 0 : !/^\d{6}$/.test(code)) {
+            showBanner(
+              mfaUsingRecovery
+                ? 'Enter one of your recovery codes.'
+                : 'Enter the 6-digit code from your authenticator app.',
+            );
+            return;
+          }
+          const payload = mfaUsingRecovery
+            ? { challenge_token: mfaChallengeToken, recovery_code: recoveryCode }
+            : { challenge_token: mfaChallengeToken, code: code };
+          mfaInFlight = true;
+          banner.classList.add('hidden');
+          if (mfaSubmit) {
+            mfaSubmit.disabled = true;
+            mfaSubmit.setAttribute('aria-busy', 'true');
+            mfaSubmit.textContent = 'Verifying…';
+          }
+          if (mfaToggle) mfaToggle.disabled = true;
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), MFA_TIMEOUT_MS);
+          fetch(apiBaseUrl + '/v1/auth/mfa/challenge', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          })
+            .then((response) =>
+              response.ok
+                ? response.json()
+                : response
+                    .json()
+                    .catch(() => ({}))
+                    .then((problem) =>
+                      Promise.reject(new Error(problem.detail || 'HTTP ' + response.status)),
+                    ),
+            )
+            .then((body) => {
+              const token = body && body.session && body.session.token;
+              if (!token) throw new Error('The server did not return a session. Sign in again.');
+              mfaChallengeToken = null;
+              completeSession(token, mfaRedirectTo);
+            })
+            .catch((err) => {
+              if (err && err.name === 'AbortError') {
+                mfaOutcomeUnknown = true;
+                mfaChallengeToken = null;
+                mfaForm.classList.add('hidden');
+                if (unknownRecovery) {
+                  unknownRecovery.classList.remove('hidden');
+                  const link = unknownRecovery.querySelector('a');
+                  if (link) link.textContent = 'Start a fresh sign-in';
+                }
+                showBanner(
+                  'MFA sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time challenge and created a session whose credential did not reach this browser. Do not submit this code again. Start a fresh sign-in.',
+                );
+                return;
+              }
+              showBanner(err && err.message ? err.message : 'Verification failed. Try again.');
+            })
+            .finally(() => {
+              window.clearTimeout(timeout);
+              mfaInFlight = false;
+              if (!mfaOutcomeUnknown) {
+                if (mfaSubmit) {
+                  mfaSubmit.disabled = false;
+                  mfaSubmit.removeAttribute('aria-busy');
+                  mfaSubmit.textContent = mfaSubmitLabel;
+                }
+                if (mfaToggle) mfaToggle.disabled = false;
+              }
+            });
+        });
       }
 
       const qs = window.location.search;
@@ -129,23 +324,20 @@ const apiBaseUrl = resolveApiBaseUrl();
             // (otherwise the dashboard surfaces "Sign in to see live
             // account data" because localStorage is empty). Mirrors
             // the password-login flow at login.astro:217.
-            if (body.session_token) {
-              try {
-                localStorage.setItem('ds_web_session_token', body.session_token);
-                // audit w2flmiw48 #2 — clear the previous user's per-session overrides
-                // (acting-as + staff/team flags) so a fresh session can't inherit them.
-                localStorage.removeItem('ds_act_as_account');
-                localStorage.removeItem('ds_is_team_user');
-                localStorage.removeItem('ds_is_staff_user');
-              } catch (_) {
-                // Private mode / disabled storage — sign-in stays
-                // bound to the cookie if present; if not, the
-                // dashboard will redirect back to /login.
-              }
+            if (body.mfa_required === true) {
+              startMfaChallenge(body);
+              return;
             }
             // Sanitize the server-returned redirect_to to a same-origin path
             // (empty/missing → '/'); never navigate a raw off-origin value.
-            window.location.href = safeNextPath(body.redirect_to, window.location.origin);
+            if (!body.session_token) {
+              showBanner('Sign-in could not be completed. Return to sign-in and try again.');
+              return;
+            }
+            completeSession(
+              body.session_token,
+              safeNextPath(body.redirect_to, window.location.origin),
+            );
             return;
           }
           if (body.outcome === 'collision-pending-verification') {

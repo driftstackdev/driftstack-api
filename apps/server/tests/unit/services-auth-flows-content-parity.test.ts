@@ -148,7 +148,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
       /\/\/ V-353d — branch on MFA enrollment\. If enrolled, issue a\s*\n?\s*\/\/ challenge token instead of a session;/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*kind: 'mfa_required',\s*\n?\s*account,\s*\n?\s*challengeToken: token,\s*\n?\s*challengeExpiresAt: new Date\(Date\.now\(\) \+ MFA_CHALLENGE_TTL_SECONDS \* 1000\),/,
+      /const challenge = await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\);\s*\n?\s*return \{\s*\n?\s*kind: 'mfa_required',\s*\n?\s*account,\s*\n?\s*\.\.\.challenge,/,
     );
   });
 
@@ -321,10 +321,12 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('issueOAuthWebSession fails closed when local MFA is enrolled', () => {
+  it('issueOAuthWebSession returns the shared IP-bound challenge when local MFA is enrolled', () => {
     expect(body).toMatch(
-      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{[\s\S]+?return null;\s*\n?\s*\}/,
+      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{[\s\S]+?kind: 'mfa_required',[\s\S]+?createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\)/,
     );
+    expect(body).toMatch(/private async createMfaChallenge\(/);
+    expect(body).toMatch(/MFA_CHALLENGE_TTL_SECONDS/);
   });
 
   it('imports: Logger + EmailService + AuthCache + AccountAuditService + MfaService + mfa-challenge-store helpers + auth-tokens helpers + AccountStatus + AccountTier', () => {

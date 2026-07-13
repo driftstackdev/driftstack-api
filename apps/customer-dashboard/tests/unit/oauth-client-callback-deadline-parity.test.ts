@@ -27,16 +27,18 @@ describe('OAuth callback completion deadlines', () => {
   it('bounds the PKCE callback without changing credential or redirect guards', () => {
     expectBoundedRequest(CALLBACK, 'CALLBACK_TIMEOUT_MS');
     expect(CALLBACK).toContain("credentials: 'include'");
-    expect(CALLBACK).toContain("localStorage.setItem('ds_web_session_token', body.session_token)");
-    expect(CALLBACK).toContain(
-      'window.location.href = safeNextPath(body.redirect_to, window.location.origin)',
-    );
+    expect(CALLBACK).toContain("localStorage.setItem('ds_web_session_token', token)");
+    expect(CALLBACK).toContain('safeNextPath(body.redirect_to, window.location.origin)');
     expect(CALLBACK).toContain('OAuth sign-in outcome is unknown after the request timed out.');
     expect(CALLBACK).toContain('exchanged this one-time callback code');
     expect(CALLBACK).toContain('session whose credential did not reach this browser');
     expect(CALLBACK).toContain('account-link confirmation email');
     expect(CALLBACK).toContain('Do not reload or submit this callback URL again.');
     expect(CALLBACK).toContain('Return to sign-in if no email arrives');
+    expect(CALLBACK).toContain('const MFA_TIMEOUT_MS = 15_000;');
+    expect(CALLBACK).toContain("fetch(apiBaseUrl + '/v1/auth/mfa/challenge'");
+    expect(CALLBACK).toContain('MFA sign-in outcome is unknown after the request timed out.');
+    expect(CALLBACK).toContain('Do not submit this code again.');
   });
 
   it('bounds merge confirmation while preserving its one-shot token POST', () => {

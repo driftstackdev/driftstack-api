@@ -32,10 +32,13 @@ describe('customer-dashboard auth/oauth-client/callback content parity', () => {
     );
   });
 
-  it('3-outcome branching pinned: signed-in-existing-link/created-new-account → / OR collision-pending-verification → /auth/oauth-client/check-email OR existing-link-revoked → /login. Drift to dropping any branch would break a real OAuth user-state path', () => {
-    expect(body).toMatch(/signed-in-existing-link \/ created-new-account → \//);
+  it('all OAuth account outcomes plus the enrolled-MFA handoff are documented', () => {
+    expect(body).toMatch(
+      /signed-in-existing-link \/ created-new-account → session or mfa_required/,
+    );
     expect(body).toMatch(/collision-pending-verification → \/auth\/oauth-client\/check-email/);
     expect(body).toMatch(/existing-link-revoked → \/login with "re-link or password" prompt/);
+    expect(body).toMatch(/mfa_required/);
   });
 
   it("PKCE verifier cookie round-trip framing pinned: 'PKCE verifier cookie round-trip is automatic via credentials:include'. Drift to dropping credentials:include would break the PKCE verifier round-trip + every OAuth sign-in attempt", () => {
@@ -52,5 +55,12 @@ describe('customer-dashboard auth/oauth-client/callback content parity', () => {
 
   it('withSidebar={false} on DashboardLayout — pinned because OAuth callback lands BEFORE the user is fully signed in. Drift would surface partial-auth navigation that can lead to confusing dead ends', () => {
     expect(body).toMatch(/<DashboardLayout title="Signing you in…" withSidebar=\{false\}>/);
+  });
+
+  it('renders the partial-auth MFA form without persisting its challenge token', () => {
+    expect(body).toMatch(/data-form="oauth-mfa"/);
+    expect(body).toMatch(/autocomplete="one-time-code"/);
+    expect(body).toMatch(/let mfaChallengeToken = null/);
+    expect(body).not.toMatch(/localStorage\.setItem\([^\n]*challenge/);
   });
 });

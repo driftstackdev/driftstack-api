@@ -346,6 +346,17 @@ export type LoginResult =
       challengeExpiresAt: Date;
     };
 
+export type OAuthWebSessionResult =
+  | {
+      kind: 'session';
+      session: { plaintext: string; row: WebSessionRow };
+    }
+  | {
+      kind: 'mfa_required';
+      challengeToken: string;
+      challengeExpiresAt: Date;
+    };
+
 /** V-353d — body of /v1/auth/mfa/challenge. Either `code` (TOTP
  *  6-digit) or `recovery_code` (10-char recovery; hyphen optional). */
 export interface MfaChallengeArgs {
@@ -503,6 +514,31 @@ export class AuthFlowsService {
      */
     private readonly emailPreferences: EmailPreferencesService | null = null,
   ) {}
+
+  private async createMfaChallenge(
+    account: AuthFlowAccountRow,
+    sourceIp: string | null,
+    userAgent: string | null,
+  ): Promise<{ challengeToken: string; challengeExpiresAt: Date }> {
+    if (this.mfaChallenges === null) {
+      throw new AuthFlowError('invalid_auth_token', 'MFA challenge not available on this server.');
+    }
+    const challengeToken = generateChallengeToken();
+    const challengeExpiresAt = new Date(Date.now() + MFA_CHALLENGE_TTL_SECONDS * 1000);
+    const payload: MfaChallengePayload = {
+      account_id: account.id,
+      email: account.email,
+      source_ip: sourceIp,
+      issued_at: Date.now(),
+      issued_user_agent: userAgent,
+    };
+    await this.mfaChallenges.set(
+      mfaChallengeKey(challengeToken),
+      JSON.stringify(payload),
+      MFA_CHALLENGE_TTL_SECONDS,
+    );
+    return { challengeToken, challengeExpiresAt };
+  }
 
   /**
    * Security fix (2026-06-30 audit) — in-process single-flight queue
@@ -842,24 +878,11 @@ export class AuthFlowsService {
     if (this.mfa && this.mfaChallenges) {
       const status = await this.mfa.getStatus(account.id);
       if (status.enrolled) {
-        const token = generateChallengeToken();
-        const payload: MfaChallengePayload = {
-          account_id: account.id,
-          email: account.email,
-          source_ip: args.issuedFromIp,
-          issued_at: Date.now(),
-          issued_user_agent: args.userAgent,
-        };
-        await this.mfaChallenges.set(
-          mfaChallengeKey(token),
-          JSON.stringify(payload),
-          MFA_CHALLENGE_TTL_SECONDS,
-        );
+        const challenge = await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent);
         return {
           kind: 'mfa_required',
           account,
-          challengeToken: token,
-          challengeExpiresAt: new Date(Date.now() + MFA_CHALLENGE_TTL_SECONDS * 1000),
+          ...challenge,
         };
       }
     }
@@ -1433,23 +1456,24 @@ export class AuthFlowsService {
    * account data" because localStorage was empty. This closes the
    * gap.
    *
-   * Returns `null` if the account was deleted, became inactive, or requires
-   * local MFA between linkOrCreateAccount + this call. The callback keeps the
-   * same opaque no-session result rather than exposing account security state.
+   * Returns `null` if the account was deleted or became inactive. Enrolled
+   * accounts receive the same short-lived, IP-bound MFA challenge used by
+   * password login instead of session plaintext.
    */
   async issueOAuthWebSession(args: {
     accountId: string;
     issuedFromIp: string | null;
     userAgent: string | null;
     provider: string;
-  }): Promise<{ plaintext: string; row: WebSessionRow } | null> {
+  }): Promise<OAuthWebSessionResult | null> {
     const account = await this.repo.findAccountById(args.accountId);
     if (account === null || account.status !== 'active') return null;
     if (this.mfa !== null && (await this.mfa.getStatus(account.id)).enrolled) {
-      // Until the dashboard has a dedicated OAuth→MFA challenge handoff,
-      // fail closed into its existing password-login fallback. An upstream IDP
-      // login must never silently bypass the second factor enabled here.
-      return null;
+      if (this.mfaChallenges === null) return null;
+      return {
+        kind: 'mfa_required',
+        ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+      };
     }
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
     await this.emitAuditBestEffort(args.accountId, 'account.login', {
@@ -1457,6 +1481,6 @@ export class AuthFlowsService {
       provider: args.provider,
       session_id: session.row.id,
     });
-    return session;
+    return { kind: 'session', session };
   }
 }

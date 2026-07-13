@@ -1,6 +1,6 @@
 // Drift guard for apps/customer-dashboard/src/pages/auth/oauth-client/
 // callback.astro. Pins the V-667.C OAuth-client callback landing page
-// + 3-outcome routing (signed-in/created → /; collision-pending → show
+// + outcome routing (signed-in/created → session or MFA; collision-pending → show
 // check-email card; existing-link-revoked → /login with "re-link or
 // password" prompt). Drift to dropping credentials:'include' would
 // break the PKCE verifier cookie round-trip.
@@ -28,10 +28,10 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('V-667.C module-level framing pinned: \'OAuth-client callback landing page. The IDP redirects the user here with ?code=...&state=... after they approve consent. This page POSTs the same query params back to /v1/auth/oauth-client/callback (server-side; the GET endpoint surfaces outcome via JSON) and routes based on the outcome: signed-in-existing-link / created-new-account → / + collision-pending-verification → /auth/oauth-client/check-email + existing-link-revoked → /login with "re-link or password" prompt. PKCE verifier cookie round-trip is automatic via credentials:include.\' — pinned so the V-667.C anchor + 3-outcome routing + PKCE-cookie-credentials:include contract all stay documented', () => {
+  it('V-667.C module-level OAuth callback framing and PKCE-cookie contract stay documented', () => {
     expect(body).toMatch(/\/\/ V-667\.C — OAuth-client callback landing page\./);
     expect(body).toMatch(
-      /\/\/\s+signed-in-existing-link \/ created-new-account → \/\s*\n?\s*\/\/\s+collision-pending-verification → \/auth\/oauth-client\/check-email\s*\n?\s*\/\/\s+existing-link-revoked → \/login with "re-link or password" prompt/,
+      /\/\/\s+signed-in-existing-link \/ created-new-account → session or mfa_required\s*\n?\s*\/\/\s+mfa_required → verify TOTP\/recovery, then continue to redirect_to\s*\n?\s*\/\/\s+collision-pending-verification → \/auth\/oauth-client\/check-email\s*\n?\s*\/\/\s+existing-link-revoked → \/login with "re-link or password" prompt/,
     );
     expect(body).toMatch(
       /\/\/ PKCE verifier cookie round-trip is automatic via credentials:'include'\./,
@@ -59,11 +59,11 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
 
   it("fetch GET /v1/auth/oauth-client/callback + credentials:'include' + 'PKCE cookie round-trip' comment pinned. Drift to credentials:'omit' would break the PKCE cookie carrying the verifier back to the server — token exchange would fail with 'PKCE verifier cookie missing or invalid'", () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/callback' \+ qs, \{\s*\n?\s*method: 'GET',\s*\n?\s*credentials: 'include', \/\/ PKCE cookie round-trip\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/callback' \+ qs, \{\s*\n?\s*method: 'GET',\s*\n?\s*credentials: 'include', \/\/ PKCE cookie round-trip\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
     );
   });
 
-  it("3-outcome branching pinned: signed-in-existing-link OR created-new-account → window.location.href = safeNextPath(body.redirect_to, origin) (open-redirect guarded; empty/off-origin → '/') + collision-pending-verification → render check-inbox card with provider+window + existing-link-revoked → showBanner('This identity-provider link was previously revoked. Sign in with your password, or click the IDP button on the login page to re-link.') — pinned so the 3-outcome routing + revoked-recovery-guidance contract all stay documented", () => {
+  it('signed-in outcomes require either a session token or the first-class MFA handoff', () => {
     expect(body).toMatch(
       /if \(body\.outcome === 'signed-in-existing-link' \|\| body\.outcome === 'created-new-account'\) \{/,
     );
@@ -72,14 +72,26 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     // before navigating — never the raw value. Mirrors login/signup/verify-email.
     expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
     expect(body).toMatch(/if \(u\.origin !== origin\) return '\/';/);
-    expect(body).toMatch(
-      /window\.location\.href = safeNextPath\(body\.redirect_to, window\.location\.origin\);/,
-    );
+    expect(body).toMatch(/if \(body\.mfa_required === true\)/);
+    expect(body).toMatch(/startMfaChallenge\(body\)/);
+    expect(body).toMatch(/if \(!body\.session_token\)/);
+    expect(body).toMatch(/completeSession\(/);
     expect(body).toMatch(/if \(body\.outcome === 'collision-pending-verification'\) \{/);
     expect(body).toMatch(/if \(body\.outcome === 'existing-link-revoked'\) \{/);
     expect(body).toMatch(
       /showBanner\(\s*\n?\s*'This identity-provider link was previously revoked\. Sign in with your password, or click the IDP button on the login page to re-link\.',\s*\n?\s*\);/,
     );
+  });
+
+  it('OAuth MFA supports TOTP and recovery-code exchange with single-flight uncertainty handling', () => {
+    expect(body).toMatch(/data-form="oauth-mfa"/);
+    expect(body).toMatch(/challenge_token: mfaChallengeToken/);
+    expect(body).toMatch(/recovery_code: recoveryCode/);
+    expect(body).toContain("'/v1/auth/mfa/challenge'");
+    expect(body).toMatch(
+      /if \(!mfaChallengeToken \|\| mfaInFlight \|\| mfaOutcomeUnknown\) return/,
+    );
+    expect(body).toContain('Do not submit this code again. Start a fresh sign-in.');
   });
 
   it("Provider-from-query-string heuristic pinned: qs.indexOf('provider=github') >= 0 → 'GitHub' / else 'Google' for the data-merge-provider text. Drift to a different heuristic would mismatch the provider-name in the check-inbox card on edge-case query strings", () => {

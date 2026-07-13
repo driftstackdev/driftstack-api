@@ -128,4 +128,11 @@ describe('routes/auth-oauth-client content parity', () => {
       /return reply\.code\(200\)\.send\(\{\s*\n?\s*outcome: 'merged' as const,\s*\n?\s*account_id: result\.accountId,\s*\n?\s*link_id: result\.linkId,\s*\n?\s*\}\);/,
     );
   });
+
+  it('returns an explicit OAuth MFA challenge instead of session plaintext for enrolled accounts', () => {
+    expect(body).toMatch(/session\?\.kind === 'mfa_required'/);
+    expect(body).toMatch(/mfa_required: true as const/);
+    expect(body).toMatch(/challenge_token: mfaChallenge\.challengeToken/);
+    expect(body).toMatch(/challenge_expires_at: mfaChallenge\.challengeExpiresAt\.toISOString\(\)/);
+  });
 });

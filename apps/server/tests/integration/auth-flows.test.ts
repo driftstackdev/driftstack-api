@@ -14,6 +14,7 @@ import { AuthFlowError, AuthFlowsService } from '../../src/services/auth-flows.j
 import {
   InMemoryMfaChallengeStore,
   MAX_MFA_CHALLENGE_ATTEMPTS,
+  redisKey as mfaChallengeKey,
 } from '../../src/services/mfa-challenge-store.js';
 import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
 
@@ -1332,6 +1333,7 @@ describe('AuthFlowsService.issueOAuthWebSession — active-account containment',
       unusedRecoveryCodes: 10,
     });
     const mfa = { getStatus };
+    const mfaChallenges = new InMemoryMfaChallengeStore();
     const service = new AuthFlowsService(
       repo,
       email,
@@ -1345,7 +1347,7 @@ describe('AuthFlowsService.issueOAuthWebSession — active-account containment',
       null,
       null,
       mfa as never,
-      new InMemoryMfaChallengeStore(),
+      mfaChallenges,
     );
     const signup = await service.signup({
       email: 'mfa-oauth@driftstack.local',
@@ -1354,16 +1356,42 @@ describe('AuthFlowsService.issueOAuthWebSession — active-account containment',
     });
     const insertSession = vi.spyOn(repo, 'insertWebSession');
 
-    await expect(
-      service.issueOAuthWebSession({
-        accountId: signup.account.id,
-        issuedFromIp: null,
-        userAgent: null,
-        provider: 'github',
-      }),
-    ).resolves.toBeNull();
+    const result = await service.issueOAuthWebSession({
+      accountId: signup.account.id,
+      issuedFromIp: '203.0.113.7',
+      userAgent: 'oauth-browser',
+      provider: 'github',
+    });
+    expect(result?.kind).toBe('mfa_required');
+    if (result?.kind !== 'mfa_required') throw new Error('expected OAuth MFA challenge');
+    const stored = await mfaChallenges.peek(mfaChallengeKey(result.challengeToken));
+    expect(JSON.parse(String(stored))).toMatchObject({
+      account_id: signup.account.id,
+      source_ip: '203.0.113.7',
+      issued_user_agent: 'oauth-browser',
+    });
+    expect(result.challengeExpiresAt.getTime()).toBeGreaterThan(Date.now());
     expect(getStatus).toHaveBeenCalledWith(signup.account.id);
     expect(insertSession).not.toHaveBeenCalled();
+  });
+
+  it('still returns a normal session result for an active account without MFA', async () => {
+    const { repo, service } = makeDirectService();
+    const signup = await service.signup({
+      email: 'plain-oauth@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    const result = await service.issueOAuthWebSession({
+      accountId: signup.account.id,
+      issuedFromIp: null,
+      userAgent: 'oauth-browser',
+      provider: 'google',
+    });
+    expect(result?.kind).toBe('session');
+    expect(insertSession).toHaveBeenCalledTimes(1);
   });
 });
 

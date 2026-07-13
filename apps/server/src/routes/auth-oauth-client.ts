@@ -274,6 +274,7 @@ export function registerOAuthClientRoutes(
       // local MFA is enrolled, falling back to password + MFA until
       // the dashboard has a dedicated OAuth→MFA challenge handoff.
       let sessionToken: string | undefined;
+      let mfaChallenge: { challengeToken: string; challengeExpiresAt: Date } | undefined;
       if (result.kind === 'signed-in-existing-link' || result.kind === 'created-new-account') {
         const session = await deps.authFlows.issueOAuthWebSession({
           accountId: result.accountId,
@@ -282,7 +283,13 @@ export function registerOAuthClientRoutes(
             typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
           provider,
         });
-        if (session !== null) sessionToken = session.plaintext;
+        if (session?.kind === 'session') sessionToken = session.session.plaintext;
+        if (session?.kind === 'mfa_required') {
+          mfaChallenge = {
+            challengeToken: session.challengeToken,
+            challengeExpiresAt: session.challengeExpiresAt,
+          };
+        }
       }
 
       return reply.code(200).send({
@@ -292,6 +299,13 @@ export function registerOAuthClientRoutes(
               account_id: result.accountId,
               redirect_to: redirectTo,
               ...(sessionToken !== undefined ? { session_token: sessionToken } : {}),
+              ...(mfaChallenge !== undefined
+                ? {
+                    mfa_required: true as const,
+                    challenge_token: mfaChallenge.challengeToken,
+                    challenge_expires_at: mfaChallenge.challengeExpiresAt.toISOString(),
+                  }
+                : {}),
             }
           : {}),
         ...(result.kind === 'collision-pending-verification'

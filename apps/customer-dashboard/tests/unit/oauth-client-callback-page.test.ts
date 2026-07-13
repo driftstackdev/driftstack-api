@@ -96,4 +96,80 @@ describe('OAuth client callback page', () => {
       '/login',
     );
   });
+
+  it('completes an OAuth-issued MFA challenge without asking for the password again', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), (call) => {
+      if (/\/v1\/auth\/mfa\/challenge$/.test(call.url)) {
+        return new Response(
+          JSON.stringify({ session: { token: 'ds_web_oauth_mfa', expires_at: '2026-08-01' } }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          outcome: 'signed-in-existing-link',
+          account_id: 'acc_test',
+          redirect_to: '/settings',
+          mfa_required: true,
+          challenge_token: 'ds_mfac_oauth',
+          challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-form="oauth-mfa"]') as HTMLFormElement;
+    const input = window.document.querySelector('#oauth-mfa-code') as HTMLInputElement;
+    expect(form.classList.contains('hidden')).toBe(false);
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    input.value = '123456';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[1]?.url).toMatch(/\/v1\/auth\/mfa\/challenge$/);
+    expect(fetchCalls[1]?.init?.method).toBe('POST');
+    expect(JSON.parse(String(fetchCalls[1]?.init?.body))).toEqual({
+      challenge_token: 'ds_mfac_oauth',
+      code: '123456',
+    });
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_oauth_mfa');
+  });
+
+  it('locks an OAuth MFA challenge after an ambiguous exchange timeout', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), (call) => {
+      if (/\/v1\/auth\/mfa\/challenge$/.test(call.url)) return Promise.reject(timeout);
+      return new Response(
+        JSON.stringify({
+          outcome: 'signed-in-existing-link',
+          redirect_to: '/',
+          mfa_required: true,
+          challenge_token: 'ds_mfac_unknown',
+          challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="oauth-mfa"]') as HTMLFormElement;
+    const input = window.document.querySelector('#oauth-mfa-code') as HTMLInputElement;
+    input.value = '123456';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls.filter((call) => /\/v1\/auth\/mfa\/challenge$/.test(call.url))).toHaveLength(
+      1,
+    );
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    expect(form.classList.contains('hidden')).toBe(true);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*consumed this one-time challenge.*do not submit this code again.*fresh sign-in/i,
+    );
+  });
 });
