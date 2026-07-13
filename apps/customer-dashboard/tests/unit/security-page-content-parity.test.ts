@@ -139,6 +139,15 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toContain('a new current authenticator code or an unused recovery code');
   });
 
+  it('generation-orders MFA status refreshes and cancels them on page exit', () => {
+    expect(body).toContain('let mfaRefreshGeneration = 0;');
+    expect(body).toContain('let mfaRefreshController = null;');
+    expect(body).toContain('const generation = ++mfaRefreshGeneration;');
+    expect(body).toContain('if (mfaRefreshController) mfaRefreshController.abort();');
+    expect(body).toContain('if (generation !== mfaRefreshGeneration) return false;');
+    expect(body).toMatch(/window\.addEventListener\(\s*'pagehide'/);
+  });
+
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     expect(body).toContain('ds_web_session_token');
   });

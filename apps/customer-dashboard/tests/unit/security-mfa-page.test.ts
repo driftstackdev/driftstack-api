@@ -200,6 +200,56 @@ describe('security page — MFA (2FA) disable', () => {
     expect(isHidden(window, '[data-section="mfa-enrolled"]')).toBe(true);
   });
 
+  it('a stale boot status cannot overwrite the authoritative post-disable refresh', async () => {
+    const mfa = newMfa({ enrolled: true });
+    const base = makeRouter(mfa);
+    let resolveBootStatus!: (response: Response) => void;
+    const bootStatus = new Promise<Response>((resolve) => {
+      resolveBootStatus = resolve;
+    });
+    let mfaGetCount = 0;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (method === 'GET' && /\/v1\/account\/mfa$/.test(call.url)) {
+          mfaGetCount += 1;
+          if (mfaGetCount === 1) return bootStatus;
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush(2);
+    (window.document.querySelector('[data-button="mfa-disable"]') as HTMLButtonElement).click();
+    await flush(12);
+
+    const mfaGets = fetchCalls.filter(
+      (call) =>
+        (call.init?.method || 'GET').toUpperCase() === 'GET' &&
+        /\/v1\/account\/mfa$/.test(call.url),
+    );
+    expect(mfaGets).toHaveLength(2);
+    expect((mfaGets[0]?.init?.signal as AbortSignal | undefined)?.aborted).toBe(true);
+    expect(window.document.querySelector('[data-field="mfa-status-badge"]')?.textContent).toBe(
+      'not enrolled',
+    );
+
+    resolveBootStatus(
+      json({
+        enrolled: true,
+        enrolled_at: '2026-05-20T10:00:00.000Z',
+        last_used_at: '2026-05-28T10:00:00.000Z',
+        recovery_codes_remaining: 8,
+      }),
+    );
+    await flush(12);
+    expect(window.document.querySelector('[data-field="mfa-status-badge"]')?.textContent).toBe(
+      'not enrolled',
+    );
+    expect(isHidden(window, '[data-section="mfa-enrolled"]')).toBe(true);
+  });
+
   it('disable requiring step-up: DELETE 403 reveals the step-up form; code → step-up POST → retry DELETE → disabled', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       confirmReturns: true,

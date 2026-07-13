@@ -469,8 +469,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
 
-      function boundedFetch(url, init = {}) {
-        const controller = new AbortController();
+      function boundedFetch(url, init = {}, suppliedController = null) {
+        const controller = suppliedController || new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), SECURITY_TIMEOUT_MS);
         return fetch(url, { ...init, signal: controller.signal })
           .catch((err) => {
@@ -509,20 +509,24 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      function authedFetch(path, init = {}) {
-        return boundedFetch(apiBaseUrl + path, {
-          ...init,
-          headers: {
-            ...(init.headers || {}),
-            authorization: 'Bearer ' + token,
-            'content-type': 'application/json',
-            // V-331b — act-as header for team-scoped requests.
-            ...(typeof window.driftstackActAsHeaders === 'function'
-              ? window.driftstackActAsHeaders()
-              : {}),
+      function authedFetch(path, init = {}, suppliedController = null) {
+        return boundedFetch(
+          apiBaseUrl + path,
+          {
+            ...init,
+            headers: {
+              ...(init.headers || {}),
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+              // V-331b — act-as header for team-scoped requests.
+              ...(typeof window.driftstackActAsHeaders === 'function'
+                ? window.driftstackActAsHeaders()
+                : {}),
+            },
+            credentials: 'include',
           },
-          credentials: 'include',
-        });
+          suppliedController,
+        );
       }
 
       // V-216 — audit log live wire.
@@ -1005,6 +1009,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       let mfaStepUpInFlight = false;
       let mfaDisableInFlight = false;
       let mfaRegenerateInFlight = false;
+      let mfaRefreshGeneration = 0;
+      let mfaRefreshController = null;
 
       function showHidden(el, hidden) {
         if (!el) return;
@@ -1416,18 +1422,27 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function loadMfa(showLoadError = true) {
         if (!token) return Promise.resolve(false);
-        return authedFetch('/v1/account/mfa', { method: 'GET' })
+        const generation = ++mfaRefreshGeneration;
+        if (mfaRefreshController) mfaRefreshController.abort();
+        const controller = new AbortController();
+        mfaRefreshController = controller;
+        return authedFetch('/v1/account/mfa', { method: 'GET' }, controller)
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((status) => {
+            if (generation !== mfaRefreshGeneration) return false;
             setMfaState(status);
             return true;
           })
           .catch((err) => {
+            if (generation !== mfaRefreshGeneration) return false;
             if (showLoadError) {
               const msg = err && err.message ? err.message : 'network error';
               showBanner("Couldn't load MFA status (" + msg + ').');
             }
             return false;
+          })
+          .finally(() => {
+            if (generation === mfaRefreshGeneration) mfaRefreshController = null;
           });
       }
 
@@ -1825,6 +1840,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         showBanner('Sign in to see live security status + recent activity.');
         return;
       }
+
+      window.addEventListener(
+        'pagehide',
+        () => {
+          mfaRefreshGeneration += 1;
+          if (mfaRefreshController) mfaRefreshController.abort();
+          mfaRefreshController = null;
+        },
+        { once: true },
+      );
 
       loadAudit();
       loadWebSessions();
