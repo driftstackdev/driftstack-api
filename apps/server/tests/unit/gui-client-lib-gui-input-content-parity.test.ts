@@ -90,8 +90,10 @@ describe('W464.C apps/gui-client/src/lib/gui-input.ts content parity', () => {
   it("Request construction: trailing-slash strip baseUrl.replace(/\\/+$/, '') + encodeURIComponent(sessionId) on URL + Authorization Bearer header + Content-Type application/json", () => {
     expect(body).toMatch(/const baseUrl = settings\.baseUrl\.replace\(\/\\\/\+\$\/, ''\);/);
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/gui-input`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*'Content-Type': 'application\/json',\s*\n?\s*Authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ action \}\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/gui-input`,\s*\{\s*method: 'POST',\s*headers: \{\s*'Content-Type': 'application\/json',\s*Authorization: `Bearer \$\{settings\.apiKey\}`,\s*\},\s*body: JSON\.stringify\(\{ action \}\),\s*\},\s*\);/,
     );
+    expect(body).toMatch(/const GUI_INPUT_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/signal: controller\.signal/);
   });
 
   it("Error-response parsing: detail = body.detail ?? body.title ?? detail (HTTP-status fallback) + kind = body.type.split('/').pop() ?? 'unknown' + RFC 7807 type-URI framing pinned 'Server emits RFC 7807 `type` URIs like \"https://errors.driftstack.dev/forbidden\".'", () => {

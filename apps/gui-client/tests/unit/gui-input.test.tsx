@@ -51,9 +51,30 @@ function mockFetch(
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('sendGUIInput', () => {
+  it('aborts a stalled coordinate-input request after 15 seconds', async () => {
+    vi.useFakeTimers();
+    const f = mockFetch(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
+    try {
+      const pending = sendGUIInput(baseSettings(), 'ses_test', { kind: 'tap_at', x: 1, y: 2 });
+      const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await rejection;
+    } finally {
+      f.restore();
+    }
+  });
+
   it('throws GUIInputError(auth_missing) without calling fetch when apiKey is null', async () => {
     const f = mockFetch(() => Promise.reject(new Error('should not be called')));
     try {

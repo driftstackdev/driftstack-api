@@ -32,6 +32,16 @@ export class GUIInputError extends Error {
   }
 }
 
+const GUI_INPUT_TIMEOUT_MS = 15_000;
+
+function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), GUI_INPUT_TIMEOUT_MS);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    globalThis.clearTimeout(timer);
+  });
+}
+
 export async function sendGUIInput(
   settings: DriftstackSettings,
   sessionId: string,
@@ -41,14 +51,17 @@ export async function sendGUIInput(
     throw new GUIInputError('API key not configured', 0, 'auth_missing');
   }
   const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-  const res = await fetch(`${baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/gui-input`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`,
+  const res = await fetchWithDeadline(
+    `${baseUrl}/v1/sessions/${encodeURIComponent(sessionId)}/gui-input`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.apiKey}`,
+      },
+      body: JSON.stringify({ action }),
     },
-    body: JSON.stringify({ action }),
-  });
+  );
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     let kind = 'unknown';
