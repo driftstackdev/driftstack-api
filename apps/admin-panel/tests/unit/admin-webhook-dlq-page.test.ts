@@ -120,13 +120,15 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
   it('renders DLQ entries with Requeue + Discard actions', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       route: makeRouter([mkEntry({ id: 'whd_1' })]),
     });
     win = window;
     await flush();
     expect(window.document.querySelector('[data-action="requeue"][data-id="whd_1"]')).toBeTruthy();
     expect(window.document.querySelector('[data-action="discard"][data-id="whd_1"]')).toBeTruthy();
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
   });
 
   it('CRITICAL discard confirm is destructive:true — without it a stray Enter fires the irrecoverable hard-delete with no click required (audit waefer6wu)', async () => {
@@ -163,6 +165,7 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
       (c) => c.init?.method === 'POST' && /\/v1\/admin\/webhook-dlq\/whd_1\/discard$/.test(c.url),
     );
     expect(post).toBeTruthy();
+    expect(post?.init?.signal).toBeInstanceOf(window.AbortSignal);
     expect(window.document.querySelector('[data-action="discard"][data-id="whd_1"]')).toBeNull();
     expect(window.document.querySelector('[data-action="discard"][data-id="whd_2"]')).toBeTruthy();
   });
@@ -196,6 +199,8 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
       (c) => c.init?.method === 'POST' && /\/v1\/admin\/webhook-dlq\/whd_1\/requeue$/.test(c.url),
     );
     expect(post).toBeTruthy();
+    expect(post?.init?.signal).toBeInstanceOf(window.AbortSignal);
+    expect(window.document.querySelectorAll('button[data-id]').length).toBe(0);
   });
 
   it('locks both entry actions and sends only one requeue while the mutation is pending', async () => {

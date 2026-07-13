@@ -175,6 +175,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       const listRegion = root.querySelector('[data-region="list"]');
       const emptyRegion = root.querySelector('[data-region="empty"]');
       const token = localStorage.getItem('ds_web_session_token');
+      const DLQ_TIMEOUT_MS = 15_000;
+      let loadController = null;
+
+      function boundedFetch(url, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(() => controller.abort(), DLQ_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       function showBanner(text) {
         if (!banner) return;
@@ -291,6 +308,8 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function renderEntries(entries) {
         if (entries.length === 0) {
+          if (list) list.innerHTML = '';
+          if (summary) summary.textContent = '0 entries';
           if (listRegion) listRegion.classList.add('hidden');
           if (emptyRegion) emptyRegion.classList.remove('hidden');
           return;
@@ -308,10 +327,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       function load() {
         if (!token) return Promise.resolve();
         const myReq = ++inFlight;
-        return fetch(apiBaseUrl + '/v1/admin/webhook-dlq?limit=50', {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        })
+        if (loadController) loadController.abort();
+        const controller = new AbortController();
+        loadController = controller;
+        root.setAttribute('aria-busy', 'true');
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/webhook-dlq?limit=50',
+          {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
@@ -323,7 +350,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
             // W604 — clear the SSG mock entry on ANY load failure. Leaving the
             // mock row on screen is dangerous: it renders live Requeue +
             // (irrecoverable) Discard buttons wired to a FAKE delivery id, so
@@ -346,6 +373,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           })
           .finally(() => {
+            if (myReq === inFlight) {
+              loadController = null;
+              root.removeAttribute('aria-busy');
+            }
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
@@ -357,7 +388,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         pendingMutations.add(id);
         setEntryBusy(id, 'requeue', true, 'Requeueing…');
         showBanner('Requeueing ' + id + '…');
-        return fetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/requeue', {
+        return boundedFetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/requeue', {
           method: 'POST',
           headers: {
             authorization: 'Bearer ' + token,
@@ -372,7 +403,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return load();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
             showBanner("Couldn't requeue " + id + ' (' + msg + ').');
           })
           .finally(() => {
@@ -404,7 +435,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (!confirmed) return;
           setEntryBusy(id, 'discard', true, 'Discarding…');
           showBanner('Discarding ' + id + '…');
-          const r = await fetch(
+          const r = await boundedFetch(
             apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/discard',
             {
               method: 'POST',
@@ -420,7 +451,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Discarded ' + id + '. Refreshing list…');
           await load();
         } catch (err) {
-          const msg = err && err.message ? err.message : 'network error';
+          const msg = requestErrorMessage(err, 'network error');
           showBanner("Couldn't discard " + id + ' (' + msg + ').');
         } finally {
           pendingMutations.delete(id);
