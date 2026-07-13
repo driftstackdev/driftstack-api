@@ -242,6 +242,13 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/'password-reset requested for unknown email — no-op',/);
   });
 
+  it('account-bound auth email delivery uses the stored address after canonical lookup', () => {
+    expect(
+      body.match(/sendSignupVerification\(\{ to: account\.email, link, expiresAt \}\)/g),
+    ).toHaveLength(2);
+    expect(body).toMatch(/sendPasswordReset\(\{ to: account\.email, link, expiresAt \}\)/);
+  });
+
   it('consumeMagicLink: atomically invalidates siblings, then implicitly verifies inbox ownership', () => {
     expect(body).toMatch(
       /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'magic_link',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);/,

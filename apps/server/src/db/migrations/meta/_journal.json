@@ -715,6 +715,13 @@
       "when": 1780368000000,
       "tag": "0101_agent_sessions_last_error_event",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1780371600000,
+      "tag": "0102_accounts_canonical_email_provider_scope",
+      "breakpoints": true
     }
   ]
 }

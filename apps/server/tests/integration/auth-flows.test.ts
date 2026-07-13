@@ -135,7 +135,7 @@ describe('POST /v1/auth/signup', () => {
 });
 
 describe('AuthFlowsService.signup — email dedup canonicalization (security fix 2026-06-30)', () => {
-  // A signup using a `+tag` suffix or (Gmail-only) dot-variant of an
+  // A Gmail signup using a `+tag` suffix or dot-variant of an
   // address that's ALREADY registered lands in the exact same real inbox
   // as the existing account — without this canonicalization, one mailbox
   // could mint unlimited "distinct" verified free-tier accounts.
@@ -198,23 +198,23 @@ describe('AuthFlowsService.signup — email dedup canonicalization (security fix
     expect(await repo.findAccountByEmail('attackername@outlook.com')).not.toBeNull();
   });
 
-  it('DOES strip +tag for a non-Gmail domain (universal RFC 5233 subaddressing, not a Gmail-only rule) — attacker@outlook.com exists → attacker+promo@outlook.com blocked', async () => {
-    const { service } = makeDirectService();
+  it('does NOT strip +tag for a non-Gmail domain — RFC 5233 subaddressing is provider-controlled and the two literal mailboxes remain distinct', async () => {
+    const { service, repo } = makeDirectService();
     await service.signup({
       email: 'attacker@outlook.com',
       password: 'correct horse battery staple',
       requestedFromIp: null,
     });
 
-    const err = await service
-      .signup({
-        email: 'attacker+promo@outlook.com',
-        password: 'correct horse battery staple',
-        requestedFromIp: null,
-      })
-      .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(AuthFlowError);
-    expect((err as AuthFlowError).code).toBe('email_already_registered');
+    const second = await service.signup({
+      email: 'attacker+promo@outlook.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    expect(second.account.email).toBe('attacker+promo@outlook.com');
+    expect(await repo.findAccountByEmail('attacker@outlook.com')).not.toBeNull();
+    expect(await repo.findAccountByEmail('attacker+promo@outlook.com')).not.toBeNull();
   });
 
   // ── REVERSE-ordering regression tests (2026-07-01 fix) ──────────────

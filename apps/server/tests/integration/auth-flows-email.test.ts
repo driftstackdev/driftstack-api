@@ -113,6 +113,77 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     expect(calls[0]?.text).toContain('https://app.driftstack.local/auth/magic-link?token=');
   });
 
+  it('routes every Gmail-alias credential to the stored account address, never the requester spelling', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const { client, calls } = makeStubPostmark();
+    const service = makeService(repo, client);
+
+    await service.signup({
+      email: 'stored.alias@gmail.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    calls.length = 0;
+
+    const requesterAlias = 'storedalias+anonymous-request@gmail.com';
+    const resend = await service.resendSignupVerification({
+      email: requesterAlias,
+      requestedFromIp: null,
+    });
+    const magic = await service.requestMagicLink({
+      email: requesterAlias,
+      requestedFromIp: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: requesterAlias,
+      requestedFromIp: null,
+    });
+
+    await flushEmailQueue();
+    expect(resend.sent).toBe(true);
+    expect(magic.sent).toBe(true);
+    expect(reset.sent).toBe(true);
+    expect(calls.map((call) => call.to)).toEqual([
+      'stored.alias@gmail.com',
+      'stored.alias@gmail.com',
+      'stored.alias@gmail.com',
+    ]);
+    expect(calls.some((call) => call.to === requesterAlias)).toBe(false);
+  });
+
+  it('does not resolve a non-Gmail +address to a different base mailbox', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const { client, calls } = makeStubPostmark();
+    const service = makeService(repo, client);
+
+    await service.signup({
+      email: 'victim@distinct-mailbox.test',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    calls.length = 0;
+
+    const distinctMailbox = 'victim+attacker@distinct-mailbox.test';
+    const resend = await service.resendSignupVerification({
+      email: distinctMailbox,
+      requestedFromIp: null,
+    });
+    const magic = await service.requestMagicLink({
+      email: distinctMailbox,
+      requestedFromIp: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: distinctMailbox,
+      requestedFromIp: null,
+    });
+
+    await flushEmailQueue();
+    expect(resend.sent).toBe(false);
+    expect(magic.sent).toBe(false);
+    expect(reset.sent).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
   it('magic-link single-use under concurrency: two simultaneous consumes of the same token → exactly one session, one InvalidAuthToken', async () => {
     // Regression for the find-then-consume race: both requests pass
     // findActiveAuthToken (token still active), but the atomic conditional

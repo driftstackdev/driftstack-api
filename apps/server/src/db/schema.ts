@@ -233,10 +233,12 @@ export const accounts = pgTable(
       .primaryKey()
       .default(sql`gen_random_uuid()`),
     email: text('email').notNull(),
-    // 2026-07-01 security fix (migration 0096) — the DEDUP-canonical
+    // 2026-07-01 security fix (migration 0096, provider scope corrected
+    // by migration 0102) — the DEDUP-canonical
     // form of `email` (see canonicalizeEmailForDedup in
-    // services/auth-flows.ts): `+tag` subaddressing stripped for every
-    // domain + dots ALSO stripped for gmail.com/googlemail.com only.
+    // services/auth-flows.ts): `+tag` subaddressing and dots are stripped
+    // for gmail.com/googlemail.com only. Other providers retain the exact
+    // local part because RFC 5233 aliases are provider-controlled.
     // Computed + stored at INSERT time by both real account-creation
     // paths that go through AuthFlowsRepo.createAccount (password
     // signup + OAuth IDP signup); unique-indexed below (when set) so

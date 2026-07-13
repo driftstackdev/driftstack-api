@@ -245,18 +245,19 @@ export class AuthFlowError extends Error {
 
 /**
  * Signup-time email dedup canonicalization (security hardening,
- * 2026-06-30; storage-backed 2026-07-01). Two normalizations, applied
- * to the local part only:
+ * 2026-06-30; storage-backed 2026-07-01; provider scope corrected
+ * 2026-07-13). Gmail-specific normalizations are applied to the local
+ * part only:
  *
- *   1. `+tag` subaddressing is stripped for EVERY domain — a
- *      universal Internet convention (RFC 5233), so
- *      `foo+anything@example.com` canonicalizes to `foo@example.com`
- *      regardless of provider.
- *   2. Dots are ALSO stripped, but ONLY for gmail.com / googlemail.com
- *      — Gmail specifically treats `f.o.o@gmail.com` as identical to
- *      `foo@gmail.com`. This is a Gmail-only quirk; dots are
- *      significant in the local part for other providers, so this
- *      must NOT generalize to other domains.
+ *   1. For gmail.com / googlemail.com, strip a `+tag` suffix.
+ *   2. For those same two domains, also strip dots.
+ *
+ * RFC 5233 describes provider-controlled subaddressing; it does NOT make
+ * `+tag` a universal mailbox alias. Other domains may deliver
+ * `foo+tag@example.com` to a mailbox distinct from `foo@example.com`, so
+ * their local part must remain literal. Treating them as aliases lets an
+ * anonymous recovery request resolve one account through canonical_email
+ * while naming a different mailbox.
  *
  * The result is stored verbatim in `accounts.canonical_email` (unique-
  * indexed) at account-creation time — see `AuthFlowsRepo.createAccount`
@@ -273,9 +274,8 @@ export function canonicalizeEmailForDedup(email: string): string {
   if (at === -1) return email;
   const localPart = email.slice(0, at);
   const domain = email.slice(at + 1);
-  const noTag = localPart.split('+')[0] ?? '';
   const isGmail = domain === 'gmail.com' || domain === 'googlemail.com';
-  const canonicalLocal = isGmail ? noTag.replace(/\./g, '') : noTag;
+  const canonicalLocal = isGmail ? (localPart.split('+')[0] ?? '').replace(/\./g, '') : localPart;
   return `${canonicalLocal}@${domain}`;
 }
 
@@ -731,7 +731,10 @@ export class AuthFlowsService {
     });
 
     const link = `${this.config.verifyEmailUrl}?token=${plaintext}`;
-    void this.email.sendSignupVerification({ to: email, link, expiresAt });
+    // Account-bound credentials always go to the address persisted on the
+    // account, never an anonymous request's alternate spelling. Canonical
+    // lookup is only an identity-resolution aid for known Gmail aliases.
+    void this.email.sendSignupVerification({ to: account.email, link, expiresAt });
 
     return {
       sent: true,
@@ -1015,7 +1018,7 @@ export class AuthFlowsService {
     });
 
     const link = `${this.config.magicLinkUrl}?token=${plaintext}`;
-    void this.email.sendSignupVerification({ to: email, link, expiresAt });
+    void this.email.sendSignupVerification({ to: account.email, link, expiresAt });
 
     return {
       sent: true,
@@ -1081,7 +1084,7 @@ export class AuthFlowsService {
       requestedFromIp: args.requestedFromIp,
     });
     const link = `${this.config.passwordResetUrl}?token=${plaintext}`;
-    void this.email.sendPasswordReset({ to: email, link, expiresAt });
+    void this.email.sendPasswordReset({ to: account.email, link, expiresAt });
 
     return {
       sent: true,
