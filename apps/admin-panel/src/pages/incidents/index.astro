@@ -437,7 +437,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
           rebuild([]);
           showBanner('Sign in with a staff admin account to see live data.');
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
-          return Promise.resolve();
+          return Promise.resolve(false);
         }
         const controller = new AbortController();
         listController = controller;
@@ -454,6 +454,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
             if (generation !== listGeneration) return;
             rebuild(body && Array.isArray(body.data) ? body.data : []);
             hideBanner();
+            return true;
           })
           .catch(function (err) {
             if (generation !== listGeneration) return;
@@ -476,6 +477,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
                 retry: true,
               });
             }
+            return false;
           })
           .finally(function () {
             if (generation !== listGeneration) return;
@@ -575,7 +577,18 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
             // Reload to show the new incident in the open list.
             window.location.reload();
           })
-          .catch(function (err) {
+          .catch(async function (err) {
+            if (err && err.name === 'AbortError') {
+              const refreshed = await fetchAndRender();
+              showErr(
+                'Posting outcome is unknown after the request timed out. ' +
+                  (refreshed
+                    ? 'The incident list was refreshed. '
+                    : "We couldn't refresh the incident list. ") +
+                  'If this incident appears in the list, do not post it again. Open the existing incident to continue updates.',
+              );
+              return;
+            }
             showErr(requestErrorMessage(err, 'Failed to post incident.'));
           })
           .finally(function () {

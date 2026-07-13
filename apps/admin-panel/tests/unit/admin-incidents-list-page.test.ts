@@ -228,4 +228,34 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     expect(submit.disabled).toBe(false);
     expect(submit.hasAttribute('aria-busy')).toBe(false);
   });
+
+  it('reconciles a committed incident after POST timeout instead of inviting a duplicate', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    let committed = false;
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: (call) => {
+        if (call.init?.method === 'POST') {
+          committed = true;
+          return Promise.reject(timeout);
+        }
+        return json({ data: committed ? [INCIDENT] : [] });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.getElementById('new-incident-form') as HTMLFormElement;
+    (form.querySelector('[name="title"]') as HTMLInputElement).value = INCIDENT.title;
+    (form.querySelector('[name="description"]') as HTMLTextAreaElement).value =
+      INCIDENT.description;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(fetchCalls.filter((call) => call.init?.method !== 'POST')).toHaveLength(2);
+    expect(text(window, '[data-incidents-list]')).toContain(INCIDENT.title);
+    expect(text(window, '#form-error')).toMatch(
+      /outcome is unknown.*list was refreshed.*do not post it again.*open the existing incident/i,
+    );
+  });
 });

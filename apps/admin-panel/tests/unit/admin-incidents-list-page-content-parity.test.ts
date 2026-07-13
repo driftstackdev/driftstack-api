@@ -134,6 +134,13 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     expect(body).toMatch(/\.finally\(function \(\) \{\s*postingIncident = false;/);
   });
 
+  it('reconciles ambiguous incident creation before the operator can repost', () => {
+    expect(body).toContain('Posting outcome is unknown after the request timed out.');
+    expect(body).toContain('The incident list was refreshed.');
+    expect(body).toContain('If this incident appears in the list, do not post it again.');
+    expect(body).toMatch(/const refreshed = await fetchAndRender\(\)/);
+  });
+
   it('CSS class on `Public on status page` checkbox is `checked` by default (status-page-default-public)', () => {
     // The default posture is PUBLIC, not private — pin so a
     // future "default to private" change forces a discussion
