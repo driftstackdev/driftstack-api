@@ -106,13 +106,21 @@ export function redactUrlQueryTokens(url: string): string {
 // correctly omits `#`; this free-text path is the one that sees whole URLs.)
 const FREE_TEXT_TOKEN_RE =
   /([?&#](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|secret|password|signature|code)=)[^&\s"'`]+/gi;
-const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._-]+/gi;
+// RFC 6750 b64token is ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" /
+// "/" followed by optional "=" padding. The former narrower class stopped at
+// `+` or `/`, replacing only a prefix and leaking the remainder. Basic auth is
+// base64 and can surface in the same upstream error/header dumps; require a
+// plausible 8+ character payload so ordinary prose such as "basic auth failed"
+// is not needlessly consumed.
+const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
+const FREE_TEXT_BASIC_RE = /(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi;
 
 export function redactText(s: string): string {
   if (typeof s !== 'string' || s.length === 0) return s;
   return s
     .replace(FREE_TEXT_TOKEN_RE, '$1[redacted]')
     .replace(FREE_TEXT_BEARER_RE, '$1[redacted]')
+    .replace(FREE_TEXT_BASIC_RE, '$1[redacted]')
     .replace(URL_USERINFO_RE, '$1[redacted]@');
 }
 

@@ -131,6 +131,25 @@ describe('redactText — free-text (exception/breadcrumb/message) credential red
     expect(out).toContain('(401)');
   });
 
+  it('redacts the complete RFC 6750 bearer b64token alphabet including + / ~ and = padding', () => {
+    const out = redactText('upstream rejected Bearer abc.DEF_ghi~jkl+DEEPSECRET/== (401)');
+    expect(out).not.toContain('DEEPSECRET');
+    expect(out).not.toContain('+');
+    expect(out).toContain('Bearer [redacted]');
+    expect(out).toContain('(401)');
+  });
+
+  it('redacts Basic base64 credentials in free text without consuming ordinary basic-auth prose', () => {
+    const encoded = 'YWxpY2U6aHVudGVyMg=='; // alice:hunter2
+    const out = redactText(`proxy replied Authorization: Basic ${encoded} (407)`);
+    expect(out).not.toContain(encoded);
+    expect(out).toContain('Basic [redacted]');
+    expect(out).toContain('(407)');
+    expect(redactText('basic auth failed before credentials were sent')).toBe(
+      'basic auth failed before credentials were sent',
+    );
+  });
+
   it('redacts the OAuth ?code= and multiple params', () => {
     const out = redactText('cb https://x/y?code=AUTHCODE&state=ok&access_token=TT done');
     expect(out).not.toContain('AUTHCODE');
