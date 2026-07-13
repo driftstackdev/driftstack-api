@@ -315,7 +315,8 @@ describe('POST /v1/profiles/:id/trim', () => {
     const registry = new FleetControlRegistry();
     registerEchoNode(registry, 'node-trim-err', (frame) => ({
       profileId: frame.profileId,
-      error: 'reseal failed',
+      error:
+        'reseal failed on 10.48.0.12 at https://admin:password@example.com/reseal?token=secret with Bearer abcdefgh',
     }));
     app = await buildHarness({
       service,
@@ -324,7 +325,13 @@ describe('POST /v1/profiles/:id/trim', () => {
     });
     const res = await trim(app);
     expect(res.statusCode).toBe(200);
-    expect(res.json<TrimBody>()).toMatchObject({ status: 'error', reason: 'reseal failed' });
+    const body = res.json<TrimBody>();
+    expect(body).toMatchObject({ status: 'error' });
+    expect(body.reason).toContain('reseal failed');
+    expect(body.reason).not.toContain('10.48.0.12');
+    expect(body.reason).not.toContain('password');
+    expect(body.reason).not.toContain('secret');
+    expect(body.reason).not.toContain('abcdefgh');
     expect(recordTrimCalls).toEqual([]); // the row is untouched on failure
   });
 

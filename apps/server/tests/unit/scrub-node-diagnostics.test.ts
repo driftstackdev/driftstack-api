@@ -3,7 +3,10 @@
 // harness diagnostic before it crosses to a customer surface (webhook / SDK).
 
 import { describe, expect, it } from 'vitest';
-import { scrubNodeDiagnostics } from '../../src/services/scrub-node-diagnostics.js';
+import {
+  customerSafeNodeDiagnostic,
+  scrubNodeDiagnostics,
+} from '../../src/services/scrub-node-diagnostics.js';
 
 describe('scrubNodeDiagnostics', () => {
   it('redacts the documented `direct=<node-ip>` egress-leak segment', () => {
@@ -33,5 +36,36 @@ describe('scrubNodeDiagnostics', () => {
 
   it('handles `direct =` with surrounding whitespace', () => {
     expect(scrubNodeDiagnostics('direct = 10.1.2.3')).toContain('direct=[redacted]');
+  });
+
+  it('customer boundary removes credentials and node IPs while preserving actionable prose', () => {
+    const out = customerSafeNodeDiagnostic(
+      'upload failed direct=10.0.0.7 at https://worker:password@internal.test/put?token=secret-token with Bearer abcdefgh',
+    );
+    expect(out).toContain('upload failed');
+    expect(out).toContain('direct=[redacted]');
+    expect(out).toContain('https://[redacted]@internal.test/put?token=[redacted]');
+    expect(out).toContain('Bearer [redacted]');
+    expect(out).not.toContain('10.0.0.7');
+    expect(out).not.toContain('password');
+    expect(out).not.toContain('secret-token');
+    expect(out).not.toContain('abcdefgh');
+  });
+
+  it('customer boundary re-applies the requested bound and supplies an empty fallback', () => {
+    expect(customerSafeNodeDiagnostic('abcdef', 4)).toBe('abcd');
+    expect(customerSafeNodeDiagnostic('', 32)).toBe('device operation failed');
+  });
+
+  it('redacts URL userinfo whose delimiter falls beyond the output boundary', () => {
+    const out = customerSafeNodeDiagnostic(
+      `prefix https://admin:${'password'.repeat(8)}@example.com/path`,
+      32,
+    );
+
+    expect(out).toContain('https://[redacted]@');
+    expect(out).not.toContain('admin');
+    expect(out).not.toContain('password');
+    expect(out.length).toBeLessThanOrEqual(32);
   });
 });

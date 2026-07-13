@@ -182,7 +182,8 @@ describe('POST /v1/agent-sessions/:id/cookies/set (wired)', () => {
             type: 'setCookiesResult',
             requestId: frame.requestId,
             sessionId: frame.sessionId,
-            error: 'cookie write failed',
+            error:
+              'cookie write failed direct=10.0.0.7 https://user:pass@internal/?token=secret Bearer abcdefgh',
           }),
         );
       }
@@ -197,6 +198,13 @@ describe('POST /v1/agent-sessions/:id/cookies/set (wired)', () => {
     const body = res.json<SetCookiesBody>();
     expect(body).toMatchObject({ status: 'error' });
     expect(body.reason).toMatch(/write failed/);
+    expect(body.reason).toContain('direct=[redacted]');
+    expect(body.reason).toContain('token=[redacted]');
+    expect(body.reason).toContain('Bearer [redacted]');
+    expect(body.reason).not.toContain('10.0.0.7');
+    expect(body.reason).not.toContain('pass');
+    expect(body.reason).not.toContain('secret');
+    expect(body.reason).not.toContain('abcdefgh');
   });
 
   it('connected node never replies → 200 { status:"timeout" } (no-ops gracefully pre-box-half)', async () => {

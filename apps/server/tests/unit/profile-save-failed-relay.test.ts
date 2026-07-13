@@ -130,16 +130,28 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
 
-  // audit M2 — scrub the node egress IP from the free-form detail before the webhook.
-  it('M2 — scrubs the node egress IP (direct=<node-ip>) from detail', async () => {
+  // audit M2 — scrub node IPs and credential-shaped text before the webhook.
+  it('M2 — scrubs node IP and credentials from detail', async () => {
     const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
-    relay({ ...FRAME, detail: 'egress lost direct=10.0.0.7' }, 'node-1');
+    relay(
+      {
+        ...FRAME,
+        detail:
+          'egress lost direct=10.0.0.7 PUT https://user:pass@internal/?signature=secret Bearer abcdefgh',
+      },
+      'node-1',
+    );
     await flush();
     const enqueued = webhooks.enqueueEvent.mock.calls[0]?.[2] as { detail: string };
     expect(enqueued.detail).not.toContain('10.0.0.7');
     expect(enqueued.detail).toContain('direct=[redacted]');
+    expect(enqueued.detail).not.toContain('pass');
+    expect(enqueued.detail).not.toContain('secret');
+    expect(enqueued.detail).not.toContain('abcdefgh');
+    expect(enqueued.detail).toContain('signature=[redacted]');
+    expect(enqueued.detail).toContain('Bearer [redacted]');
   });
 
   it('coalesces repeated pending save outcomes to the newest frame per session', async () => {

@@ -90,15 +90,16 @@ describe('W393 makeChallengeRelay', () => {
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
 
-  // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`) from
-  // the free-form challenge.detail before it crosses to the customer webhook.
-  it('M2 — scrubs the node egress IP from challenge.detail before the webhook', async () => {
+  // audit M2 — scrub node IPs and credential-shaped text from free-form detail
+  // before it crosses to the customer webhook.
+  it('M2 — scrubs node IP and credentials from challenge.detail before the webhook', async () => {
     const frame: ChallengeDetected = {
       ...FRAME,
       challenge: {
         type: 'datadome',
         confidence: 0.9,
-        detail: 'blocked proxied=1.2.3.4 direct=10.0.0.7',
+        detail:
+          'blocked proxied=1.2.3.4 direct=10.0.0.7 at https://user:pass@internal/?token=secret with Bearer abcdefgh',
       },
     };
     const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
@@ -113,6 +114,11 @@ describe('W393 makeChallengeRelay', () => {
     expect(enqueued.challenge.detail).toContain('direct=[redacted]');
     // bare IPv4 (the customer's own proxied= exit) is also redacted (defence-in-depth).
     expect(enqueued.challenge.detail).not.toContain('1.2.3.4');
+    expect(enqueued.challenge.detail).not.toContain('pass');
+    expect(enqueued.challenge.detail).not.toContain('secret');
+    expect(enqueued.challenge.detail).not.toContain('abcdefgh');
+    expect(enqueued.challenge.detail).toContain('token=[redacted]');
+    expect(enqueued.challenge.detail).toContain('Bearer [redacted]');
   });
 
   it('bounds unique-session ownership/webhook work for one authenticated node', () => {

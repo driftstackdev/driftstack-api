@@ -22,7 +22,7 @@ import type { WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
-import { scrubNodeDiagnostics } from './scrub-node-diagnostics.js';
+import { customerSafeNodeDiagnostic } from './scrub-node-diagnostics.js';
 
 /** Narrow structural deps so the relay is unit-testable without standing up the
  *  full repo / WebhooksService (the real instances satisfy these). `nodeId` is the
@@ -83,9 +83,9 @@ export function makeProfileSaveFailedRelay(
         session_id: frame.sessionId,
         profile_id: frame.profile_id,
         reason: frame.reason,
-        // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
-        // from the free-form detail before it reaches the customer webhook.
-        ...(frame.detail !== undefined ? { detail: scrubNodeDiagnostics(frame.detail) } : {}),
+        // Scrub credentials plus the node's real egress IP before the free-form
+        // detail reaches the customer webhook.
+        ...(frame.detail !== undefined ? { detail: customerSafeNodeDiagnostic(frame.detail) } : {}),
       },
     );
     logger.info(

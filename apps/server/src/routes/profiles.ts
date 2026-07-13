@@ -29,6 +29,7 @@ import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
+import { customerSafeNodeDiagnostic } from '../services/scrub-node-diagnostics.js';
 
 /**
  * V-326e4 — admin-only gate for profile write operations on team
@@ -595,7 +596,10 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       }
       if (outcome.status === 'error') {
         // Node reported a failure — do NOT update the row (the old blob is untouched).
-        return { status: 'error' as const, reason: outcome.message };
+        return {
+          status: 'error' as const,
+          reason: customerSafeNodeDiagnostic(outcome.message),
+        };
       }
       return { status: 'timeout' as const };
     },

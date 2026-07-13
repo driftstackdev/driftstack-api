@@ -49,6 +49,7 @@
 //      `status` promptly, …) without needing the store to know why.
 
 import type { PageStateFrame } from '../schemas/harness-control-protocol.js';
+import { customerSafeNodeDiagnostic } from './scrub-node-diagnostics.js';
 
 /** The customer-facing slice of a pageState frame (drop the wire-routing
  *  `type`/`sessionId`; keep what the overlay renders). */
@@ -118,7 +119,13 @@ export class SessionPageStateStore {
       url: frame.url ?? null,
       title: frame.title ?? null,
       tabId: frame.tabId ?? null,
-      error: frame.error ?? null,
+      error:
+        frame.error === undefined || frame.error === null
+          ? null
+          : {
+              ...frame.error,
+              message: customerSafeNodeDiagnostic(frame.error.message),
+            },
       receivedAt: this.clock(),
     });
     if (this.map.size > this.maxEntries) {

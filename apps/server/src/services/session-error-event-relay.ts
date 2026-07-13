@@ -5,7 +5,6 @@
 // the atomic repository update to match the connection's authenticated node.
 
 import type { Logger } from '../lib/logger.js';
-import { redactText } from '../lib/redact-url.js';
 import {
   HARNESS_HEARTBEAT_MAX_CONCURRENT,
   HARNESS_ERROR_EVENT_DETAIL_MAX_LENGTH,
@@ -14,7 +13,7 @@ import {
 } from '../schemas/harness-control-protocol.js';
 import type { AgentSessionErrorEvent, AgentSessionsRepo } from './agent-sessions.js';
 import type { NotificationEventBus } from './notification-event-bus.js';
-import { scrubNodeDiagnostics } from './scrub-node-diagnostics.js';
+import { customerSafeNodeDiagnostic } from './scrub-node-diagnostics.js';
 
 // A real worker cannot own more than the heartbeat protocol's declared 512
 // concurrent sessions. Keep the relay's distinct active/queued session budget
@@ -41,13 +40,6 @@ function activeSessionCount(state: NodeRelayState): number {
   return count;
 }
 
-function customerSafeText(value: string, maxLength: number): string {
-  // IPv4 scrubbing can expand a short literal into `[redacted-ip]`. Re-apply
-  // the protocol bound after sanitizing so the durable/public representation
-  // cannot exceed the contract that admitted the original harness frame.
-  return scrubNodeDiagnostics(redactText(value)).slice(0, maxLength);
-}
-
 export function makeSessionErrorEventRelay(
   agentSessions: Pick<AgentSessionsRepo, 'recordErrorEvent'>,
   notifications: NotificationEventBus,
@@ -62,10 +54,10 @@ export function makeSessionErrorEventRelay(
       timestamp: frame.timestamp,
       code: frame.code,
       severity: frame.severity,
-      summary: customerSafeText(frame.summary, HARNESS_ERROR_EVENT_SUMMARY_MAX_LENGTH),
+      summary: customerSafeNodeDiagnostic(frame.summary, HARNESS_ERROR_EVENT_SUMMARY_MAX_LENGTH),
       detail:
         frame.detail !== undefined
-          ? customerSafeText(frame.detail, HARNESS_ERROR_EVENT_DETAIL_MAX_LENGTH)
+          ? customerSafeNodeDiagnostic(frame.detail, HARNESS_ERROR_EVENT_DETAIL_MAX_LENGTH)
           : null,
       customerActionable: frame.customerActionable,
       retryable: frame.retryable,

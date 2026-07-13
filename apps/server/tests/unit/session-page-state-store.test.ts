@@ -72,6 +72,29 @@ describe('SessionPageStateStore', () => {
     });
   });
 
+  it('set scrubs credentials and node IPs from customer-visible error messages', () => {
+    const store = new SessionPageStateStore();
+    store.set(
+      frame('agt_a', {
+        state: 'errored',
+        error: {
+          kind: 'net',
+          http_status: null,
+          message:
+            'connect direct=10.0.0.7 https://user:pass@internal/?access_token=secret Bearer abcdefgh',
+        },
+      }),
+    );
+    const message = store.get('agt_a')?.error?.message ?? '';
+    expect(message).toContain('direct=[redacted]');
+    expect(message).toContain('access_token=[redacted]');
+    expect(message).toContain('Bearer [redacted]');
+    expect(message).not.toContain('10.0.0.7');
+    expect(message).not.toContain('pass');
+    expect(message).not.toContain('secret');
+    expect(message).not.toContain('abcdefgh');
+  });
+
   it('delete drops a session entry', () => {
     const store = new SessionPageStateStore();
     store.set(frame('agt_a'));

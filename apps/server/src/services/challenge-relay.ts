@@ -21,7 +21,7 @@ import type { WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
-import { scrubNodeDiagnostics } from './scrub-node-diagnostics.js';
+import { customerSafeNodeDiagnostic } from './scrub-node-diagnostics.js';
 
 /** Narrow structural deps so the relay is unit-testable without standing up the
  *  full repo / WebhooksService (the real instances satisfy these). `nodeId` is the
@@ -74,11 +74,11 @@ export function makeChallengeRelay(
       );
       return;
     }
-    // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
-    // from the free-form challenge.detail before it reaches the customer webhook.
+    // Scrub credentials plus the node's real egress IP from the free-form
+    // challenge.detail before it reaches the customer webhook.
     const challenge =
       typeof frame.challenge.detail === 'string'
-        ? { ...frame.challenge, detail: scrubNodeDiagnostics(frame.challenge.detail) }
+        ? { ...frame.challenge, detail: customerSafeNodeDiagnostic(frame.challenge.detail) }
         : frame.challenge;
     const endpoints = await webhooks.enqueueEvent(session.accountId, 'session.challenge_detected', {
       session_id: frame.sessionId,

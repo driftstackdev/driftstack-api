@@ -119,6 +119,7 @@ import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { readClientIp } from '../lib/client-ip.js';
+import { customerSafeNodeDiagnostic } from '../services/scrub-node-diagnostics.js';
 
 // gui_control_key control-auth (separate-simulator-app support). The
 // stand-alone "Driftstack Simulator" macOS app can't read the main
@@ -2392,7 +2393,11 @@ export function registerAgentSessionsRoutes(
           return { cookies: outcome.cookies, status: 'ok' as const };
         }
         if (outcome.status === 'error') {
-          return { cookies: null, status: 'error' as const, reason: outcome.message };
+          return {
+            cookies: null,
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
         }
         return { cookies: null, status: 'timeout' as const };
       } finally {
@@ -2520,7 +2525,10 @@ export function registerAgentSessionsRoutes(
           return { status: 'ok' as const };
         }
         if (outcome.status === 'error') {
-          return { status: 'error' as const, reason: outcome.message };
+          return {
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
         }
         return { status: 'timeout' as const };
       } finally {
@@ -2613,7 +2621,10 @@ export function registerAgentSessionsRoutes(
           return { status: 'ok' as const };
         }
         if (outcome.status === 'error') {
-          return { status: 'error' as const, reason: outcome.message };
+          return {
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
         }
         return { status: 'timeout' as const };
       } finally {
@@ -2834,7 +2845,11 @@ export function registerAgentSessionsRoutes(
           return { handle: outcome.handle, status: 'ok' as const };
         }
         if (outcome.status === 'error') {
-          return { handle: null, status: 'error' as const, reason: outcome.message };
+          return {
+            handle: null,
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
         }
         return { handle: null, status: 'timeout' as const };
       } finally {
@@ -2903,7 +2918,11 @@ export function registerAgentSessionsRoutes(
           return { files: outcome.files, status: 'ok' as const };
         }
         if (outcome.status === 'error') {
-          return { files: null, status: 'error' as const, reason: outcome.message };
+          return {
+            files: null,
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
         }
         if (outcome.status === 'data') {
           // A fetch reply for a list request — never expected; treat as a failure.
@@ -2981,7 +3000,11 @@ export function registerAgentSessionsRoutes(
           };
         }
         if (outcome.status === 'error') {
-          return { file: null, status: 'error' as const, reason: outcome.message };
+          return {
+            file: null,
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
         }
         if (outcome.status === 'list') {
           return {
