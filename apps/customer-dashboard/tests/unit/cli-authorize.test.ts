@@ -30,7 +30,7 @@ function setUpDom(
 ): {
   window: JSDOM['window'];
   fetchCalls: MockFetchCall[];
-  setFetchPlan: (plan: Array<(call: MockFetchCall) => Response>) => void;
+  setFetchPlan: (plan: Array<(call: MockFetchCall) => Response | Promise<Response>>) => void;
 } {
   // Strip the page <script> tags from the HTML before jsdom parses so
   // we can pre-seed window globals (localStorage, fetch mock) BEFORE
@@ -47,7 +47,7 @@ function setUpDom(
   });
   const { window } = dom;
   const fetchCalls: MockFetchCall[] = [];
-  let plan: Array<(call: MockFetchCall) => Response> = [];
+  let plan: Array<(call: MockFetchCall) => Response | Promise<Response>> = [];
   // Polyfill Response on the jsdom window. Some jsdom builds expose
   // Response via globalThis but not on the window object — set it
   // explicitly so test-side `new window.Response(...)` works.
@@ -64,7 +64,7 @@ function setUpDom(
       console.warn('[cli-authorize test] unplanned fetch:', call.url);
       return Promise.resolve(new Response('{}', { status: 500 }));
     }
-    return Promise.resolve(handler(call));
+    return Promise.resolve().then(() => handler(call));
   };
   // Customer-test-only window setup (localStorage seeding etc.).
   beforeScripts(window as JSDOM['window']);
@@ -168,6 +168,68 @@ describe('cli-authorize page — local integration', () => {
     expect(local.fetchCalls).toHaveLength(1);
     expect(local.fetchCalls[0]?.init?.signal).toBeDefined();
     await flush();
+  });
+
+  it('turns an ambiguous bind timeout into desktop-handoff-only mode with no second bind', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    const timeout = new Error('response deadline exceeded');
+    timeout.name = 'AbortError';
+    local.setFetchPlan([() => Promise.reject(timeout)]);
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+
+    expect(visibleState(local.window)).toBe('error');
+    expect(local.window.document.querySelector('[data-error-message]')?.textContent).toMatch(
+      /may already have completed.*existing poll.*Do not retry this link.*fresh browser sign-in/i,
+    );
+    const retry = local.window.document.querySelector('[data-retry]') as HTMLButtonElement;
+    expect(retry.textContent).toBe('Return to desktop');
+    retry.dispatchEvent(new local.window.MouseEvent('click'));
+    retry.dispatchEvent(new local.window.MouseEvent('click'));
+    await flush();
+    expect(
+      local.fetchCalls.filter((call) => call.url.endsWith('/v1/auth/cli-authorize/bind')),
+    ).toHaveLength(1);
+  });
+
+  it('keeps an authoritative HTTP bind failure retryable', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    local.setFetchPlan([
+      () =>
+        new local.window.Response(JSON.stringify({ detail: 'Temporary bind failure.' }), {
+          status: 503,
+        }),
+      () =>
+        new local.window.Response(JSON.stringify({ status: 'bound' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    ]);
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+    expect(visibleState(local.window)).toBe('error');
+    const retry = local.window.document.querySelector('[data-retry]') as HTMLButtonElement;
+    expect(retry.textContent).toBe('Try again');
+
+    retry.click();
+    await flush();
+    await flush();
+    expect(visibleState(local.window)).toBe('success');
+    expect(
+      local.fetchCalls.filter((call) => call.url.endsWith('/v1/auth/cli-authorize/bind')),
+    ).toHaveLength(2);
   });
 
   it('on 409 LegalAcceptanceRequired with top-level pending_acceptances, surfaces legal-accept UI with mapped slugs + friendly labels (regression for .extensions.* shape AND tos→terms URL slug)', async () => {

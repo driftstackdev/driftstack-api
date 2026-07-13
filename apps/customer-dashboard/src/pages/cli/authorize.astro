@@ -236,6 +236,22 @@ const apiBaseUrl = resolveApiBaseUrl();
       const retryBtn = sections.error.querySelector('[data-retry]');
       const AUTHORIZE_TIMEOUT_MS = 15_000;
       let authorizeInFlight = false;
+      let authorizeOutcomeUnknown = false;
+
+      function returnToDesktop(delayMs) {
+        window.setTimeout(() => {
+          try {
+            const target =
+              'driftstack://auth/callback?code=' +
+              encodeURIComponent(code) +
+              '&state=' +
+              encodeURIComponent(state);
+            window.location.assign(target);
+          } catch (_) {
+            /* swallow — the desktop poller remains the fallback */
+          }
+        }, delayMs);
+      }
 
       // Server's document_key values are 'tos' | 'privacy' | 'dpa' |
       // 'aup' but the marketing-site URL slug for the terms-of-service
@@ -294,6 +310,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       function authorize() {
         if (authorizeInFlight) return;
         authorizeInFlight = true;
+        authorizeOutcomeUnknown = false;
+        retryBtn.textContent = 'Try again';
+        retryBtn.removeAttribute('title');
         authorizeBtn.disabled = true;
         authorizeBtn.setAttribute('aria-busy', 'true');
         authorizeBtn.textContent = 'Authorizing…';
@@ -342,28 +361,20 @@ const apiBaseUrl = resolveApiBaseUrl();
             // registration didn't take. Brief delay so the user sees
             // the success confirmation before the OS hand-off swap
             // takes focus away from the browser.
-            window.setTimeout(() => {
-              try {
-                const target =
-                  'driftstack://auth/callback?code=' +
-                  encodeURIComponent(code) +
-                  '&state=' +
-                  encodeURIComponent(state);
-                window.location.assign(target);
-              } catch (_) {
-                /* swallow — fallback hint already visible */
-              }
-            }, 600);
+            returnToDesktop(600);
           })
           .catch((err) => {
             if (err && err.message === '__legal_accept_required__') return;
-            showError(
-              err && err.name === 'AbortError'
-                ? 'Authorization took too long. Check your connection and try again.'
-                : err && err.message
-                  ? err.message
-                  : 'Authorization failed.',
-            );
+            if (err && err.name === 'AbortError') {
+              authorizeOutcomeUnknown = true;
+              retryBtn.textContent = 'Return to desktop';
+              retryBtn.title = 'Check the desktop app without sending this authorization again';
+              showError(
+                'The authorization response timed out, so it may already have completed. Return to the desktop app and wait for its existing poll. Do not retry this link; if the app does not connect, start a fresh browser sign-in from the desktop app.',
+              );
+              return;
+            }
+            showError(err && err.message ? err.message : 'Authorization failed.');
           })
           .finally(() => {
             window.clearTimeout(timeout);
@@ -375,7 +386,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       authorizeBtn.addEventListener('click', authorize);
-      retryBtn.addEventListener('click', authorize);
+      retryBtn.addEventListener('click', function () {
+        if (authorizeOutcomeUnknown) {
+          returnToDesktop(0);
+          return;
+        }
+        authorize();
+      });
       cancelBtn.addEventListener('click', () => {
         window.location.href = '/';
       });

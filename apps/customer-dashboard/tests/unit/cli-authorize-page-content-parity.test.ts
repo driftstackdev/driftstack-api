@@ -90,7 +90,12 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/const controller = new AbortController\(\);/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/window\.clearTimeout\(timeout\);\s*authorizeInFlight = false;/);
-    expect(body).toContain('Authorization took too long. Check your connection and try again.');
+    expect(body).toContain('let authorizeOutcomeUnknown = false;');
+    expect(body).toContain(
+      'The authorization response timed out, so it may already have completed.',
+    );
+    expect(body).toContain('Do not retry this link');
+    expect(body).toMatch(/if \(authorizeOutcomeUnknown\) \{\s*returnToDesktop\(0\);\s*return;/);
   });
 
   it('serializes and bounds the legal-acceptance lookup plus fan-out', () => {
@@ -110,10 +115,12 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
 
   it('V-328e OS deep-link: driftstack://auth/callback?code=…&state=… after 600ms delay', () => {
     expect(body).toMatch(/V-328e/);
+    expect(body).toMatch(/function returnToDesktop\(delayMs\)/);
     expect(body).toMatch(
       /'driftstack:\/\/auth\/callback\?code=' \+\s*\n?\s*encodeURIComponent\(code\) \+\s*\n?\s*'&state=' \+\s*\n?\s*encodeURIComponent\(state\)/,
     );
-    expect(body).toMatch(/window\.setTimeout\(\(\) => \{[\s\S]*?\}, 600\);/);
+    expect(body).toMatch(/window\.setTimeout\(\(\) => \{[\s\S]*?\}, delayMs\);/);
+    expect(body).toMatch(/returnToDesktop\(600\);/);
   });
 
   it('code preview: first 6 chars + ellipsis (no full-code leak in UI)', () => {
