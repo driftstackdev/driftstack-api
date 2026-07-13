@@ -379,6 +379,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain(
       'makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger)',
     );
+    // Authenticated heartbeat DB/reconcile work must stay behind the per-node
+    // latest-state coalescer; a bare inline callback recreates unbounded work.
+    expect(body).toContain('makeFleetHeartbeatConsumer({');
+    expect(body).toContain('persistSnapshot: async (frame) => {');
+    expect(body).toContain('reconcileWorkerOrphans: async (frame) => {');
+    expect(body).toContain('reconcileNodeBoot: (frame) =>');
     // W650/A3-W1254 — the pageState store is constructed alongside the registry
     // (behind the same flag) + wired as the registry's onPageState consumer.
     expect(body).toMatch(/const sessionPageStateStore = new SessionPageStateStore\(\);/);

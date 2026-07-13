@@ -38,6 +38,7 @@ import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-rela
 import { makeSessionPageStateRelay } from '../services/session-page-state-relay.js';
 import { makeSessionCapabilityReportRelay } from '../services/session-capability-report-relay.js';
 import { makeSessionErrorEventRelay } from '../services/session-error-event-relay.js';
+import { makeFleetHeartbeatConsumer } from '../services/fleet-heartbeat-consumer.js';
 import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
 import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.js';
 import { reconcileNodeBootChange } from '../services/node-boot-reconcile.js';
@@ -1693,63 +1694,55 @@ export async function createProductionDeps(
             // just leaves the snapshot stale until the next 10s beat — never
             // throws into the socket loop. Optional fields are omitted when the
             // node doesn't emit them (jsonb drops undefined keys).
-            (frame) => {
-              const snapshot = {
-                beatAt: frame.timestamp,
-                cpuPercent: frame.cpuPercent,
-                memoryPercent: frame.memoryPercent,
-                activeSessionCount: frame.activeSessionCount,
-                ...(frame.maxConcurrent !== undefined && { maxConcurrent: frame.maxConcurrent }),
-                ...(frame.uptimeSeconds !== undefined && { uptimeSeconds: frame.uptimeSeconds }),
-                ...(frame.drainState !== undefined && { drainState: frame.drainState }),
-                ...(frame.sessionOutcomeCounts !== undefined && {
-                  sessionOutcomeCounts: frame.sessionOutcomeCounts,
-                }),
-                ...(frame.thermalState !== undefined && { thermalState: frame.thermalState }),
-                ...(frame.memoryPressureLevel !== undefined && {
-                  memoryPressureLevel: frame.memoryPressureLevel,
-                }),
-                ...(frame.busiestCorePercent !== undefined && {
-                  busiestCorePercent: frame.busiestCorePercent,
-                }),
-                ...(frame.diskFreePercent !== undefined && {
-                  diskFreePercent: frame.diskFreePercent,
-                }),
-                ...(frame.harnessVersion !== undefined && { harnessVersion: frame.harnessVersion }),
-              };
-              void drizzleFleetNodesRepo.recordHeartbeat(frame.macNodeId, snapshot).catch((err) => {
-                logger.warn(
-                  { component: 'fleet-heartbeat', nodeId: frame.macNodeId, err: String(err) },
-                  'recordHeartbeat failed (snapshot stays stale until next beat)',
-                );
-              });
+            makeFleetHeartbeatConsumer({
+              logger,
+              persistSnapshot: async (frame) => {
+                const snapshot = {
+                  beatAt: frame.timestamp,
+                  cpuPercent: frame.cpuPercent,
+                  memoryPercent: frame.memoryPercent,
+                  activeSessionCount: frame.activeSessionCount,
+                  ...(frame.maxConcurrent !== undefined && {
+                    maxConcurrent: frame.maxConcurrent,
+                  }),
+                  ...(frame.uptimeSeconds !== undefined && { uptimeSeconds: frame.uptimeSeconds }),
+                  ...(frame.drainState !== undefined && { drainState: frame.drainState }),
+                  ...(frame.sessionOutcomeCounts !== undefined && {
+                    sessionOutcomeCounts: frame.sessionOutcomeCounts,
+                  }),
+                  ...(frame.thermalState !== undefined && { thermalState: frame.thermalState }),
+                  ...(frame.memoryPressureLevel !== undefined && {
+                    memoryPressureLevel: frame.memoryPressureLevel,
+                  }),
+                  ...(frame.busiestCorePercent !== undefined && {
+                    busiestCorePercent: frame.busiestCorePercent,
+                  }),
+                  ...(frame.diskFreePercent !== undefined && {
+                    diskFreePercent: frame.diskFreePercent,
+                  }),
+                  ...(frame.harnessVersion !== undefined && {
+                    harnessVersion: frame.harnessVersion,
+                  }),
+                };
+                await drizzleFleetNodesRepo.recordHeartbeat(frame.macNodeId, snapshot);
+              },
               // A2 W2679 re-base — feed the per-session liveness map into the
-              // store the agent-sessions `liveness` field reads. The macNodeId
-              // is already cross-checked against the JWT nodeId in the
-              // connection (anti-spoof), so passing it as the eviction scope is
-              // safe. Absent on a quiet/older node's beat → no-op.
-              if (frame.activeSessionStates) {
-                // Stamp beatAt with the SERVER's receive time, NOT the node's
-                // self-reported frame.timestamp. SessionLivenessStore.isFresh
-                // measures age against the server clock (Date.now()), so trusting
-                // the node's wall-clock here computes freshness across two clocks:
-                // a node whose clock lags the server would have its live sessions
-                // read stale (and a fast-clock node's crashed sessions read fresh)
-                // under routine NTP drift. Server-authoritative time keeps the
-                // freshness comparison single-clock and makes beatAt monotonic
-                // with server time (which the oldest-first size-cap eviction also
-                // relies on). frame.timestamp stays available for other telemetry.
-                sessionLivenessStore.recordBeat(
-                  frame.macNodeId,
-                  frame.activeSessionStates,
-                  Date.now(),
-                );
-                // CP↔daemon reconcile (A2 W2808 / A3 W2804): re-issue sessionEnd for
-                // any session this still-connected worker reports active that the CP
-                // already holds terminal (WSS-blip / lost-sessionEnd orphan — still
-                // billed + slot-holding). Fire-and-forget off the receive loop; the
-                // helper swallows+logs per session + acts ONLY on existing-terminal rows.
-                void reconcileWorkerReportedOrphans({
+              // store the agent-sessions `liveness` field reads. Stamp receive
+              // time from the server clock, never the node's wall clock.
+              recordLiveness: (frame) => {
+                if (frame.activeSessionStates) {
+                  sessionLivenessStore.recordBeat(
+                    frame.macNodeId,
+                    frame.activeSessionStates,
+                    Date.now(),
+                  );
+                }
+              },
+              // CP↔daemon reconcile: re-issue sessionEnd for worker-reported
+              // sessions the control plane already holds terminal.
+              reconcileWorkerOrphans: async (frame) => {
+                if (!frame.activeSessionStates) return;
+                await reconcileWorkerReportedOrphans({
                   agentSessions: agentSessionsRepo,
                   activeSessionStates: frame.activeSessionStates,
                   macNodeId: frame.macNodeId,
@@ -1759,22 +1752,21 @@ export async function createProductionDeps(
                       ?.sendSessionEnd(serializeSessionEnd(sessionId)),
                   logger,
                 });
-              }
-              // W2813 bootId consumer — track per-process bootId; on a CHANGE (daemon
-              // restart) close this node's CP-active sessions the new boot doesn't
-              // reaffirm. Runs every beat (OUTSIDE the activeSessionStates guard — a
-              // just-restarted node may report zero sessions); self-guards on bootId absent.
-              void reconcileNodeBootChange({
-                agentSessions: agentSessionsRepo,
-                macNodeId: frame.macNodeId,
-                bootId: frame.bootId,
-                reaffirmedSessionIds: Object.keys(frame.activeSessionStates ?? {}),
-                bootIdByNode,
-                restartSweepUntil,
-                now: Date.now(),
-                logger,
-              });
-            },
+              },
+              // Track bootId changes even when a restarted node reports zero
+              // sessions; close CP-active sessions it does not reaffirm.
+              reconcileNodeBoot: (frame) =>
+                reconcileNodeBootChange({
+                  agentSessions: agentSessionsRepo,
+                  macNodeId: frame.macNodeId,
+                  bootId: frame.bootId,
+                  reaffirmedSessionIds: Object.keys(frame.activeSessionStates ?? {}),
+                  bootIdByNode,
+                  restartSweepUntil,
+                  now: Date.now(),
+                  logger,
+                }),
+            }),
             // Worker-disconnect fix (2026-06-19) — liveness hooks (positional
             // args 6 + 7): a (re)connect CANCELS the node's pending grace timer;
             // a disconnect ARMS it. On grace expiry the reaper closes the node's
