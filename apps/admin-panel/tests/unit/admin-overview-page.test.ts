@@ -920,6 +920,66 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     await flush();
   });
 
+  it('serializes delete against reveal and replacement save across the secret surface', async () => {
+    let resolveDelete: ((response: Response) => void) | undefined;
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({
+            enabled: true,
+            secrets: [
+              { name: 'stripe_key', description: 'billing', updated_at: '2026-07-12T18:00:00Z' },
+            ],
+          });
+        }
+        if (/\/v1\/admin\/owner\/secrets\/stripe_key$/.test(call.url) && method === 'DELETE') {
+          return new Promise<Response>((resolve) => {
+            resolveDelete = resolve;
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+    const deleteButton = window.document.querySelector(
+      '[data-delete-secret="stripe_key"]',
+    ) as HTMLButtonElement;
+    const revealButton = window.document.querySelector(
+      '[data-reveal-secret="stripe_key"]',
+    ) as HTMLButtonElement;
+    const form = window.document.querySelector('[data-form="secret-set"]') as HTMLFormElement;
+    const name = form.querySelector('[name="name"]') as HTMLInputElement;
+    const value = form.querySelector('[name="value"]') as HTMLInputElement;
+    const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    name.value = 'stripe_key';
+    value.value = 'replacement_secret';
+
+    deleteButton.click();
+    await flush(1);
+    revealButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(1);
+
+    expect(revealButton.disabled).toBe(true);
+    expect(revealButton.title).toBe('Wait for the active secret action to finish.');
+    expect(submit.disabled).toBe(true);
+    expect(submit.title).toBe('Wait for the active secret action to finish.');
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(fetchCalls.filter((call) => /\/reveal$/.test(call.url))).toHaveLength(0);
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(0);
+
+    resolveDelete?.(new Response(null, { status: 204 }));
+    await flush();
+    expect(submit.disabled).toBe(false);
+    expect(submit.getAttribute('title')).toBeNull();
+  });
+
   it('owner-secret delete timeout refreshes metadata before advising another irreversible delete', async () => {
     let secretPresent = true;
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });

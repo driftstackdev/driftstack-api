@@ -974,6 +974,91 @@ const apiBaseUrl = resolveApiBaseUrl();
       // list; Reveal POSTs the audited decrypt and shows the value until
       // Hide is clicked (cleared from the DOM on hide, never logged).
       let secretMetadataByName = new Map();
+      let secretActionInFlight = null;
+      let secretFormDisabledBeforeExternalAction = null;
+      const SECRET_ACTION_WAIT_REASON = 'Wait for the active secret action to finish.';
+      function syncSecretActionControls() {
+        const active = secretActionInFlight;
+        root
+          .querySelectorAll('[data-reveal-secret], [data-delete-secret]')
+          .forEach((button) => {
+            const isReveal = button.hasAttribute('data-reveal-secret');
+            const action = isReveal ? 'reveal' : 'delete';
+            const name = button.getAttribute(
+              isReveal ? 'data-reveal-secret' : 'data-delete-secret',
+            );
+            const isActive = Boolean(
+              active && active.name === name && active.action === action,
+            );
+            button.disabled = active !== null;
+            button.toggleAttribute('aria-busy', isActive);
+            if (active) button.setAttribute('title', SECRET_ACTION_WAIT_REASON);
+            else button.removeAttribute('title');
+            if (isActive) {
+              button.textContent = active.label;
+            } else if (isReveal) {
+              const output = Array.from(root.querySelectorAll('[data-secret-value]')).find(
+                (candidate) => candidate.getAttribute('data-secret-value') === name,
+              );
+              button.textContent = output && !output.classList.contains('hidden') ? 'Hide' : 'Reveal';
+            } else {
+              button.textContent = 'Delete';
+            }
+          });
+
+        if (!secretForm) return;
+        const externalAction = Boolean(active && active.action !== 'save');
+        const controls = Array.from(secretForm.elements);
+        const submit = secretForm.querySelector('button[type="submit"]');
+        if (externalAction && secretFormDisabledBeforeExternalAction === null) {
+          secretFormDisabledBeforeExternalAction = {
+            disabled: controls.map((control) => control.disabled),
+            ariaDisabled: secretForm.getAttribute('aria-disabled'),
+            submitTitle: submit ? submit.getAttribute('title') : null,
+          };
+        }
+        if (externalAction) {
+          controls.forEach((control) => {
+            control.disabled = true;
+          });
+          secretForm.setAttribute('aria-disabled', 'true');
+          if (submit) submit.setAttribute('title', SECRET_ACTION_WAIT_REASON);
+        } else if (secretFormDisabledBeforeExternalAction !== null) {
+          controls.forEach((control, index) => {
+            control.disabled = secretFormDisabledBeforeExternalAction.disabled[index];
+          });
+          const { ariaDisabled, submitTitle } = secretFormDisabledBeforeExternalAction;
+          secretFormDisabledBeforeExternalAction = null;
+          if (ariaDisabled === null) secretForm.removeAttribute('aria-disabled');
+          else secretForm.setAttribute('aria-disabled', ariaDisabled);
+          if (submit) {
+            if (submitTitle === null) submit.removeAttribute('title');
+            else submit.setAttribute('title', submitTitle);
+          }
+        }
+      }
+      function beginSecretAction(name, action, label) {
+        if (!name || secretActionInFlight !== null) return false;
+        if (action !== 'reveal') {
+          root.querySelectorAll('[data-secret-value]').forEach((output) => {
+            output.textContent = '';
+            output.classList.add('hidden');
+          });
+        }
+        secretActionInFlight = { name, action, label };
+        syncSecretActionControls();
+        return true;
+      }
+      function updateSecretActionLabel(action, label) {
+        if (!secretActionInFlight || secretActionInFlight.action !== action) return;
+        secretActionInFlight.label = label;
+        syncSecretActionControls();
+      }
+      function endSecretAction(action) {
+        if (!secretActionInFlight || secretActionInFlight.action !== action) return;
+        secretActionInFlight = null;
+        syncSecretActionControls();
+      }
       function renderSecrets(body) {
         const card = root.querySelector('[data-owner-only="secrets"]');
         const list = root.querySelector('[data-list="owner-secrets"]');
@@ -1007,6 +1092,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             .join('');
         }
         card.classList.remove('hidden');
+        syncSecretActionControls();
       }
       function fetchSecrets() {
         return authedFetch('/v1/admin/owner/secrets')
@@ -1016,11 +1102,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             return body;
           });
       }
-      const secretDeletesInFlight = new Set();
       async function deleteSecret(name, button) {
-        if (!name || secretDeletesInFlight.has(name)) return;
-        secretDeletesInFlight.add(name);
         const idleLabel = button ? button.textContent : 'Delete';
+        if (!beginSecretAction(name, 'delete', 'Confirming…')) return;
         if (button) {
           button.disabled = true;
           button.textContent = 'Confirming…';
@@ -1035,6 +1119,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               })
             : window.confirm('Delete secret "' + name + '"? This is audited and irreversible.');
           if (!confirmed) return;
+          updateSecretActionLabel('delete', 'Deleting…');
           if (button) button.textContent = 'Deleting…';
           const dstatus = root.querySelector('[data-field="secret-set-status"]');
           const r = await authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name), {
@@ -1070,7 +1155,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (dstatus) dstatus.textContent = 'Delete failed (' + msg + ').';
           }
         } finally {
-          secretDeletesInFlight.delete(name);
+          endSecretAction('delete');
           if (button && button.isConnected) {
             button.disabled = false;
             button.textContent = idleLabel;
@@ -1079,9 +1164,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
       }
       const secretsList = root.querySelector('[data-list="owner-secrets"]');
-      const secretRevealsInFlight = new Set();
       async function revealSecret(name, button) {
-        if (!name || secretRevealsInFlight.has(name)) return;
+        if (!name) return;
         const out = Array.from(root.querySelectorAll('[data-secret-value]')).find(
           (candidate) => candidate.getAttribute('data-secret-value') === name,
         );
@@ -1092,7 +1176,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           button.textContent = 'Reveal';
           return;
         }
-        secretRevealsInFlight.add(name);
+        if (!beginSecretAction(name, 'reveal', 'Revealing…')) return;
         button.disabled = true;
         button.textContent = 'Revealing…';
         button.setAttribute('aria-busy', 'true');
@@ -1109,7 +1193,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           out.textContent = '';
           out.classList.add('hidden');
         } finally {
-          secretRevealsInFlight.delete(name);
+          endSecretAction('reveal');
           if (button.isConnected) {
             button.disabled = false;
             button.removeAttribute('aria-busy');
@@ -1133,18 +1217,20 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
       const secretForm = root.querySelector('[data-form="secret-set"]');
-      let secretSetInFlight = false;
       async function saveSecret(form) {
-        if (secretSetInFlight) return;
         const status = root.querySelector('[data-field="secret-set-status"]');
+        if (secretActionInFlight !== null) {
+          if (status) status.textContent = SECRET_ACTION_WAIT_REASON;
+          return;
+        }
         const fd = new FormData(form);
         const name = String(fd.get('name') || '');
         const value = String(fd.get('value') || '');
         const description = String(fd.get('description') || '');
         if (!name || !value) return;
+        if (!beginSecretAction(name, 'save', 'Confirming…')) return;
         const previouslyPresent = secretMetadataByName.has(name);
         const previousUpdatedAt = secretMetadataByName.get(name) || '';
-        secretSetInFlight = true;
         form.setAttribute('aria-busy', 'true');
         const controls = Array.from(form.elements);
         const disabledBefore = controls.map((control) => control.disabled);
@@ -1160,6 +1246,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             { confirmLabel: 'Save secret' },
           );
           if (!confirmed) return;
+          updateSecretActionLabel('save', 'Saving…');
           if (submit) submit.textContent = 'Saving…';
           if (status) {
             status.textContent = 'saving…';
@@ -1223,7 +1310,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           }
         } finally {
-          secretSetInFlight = false;
+          endSecretAction('save');
           form.removeAttribute('aria-busy');
           controls.forEach((control, index) => {
             control.disabled = disabledBefore[index];

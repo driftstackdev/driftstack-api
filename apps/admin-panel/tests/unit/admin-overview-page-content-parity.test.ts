@@ -92,9 +92,9 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toContain('Verify the tier price before retrying');
   });
 
-  it('irreversible owner-secret deletion uses the branded destructive modal and a per-secret single-flight guard', () => {
-    expect(body).toMatch(/const secretDeletesInFlight = new Set\(\);/);
-    expect(body).toMatch(/secretDeletesInFlight\.has\(name\)/);
+  it('irreversible owner-secret deletion uses the branded destructive modal and the shared secret-action guard', () => {
+    expect(body).toMatch(/let secretActionInFlight = null;/);
+    expect(body).toMatch(/beginSecretAction\(name, 'delete', 'Confirming…'\)/);
     expect(body).toMatch(/window\.driftstackConfirm/);
     expect(body).toMatch(/confirmLabel: 'Delete secret',\s*destructive: true/);
     expect(body).toMatch(/button\.textContent = 'Deleting…'/);
@@ -113,13 +113,13 @@ describe('W358.C admin-panel /index overview page content parity', () => {
   });
 
   it('owner-secret writes are confirm-gated and single-flight without logging the value', () => {
-    expect(body).toMatch(/let secretSetInFlight = false;/);
-    expect(body).toMatch(/if \(secretSetInFlight\) return;/);
+    expect(body).toMatch(/if \(secretActionInFlight !== null\)/);
+    expect(body).toMatch(/beginSecretAction\(name, 'save', 'Confirming…'\)/);
     expect(body).toMatch(/form\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/confirmLabel: 'Save secret'/);
     expect(body).toMatch(/The value is never written to the audit log/);
     expect(body).toMatch(/if \(submit\) submit\.textContent = 'Saving…'/);
-    expect(body).toMatch(/secretSetInFlight = false;\s*form\.removeAttribute\('aria-busy'\)/);
+    expect(body).toMatch(/endSecretAction\('save'\);\s*form\.removeAttribute\('aria-busy'\)/);
   });
 
   it('reconciles ambiguous owner-secret saves against versioned metadata', () => {
@@ -132,13 +132,19 @@ describe('W358.C admin-panel /index overview page content parity', () => {
   });
 
   it('owner-secret reveal is single-flight and clears plaintext on hide/failure', () => {
-    expect(body).toMatch(/const secretRevealsInFlight = new Set\(\);/);
-    expect(body).toMatch(/secretRevealsInFlight\.has\(name\)/);
+    expect(body).toMatch(/beginSecretAction\(name, 'reveal', 'Revealing…'\)/);
     expect(body).toMatch(/button\.textContent = 'Revealing…'/);
     expect(body).toMatch(/button\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/out\.textContent = '';/);
-    expect(body).toMatch(/secretRevealsInFlight\.delete\(name\)/);
+    expect(body).toMatch(/endSecretAction\('reveal'\)/);
     expect(body).toMatch(/out\.classList\.contains\('hidden'\) \? 'Reveal' : 'Hide'/);
+  });
+
+  it('serializes every owner-secret control with a visible wait reason', () => {
+    expect(body).toContain('Wait for the active secret action to finish.');
+    expect(body).toMatch(/button\.disabled = active !== null/);
+    expect(body).toMatch(/secretForm\.setAttribute\('aria-disabled', 'true'\)/);
+    expect(body).toMatch(/syncSecretActionControls\(\)/);
   });
 
   it('tile data-fields map to overview-response keys', () => {
