@@ -130,6 +130,14 @@ const ENDPOINT = {
   rotation_grace_expires_at: null,
 };
 
+const DELIVERY = {
+  id: 'delivery_failed',
+  status: 'failed',
+  event_type: 'session.errored',
+  created_at: '2026-05-20T10:05:00.000Z',
+  last_error: 'endpoint returned 503',
+};
+
 describe('webhooks page — local integration', () => {
   let win: JSDOM['window'] | null = null;
   afterEach(() => {
@@ -345,6 +353,74 @@ describe('webhooks page — local integration', () => {
     const sends = fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/test$/.test(c.url));
     expect(sends).toHaveLength(1);
     expect(sends[0]?.init?.signal).toBeDefined();
+  });
+
+  it('send-test timeout refreshes state, locks the endpoint, and blocks forced replay', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [ENDPOINT] }),
+        () => Promise.reject(timeout),
+        () => json({ data: [ENDPOINT] }),
+      ],
+    });
+    win = window;
+    await flush();
+    const original = window.document.querySelector(
+      '[data-test="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    original.dispatchEvent(new window.Event('click'));
+    await flush(10);
+    original.dispatchEvent(new window.Event('click'));
+    await flush();
+
+    expect(fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/test$/.test(c.url))).toHaveLength(
+      1,
+    );
+    const current = window.document.querySelector('[data-test="wh_endpoint"]') as HTMLButtonElement;
+    expect(current.disabled).toBe(true);
+    expect(current.textContent).toContain('Test outcome unknown');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /Test-send outcome is unknown.*endpoint list was refreshed.*may already be queued.*Do not send another test/i,
+    );
+  });
+
+  it('replay timeout refreshes deliveries, locks the delivery, and blocks forced replay', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [ENDPOINT] }),
+        () => json({ data: [DELIVERY], has_more: false }),
+        () => Promise.reject(timeout),
+        () => json({ data: [DELIVERY], has_more: false }),
+      ],
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector('[data-toggle-deliveries="wh_endpoint"]') as HTMLButtonElement
+    ).click();
+    await flush();
+    const original = window.document.querySelector(
+      '[data-replay="delivery_failed"]',
+    ) as HTMLButtonElement;
+    original.dispatchEvent(new window.Event('click'));
+    await flush(10);
+    original.dispatchEvent(new window.Event('click'));
+    await flush();
+
+    expect(
+      fetchCalls.filter((c) => /\/v1\/webhook-deliveries\/delivery_failed\/replay$/.test(c.url)),
+    ).toHaveLength(1);
+    expect(
+      fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/deliveries\?/.test(c.url)),
+    ).toHaveLength(2);
+    expect(window.document.body.textContent).toContain('Replay outcome unknown');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /Replay outcome is unknown.*delivery log was refreshed.*Do not replay this delivery again/i,
+    );
   });
 
   it('delete cancelled at confirm: no DELETE fetch fired', async () => {

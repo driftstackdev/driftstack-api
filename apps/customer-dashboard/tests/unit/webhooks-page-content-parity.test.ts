@@ -56,6 +56,17 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toContain('Rotation outcome is unknown after the request timed out.');
     expect(body).toContain('signing secret cannot be recovered');
   });
+
+  it('terminally guards ambiguous replay and test-enqueue outcomes', () => {
+    expect(body).toContain('const uncertainReplayIds = new Set();');
+    expect(body).toContain('const uncertainTestEndpointIds = new Set();');
+    expect(body).toContain('Replay outcome is unknown after the request timed out.');
+    expect(body).toContain('Test-send outcome is unknown after the request timed out.');
+    expect(body).toContain('Do not replay this delivery again on this page');
+    expect(body).toContain('Do not send another test from this page');
+    expect(body).toMatch(/if \(!id \|\| uncertainReplayIds\.has\(String\(id\)\)\) return;/);
+    expect(body).toMatch(/if \(!id \|\| uncertainTestEndpointIds\.has\(String\(id\)\)\) return;/);
+  });
   const subscribable = new Set<string>(
     (SubscribableWebhookEventTypeSchema._def as { values: readonly string[] }).values,
   );

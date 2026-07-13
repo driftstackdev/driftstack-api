@@ -97,24 +97,26 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
   });
 
   it('Webhook API contracts: POST /v1/webhooks + PATCH /v1/webhooks/:id + DELETE /v1/webhooks/:id + POST /v1/webhooks/:id/rotate-secret + POST /v1/webhooks/:id/test + GET /v1/webhooks/:id/deliveries + POST /v1/webhook-deliveries/:id/replay — pinned so the 7-endpoint webhook lifecycle contract stays correct (drift to renaming any path would break the wired UI action)', () => {
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n?\s*method: 'POST',/);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpoint\.id\), \{\s*\n?\s*method: 'PATCH',/,
+      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n?\s*method: 'POST',/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',/,
+      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpoint\.id\), \{\s*\n?\s*method: 'PATCH',/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n?\s*method: 'POST',/,
+      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test', \{\s*\n?\s*method: 'POST',/,
+      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n?\s*method: 'POST',/,
+    );
+    expect(body).toMatch(
+      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test', \{\s*\n?\s*method: 'POST',/,
     );
     expect(body).toMatch(
       /apiBaseUrl \+\s*\n?\s*'\/v1\/webhooks\/' \+\s*\n?\s*encodeURIComponent\(endpointId\) \+\s*\n?\s*'\/deliveries\?'/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay', \{\s*\n?\s*method: 'POST',/,
+      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay', \{\s*\n?\s*method: 'POST',/,
     );
   });
 

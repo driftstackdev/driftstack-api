@@ -485,6 +485,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       const token = localStorage.getItem('ds_web_session_token');
       const WEBHOOK_TIMEOUT_MS = 15_000;
       const actionButtonsInFlight = new WeakSet();
+      // Replay + test are enqueue-like mutations. A timeout cannot prove that
+      // the server did not accept them, so never let a re-render or synthetic
+      // click turn an unknown outcome into duplicate customer traffic.
+      const uncertainReplayIds = new Set();
+      const uncertainTestEndpointIds = new Set();
       let createInFlight = false;
       let editInFlight = false;
 
@@ -707,6 +712,13 @@ const apiBaseUrl = resolveApiBaseUrl();
               counts.dlq +
               ')</button>'
             : '';
+        const testButton = uncertainTestEndpointIds.has(String(e.id))
+          ? '<button type="button" data-test="' +
+            escapeHtml(e.id) +
+            '" disabled title="A test delivery may already have been queued. Verify the delivery log before reloading." class="text-sm text-amber-700">Test outcome unknown</button>'
+          : '<button type="button" data-test="' +
+            escapeHtml(e.id) +
+            '" class="text-sm text-tk-accent-text hover:underline">Send test</button>';
         return (
           '<li class="dashboard-card">' +
           '<div class="flex items-start justify-between gap-6">' +
@@ -753,9 +765,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<button type="button" data-edit="' +
           escapeHtml(e.id) +
           '" class="text-sm text-tk-accent-text hover:underline">Edit</button>' +
-          '<button type="button" data-test="' +
-          escapeHtml(e.id) +
-          '" class="text-sm text-tk-accent-text hover:underline">Send test</button>' +
+          testButton +
           '<button type="button" data-rotate="' +
           escapeHtml(e.id) +
           '" class="text-sm text-tk-accent-text hover:underline">Rotate secret</button>' +
@@ -813,12 +823,15 @@ const apiBaseUrl = resolveApiBaseUrl();
               : d.status === 'failed'
                 ? statusBadge + 'bg-tk-busy/10 text-tk-busy-text'
                 : statusBadge + 'bg-tk-err/10 text-tk-err-text';
-        const replayBtn =
-          d.status === 'failed' || d.status === 'dlq' || d.status === 'delivered'
-            ? '<button type="button" data-replay="' +
+        const replayable =
+          d.status === 'failed' || d.status === 'dlq' || d.status === 'delivered';
+        const replayBtn = !replayable
+          ? ''
+          : uncertainReplayIds.has(String(d.id))
+            ? '<span class="text-xs font-medium text-amber-700" title="This delivery may already have been requeued. Verify its state before reloading.">Replay outcome unknown</span>'
+            : '<button type="button" data-replay="' +
               escapeHtml(d.id) +
-              '" class="text-xs text-tk-accent-text hover:underline">Replay</button>'
-            : '';
+              '" class="text-xs text-tk-accent-text hover:underline">Replay</button>';
         return (
           '<li class="flex items-start justify-between gap-3 py-2 text-sm">' +
           '<div class="min-w-0 flex-1">' +
@@ -913,7 +926,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             loadMoreDeliveries(endpointId, container);
           });
         }
-        wireReplayButtons(container);
+        wireReplayButtons(container, endpointId);
       }
 
       function loadDeliveries(endpointId, container, status) {
@@ -936,7 +949,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             loadDeliveries(endpointId, container, sel.value);
           });
         }
-        boundedFetch(
+        return boundedFetch(
           apiBaseUrl +
             '/v1/webhooks/' +
             encodeURIComponent(endpointId) +
@@ -962,6 +975,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             };
             deliveriesPager.set(endpointId, state);
             renderDeliveries(container, endpointId, state);
+            return true;
           })
           .catch((err) => {
             if (deliveriesSeq.get(endpointId) !== seq) return;
@@ -969,6 +983,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               '<p class="text-sm text-tk-err-text">Failed to load deliveries: ' +
               escapeHtml(err && err.message ? err.message : 'network error') +
               '</p>';
+            return false;
           });
       }
 
@@ -1025,16 +1040,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      function wireReplayButtons(scope) {
+      function wireReplayButtons(scope, endpointId) {
         const buttons = scope.querySelectorAll('[data-replay]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', () => {
             if (actionButtonsInFlight.has(btn)) return;
-            actionButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-replay');
+            if (!id || uncertainReplayIds.has(String(id))) return;
+            actionButtonsInFlight.add(btn);
             btn.disabled = true;
             btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Replaying…';
+            let outcomeUnknown = false;
             boundedFetch(apiBaseUrl + '/v1/webhook-deliveries/' + encodeURIComponent(id) + '/replay', {
               method: 'POST',
               headers: {
@@ -1051,14 +1068,38 @@ const apiBaseUrl = resolveApiBaseUrl();
                 btn.textContent = 'Replayed ✓';
                 btn.classList.add('text-tk-ready-text');
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                if (err && err.name === 'AbortError') {
+                  outcomeUnknown = true;
+                  uncertainReplayIds.add(String(id));
+                  const state = deliveriesPager.get(endpointId);
+                  const refreshed = await loadDeliveries(
+                    endpointId,
+                    scope,
+                    state ? state.status : '',
+                  );
+                  showBanner(
+                    'Replay outcome is unknown after the request timed out. ' +
+                      (refreshed
+                        ? 'The delivery log was refreshed, but it cannot prove whether the async replay ran. '
+                        : "We couldn't refresh the delivery log. ") +
+                      'Do not replay this delivery again on this page; verify its state before reloading.',
+                  );
+                  return;
+                }
                 btn.disabled = false;
                 btn.textContent = 'Replay';
-                showBanner('Replay failed: ' + (err && err.message ? err.message : 'network error'));
+                showBanner(
+                  'Replay failed: ' + (err && err.message ? err.message : 'network error'),
+                );
               })
               .finally(() => {
                 actionButtonsInFlight.delete(btn);
                 btn.setAttribute('aria-busy', 'false');
+                if (outcomeUnknown) {
+                  btn.disabled = true;
+                  btn.textContent = 'Replay outcome unknown';
+                }
               });
           });
         });
@@ -1445,16 +1486,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         buttons.forEach((btn) => {
           btn.addEventListener('click', () => {
             if (actionButtonsInFlight.has(btn)) return;
-            actionButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-test');
-            if (!id) {
-              actionButtonsInFlight.delete(btn);
-              return;
-            }
+            if (!id || uncertainTestEndpointIds.has(String(id))) return;
+            actionButtonsInFlight.add(btn);
             btn.disabled = true;
             btn.setAttribute('aria-busy', 'true');
             const original = btn.textContent;
             btn.textContent = 'Sending…';
+            let outcomeUnknown = false;
             boundedFetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/test', {
               method: 'POST',
               headers: {
@@ -1475,7 +1514,20 @@ const apiBaseUrl = resolveApiBaseUrl();
                   'Test event queued. Check your endpoint and the delivery log to confirm receipt.',
                 );
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                if (err && err.name === 'AbortError') {
+                  outcomeUnknown = true;
+                  uncertainTestEndpointIds.add(String(id));
+                  const refreshed = await refreshEndpointList(false);
+                  showBanner(
+                    'Test-send outcome is unknown after the request timed out. ' +
+                      (refreshed
+                        ? 'The endpoint list was refreshed, but delivery counts may update later. '
+                        : "We couldn't refresh the endpoint list. ") +
+                      'The test event may already be queued. Do not send another test from this page; verify the delivery log before reloading.',
+                  );
+                  return;
+                }
                 showBanner(
                   'Test send failed: ' +
                     (err && err.message ? err.message : 'network error'),
@@ -1483,9 +1535,9 @@ const apiBaseUrl = resolveApiBaseUrl();
               })
               .finally(() => {
                 actionButtonsInFlight.delete(btn);
-                btn.disabled = false;
+                btn.disabled = outcomeUnknown;
                 btn.setAttribute('aria-busy', 'false');
-                btn.textContent = original;
+                btn.textContent = outcomeUnknown ? 'Test outcome unknown' : original;
               });
           });
         });
