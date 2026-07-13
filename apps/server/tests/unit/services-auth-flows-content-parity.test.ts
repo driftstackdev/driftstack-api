@@ -129,8 +129,18 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('password reset atomically consumes the presented token and all account siblings before changing credentials', () => {
     expect(body).toMatch(
-      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'password_reset',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);\s*\n?\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const newHash = await hashPassword\(args\.newPassword\);/,
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'password_reset',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);\s*\n?\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const mfaRequired = this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled;\s*\n?\s*const newHash = await hashPassword\(args\.newPassword\);/,
     );
+  });
+
+  it('magic-link and password-reset recovery return MFA challenges before any session mint', () => {
+    expect(body).toMatch(
+      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{\s*\n?\s*return \{\s*\n?\s*kind: 'mfa_required',\s*\n?\s*account,\s*\n?\s*\.\.\.\(await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\)\),/,
+    );
+    expect(body).toMatch(
+      /if \(mfaRequired\) \{[\s\S]+?await this\.revokeSessionsAfterPasswordReset\(account\.id, null, now\);[\s\S]+?kind: 'mfa_required',[\s\S]+?createMfaChallenge/,
+    );
+    expect(body).toMatch(/revoked_via: 'password_reset'/);
   });
 
   it('login: 4-failure-mode cascade (invalid_credentials × 2 + account_suspended + email_not_verified) + V-353d branch returns mfa_required with challenge_token', () => {

@@ -122,6 +122,30 @@ func TestAuth_RequestMagicLink(t *testing.T) {
 	}
 }
 
+func TestAuth_ConsumeMagicLink_MfaRequired(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/magic-link/consume" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"mfa_required":true,"challenge_token":"magic-mfa","challenge_expires_at":"2026-07-13T12:00:00Z"}`))
+	})
+	got, err := client.Auth.ConsumeMagicLink(
+		context.Background(),
+		&MagicLinkConsumeRequest{Token: "magic-token"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.MfaRequired || got.ChallengeToken != "magic-mfa" {
+		t.Fatalf("unexpected MFA response: %+v", got)
+	}
+	if got.Session.Token != "" {
+		t.Errorf("session must be empty before MFA, got %q", got.Session.Token)
+	}
+}
+
 func TestAuth_RequestPasswordReset(t *testing.T) {
 	t.Parallel()
 	expiresAt := time.Now().Add(30 * time.Minute).UTC().Truncate(time.Second)
@@ -141,6 +165,30 @@ func TestAuth_RequestPasswordReset(t *testing.T) {
 	}
 	if got.DebugToken != "pr_stub_tok" {
 		t.Errorf("debug_token=%q", got.DebugToken)
+	}
+}
+
+func TestAuth_ConfirmPasswordReset_MfaRequired(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/password-reset/confirm" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"mfa_required":true,"challenge_token":"reset-mfa","challenge_expires_at":"2026-07-13T12:00:00Z"}`))
+	})
+	got, err := client.Auth.ConfirmPasswordReset(
+		context.Background(),
+		&PasswordResetConfirmRequest{Token: "reset-token", NewPassword: "new-password"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.MfaRequired || got.ChallengeToken != "reset-mfa" {
+		t.Fatalf("unexpected MFA response: %+v", got)
+	}
+	if got.Session.Token != "" {
+		t.Errorf("session must be empty before MFA, got %q", got.Session.Token)
 	}
 }
 

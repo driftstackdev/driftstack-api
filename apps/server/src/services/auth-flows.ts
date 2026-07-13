@@ -410,10 +410,7 @@ export interface MagicLinkConsumeArgs {
   userAgent: string | null;
 }
 
-export interface MagicLinkConsumeResult {
-  account: AuthFlowAccountRow;
-  session: { plaintext: string; row: WebSessionRow };
-}
+export type MagicLinkConsumeResult = LoginResult;
 
 export interface PasswordResetRequestArgs {
   email: string;
@@ -433,10 +430,7 @@ export interface PasswordResetConfirmArgs {
   userAgent: string | null;
 }
 
-export interface PasswordResetConfirmResult {
-  account: AuthFlowAccountRow;
-  session: { plaintext: string; row: WebSessionRow };
-}
+export type PasswordResetConfirmResult = LoginResult;
 
 export interface RefreshSessionArgs {
   token: string;
@@ -875,7 +869,7 @@ export class AuthFlowsService {
     // challenge token instead of a session; the customer exchanges it
     // at /v1/auth/mfa/challenge with their 6-digit code (or recovery
     // code) to get the actual session.
-    if (this.mfa && this.mfaChallenges) {
+    if (this.mfa) {
       const status = await this.mfa.getStatus(account.id);
       if (status.enrolled) {
         const challenge = await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent);
@@ -1080,8 +1074,21 @@ export class AuthFlowsService {
       await this.repo.markEmailVerified(account.id, now);
     }
 
+    // A magic link proves mailbox control, not possession of the account's
+    // enrolled second factor. Mirror password/OAuth login: return the shared
+    // short-lived challenge and do not mint a session until TOTP/recovery is
+    // verified. createMfaChallenge deliberately fails closed if its store is
+    // unavailable.
+    if (this.mfa !== null && (await this.mfa.getStatus(account.id)).enrolled) {
+      return {
+        kind: 'mfa_required',
+        account,
+        ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+      };
+    }
+
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
-    return { account, session };
+    return { kind: 'session', account, session };
   }
 
   async requestPasswordReset(args: PasswordResetRequestArgs): Promise<PasswordResetRequestResult> {
@@ -1145,24 +1152,43 @@ export class AuthFlowsService {
     if (!consumed) throw new AuthFlowError('invalid_auth_token');
     const account = await this.requireAccount(row.accountId);
     if (account.status !== 'active') throw new AuthFlowError('account_suspended');
+    const mfaRequired = this.mfa !== null && (await this.mfa.getStatus(account.id)).enrolled;
     const newHash = await hashPassword(args.newPassword);
     await this.repo.setPassword(account.id, newHash);
+
+    if (mfaRequired) {
+      // Password reset is a compromise-recovery boundary. With MFA enrolled,
+      // there is no new session to retain yet: revoke every old session before
+      // issuing the challenge so a stolen bearer cannot survive the reset.
+      await this.revokeSessionsAfterPasswordReset(account.id, null, now);
+      await this.emitAuditBestEffort(account.id, 'account.password_changed', {
+        via: 'password_reset',
+        issued_from_ip: args.issuedFromIp,
+        user_agent: args.userAgent,
+      });
+      return {
+        kind: 'mfa_required',
+        account,
+        ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+      };
+    }
 
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
     // Security: a password reset is a compromise-recovery action, so revoke
     // EVERY OTHER web session (an attacker-held session must not survive the
-    // reset) while keeping the just-issued one. Reuses the V-355 helper, which
-    // also invalidates the auth cache + audits the revocation. Without this a
-    // stolen/lingering session stayed valid after the victim reset — defeating
+    // reset) while keeping the just-issued one. The reset-specific helper also
+    // invalidates the auth cache and attributes the revocation accurately.
+    // Without this, a stolen/lingering session stayed valid after the victim
+    // reset — defeating
     // the reset's purpose (OWASP session-management: invalidate sessions on
     // credential change).
-    await this.revokeAllWebSessionsExceptCurrent(account.id, session.row.id, now);
+    await this.revokeSessionsAfterPasswordReset(account.id, session.row.id, now);
     await this.emitAuditBestEffort(account.id, 'account.password_changed', {
       via: 'password_reset',
       issued_from_ip: args.issuedFromIp,
       user_agent: args.userAgent,
     });
-    return { account, session };
+    return { kind: 'session', account, session };
   }
 
   async refreshSession(args: RefreshSessionArgs): Promise<RefreshSessionResult> {
@@ -1394,6 +1420,32 @@ export class AuthFlowsService {
   }
 
   // ──────────────────── helpers ────────────────────
+
+  private async revokeSessionsAfterPasswordReset(
+    accountId: string,
+    keepSessionId: string | null,
+    now: Date,
+  ): Promise<number> {
+    const revoked =
+      keepSessionId === null
+        ? await this.repo.revokeAllWebSessionsForAccount(accountId, now)
+        : await this.repo.revokeAllWebSessionsExcept(accountId, keepSessionId, now);
+    if (revoked > 0 && this.authCache) {
+      try {
+        await this.authCache.invalidateAccount(accountId);
+      } catch {
+        /* cache TTLs out within 30s */
+      }
+    }
+    if (revoked > 0) {
+      await this.emitAuditBestEffort(accountId, 'account.logout', {
+        revoked_via: 'password_reset',
+        revoked_count: revoked,
+        ...(keepSessionId === null ? {} : { kept_session_id: keepSessionId }),
+      });
+    }
+    return revoked;
+  }
 
   private async releaseStepUpAttemptBestEffort(key: string): Promise<void> {
     try {

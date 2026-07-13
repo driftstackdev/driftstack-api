@@ -25,12 +25,14 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
 
   // --- reset-password.astro ---------------------------------------
 
-  it('CRITICAL reset-password V-273 anchor + V-079 backend pairing pinned. The 5-step flow framing tells engineers the password-reset confirm contract: read token → enter new password → POST {token, new_password} → fresh session → one-shot.', () => {
+  it('CRITICAL reset-password V-273 anchor + V-079 backend pairing and one-shot recovery are pinned', () => {
     const r = read(RESET);
 
     expect(r).toMatch(/V-273 — Password-reset confirmation page\. Pairs with the V-079/);
     expect(r).toMatch(/backend route `POST \/v1\/auth\/password-reset\/confirm`/);
-    expect(r).toMatch(/Token is one-shot — second use returns 400/);
+    expect(r).toMatch(
+      /Token is one-shot — second use returns 400; a successful MFA challenge is too/,
+    );
   });
 
   it('CRITICAL reset-password 12-char minimum + autocomplete=new-password pinned. The 12-char minimum matches server-side password validation; new-password autocomplete tells password managers to suggest a fresh strong password.', () => {
@@ -77,21 +79,25 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     );
   });
 
-  it('CRITICAL reset-password on-success → localStorage `ds_web_session_token` + redirect to `/`. The fresh-session-after-reset is what auto-signs-in the customer (drift to "redirect to login" would force them to re-enter the password they just set).', () => {
+  it('CRITICAL reset-password persists a session only after direct or MFA completion', () => {
     const r = read(RESET);
 
     expect(r).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
     expect(r).toMatch(/window\.location\.href = '\/'/);
+    expect(r).toContain('if (body.mfa_required === true)');
+    expect(r).toContain("'/v1/auth/mfa/challenge'");
   });
 
   // --- auth/magic-link.astro --------------------------------------
 
-  it('CRITICAL magic-link #190 anchor + V-079 backend pairing pinned. The 5-step flow framing tells engineers magic-link is "request → email → link land → POST → fresh session → one-shot".', () => {
+  it('CRITICAL magic-link #190 anchor + V-079 backend pairing and one-shot recovery are pinned', () => {
     const m = read(MAGIC);
 
     expect(m).toMatch(/#190 — magic-link consume page\. Pairs with the V-079/);
     expect(m).toMatch(/backend route\s*\n?\s*\/\/\s*`POST \/v1\/auth\/magic-link\/consume`/);
-    expect(m).toMatch(/Token is one-shot — second use returns 400/);
+    expect(m).toMatch(
+      /Token is one-shot — second use returns 400; a successful MFA challenge is too/,
+    );
   });
 
   it('CRITICAL magic-link auto-submit pattern pinned — `if (linkToken && linkToken.length > 0) submitToken(linkToken)`. Drift to requiring manual paste would mis-document the canonical happy-path (click email link → signed in).', () => {
@@ -121,7 +127,7 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     const m = read(MAGIC);
 
     expect(m).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{ 'content-type': 'application\/json' \},\s*\n\s+body: JSON\.stringify\(\{ token: token \}\),\s*\n\s+credentials: 'include',\s*\n\s+\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume', \{[\s\S]+?body: JSON\.stringify\(\{ token: token \}\),[\s\S]+?credentials: 'include',[\s\S]+?signal: controller\.signal,/,
     );
   });
 
@@ -137,15 +143,13 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     );
 
     // V-079 framing notes the next=round-trip in docstring.
-    expect(m).toMatch(
-      /redirects to \/\s*\n\/\/\s+\(or \?next= if the original entry round-tripped one\)/,
-    );
+    expect(m).toMatch(/to localStorage and redirects to \/ \(or the safe \?next= path\)/);
   });
 
   it('CRITICAL magic-link on-failure UX — show fallback form THEN banner with error. Drift to hiding form on error would leave the customer with no recovery path.', () => {
     const m = read(MAGIC);
 
-    expect(m).toMatch(/\.catch\(\(err\) => \{\s*\n\s+showFallbackForm\(token\);\s*\n\s+showBanner/);
+    expect(m).toMatch(/\.catch\(\(err\) => \{[\s\S]+?showFallbackForm\(token\);\s*\n\s+showBanner/);
   });
 
   it('CRITICAL magic-link token input has autocomplete="one-time-code". Matches W735 verify-email pattern.', () => {
@@ -167,7 +171,7 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     }
   });
 
-  it('CRITICAL both pages store session.token in localStorage as `ds_web_session_token`. Shared key matches W735 verify-email pattern + every other web-auth flow in the dashboard.', () => {
+  it('CRITICAL both pages store the completed session under the shared dashboard key', () => {
     for (const path of [RESET, MAGIC]) {
       const c = read(path);
       expect(c, `${path} session.token localStorage`).toMatch(

@@ -113,7 +113,7 @@ async function flush(times = 4): Promise<void> {
 }
 
 function submit(window: JSDOM['window'], password: string, confirm: string): void {
-  const form = window.document.querySelector('[data-form]') as HTMLFormElement;
+  const form = window.document.querySelector('[data-form="reset-password"]') as HTMLFormElement;
   (form.querySelector('input[name="password"]') as HTMLInputElement).value = password;
   (form.querySelector('input[name="confirm"]') as HTMLInputElement).value = confirm;
   form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
@@ -131,7 +131,7 @@ describe('reset-password page — local integration', () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), { url: NO_TOKEN_URL });
     win = window;
     await flush();
-    expect(isHidden(window, '[data-form]')).toBe(true);
+    expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
     expect(isHidden(window, '[data-missing]')).toBe(false);
     expect(fetchCalls.length).toBe(0);
   });
@@ -204,12 +204,12 @@ describe('reset-password page — local integration', () => {
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
     const submitBtn = window.document.querySelector(
-      '[data-form] button[type="submit"]',
+      '[data-form="reset-password"] button[type="submit"]',
     ) as HTMLButtonElement;
     expect(submitBtn.disabled).toBe(true);
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
     expect(submitBtn.textContent).toBe('Reset outcome unknown');
-    expect(isHidden(window, '[data-form]')).toBe(true);
+    expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
     expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
     expect(
       window.document.querySelector('[data-unknown-recovery] a[href="/login"]')?.textContent,
@@ -225,5 +225,68 @@ describe('reset-password page — local integration', () => {
     submit(window, 'a-brand-new-password', 'a-brand-new-password');
     await flush();
     expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('requires and exchanges MFA after changing the password before storing a session', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [
+        () =>
+          json({
+            mfa_required: true,
+            challenge_token: 'reset-challenge-memory-only',
+            challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+          }),
+        () => json({ session: { token: 'web_after_reset_mfa' }, via: 'totp' }),
+      ],
+    });
+    win = window;
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    const mfaForm = window.document.querySelector('[data-form="reset-mfa"]') as HTMLFormElement;
+    expect(mfaForm.classList.contains('hidden')).toBe(false);
+    expect(window.localStorage.getItem('reset-challenge-memory-only')).toBeNull();
+    (mfaForm.querySelector('#reset-mfa-code') as HTMLInputElement).value = '654321';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[1]?.url).toMatch(/\/v1\/auth\/mfa\/challenge$/);
+    expect(JSON.parse(String(fetchCalls[1]?.init?.body))).toEqual({
+      challenge_token: 'reset-challenge-memory-only',
+      code: '654321',
+    });
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('web_after_reset_mfa');
+  });
+
+  it('never replays an MFA challenge after an ambiguous exchange timeout', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [
+        () =>
+          json({
+            mfa_required: true,
+            challenge_token: 'reset-challenge-once',
+            challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+          }),
+        () => Promise.reject(timeout),
+      ],
+    });
+    win = window;
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    const mfaForm = window.document.querySelector('[data-form="reset-mfa"]') as HTMLFormElement;
+    (mfaForm.querySelector('#reset-mfa-code') as HTMLInputElement).value = '654321';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(mfaForm.classList.contains('hidden')).toBe(true);
+    expect(bannerText(window)).toMatch(
+      /MFA sign-in outcome is unknown.*one-time challenge.*do not submit this code again.*new password/i,
+    );
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
   });
 });

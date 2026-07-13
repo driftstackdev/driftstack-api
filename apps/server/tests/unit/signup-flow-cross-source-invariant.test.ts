@@ -113,9 +113,9 @@ describe('W900 Signup flow cross-source invariant', () => {
 
   // ─── PasswordResetConfirmResponse + SuccessfulReset comment ──
 
-  it("CRITICAL Successful PasswordResetConfirm issues a fresh web session ('same UX as verify-email'). The unified successful-flow framing pins the consistent UX across signup-verify + password-reset.", () => {
+  it('CRITICAL PasswordResetConfirm returns a session or the shared MFA challenge union', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/Successful reset issues a fresh web session — same UX as verify-email/);
+    expect(p).toMatch(/PasswordResetConfirmResponseSchema = LoginResponseUnionSchema/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

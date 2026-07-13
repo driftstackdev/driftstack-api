@@ -131,14 +131,12 @@ describe('W882 anti-enumeration response cross-source invariant', () => {
     }
   });
 
-  it("CRITICAL the consume/confirm responses (MagicLinkConsumeResponse + PasswordResetConfirmResponse) DO NOT use the anti-enum shape — they're post-token-validated, so revealing 'session: WebSession' is correct (the user already proved possession). The asymmetry is intentional.", () => {
+  it('CRITICAL consume/confirm remain post-token auth responses and use the session-or-MFA union, never the anti-enumeration sent shape', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(
-      /MagicLinkConsumeResponseSchema = z\.object\(\{\s*\n\s*session: WebSessionSchema,/,
-    );
-    expect(p).toMatch(
-      /PasswordResetConfirmResponseSchema = z\.object\(\{\s*\n\s*session: WebSessionSchema,/,
-    );
+    expect(p).toMatch(/MagicLinkConsumeResponseSchema = LoginResponseUnionSchema;/);
+    expect(p).toMatch(/PasswordResetConfirmResponseSchema = LoginResponseUnionSchema;/);
+    expect(p).not.toMatch(/MagicLinkConsumeResponseSchema = z\.object\(\{[\s\S]*?sent:/);
+    expect(p).not.toMatch(/PasswordResetConfirmResponseSchema = z\.object\(\{[\s\S]*?sent:/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

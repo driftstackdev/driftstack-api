@@ -42,7 +42,9 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
   it('#190 + V-079 framing comment pinned (5-step flow + form-as-fallback rationale)', () => {
     expect(body).toMatch(/#190 — magic-link consume page/);
     expect(body).toMatch(/V-079 backend route\s+\/\/ `POST \/v1\/auth\/magic-link\/consume`/);
-    expect(body).toMatch(/Token is one-shot — second use returns 400\./);
+    expect(body).toMatch(
+      /Token is one-shot — second use returns 400; a successful MFA challenge is too\./,
+    );
     expect(body).toMatch(
       /The form is rendered as a fallback for the rare case where a mail\s*\n?\s*\/\/\s*client mangles the link/,
     );
@@ -100,6 +102,17 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(
       /window\.location\.href = safeNextPath\(params\.get\('next'\), window\.location\.origin\)/,
     );
+  });
+
+  it('enrolled accounts exchange a memory-only MFA challenge with TOTP or recovery', () => {
+    expect(body).toContain('data-form="magic-link-mfa"');
+    expect(body).toContain('if (body.mfa_required === true)');
+    expect(body).toContain("'/v1/auth/mfa/challenge'");
+    expect(body).toContain('recovery_code: recoveryCode');
+    expect(body).toContain('let mfaChallengeToken = null;');
+    expect(body).not.toMatch(/localStorage\.setItem\([^,]+, mfaChallengeToken\)/);
+    expect(body).toContain('MFA sign-in outcome is unknown after the request timed out.');
+    expect(body).toContain('Do not submit this code again; request a fresh sign-in link.');
   });
 
   it('authoritative error path: fallback form revealed + banner shown (retry by paste)', () => {

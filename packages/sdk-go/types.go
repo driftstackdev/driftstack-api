@@ -904,7 +904,10 @@ type MagicLinkConsumeRequest struct {
 }
 
 type MagicLinkConsumeResponse struct {
-	Session WebSession `json:"session"`
+	Session            WebSession `json:"session,omitempty"`
+	MfaRequired        bool       `json:"mfa_required,omitempty"`
+	ChallengeToken     string     `json:"challenge_token,omitempty"`
+	ChallengeExpiresAt string     `json:"challenge_expires_at,omitempty"`
 }
 
 type PasswordResetRequest struct {
@@ -928,7 +931,10 @@ type PasswordResetConfirmRequest struct {
 }
 
 type PasswordResetConfirmResponse struct {
-	Session WebSession `json:"session"`
+	Session            WebSession `json:"session,omitempty"`
+	MfaRequired        bool       `json:"mfa_required,omitempty"`
+	ChallengeToken     string     `json:"challenge_token,omitempty"`
+	ChallengeExpiresAt string     `json:"challenge_expires_at,omitempty"`
 }
 
 // RefreshSessionRequest — V-425. Server expects `{ "token": "..." }`,

@@ -225,9 +225,9 @@ export const MagicLinkConsumeRequestSchema = z.object({
 });
 export type MagicLinkConsumeRequest = z.infer<typeof MagicLinkConsumeRequestSchema>;
 
-export const MagicLinkConsumeResponseSchema = z.object({
-  session: WebSessionSchema,
-});
+// A magic link proves mailbox control. Accounts with enrolled MFA receive the
+// same short-lived challenge union as password/OAuth login instead of a session.
+export const MagicLinkConsumeResponseSchema = LoginResponseUnionSchema;
 export type MagicLinkConsumeResponse = z.infer<typeof MagicLinkConsumeResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -252,10 +252,9 @@ export const PasswordResetConfirmRequestSchema = z.object({
 });
 export type PasswordResetConfirmRequest = z.infer<typeof PasswordResetConfirmRequestSchema>;
 
-// Successful reset issues a fresh web session — same UX as verify-email.
-export const PasswordResetConfirmResponseSchema = z.object({
-  session: WebSessionSchema,
-});
+// A successful reset issues a fresh session only when MFA is not enrolled;
+// enrolled accounts must exchange the returned challenge first.
+export const PasswordResetConfirmResponseSchema = LoginResponseUnionSchema;
 export type PasswordResetConfirmResponse = z.infer<typeof PasswordResetConfirmResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -36,6 +36,12 @@ describe('#190 magic-link consume page parity', () => {
     expect(body).toContain("localStorage.setItem('ds_web_session_token', session.token)");
   });
 
+  it('exchanges the shared MFA challenge for enrolled accounts', () => {
+    expect(body).toContain('if (body.mfa_required === true)');
+    expect(body).toContain("'/v1/auth/mfa/challenge'");
+    expect(body).toContain('data-form="magic-link-mfa"');
+  });
+
   it('honours ?next= round-trip; otherwise lands on /', () => {
     expect(body).toMatch(/params\.get\(\s*['"]next['"]\s*\)/);
     // audit w2flmiw48 #5-7 — open-redirect-guarded via safeNextPath (was raw next ? next : '/').

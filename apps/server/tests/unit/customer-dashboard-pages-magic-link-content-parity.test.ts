@@ -25,14 +25,16 @@ describe('customer-dashboard/pages/auth/magic-link content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("#190 module-level framing pinned: 'magic-link consume page. Pairs with the V-079 backend route POST /v1/auth/magic-link/consume.' + 5-step flow (request → email → click → POST → session-redirect) + 'Token is one-shot — second use returns 400.' — pinned so the #190 anchor + V-079 cross-reference + 5-step flow + token-one-shot contract all stay documented", () => {
+  it('#190 module framing pins the backend pairing and one-shot link/MFA challenge', () => {
     expect(body).toMatch(
       /\/\/ #190 — magic-link consume page\. Pairs with the V-079 backend route\s*\n?\s*\/\/ `POST \/v1\/auth\/magic-link\/consume`\./,
     );
     expect(body).toMatch(
       /\/\/\s+1\. User requests a magic-link on \/login \(forgot-password style\)\./,
     );
-    expect(body).toMatch(/\/\/\s+5\. Token is one-shot — second use returns 400\./);
+    expect(body).toMatch(
+      /\/\/\s+6\. Token is one-shot — second use returns 400; a successful MFA challenge is too\./,
+    );
   });
 
   it("Fallback-form-for-mangled-link framing pinned: 'The form is rendered as a fallback for the rare case where a mail client mangles the link (drops the query string), so the user can paste the token manually.' — pinned so the mail-client-mangled-recovery contract stays documented", () => {
@@ -50,9 +52,9 @@ describe('customer-dashboard/pages/auth/magic-link content parity', () => {
     );
   });
 
-  it('ds_web_session_token localStorage write framing pinned: \'if (session.token) { localStorage.setItem("ds_web_session_token", session.token); }\' — pinned so the canonical localStorage key contract stays documented (drift to a different key would orphan the signed-in state across other pages reading this same key)', () => {
+  it('completeSession persists the canonical session token and clears prior-user overrides', () => {
     expect(body).toMatch(
-      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*\}/,
+      /function completeSession\(session\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);/,
     );
   });
 
@@ -65,13 +67,13 @@ describe('customer-dashboard/pages/auth/magic-link content parity', () => {
 
   it("fetch POST /v1/auth/magic-link/consume + credentials:'include' + body:JSON.stringify({token:token}) framing pinned. Drift to dropping credentials:'include' would prevent the server's Set-Cookie response from landing", () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ token: token \}\),\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume', \{[\s\S]+?body: JSON\.stringify\(\{ token: token \}\),[\s\S]+?credentials: 'include',[\s\S]+?signal: controller\.signal,/,
     );
   });
 
   it('On-error-showFallbackForm-with-prefill framing pinned: \'.catch((err) => { showFallbackForm(token); showBanner(err && err.message ? err.message : "Magic-link sign-in failed."); })\' — pinned so the failed-consume-prefills-fallback-form UX contract stays documented (drift to clearing the token on error would force the user to re-type from the email)', () => {
     expect(body).toMatch(
-      /\.catch\(\(err\) => \{\s*\n?\s*showFallbackForm\(token\);\s*\n?\s*showBanner\(err && err\.message \? err\.message : 'Magic-link sign-in failed\.'\);\s*\n?\s*\}\);/,
+      /\.catch\(\(err\) => \{[\s\S]+?if \(err && err\.name === 'AbortError'\)[\s\S]+?showFallbackForm\(token\);\s*\n?\s*showBanner\(err && err\.message \? err\.message : 'Magic-link sign-in failed\.'\);/,
     );
   });
 });

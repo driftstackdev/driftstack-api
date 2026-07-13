@@ -8,10 +8,10 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 //   1. User requests a magic-link on /login (forgot-password style).
 //   2. Email arrives; clicking the link lands here with ?token=…
 //   3. This page POSTs `{ token }` to the backend.
-//   4. Server returns a fresh web session on success; page writes
-//      `ds_web_session_token` to localStorage and redirects to /
-//      (or ?next= if the original entry round-tripped one).
-//   5. Token is one-shot — second use returns 400.
+//   4. Server returns a session, or an MFA challenge for enrolled accounts.
+//   5. The page exchanges TOTP/recovery when required, then writes the session
+//      to localStorage and redirects to / (or the safe ?next= path).
+//   6. Token is one-shot — second use returns 400; a successful MFA challenge is too.
 //
 // The form is rendered as a fallback for the rare case where a mail
 // client mangles the link (drops the query string), so the user can
@@ -45,6 +45,51 @@ const apiBaseUrl = resolveApiBaseUrl();
           >Request a fresh sign-in link</a
         >
       </div>
+
+      <form
+        data-form="magic-link-mfa"
+        novalidate
+        class="hidden space-y-5"
+        aria-label="Two-factor verification"
+      >
+        <div>
+          <h2 class="text-base font-semibold text-tk-ink">Finish two-factor verification</h2>
+          <p class="mt-2 text-sm text-tk-ink-2">
+            Your email link is verified. Enter the code from your authenticator app.
+            This challenge expires in <span data-mfa-expiry class="font-mono">5 minutes</span>.
+          </p>
+        </div>
+        <div data-mfa-code-row>
+          <label class="form-label" for="magic-link-mfa-code">Authentication code</label>
+          <input
+            id="magic-link-mfa-code"
+            name="mfa-code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            class="form-input font-mono tracking-widest"
+            placeholder="123456"
+          />
+        </div>
+        <div data-mfa-recovery-row class="hidden">
+          <label class="form-label" for="magic-link-mfa-recovery">Recovery code</label>
+          <input
+            id="magic-link-mfa-recovery"
+            name="mfa-recovery"
+            type="text"
+            autocomplete="one-time-code"
+            class="form-input font-mono uppercase tracking-wider"
+            placeholder="ABCD-EFGHJK"
+          />
+        </div>
+        <button type="submit" class="btn-primary w-full">Verify and sign in</button>
+        <button
+          type="button"
+          data-mfa-toggle-recovery
+          class="w-full text-sm text-tk-accent-text underline underline-offset-4"
+        >Use a recovery code instead</button>
+      </form>
 
       <form data-form="magic-link" class="hidden space-y-5" data-state="fallback">
         <p class="text-sm text-tk-ink-2">
@@ -85,6 +130,36 @@ const apiBaseUrl = resolveApiBaseUrl();
       const form = root.querySelector('[data-form="magic-link"]');
       const tokenInput = root.querySelector('#magic-link-token');
       const unknownRecovery = root.querySelector('[data-unknown-recovery]');
+      const mfaForm = root.querySelector('[data-form="magic-link-mfa"]');
+      const mfaCodeRow = root.querySelector('[data-mfa-code-row]');
+      const mfaRecoveryRow = root.querySelector('[data-mfa-recovery-row]');
+      const mfaCodeInput = root.querySelector('#magic-link-mfa-code');
+      const mfaRecoveryInput = root.querySelector('#magic-link-mfa-recovery');
+      const mfaToggle = root.querySelector('[data-mfa-toggle-recovery]');
+      const mfaExpiry = root.querySelector('[data-mfa-expiry]');
+
+      const safeNextPath = (next, origin) => {
+        if (typeof next !== 'string' || next.length === 0) return '/';
+        let u;
+        try {
+          u = new URL(next, origin);
+        } catch (e) {
+          return '/';
+        }
+        if (u.origin !== origin) return '/';
+        const p = u.pathname + u.search + u.hash;
+        if (p.indexOf('/') !== 0 || p.indexOf('//') === 0 || p.indexOf('/\\') === 0) return '/';
+        return p;
+      };
+
+      function completeSession(session) {
+        localStorage.setItem('ds_web_session_token', session.token);
+        localStorage.removeItem('ds_act_as_account');
+        localStorage.removeItem('ds_is_team_user');
+        localStorage.removeItem('ds_is_staff_user');
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = safeNextPath(params.get('next'), window.location.origin);
+      }
 
       function showBanner(text) {
         banner.textContent = text;
@@ -102,8 +177,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       const consumeSubmit = form ? form.querySelector('button[type="submit"]') : null;
       const consumeSubmitText = consumeSubmit ? consumeSubmit.textContent : '';
       const CONSUME_TIMEOUT_MS = 15_000;
+      const MFA_TIMEOUT_MS = 15_000;
       let consumeInFlight = false;
       let consumeOutcomeUnknown = false;
+      let mfaChallengeToken = null;
+      let mfaUsingRecovery = false;
+      let mfaInFlight = false;
+      let mfaOutcomeUnknown = false;
       function setConsumeBusy(busy) {
         if (form) form.setAttribute('aria-busy', busy ? 'true' : 'false');
         if (tokenInput) tokenInput.disabled = busy || consumeOutcomeUnknown;
@@ -115,6 +195,123 @@ const apiBaseUrl = resolveApiBaseUrl();
               ? 'Sign-in outcome unknown'
               : consumeSubmitText;
         }
+      }
+
+      function startMfaChallenge(body) {
+        if (!body.challenge_token) {
+          showBanner('Two-factor verification could not start. Request a fresh sign-in link.');
+          return;
+        }
+        mfaChallengeToken = body.challenge_token;
+        mfaOutcomeUnknown = false;
+        if (form) form.classList.add('hidden');
+        banner.classList.add('hidden');
+        if (intro) intro.textContent = 'Your email link is verified. Finish with your second factor.';
+        if (body.challenge_expires_at && mfaExpiry) {
+          const minutes = Math.max(
+            1,
+            Math.round((new Date(body.challenge_expires_at).getTime() - Date.now()) / 60000),
+          );
+          mfaExpiry.textContent = minutes + (minutes === 1 ? ' minute' : ' minutes');
+        }
+        if (mfaForm) mfaForm.classList.remove('hidden');
+        if (mfaCodeInput) mfaCodeInput.focus();
+      }
+
+      if (mfaToggle) {
+        mfaToggle.addEventListener('click', () => {
+          if (mfaInFlight || mfaOutcomeUnknown) return;
+          mfaUsingRecovery = !mfaUsingRecovery;
+          mfaCodeRow.classList.toggle('hidden', mfaUsingRecovery);
+          mfaRecoveryRow.classList.toggle('hidden', !mfaUsingRecovery);
+          mfaToggle.textContent = mfaUsingRecovery
+            ? 'Use an authenticator code instead'
+            : 'Use a recovery code instead';
+          const activeInput = mfaUsingRecovery ? mfaRecoveryInput : mfaCodeInput;
+          if (activeInput) activeInput.focus();
+        });
+      }
+
+      if (mfaForm) {
+        const mfaSubmit = mfaForm.querySelector('button[type="submit"]');
+        const mfaSubmitLabel = mfaSubmit ? mfaSubmit.textContent : '';
+        mfaForm.addEventListener('submit', (event) => {
+          event.preventDefault();
+          if (!mfaChallengeToken || mfaInFlight || mfaOutcomeUnknown) return;
+          const code = mfaCodeInput ? mfaCodeInput.value.trim() : '';
+          const recoveryCode = mfaRecoveryInput ? mfaRecoveryInput.value.trim() : '';
+          if (mfaUsingRecovery ? recoveryCode.length === 0 : !/^\d{6}$/.test(code)) {
+            showBanner(
+              mfaUsingRecovery
+                ? 'Enter one of your recovery codes.'
+                : 'Enter the 6-digit code from your authenticator app.',
+            );
+            return;
+          }
+          const payload = mfaUsingRecovery
+            ? { challenge_token: mfaChallengeToken, recovery_code: recoveryCode }
+            : { challenge_token: mfaChallengeToken, code: code };
+          mfaInFlight = true;
+          banner.classList.add('hidden');
+          if (mfaSubmit) {
+            mfaSubmit.disabled = true;
+            mfaSubmit.setAttribute('aria-busy', 'true');
+            mfaSubmit.textContent = 'Verifying…';
+          }
+          if (mfaToggle) mfaToggle.disabled = true;
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), MFA_TIMEOUT_MS);
+          fetch(apiBaseUrl + '/v1/auth/mfa/challenge', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          })
+            .then((response) =>
+              response.ok
+                ? response.json()
+                : response
+                    .json()
+                    .catch(() => ({}))
+                    .then((problem) =>
+                      Promise.reject(new Error(problem.detail || 'HTTP ' + response.status)),
+                    ),
+            )
+            .then((body) => {
+              const session = body && body.session;
+              if (!session || !session.token)
+                throw new Error('The server did not return a session. Sign in again.');
+              mfaChallengeToken = null;
+              completeSession(session);
+            })
+            .catch((err) => {
+              if (err && err.name === 'AbortError') {
+                mfaOutcomeUnknown = true;
+                mfaChallengeToken = null;
+                mfaForm.classList.add('hidden');
+                if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+                if (intro) intro.textContent = 'MFA sign-in outcome unknown';
+                showBanner(
+                  'MFA sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time challenge and created a session whose credential did not reach this browser. Do not submit this code again; request a fresh sign-in link.',
+                );
+                return;
+              }
+              showBanner(err && err.message ? err.message : 'Verification failed. Try again.');
+            })
+            .finally(() => {
+              window.clearTimeout(timeout);
+              mfaInFlight = false;
+              if (!mfaOutcomeUnknown) {
+                if (mfaSubmit) {
+                  mfaSubmit.disabled = false;
+                  mfaSubmit.removeAttribute('aria-busy');
+                  mfaSubmit.textContent = mfaSubmitLabel;
+                }
+                if (mfaToggle) mfaToggle.disabled = false;
+              }
+            });
+        });
       }
 
       function submitToken(token) {
@@ -143,34 +340,14 @@ const apiBaseUrl = resolveApiBaseUrl();
                   .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
           )
           .then((body) => {
-            const session = body.session || {};
-            if (session.token) {
-              localStorage.setItem('ds_web_session_token', session.token);
-              // audit w2flmiw48 #2 — clear the previous user's per-session overrides
-              // (acting-as + staff/team flags) so a fresh session can't inherit them.
-              localStorage.removeItem('ds_act_as_account');
-              localStorage.removeItem('ds_is_team_user');
-              localStorage.removeItem('ds_is_staff_user');
+            if (body.mfa_required === true) {
+              startMfaChallenge(body);
+              return;
             }
-            // Open-redirect guard for ?next= — reduce to a SAME-ORIGIN relative path
-            // (else '/'), so a magic-link can't bounce a just-authenticated user off-site
-            // to a phishing page. Inline copy of src/lib/safe-next.ts (unit-tested),
-            // matching login.astro/verify-email.astro; an is:inline script can't import.
-            const safeNextPath = (next, origin) => {
-              if (typeof next !== 'string' || next.length === 0) return '/';
-              let u;
-              try {
-                u = new URL(next, origin);
-              } catch (e) {
-                return '/';
-              }
-              if (u.origin !== origin) return '/';
-              const p = u.pathname + u.search + u.hash;
-              if (p.indexOf('/') !== 0 || p.indexOf('//') === 0 || p.indexOf('/\\') === 0) return '/';
-              return p;
-            };
-            const params = new URLSearchParams(window.location.search);
-            window.location.href = safeNextPath(params.get('next'), window.location.origin);
+            const session = body && body.session;
+            if (!session || !session.token)
+              throw new Error('The server did not return a session. Sign in again.');
+            completeSession(session);
           })
           .catch((err) => {
             if (err && err.name === 'AbortError') {

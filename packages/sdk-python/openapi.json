@@ -18664,7 +18664,7 @@
             }
           },
           "409": {
-            "description": "Agent session is closed or paused; start a new session.",
+            "description": "Agent session is closed/paused, its transcript capacity is exhausted, or another turn is already running for this session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24246,7 +24246,7 @@
     },
     "/v1/auth/magic-link/consume": {
       "post": {
-        "summary": "Exchange a magic-link token for a fresh web session",
+        "summary": "Exchange a magic-link token for a session or MFA challenge",
         "tags": ["auth"],
         "requestBody": {
           "content": {
@@ -24272,31 +24272,53 @@
         },
         "responses": {
           "200": {
-            "description": "Session issued.",
+            "description": "Session issued, or an MFA challenge returned when the account has MFA.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "session": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "token": {
+                        "session": {
+                          "type": "object",
+                          "properties": {
+                            "token": {
+                              "type": "string"
+                            },
+                            "expires_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                            },
+                            "account_id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["token", "expires_at", "account_id"]
+                        }
+                      },
+                      "required": ["session"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mfa_required": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
+                        "challenge_token": {
                           "type": "string"
                         },
-                        "expires_at": {
+                        "challenge_expires_at": {
                           "type": "string",
                           "format": "date-time",
                           "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
-                        },
-                        "account_id": {
-                          "type": "string"
                         }
                       },
-                      "required": ["token", "expires_at", "account_id"]
+                      "required": ["mfa_required", "challenge_token", "challenge_expires_at"]
                     }
-                  },
-                  "required": ["session"]
+                  ]
                 }
               }
             }
@@ -24440,7 +24462,7 @@
     },
     "/v1/auth/password-reset/confirm": {
       "post": {
-        "summary": "Consume a password-reset token + set a new password; issues a fresh session",
+        "summary": "Consume a password-reset token and set a new password",
         "tags": ["auth"],
         "requestBody": {
           "content": {
@@ -24473,31 +24495,53 @@
         },
         "responses": {
           "200": {
-            "description": "Password updated; web session issued.",
+            "description": "Password updated; a session is issued unless the account must complete MFA first.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "session": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "token": {
+                        "session": {
+                          "type": "object",
+                          "properties": {
+                            "token": {
+                              "type": "string"
+                            },
+                            "expires_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                            },
+                            "account_id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["token", "expires_at", "account_id"]
+                        }
+                      },
+                      "required": ["session"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mfa_required": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
+                        "challenge_token": {
                           "type": "string"
                         },
-                        "expires_at": {
+                        "challenge_expires_at": {
                           "type": "string",
                           "format": "date-time",
                           "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
-                        },
-                        "account_id": {
-                          "type": "string"
                         }
                       },
-                      "required": ["token", "expires_at", "account_id"]
+                      "required": ["mfa_required", "challenge_token", "challenge_expires_at"]
                     }
-                  },
-                  "required": ["session"]
+                  ]
                 }
               }
             }

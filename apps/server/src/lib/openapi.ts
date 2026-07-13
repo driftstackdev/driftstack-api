@@ -4807,7 +4807,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/auth/magic-link/consume',
-    summary: 'Exchange a magic-link token for a fresh web session',
+    summary: 'Exchange a magic-link token for a session or MFA challenge',
     tags: ['auth'],
     request: {
       body: {
@@ -4821,7 +4821,7 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Session issued.',
+        description: 'Session issued, or an MFA challenge returned when the account has MFA.',
         content: { 'application/json': { schema: MagicLinkConsumeResponseSchema } },
       },
       ...errors4xx,
@@ -4854,7 +4854,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/auth/password-reset/confirm',
-    summary: 'Consume a password-reset token + set a new password; issues a fresh session',
+    summary: 'Consume a password-reset token and set a new password',
     tags: ['auth'],
     request: {
       body: {
@@ -4871,7 +4871,8 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Password updated; web session issued.',
+        description:
+          'Password updated; a session is issued unless the account must complete MFA first.',
         content: { 'application/json': { schema: PasswordResetConfirmResponseSchema } },
       },
       ...errors4xx,

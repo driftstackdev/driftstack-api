@@ -124,6 +124,15 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     );
     expect(body).toMatch(/MfaRequired\s+bool\s+`json:"mfa_required,omitempty"`/);
     expect(body).toMatch(/ChallengeToken\s+string `json:"challenge_token,omitempty"`/);
+    for (const response of ['MagicLinkConsumeResponse', 'PasswordResetConfirmResponse']) {
+      expect(body).toMatch(
+        new RegExp(
+          'type ' +
+            response +
+            ' struct \\{[\\s\\S]+?Session\\s+WebSession `json:"session,omitempty"`[\\s\\S]+?MfaRequired\\s+bool\\s+`json:"mfa_required,omitempty"`[\\s\\S]+?ChallengeToken\\s+string\\s+`json:"challenge_token,omitempty"`',
+        ),
+      );
+    }
     expect(body).toMatch(/\/\/ V-445 — MFA challenge \+ step-up shapes\./);
     expect(body).toMatch(/^type MfaChallengeRequest struct \{/m);
     expect(body).toMatch(/^type MfaStepUpRequest struct \{/m);

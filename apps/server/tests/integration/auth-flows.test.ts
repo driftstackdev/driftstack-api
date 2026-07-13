@@ -33,6 +33,40 @@ function makeDirectService(repo = new InMemoryAuthFlowsRepo()): {
   return { repo, service };
 }
 
+function makeMfaDirectService(): {
+  repo: InMemoryAuthFlowsRepo;
+  service: AuthFlowsService;
+  challenges: InMemoryMfaChallengeStore;
+  getStatus: ReturnType<typeof vi.fn>;
+} {
+  const repo = new InMemoryAuthFlowsRepo();
+  const logger = createTestLogger();
+  const email = createEmailService({ config: null, logger });
+  const challenges = new InMemoryMfaChallengeStore();
+  const getStatus = vi.fn().mockResolvedValue({
+    enrolled: true,
+    enrolledAt: new Date(),
+    lastUsedAt: null,
+    unusedRecoveryCodes: 10,
+  });
+  const service = new AuthFlowsService(
+    repo,
+    email,
+    logger,
+    {
+      verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+      magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+      passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+      exposeDebugToken: true,
+    },
+    null,
+    null,
+    { getStatus } as never,
+    challenges,
+  );
+  return { repo, service, challenges, getStatus };
+}
+
 interface SignupResponse {
   verification_email_expires_at: string;
   debug_token?: string;
@@ -803,6 +837,134 @@ describe('POST /v1/auth/magic-link', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json<SessionEnvelope>().session.token).toBeDefined();
+  });
+});
+
+describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
+  it('fails closed instead of bypassing enrolled MFA when the challenge store is unavailable', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const logger = createTestLogger();
+    const email = createEmailService({ config: null, logger });
+    const service = new AuthFlowsService(
+      repo,
+      email,
+      logger,
+      {
+        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        exposeDebugToken: true,
+      },
+      null,
+      null,
+      {
+        getStatus: () => Promise.resolve({ enrolled: true }),
+      } as never,
+      null,
+    );
+    const signup = await service.signup({
+      email: 'mfa-store-down@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    repo.seedAccount({ ...signup.account, emailVerifiedAt: new Date() });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    await expect(
+      service.login({
+        email: signup.account.email,
+        password: 'correct horse battery staple',
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+
+  it('turns a consumed magic link into an IP-bound MFA challenge without minting a session', async () => {
+    const { repo, service, challenges, getStatus } = makeMfaDirectService();
+    const signup = await service.signup({
+      email: 'mfa-magic@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const request = await service.requestMagicLink({
+      email: signup.account.email,
+      requestedFromIp: '203.0.113.4',
+    });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    const result = await service.consumeMagicLink({
+      token: request.debugToken as string,
+      issuedFromIp: '203.0.113.4',
+      userAgent: 'recovery-browser',
+    });
+
+    expect(result.kind).toBe('mfa_required');
+    if (result.kind !== 'mfa_required') throw new Error('expected MFA challenge');
+    expect(
+      JSON.parse(String(await challenges.peek(mfaChallengeKey(result.challengeToken)))),
+    ).toMatchObject({
+      account_id: signup.account.id,
+      source_ip: '203.0.113.4',
+      issued_user_agent: 'recovery-browser',
+    });
+    expect(result.challengeExpiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(getStatus).toHaveBeenCalledWith(signup.account.id);
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+
+  it('changes the password, revokes every old session, and returns MFA without minting a replacement', async () => {
+    const { repo, service, challenges, getStatus } = makeMfaDirectService();
+    const signup = await service.signup({
+      email: 'mfa-reset@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const expiresAt = new Date(Date.now() + 60_000);
+    await repo.insertWebSession({
+      accountId: signup.account.id,
+      tokenHash: 'old-session-one',
+      expiresAt,
+      issuedFromIp: null,
+      userAgent: 'old-browser-one',
+    });
+    await repo.insertWebSession({
+      accountId: signup.account.id,
+      tokenHash: 'old-session-two',
+      expiresAt,
+      issuedFromIp: null,
+      userAgent: 'old-browser-two',
+    });
+    const reset = await service.requestPasswordReset({
+      email: signup.account.email,
+      requestedFromIp: '203.0.113.5',
+    });
+    const setPassword = vi.spyOn(repo, 'setPassword');
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    const revokeAll = vi.spyOn(repo, 'revokeAllWebSessionsForAccount');
+
+    const result = await service.confirmPasswordReset({
+      token: reset.debugToken as string,
+      newPassword: 'the new password still needs MFA!!',
+      issuedFromIp: '203.0.113.5',
+      userAgent: 'reset-browser',
+    });
+
+    expect(result.kind).toBe('mfa_required');
+    if (result.kind !== 'mfa_required') throw new Error('expected MFA challenge');
+    expect(
+      JSON.parse(String(await challenges.peek(mfaChallengeKey(result.challengeToken)))),
+    ).toMatchObject({
+      account_id: signup.account.id,
+      source_ip: '203.0.113.5',
+      issued_user_agent: 'reset-browser',
+    });
+    expect(getStatus).toHaveBeenCalledWith(signup.account.id);
+    expect(setPassword).toHaveBeenCalledTimes(1);
+    expect(revokeAll).toHaveBeenCalledWith(signup.account.id, expect.any(Date));
+    expect(await repo.listActiveWebSessionsForAccount(signup.account.id, new Date())).toEqual([]);
+    expect(insertSession).not.toHaveBeenCalled();
   });
 });
 

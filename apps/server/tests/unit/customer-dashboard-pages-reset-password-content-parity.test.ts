@@ -28,13 +28,15 @@ function read(p: string): string {
 describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-273 + V-079 framing pinned: 'Password-reset confirmation page. Pairs with the V-079 backend route POST /v1/auth/password-reset/confirm.' + 5-step flow comment + 'Token is one-shot — second use returns 400.' — pinned so the one-shot invariant + auto-login behavior survive (drift to multi-use tokens would let attackers replay leaked reset links)", () => {
+  it('V-273 + V-079 framing pins session-or-MFA recovery and one-shot tokens', () => {
     expect(body).toMatch(
       /\/\/ V-273 — Password-reset confirmation page\. Pairs with the V-079\s*\n?\s*\/\/ backend route `POST \/v1\/auth\/password-reset\/confirm`\./,
     );
-    expect(body).toMatch(/\/\/ {3}5\. Token is one-shot — second use returns 400\./);
     expect(body).toMatch(
-      /\/\/ {3}4\. Server returns a fresh web session on success; page writes\s*\n?\s*\/\/ {6}`ds_web_session_token` to localStorage and redirects to \/\./,
+      /\/\/ {3}6\. Token is one-shot — second use returns 400; a successful MFA challenge is too\./,
+    );
+    expect(body).toMatch(
+      /\/\/ {3}4\. Server returns a session, or an MFA challenge for enrolled accounts\./,
     );
   });
 
@@ -67,14 +69,16 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
 
   it('POST /v1/auth/password-reset/confirm contract: body:{token, new_password} (snake_case new_password matching server schema) + content-type:application/json — pinned so the field name stays in sync with V-079 schema (drift to camelCase newPassword would silently 400)', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/confirm', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ token: token, new_password: password \}\),\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/confirm', \{[\s\S]+?body: JSON\.stringify\(\{ token: token, new_password: password \}\),[\s\S]+?signal: controller\.signal,/,
     );
   });
 
-  it("Auto-login on success: const session = body.session || {}; if session.token → localStorage.setItem('ds_web_session_token', session.token) + redirect to '/' — pinned so the customer doesn't get bounced back to /login after a successful reset (the V-079 server returns a fresh session expressly to avoid the double-step UX)", () => {
+  it('persists the session only after the direct or MFA branch returns it', () => {
     expect(body).toMatch(
-      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*\}\s*\n?\s*window\.location\.href = '\/';/,
+      /function completeSession\(session\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*window\.location\.href = '\/';/,
     );
+    expect(body).toContain('if (body.mfa_required === true)');
+    expect(body).toContain("'/v1/auth/mfa/challenge'");
   });
 
   it("problem+json error surfacing: r.json().catch(() => ({})).then((b) => Promise.reject(new Error(b.detail || 'HTTP N'))) — pinned so server-returned problem+json detail (like 'token expired' or 'token already used') reaches the customer banner (drift to bare 'HTTP 400' would hide which specific reset-token error happened)", () => {

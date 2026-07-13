@@ -165,12 +165,10 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
     expect(body).toMatch(
       /export const MagicLinkRequestResponseSchema = z\.object\(\{[\s\S]*?sent: z\.literal\(true\),\s*\n?\s*expires_at: Iso8601Schema,\s*\n?\s*debug_token: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
-    expect(body).toMatch(
-      /export const MagicLinkConsumeResponseSchema = z\.object\(\{\s*\n?\s*session: WebSessionSchema,\s*\n?\s*\}\);/,
-    );
+    expect(body).toMatch(/export const MagicLinkConsumeResponseSchema = LoginResponseUnionSchema;/);
   });
 
-  it('PasswordReset: request shape-stable sent:true; confirm body token + new_password; confirm issues fresh web session (same UX as verify-email rationale)', () => {
+  it('PasswordReset: request shape-stable sent:true; confirm body token + new_password; confirm returns session-or-MFA', () => {
     expect(body).toMatch(
       /export const PasswordResetRequestResponseSchema = z\.object\(\{\s*\n?\s*sent: z\.literal\(true\),\s*\n?\s*expires_at: Iso8601Schema,\s*\n?\s*debug_token: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
@@ -178,7 +176,7 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
       /export const PasswordResetConfirmRequestSchema = z\.object\(\{\s*\n?\s*token: AuthTokenSchema,\s*\n?\s*new_password: AuthPasswordSchema,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /\/\/ Successful reset issues a fresh web session — same UX as verify-email\./,
+      /export const PasswordResetConfirmResponseSchema = LoginResponseUnionSchema;/,
     );
   });
 

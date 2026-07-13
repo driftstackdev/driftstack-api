@@ -110,12 +110,18 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
   });
 
-  it("V-353d MFA-required discriminated union: login returns { mfa_required: true as const, challenge_token, challenge_expires_at ISO } when result.kind === 'mfa_required'", () => {
+  it('MFA-required responses use one challenge-token/expiry serializer', () => {
     expect(body).toMatch(
       /\/\/ V-353d — discriminated-union response\. MFA-enrolled accounts\s*\n?\s*\/\/ get a challenge token instead of a session; client posts the\s*\n?\s*\/\/ token \+ 6-digit \(or recovery\) to \/v1\/auth\/mfa\/challenge\./,
     );
     expect(body).toMatch(
-      /if \(result\.kind === 'mfa_required'\) \{\s*\n?\s*return \{\s*\n?\s*mfa_required: true as const,\s*\n?\s*challenge_token: result\.challengeToken,\s*\n?\s*challenge_expires_at: result\.challengeExpiresAt\.toISOString\(\),\s*\n?\s*\};/,
+      /function mfaRequiredResponse\(args: \{[\s\S]+?mfa_required: true,[\s\S]+?challenge_token: args\.challengeToken,[\s\S]+?challenge_expires_at: args\.challengeExpiresAt\.toISOString\(\),/,
+    );
+    expect(
+      body.match(/if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);/g),
+    ).toHaveLength(2);
+    expect(body).toMatch(
+      /if \(result\.kind === 'mfa_required'\) \{\s*\n?\s*return mfaRequiredResponse\(result\);/,
     );
   });
 
@@ -177,15 +183,15 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     expect(body).not.toMatch(/bundledLlmConsent:/);
   });
 
-  it('Verify-email + magic-link-consume + password-reset-confirm + refresh all use sessionResponse(result) shape', () => {
+  it('verify-email/refresh always return sessions; magic/reset branch through MFA first', () => {
     expect(body).toMatch(
       /const result = await service\.verifyEmail\(\{[\s\S]+?return sessionResponse\(result\);/,
     );
     expect(body).toMatch(
-      /const result = await service\.consumeMagicLink\(\{[\s\S]+?return sessionResponse\(result\);/,
+      /const result = await service\.consumeMagicLink\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*\n?\s*return sessionResponse\(result\);/,
     );
     expect(body).toMatch(
-      /const result = await service\.confirmPasswordReset\(\{[\s\S]+?return sessionResponse\(result\);/,
+      /const result = await service\.confirmPasswordReset\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*\n?\s*return sessionResponse\(result\);/,
     );
     expect(body).toMatch(
       /const result = await service\.refreshSession\(\{[\s\S]+?return sessionResponse\(result\);/,

@@ -29,14 +29,16 @@ describe('customer-dashboard auth/magic-link content parity', () => {
     expect(body).toMatch(/`POST \/v1\/auth\/magic-link\/consume`/);
   });
 
-  it("one-shot token contract pinned: 'Token is one-shot — second use returns 400'. Drift would mislead the dashboard about retry semantics + customer-facing reuse failure mode", () => {
-    expect(body).toMatch(/Token is one-shot — second use returns 400/);
+  it('one-shot token and MFA challenge contract pinned', () => {
+    expect(body).toMatch(
+      /Token is one-shot — second use returns 400; a successful MFA challenge is too/,
+    );
   });
 
-  it('session-persistence contract pinned: page writes `ds_web_session_token` to localStorage and redirects to / (or ?next= if round-tripped). Drift to a different localStorage key would break every other dashboard page reading the same token', () => {
-    expect(body).toMatch(/page writes\s*\n?\s*\/\/?\s*`ds_web_session_token` to localStorage/);
+  it('session-persistence contract pins localStorage and the safe next path', () => {
+    expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
     expect(body).toMatch(
-      /redirects to \/\s*\n?\s*\/\/?\s*\(or \?next= if the original entry round-tripped one\)/,
+      /window\.location\.href = safeNextPath\(params\.get\('next'\), window\.location\.origin\)/,
     );
   });
 

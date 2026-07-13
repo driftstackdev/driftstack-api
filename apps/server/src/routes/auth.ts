@@ -82,6 +82,18 @@ function sessionResponse(args: {
   };
 }
 
+function mfaRequiredResponse(args: { challengeToken: string; challengeExpiresAt: Date }): {
+  mfa_required: true;
+  challenge_token: string;
+  challenge_expires_at: string;
+} {
+  return {
+    mfa_required: true,
+    challenge_token: args.challengeToken,
+    challenge_expires_at: args.challengeExpiresAt.toISOString(),
+  };
+}
+
 function mapAuthFlowError(err: unknown): never {
   if (!(err instanceof AuthFlowError)) throw err;
   switch (err.code) {
@@ -249,11 +261,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
       // get a challenge token instead of a session; client posts the
       // token + 6-digit (or recovery) to /v1/auth/mfa/challenge.
       if (result.kind === 'mfa_required') {
-        return {
-          mfa_required: true as const,
-          challenge_token: result.challengeToken,
-          challenge_expires_at: result.challengeExpiresAt.toISOString(),
-        };
+        return mfaRequiredResponse(result);
       }
       return sessionResponse(result);
     } catch (e) {
@@ -348,6 +356,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
         issuedFromIp: clientIp(req),
         userAgent: userAgent(req),
       });
+      if (result.kind === 'mfa_required') return mfaRequiredResponse(result);
       return sessionResponse(result);
     } catch (e) {
       mapAuthFlowError(e);
@@ -387,6 +396,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
           issuedFromIp: clientIp(req),
           userAgent: userAgent(req),
         });
+        if (result.kind === 'mfa_required') return mfaRequiredResponse(result);
         return sessionResponse(result);
       } catch (e) {
         mapAuthFlowError(e);

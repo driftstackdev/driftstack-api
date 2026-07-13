@@ -42,7 +42,7 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
     expect(body).toMatch(/V-273 — Password-reset confirmation page/);
     expect(body).toMatch(/V-079\s+\/\/ backend route `POST \/v1\/auth\/password-reset\/confirm`/);
     expect(body).toMatch(/User clicks the reset link from email; page reads `\?token=…`/);
-    expect(body).toMatch(/Server returns a fresh web session on success/);
+    expect(body).toMatch(/Server returns a session, or an MFA challenge for enrolled accounts/);
   });
 
   it('POST /v1/auth/password-reset/confirm wired client + registered server-side', () => {
@@ -53,7 +53,9 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
   });
 
   it('one-shot token framing pinned: "second use returns 400" + customer-facing "single-use"', () => {
-    expect(body).toMatch(/Token is one-shot — second use returns 400\./);
+    expect(body).toMatch(
+      /Token is one-shot — second use returns 400; a successful MFA challenge is too\./,
+    );
     expect(body).toMatch(/The link is single-use; if you need\s+another/);
   });
 
@@ -92,6 +94,17 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
   it('session-token persistence on success: localStorage ds_web_session_token + redirect to "/"', () => {
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
     expect(body).toMatch(/window\.location\.href = '\/'/);
+  });
+
+  it('enrolled accounts finish the reset through memory-only TOTP/recovery MFA', () => {
+    expect(body).toContain('data-form="reset-mfa"');
+    expect(body).toContain('if (body.mfa_required === true)');
+    expect(body).toContain("'/v1/auth/mfa/challenge'");
+    expect(body).toContain('recovery_code: recoveryCode');
+    expect(body).toContain('let mfaChallengeToken = null;');
+    expect(body).not.toMatch(/localStorage\.setItem\([^,]+, mfaChallengeToken\)/);
+    expect(body).toContain('MFA sign-in outcome is unknown after the request timed out.');
+    expect(body).toContain('Do not submit this code again. Sign in afresh with your new password');
   });
 
   it('withSidebar={false} pre-auth layout', () => {

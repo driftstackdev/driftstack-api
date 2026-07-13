@@ -119,4 +119,64 @@ describe('magic-link consume page', () => {
     expect(fetchCalls).toHaveLength(2);
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('web_after_retry');
   });
+
+  it('keeps an MFA challenge memory-only and exchanges a valid TOTP before storing a session', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), [
+      () =>
+        json({
+          mfa_required: true,
+          challenge_token: 'challenge-memory-only',
+          challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+        }),
+      () => json({ session: { token: 'web_after_magic_mfa' }, via: 'totp' }),
+    ]);
+    win = window;
+    await flush();
+
+    const mfaForm = window.document.querySelector(
+      '[data-form="magic-link-mfa"]',
+    ) as HTMLFormElement;
+    expect(mfaForm.classList.contains('hidden')).toBe(false);
+    expect(window.localStorage.getItem('challenge-memory-only')).toBeNull();
+    (mfaForm.querySelector('#magic-link-mfa-code') as HTMLInputElement).value = '123456';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[1]?.url).toMatch(/\/v1\/auth\/mfa\/challenge$/);
+    expect(JSON.parse(String(fetchCalls[1]?.init?.body))).toEqual({
+      challenge_token: 'challenge-memory-only',
+      code: '123456',
+    });
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('web_after_magic_mfa');
+  });
+
+  it('never replays an MFA challenge whose exchange timed out ambiguously', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), [
+      () =>
+        json({
+          mfa_required: true,
+          challenge_token: 'challenge-once',
+          challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+        }),
+      () => Promise.reject(timeout),
+    ]);
+    win = window;
+    await flush();
+    const mfaForm = window.document.querySelector(
+      '[data-form="magic-link-mfa"]',
+    ) as HTMLFormElement;
+    (mfaForm.querySelector('#magic-link-mfa-code') as HTMLInputElement).value = '123456';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(mfaForm.classList.contains('hidden')).toBe(true);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /MFA sign-in outcome is unknown.*one-time challenge.*do not submit this code again.*fresh sign-in link/i,
+    );
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
+  });
 });
