@@ -41,8 +41,10 @@ describe('OAuth callback completion deadlines', () => {
     expect(CONFIRM).toContain("'/v1/auth/oauth-client/confirm-merge'");
     expect(CONFIRM).toContain('body: JSON.stringify({ token: token })');
     expect(CONFIRM).toContain("credentials: 'include'");
-    expect(CONFIRM).toContain(
-      'Account linking is taking too long. Check your connection, then reload this page to try again.',
-    );
+    expect(CONFIRM).toContain('Account-link outcome is unknown after the request timed out.');
+    expect(CONFIRM).toContain('consumed this one-time token');
+    expect(CONFIRM).toContain('Do not reload or submit this link again.');
+    expect(CONFIRM).toContain('Check connected accounts');
+    expect(CONFIRM).toContain('sign in with your password and retry its IDP button from Login');
   });
 });

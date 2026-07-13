@@ -30,6 +30,15 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
 
+      <div
+        data-merge-unknown
+        class="mb-5 hidden rounded-lg border border-tk-border bg-tk-surface px-4 py-4 text-sm text-tk-ink-2"
+      >
+        <a href="/security" class="btn-primary flex w-full items-center justify-center"
+          >Check connected accounts</a
+        >
+      </div>
+
       <p class="mt-6 text-xs text-tk-ink-3">
         Link expired or invalid? Sign in via password + retry the IDP
         button from the <a
@@ -46,6 +55,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const intro = root.querySelector('[data-field="intro"]');
+      const unknownRecovery = root.querySelector('[data-merge-unknown]');
       const CONFIRM_TIMEOUT_MS = 15_000;
 
       function showBanner(text) {
@@ -82,12 +92,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           window.location.href = '/';
         })
         .catch((err) => {
+          if (err && err.name === 'AbortError') {
+            if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+            showBanner(
+              'Account-link outcome is unknown after the request timed out. The server may already have consumed this one-time token and linked the identity provider. Do not reload or submit this link again. Check connected accounts in Security; if the provider is absent, sign in with your password and retry its IDP button from Login.',
+            );
+            return;
+          }
           showBanner(
-            err && err.name === 'AbortError'
-              ? 'Account linking is taking too long. Check your connection, then reload this page to try again.'
-              : err && err.message
-                ? err.message
-                : 'Merge confirmation failed.',
+            err && err.message
+              ? err.message
+              : 'Merge confirmation failed.',
           );
         })
         .finally(() => window.clearTimeout(timeout));
