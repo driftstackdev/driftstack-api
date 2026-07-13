@@ -49,11 +49,19 @@ describe('customer-dashboard auth/magic-link-request content parity', () => {
     expect(body).toMatch(/<DashboardLayout title="Magic-link sign-in" withSidebar=\{false\}>/);
   });
 
-  it('shows honest in-flight feedback while preserving the synchronous duplicate-request guard', () => {
+  it('shows honest in-flight feedback, blocks duplicate requests, and keeps an ambiguous timed-out delivery latched', () => {
     expect(body).toMatch(/if \(requestInFlight\) return;/);
+    expect(body).toMatch(/if \(requestOutcomeUnknown\) return;/);
     expect(body).toMatch(/setSubmitting\(true\);/);
     expect(body).toMatch(/submitBtn\.setAttribute\('aria-busy', on \? 'true' : 'false'\);/);
     expect(body).toMatch(/submitBtn\.textContent = on \? 'Sending…' : submitLabel;/);
-    expect(body).toMatch(/requestInFlight = false;\s*\n?\s*setSubmitting\(false\);/);
+    expect(body).toMatch(/const REQUEST_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/signal: controller\.signal,/);
+    expect(body).toMatch(
+      /if \(controller\.signal\.aborted\) \{\s*\n?\s*showUnknownOutcome\(email\);\s*\n?\s*return;/,
+    );
+    expect(body).toMatch(
+      /requestInFlight = false;\s*\n?\s*if \(!requestOutcomeUnknown\) setSubmitting\(false\);/,
+    );
   });
 });
