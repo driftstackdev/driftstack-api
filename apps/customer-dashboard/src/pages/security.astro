@@ -430,6 +430,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const token = localStorage.getItem('ds_web_session_token');
+      const SECURITY_TIMEOUT_MS = 15_000;
+      let passwordResetInFlight = false;
       // Captured from the /v1/account/me load below so the change-password
       // flow doesn't re-prompt the signed-in customer for an email they
       // could mistype (a typo silently fails — the server returns
@@ -463,9 +465,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
 
+      function boundedFetch(url, init = {}) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), SECURITY_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal })
+          .catch((err) => {
+            if (err && err.name === 'AbortError') {
+              throw new Error('Request took too long. Check your connection and try again.');
+            }
+            throw err;
+          })
+          .finally(() => window.clearTimeout(timeout));
+      }
+
       // Load the account identity (GET /v1/account/me).
       if (token) {
-        fetch(apiBaseUrl + '/v1/account/me', {
+        boundedFetch(apiBaseUrl + '/v1/account/me', {
           headers: { authorization: 'Bearer ' + token },
         })
           .then((r) => (r.ok ? r.json() : null))
@@ -487,7 +502,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function authedFetch(path, init = {}) {
-        return fetch(apiBaseUrl + path, {
+        return boundedFetch(apiBaseUrl + path, {
           ...init,
           headers: {
             ...(init.headers || {}),
@@ -832,10 +847,16 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       // V-079 — change password trigger via password-reset request.
-      async function changePassword() {
+      async function changePassword(btn) {
         if (!token) {
           showBanner('Sign in to change password.');
           return;
+        }
+        if (passwordResetInFlight) return;
+        passwordResetInFlight = true;
+        if (btn) {
+          btn.disabled = true;
+          btn.setAttribute('aria-busy', 'true');
         }
         // The page already knows the signed-in customer's email (captured
         // from /v1/account/me on load), so send the reset link straight to
@@ -845,33 +866,39 @@ const apiBaseUrl = resolveApiBaseUrl();
         // Defensive fallback: if /account/me hasn't resolved yet (e.g. the
         // profile inputs were absent so the load was gated out), prompt
         // with whatever email we have pre-filled.
-        let email = accountEmail;
-        if (!email) {
-          const entered = await window.driftstackPrompt(
-            'Confirm your account email to send the password-reset link:',
-            {
-              placeholder: 'you@example.com',
-              confirmLabel: 'Send link',
-              defaultValue: accountEmail || '',
-            },
-          );
-          if (!entered || !entered.trim()) return;
-          email = entered.trim();
-        }
-        showBanner('Sending password-reset email…');
-        fetch(apiBaseUrl + '/v1/auth/password-reset/request', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email: email }),
-        })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then(() => {
-            showBanner('Password-reset email sent. Check your inbox.');
-          })
-          .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't send password-reset (" + msg + ').');
+        try {
+          let email = accountEmail;
+          if (!email) {
+            const entered = await window.driftstackPrompt(
+              'Confirm your account email to send the password-reset link:',
+              {
+                placeholder: 'you@example.com',
+                confirmLabel: 'Send link',
+                defaultValue: accountEmail || '',
+              },
+            );
+            if (!entered || !entered.trim()) return;
+            email = entered.trim();
+          }
+          showBanner('Sending password-reset email…');
+          const response = await boundedFetch(apiBaseUrl + '/v1/auth/password-reset/request', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email: email }),
           });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          await response.json();
+          showBanner('Password-reset email sent. Check your inbox.');
+        } catch (err) {
+          const msg = err && err.message ? err.message : 'network error';
+          showBanner("Couldn't send password-reset (" + msg + ').');
+        } finally {
+          passwordResetInFlight = false;
+          if (btn) {
+            btn.disabled = false;
+            btn.setAttribute('aria-busy', 'false');
+          }
+        }
       }
 
       root.addEventListener('click', (ev) => {
@@ -880,7 +907,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         const btn = target.closest('[data-action="change-password"]');
         if (!btn) return;
         ev.preventDefault();
-        changePassword();
+        changePassword(btn);
       });
 
       // V-353h — MFA section live wire.

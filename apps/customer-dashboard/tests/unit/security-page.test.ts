@@ -130,6 +130,9 @@ function makeRouter(webSessions: WebSession[]): (c: MockFetchCall) => Response {
     if (/\/v1\/account\/me$/.test(u) && method === 'GET') {
       return json({ email: 'me@example.com', name: 'Me', slug: 'me', region: 'eu' });
     }
+    if (/\/v1\/auth\/password-reset\/request$/.test(u) && method === 'POST') {
+      return json({ sent: true });
+    }
     if (/\/v1\/account\/audit-log/.test(u)) return json({ data: [] });
     // oauth-links / mfa return 404 when absent — the page handles
     // those gracefully (independent .catch per section).
@@ -144,6 +147,28 @@ describe('security page — web-session management (security)', () => {
     win = null;
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('coalesces forced duplicate password-reset actions into one bounded request', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: makeRouter([]),
+    });
+    win = window;
+    await flush();
+    const btn = window.document.querySelector(
+      '[data-action="change-password"]',
+    ) as HTMLButtonElement;
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    const resets = fetchCalls.filter(
+      (c) => /\/v1\/auth\/password-reset\/request$/.test(c.url) && c.init?.method === 'POST',
+    );
+    expect(resets).toHaveLength(1);
+    expect(resets[0]?.init?.signal).toBeDefined();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'Password-reset email sent',
+    );
+  });
 
   it('renders active sign-ins: the non-current session gets a Revoke button; the current one shows the current badge', async () => {
     const { window } = setUpDom(loadBuiltPage(), {

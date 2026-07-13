@@ -64,6 +64,18 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toMatch(/defaultValue: accountEmail/);
   });
 
+  it('bounds every authenticated request and serializes password-reset before prompting', () => {
+    expect(body).toContain('const SECURITY_TIMEOUT_MS = 15_000;');
+    expect(body).toContain('let passwordResetInFlight = false;');
+    expect(body).toMatch(/if \(passwordResetInFlight\) return;/);
+    expect(body).toMatch(/const controller = new AbortController\(\);/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/\.finally\(\(\) => window\.clearTimeout\(timeout\)\)/);
+    expect(body).toContain('Request took too long. Check your connection and try again.');
+    expect(body).toMatch(/passwordResetInFlight = false;/);
+    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\)/);
+  });
+
   it('V-353h TOTP enrollment: SHA-1 / 30s / 6-digit (RFC 6238 defaults) pinned', () => {
     expect(body).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults/);
   });
