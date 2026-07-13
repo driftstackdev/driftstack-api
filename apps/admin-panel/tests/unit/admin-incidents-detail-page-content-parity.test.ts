@@ -154,4 +154,13 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).toMatch(/state\.control\.disabled = state\.disabled/);
     expect(body).toMatch(/endIncidentMutation\(submit\)/);
   });
+
+  it('reconciles ambiguous mutations with operation-specific no-repeat guidance', () => {
+    expect(body).toContain('Mutation outcome is unknown after the request timed out.');
+    expect(body).toContain('The incident was refreshed.');
+    expect(body).toContain('If this message appears in the timeline, do not post it again.');
+    expect(body).toContain('If the incident now shows resolved, do not resolve it again.');
+    expect(body).toContain('If the incident now shows active, do not reopen it again.');
+    expect(body).toMatch(/const refreshed = await loadIncident\(\)/);
+  });
 });

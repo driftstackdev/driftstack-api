@@ -124,4 +124,77 @@ describe('admin incident detail mutation lifecycle', () => {
     expect(resolveButton.disabled).toBe(false);
     expect(reopenButton.disabled).toBe(false);
   });
+
+  it('reconciles a committed timeline update after timeout without inviting a duplicate', async () => {
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', () => {});
+    const dom = new JSDOM(
+      `<!doctype html><title>Incident</title>
+       <div data-banner class="hidden"></div>
+       <span data-field="status-badge"></span>
+       <ul data-list="timeline"></ul>
+       <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
+       <div data-form-group="resolved" class="hidden">${form('reopen-form', 'Reopen')}</div>`,
+      {
+        url: 'https://admin.driftstack.dev/incidents/inc_test',
+        runScripts: 'dangerously',
+        virtualConsole,
+      },
+    );
+    windowRef = dom.window;
+    const calls: FetchCall[] = [];
+    let committed = false;
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    // @ts-expect-error — jsdom's fetch global is intentionally injected.
+    dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+      const call = { url: String(input), init };
+      calls.push(call);
+      if (/\/updates$/.test(call.url)) {
+        committed = true;
+        return Promise.reject(timeout);
+      }
+      return Promise.resolve(
+        response({
+          incident: {
+            id: 'inc_test',
+            title: 'Test incident',
+            severity: 'major',
+            status: committed ? 'monitoring' : 'investigating',
+            public: true,
+            affected_components: [],
+            started_at: '2026-07-12T00:00:00.000Z',
+            resolved_at: null,
+          },
+          updates: committed
+            ? [
+                {
+                  status: 'monitoring',
+                  message: 'Post update message',
+                  posted_at: '2026-07-12T00:05:00.000Z',
+                },
+              ]
+            : [],
+        }),
+      );
+    };
+    dom.window.localStorage.setItem('ds_web_session_token', 'tok');
+    dom.window.eval(
+      `const apiBaseUrl = 'https://api.driftstack.dev'; const incidentId = 'inc_test';${scriptBody()}`,
+    );
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    await flush();
+
+    const updateForm = dom.window.document.getElementById('add-update-form') as HTMLFormElement;
+    updateForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(50);
+
+    expect(calls.filter((call) => /\/updates$/.test(call.url))).toHaveLength(1);
+    expect(calls.filter((call) => call.init?.method !== 'POST')).toHaveLength(2);
+    expect(dom.window.document.querySelector('[data-list="timeline"]')?.textContent).toContain(
+      'Post update message',
+    );
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*incident was refreshed.*message appears in the timeline.*do not post it again/i,
+    );
+  });
 });

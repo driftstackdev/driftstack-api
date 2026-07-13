@@ -465,7 +465,7 @@ const isResolved = incident.status === 'resolved';
         if (!token) {
           showBanner('Sign in with a staff admin account to see this incident.', true);
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
-          return Promise.resolve();
+          return Promise.resolve(false);
         }
         const controller = new AbortController();
         loadController = controller;
@@ -480,9 +480,10 @@ const isResolved = incident.status === 'resolved';
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then(function (body) {
-            if (generation !== loadGeneration) return;
-            if (!body || !body.incident) return;
+            if (generation !== loadGeneration) return false;
+            if (!body || !body.incident) return false;
             applyIncident(body.incident, body.updates || []);
+            return true;
           })
           .catch(function (err) {
             if (generation !== loadGeneration) return;
@@ -497,6 +498,7 @@ const isResolved = incident.status === 'resolved';
             } else {
               showBanner("Couldn't load incident (" + msg + ').', true);
             }
+            return false;
           })
           .finally(function () {
             if (generation !== loadGeneration) return;
@@ -586,7 +588,25 @@ const isResolved = incident.status === 'resolved';
             .then(function () {
               window.location.reload();
             })
-            .catch(function (err) {
+            .catch(async function (err) {
+              if (err && err.name === 'AbortError') {
+                const refreshed = await loadIncident();
+                const recovery =
+                  urlSuffix === '/updates'
+                    ? 'If this message appears in the timeline, do not post it again.'
+                    : urlSuffix === '/resolve'
+                      ? 'If the incident now shows resolved, do not resolve it again.'
+                      : 'If the incident now shows active, do not reopen it again.';
+                showBanner(
+                  'Mutation outcome is unknown after the request timed out. ' +
+                    (refreshed
+                      ? 'The incident was refreshed. '
+                      : "We couldn't refresh the incident. ") +
+                    recovery,
+                  true,
+                );
+                return;
+              }
               showBanner(
                 'Post failed: ' + requestErrorMessage(err, 'network error'),
                 true,
