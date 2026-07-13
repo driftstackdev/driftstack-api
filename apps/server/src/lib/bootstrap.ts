@@ -39,7 +39,7 @@ import { makeSessionPageStateRelay } from '../services/session-page-state-relay.
 import { makeSessionCapabilityReportRelay } from '../services/session-capability-report-relay.js';
 import { makeSessionErrorEventRelay } from '../services/session-error-event-relay.js';
 import { makeFleetHeartbeatConsumer } from '../services/fleet-heartbeat-consumer.js';
-import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
+import { makeAgentSessionTerminalStatusRelay } from '../services/agent-session-terminal-close.js';
 import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.js';
 import { reconcileNodeBootChange } from '../services/node-boot-reconcile.js';
 import { serializeSessionEnd } from '../services/harness-control-codec.js';
@@ -1780,15 +1780,13 @@ export async function createProductionDeps(
             // Fire-and-forget off the receive loop (the helper swallows+logs
             // internally + is idempotent via an 'active'-guard); the
             // worker-disconnect reaper + 12h orphan_reap stay the backstops.
-            (frame, reportingNodeId) =>
-              void closeAgentSessionOnTerminalStatus({
-                agentSessions: agentSessionsRepo,
-                frame,
-                reportingNodeId,
-                logger,
-                livenessStore: sessionLivenessStore,
-                sessionCapabilityReportStore,
-              }),
+            makeAgentSessionTerminalStatusRelay({
+              agentSessions: agentSessionsRepo,
+              logger,
+              livenessStore: sessionLivenessStore,
+              sessionPageStateStore,
+              sessionCapabilityReportStore,
+            }),
             // Cross-session spoof guard (audit M1 extended to the correlated reply
             // path) — threaded into every connection's request correlators so a
             // dropped result frame (sessionId mismatch) logs one warn.

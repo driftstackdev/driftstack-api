@@ -11,11 +11,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import { SessionLivenessStore } from '../../src/services/session-liveness-store.js';
 import { SessionPageStateStore } from '../../src/services/session-page-state-store.js';
-import { closeAgentSessionOnTerminalStatus } from '../../src/services/agent-session-terminal-close.js';
+import {
+  closeAgentSessionOnTerminalStatus,
+  makeAgentSessionTerminalStatusRelay,
+} from '../../src/services/agent-session-terminal-close.js';
 import type { AgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import type { SessionStatus, PageStateFrame } from '../../src/schemas/harness-control-protocol.js';
 import type { Logger } from '../../src/lib/logger.js';
 import type { SessionCapabilityReportStore } from '../../src/services/session-capability-report-store.js';
+import {
+  BOUNDED_NODE_LATEST_RELAY_MAX_CONCURRENT,
+  BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
+} from '../../src/services/bounded-node-latest-relay.js';
 
 const noopLogger = { info: () => {}, warn: () => {} } as unknown as Logger;
 
@@ -373,5 +380,74 @@ describe('closeAgentSessionOnTerminalStatus — cross-node ownership guard (audi
       logger: noopLogger,
     });
     expect((await repo.get(created.id))?.status).toBe('active');
+  });
+});
+
+describe('makeAgentSessionTerminalStatusRelay', () => {
+  it('bounds unique-session ownership/close work for one authenticated node', () => {
+    const get = vi.fn(() => new Promise<never>(() => undefined));
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Logger;
+    const relay = makeAgentSessionTerminalStatusRelay({
+      agentSessions: { get, closeWithReason: vi.fn() } as unknown as AgentSessionsRepo,
+      logger: log,
+    });
+
+    for (let i = 0; i < BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS; i += 1) {
+      relay(terminalFrame(`agt_${i}`, 'ended', 'idle_timeout'), 'node-1');
+    }
+    relay(terminalFrame('agt_overflow', 'ended', 'idle_timeout'), 'node-1');
+    relay(terminalFrame('agt_overflow_2', 'ended', 'idle_timeout'), 'node-1');
+
+    expect(get).toHaveBeenCalledTimes(BOUNDED_NODE_LATEST_RELAY_MAX_CONCURRENT);
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reportingNodeId: 'node-1',
+        sessionBudget: BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
+        sessionId: 'agt_overflow',
+      }),
+      expect.stringContaining('exceeded its relay session budget'),
+    );
+  });
+
+  it('serializes one session and coalesces pending terminal state to the newest frame', async () => {
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let lookups = 0;
+    const get = vi.fn(async () => {
+      lookups += 1;
+      if (lookups === 1) await first;
+      return { id: 'agt_1', status: 'active', nodeId: 'node-1' } as Awaited<
+        ReturnType<AgentSessionsRepo['get']>
+      >;
+    });
+    const closeWithReason = vi.fn((_id: string, reason: string) =>
+      Promise.resolve({
+        id: 'agt_1',
+        status: 'closed',
+        closedReason: reason,
+      } as Awaited<ReturnType<AgentSessionsRepo['closeWithReason']>>),
+    );
+    const relay = makeAgentSessionTerminalStatusRelay({
+      agentSessions: { get, closeWithReason } as unknown as AgentSessionsRepo,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger,
+    });
+
+    relay(terminalFrame('agt_1', 'ended', 'first_reason'), 'node-1');
+    relay(terminalFrame('agt_1', 'errored', 'superseded_reason'), 'node-1');
+    relay(terminalFrame('agt_1', 'errored', 'latest_reason'), 'node-1');
+    expect(get).toHaveBeenCalledTimes(1);
+
+    releaseFirst();
+    await vi.waitFor(() => expect(closeWithReason).toHaveBeenCalledTimes(2));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(closeWithReason).toHaveBeenNthCalledWith(1, 'agt_1', 'first_reason');
+    expect(closeWithReason).toHaveBeenNthCalledWith(2, 'agt_1', 'latest_reason');
   });
 });

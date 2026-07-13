@@ -385,6 +385,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain('persistSnapshot: async (frame) => {');
     expect(body).toContain('reconcileWorkerOrphans: async (frame) => {');
     expect(body).toContain('reconcileNodeBoot: (frame) =>');
+    // Terminal statuses use the bounded authenticated relay and evict all three
+    // live-state stores; omitting pageState leaves stale terminal overlays.
+    expect(body).toContain('makeAgentSessionTerminalStatusRelay({');
+    expect(body).toContain('livenessStore: sessionLivenessStore,');
+    expect(body).toContain('sessionPageStateStore,');
+    expect(body).toContain('sessionCapabilityReportStore,');
     // W650/A3-W1254 — the pageState store is constructed alongside the registry
     // (behind the same flag) + wired as the registry's onPageState consumer.
     expect(body).toMatch(/const sessionPageStateStore = new SessionPageStateStore\(\);/);

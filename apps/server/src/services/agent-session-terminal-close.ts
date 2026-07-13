@@ -44,6 +44,7 @@ import type { SessionPageStateStore } from './session-page-state-store.js';
 import type { SessionCapabilityReportStore } from './session-capability-report-store.js';
 import type { SessionStatus } from '../schemas/harness-control-protocol.js';
 import type { Logger } from '../lib/logger.js';
+import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
 
 export interface CloseAgentSessionOnTerminalStatusDeps {
@@ -174,4 +175,49 @@ export async function closeAgentSessionOnTerminalStatus(
       'closeAgentSessionOnTerminalStatus failed (worker-disconnect / 12h orphan_reap backstop holds)',
     );
   }
+}
+
+export type AgentSessionTerminalStatusRelayDeps = Omit<
+  CloseAgentSessionOnTerminalStatusDeps,
+  'frame' | 'reportingNodeId'
+>;
+
+/**
+ * Build the authenticated FleetControlRegistry terminal-status consumer. A
+ * compromised node cannot turn unique fake session ids into unlimited DB work:
+ * each reporting node gets the shared 512-session admission budget and eight
+ * concurrent close operations. Repeated pending status for one session keeps
+ * only the newest successor; the atomic close path still guarantees first
+ * successful close wins and later duplicates cannot overwrite its reason.
+ */
+export function makeAgentSessionTerminalStatusRelay(
+  deps: AgentSessionTerminalStatusRelayDeps,
+): (frame: SessionStatus, reportingNodeId: string) => void {
+  return makeBoundedNodeLatestRelay({
+    getSessionId: (frame: SessionStatus) => frame.sessionId,
+    process: (frame, reportingNodeId) =>
+      closeAgentSessionOnTerminalStatus({ ...deps, frame, reportingNodeId }),
+    onError: ({ error, reportingNodeId, sessionId }) => {
+      deps.logger.error(
+        {
+          component: 'agent-session-terminal-close',
+          sessionId,
+          reportingNodeId,
+          err: error,
+        },
+        'terminal sessionStatus relay failed unexpectedly',
+      );
+    },
+    onOverflow: ({ reportingNodeId, sessionBudget, sessionId }) => {
+      deps.logger.warn(
+        {
+          component: 'agent-session-terminal-close',
+          sessionId,
+          reportingNodeId,
+          sessionBudget,
+        },
+        'dropped terminal sessionStatus because the reporting node exceeded its relay session budget',
+      );
+    },
+  });
 }
