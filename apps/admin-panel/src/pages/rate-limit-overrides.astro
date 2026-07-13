@@ -191,6 +191,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       const accountIdEl = root.querySelector('[data-field="account-id"]');
       const includeExpiredEl = root.querySelector('[data-field="include-expired"]');
       const token = localStorage.getItem('ds_web_session_token');
+      const OVERRIDE_TIMEOUT_MS = 15_000;
+      let loadController = null;
+
+      function boundedFetch(url, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(() => controller.abort(), OVERRIDE_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       const BUCKET_LABEL = {
         global: 'Global',
@@ -278,10 +295,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!token) return Promise.resolve();
         const myReq = ++inFlight;
         const params = buildQuery();
-        return fetch(apiBaseUrl + '/v1/admin/rate-limit-overrides?' + params.toString(), {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        })
+        if (loadController) loadController.abort();
+        const controller = new AbortController();
+        loadController = controller;
+        root.setAttribute('aria-busy', 'true');
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/rate-limit-overrides?' + params.toString(),
+          {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
@@ -308,16 +333,26 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
+            if (list) {
+              list.classList.remove('hidden');
+              list.innerHTML =
+                '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">Could not load live overrides — nothing to act on. Resolve the error above and retry.</li>';
+            }
+            if (emptyRegion) emptyRegion.classList.add('hidden');
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
               );
             } else {
-              showBanner("Couldn't load overrides (" + msg + '). Showing preview data below.');
+              showBanner("Couldn't load overrides (" + msg + ').');
             }
           })
           .finally(() => {
+            if (myReq === inFlight) {
+              loadController = null;
+              root.removeAttribute('aria-busy');
+            }
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
@@ -344,7 +379,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (!proceed) return;
           if (btn) btn.textContent = 'Clearing…';
           showBanner('Clearing override…');
-          const response = await fetch(
+          const response = await boundedFetch(
             apiBaseUrl +
               '/v1/admin/accounts/' +
               encodeURIComponent(prefixedAccountId) +
@@ -362,7 +397,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Override cleared. Refreshing…');
           await load();
         } catch (err) {
-          const msg = err && err.message ? err.message : 'network error';
+          const msg = requestErrorMessage(err, 'network error');
           showBanner("Couldn't clear (" + msg + ').');
         } finally {
           clearsInFlight.delete(operationKey);

@@ -120,12 +120,16 @@ describe('admin rate-limit-overrides page — clear-now (operator)', () => {
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
   it('renders overrides with a Clear-now action carrying account_id + bucket_key', async () => {
-    const { window } = setUpDom(loadBuiltPage(), { route: makeRouter([{ ...OV_A }]) });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: makeRouter([{ ...OV_A }]),
+    });
     win = window;
     await flush();
     const btn = window.document.querySelector('[data-action="clear"][data-account-id="acc_a"]');
     expect(btn).toBeTruthy();
     expect(btn?.getAttribute('data-bucket-key')).toBe('sessions:create');
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
   });
 
   it('clear: confirm-gated DELETE /accounts/:id/quota-override?bucket_key=… (colon URL-encoded), then refresh drops it', async () => {
@@ -145,6 +149,7 @@ describe('admin rate-limit-overrides page — clear-now (operator)', () => {
     expect(del?.url).toContain('/v1/admin/accounts/acc_a/quota-override?bucket_key=');
     // The colon in the bucket key must be percent-encoded on the wire.
     expect(del?.url).toContain('sessions%3Acreate');
+    expect(del?.init?.signal).toBeInstanceOf(window.AbortSignal);
     expect(
       window.document.querySelector('[data-action="clear"][data-account-id="acc_a"]'),
     ).toBeNull();
@@ -202,5 +207,16 @@ describe('admin rate-limit-overrides page — clear-now (operator)', () => {
     expect(
       window.document.querySelector('[data-action="clear"][data-account-id="acc_a"]'),
     ).toBeNull();
+  });
+
+  it('load failure removes every mock Clear action and leaves an honest non-actionable state', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: () => json({ detail: 'unavailable' }, 503),
+    });
+    win = window;
+    await flush();
+    expect(window.document.querySelectorAll('[data-action="clear"]')).toHaveLength(0);
+    expect(window.document.body.textContent).toContain('nothing to act on');
+    expect(window.document.body.textContent).not.toContain('Showing preview data below');
   });
 });
