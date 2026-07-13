@@ -23,7 +23,7 @@ interface MockFetchCall {
   init: RequestInit | undefined;
 }
 interface SetUpOpts {
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
   noToken?: boolean;
 }
 
@@ -49,7 +49,7 @@ function setUpDom(
   window.fetch = (input: string, init: RequestInit | undefined) => {
     const call: MockFetchCall = { url: String(input), init };
     fetchCalls.push(call);
-    return Promise.resolve(opts.route(call));
+    return Promise.resolve().then(() => opts.route(call));
   };
   if (opts.noToken !== true) window.localStorage.setItem('ds_web_session_token', 'staff-tok');
 
@@ -158,6 +158,56 @@ describe('admin fleet page — operator visibility', () => {
     expect(html).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
     );
+  });
+
+  it('locks an affected node after an unknown control outcome and blocks a blind replay', async () => {
+    let getCount = 0;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST') {
+          const timeout = new Error('request timed out');
+          timeout.name = 'AbortError';
+          return Promise.reject(timeout);
+        }
+        getCount += 1;
+        return json({
+          data: [
+            {
+              id: 'node-1',
+              display_name: 'mac-001',
+              region: 'us',
+              last_seen_at: '2026-06-11T12:00:00Z',
+              has_livekit: true,
+              connected: true,
+              last_heartbeat: getCount > 1 ? { drainState: 'draining' } : null,
+            },
+          ],
+        });
+      },
+    });
+    win = window;
+    // @ts-expect-error — app modal helper is attached by AdminLayout at runtime
+    window.driftstackConfirm = () => Promise.resolve(true);
+    await flush();
+
+    const restart = window.document.querySelector<HTMLButtonElement>(
+      'button[data-control="restart"]',
+    );
+    expect(restart).not.toBeNull();
+    restart!.click();
+    await flush(12);
+    // Even a queued/synthetic second activation of the original button must
+    // not dispatch another destructive command after the timeout.
+    restart!.click();
+    await flush();
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(window.document.querySelectorAll('button[data-control]')).toHaveLength(0);
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('Restart outcome is unknown because the response timed out');
+    expect(text).toContain('Outcome unknown — verify, then reload');
+    expect(text).toContain('Controls for this node are locked for this page');
+    expect(text).toContain('do not send the command again blindly');
   });
 
   it('403 → access-denied banner (customer account, not staff admin)', async () => {

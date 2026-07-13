@@ -71,6 +71,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       const FLEET_REQUEST_TIMEOUT_MS = 15_000;
       let loadController = null;
       let loadGeneration = 0;
+      // A node control is fire-and-forget after the server accepts it. If the
+      // browser loses the 202 response, a second command can duplicate a
+      // destructive restart/drain. Keep that node non-actionable until a
+      // deliberate reload after the operator verifies its live state.
+      const uncertainControlNodes = new Set();
 
       function boundedFetch(url, init, controller) {
         const activeController = controller || new AbortController();
@@ -261,6 +266,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (n.connected !== true) {
           return '<span class="text-xs text-tk-ink-3" title="Controls need a live control-plane connection">—</span>';
         }
+        if (uncertainControlNodes.has(String(n.id))) {
+          return '<span class="text-xs font-medium text-amber-700" title="A control command may already have been accepted. Verify Health and Last seen before reloading.">Outcome unknown — verify, then reload</span>';
+        }
         const mk = (cmd, label, cls) =>
           '<button type="button" data-control="' +
           cmd +
@@ -328,6 +336,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 ' connected. A launch needs a connected node with LiveKit to show a real browser.';
             }
             hideBanner();
+            return true;
           })
           .catch((err) => {
             if (generation !== loadGeneration) return;
@@ -344,6 +353,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner('Could not load fleet nodes — ' + msg + '.');
             }
+            return false;
           })
           .finally(() => {
             if (generation !== loadGeneration) return;
@@ -448,16 +458,29 @@ const apiBaseUrl = resolveApiBaseUrl();
             showBanner('Cannot ' + cmd + ' — HTTP ' + r.status + '.');
           }
         } catch (err) {
-          showBanner(
-            'Control request failed — ' + requestErrorMessage(err) + '.',
-          );
+          if (err && err.name === 'AbortError') {
+            uncertainControlNodes.add(String(nodeId));
+            const refreshed = await load();
+            showBanner(
+              controlActionLabel(cmd) +
+                ' outcome is unknown because the response timed out. The node may already have accepted the command. ' +
+                (refreshed
+                  ? 'Fleet state was refreshed, but it cannot prove whether an asynchronous command ran. '
+                  : 'Fleet state could not be refreshed. ') +
+                'Controls for this node are locked for this page. Verify Health and Last seen before reloading; do not send the command again blindly.',
+            );
+          } else {
+            showBanner('Control request failed — ' + requestErrorMessage(err) + '.');
+          }
         } finally {
+          const outcomeUnknown = uncertainControlNodes.has(String(nodeId));
           controls.forEach(function (control) {
-            control.disabled = false;
+            control.disabled = outcomeUnknown;
           });
           if (btn) {
             btn.textContent = originalText;
             btn.removeAttribute('aria-busy');
+            btn.disabled = outcomeUnknown;
           }
           controlInFlight = false;
         }
