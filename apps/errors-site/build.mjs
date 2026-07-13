@@ -18,6 +18,17 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = join(HERE, 'dist');
 
+// One catch-all security baseline for every generated error explainer.
+// Keep security headers in this single rule: Cloudflare Pages merges all
+// matching _headers rules, so repeating them under `/` would emit duplicates.
+const SECURITY_HEADERS = `/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+`;
+
 /**
  * slug → { status, title, meaning, fix }. Titles + statuses mirror
  * apps/server/src/lib/errors.ts (the constructors that emit them).
@@ -296,6 +307,7 @@ const page = (title, body) => `<!doctype html>
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST, { recursive: true });
+writeFileSync(join(DIST, '_headers'), SECURITY_HEADERS);
 
 const slugs = Object.keys(ERROR_PAGES).sort();
 for (const slug of slugs) {

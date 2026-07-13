@@ -66,9 +66,6 @@
 # times a week and want fast page loads in between."
 /
   Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: strict-origin-when-cross-origin
 /index.html
   Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
 

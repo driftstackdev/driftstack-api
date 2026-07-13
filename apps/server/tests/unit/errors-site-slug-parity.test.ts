@@ -62,4 +62,19 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
     const bad = [...new Set([...keys, ...targets])].filter((s) => !pageSlugs.has(s)).sort();
     expect(bad, `RELATED references non-existent slugs:\n${bad.join('\n')}`).toEqual([]);
   });
+
+  it('errors-site generator writes one catch-all five-header security baseline', () => {
+    const block = siteSrc.match(/const SECURITY_HEADERS = `([\s\S]+?)`;/)?.[1] ?? '';
+    expect(block).toMatch(/^\/\*$/m);
+    for (const header of [
+      'Strict-Transport-Security:',
+      'X-Frame-Options:',
+      'X-Content-Type-Options:',
+      'Referrer-Policy:',
+      'Permissions-Policy:',
+    ]) {
+      expect(block.match(new RegExp(header, 'g')), header).toHaveLength(1);
+    }
+    expect(siteSrc).toMatch(/writeFileSync\(join\(DIST, '_headers'\), SECURITY_HEADERS\);/);
+  });
 });

@@ -106,6 +106,12 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     expect(p).toMatch(
       /^ {2}Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\), gyroscope=\(\), magnetometer=\(\), microphone=\(\), payment=\(\), usb=\(\)$/m,
     );
+    for (const header of ['X-Frame-Options:', 'X-Content-Type-Options:', 'Referrer-Policy:']) {
+      expect(
+        p.match(new RegExp(header, 'g')),
+        `${header} must be emitted by one rule only`,
+      ).toHaveLength(1);
+    }
   });
 
   it("CRITICAL catch-all /* HTML pattern pinned. The '/* pattern (last-resort) covers any HTML response not already matched' wording explains why /* sits at the bottom — first-match-wins means more-specific patterns must come above.", () => {
