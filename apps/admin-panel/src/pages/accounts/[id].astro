@@ -380,7 +380,10 @@ const accountId = account.id;
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const list = root.querySelector('[data-list="account-audit"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      let token = null;
+      const ACCOUNT_DETAIL_TIMEOUT_MS = 15_000;
+      let hydrationController = null;
+      let hydrationGeneration = 0;
 
       // Derive the live UUID from the URL path rather than the SSG-baked
       // attribute so a fallback / SSR conversion works without changing
@@ -426,7 +429,11 @@ const accountId = account.id;
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
       }
 
-      function authedFetch(path, init = {}) {
+      function authedFetch(path, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(
+          () => controller.abort(),
+          ACCOUNT_DETAIL_TIMEOUT_MS,
+        );
         return fetch(apiBaseUrl + path, {
           ...init,
           headers: {
@@ -435,7 +442,16 @@ const accountId = account.id;
             'content-type': 'application/json',
           },
           credentials: 'include',
-        });
+          signal: controller.signal,
+        }).finally(() => window.clearTimeout(timeout));
+      }
+
+      function requestErrorMessage(err, fallback = 'network error') {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
       }
 
       // On a failed mutation (tier change / suspend / refund / override /
@@ -516,23 +532,39 @@ const accountId = account.id;
       }
 
       function load() {
-        if (!token) return;
-        const accountP = authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId))
+        if (!token) return Promise.resolve();
+        if (hydrationController) hydrationController.abort();
+        const controller = new AbortController();
+        hydrationController = controller;
+        const generation = ++hydrationGeneration;
+        root.setAttribute('aria-busy', 'true');
+        const isCurrent = () => generation === hydrationGeneration;
+        const accountP = authedFetch(
+          '/v1/admin/accounts/' + encodeURIComponent(prefixedId),
+          {},
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             if (r.status === 404) return Promise.reject(new Error('not-found'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
-          .then(applyAccount);
+          .then((body) => {
+            if (isCurrent()) applyAccount(body);
+          });
 
         const auditP = authedFetch(
           '/v1/admin/audit-log?limit=20&target_id=' + encodeURIComponent(prefixedId),
+          {},
+          controller,
         )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
-          .then((body) => renderAudit(body.data || []));
+          .then((body) => {
+            if (isCurrent()) renderAudit(body.data || []);
+          });
 
         // 2026-05-22 — per-account cost. Soft-fails (kept off the
         // Promise.all error path) so an unwired cost surface
@@ -544,10 +576,14 @@ const accountId = account.id;
         // So it needs the RAW uuid, not prefixedId: sending the prefixed id 404s,
         // which (soft-failed below) silently rendered "No cost data this cycle
         // yet" for every account that actually had usage.
-        authedFetch(`/v1/admin/cost/accounts/${encodeURIComponent(accountUuid)}`)
+        const costP = authedFetch(
+          `/v1/admin/cost/accounts/${encodeURIComponent(accountUuid)}`,
+          {},
+          controller,
+        )
           .then((r) => (r.ok ? r.json() : null))
           .then((b) => {
-            if (!costBody) return;
+            if (!isCurrent() || !costBody) return;
             if (!b || !b.breakdown) {
               costBody.innerHTML = '<p class="text-sm text-tk-ink-3">No cost data this cycle yet.</p>';
               return;
@@ -589,13 +625,18 @@ const accountId = account.id;
               '<p class="mt-3 text-xs text-tk-ink-3">Cycle: ' + (b.billing_cycle || b.billingCycle || '—') + '</p>';
           })
           .catch(() => {
-            if (costBody) costBody.innerHTML = '<p class="text-sm text-tk-ink-3">Cost data not available.</p>';
+            if (isCurrent() && costBody)
+              costBody.innerHTML =
+                '<p class="text-sm text-tk-ink-3">Cost data not available.</p>';
           });
 
-        Promise.all([accountP, auditP])
-          .then(() => hideBanner())
+        return Promise.all([accountP, auditP, costP])
+          .then(() => {
+            if (isCurrent()) hideBanner();
+          })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            if (!isCurrent()) return;
+            const msg = requestErrorMessage(err);
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -605,6 +646,12 @@ const accountId = account.id;
             } else {
               showBanner("Couldn't load account (" + msg + '). Showing preview data below.');
             }
+          })
+          .finally(() => {
+            if (!isCurrent()) return;
+            hydrationController = null;
+            root.removeAttribute('aria-busy');
+            if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           });
       }
 
@@ -665,7 +712,7 @@ const accountId = account.id;
             load();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err);
             showBanner("Couldn't change tier (" + msg + ').');
           });
       }
@@ -703,7 +750,7 @@ const accountId = account.id;
             load();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err);
             showBanner("Couldn't suspend (" + msg + ').');
           });
       }
@@ -728,7 +775,7 @@ const accountId = account.id;
             load();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err);
             showBanner("Couldn't unsuspend (" + msg + ').');
           });
       }
@@ -795,7 +842,7 @@ const accountId = account.id;
             load();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err);
             showBanner("Couldn't apply override (" + msg + ').');
           })
           .finally(() => {
@@ -866,7 +913,7 @@ const accountId = account.id;
             load();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err);
             showBanner("Couldn't record note (" + msg + ').');
           });
       }
@@ -910,7 +957,7 @@ const accountId = account.id;
             load();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err);
             showBanner("Couldn't record refund (" + msg + ').');
           });
       }
@@ -922,12 +969,24 @@ const accountId = account.id;
         });
       }
 
-      if (!token) {
-        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
-        return;
+      function start() {
+        // AdminLayout consumes the SSO hash and writes this token in its trailing
+        // script. Defer the read until parsing completes so a fresh sign-in does
+        // not permanently capture null in this page's earlier slotted script.
+        token = localStorage.getItem('ds_web_session_token');
+        if (!token) {
+          showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return;
+        }
+        load();
       }
 
-      load();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>

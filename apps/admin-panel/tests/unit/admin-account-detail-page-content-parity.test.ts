@@ -138,6 +138,35 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
+  it('defers the SSO token read until AdminLayout has consumed the sign-in hash', () => {
+    expect(body).toMatch(/let token = null;/);
+    expect(body).toMatch(
+      /function start\(\) \{[\s\S]*token = localStorage\.getItem\('ds_web_session_token'\)/,
+    );
+    expect(body).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
+  });
+
+  it('bounds every request and makes repeated three-resource hydration latest-wins', () => {
+    expect(body).toMatch(/const ACCOUNT_DETAIL_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(
+      /function authedFetch\(path, init = \{\}, controller = new AbortController\(\)\)/,
+    );
+    expect(body).toMatch(
+      /window\.setTimeout\([\s\S]*controller\.abort\(\)[\s\S]*ACCOUNT_DETAIL_TIMEOUT_MS/,
+    );
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/\.finally\(\(\) => window\.clearTimeout\(timeout\)\)/);
+    expect(body).toMatch(/if \(hydrationController\) hydrationController\.abort\(\)/);
+    expect(body).toMatch(/const generation = \+\+hydrationGeneration;/);
+    expect(body).toMatch(/const isCurrent = \(\) => generation === hydrationGeneration;/);
+    expect(body).toMatch(/Promise\.all\(\[accountP, auditP, costP\]\)/);
+    expect(body).toMatch(/if \(!isCurrent\(\)\) return;/);
+    expect(body).toMatch(/root\.removeAttribute\('aria-busy'\)/);
+    expect(body).toContain('Request timed out. Try again.');
+  });
+
   it('CRITICAL suspend confirm is destructive:true — without it the OK button auto-focuses and a stray Enter fires the suspend (revokes ALL sessions + API keys) with no click required (audit waefer6wu)', () => {
     const suspendFn = body.match(/async function suspend\(\)[\s\S]*?\n      \}/);
     expect(suspendFn).not.toBeNull();
