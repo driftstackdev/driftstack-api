@@ -67,7 +67,26 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const tbody = root.querySelector('[data-list="fleet"]');
       const footnote = root.querySelector('[data-field="footnote"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      let token = null;
+      const FLEET_REQUEST_TIMEOUT_MS = 15_000;
+      let loadController = null;
+      let loadGeneration = 0;
+
+      function boundedFetch(url, init, controller) {
+        const activeController = controller || new AbortController();
+        const timeout = window.setTimeout(() => activeController.abort(), FLEET_REQUEST_TIMEOUT_MS);
+        return fetch(url, { ...(init || {}), signal: activeController.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback = 'network error') {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       function showBanner(text) {
         if (!banner) return;
@@ -268,17 +287,27 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (tbody)
             tbody.innerHTML =
               '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return Promise.resolve();
         }
-        return fetch(apiBaseUrl + '/v1/mac-nodes', {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        })
+        if (loadController) loadController.abort();
+        const controller = new AbortController();
+        loadController = controller;
+        const generation = ++loadGeneration;
+        return boundedFetch(
+          apiBaseUrl + '/v1/mac-nodes',
+          {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
+            if (generation !== loadGeneration) return;
             const rows = body.data || [];
             if (tbody) {
               if (rows.length === 0) {
@@ -301,7 +330,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             hideBanner();
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            if (generation !== loadGeneration) return;
+            const msg = requestErrorMessage(err);
             // W604 discipline: never leave fabricated rows; show honest state.
             if (tbody)
               tbody.innerHTML =
@@ -314,6 +344,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner('Could not load fleet nodes — ' + msg + '.');
             }
+          })
+          .finally(() => {
+            if (generation !== loadGeneration) return;
+            loadController = null;
+            if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           });
       }
 
@@ -384,7 +419,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             btn.textContent = controlPendingLabel(cmd);
             btn.setAttribute('aria-busy', 'true');
           }
-          const r = await fetch(
+          const r = await boundedFetch(
             apiBaseUrl + '/v1/mac-nodes/' + encodeURIComponent(nodeId) + '/control',
             {
               method: 'POST',
@@ -414,9 +449,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
         } catch (err) {
           showBanner(
-            'Control request failed — ' +
-              (err && err.message ? err.message : 'network error') +
-              '.',
+            'Control request failed — ' + requestErrorMessage(err) + '.',
           );
         } finally {
           controls.forEach(function (control) {
@@ -441,7 +474,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
-      void load();
+      function start() {
+        token = localStorage.getItem('ds_web_session_token');
+        void load();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+      } else {
+        start();
+      }
       // W630 — auto-refresh every 15s so an operator watching a worker
       // come online sees connected flip offline→connected live, without
       // reloading the page. Cheap (one small GET) and the load() function

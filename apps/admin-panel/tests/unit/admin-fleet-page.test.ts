@@ -113,6 +113,7 @@ describe('admin fleet page — operator visibility', () => {
     expect(String((get?.init?.headers as Record<string, string>)?.authorization)).toContain(
       'Bearer staff-tok',
     );
+    expect(get?.init?.signal).toBeTruthy();
     const text = window.document.body.textContent ?? '';
     expect(text).toContain('mac-001');
     expect(text).toContain('connected');
@@ -145,6 +146,18 @@ describe('admin fleet page — operator visibility', () => {
     const html = loadBuiltPage();
     expect(html).toContain('setInterval');
     expect(html).toContain('15000');
+  });
+
+  it('bounds fleet reads/controls, rejects stale polls, and defers fresh-SSO loading', () => {
+    const html = loadBuiltPage();
+    expect(html).toContain('FLEET_REQUEST_TIMEOUT_MS = 15_000');
+    expect(html).toContain('Request timed out. Try again.');
+    expect(html).toMatch(/if \(loadController\) loadController\.abort\(\)/);
+    expect(html).toMatch(/const generation = \+\+loadGeneration/);
+    expect(html).toMatch(/if \(generation !== loadGeneration\) return/);
+    expect(html).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
   });
 
   it('403 → access-denied banner (customer account, not staff admin)', async () => {
