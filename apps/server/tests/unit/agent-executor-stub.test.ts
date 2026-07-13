@@ -270,6 +270,25 @@ describe('AI-B2 runResultToTranscriptEntry', () => {
     expect(entry.body).toBe('✓ navigated to https://example.com/p?q=1&x=2');
   });
 
+  it('redacts credential-shaped result text before it enters durable history', () => {
+    const runResult: ExecutorRunResult = {
+      results: [
+        {
+          kind: 'failure',
+          intent: { kind: 'navigate', url: 'https://example.com' },
+          reason:
+            'failed at https://user:hunter2@internal.test/cb?state=SIGNED_STATE with Bearer live-token-secret',
+        },
+      ],
+      ok: false,
+    };
+    const entry = runResultToTranscriptEntry(runResult, '2026-05-16T00:00:00Z');
+    expect(entry.body).not.toMatch(/hunter2|SIGNED_STATE|live-token-secret/);
+    expect(entry.body).toContain('https://[redacted]@internal.test');
+    expect(entry.body).toContain('state=[redacted]');
+    expect(entry.body).toContain('Bearer [redacted]');
+  });
+
   // W443/W445 — consequential-action confirmation halt.
   it('halts BEFORE a consequential tap (confirmation_required + awaitingConfirmation); later intents do not run', async () => {
     const exec = new StubAgentExecutor();

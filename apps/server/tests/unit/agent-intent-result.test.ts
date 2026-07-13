@@ -38,6 +38,23 @@ describe('intentResultToCustomer — success summaries', () => {
     });
   });
 
+  it('redacts credentials from a returned redirect URL before customer and transcript boundaries', () => {
+    const intent: AgentIntent = { kind: 'navigate', url: 'https://example.com/start' };
+    const r = intentResultToCustomer(
+      intent,
+      ok({
+        url: 'https://user:password@example.com/callback?code=AUTH_CODE&keep=ok#access_token=ACCESS_TOKEN',
+      }),
+    );
+    expect(r.kind).toBe('success');
+    if (r.kind !== 'success') throw new Error('narrow');
+    expect(r.summary).not.toMatch(/password|AUTH_CODE|ACCESS_TOKEN/);
+    expect(r.summary).toContain('https://[redacted]@example.com/callback');
+    expect(r.summary).toContain('code=[redacted]');
+    expect(r.summary).toContain('keep=ok');
+    expect(r.summary).toContain('access_token=[redacted]');
+  });
+
   it('navigate falls back to generic when outputData has no url', () => {
     const r = intentResultToCustomer({ kind: 'navigate', url: 'https://x' }, ok({}));
     expect(r.kind).toBe('success');
@@ -169,6 +186,22 @@ describe('intentResultToCustomer — failure reasons', () => {
     expect(r.reason).not.toContain('x'.repeat(201));
     expect(r.reason.endsWith('…')).toBe(true);
     expect(r.reason.length).toBeLessThan(400);
+  });
+
+  it('redacts credential material from harness diagnostics while preserving guidance', () => {
+    const r = intentResultToCustomer(
+      { kind: 'interact', action: 'tap', selector: '#continue' },
+      fail(
+        'intent_webdriver_failed',
+        'no such element #continue after https://user:hunter2@internal.test/cb?token=LIVE_TOKEN; Authorization: Bearer bearer-live-secret',
+      ),
+    );
+    if (r.kind !== 'failure') throw new Error('narrow');
+    expect(r.reason).toContain('no such element #continue');
+    expect(r.reason).not.toMatch(/hunter2|LIVE_TOKEN|bearer-live-secret/);
+    expect(r.reason).toContain('https://[redacted]@internal.test');
+    expect(r.reason).toContain('token=[redacted]');
+    expect(r.reason).toContain('Bearer [redacted]');
   });
 
   it('doc-132 §5.3 — intent_webdriver_failed is specialized by intent kind (actionable "why"), other codes are not', () => {

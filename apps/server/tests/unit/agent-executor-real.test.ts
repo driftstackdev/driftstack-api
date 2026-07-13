@@ -269,4 +269,28 @@ describe('AI-B2.b RealAgentExecutor — vocab gaps + guards', () => {
     expect(r.ok).toBe(false);
     expect(r.results[0]?.kind === 'failure' && r.results[0].reason).toBe('session destroyed');
   });
+
+  it('redacts credentials from a throwing SessionsService diagnostic', async () => {
+    const { port } = makePort({
+      navigate: vi.fn(() =>
+        Promise.reject(
+          new Error(
+            'upstream https://user:hunter2@internal.test/cb?code=AUTH_CODE rejected Bearer live-token-secret',
+          ),
+        ),
+      ),
+    });
+    const exec = new RealAgentExecutor({ sessions: port });
+    const r = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'navigate', url: 'https://ex.com' }]),
+    });
+    const result = r.results[0];
+    if (result?.kind !== 'failure') throw new Error('narrow');
+    expect(result.reason).not.toMatch(/hunter2|AUTH_CODE|live-token-secret/);
+    expect(result.reason).toContain('https://[redacted]@internal.test');
+    expect(result.reason).toContain('code=[redacted]');
+    expect(result.reason).toContain('Bearer [redacted]');
+  });
 });

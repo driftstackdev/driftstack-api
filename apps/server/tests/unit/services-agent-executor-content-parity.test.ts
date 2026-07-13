@@ -87,12 +87,12 @@ describe('services/agent-executor content parity', () => {
     );
   });
 
-  it('stubSummary() 4-arm switch pinned: navigate / interact / wait / capture (the 4 AgentIntent kinds). Each renders a deterministic "stub …" line — drift to dropping a case would crash on real AgentIntent values; drift to changing wording would break test fixtures that assert on the exact summary text', () => {
+  it('stubSummary() switch keeps deterministic summaries and sends navigate URLs through the credential-safe diagnostic boundary', () => {
     expect(body).toMatch(
       /function stubSummary\(intent: AgentIntent\): string \{\s*\n?\s*switch \(intent\.kind\) \{/,
     );
     expect(body).toMatch(
-      /case 'navigate':\s*\n?\s*return `stub navigate → \$\{intent\.url\} \(returns 200; no real fetch\)`;/,
+      /case 'navigate':\s*\n?\s*return safeExecutorDiagnostic\(\s*`stub navigate → \$\{intent\.url\} \(returns 200; no real fetch\)`,\s*'stub navigate completed',\s*\);/,
     );
     expect(body).toMatch(/case 'interact':/);
     expect(body).toMatch(/if \(intent\.action === 'type'\) \{/);
@@ -116,11 +116,17 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(
       /lines\.push\(`✗ \$\{r\.intent\.kind\} — \$\{sanitizeTranscriptText\(r\.reason\)\}`\);/,
     );
-    // The sanitizer: strips C0/C1 control chars (transcript line-forging defense)
-    // + caps length (bloat). Pinned so this prompt-injection interim can't
-    // silently regress to raw interpolation.
+    // The sanitizer redacts credential-shaped material first, strips C0/C1
+    // controls (transcript line-forging defense), then caps length. Pinned so
+    // this prompt-injection + secret-retention boundary cannot regress to raw
+    // interpolation.
     expect(body).toMatch(/export function sanitizeTranscriptText\(s: string\): string \{/);
-    expect(body).toMatch(/s\.replace\(\/\[\\u0000-\\u001f\\u007f-\\u009f\]\/g, ' '\)\.trim\(\)/);
+    expect(body).toMatch(
+      /const redacted = redactText\(s\.slice\(0, EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH\)\);/,
+    );
+    expect(body).toMatch(
+      /redacted\.replace\(\/\[\\u0000-\\u001f\\u007f-\\u009f\]\/g, ' '\)\.trim\(\)/,
+    );
     expect(body).toMatch(/export const MAX_TRANSCRIPT_FIELD_LEN = 512;/);
     // #139 — the "(plan halted on failure)" suffix keys on a NON-wait failure
     // (an actual halt), NOT on !ok (which is true even when a best-effort wait

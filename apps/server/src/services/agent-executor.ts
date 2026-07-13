@@ -28,6 +28,15 @@ import {
   classifyConsequentialAction,
   type ConsequentialActionCategory,
 } from './agent-consequential-action.js';
+import { redactText } from '../lib/redact-url.js';
+
+const EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH = 4096;
+const EXECUTOR_DIAGNOSTIC_MAX_LENGTH = 512;
+
+function safeExecutorDiagnostic(value: string, fallback: string): string {
+  const bounded = value.slice(0, EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH);
+  return (redactText(bounded) || fallback).slice(0, EXECUTOR_DIAGNOSTIC_MAX_LENGTH);
+}
 
 /**
  * Per-intent execution result. The discriminated union lets callers
@@ -338,7 +347,10 @@ export class RealAgentExecutor implements AgentExecutor {
       return {
         kind: 'failure',
         intent,
-        reason: err instanceof Error ? err.message : 'dispatch failed',
+        reason:
+          err instanceof Error
+            ? safeExecutorDiagnostic(err.message, 'dispatch failed')
+            : 'dispatch failed',
       };
     }
   }
@@ -446,7 +458,10 @@ export class RealAgentExecutor implements AgentExecutor {
 function stubSummary(intent: AgentIntent): string {
   switch (intent.kind) {
     case 'navigate':
-      return `stub navigate → ${intent.url} (returns 200; no real fetch)`;
+      return safeExecutorDiagnostic(
+        `stub navigate → ${intent.url} (returns 200; no real fetch)`,
+        'stub navigate completed',
+      );
     case 'interact':
       // Typed text can be a password, OTP, card value, or other secret. The
       // stub is a production-capable no-fleet fallback and its summary is
@@ -496,8 +511,13 @@ function stubSummary(intent: AgentIntent): string {
  */
 export const MAX_TRANSCRIPT_FIELD_LEN = 512;
 export function sanitizeTranscriptText(s: string): string {
+  // Results from every executor implementation meet here before durable
+  // history. Keep this credential scrub even though the live result mapper and
+  // legacy executor sanitize at their customer-response boundaries: future
+  // executors and synthetic test/demo paths must not be able to bypass it.
+  const redacted = redactText(s.slice(0, EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH));
   // eslint-disable-next-line no-control-regex
-  const stripped = s.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
+  const stripped = redacted.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
   return stripped.length > MAX_TRANSCRIPT_FIELD_LEN
     ? `${stripped.slice(0, MAX_TRANSCRIPT_FIELD_LEN)}…`
     : stripped;

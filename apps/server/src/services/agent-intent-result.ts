@@ -24,6 +24,22 @@ import type {
 } from '@driftstack/api-types';
 import type { ParsedIntentResult } from './harness-control-codec.js';
 import type { HarnessErrorCode } from '../schemas/harness-control-protocol.js';
+import { redactText } from '../lib/redact-url.js';
+
+// Result summaries and failure reasons cross two customer-data boundaries: the
+// message response and the encrypted agent transcript. Harness output is
+// internal, but it can reflect a final redirect URL, WebDriver diagnostic, or
+// page-controlled text. Bound it before redaction (the wire schema already caps
+// errorMessage at 1,000 chars, but success output is less constrained), redact
+// credential-shaped material, then bound again because replacement markers can
+// expand the string.
+const RESULT_TEXT_INPUT_MAX_LENGTH = 4096;
+const RESULT_SUMMARY_MAX_LENGTH = 512;
+
+function safeResultText(value: string, maxLength: number): string {
+  const bounded = value.slice(0, RESULT_TEXT_INPUT_MAX_LENGTH);
+  return redactText(bounded).slice(0, maxLength);
+}
 
 /** Map a decoded harness result + its originating intent → customer IntentResult. */
 export function intentResultToCustomer(
@@ -46,7 +62,9 @@ function summarize(intent: AgentIntent, outputData: unknown): string {
   switch (intent.kind) {
     case 'navigate': {
       const url = readString(outputData, 'url');
-      return url !== null ? `navigated to ${url}` : 'navigated';
+      return url !== null
+        ? safeResultText(`navigated to ${url}`, RESULT_SUMMARY_MAX_LENGTH)
+        : 'navigated';
     }
     case 'interact':
       return summarizeInteract(intent);
@@ -192,7 +210,9 @@ function failureReason(
         : 'the action failed';
   const msg = message?.trim();
   if (msg !== undefined && msg.length > 0) {
-    const capped = msg.length > MAX_MESSAGE_LEN ? `${msg.slice(0, MAX_MESSAGE_LEN)}…` : msg;
+    const redacted = safeResultText(msg, MAX_MESSAGE_LEN);
+    const capped =
+      msg.length > MAX_MESSAGE_LEN ? `${redacted.slice(0, MAX_MESSAGE_LEN - 1)}…` : redacted;
     return `${base}: ${capped}`;
   }
   return base;
