@@ -61,15 +61,19 @@ describe('W470.A apps/gui-client/src/lib/use-admin-idempotency-metrics.ts conten
       /const \[state, setState\] = useState<AdminIdempotencyMetricsState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/idempotency-metrics`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/idempotency-metrics`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
     );
     expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: err instanceof Error \? err\.message : String\(err\),\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
   });
 
-  it('useEffect: opts.manual === true early return + useCallback deps [settings.apiKey, settings.baseUrl] (no extra opts deps)', () => {
+  it('single-flight and dependency/unmount lifecycle guards retain the manual gate and exact callback dependencies', () => {
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl\]\);/);
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
+    );
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
     );

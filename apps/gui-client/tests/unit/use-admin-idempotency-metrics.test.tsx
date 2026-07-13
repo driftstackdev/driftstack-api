@@ -20,6 +20,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -41,6 +42,8 @@ describe('V-534.BA useAdminIdempotencyMetrics', () => {
     }
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toContain('/v1/admin/crypto-orders/idempotency-metrics');
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('reports HTTP errors via state.kind = error', async () => {
@@ -103,5 +106,73 @@ describe('V-534.BA useAdminIdempotencyMetrics', () => {
     vi.stubGlobal('fetch', vi.fn());
     const { result } = renderHook(() => useAdminIdempotencyMetrics());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
+  });
+
+  it('single-flights overlapping manual refreshes', async () => {
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useAdminIdempotencyMetrics({ manual: true }));
+
+    let first: Promise<void> | undefined;
+    await act(async () => {
+      first = result.current.refetch();
+      await result.current.refetch();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFetch?.({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ replays: 1, first_writes: 2, body_mismatches: 0 }),
+    } as unknown as Response);
+    await act(async () => first);
+    expect(result.current.state.kind).toBe('ready');
+  });
+
+  it('fails with actionable copy after the shared 15 second deadline', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      }),
+    );
+    const { result } = renderHook(() => useAdminIdempotencyMetrics({ manual: true }));
+
+    await act(async () => {
+      const pending = result.current.refetch();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await pending;
+    });
+
+    expect(result.current.state).toEqual({
+      kind: 'error',
+      message: 'Idempotency metrics timed out. Check your connection and try again.',
+    });
+  });
+
+  it('aborts the active request on unmount', () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const { unmount } = renderHook(() => useAdminIdempotencyMetrics());
+    expect(signal).toBeInstanceOf(AbortSignal);
+    unmount();
+    expect(signal?.aborted).toBe(true);
   });
 });
