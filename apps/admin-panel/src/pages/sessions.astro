@@ -545,7 +545,16 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
 
       if (!token) {
-        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        // Never leave the SSG mock on a live-operations surface. Even though
+        // destroy() fails closed without a token, fabricated session ids and
+        // statuses look authoritative and can send an operator investigating
+        // customers that do not exist.
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in with a staff admin account to see live sessions.</td></tr>';
+        }
+        if (footnote) footnote.textContent = '';
+        showBanner('Sign in with a staff admin account to see live data.');
         return;
       }
 

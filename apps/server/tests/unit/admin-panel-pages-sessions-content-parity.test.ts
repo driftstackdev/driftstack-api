@@ -73,7 +73,10 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     );
   });
 
-  it("POST /v1/admin/sessions/{encodeURIComponent(id)}/destroy contract: optional reason via branded driftstackPrompt → trimmed → JSON.stringify({reason}) body (empty reason → empty object {}); Bearer auth + content-type:application/json + credentials:'include' — pinned so the optional-reason pattern lands the audit row with the operator's text when provided, and the URL encoding handles session-IDs safely", () => {
+  it('POST /v1/admin/sessions/{encodeURIComponent(id)}/destroy stays confirmed, bounded, latched, and audited — pinned so an optional trimmed reason reaches the audit row without allowing an accidental or duplicate force-destroy', () => {
+    expect(body).toMatch(
+      /const confirmed = await window\.driftstackConfirm\(\s*\n?\s*'Force-destroy session ' \+ id \+ "\? This ends the customer's live browser session immediately\.",/,
+    );
     expect(body).toMatch(
       /await window\.driftstackPrompt\('Reason for force-destroying ' \+ id \+ ' \(optional\):', \{/,
     );
@@ -81,8 +84,13 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
       /const body = \{\};\s*\n?\s*if \(reason\.trim\(\)\) body\.reason = reason\.trim\(\);/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/sessions\/' \+ encodeURIComponent\(id\) \+ '\/destroy', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\}\)/,
+      /const response = await boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/admin\/sessions\/' \+ encodeURIComponent\(id\) \+ '\/destroy',\s*\n?\s*\{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\},\s*\n?\s*\);/,
     );
+    expect(body).toMatch(/const SESSION_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/if \(!token \|\| destroysInFlight\.has\(id\)\) return;/);
+    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\);/);
+    expect(body).toMatch(/if \(err && err\.name === 'AbortError'\) \{/);
+    expect(body).toMatch(/const refreshed = await load\(\);/);
   });
 
   it("5-col table header (Session/Account/Status/Started/<empty actions col>) + colspan=5 empty-state — pinned so the 5-column layout's empty-after-filter row spans full width (drift to colspan=4 would visually misalign + drift to a 4-col header without the actions col would leave force-destroy buttons floating)", () => {
@@ -101,10 +109,19 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     );
   });
 
-  it("Action-result banner taxonomy: 'Destroying N…' → 'Destroyed N. Refreshing…' → 'Couldn't destroy (msg).' — pinned so operators see the 3-phase destruction feedback (in-flight / success / error) consistent with other admin-action pages (drift to a single 'destroyed' message would hide the in-flight state during slow destroys)", () => {
+  it("Action-result banner taxonomy: 'Destroying N…' → 'Destroyed N. Refreshing…' → stable mapped failure copy", () => {
     expect(body).toMatch(/showBanner\('Destroying ' \+ id \+ '…'\);/);
     expect(body).toMatch(/showBanner\('Destroyed ' \+ id \+ '\. Refreshing…'\);/);
-    expect(body).toMatch(/showBanner\("Couldn't destroy \(" \+ msg \+ '\)\.'\);/);
+    expect(body).toMatch(
+      /showBanner\("Couldn't destroy \(" \+ requestErrorMessage\(err, 'network error'\) \+ '\)\.'\);/,
+    );
+  });
+
+  it('Signed-out state removes fabricated SSG sessions and their destructive controls', () => {
+    expect(body).toMatch(
+      /if \(!token\) \{[\s\S]*?tbody\.innerHTML =\s*\n?\s*'<tr><td colspan="5"[^']*>Sign in with a staff admin account to see live sessions\.<\/td><\/tr>';[\s\S]*?if \(footnote\) footnote\.textContent = '';[\s\S]*?showBanner\('Sign in with a staff admin account to see live data\.'\);[\s\S]*?return;/,
+    );
+    expect(body).not.toMatch(/Showing preview below/);
   });
 
   it('file exists at canonical path', () => {
