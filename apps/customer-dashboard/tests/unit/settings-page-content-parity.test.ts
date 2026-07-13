@@ -149,4 +149,12 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(testHandler).toMatch(/const plaintext = await service\.getPlaintext/);
     expect(testHandler).not.toMatch(/request\.body/);
   });
+
+  it('reconciles an ambiguous BYOK clear against authoritative metadata', () => {
+    expect(body).toMatch(/if \(refreshed\?\.hasKey === false\)/);
+    expect(body).toMatch(/clear likely completed before the response timed out/);
+    expect(body).toMatch(/key is still on file/);
+    expect(body).toMatch(/clear outcome is unknown after the timeout/);
+    expect(body).toMatch(/Reload to verify before retrying/);
+  });
 });

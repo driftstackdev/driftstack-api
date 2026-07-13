@@ -329,6 +329,108 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="empty"]')).toBe(false);
   });
 
+  it('committed clear followed by AbortError refreshes metadata and refuses a duplicate clear', async () => {
+    const byok = newByok({ set: true });
+    const base = makeRouter(byok);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (
+          call.init?.method === 'DELETE' &&
+          /\/v1\/account\/me\/byok-anthropic-key$/.test(call.url)
+        ) {
+          byok.set = false;
+          const error = new Error('response lost after clear');
+          error.name = 'AbortError';
+          return Promise.reject(error);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    (window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).click();
+    await flush(10);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(isHidden(window, '[data-byok-state="empty"]')).toBe(false);
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
+      /clear likely completed.*no stored key remains.*Do not clear again/i,
+    );
+    expect((window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it('uncommitted clear timeout keeps the authoritative stored state without claiming success', async () => {
+    const byok = newByok({ set: true });
+    const base = makeRouter(byok);
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (
+          call.init?.method === 'DELETE' &&
+          /\/v1\/account\/me\/byok-anthropic-key$/.test(call.url)
+        ) {
+          const error = new Error('request timed out before clear');
+          error.name = 'AbortError';
+          return Promise.reject(error);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    (window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).click();
+    await flush(10);
+
+    expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
+      /clear timed out.*key is still on file.*retry only if it remains present/i,
+    );
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).not.toMatch(
+      /likely completed/i,
+    );
+  });
+
+  it('clear timeout plus refresh failure reports an unknown outcome and keeps actions disabled', async () => {
+    let byokGets = 0;
+    const byok = newByok({ set: true });
+    const base = makeRouter(byok);
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (/\/v1\/account\/me\/byok-anthropic-key$/.test(call.url)) {
+          if (call.init?.method === 'DELETE') {
+            const error = new Error('clear response lost');
+            error.name = 'AbortError';
+            return Promise.reject(error);
+          }
+          if ((call.init?.method || 'GET').toUpperCase() === 'GET') {
+            byokGets += 1;
+            if (byokGets > 1) return Promise.reject(new TypeError('status network down'));
+          }
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    (window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).click();
+    await flush(10);
+
+    expect(isHidden(window, '[data-byok-state="error"]')).toBe(false);
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
+      /clear outcome is unknown.*could not be refreshed.*Reload to verify before retrying/i,
+    );
+    expect((window.document.querySelector('[data-byok-test]') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect((window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
   // S35 2026-07-07 (fable-frontend-audit) — a transient non-2xx on the
   // status GET used to fall back to byokShowState('empty'), telling a
   // customer WITH a stored key "No key on file"; and the chain called

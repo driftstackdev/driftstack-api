@@ -1312,7 +1312,24 @@ const EMAIL_EVENTS = [
             }
             await loadByokAnthropic();
           } catch (err) {
-            byokShowError(requestErrorMessage(err, 'network error'));
+            if (err && err.name === 'AbortError') {
+              const refreshed = await loadByokAnthropic();
+              if (refreshed?.hasKey === false) {
+                byokShowError(
+                  'The clear likely completed before the response timed out: no stored key remains. Do not clear again.',
+                );
+              } else if (refreshed?.hasKey === true) {
+                byokShowError(
+                  'The clear timed out, and the key is still on file. Wait a moment and retry only if it remains present.',
+                );
+              } else {
+                byokShowError(
+                  'The clear outcome is unknown after the timeout, and stored-key status could not be refreshed. Reload to verify before retrying.',
+                );
+              }
+            } else {
+              byokShowError(requestErrorMessage(err, 'network error'));
+            }
           } finally {
             endByokAction('clear');
           }
