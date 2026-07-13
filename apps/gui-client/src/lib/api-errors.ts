@@ -3,6 +3,8 @@
 // problem+json bodies on 4xx; without this helper, hooks would
 // surface only "HTTP 400" which is unhelpful.
 
+import { readBoundedDiagnosticJson } from './read-bounded-json';
+
 /**
  * Best-effort parse a fetch Response's body into a human-readable
  * error message. Tries problem+json (.detail then .title) first,
@@ -11,7 +13,13 @@
  */
 export async function readApiErrorMessage(res: Response): Promise<string> {
   try {
-    const body = (await res.json()) as { detail?: unknown; title?: unknown };
+    // Older hook tests use structural response doubles with json() but no
+    // body/headers. A real fetch Response always has a body property, so only
+    // production responses take the bounded stream path.
+    const body =
+      (res as { body?: ReadableStream<Uint8Array> | null }).body === undefined
+        ? ((await res.json()) as { detail?: unknown; title?: unknown })
+        : await readBoundedDiagnosticJson<{ detail?: unknown; title?: unknown }>(res);
     if (typeof body.detail === 'string' && body.detail.length > 0) return body.detail;
     if (typeof body.title === 'string' && body.title.length > 0) return body.title;
   } catch {
