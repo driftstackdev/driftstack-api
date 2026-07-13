@@ -239,17 +239,40 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
         banner.classList.remove('hidden');
       }
 
+      const AUTHED_REQUEST_TIMEOUT_MS = 15_000;
+      const ownedRequestControllers = new Set();
       function authedFetch(path, init = {}) {
+        // Mutations below already own an AbortSignal because their busy-state
+        // lease needs the same deadline. Reads without one still need a hard
+        // transport bound: otherwise the initial subscription check can hang
+        // forever and leave an existing subscriber looking eligible to start a
+        // second Checkout. Track only controllers created here so pagehide can
+        // cancel an orphaned read without interfering with caller-owned work.
+        const ownsController = !init.signal;
+        const controller = ownsController ? new AbortController() : null;
+        const signal = init.signal || controller.signal;
+        const timeout = ownsController
+          ? window.setTimeout(() => controller.abort(), AUTHED_REQUEST_TIMEOUT_MS)
+          : null;
+        if (controller) ownedRequestControllers.add(controller);
         return fetch(apiBaseUrl + path, {
           ...init,
+          signal,
           headers: {
             ...(init.headers || {}),
             authorization: 'Bearer ' + token,
             'content-type': 'application/json',
           },
           credentials: 'include',
+        }).finally(() => {
+          if (timeout !== null) window.clearTimeout(timeout);
+          if (controller) ownedRequestControllers.delete(controller);
         });
       }
+      window.addEventListener('pagehide', () => {
+        ownedRequestControllers.forEach((controller) => controller.abort());
+        ownedRequestControllers.clear();
+      });
 
       // V-501 — disable a button while its checkout-session call is in
       // flight so the customer can't double-click and create two Stripe

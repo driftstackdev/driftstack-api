@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'select-tier', 'index.html');
@@ -28,7 +28,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -98,6 +98,7 @@ let win: JSDOM['window'] | undefined;
 afterEach(() => {
   win?.close?.();
   win = undefined;
+  vi.useRealTimers();
 });
 
 describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour', () => {
@@ -136,6 +137,39 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(body.billing_period).toBe('monthly');
     expect(typeof body.tier).toBe('string');
     expect(body.tier.length).toBeGreaterThan(0);
+  });
+
+  it('bounds the initial subscription read and aborts it when the page is left', async () => {
+    vi.useFakeTimers();
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return new Promise(() => {});
+        return json({});
+      },
+    });
+    win = window;
+    const billingRead = fetchCalls.find((call) => /\/v1\/billing$/.test(call.url));
+    expect(billingRead?.init?.signal).toBeDefined();
+    expect(billingRead?.init?.signal?.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(billingRead?.init?.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(billingRead?.init?.signal?.aborted).toBe(true);
+
+    const second = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return new Promise(() => {});
+        return json({});
+      },
+    });
+    window.close();
+    win = second.window;
+    const secondRead = second.fetchCalls.find((call) => /\/v1\/billing$/.test(call.url));
+    second.window.dispatchEvent(new second.window.Event('pagehide'));
+    expect(secondRead?.init?.signal?.aborted).toBe(true);
   });
 
   it('Stripe buy-tier 503 (billing unwired): shows the "setup in progress" soft message', async () => {
