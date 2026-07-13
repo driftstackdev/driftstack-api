@@ -55,4 +55,22 @@ describe('Dashboard shared request error copy', () => {
       expect(body).not.toMatch(/err && err\.message\s*\?\s*err\.message/);
     }
   });
+
+  it('is consumed across every DashboardLayout account surface', () => {
+    const pages = [
+      'billing.astro',
+      'usage.astro',
+      'webhooks.astro',
+      'api-keys.astro',
+      'index.astro',
+      'team.astro',
+      'select-tier.astro',
+    ];
+    for (const page of pages) {
+      const body = readFileSync(resolve(HERE, '..', '..', 'src', 'pages', page), 'utf8');
+      expect(body).toContain('window.driftstackRequestErrorMessage(');
+      expect(body).not.toMatch(/err && err\.message\s*\?\s*err\.message/);
+      expect(body).not.toMatch(/new Error\((?:b|body)\.detail\s*\|\|/);
+    }
+  });
 });

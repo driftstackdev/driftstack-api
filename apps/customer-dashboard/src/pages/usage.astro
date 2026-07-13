@@ -564,7 +564,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         .catch((err) => {
           showBanner(
             "Couldn't load live usage (" +
-              (err && err.message ? err.message : 'network error') +
+              window.driftstackRequestErrorMessage(err, "Couldn't load live usage. Try again.") +
               ').',
           );
         })

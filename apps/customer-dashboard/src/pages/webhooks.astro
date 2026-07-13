@@ -619,7 +619,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 : r
                     .json()
                     .catch(() => ({}))
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then((body) => {
               hideCreate();
@@ -668,7 +668,12 @@ const apiBaseUrl = resolveApiBaseUrl();
                 );
                 return;
               }
-              showCreateError(err && err.message ? err.message : 'Failed to create endpoint.');
+              showCreateError(
+                window.driftstackRequestErrorMessage(
+                  err,
+                  'Failed to create the endpoint. Try again.',
+                ),
+              );
             })
             .finally(() => {
               createInFlight = false;
@@ -1094,7 +1099,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (deliveriesSeq.get(endpointId) !== seq) return;
             container.innerHTML =
               '<p class="text-sm text-tk-err-text">Failed to load deliveries: ' +
-              escapeHtml(err && err.message ? err.message : 'network error') +
+              escapeHtml(
+                window.driftstackRequestErrorMessage(
+                  err,
+                  'Could not load deliveries. Try again.',
+                ),
+              ) +
               '</p>';
             return false;
           });
@@ -1147,7 +1157,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (banner) {
               banner.textContent =
                 'Failed to load more deliveries: ' +
-                (err && err.message ? err.message : 'network error');
+                window.driftstackRequestErrorMessage(
+                  err,
+                  'Could not load more deliveries. Try again.',
+                );
               banner.classList.remove('hidden');
             }
           });
@@ -1203,7 +1216,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                 btn.disabled = false;
                 btn.textContent = 'Replay';
                 showBanner(
-                  'Replay failed: ' + (err && err.message ? err.message : 'network error'),
+                  'Replay failed: ' +
+                    window.driftstackRequestErrorMessage(
+                      err,
+                      'Could not replay this delivery. Try again.',
+                    ),
                 );
               })
               .finally(() => {
@@ -1325,7 +1342,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               .catch((err) => {
                 showBanner(
                   'Failed to load endpoint for edit: ' +
-                    (err && err.message ? err.message : 'network error'),
+                    window.driftstackRequestErrorMessage(
+                      err,
+                      'Could not load this endpoint. Try again.',
+                    ),
                 );
               });
           });
@@ -1387,14 +1407,19 @@ const apiBaseUrl = resolveApiBaseUrl();
                 : r
                     .json()
                     .catch(() => ({}))
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then(() => {
               hideEdit();
               window.location.reload();
             })
             .catch((err) => {
-              showEditError(err && err.message ? err.message : 'Failed to save changes.');
+              showEditError(
+                window.driftstackRequestErrorMessage(
+                  err,
+                  'Failed to save the endpoint. Try again.',
+                ),
+              );
             })
             .finally(() => {
               editInFlight = false;
@@ -1445,12 +1470,18 @@ const apiBaseUrl = resolveApiBaseUrl();
                   return r
                     .json()
                     .catch(() => ({}))
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
                 }
                 window.location.reload();
               })
               .catch((err) => {
-                showBanner('Delete failed: ' + (err && err.message ? err.message : 'network error'));
+                showBanner(
+                  'Delete failed: ' +
+                    window.driftstackRequestErrorMessage(
+                      err,
+                      'Could not delete this endpoint. Try again.',
+                    ),
+                );
               })
               .finally(() => {
                 actionButtonsInFlight.delete(btn);
@@ -1575,7 +1606,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                   : r
                       .json()
                       .catch(() => ({}))
-                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                      .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
               )
               .then((body) => {
                 showRotateReveal(id, body.secret, body.grace_expires_at);
@@ -1618,7 +1649,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                   return;
                 }
                 showBanner(
-                  'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
+                  'Rotate failed: ' +
+                    window.driftstackRequestErrorMessage(
+                      err,
+                      'Could not rotate the signing secret. Try again.',
+                    ),
                 );
               })
               .finally(() => {
@@ -1664,7 +1699,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                   return r
                     .json()
                     .catch(() => ({}))
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
                 }
                 showBanner(
                   'Test event queued. Check your endpoint and the delivery log to confirm receipt.',
@@ -1686,7 +1721,10 @@ const apiBaseUrl = resolveApiBaseUrl();
                 }
                 showBanner(
                   'Test send failed: ' +
-                    (err && err.message ? err.message : 'network error'),
+                    window.driftstackRequestErrorMessage(
+                      err,
+                      'Could not send the test event. Try again.',
+                    ),
                 );
               })
               .finally(() => {
@@ -1757,7 +1795,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               empty.classList.add('hidden');
               showBanner(
                 "Couldn't load your webhook endpoints (" +
-                  (err && err.message ? err.message : 'network error') +
+                  window.driftstackRequestErrorMessage(
+                    err,
+                    "Couldn't load webhook endpoints. Try again.",
+                  ) +
                   '). Refresh to try again.',
               );
             }

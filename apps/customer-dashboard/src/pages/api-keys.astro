@@ -672,7 +672,10 @@ npm i @driftstack/sdk</code></pre>
               err && err.name === 'AbortError'
                 ? "Loading API keys took too long. Check your connection and retry."
                 : "Couldn't load live API keys (" +
-                  (err && err.message ? err.message : 'network error') +
+                  window.driftstackRequestErrorMessage(
+                    err,
+                    "Couldn't load live API keys. Try again.",
+                  ) +
                   ').',
             );
             return false;
@@ -824,7 +827,7 @@ npm i @driftstack/sdk</code></pre>
                     .json()
                     .catch(() => ({}))
                     .then((b) =>
-                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                      Promise.reject(window.driftstackResponseError(r, b)),
                     );
                 }
                 return refresh();
@@ -835,7 +838,11 @@ npm i @driftstack/sdk</code></pre>
                   return;
                 }
                 showBanner(
-                  'Revoke failed: ' + (err && err.message ? err.message : 'network error'),
+                  'Revoke failed: ' +
+                    window.driftstackRequestErrorMessage(
+                      err,
+                      'Could not revoke this API key. Try again.',
+                    ),
                 );
               })
               .finally(() => {
@@ -954,7 +961,7 @@ npm i @driftstack/sdk</code></pre>
                     .json()
                     .catch(() => ({}))
                     .then((b) =>
-                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                      Promise.reject(window.driftstackResponseError(r, b)),
                     );
                 }
                 return r.json();
@@ -977,7 +984,11 @@ npm i @driftstack/sdk</code></pre>
                   return;
                 }
                 showBanner(
-                  'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
+                  'Rotate failed: ' +
+                    window.driftstackRequestErrorMessage(
+                      err,
+                      'Could not rotate this API key. Try again.',
+                    ),
                 );
               })
               .finally(() => {
@@ -1097,7 +1108,7 @@ npm i @driftstack/sdk</code></pre>
                   .json()
                   .catch(() => ({}))
                   .then((b) =>
-                    Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                    Promise.reject(window.driftstackResponseError(r, b)),
                   ),
           )
           .then((body) => {
@@ -1111,9 +1122,10 @@ npm i @driftstack/sdk</code></pre>
             createError.textContent =
               err && err.name === 'AbortError'
                 ? await reconcileAmbiguousMutation('create', name, keyIdsBefore)
-                : err && err.message
-                  ? err.message
-                  : 'Create failed.';
+                : window.driftstackRequestErrorMessage(
+                    err,
+                    'Could not create the API key. Try again.',
+                  );
             createError.classList.remove('hidden');
           })
           .finally(() => {

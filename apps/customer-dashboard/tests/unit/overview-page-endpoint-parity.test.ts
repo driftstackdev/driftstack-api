@@ -80,8 +80,12 @@ describe('W337.C dashboard /index overview endpoint parity', () => {
     // The account/me failure is the one user-visible error on this
     // landing page; it must read as a human message, not leak
     // "/v1/account/me returned 500". Pin the b.detail extraction + the
-    // clean banner copy, and assert the old path-leaking throw is gone.
-    expect(body).toMatch(/throw new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)/);
+    // clean banner copy, and assert the old path-leaking throw is gone. The
+    // shared response helper marks server detail customer-safe while the
+    // banner classifier suppresses arbitrary transport/runtime internals.
+    expect(body).toContain('throw window.driftstackResponseError(r, b)');
+    expect(body).toContain('window.driftstackRequestErrorMessage(');
+    expect(body).not.toMatch(/throw new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)/);
     expect(body).toContain('Could not load your account: ');
     expect(body).not.toMatch(/throw new Error\(path \+ ' returned ' \+ r\.status\)/);
   });

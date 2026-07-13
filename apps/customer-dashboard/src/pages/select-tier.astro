@@ -455,7 +455,7 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
                     ? r.json()
                     : r
                         .json()
-                        .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                        .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
                 )
                 .then((body) => {
                   // Finding #20 — don't leave the button stuck on
@@ -468,7 +468,10 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             ).catch((err) => {
               showBanner(
                 "Couldn't open the billing portal (" +
-                  (err && err.message ? err.message : 'network error') +
+                  window.driftstackRequestErrorMessage(
+                    err,
+                    "Couldn't open the billing portal. Try again.",
+                  ) +
                   ').',
               );
             });
@@ -498,9 +501,10 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
                 // instead of "HTTP 404", which reads as a broken site.
                 if (r.status === 404 || r.status === 503) {
                   return Promise.reject(
-                    new Error(
-                      'Billing setup is still in progress on this server. Check back shortly — you can keep exploring the dashboard in the meantime.',
-                    ),
+                    window.driftstackResponseError(r, {
+                      detail:
+                        'Billing setup is still in progress on this server. Check back shortly — you can keep exploring the dashboard in the meantime.',
+                    }),
                   );
                 }
                 // 2026-06-30 — surface a 409 double-subscribe rejection (the
@@ -508,14 +512,17 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
                 // message rather than a bare "HTTP 409".
                 if (r.status === 409) {
                   return Promise.reject(
-                    new Error(
-                      'You already have an active subscription. Use the billing portal to change plans.',
-                    ),
+                    window.driftstackResponseError(r, {
+                      detail:
+                        'You already have an active subscription. Use the billing portal to change plans.',
+                    }),
                   );
                 }
                 return r.ok
                   ? r.json()
-                  : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+                  : r
+                      .json()
+                      .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
               })
               .then((body) => {
                 // Finding #20 — a 200 with no checkout_url (malformed/
@@ -528,7 +535,10 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           ).catch((err) => {
             showBanner(
               "Couldn't start checkout (" +
-                (err && err.message ? err.message : 'network error') +
+                window.driftstackRequestErrorMessage(
+                  err,
+                  "Couldn't start checkout. Try again.",
+                ) +
                 ').',
             );
           });
@@ -664,7 +674,12 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok) {
-              showCryptoError(body.detail || 'HTTP ' + res.status);
+              showCryptoError(
+                window.driftstackRequestErrorMessage(
+                  window.driftstackResponseError(res, body),
+                  'Could not start crypto checkout. Try again.',
+                ),
+              );
               return;
             }
             if (body.provider === 'stub' || !body.payment_address) {
@@ -692,9 +707,10 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             showCryptoError(
               err && err.name === 'AbortError'
                 ? 'Minting the payment address took too long. Check your connection and try again.'
-                : err && err.message
-                  ? err.message
-                  : 'network error',
+                : window.driftstackRequestErrorMessage(
+                    err,
+                    'Could not start crypto checkout. Try again.',
+                  ),
             );
           } finally {
             window.clearTimeout(timeout);

@@ -607,7 +607,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           const b = await r.json().catch(function () {
             return {};
           });
-          throw new Error(b.detail || 'HTTP ' + r.status);
+          throw window.driftstackResponseError(r, b);
         }
         return r.json();
       }
@@ -655,7 +655,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         .catch(function (err) {
           showBanner(
             'Could not load your account: ' +
-              (err && err.message ? err.message : 'network error'),
+              window.driftstackRequestErrorMessage(
+                err,
+                'Could not load your account. Try again.',
+              ),
           );
         })
         .finally(function () {

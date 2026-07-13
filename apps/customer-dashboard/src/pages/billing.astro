@@ -358,7 +358,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 .json()
                 .catch(() => ({}))
                 .then((body) => {
-                  const err = new Error(body.detail || 'HTTP ' + r.status);
+                  const err = window.driftstackResponseError(r, body);
                   err.status = r.status;
                   return Promise.reject(err);
                 }),
@@ -433,7 +433,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             // card the same way the 503 branch does.
             showBanner(
               "Couldn't load live billing (" +
-                (err && err.message ? err.message : 'network error') +
+                window.driftstackRequestErrorMessage(
+                  err,
+                  "Couldn't load your live subscription. Try again.",
+                ) +
                 ').',
             );
             setText('sub-tier', 'Billing state unavailable');

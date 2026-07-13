@@ -404,7 +404,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (showLoadError) {
               renderLoadError();
               showBanner(
-                'Failed to load team: ' + (err && err.message ? err.message : 'network error'),
+                'Failed to load team: ' +
+                  window.driftstackRequestErrorMessage(
+                    err,
+                    'Could not load the team. Try again.',
+                  ),
               );
             }
             return false;
@@ -479,7 +483,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                   }
                 } else {
                   showBanner(
-                    'Remove failed: ' + (err && err.message ? err.message : 'network error'),
+                    'Remove failed: ' +
+                      window.driftstackRequestErrorMessage(
+                        err,
+                        'Could not remove this member. Try again.',
+                      ),
                   );
                 }
               })
@@ -592,7 +600,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                     return {};
                   })
                   .then(function (b) {
-                    throw new Error(b.detail || 'HTTP ' + r.status);
+                    throw window.driftstackResponseError(r, b);
                   });
               }
               return refresh();
@@ -636,7 +644,10 @@ const apiBaseUrl = resolveApiBaseUrl();
                       "The request timed out and we couldn't refresh pending invites. Reload and verify the list before retrying this email; resending could replace the first emailed link.";
                   }
                 } else {
-                  inviteError.textContent = err && err.message ? err.message : 'Invite failed.';
+                  inviteError.textContent = window.driftstackRequestErrorMessage(
+                    err,
+                    'Could not send the invite. Try again.',
+                  );
                 }
                 inviteError.classList.remove('hidden');
               }
