@@ -846,6 +846,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
             if (body && Array.isArray(body.tiers)) renderPricing(body.tiers);
+            return body;
           });
       }
       const pricingSavesInFlight = new Set();
@@ -897,8 +898,51 @@ const apiBaseUrl = resolveApiBaseUrl();
             status.textContent = 'saved';
             status.className = 'w-12 text-[11px] text-emerald-600';
           }
-        } catch {
-          if (status) {
+        } catch (err) {
+          if (err && err.name === 'AbortError') {
+            const refreshed = await fetchPricing().catch(() => null);
+            const liveTier =
+              refreshed && Array.isArray(refreshed.tiers)
+                ? refreshed.tiers.find((candidate) => candidate && candidate.tier === tier)
+                : null;
+            const liveCents = liveTier ? Number(liveTier.monthly_cents) : null;
+            const outcomeStatus = root.querySelector('[data-save-status="' + tier + '"]');
+            if (liveCents === cents) {
+              showBanner(
+                'Pricing outcome is unknown because the response timed out. Effective pricing was refreshed and ' +
+                  tier +
+                  ' is now $' +
+                  (cents / 100).toFixed(2) +
+                  '; the save completed, so do not submit it again.',
+              );
+              if (outcomeStatus) {
+                outcomeStatus.textContent = 'confirmed';
+                outcomeStatus.className = 'w-16 text-[11px] text-emerald-600';
+              }
+            } else if (liveTier) {
+              showBanner(
+                'Pricing outcome is unknown because the response timed out. Effective pricing was refreshed and ' +
+                  tier +
+                  ' is still $' +
+                  (liveCents / 100).toFixed(2) +
+                  '; retry the $' +
+                  (cents / 100).toFixed(2) +
+                  ' save if that price is still required.',
+              );
+              if (outcomeStatus) {
+                outcomeStatus.textContent = 'retry';
+                outcomeStatus.className = 'w-12 text-[11px] text-amber-600';
+              }
+            } else {
+              showBanner(
+                'Pricing outcome is unknown because the response timed out, and effective pricing could not be refreshed. Verify the tier price before retrying.',
+              );
+              if (outcomeStatus) {
+                outcomeStatus.textContent = 'unknown';
+                outcomeStatus.className = 'w-12 text-[11px] text-rose-600';
+              }
+            }
+          } else if (status) {
             status.textContent = 'error';
             status.className = 'w-12 text-[11px] text-rose-600';
           }

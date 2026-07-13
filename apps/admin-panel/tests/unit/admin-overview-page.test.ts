@@ -453,6 +453,44 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-save-status="api_scale"]')).toContain('saved');
   });
 
+  it('owner pricing timeout refreshes the effective value before another purchase-price edit', async () => {
+    let monthlyCents = 149900;
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const fallback = makeRouter({
+      overview: {
+        accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+        webhooks: { dlq_depth: 0 },
+      },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/pricing$/.test(call.url) && method === 'GET') {
+          return json({ tiers: [{ tier: 'api_scale', monthly_cents: monthlyCents }] });
+        }
+        if (/\/v1\/admin\/owner\/pricing\/api_scale$/.test(call.url) && method === 'PATCH') {
+          monthlyCents = JSON.parse(String(call.init?.body)).monthly_cents;
+          return Promise.reject(timeout);
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const input = window.document.querySelector('[data-edit-tier="api_scale"]') as HTMLInputElement;
+    input.value = '199900';
+    (window.document.querySelector('[data-save-tier="api_scale"]') as HTMLButtonElement).click();
+    await flush(15);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
+    expect(text(window, '[data-save-status="api_scale"]')).toContain('confirmed');
+    expect(text(window, '[data-banner]')).toMatch(
+      /pricing outcome is unknown.*effective pricing was refreshed.*api_scale is now \$1999\.00.*save completed.*do not submit it again/i,
+    );
+  });
+
   it('owner pricing confirms the resolved value and serializes duplicate saves per tier', async () => {
     const confirmCalls: unknown[] = [];
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {

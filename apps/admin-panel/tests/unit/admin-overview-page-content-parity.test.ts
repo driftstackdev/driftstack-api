@@ -84,6 +84,14 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toMatch(/pricingSavesInFlight\.delete\(tier\)/);
   });
 
+  it('reconciles ambiguous owner pricing saves against effective pricing', () => {
+    expect(body).toMatch(/const refreshed = await fetchPricing\(\)\.catch\(\(\) => null\)/);
+    expect(body).toMatch(/candidate && candidate\.tier === tier/);
+    expect(body).toMatch(/liveCents === cents/);
+    expect(body).toContain('the save completed, so do not submit it again');
+    expect(body).toContain('Verify the tier price before retrying');
+  });
+
   it('irreversible owner-secret deletion uses the branded destructive modal and a per-secret single-flight guard', () => {
     expect(body).toMatch(/const secretDeletesInFlight = new Set\(\);/);
     expect(body).toMatch(/secretDeletesInFlight\.has\(name\)/);
