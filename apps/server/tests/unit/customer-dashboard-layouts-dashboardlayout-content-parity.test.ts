@@ -42,6 +42,7 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     expect(body).toMatch(/data-ds-prompt-ok/);
     expect(body).toMatch(/data-ds-prompt-cancel/);
     expect(body).toMatch(/window\.driftstackPrompt = function \(message, opts\)/);
+    expect(body).toMatch(/data-ds-prompt-input\s+aria-label="Response"/);
   });
 
   it('2026-05-29 modal UX hardening: body scroll-lock while open + backdrop-click-to-dismiss — pinned so the branded modals behave like professional dialogs (no background scroll, click-outside cancels). Drift would regress the modals to a less-polished feel', () => {

@@ -27,6 +27,7 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(body).toMatch(/data-ds-confirm\b/);
     expect(body).toMatch(/data-ds-prompt\b/);
     expect(body).toMatch(/data-ds-prompt-input/);
+    expect(body).toMatch(/data-ds-prompt-input aria-label="Response"/);
     expect(body).toMatch(/window\.driftstackConfirm = function \(message, opts\)/);
     expect(body).toMatch(/window\.driftstackPrompt = function \(message, opts\)/);
   });
@@ -71,18 +72,19 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(body).toMatch(/admin\s*<\/span>/);
   });
 
-  it("11-item admin nav pinned (Overview / Accounts / Cost / Audit log / Incidents / Status subs / Leads / Sessions / API keys / Webhook DLQ / Rate limits). Drift to dropping any would break admin's at-a-glance nav for an operational surface staff use daily", () => {
+  it("12-item admin nav pinned (Overview / Accounts / Cost / Audit log / Incidents / Status subs / Sessions / Fleet / API keys / Webhook DLQ / Rate limits / Atlas priority). Drift to dropping any would break admin's at-a-glance nav for an operational surface staff use daily", () => {
     expect(body).toMatch(/\{ href: '\/', label: 'Overview' \}/);
     expect(body).toMatch(/\{ href: '\/accounts', label: 'Accounts' \}/);
     expect(body).toMatch(/\{ href: '\/cost', label: 'Cost' \}/);
     expect(body).toMatch(/\{ href: '\/audit-log', label: 'Audit log' \}/);
     expect(body).toMatch(/\{ href: '\/incidents', label: 'Incidents' \}/);
     expect(body).toMatch(/\{ href: '\/status-subscribers', label: 'Status subs' \}/);
-    expect(body).toMatch(/\{ href: '\/leads', label: 'Leads' \}/);
     expect(body).toMatch(/\{ href: '\/sessions', label: 'Sessions' \}/);
+    expect(body).toMatch(/\{ href: '\/fleet', label: 'Fleet' \}/);
     expect(body).toMatch(/\{ href: '\/api-keys', label: 'API keys' \}/);
     expect(body).toMatch(/\{ href: '\/webhook-dlq', label: 'Webhook DLQ' \}/);
     expect(body).toMatch(/\{ href: '\/rate-limit-overrides', label: 'Rate limits' \}/);
+    expect(body).toMatch(/\{ href: '\/atlas-priority-queue', label: 'Atlas priority' \}/);
   });
 
   it("Title-suffix pattern pinned: '<title> · Driftstack admin' (unconditional, unlike the docs Header which has a homepage special-case). Drift to dropping the suffix would let admin tabs become indistinguishable from customer tabs in browser tab strips", () => {

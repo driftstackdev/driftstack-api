@@ -63,6 +63,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <input
           type="search"
           data-field="action"
+          aria-label="Filter audit log by action"
           placeholder="Filter by action (e.g. account.tier_changed)…"
           class="w-80 rounded-md border border-tk-border px-3 py-2 pr-12 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
         />
@@ -76,11 +77,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       <input
         type="search"
         data-field="admin-id"
+        aria-label="Filter audit log by admin id"
         placeholder="Admin id (acc_<uuid>)"
         class="w-64 rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
       />
       <select
         data-field="result"
+        aria-label="Filter audit log by result"
         class="rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
       >
         <option value="">Any result</option>

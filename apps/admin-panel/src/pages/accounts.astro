@@ -70,6 +70,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <input
           type="search"
           data-field="search"
+          aria-label="Search accounts by email"
           placeholder="Search by email substring…  ( /  to focus)"
           class="w-72 rounded-md border border-tk-border px-3 py-2 pr-12 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
         />
@@ -83,6 +84,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
       <select
         data-field="status"
+        aria-label="Filter accounts by status"
         class="rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
       >
         <option value="">All statuses</option>
@@ -92,6 +94,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </select>
       <select
         data-field="tier"
+        aria-label="Filter accounts by tier"
         class="rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
       >
         <option value="">All tiers</option>
