@@ -31,6 +31,7 @@ interface MockFetchCall {
 interface SetUpOpts {
   url?: string;
   requestTimeoutImmediately?: boolean;
+  requestTimeoutOnCall?: number;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
@@ -74,9 +75,14 @@ function setUpDom(
     return Promise.resolve(handler(call));
   };
   if (opts.requestTimeoutImmediately) {
+    let requestTimerCount = 0;
     const nativeSetTimeout = window.setTimeout.bind(window);
     window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-      if (timeout === 15_000) {
+      if (
+        timeout === 15_000 &&
+        (++requestTimerCount === (opts.requestTimeoutOnCall ?? 1) ||
+          (opts.requestTimeoutOnCall === undefined && opts.requestTimeoutImmediately))
+      ) {
         window.queueMicrotask(() => {
           if (typeof handler === 'function') handler(...args);
         });
@@ -179,6 +185,40 @@ describe('login page — local integration', () => {
       code: '123456',
     });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MFA_TOKEN');
+  });
+
+  it('serializes duplicate MFA submits and recovers after the bounded challenge times out', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      requestTimeoutImmediately: true,
+      requestTimeoutOnCall: 2,
+      fetchPlan: [
+        () => json({ mfa_required: true, challenge_token: 'chal_x' }),
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'mfa@example.com', 'secret-password');
+    await flush();
+    const codeInput = window.document.querySelector('#login-mfa-code') as HTMLInputElement;
+    codeInput.value = '123456';
+    const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const challengeCalls = fetchCalls.filter((c) => /\/v1\/auth\/mfa\/challenge$/.test(c.url));
+    expect(challengeCalls).toHaveLength(1);
+    expect(challengeCalls[0]?.init?.signal?.aborted).toBe(true);
+    const submitBtn = mfaForm.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.getAttribute('aria-busy')).toBe('false');
+    expect(submitBtn.textContent).toBe('Verify');
+    expect(bannerText(window)).toMatch(/verification took too long.*check your connection/i);
   });
 
   it('invalid credentials: surfaces the server detail in the banner, stores no token', async () => {

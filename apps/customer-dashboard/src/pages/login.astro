@@ -484,6 +484,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaRecoveryInput = root.querySelector('#login-mfa-recovery');
       let mfaChallengeToken = null;
       let mfaUsingRecovery = false;
+      let mfaInFlight = false;
 
       function startMfaChallenge(challengeToken) {
         mfaChallengeToken = challengeToken;
@@ -507,8 +508,11 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       if (mfaForm) {
         const mfaSubmit = mfaForm.querySelector('button[type="submit"]');
+        const mfaSubmitLabel = mfaSubmit ? mfaSubmit.textContent : '';
+        const MFA_REQUEST_TIMEOUT_MS = 15_000;
         mfaForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
+          if (mfaInFlight) return;
           banner.classList.add('hidden');
           const code = mfaCodeInput ? mfaCodeInput.value.trim() : '';
           const recovery = mfaRecoveryInput ? mfaRecoveryInput.value.trim() : '';
@@ -523,14 +527,19 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             return;
           }
+          mfaInFlight = true;
           if (mfaSubmit) {
             mfaSubmit.disabled = true;
             mfaSubmit.setAttribute('aria-busy', 'true');
+            mfaSubmit.textContent = 'Verifying…';
           }
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), MFA_REQUEST_TIMEOUT_MS);
           fetch(apiBaseUrl + '/v1/auth/mfa/challenge', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(payload),
+            signal: controller.signal,
           })
             .then((r) =>
               r.ok
@@ -543,12 +552,21 @@ const apiBaseUrl = resolveApiBaseUrl();
             )
             .then((body) => completeSession(body))
             .catch((err) => {
-              showBanner(err && err.message ? err.message : 'Verification failed. Try again.');
+              showBanner(
+                controller.signal.aborted
+                  ? 'Verification took too long. Check your connection and try again.'
+                  : err && err.message
+                    ? err.message
+                    : 'Verification failed. Try again.',
+              );
             })
             .finally(() => {
+              clearTimeout(timeoutId);
+              mfaInFlight = false;
               if (mfaSubmit) {
                 mfaSubmit.disabled = false;
                 mfaSubmit.setAttribute('aria-busy', 'false');
+                mfaSubmit.textContent = mfaSubmitLabel;
               }
             });
         });

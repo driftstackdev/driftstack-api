@@ -75,6 +75,19 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).not.toMatch(/not available yet/);
   });
 
+  it('MFA verification has a real single-flight lease and bounded network deadline', () => {
+    expect(body).toMatch(/let mfaInFlight = false/);
+    expect(body).toMatch(/const MFA_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/if \(mfaInFlight\) return/);
+    expect(body).toMatch(/mfaInFlight = true/);
+    expect(body).toMatch(/mfaSubmit\.textContent = 'Verifying…'/);
+    expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), MFA_REQUEST_TIMEOUT_MS\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\)/);
+    expect(body).toMatch(/mfaInFlight = false/);
+    expect(body).toMatch(/Verification took too long/);
+  });
+
   it("V-269 ?next= preserved on /signup cross-link (deep-link doesn't leak)", () => {
     expect(body).toMatch(/V-269 — preserve \?next= when bouncing the user to \/signup/);
     expect(body).toMatch(
