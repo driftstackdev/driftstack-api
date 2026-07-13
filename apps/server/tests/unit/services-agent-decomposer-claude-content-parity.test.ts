@@ -69,6 +69,16 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).not.toMatch(/const MODEL = /);
   });
 
+  it('runtime-enforces the documented eight-intent ceiling and safe Anthropic usage accounting', () => {
+    expect(body).toContain('const MAX_PLAN_INTENTS = 8;');
+    expect(body).toMatch(/if \(raw\.length > MAX_PLAN_INTENTS\) \{/);
+    expect(body).toContain('Anthropic plan.intents exceeded ${MAX_PLAN_INTENTS} entries');
+    expect(body).toMatch(/Number\.isSafeInteger\(inputTokens\)/);
+    expect(body).toMatch(/Number\.isSafeInteger\(outputTokens\)/);
+    expect(body).toMatch(/Number\.isSafeInteger\(inputTokens \+ outputTokens\)/);
+    expect(body).toContain('Anthropic response usage was missing or invalid');
+  });
+
   it("6.c / #15 per-model rate sourcing pinned: imports CLAUDE_MODELS + DEFAULT_AGENT_MODEL from @driftstack/api-types; makeClaudeUsage looks up CLAUDE_MODELS[model] for the per-call cost (replacing the hardcoded Opus PER_MTOK consts). + 'If a rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the registry-sourced-rate + no-recompute-on-drift contract stay documented", () => {
     expect(body).toMatch(
       /import \{ CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel \} from '@driftstack\/api-types';/,
@@ -197,6 +207,6 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/const reader = res\.body\.getReader\(\);/);
     expect(body).toMatch(/bytesRead \+= value\.byteLength;/);
     expect(body).toMatch(/if \(bytesRead > MAX_ANTHROPIC_RESPONSE_BYTES\) \{/);
-    expect(body).toMatch(/return JSON\.parse\(bodyText\) as AnthropicResponseJson;/);
+    expect(body).toMatch(/return JSON\.parse\(bodyText\) as unknown;/);
   });
 });

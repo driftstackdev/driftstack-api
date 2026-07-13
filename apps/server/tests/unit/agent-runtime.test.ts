@@ -760,6 +760,17 @@ describe('Q.1.b classifyDecomposerError', () => {
     );
   });
 
+  it('classifies malformed Anthropic envelope, usage, and overlong-plan errors as fatal', () => {
+    for (const message of [
+      'Anthropic response envelope was not a JSON object',
+      'Anthropic response content was not an array',
+      'Anthropic response usage was missing or invalid',
+      'Anthropic plan.intents exceeded 8 entries',
+    ]) {
+      expect(classifyDecomposerError(new Error(message)), message).toBe('fatal');
+    }
+  });
+
   it('oversized Anthropic response body → fatal protocol violation', () => {
     expect(
       classifyDecomposerError(new Error('Anthropic response body exceeded 262144 bytes')),

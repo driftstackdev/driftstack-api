@@ -813,7 +813,7 @@ export function classifyDecomposerError(err: unknown): 'transient' | 'fatal' {
   if (/Anthropic API 4\d\d/.test(msg)) return 'fatal';
   // Malformed Anthropic response → fatal
   if (
-    /missing text content|not valid JSON|not a JSON object|unknown kind:|intents was not an array|missing clarifyingQuestion|missing refuseReason|response body exceeded \d+ bytes/i.test(
+    /missing text content|not valid JSON|not a JSON object|response (?:envelope|content|usage)|unknown kind:|intents (?:was not an array|exceeded \d+ entries)|missing clarifyingQuestion|missing refuseReason|response body exceeded \d+ bytes/i.test(
       msg,
     )
   ) {

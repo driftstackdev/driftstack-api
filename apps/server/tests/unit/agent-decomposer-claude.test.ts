@@ -343,6 +343,18 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents.map((i) => i.kind)).toEqual(['navigate', 'capture']);
     });
 
+    it('rejects a plan above the eight-entry execution ceiling before any action can run', async () => {
+      const intents = Array.from({ length: __TEST_ONLY__.MAX_PLAN_INTENTS + 1 }, () => ({
+        kind: 'capture',
+        capture: 'screenshot',
+      }));
+      const { fetch } = sequenceFetch([jsonResponse({ kind: 'plan', intents })]);
+
+      await expect(new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs())).rejects.toThrow(
+        /intents exceeded 8 entries/i,
+      );
+    });
+
     it('preserves boolean sensitive typing and drops spoof string values', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({
@@ -414,15 +426,22 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
             { kind: 'interact', action: 'press', value: '' },
             { kind: 'interact', action: 'press', value: 'x'.repeat(21) },
             { kind: 'interact', action: 'tap', selector: '#go' },
+          ],
+        }),
+        jsonResponse({
+          kind: 'plan',
+          intents: [
             { kind: 'interact', action: 'type', selector: '#name', value: '' },
             { kind: 'interact', action: 'scroll', selector: '#ignored', value: 'ignored' },
             { kind: 'interact', action: 'press', value: 'Enter' },
           ],
         }),
       ]);
-      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
-      if (res.kind !== 'plan') throw new Error('type narrow');
-      expect(res.intents).toEqual([
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const first = await dec.decompose(defaultArgs());
+      const second = await dec.decompose(defaultArgs());
+      if (first.kind !== 'plan' || second.kind !== 'plan') throw new Error('type narrow');
+      expect([...first.intents, ...second.intents]).toEqual([
         { kind: 'interact', action: 'tap', selector: '#go' },
         { kind: 'interact', action: 'type', selector: '#name', value: '' },
         { kind: 'interact', action: 'scroll' },
@@ -675,6 +694,46 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       await expect(dec.decompose(defaultArgs())).rejects.toThrow(/missing text content/);
     });
 
+    it('rejects malformed top-level and content envelopes with stable protocol errors', async () => {
+      const topLevel = new ClaudeAgentDecomposer({ fetch: sequenceFetch([jsonRaw(null)]).fetch });
+      await expect(topLevel.decompose(defaultArgs())).rejects.toThrow(/envelope was not/i);
+
+      const content = new ClaudeAgentDecomposer({
+        fetch: sequenceFetch([
+          jsonRaw({ content: {}, usage: { input_tokens: 1, output_tokens: 1 } }),
+        ]).fetch,
+      });
+      await expect(content.decompose(defaultArgs())).rejects.toThrow(/content was not an array/i);
+    });
+
+    it('rejects missing, negative, fractional, string, and unsafe Anthropic token usage', async () => {
+      const invalidUsage: unknown[] = [
+        undefined,
+        null,
+        {},
+        { input_tokens: -1, output_tokens: 1 },
+        { input_tokens: 1.5, output_tokens: 1 },
+        { input_tokens: '1', output_tokens: 1 },
+        { input_tokens: Number.MAX_SAFE_INTEGER, output_tokens: 1 },
+      ];
+      for (const usage of invalidUsage) {
+        const envelope = {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                kind: 'plan',
+                intents: [{ kind: 'capture', capture: 'screenshot' }],
+              }),
+            },
+          ],
+          ...(usage !== undefined ? { usage } : {}),
+        };
+        const dec = new ClaudeAgentDecomposer({ fetch: sequenceFetch([jsonRaw(envelope)]).fetch });
+        await expect(dec.decompose(defaultArgs())).rejects.toThrow(/usage was missing or invalid/i);
+      }
+    });
+
     it('non-JSON text → throws', async () => {
       const { fetch } = sequenceFetch([
         jsonRaw({
@@ -834,6 +893,19 @@ describe('AI-B1.b ClaudeAgentDecomposer — #140 answerFromObservation (read-and
     const { fetch } = sequenceFetch([jsonResponse({ kind: 'answer', answer: '   ' })]);
     const dec = new ClaudeAgentDecomposer({ fetch });
     await expect(dec.answerFromObservation(answerArgs)).rejects.toThrow(/missing answer string/);
+  });
+
+  it('rejects invalid usage on the read-back path instead of emitting a bad debit', async () => {
+    const { fetch } = sequenceFetch([
+      jsonResponse(
+        { kind: 'answer', answer: 'Your IP address is 203.0.113.7.' },
+        { input_tokens: 10, output_tokens: -1 },
+      ),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(dec.answerFromObservation(answerArgs)).rejects.toThrow(
+      /usage was missing or invalid/i,
+    );
   });
 
   it('caps a multi-MB observation so it cannot blow context/cost', async () => {

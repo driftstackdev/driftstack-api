@@ -52,9 +52,9 @@ describe('services/agent-decomposer content parity', () => {
     expect(body).toMatch(/intents\?: ReadonlyArray<AgentIntent>;/);
   });
 
-  it("CredentialBag 'never persisted; logged as [redacted]' framing pinned + 3-field shape (username + password + extras Record). Drift to logging credentials in transcripts would leak customer login info into per-account audit dumps", () => {
+  it('CredentialBag encrypted-at-rest + redacted-rendering framing pinned with its three-field shape', () => {
     expect(body).toMatch(
-      /\*\s+Customer-supplied credentials for log-in flows the agent might\s*\n?\s*\*\s+need to drive\. Held in-memory for the agent-session lifetime;\s*\n?\s*\*\s+never persisted\. Logged in transcripts as `\[redacted\]`\./,
+      /\*\s+Customer-supplied credentials for log-in flows the agent might\s*\n?\s*\*\s+need to drive\. Held in-memory for the agent-session lifetime and never\s*\n?\s*\*\s+persisted in plaintext; transcript copies are protected by the encrypted\s*\n?\s*\*\s+transcript envelope and rendered as `\[redacted\]` where applicable\./,
     );
     expect(body).toMatch(
       /export interface CredentialBag \{\s*\n?\s*username\?: string;\s*\n?\s*password\?: string;\s*\n?\s*\/\*\* Free-form per-credential metadata \(e\.g\. 2FA seed, recovery\s*\n?\s*\*\s+email\)\. Each key is treated as sensitive\. \*\/\s*\n?\s*extras\?: Readonly<Record<string, string>>;\s*\n?\s*\}/,

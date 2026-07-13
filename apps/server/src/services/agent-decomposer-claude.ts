@@ -41,6 +41,7 @@ import { normalizeTaskForScreening } from './task-refusal.js';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION_HEADER = '2023-06-01';
 const MAX_OUTPUT_TOKENS = 2048;
+const MAX_PLAN_INTENTS = 8;
 const MAX_RETRIES_5XX = 1;
 const DEFAULT_RETRY_BACKOFF_MS = 1000;
 // Per-request timeout for the Anthropic call. Without it a hung upstream
@@ -285,7 +286,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     return parseAnswerResponse(response, model);
   }
 
-  private async callWithRetry(body: string, apiKey: string): Promise<AnthropicResponseJson> {
+  private async callWithRetry(body: string, apiKey: string): Promise<unknown> {
     let attempt = 0;
     // Single retry on 5xx; let 4xx + post-retry 5xx escape as exceptions.
     while (true) {
@@ -329,7 +330,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       if (res.ok) {
         // Parse OUTSIDE the try so a malformed-JSON success body throws (not
         // retried) — same semantics as the prior res.json().
-        return JSON.parse(bodyText) as AnthropicResponseJson;
+        return JSON.parse(bodyText) as unknown;
       }
 
       // Retry transient throttles too, not just 5xx: a 429 (rate-limit) is
@@ -345,11 +346,6 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       throw new Error(`Anthropic API ${res.status}: ${bodyText.slice(0, 300)}`);
     }
   }
-}
-
-interface AnthropicResponseJson {
-  content: ReadonlyArray<{ type: string; text?: string }>;
-  usage?: { input_tokens?: number; output_tokens?: number };
 }
 
 interface AgentRequestMessage {
@@ -387,13 +383,61 @@ function buildMessages(args: DecomposeArgs): AgentRequestMessage[] {
   return messages;
 }
 
-function parseAnthropicResponse(json: AnthropicResponseJson, model: AgentModel): DecomposeResult {
-  const textBlock = json.content.find((c) => c.type === 'text' && typeof c.text === 'string');
-  if (!textBlock || typeof textBlock.text !== 'string') {
-    throw new Error('Anthropic response missing text content block');
+function extractAnthropicText(
+  json: unknown,
+  missingTextMessage: string,
+): { envelope: Record<string, unknown>; text: string } {
+  if (typeof json !== 'object' || json === null || Array.isArray(json)) {
+    throw new Error('Anthropic response envelope was not a JSON object');
   }
+  const envelope = json as Record<string, unknown>;
+  if (!Array.isArray(envelope.content)) {
+    throw new Error('Anthropic response content was not an array');
+  }
+  const textBlock = envelope.content.find(
+    (candidate): candidate is { type: string; text: string } =>
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      (candidate as Record<string, unknown>).type === 'text' &&
+      typeof (candidate as Record<string, unknown>).text === 'string',
+  );
+  if (textBlock === undefined) throw new Error(missingTextMessage);
+  return { envelope, text: textBlock.text };
+}
+
+function parseAnthropicUsage(envelope: Record<string, unknown>): {
+  inputTokens: number;
+  outputTokens: number;
+  tokensConsumed: number;
+} {
+  const usage = envelope.usage;
+  if (typeof usage !== 'object' || usage === null || Array.isArray(usage)) {
+    throw new Error('Anthropic response usage was missing or invalid');
+  }
+  const usageRecord = usage as Record<string, unknown>;
+  const inputTokens = usageRecord.input_tokens;
+  const outputTokens = usageRecord.output_tokens;
+  if (
+    typeof inputTokens !== 'number' ||
+    !Number.isSafeInteger(inputTokens) ||
+    inputTokens < 0 ||
+    typeof outputTokens !== 'number' ||
+    !Number.isSafeInteger(outputTokens) ||
+    outputTokens < 0 ||
+    !Number.isSafeInteger(inputTokens + outputTokens)
+  ) {
+    throw new Error('Anthropic response usage was missing or invalid');
+  }
+  return { inputTokens, outputTokens, tokensConsumed: inputTokens + outputTokens };
+}
+
+function parseAnthropicResponse(json: unknown, model: AgentModel): DecomposeResult {
+  const { envelope, text } = extractAnthropicText(
+    json,
+    'Anthropic response missing text content block',
+  );
   // Strip code fences if the model emitted them despite the instruction.
-  const raw = textBlock.text
+  const raw = text
     .trim()
     .replace(/^```(?:json)?\s*/, '')
     .replace(/\s*```$/, '');
@@ -411,9 +455,7 @@ function parseAnthropicResponse(json: AnthropicResponseJson, model: AgentModel):
   const obj = parsed as Record<string, unknown>;
   const kind = obj.kind;
 
-  const inputTokens = json.usage?.input_tokens ?? 0;
-  const outputTokens = json.usage?.output_tokens ?? 0;
-  const tokensConsumed = inputTokens + outputTokens;
+  const { inputTokens, outputTokens, tokensConsumed } = parseAnthropicUsage(envelope);
   const usage = makeClaudeUsage(inputTokens, outputTokens, model);
 
   if (kind === 'plan') {
@@ -461,12 +503,12 @@ function parseAnthropicResponse(json: AnthropicResponseJson, model: AgentModel):
  * `answer` string (a blank/malformed answer throws so the runtime falls back to
  * the plan result rather than surfacing an empty reply).
  */
-function parseAnswerResponse(json: AnthropicResponseJson, model: AgentModel): AnswerResult {
-  const textBlock = json.content.find((c) => c.type === 'text' && typeof c.text === 'string');
-  if (!textBlock || typeof textBlock.text !== 'string') {
-    throw new Error('Anthropic answer response missing text content block');
-  }
-  const raw = textBlock.text
+function parseAnswerResponse(json: unknown, model: AgentModel): AnswerResult {
+  const { envelope, text } = extractAnthropicText(
+    json,
+    'Anthropic answer response missing text content block',
+  );
+  const raw = text
     .trim()
     .replace(/^```(?:json)?\s*/, '')
     .replace(/\s*```$/, '');
@@ -483,11 +525,10 @@ function parseAnswerResponse(json: AnthropicResponseJson, model: AgentModel): An
   if (typeof obj.answer !== 'string' || obj.answer.trim() === '') {
     throw new Error('Anthropic answer response missing answer string');
   }
-  const inputTokens = json.usage?.input_tokens ?? 0;
-  const outputTokens = json.usage?.output_tokens ?? 0;
+  const { inputTokens, outputTokens, tokensConsumed } = parseAnthropicUsage(envelope);
   return {
     answer: obj.answer,
-    tokensConsumed: inputTokens + outputTokens,
+    tokensConsumed,
     usage: makeClaudeUsage(inputTokens, outputTokens, model),
   };
 }
@@ -589,6 +630,9 @@ function isAbsoluteHttpUrl(value: unknown): value is string {
 function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
   if (!Array.isArray(raw)) {
     throw new Error('Anthropic plan.intents was not an array');
+  }
+  if (raw.length > MAX_PLAN_INTENTS) {
+    throw new Error(`Anthropic plan.intents exceeded ${MAX_PLAN_INTENTS} entries`);
   }
   const out: AgentIntent[] = [];
   for (const item of raw) {
@@ -766,5 +810,6 @@ export const __TEST_ONLY__ = {
   ANTHROPIC_API_URL,
   ANTHROPIC_VERSION_HEADER,
   MAX_ANTHROPIC_RESPONSE_BYTES,
+  MAX_PLAN_INTENTS,
   makeClaudeUsage,
 };

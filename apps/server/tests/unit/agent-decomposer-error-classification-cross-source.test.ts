@@ -122,6 +122,53 @@ describe('decomposer errors ↔ runtime classifier cross-source invariant', () =
       expect(classifyDecomposerError(err)).toBe('fatal');
     });
 
+    it('malformed top-level/content envelopes', async () => {
+      for (const response of [
+        rawResponse(null),
+        rawResponse({ content: {}, usage: { input_tokens: 10, output_tokens: 5 } }),
+      ]) {
+        const err = await thrownBy(dec([response]).decompose(defaultArgs()));
+        expect(classifyDecomposerError(err)).toBe('fatal');
+      }
+    });
+
+    it('invalid token usage', async () => {
+      const err = await thrownBy(
+        dec([
+          rawResponse({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  kind: 'plan',
+                  intents: [{ kind: 'capture', capture: 'screenshot' }],
+                }),
+              },
+            ],
+            usage: { input_tokens: -10, output_tokens: 5 },
+          }),
+        ]).decompose(defaultArgs()),
+      );
+      expect(classifyDecomposerError(err)).toBe('fatal');
+    });
+
+    it('plan above the eight-entry execution ceiling', async () => {
+      const err = await thrownBy(
+        dec([
+          textResponse(
+            JSON.stringify({
+              kind: 'plan',
+              intents: Array.from({ length: 9 }, () => ({
+                kind: 'capture',
+                capture: 'screenshot',
+              })),
+            }),
+          ),
+        ]).decompose(defaultArgs()),
+      );
+      expect(classifyDecomposerError(err)).toBe('fatal');
+    });
+
     it('clarify missing clarifyingQuestion', async () => {
       const err = await thrownBy(
         dec([textResponse(JSON.stringify({ kind: 'clarify' }))]).decompose(defaultArgs()),
