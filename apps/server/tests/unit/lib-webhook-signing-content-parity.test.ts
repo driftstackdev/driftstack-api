@@ -43,9 +43,9 @@ describe('W388.C apps/server/src/lib/webhook-signing.ts content parity', () => {
     expect(body).toMatch(/hmac = HMAC-SHA256\(`<unix-seconds>\.<raw body>`, <secret-plaintext>\)/);
   });
 
-  it('D-023 plaintext-storage framing (secrets generated at subscription-creation time)', () => {
+  it('encrypted-at-rest framing keeps plaintext scoped to the delivery worker', () => {
     expect(body).toMatch(
-      /Secrets are generated at subscription-creation time and stored in\s*\n?\s*\/\/\s*plaintext \(D-023\)\. Verification happens on the customer's machine using\s*\n?\s*\/\/\s*the SDK helper/,
+      /Secrets are generated at subscription-creation time and stored in a\s*\n?\s*\/\/\s*versioned AES-GCM envelope\. The delivery worker receives plaintext only\s*\n?\s*\/\/\s*after repository-boundary decryption/,
     );
   });
 

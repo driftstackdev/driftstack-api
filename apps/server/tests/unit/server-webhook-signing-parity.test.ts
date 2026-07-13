@@ -69,12 +69,11 @@ describe('W716 server-side webhook-signing canonical-format parity', () => {
     expect(src).toMatch(/\.update\(signed\)\.digest\('hex'\)/);
   });
 
-  it('CRITICAL plaintext secret storage framing pinned with D-023 anchor — "Secrets are generated at subscription-creation time and stored in plaintext (D-023)". The plaintext storage is what lets the server sign without an HSM round-trip; drift to dropping the anchor would lose the per-decision provenance.', () => {
+  it('CRITICAL encrypted secret storage framing keeps delivery-worker plaintext boundary explicit', () => {
     const src = read(SIGNING);
-    expect(src).toMatch(/Secrets are generated at subscription-creation time and stored in/);
-    expect(src).toMatch(/plaintext \(D-023\)/);
-    expect(src).toMatch(/Verification happens on the customer's machine using/);
-    expect(src).toMatch(/the SDK helper/);
+    expect(src).toMatch(/stored in a\s*\n?\s*\/\/ versioned AES-GCM envelope/);
+    expect(src).toMatch(/delivery worker receives plaintext only/);
+    expect(src).toMatch(/repository-boundary decryption/);
   });
 
   it('CRITICAL secret format pinned — `whsec_<32 base32 chars>` from 20 random bytes (160 bits entropy). The `whsec_` prefix is what makes secrets identifiable in customer logs; drift to dropping would let customers paste raw base32 strings without recognizing them as secrets.', () => {

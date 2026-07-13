@@ -176,7 +176,9 @@ export async function startTestServer(): Promise<TestServer> {
   const accountAuditRepo = new DrizzleAccountAuditRepo(database);
   const accountAuditService = new AccountAuditService(accountAuditRepo);
 
-  const webhooksRepo = new DrizzleWebhooksRepo(database);
+  const webhooksRepo = new DrizzleWebhooksRepo(database, {
+    secretEncryptionKeyBase64: Buffer.alloc(32, 17).toString('base64'),
+  });
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
   const webhooksService = new WebhooksService(webhooksRepo, accountAuditService);
   const webhooksAdminService = new WebhooksAdminService(webhooksRepo);

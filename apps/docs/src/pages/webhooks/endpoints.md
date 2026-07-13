@@ -76,10 +76,9 @@ plaintext signing secret in `secret`:
 }
 ```
 
-> **Save the secret now.** It's shown ONCE; Driftstack stores the
-> plaintext server-side (per D-023, since the worker needs it to
-> sign outbound deliveries) but never returns it again on subsequent
-> reads.
+> **Save the secret now.** It's shown ONCE; Driftstack stores a versioned
+> AES-256-GCM envelope and decrypts it only in the delivery worker while
+> signing. Subsequent reads return the prefix, never the plaintext secret.
 
 Errors:
 

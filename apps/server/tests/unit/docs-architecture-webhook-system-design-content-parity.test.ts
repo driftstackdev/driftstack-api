@@ -96,14 +96,15 @@ describe('W560.C /docs/architecture/webhook-system-design.md content parity', ()
     expect(body).toMatch(/## Subscription model/);
     expect(body).toMatch(/Stored in a new `webhook_endpoints` table \(Drizzle\):/);
     expect(body).toMatch(/`account_id`\s+\| uuid FK accounts\s+\| ON DELETE CASCADE/);
-    expect(body).toMatch(/`secret_hash`\s+\| text\s+\| scrypt-hashed/);
+    expect(body).toMatch(/`secret`\s+\| text\s+\| versioned AES-256-GCM envelope/);
+    expect(body).toMatch(/`secret_prev`\s+\| text nullable\s+\| encrypted prior secret/);
     expect(body).toMatch(/`secret_prefix`\s+\| text\s+\| first 12 chars for log\/debug display/);
     expect(body).toMatch(
       /`consecutive_failures` \| int\s+\| circuit breaker: auto-disable after 50 consecutive 5xx/,
     );
     expect(body).toMatch(/Public ID prefix: `whk_`/);
-    expect(body).toMatch(/\*\*Plaintext secret is `whsec_<32 base32 chars>`\*\*/);
-    expect(body).toMatch(/We hash with scrypt at the same `logN=15` factor/);
+    expect(body).toMatch(/\*\*Customer secret is `whsec_<32 base32 chars>`\*\*/);
+    expect(body).toMatch(/At rest it is a versioned AES-256-GCM envelope/);
     expect(body).toMatch(/## Delivery model/);
     expect(body).toMatch(/Stored in a new `webhook_deliveries` table:/);
     expect(body).toMatch(
@@ -140,7 +141,7 @@ describe('W560.C /docs/architecture/webhook-system-design.md content parity', ()
     expect(body).toMatch(/hmac = HMAC-SHA256\(`<unix-seconds>\.<raw body>`, <secret-plaintext>\)/);
     expect(body).toMatch(/The verifier is in the SDK and was added in V-013\./);
     expect(body).toMatch(
-      /\*\*Decision \(D-023\):\*\* store the secret in plaintext alongside the hash\./,
+      /\*\*Decision \(D-023, superseded 2026-07-12\):\*\* store a versioned AES-256-GCM envelope/,
     );
   });
 

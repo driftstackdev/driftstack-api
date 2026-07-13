@@ -30,6 +30,7 @@ import type { NewWebhookEndpointInput } from '../../src/services/webhooks.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+const WEBHOOK_KEY = Buffer.alloc(32, 17).toString('base64');
 
 let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
@@ -92,7 +93,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('5 concurrent inserts on a limit-1 account yield EXACTLY 1 row (the advisory lock serialises → 4 losers get null)', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleWebhooksRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleWebhooksRepo(
+        { client, db, close: async () => {} },
+        { secretEncryptionKeyBase64: WEBHOOK_KEY },
+      );
       const accountId = await seedAccount(client);
 
       // Pre-fix (bare count-then-insert) → all 5 read count=0 → 5 rows. With the
@@ -103,12 +107,40 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(results.filter((r) => r !== null)).toHaveLength(1);
       expect(results.filter((r) => r === null)).toHaveLength(4);
       expect(await repo.countActiveEndpoints(accountId)).toBe(1);
+      const winner = results.find((result) => result !== null);
+      if (!winner) throw new Error('expected one webhook endpoint winner');
+      expect(winner.secret).toMatch(/^whsec_/);
+      const [stored] =
+        await client`SELECT secret FROM webhook_endpoints WHERE account_id = ${accountId}`;
+      expect(stored?.secret).toContain('driftstack:webhook-secret:v1:');
+      expect(stored?.secret).not.toContain(winner.secret);
+
+      const rotatedPlaintext = 'whsec_rotated_database_snapshot_must_not_forge';
+      const rotated = await repo.rotateSecret({
+        id: winner.id,
+        accountId,
+        newSecret: rotatedPlaintext,
+        newPrefix: rotatedPlaintext.slice(0, 12),
+        graceExpiresAt: new Date(Date.now() + 86_400_000),
+        now: new Date(),
+      });
+      expect(rotated?.secret).toBe(rotatedPlaintext);
+      expect(rotated?.secretPrev).toBe(winner.secret);
+      const [storedRotated] =
+        await client`SELECT secret, secret_prev FROM webhook_endpoints WHERE id = ${winner.id}`;
+      expect(storedRotated?.secret).toContain('driftstack:webhook-secret:v1:');
+      expect(storedRotated?.secret_prev).toContain('driftstack:webhook-secret:v1:');
+      expect(JSON.stringify(storedRotated)).not.toContain(rotatedPlaintext);
+      expect(JSON.stringify(storedRotated)).not.toContain(winner.secret);
     });
 
     it('6 concurrent inserts on a limit-3 account yield EXACTLY 3 rows', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleWebhooksRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleWebhooksRepo(
+        { client, db, close: async () => {} },
+        { secretEncryptionKeyBase64: WEBHOOK_KEY },
+      );
       const accountId = await seedAccount(client);
 
       const results = await Promise.all(
@@ -116,6 +148,38 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       );
       expect(results.filter((r) => r !== null)).toHaveLength(3);
       expect(await repo.countActiveEndpoints(accountId)).toBe(3);
+    });
+
+    it('bounded upgrader converts legacy current+previous keys without changing in-process plaintext', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleWebhooksRepo(
+        { client, db, close: async () => {} },
+        { secretEncryptionKeyBase64: WEBHOOK_KEY },
+      );
+      const accountId = await seedAccount(client);
+      const current = 'whsec_legacy_current_database_snapshot';
+      const previous = 'whsec_legacy_previous_database_snapshot';
+      const [inserted] = await client`
+        INSERT INTO webhook_endpoints
+          (account_id, url, secret, secret_prefix, secret_prev, secret_prev_expires_at, events, description)
+        VALUES
+          (${accountId}, 'https://hooks.example/legacy', ${current}, 'whsec_legac', ${previous}, NOW() + INTERVAL '1 day', ARRAY['session.completed']::webhook_event_type[], NULL)
+        RETURNING id
+      `;
+      const endpointId = String(inserted?.id);
+
+      const upgraded = await repo.encryptLegacySecrets(10_000);
+      expect(upgraded.converted).toBeGreaterThanOrEqual(1);
+      const [stored] =
+        await client`SELECT secret, secret_prev FROM webhook_endpoints WHERE id = ${endpointId}`;
+      expect(stored?.secret).toContain('driftstack:webhook-secret:v1:');
+      expect(stored?.secret_prev).toContain('driftstack:webhook-secret:v1:');
+      expect(JSON.stringify(stored)).not.toContain(current);
+      expect(JSON.stringify(stored)).not.toContain(previous);
+      const read = await repo.findEndpoint(endpointId, accountId);
+      expect(read?.secret).toBe(current);
+      expect(read?.secretPrev).toBe(previous);
     });
   },
 );

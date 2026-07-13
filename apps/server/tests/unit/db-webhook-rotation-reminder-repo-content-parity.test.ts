@@ -60,6 +60,8 @@ describe('db/webhook-rotation-reminder-repo content parity', () => {
     expect(body).toMatch(/graceWindowEndsAt: webhookEndpoints\.graceWindowEndsAt,/);
     expect(body).toMatch(/forceRotatedAt: webhookEndpoints\.forceRotatedAt,/);
     expect(body).toMatch(/consecutiveFailures: webhookEndpoints\.consecutiveFailures,/);
+    expect(body).toMatch(/secret: readWebhookSecret\(r\.secret, this\.secretEncryptionKeyBase64\)/);
+    expect(body).toMatch(/readWebhookSecret\(r\.secretPrev, this\.secretEncryptionKeyBase64\)/);
   });
 
   it("markReminderSent updates ONLY lastReminderSentAt framing pinned: .set({ lastReminderSentAt: args.now }) + void sql to suppress unused-import warn. Drift to bumping updatedAt would create artificial 'customer mutated' signals on every reminder cycle (vs the actual customer-driven mutation events)", () => {

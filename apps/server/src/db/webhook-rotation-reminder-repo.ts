@@ -9,11 +9,19 @@ import type { Database } from './client.js';
 import { accounts, webhookEndpoints } from './schema.js';
 import type { WebhookRotationReminderRepo } from '../services/webhook-rotation-reminder.js';
 import type { WebhookEndpointRow } from '../services/webhooks.js';
+import { readWebhookSecret } from '../lib/webhook-secret-encryption.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export class DrizzleWebhookRotationReminderRepo implements WebhookRotationReminderRepo {
-  constructor(private readonly database: Database) {}
+  private readonly secretEncryptionKeyBase64: string | undefined;
+
+  constructor(
+    private readonly database: Database,
+    options: { secretEncryptionKeyBase64?: string } = {},
+  ) {
+    this.secretEncryptionKeyBase64 = options.secretEncryptionKeyBase64;
+  }
 
   async findEndpointsNeedingRotationReminder(args: {
     now: Date;
@@ -71,9 +79,12 @@ export class DrizzleWebhookRotationReminderRepo implements WebhookRotationRemind
       id: r.id,
       accountId: r.accountId,
       url: r.url,
-      secret: r.secret,
+      secret: readWebhookSecret(r.secret, this.secretEncryptionKeyBase64),
       secretPrefix: r.secretPrefix,
-      secretPrev: r.secretPrev,
+      secretPrev:
+        r.secretPrev !== null
+          ? readWebhookSecret(r.secretPrev, this.secretEncryptionKeyBase64)
+          : null,
       secretPrevExpiresAt: r.secretPrevExpiresAt,
       secretCreatedAt: r.secretCreatedAt,
       lastReminderSentAt: r.lastReminderSentAt,

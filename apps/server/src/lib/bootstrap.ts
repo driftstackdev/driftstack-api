@@ -331,7 +331,25 @@ export async function createProductionDeps(
   const sessionsRepo = new DrizzleSessionRepo(dbHandle);
   const apiKeysRepo = new DrizzleApiKeysRepo(dbHandle);
   const usageRepo = new DrizzleUsageRepo(dbHandle);
-  const webhooksRepo = new DrizzleWebhooksRepo(dbHandle);
+  const webhooksRepo = new DrizzleWebhooksRepo(dbHandle, {
+    ...(config.mfaEncryptionKey !== undefined
+      ? { secretEncryptionKeyBase64: config.mfaEncryptionKey }
+      : {}),
+  });
+  if (config.mfaEncryptionKey !== undefined) {
+    const upgraded = await webhooksRepo.encryptLegacySecrets(500);
+    if (upgraded.scanned > 0) {
+      logger.info(
+        { component: 'webhook-secret-encryption', ...upgraded },
+        'legacy webhook signing secrets encrypted in bounded bootstrap batch',
+      );
+    }
+  } else {
+    logger.warn(
+      { component: 'webhook-secret-encryption' },
+      'MFA_ENCRYPTION_KEY not set — encrypted webhook secrets are unreadable and new secret writes fail closed',
+    );
+  }
   const adminAuditRepo = new DrizzleAdminAuditLogRepo(dbHandle);
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(dbHandle);
   const adminBillingRepo = new DrizzleAdminBillingRepo(dbHandle);
@@ -2284,7 +2302,11 @@ export async function createProductionDeps(
   const ROTATION_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
   const rotationRemindersDisabled = process.env.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS === '1';
   const webhookRotationReminderService = new WebhookRotationReminderService(
-    new DrizzleWebhookRotationReminderRepo(dbHandle),
+    new DrizzleWebhookRotationReminderRepo(dbHandle, {
+      ...(config.mfaEncryptionKey !== undefined
+        ? { secretEncryptionKeyBase64: config.mfaEncryptionKey }
+        : {}),
+    }),
     email,
     logger,
     // v2-#36 — thread DASHBOARD_ORIGIN-driven config so rotation
@@ -2366,6 +2388,43 @@ export async function createProductionDeps(
         })();
       }, ROTATION_REMINDER_INTERVAL_MS);
   byokAnthropicRotationReminderTimer?.unref();
+
+  // Drain pre-envelope D-023 rows in bounded batches. The first batch ran
+  // synchronously above so a wrong key fails boot before workers start; this
+  // non-overlapping follow-up retires any remainder without a table rewrite or
+  // a long deployment lock, then stops itself once the query finds none.
+  const WEBHOOK_SECRET_UPGRADE_INTERVAL_MS = 60_000;
+  let webhookSecretUpgradeInFlight = false;
+  let webhookSecretUpgradeTimer: NodeJS.Timeout | null = null;
+  if (config.mfaEncryptionKey !== undefined) {
+    webhookSecretUpgradeTimer = setInterval(() => {
+      if (webhookSecretUpgradeInFlight) return;
+      webhookSecretUpgradeInFlight = true;
+      void webhooksRepo
+        .encryptLegacySecrets(500)
+        .then((result) => {
+          if (result.scanned > 0) {
+            logger.info(
+              { component: 'webhook-secret-encryption', ...result },
+              'legacy webhook signing secrets encrypted in bounded follow-up batch',
+            );
+          } else if (webhookSecretUpgradeTimer !== null) {
+            clearInterval(webhookSecretUpgradeTimer);
+            webhookSecretUpgradeTimer = null;
+          }
+        })
+        .catch((err: unknown) => {
+          logger.error(
+            { component: 'webhook-secret-encryption', err },
+            'legacy webhook signing-secret conversion failed; interval will retry',
+          );
+        })
+        .finally(() => {
+          webhookSecretUpgradeInFlight = false;
+        });
+    }, WEBHOOK_SECRET_UPGRADE_INTERVAL_MS);
+    webhookSecretUpgradeTimer.unref();
+  }
 
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
   // sweep. Tick every 5 seconds: walks tracker.findStaleSessions()
@@ -2534,6 +2593,7 @@ export async function createProductionDeps(
     if (webhookSecretForceRotationTimer) clearInterval(webhookSecretForceRotationTimer);
     if (webhookGraceExpiringNoticeTimer) clearInterval(webhookGraceExpiringNoticeTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
+    if (webhookSecretUpgradeTimer) clearInterval(webhookSecretUpgradeTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
     clearInterval(webhookDeliveryTimer);
     try {

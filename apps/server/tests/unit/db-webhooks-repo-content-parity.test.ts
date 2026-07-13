@@ -77,7 +77,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
 
   it("insertEndpoint: 6-field values (accountId + url + secret + secretPrefix + events + description); throws 'insertEndpoint returned no row'", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*url: input\.url,\s*\n?\s*secret: input\.secret,\s*\n?\s*secretPrefix: input\.secretPrefix,\s*\n?\s*events: input\.events,\s*\n?\s*description: input\.description,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
+      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*url: input\.url,\s*\n?\s*secret: this\.encryptForStorage\(input\.secret\),\s*\n?\s*secretPrefix: input\.secretPrefix,\s*\n?\s*events: input\.events,\s*\n?\s*description: input\.description,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
     );
     expect(body).toMatch(/if \(!row\) throw new Error\('insertEndpoint returned no row'\);/);
   });
@@ -117,8 +117,9 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     // not-yet-expired) rather than clobbering it with the un-deployed force secret —
     // else the worker dual-signs {new, force} and both fail the customer's verifier.
     expect(body).toMatch(
-      /secretPrev: sql`CASE WHEN \$\{webhookEndpoints\.forceRotatedAt\} IS NOT NULL AND \$\{webhookEndpoints\.secretPrevExpiresAt\} > \$\{input\.now\} THEN \$\{webhookEndpoints\.secretPrev\} ELSE \$\{webhookEndpoints\.secret\} END`,/,
+      /secretPrev: sql`CASE WHEN \$\{webhookEndpoints\.forceRotatedAt\} IS NOT NULL AND \$\{webhookEndpoints\.secretPrevExpiresAt\} > \$\{nowIso\}::timestamptz THEN \$\{webhookEndpoints\.secretPrev\} ELSE \$\{webhookEndpoints\.secret\} END`,/,
     );
+    expect(body).toMatch(/const nowIso = input\.now\.toISOString\(\);/);
   });
 
   it('enqueueDelivery: 4-field base values (webhookId + eventId + eventType + payload) + conditional nextAttemptAt spread + RETURNING id (returns the real delivery row id)', () => {
@@ -226,8 +227,16 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
 
   it('toEndpointRow: 20-field WebhookEndpointRow (id + accountId + url + secret + secretPrefix + secretPrev + secretPrevExpiresAt + secretCreatedAt + lastReminderSentAt + graceWindowEndsAt + forceRotatedAt + events + description + active + consecutiveFailures + lastSuccessAt + lastFailureAt + disabledAt + 2 timestamps; secretCreatedAt + lastReminderSentAt added in v2-#10 migration 0048; graceWindowEndsAt + forceRotatedAt added in v2-#28 force-rotation slice)', () => {
     expect(body).toMatch(
-      /function toEndpointRow\(r: typeof webhookEndpoints\.\$inferSelect\): WebhookEndpointRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*url: r\.url,\s*\n?\s*secret: r\.secret,\s*\n?\s*secretPrefix: r\.secretPrefix,\s*\n?\s*secretPrev: r\.secretPrev,\s*\n?\s*secretPrevExpiresAt: r\.secretPrevExpiresAt,\s*\n?\s*secretCreatedAt: r\.secretCreatedAt,\s*\n?\s*lastReminderSentAt: r\.lastReminderSentAt,[\s\S]*?graceWindowEndsAt: r\.graceWindowEndsAt,\s*\n?\s*forceRotatedAt: r\.forceRotatedAt,\s*\n?\s*events: r\.events,\s*\n?\s*description: r\.description,\s*\n?\s*active: r\.active,\s*\n?\s*consecutiveFailures: r\.consecutiveFailures,\s*\n?\s*lastSuccessAt: r\.lastSuccessAt,\s*\n?\s*lastFailureAt: r\.lastFailureAt,\s*\n?\s*disabledAt: r\.disabledAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toEndpointRow\([\s\S]*?secretEncryptionKeyBase64: string \| undefined,[\s\S]*?\): WebhookEndpointRow \{\s*\n?\s*return \{[\s\S]*?secret: readWebhookSecret\(r\.secret, secretEncryptionKeyBase64\),[\s\S]*?secretPrev:[\s\S]*?readWebhookSecret\(r\.secretPrev, secretEncryptionKeyBase64\)[\s\S]*?updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
+  });
+
+  it('encrypts new writes, authenticates reads, and upgrades legacy rows with exact-value compare-and-set guards', () => {
+    expect(body).toMatch(/secret: this\.encryptForStorage\(input\.secret\)/);
+    expect(body).toMatch(/secret: this\.encryptForStorage\(input\.newSecret\)/);
+    expect(body).toMatch(/async encryptLegacySecrets\(limit = 500\)/);
+    expect(body).toMatch(/eq\(webhookEndpoints\.secret, row\.secret\)/);
+    expect(body).toMatch(/readWebhookSecret\(r\.secret, secretEncryptionKeyBase64\)/);
   });
 
   it('file exists at canonical path', () => {

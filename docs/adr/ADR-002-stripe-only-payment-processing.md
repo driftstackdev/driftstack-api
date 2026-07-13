@@ -93,4 +93,4 @@ Re-evaluate this decision if **any** of the following fires:
 
 The deferred file-116 dual-processor spec remains the documented fallback architecture; do not delete the spec from the parent driftstack repo. If the Stripe-decline trigger fires, the Mollie reactivation path is to (1) provision a Mollie API key + webhook endpoint, (2) wire the existing webhook handler scaffolding behind a `provider` discriminator, (3) update the DPA Annex 3 + Privacy Policy sub-processor table, (4) issue Art 28(2) amendment notice to existing customers with the standard 30-day notice period, (5) version-bump the legal documents (minor: forces re-acceptance under conservative posture).
 
-The Stripe webhook signing-secret rotation cadence and audit posture inherits from D-023 (webhook signing secret stored plaintext at rest, Stripe-style).
+The Stripe webhook signing-secret rotation cadence remains independent; D-023 now requires encrypted envelopes for Driftstack outbound-webhook secrets.

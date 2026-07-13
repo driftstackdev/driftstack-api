@@ -1187,14 +1187,14 @@ export const webhookEndpoints = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
     url: text('url').notNull(),
-    // Secret stored in plaintext (D-023): the worker needs the plaintext on
-    // every signing call, and webhook-signature forgery is a phishing-grade
-    // not auth-grade risk. Same posture as Stripe.
+    // Versioned AES-256-GCM text envelope in production. The repository
+    // decrypts only at the worker/service boundary for signing; legacy D-023
+    // plaintext rows are readable solely for bounded bootstrap conversion.
     secret: text('secret').notNull(),
     // First 12 chars of the plaintext, for display in lists / logs.
     secretPrefix: text('secret_prefix').notNull(),
     // V-359 — rotation grace period. When customer rotates the
-    // signing secret, the OLD secret moves into `secret_prev` and
+    // signing secret, the OLD encrypted envelope moves into `secret_prev` and
     // `secret_prev_expires_at` is set to (now + 24h). During the
     // grace, every outbound delivery is signed twice (`v1=<curr>,
     // v1=<prev>`) so the customer's verifier can accept either while

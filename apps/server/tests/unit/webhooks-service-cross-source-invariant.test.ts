@@ -124,11 +124,13 @@ describe('W949 webhooks service cross-source invariant', () => {
     );
   });
 
-  // ─── D-023 plaintext-secret framing ──────────────────────────
+  // ─── D-023 encrypted-at-rest framing ─────────────────────────
 
-  it("CRITICAL WebhookEndpointRow.secret is 'plaintext (D-023)' — explicit inline comment. The D-023 anchor is the policy provenance for the plaintext-not-hashed decision; webhook secrets must be plaintext-accessible to the worker for HMAC signing.", () => {
+  it('CRITICAL WebhookEndpointRow.secret is plaintext only in the in-process repository result and encrypted at rest', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'));
-    expect(p).toMatch(/secret: string;\s*\/\/ plaintext \(D-023\)/);
+    expect(p).toMatch(
+      /\/\*\* Plaintext only in the in-process repository result; encrypted at rest\. \*\/\s*\n?\s*secret: string;/,
+    );
   });
 
   // ─── V-359 dual-sign rotation grace framing ──────────────────

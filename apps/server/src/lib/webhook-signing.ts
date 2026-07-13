@@ -5,9 +5,9 @@
 //
 // hmac = HMAC-SHA256(`<unix-seconds>.<raw body>`, <secret-plaintext>)
 //
-// Secrets are generated at subscription-creation time and stored in
-// plaintext (D-023). Verification happens on the customer's machine using
-// the SDK helper.
+// Secrets are generated at subscription-creation time and stored in a
+// versioned AES-GCM envelope. The delivery worker receives plaintext only
+// after repository-boundary decryption; customer verification uses the SDK.
 
 import { createHmac, randomBytes } from 'node:crypto';
 

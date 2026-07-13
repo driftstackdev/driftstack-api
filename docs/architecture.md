@@ -255,7 +255,7 @@ Auth + security:
 
 Webhooks:
 
-- **D-023** — Outbound-webhook signing secrets stored plaintext at rest.
+- **D-023** — Outbound-webhook signing secrets use versioned AES-GCM envelopes; plaintext exists only at the delivery-worker boundary.
 - **D-029** — Hand-rolled Stripe HTTP client (no `stripe` npm SDK dep).
 - **D-030** — Inbound Stripe webhook idempotency via `processed_stripe_events` PK.
 - **D-031** — `session.failed` first-failure-only emission semantic.

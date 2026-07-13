@@ -81,13 +81,13 @@ describe('W959 webhook-signing V-359 dual-sign cross-source invariant', () => {
     expect(p).toMatch(/hmac = HMAC-SHA256\(`<unix-seconds>\.<raw body>`, <secret-plaintext>\)/);
   });
 
-  // ─── D-023 plaintext-secret framing ──────────────────────────
+  // ─── D-023 encrypted-at-rest framing ─────────────────────────
 
-  it("CRITICAL D-023 framing — 'Secrets are generated at subscription-creation time and stored in plaintext (D-023). Verification happens on the customer's machine using the SDK helper'. The D-023 plaintext-stored + verify-on-customer design matches W949 webhooks D-023 invariant.", () => {
+  it('CRITICAL D-023 framing — versioned AES-GCM at rest and repository-boundary decryption', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/webhook-signing.ts'));
-    expect(p).toMatch(/Secrets are generated at subscription-creation time and stored in/);
-    expect(p).toMatch(/plaintext \(D-023\)\. Verification happens on the customer's machine using/);
-    expect(p).toMatch(/the SDK helper\./);
+    expect(p).toMatch(/versioned AES-GCM envelope/);
+    expect(p).toMatch(/delivery worker receives plaintext only/);
+    expect(p).toMatch(/repository-boundary decryption/);
   });
 
   // ─── Constants ───────────────────────────────────────────────

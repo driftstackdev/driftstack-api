@@ -66,7 +66,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         return;
       }
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleWebhooksRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleWebhooksRepo(
+        { client, db, close: async () => {} },
+        { secretEncryptionKeyBase64: Buffer.alloc(32, 17).toString('base64') },
+      );
 
       const accountId = randomUUID();
       const webhookId = randomUUID();

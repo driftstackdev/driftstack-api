@@ -45,25 +45,26 @@ The set is deliberately small for the first release. Adding new event types is n
 
 Stored in a new `webhook_endpoints` table (Drizzle):
 
-| column                 | type               | notes                                                                                |
-| ---------------------- | ------------------ | ------------------------------------------------------------------------------------ |
-| `id`                   | uuid PK            | `gen_random_uuid()`                                                                  |
-| `account_id`           | uuid FK accounts   | ON DELETE CASCADE                                                                    |
-| `url`                  | text               | HTTPS-only enforced at validation                                                    |
-| `secret_hash`          | text               | scrypt-hashed; the plaintext is returned ONCE at creation, never stored in plaintext |
-| `secret_prefix`        | text               | first 12 chars for log/debug display                                                 |
-| `events`               | text[]             | subset of supported types; validated at write                                        |
-| `description`          | text nullable      | optional human label                                                                 |
-| `active`               | boolean            | default true                                                                         |
-| `consecutive_failures` | int                | circuit breaker: auto-disable after 50 consecutive 5xx                               |
-| `last_success_at`      | timestamp nullable |                                                                                      |
-| `last_failure_at`      | timestamp nullable |                                                                                      |
-| `created_at`           | timestamp          |                                                                                      |
-| `disabled_at`          | timestamp nullable |                                                                                      |
+| column                 | type               | notes                                                               |
+| ---------------------- | ------------------ | ------------------------------------------------------------------- |
+| `id`                   | uuid PK            | `gen_random_uuid()`                                                 |
+| `account_id`           | uuid FK accounts   | ON DELETE CASCADE                                                   |
+| `url`                  | text               | HTTPS-only enforced at validation                                   |
+| `secret`               | text               | versioned AES-256-GCM envelope; plaintext returned ONCE at creation |
+| `secret_prefix`        | text               | first 12 chars for log/debug display                                |
+| `secret_prev`          | text nullable      | encrypted prior secret during a bounded dual-sign rotation window   |
+| `events`               | text[]             | subset of supported types; validated at write                       |
+| `description`          | text nullable      | optional human label                                                |
+| `active`               | boolean            | default true                                                        |
+| `consecutive_failures` | int                | circuit breaker: auto-disable after 50 consecutive 5xx              |
+| `last_success_at`      | timestamp nullable |                                                                     |
+| `last_failure_at`      | timestamp nullable |                                                                     |
+| `created_at`           | timestamp          |                                                                     |
+| `disabled_at`          | timestamp nullable |                                                                     |
 
 Public ID prefix: `whk_` (matches the `acc_/key_/ses_` family).
 
-**Plaintext secret is `whsec_<32 base32 chars>`**, generated like API keys. Returned once on `POST /v1/webhooks`. We hash with scrypt at the same `logN=15` factor for at-rest consistency. The receiver-side verifier (`verifyWebhookSignature` in the SDK) takes the plaintext directly — there's no equivalent of the auth cache here because verification happens on the customer's machine, not ours. (We DO want to avoid hashing the secret on every outbound delivery; see Signing notes below.)
+**Customer secret is `whsec_<32 base32 chars>`**, generated like API keys and returned once on `POST /v1/webhooks`. At rest it is a versioned AES-256-GCM envelope; the repository decrypts only for outbound signing. The receiver-side verifier (`verifyWebhookSignature` in the SDK) takes the customer's plaintext directly because verification happens on their machine.
 
 ## Delivery model
 
@@ -172,13 +173,13 @@ X-Driftstack-Signature: t=<unix-seconds>,v1=<hex-hmac-sha256>
 
 The receiver verifies with `verifyWebhookSignature({ body: rawBytes, header, secret })`. The verifier is in the SDK and was added in V-013.
 
-**Open question — secret storage:** the worker needs the plaintext secret to sign each delivery. Options:
+**Resolved question — secret storage:** the worker needs the plaintext secret to sign each delivery. Options considered:
 
 - (a) Store the plaintext secret in the `webhook_endpoints` row (same column we currently call `secret_hash`). Risk: a DB dump leaks plaintext webhook secrets. But signing webhooks is not as sensitive as API key auth; a leaked secret lets an attacker forge webhook deliveries to a customer endpoint, which is a phishing-grade concern, not a takeover-grade one.
 - (b) Hash at rest, require customer to re-supply the secret on every config change, sign with derived material. Operationally awful.
 - (c) Use a KMS-style envelope: encrypt-at-rest with a per-account key. Adds operational complexity (key rotation, KMS dependency) without solving the leak problem (the per-account key is itself stored somewhere).
 
-**Decision (D-023):** store the secret in plaintext alongside the hash. Document this clearly. The hash is for display/debug; the plaintext is for signing. Customers should treat their webhook secret like an API key: rotate if leaked. Acceptable risk for the first release; can revisit if the threat model shifts. (This is what Stripe does.)
+**Decision (D-023, superseded 2026-07-12):** store a versioned AES-256-GCM envelope in `secret`/`secret_prev`, backed by the platform customer-secret key. The repository authenticates and decrypts only at the delivery-worker boundary. Legacy plaintext rows are readable only for a bounded, compare-and-set bootstrap conversion; new writes fail closed without the key. This preserves one-time plaintext creation responses and dual-sign rotation without making a database snapshot sufficient to forge events.
 
 ## API surface
 

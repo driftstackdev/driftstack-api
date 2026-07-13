@@ -54,7 +54,8 @@ export interface WebhookEndpointRow {
   id: string;
   accountId: string;
   url: string;
-  secret: string; // plaintext (D-023)
+  /** Plaintext only in the in-process repository result; encrypted at rest. */
+  secret: string;
   secretPrefix: string;
   /** V-359 — previous signing secret during the rotation grace
    *  period. Null when no rotation in flight or grace expired. The
@@ -195,8 +196,8 @@ export interface WebhooksRepo {
    * v2-#29 — null out `secret_prev` + `secret_prev_expires_at` on every
    * row whose grace window has elapsed. v2-#20's worker fix already
    * stops emitting the prev signature past expiry, so this is purely a
-   * data-hygiene sweep: a leaked DB snapshot would otherwise still
-   * carry the old plaintext secret past its useful lifetime. Returns
+   * data-hygiene sweep: a leaked DB snapshot should not retain even the
+   * expired ciphertext envelope past its useful lifetime. Returns
    * the count of rows cleared for telemetry.
    */
   clearStaleSecretPrev(args: { now: Date }): Promise<{ cleared: number }>;

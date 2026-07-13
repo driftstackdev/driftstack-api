@@ -176,12 +176,12 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 2 (perf-critical structural choice; approved).
 - **V-log:** V-015.
 
-## D-023 — Webhook signing secret stored plaintext at rest (Stripe posture)
+## D-023 — Webhook signing secret encrypted at rest (supersedes original plaintext posture)
 
-- **Decision:** the `webhook_endpoints.secret` column holds the plaintext signing secret (`whsec_<32 base32>`). The `secret_prefix` column stores the first 12 chars for display/debug. There is no separate scrypt-hashed field; the signing worker reads the plaintext directly to compute `HMAC-SHA256(<unix>.<body>, secret)` per delivery.
-- **Reasoning:** the worker MUST sign every outbound delivery, so the plaintext has to be available at sign-time. Hashing-at-rest while still being able to sign requires either (a) re-deriving signing material from a hash on every delivery (operationally awful, breaks customer rotation flow) or (b) a KMS-style envelope (per-account encryption key — adds operational complexity without solving the root leak problem, since the per-account key has to live somewhere). The threat model for a leaked webhook secret is "attacker can forge webhook deliveries to the customer's endpoint" — phishing-grade, not takeover-grade. API key plaintext leaks remain takeover-grade because they let the attacker call our API as the customer; webhook secret leaks let the attacker impersonate us to the customer's endpoint, which the customer can mitigate by rotating the secret. Stripe takes the same posture (plaintext signing secret at rest, customers rotate on suspicion of leak). Documented as a customer-facing rotation flow, not as a security gap to solve in a future iteration.
+- **Decision:** `webhook_endpoints.secret` and live `secret_prev` hold versioned AES-256-GCM envelopes under the platform customer-secret key. The repository decrypts them only in process for HMAC signing; `secret_prefix` remains display-only. Legacy plaintext rows are drained by a bounded compare-and-set bootstrap upgrader, and encrypted rows/new writes fail closed when the key is absent or wrong.
+- **Reasoning:** signing requires recoverable key material, but it does not require usable keys in a database snapshot. Reusing the already-operated platform envelope removes the former KMS-complexity objection while preserving one-time plaintext creation responses and atomic dual-sign rotation. A webhook-secret leak enables forged customer events and is therefore treated as a direct integrity breach, not an acceptable “phishing-grade” exception.
 - **Tier:** Contractual (security model; reviewed via the WH1 design doc that captured this as the proposed decision).
-- **V-log:** V-014.
+- **V-log:** V-014; plaintext posture superseded 2026-07-12.
 
 ## D-022 — `*Input` type variants for request shapes with server-side defaults
 

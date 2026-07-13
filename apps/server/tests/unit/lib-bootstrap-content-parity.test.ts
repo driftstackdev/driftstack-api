@@ -67,6 +67,21 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it('wires and verifies webhook secret encryption, then runs a bounded legacy conversion batch before workers start', () => {
+    expect(body).toMatch(
+      /const webhooksRepo = new DrizzleWebhooksRepo\(dbHandle, \{[\s\S]*?secretEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\);/,
+    );
+    expect(body).toMatch(/const upgraded = await webhooksRepo\.encryptLegacySecrets\(500\);/);
+    expect(body).toMatch(
+      /encrypted webhook secrets are unreadable and new secret writes fail closed/,
+    );
+    expect(body).toMatch(/const WEBHOOK_SECRET_UPGRADE_INTERVAL_MS = 60_000;/);
+    expect(body).toMatch(/if \(webhookSecretUpgradeInFlight\) return;/);
+    expect(body).toMatch(
+      /if \(webhookSecretUpgradeTimer\) clearInterval\(webhookSecretUpgradeTimer\);/,
+    );
+  });
+
   it('header framing pinned: pure-factory; pass-in deps NOT lazy; every external connection (Postgres pool, Redis, R2, Sentry, Postmark) opened HERE so SIGTERM handler closes them deterministically', () => {
     expect(body).toMatch(/\/\/ Production bootstrap\./);
     expect(body).toMatch(
@@ -234,7 +249,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/const ROTATION_REMINDER_INTERVAL_MS = 24 \* 60 \* 60 \* 1000;/);
     expect(body).toMatch(/process\.env\.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS === '1'/);
     expect(body).toMatch(
-      /new WebhookRotationReminderService\(\s*\n?\s*new DrizzleWebhookRotationReminderRepo\(dbHandle\),/,
+      /new WebhookRotationReminderService\(\s*\n?\s*new DrizzleWebhookRotationReminderRepo\(dbHandle, \{[\s\S]*?secretEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\),/,
     );
     expect(body).toMatch(
       /new ByokAnthropicRotationReminderService\(\s*\n?\s*new DrizzleByokAnthropicRotationReminderRepo\(dbHandle\),/,

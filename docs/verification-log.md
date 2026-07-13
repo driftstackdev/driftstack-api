@@ -706,7 +706,7 @@ Webhook System (Priority 2) is the next workstream. The signature-verification h
 Eight commits (WH1–WH8) landing the full webhook delivery system end-to-end.
 
 - **Schema (WH2 — `0002_webhook_tables.sql`):** two new tables + two new pg-enums.
-  - `webhook_endpoints`: id, account_id (FK CASCADE), url, secret (plaintext, see D-023), secret_prefix, events (`webhook_event_type[]`), description, active, consecutive_failures, last_success_at, last_failure_at, disabled_at, created_at, updated_at. Indexes on `(account_id)` and `(account_id, active)`.
+  - `webhook_endpoints`: id, account_id (FK CASCADE), url, secret (versioned AES-GCM envelope; original D-023 plaintext posture superseded 2026-07-12), secret_prefix, events (`webhook_event_type[]`), description, active, consecutive_failures, last_success_at, last_failure_at, disabled_at, created_at, updated_at. Indexes on `(account_id)` and `(account_id, active)`.
   - `webhook_deliveries`: id, webhook_id (FK CASCADE), event_id, event_type, payload (jsonb), status (`webhook_delivery_status`), attempts, next_attempt_at, last_response_status, last_response_excerpt, last_error, delivered_at, created_at, updated_at. Indexes on `(status, next_attempt_at)` (worker-poll) and `(webhook_id, created_at)` (per-endpoint history).
   - 5 event types: `session.completed`, `session.failed`, `quota.warning_80pct`, `quota.exceeded`, `api_key.revoked`. 5 delivery statuses: `pending` / `in_flight` / `delivered` / `failed` / `dlq`.
 - **Service + repos (WH3):** `WebhooksService` (mgmt + `enqueueEvent` fan-out, account-scoped, `MAX_ENDPOINTS_PER_ACCOUNT = 10`, HTTPS-only via `parseHttpsUrl`). `WebhooksRepo` interface + `DrizzleWebhooksRepo` (transactional `recordDelivered/recordRetry/recordDlq` that updates endpoint counters in the same tx) + `InMemoryWebhooksRepo` for tests. Signing: `lib/webhook-signing.ts` (`generateWebhookSecret` → `whsec_<32 base32>`, `signWebhookPayload` → `t=<unix>,v1=<hex>` matching the SDK's `verifyWebhookSignature`).
@@ -738,7 +738,7 @@ Eight commits (WH1–WH8) landing the full webhook delivery system end-to-end.
 
 5. **`InMemoryWebhooksRepo.claim()` and the Drizzle one diverged on what `nextAttemptAt: undefined` meant for a freshly-enqueued row.** In-memory: defaults to `now`, so the worker can claim immediately. Drizzle: column has a `DEFAULT NOW()` so same effective behaviour. The unit test for "worker delivers a 2xx" originally passed `nextAttemptAt: undefined` and used a fixed `constNow()` of `2026-05-02T12:00:00Z` to drive the worker. The wall-clock `now` from `Date.now()` (the real `now` in May 2026 was after `constNow`) made the row's `nextAttemptAt > constNow`, so `claim()` filtered it out and the test asserted "0 outcomes" — looked passing-but-vacuous. Fix: pass an explicit `nextAttemptAt: NOW` (where NOW = `constNow()`) so the worker's `now <= nextAttemptAt` filter is exercised meaningfully. Same class of "test silently passes because the assertion short-circuits" bug as V-009's autocannon `path` vs `url`.
 
-6. **Webhook secret-at-rest plaintext storage was the only viable option** without forcing customers into a re-supply-on-every-edit dance or building a KMS envelope abstraction we don't otherwise need. Captured as D-023; threat model is "leaked secret = attacker can forge deliveries to the customer's endpoint", which is rotation-recoverable, not takeover-grade. Stripe takes the same posture.
+6. **Superseded 2026-07-12:** webhook secrets now use the existing platform AES-GCM envelope, preserving recoverability for signing without plaintext-at-rest exposure or customer re-supply.
 
 7. **`@driftstack/sdk` import from server tests requires the package alias, not relative paths.** First pass of `tests/unit/webhook-signing.test.ts` imported `verifyWebhookSignature` from `../../../../packages/sdk-typescript/src/webhook-signature.js`, which TS rejects with `TS6059: File … is not under 'rootDir'`. Fixed by importing from `@driftstack/sdk` (already a workspace devDependency on `apps/server`). The e2e spec already used the package import — the unit test was the outlier.
 
@@ -746,7 +746,7 @@ Eight commits (WH1–WH8) landing the full webhook delivery system end-to-end.
 
 ### Decisions made (cross-link)
 
-D-023 (webhook signing secret plaintext at rest, Stripe posture).
+D-023 (webhook signing secret encrypted at rest; original plaintext posture superseded 2026-07-12).
 
 ### Status
 

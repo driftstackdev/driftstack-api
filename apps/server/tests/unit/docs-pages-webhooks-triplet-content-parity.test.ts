@@ -74,12 +74,12 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL D-023 plaintext-stored-server-side framing pinned. The '**Save the secret now.** It\\'s shown ONCE; Driftstack stores the plaintext server-side (per D-023, since the worker needs it to sign outbound deliveries) but never returns it again on subsequent reads' wording is the load-bearing why-server-stores-plaintext rationale.", () => {
+  it('CRITICAL one-time secret + encrypted-at-rest delivery-worker boundary framing pinned', () => {
     const p = read(EP);
 
-    expect(p).toMatch(/\*\*Save the secret now\.\*\* It's shown ONCE; Driftstack stores the/);
+    expect(p).toMatch(/\*\*Save the secret now\.\*\* It's shown ONCE; Driftstack stores a/);
     expect(p).toMatch(
-      /plaintext server-side \(per D-023, since the worker needs it to\s*\n?> sign outbound deliveries\) but never returns it again on subsequent\s*\n?> reads\./,
+      /versioned\s*\n?> AES-256-GCM envelope and decrypts it only in the delivery worker while\s*\n?> signing\. Subsequent reads return the prefix, never the plaintext secret\./,
     );
   });
 

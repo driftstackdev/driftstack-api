@@ -116,7 +116,7 @@ describe('W550.A /docs/adr/ADR-002-stripe-only-payment-processing.md content par
       /The deferred file-116 dual-processor spec remains the documented fallback architecture; do not delete the spec from the parent driftstack repo\./,
     );
     expect(body).toMatch(
-      /inherits from D-023 \(webhook signing secret stored plaintext at rest, Stripe-style\)\./,
+      /D-023 now requires encrypted envelopes for Driftstack outbound-webhook secrets\./,
     );
   });
 
