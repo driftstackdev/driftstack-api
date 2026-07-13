@@ -1,7 +1,9 @@
 import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { humanizeError } from './lib/humanize-error';
 import { installLogCapture } from './lib/log-buffer';
 import { isBenignTeardownError } from './lib/livekit-errors';
+import { sanitizeUiDiagnostic } from './lib/sanitize-ui-diagnostic';
 import './styles/index.css';
 
 // The floating-iPhone simulator opens as a separate Tauri window pointed at
@@ -45,8 +47,10 @@ function renderFatalError(code: string, err: unknown): void {
   // First error wins — shared flag dedupes with the index.html early guard.
   if (window.__dsFatalShown) return;
   window.__dsFatalShown = true;
-  const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error && typeof err.stack === 'string' ? err.stack : '';
+  const rawMessage = err instanceof Error ? err.message : String(err);
+  const rawStack = err instanceof Error && typeof err.stack === 'string' ? err.stack : '';
+  const message = sanitizeUiDiagnostic(rawMessage, '(no additional details)', 1_500);
+  const stack = rawStack === '' ? '' : sanitizeUiDiagnostic(rawStack, '', 6_000);
   try {
     const box = document.createElement('div');
     box.setAttribute('data-fatal-error', code);
@@ -78,7 +82,7 @@ function renderFatalError(code: string, err: unknown): void {
       '</b></div>' +
       '<div style="background:#161616;border:1px solid #333;border-radius:8px;padding:10px 12px;' +
       'margin:8px 0 0;color:#bbb;font-size:12px">' +
-      escapeHtml(message || '(no message)') +
+      escapeHtml(message) +
       '</div>' +
       (stack
         ? '<pre style="white-space:pre-wrap;word-break:break-word;color:#8a8a8a;background:#111;' +
@@ -95,7 +99,7 @@ function renderFatalError(code: string, err: unknown): void {
       ?.addEventListener('click', () => window.location.reload());
   } catch {
     // Absolute last resort if even DOM injection fails.
-    document.title = 'Driftstack error ' + code + ': ' + message;
+    document.title = 'Driftstack error ' + code;
   }
 }
 
@@ -113,8 +117,7 @@ function showTransientNotice(message: string): void {
       'max-width:80vw;background:#161616;color:#eee;border:1px solid #3a3a3a;border-radius:8px;' +
       'padding:9px 14px;font:12px/1.45 -apple-system,system-ui,sans-serif;' +
       'box-shadow:0 6px 20px rgba(0,0,0,.45);opacity:0;transition:opacity .2s ease';
-    note.textContent =
-      'Something hiccuped, but your session is still running' + (message ? ` — ${message}` : '');
+    note.textContent = `Something hiccuped, but your session is still running — ${message}`;
     document.body.appendChild(note);
     requestAnimationFrame(() => {
       note.style.opacity = '1';
@@ -131,10 +134,8 @@ function showTransientNotice(message: string): void {
 // Post-boot degradation: log to the captured dev-log (the crash trail) + a
 // transient notice, but NEVER the latched fatal overlay.
 function reportNonFatal(code: string, reason: unknown): void {
-  const message =
-    reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : '';
   console.error(`[${code}] non-fatal after boot:`, reason);
-  showTransientNotice(message);
+  showTransientNotice(humanizeError(reason, 'Something went wrong. Please try the action again.'));
 }
 
 // Catch async errors + unhandled promise rejections (e.g. a failed API/keychain

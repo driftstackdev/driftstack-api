@@ -89,6 +89,18 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     }
   });
 
+  it('rendered crash diagnostics are sanitized while raw post-boot errors stay local-only', () => {
+    expect(body).toContain("import { humanizeError } from './lib/humanize-error';");
+    expect(body).toContain("import { sanitizeUiDiagnostic } from './lib/sanitize-ui-diagnostic';");
+    expect(body).toMatch(/sanitizeUiDiagnostic\(rawMessage, '\(no additional details\)', 1_500\)/);
+    expect(body).toMatch(/sanitizeUiDiagnostic\(rawStack, '', 6_000\)/);
+    expect(body).toContain(
+      "humanizeError(reason, 'Something went wrong. Please try the action again.')",
+    );
+    expect(body).toContain("document.title = 'Driftstack error ' + code;");
+    expect(body).not.toMatch(/document\.title\s*=\s*[^;]+message/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
