@@ -126,6 +126,11 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
+  it('header Docs exit targets the live endpoint-management guide, not the dead webhooks root', () => {
+    expect(body).toContain('href="https://docs.driftstack.dev/webhooks/endpoints/"');
+    expect(body).not.toContain('href="https://docs.driftstack.dev/webhooks/"');
+  });
+
   it.skip('signing-secret reveal pattern mirrors V-296 api-key reveal (shown ONCE)', () => {
     expect(body).toMatch(
       /On\s+success the secret is shown ONCE — same pattern as the V-296\s+api-key reveal pane/,
