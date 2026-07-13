@@ -51,4 +51,10 @@ describe('W252.D docs/webhooks/events ↔ SubscribableWebhookEventTypeSchema par
     expect(doc).toMatch(/"type":\s*"<event-type>"/);
     expect(doc).toMatch(/Common envelope/);
   });
+
+  it('distinguishes a benign superseded profile save from upload failure or stale state', () => {
+    expect(doc).toMatch(/`superseded` \(a newer profile write won/);
+    expect(doc).toMatch(/next restore uses the newer state/);
+    expect(doc).toMatch(/benign and not data loss/);
+  });
 });

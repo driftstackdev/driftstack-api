@@ -320,6 +320,18 @@ describe('FleetControlConnection', () => {
     );
     expect(seen).toHaveLength(3);
     expect((seen[2] as { reason: string }).reason).toBe('degenerate_dump');
+    // A conditional write rejected because a newer profile save won is benign:
+    // preserve `superseded` so the webhook cannot misreport it as upload failure.
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaveFailed',
+        sessionId: 'agt_x',
+        profile_id: 'prof_1',
+        reason: 'superseded',
+      }),
+    );
+    expect(seen).toHaveLength(4);
+    expect((seen[3] as { reason: string }).reason).toBe('superseded');
     // An unknown FUTURE reason no longer DROPS the frame (forward-compat .catch):
     // it routes with the reason coerced to the generic 'upload_failed' bucket, so
     // the CP never silently loses a save-failure signal on an enum it predates.
@@ -331,8 +343,8 @@ describe('FleetControlConnection', () => {
         reason: 'gremlins',
       }),
     );
-    expect(seen).toHaveLength(4);
-    expect((seen[3] as { reason: string }).reason).toBe('upload_failed');
+    expect(seen).toHaveLength(5);
+    expect((seen[4] as { reason: string }).reason).toBe('upload_failed');
   });
 
   it('a profileSaveFailed frame with no handler wired is accepted + ignored (no crash \u2014 stateless deploy)', () => {

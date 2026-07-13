@@ -1538,6 +1538,10 @@ describe('harness-control-protocol behavioral contract', () => {
     ]) {
       expect(HarnessOutboundSchema.safeParse({ ...base, ...oversized }).success).toBe(false);
     }
+    const superseded = HarnessOutboundSchema.parse({ ...base, reason: 'superseded' });
+    expect(superseded).toMatchObject({ reason: 'superseded' });
+    const futureReason = HarnessOutboundSchema.parse({ ...base, reason: 'future_reason' });
+    expect(futureReason).toMatchObject({ reason: 'upload_failed' });
   });
 
   it('CookieSchema domain/name/value/path are bounded (RFC 6265-realistic) — reused by both the customer write-path (SetCookiesRequestSchema) and the harness read-path (CookiesResultSchema); an ~oversized field on either is rejected', () => {

@@ -60,6 +60,29 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     });
   });
 
+  it('preserves a benign superseded save instead of reporting an upload failure', async () => {
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1' }),
+    };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+    relay(
+      {
+        ...FRAME,
+        reason: 'superseded',
+        detail: 'stale save refused; newer profile preserved',
+      },
+      'node_1',
+    );
+    await flush();
+    expect(webhooks.enqueueEvent).toHaveBeenCalledWith('acc_9', 'session.profile_save_failed', {
+      session_id: 'agt_1',
+      profile_id: 'prof_1',
+      reason: 'superseded',
+      detail: 'stale save refused; newer profile preserved',
+    });
+  });
+
   it('drops the relay (no webhook) for an unknown session', async () => {
     const sessions = { get: vi.fn().mockResolvedValue(null) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(0) };

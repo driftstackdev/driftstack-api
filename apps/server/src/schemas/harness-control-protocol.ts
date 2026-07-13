@@ -833,10 +833,20 @@ export const ProfileSaveFailedSchema = z.object({
   // DELIBERATELY skipped the save-back because a torn/empty fork dump would have
   // overwritten a known-good prior blob — the prior is PRESERVED (reassuring, NOT
   // data loss). Accept it so the strict enum doesn't reject the whole webhook.
+  // `superseded` is the benign conditional-write guard: a newer profile write
+  // won, so the stale save was refused without losing state. Preserve that
+  // distinction instead of misreporting it to customers as `upload_failed`.
   // `.catch` keeps an unrecognised FUTURE reason from rejecting the frame too
   // (forward-compat; falls back to the generic 'upload_failed' bucket).
   reason: z
-    .enum(['serialize_failed', 'seal_failed', 'too_large', 'upload_failed', 'degenerate_dump'])
+    .enum([
+      'serialize_failed',
+      'seal_failed',
+      'too_large',
+      'upload_failed',
+      'degenerate_dump',
+      'superseded',
+    ])
     .catch('upload_failed'),
   // Security-audit hardening (2026-06-30) — bounded like the sibling hardened
   // fields in this file (bootId 256, ControlCommand.reason 512): this flows

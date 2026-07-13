@@ -18,28 +18,28 @@ site (when it lands as a Tier 3 visual surface).
 
 ## Quick index
 
-| Event                               | Status     | When                                                              |
-| ----------------------------------- | ---------- | ----------------------------------------------------------------- |
-| `session.completed`                 | [LIVE]     | Session is destroyed cleanly                                      |
-| `session.failed`                    | [LIVE]     | Session terminates in `errored` state                             |
-| `api_key.revoked`                   | [LIVE]     | API key revoked (customer or admin)                               |
-| `quota.warning_80pct`               | [DECLARED] | Account hits 80% of tier quota                                    |
-| `quota.exceeded`                    | [DECLARED] | Account hits 100% of tier quota                                   |
-| `test.ping`                         | [LIVE]     | Synthetic test event from POST /v1/webhooks/:id/test              |
-| `session.egress_capability_changed` | [DECLARED] | Harness emitted an egress.capability_report for a SOCKS5 session  |
-| `crypto.order.paid`                 | [LIVE]     | NowPayments-backed order transitioned to `paid` (V-666)           |
-| `crypto.order.failed`               | [LIVE]     | Crypto order moved to terminal `failed` (timeout/refund/expired)  |
-| `session.challenge_detected`        | [DECLARED] | Harness ChallengeDetector flagged a bot-check (DataDome/Arkose/…) |
-| `session.profile_save_failed`       | [DECLARED] | Profile save-back failed at session teardown (next restore stale) |
-| `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                          |
-| `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)             |
-| `profile.created`                   | [PLANNED]  | New profile created                                               |
-| `profile.deleted`                   | [PLANNED]  | Profile deleted                                                   |
-| `api_key.minted`                    | [PLANNED]  | New API key issued                                                |
-| `subscription.changed`              | [PLANNED]  | Tier changed via Stripe                                           |
-| `subscription.cancelled`            | [PLANNED]  | Subscription cancelled                                            |
-| `webhook_endpoint.created`          | [PLANNED]  | New webhook endpoint registered                                   |
-| `webhook_endpoint.deleted`          | [PLANNED]  | Webhook endpoint deleted                                          |
+| Event                               | Status     | When                                                                    |
+| ----------------------------------- | ---------- | ----------------------------------------------------------------------- |
+| `session.completed`                 | [LIVE]     | Session is destroyed cleanly                                            |
+| `session.failed`                    | [LIVE]     | Session terminates in `errored` state                                   |
+| `api_key.revoked`                   | [LIVE]     | API key revoked (customer or admin)                                     |
+| `quota.warning_80pct`               | [DECLARED] | Account hits 80% of tier quota                                          |
+| `quota.exceeded`                    | [DECLARED] | Account hits 100% of tier quota                                         |
+| `test.ping`                         | [LIVE]     | Synthetic test event from POST /v1/webhooks/:id/test                    |
+| `session.egress_capability_changed` | [DECLARED] | Harness emitted an egress.capability_report for a SOCKS5 session        |
+| `crypto.order.paid`                 | [LIVE]     | NowPayments-backed order transitioned to `paid` (V-666)                 |
+| `crypto.order.failed`               | [LIVE]     | Crypto order moved to terminal `failed` (timeout/refund/expired)        |
+| `session.challenge_detected`        | [DECLARED] | Harness ChallengeDetector flagged a bot-check (DataDome/Arkose/…)       |
+| `session.profile_save_failed`       | [DECLARED] | Profile save-back did not replace the stored profile (inspect `reason`) |
+| `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                                |
+| `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)                   |
+| `profile.created`                   | [PLANNED]  | New profile created                                                     |
+| `profile.deleted`                   | [PLANNED]  | Profile deleted                                                         |
+| `api_key.minted`                    | [PLANNED]  | New API key issued                                                      |
+| `subscription.changed`              | [PLANNED]  | Tier changed via Stripe                                                 |
+| `subscription.cancelled`            | [PLANNED]  | Subscription cancelled                                                  |
+| `webhook_endpoint.created`          | [PLANNED]  | New webhook endpoint registered                                         |
+| `webhook_endpoint.deleted`          | [PLANNED]  | Webhook endpoint deleted                                                |
 
 ## Common envelope
 
@@ -51,9 +51,7 @@ with the following envelope:
   "id": "<uuid>",
   "type": "<event-type>",
   "created_at": "2026-05-05T12:34:56.789Z",
-  "data": {
-    /* per-event-type shape, see below */
-  }
+  "data": {/* per-event-type shape, see below */}
 }
 ```
 
@@ -321,17 +319,19 @@ and fires once the fleet control plane is live (gated behind
 
 ### `session.profile_save_failed` [DECLARED]
 
-Fires when a profile-backed session's save-back fails at session
-teardown — the browsing session itself **succeeded**, but the updated
-profile store (cookies / logins / browser state from this run) could
-not be persisted, so the **next restore of this profile will be
-stale**. The failure is terminal: the harness's internal upload retry
-is already exhausted before this event is emitted, and there is no
-later retry path. `reason` is one of `serialize_failed`, `seal_failed`,
+Fires when a profile-backed session's save-back does not replace the
+stored profile at teardown. The browsing session itself **succeeded**.
+For failure reasons, the updated store (cookies / logins / browser
+state from this run) could not be persisted, so the **next restore of
+this profile will be stale**; the harness's internal upload retry is
+already exhausted and there is no later retry path. `reason` is one of `serialize_failed`, `seal_failed`,
 `too_large` (the sealed store exceeded the 256 MiB cap),
 `upload_failed`, or `degenerate_dump` (the dump was empty/malformed
 and would have clobbered a known-good prior store — the prior is
-preserved, so this one is reassuring rather than data loss). An
+preserved, so this one is reassuring rather than data loss), or
+`superseded` (a newer profile write won and the stale conditional save
+was safely refused; the next restore uses the newer state, so this is
+benign and not data loss). An
 unrecognized future harness reason is folded into `upload_failed`
 rather than dropping the event. Subscribable so customers relying on persisted profile
 state can alert on it. In the enum (migration 0073); the relay emitter

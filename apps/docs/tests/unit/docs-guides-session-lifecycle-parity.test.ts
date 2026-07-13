@@ -61,6 +61,11 @@ describe('W259.D docs/guides/session-lifecycle ↔ live session surface parity',
     }
   });
 
+  it('does not misclassify a superseded profile save as stale or lost state', () => {
+    expect(doc).toMatch(/`superseded` is benign/);
+    expect(doc).toMatch(/newer saved profile won the conditional write/);
+  });
+
   it('does not advertise the fictional session.created / session.destroyed / session.error events as live bus events', () => {
     expect(doc).not.toMatch(/^- `session\.created`/m);
     expect(doc).not.toMatch(/^- `session\.destroyed`/m);
