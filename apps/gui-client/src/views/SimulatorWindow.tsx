@@ -99,6 +99,7 @@ import {
   sendAgentMessage,
   endAgentSession,
   AgentSessionControlError,
+  type AgentSessionCapabilityReport,
   type SessionMode,
   type ControlAuth,
   type SessionCookie,
@@ -610,6 +611,7 @@ export function DeviceToolbar({
   keyboardVisible,
   onToggleKeyboard,
   inputEnabled = true,
+  inputUnavailableReason = 'agent',
 }: {
   deviceName: string;
   profileName: string;
@@ -627,6 +629,7 @@ export function DeviceToolbar({
    *  controlMode !== 'ai'), so disable it rather than letting it light up "pressed"
    *  while nothing appears (and nudge the window for a keyboard that never shows). */
   inputEnabled?: boolean;
+  inputUnavailableReason?: 'agent' | 'device';
 }): JSX.Element {
   // The activity-bar rail is always docked beside the phone (it lives in the main
   // layout, not this thin toolbar); panes expand on a rail-icon click. There is no
@@ -723,14 +726,18 @@ export function DeviceToolbar({
             type="button"
             aria-label={
               !inputEnabled
-                ? 'Keyboard unavailable while the agent is driving'
+                ? inputUnavailableReason === 'device'
+                  ? 'Keyboard unavailable because device input is offline'
+                  : 'Keyboard unavailable while the agent is driving'
                 : keyboardVisible
                   ? 'Hide keyboard'
                   : 'Show keyboard'
             }
             title={
               !inputEnabled
-                ? 'The agent is driving — switch to Manual to type'
+                ? inputUnavailableReason === 'device'
+                  ? 'This session is view only because device input is unavailable'
+                  : 'The agent is driving — switch to Manual to type'
                 : keyboardVisible
                   ? 'Hide the on-screen keyboard'
                   : 'Show the on-screen keyboard'
@@ -963,6 +970,7 @@ function ControlActionSpinner(): JSX.Element {
 
 export function SessionControlSection({
   mode,
+  manualInputAvailable,
   pairKind,
   action,
   composerText,
@@ -975,6 +983,7 @@ export function SessionControlSection({
   onSendMessage,
 }: {
   mode: SessionMode | null;
+  manualInputAvailable?: boolean | null;
   pairKind: string | null;
   action: SessionControlAction | null;
   composerText: string;
@@ -1016,7 +1025,9 @@ export function SessionControlSection({
                 : mode === null
                   ? 'Connecting…'
                   : mode === 'manual'
-                    ? 'Manual — tap the screen to drive'
+                    ? manualInputAvailable === false
+                      ? 'Manual mode — view only (device input unavailable)'
+                      : 'Manual — tap the screen to drive'
                     : mode === 'pair'
                       ? humanDriving
                         ? "You're driving — agent is paused"
@@ -1742,6 +1753,7 @@ function TabStrip({
   tabs,
   activeTabId,
   switchingTabId,
+  inputEnabled = true,
   onActivate,
   onClose,
   onNew,
@@ -1752,6 +1764,7 @@ function TabStrip({
   // TO renders a subtle "switching…" affordance until the box reports its page. null
   // when no switch is in flight. iOS-clean, not over-animated.
   switchingTabId: string | null;
+  inputEnabled?: boolean;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
@@ -1767,7 +1780,7 @@ function TabStrip({
     const target = tabs[wrapped];
     if (target === undefined) return;
     tabRefs.current[target.id]?.focus();
-    onActivate(target.id);
+    if (inputEnabled) onActivate(target.id);
   };
   const label = (t: SimTab): string => {
     const url = t.url.trim();
@@ -1790,6 +1803,7 @@ function TabStrip({
       data-no-drag
       role="tablist"
       aria-label="Open pages"
+      aria-disabled={!inputEnabled}
       className="relative flex h-8 w-full shrink-0 items-stretch gap-1 overflow-x-auto bg-[#17181d] px-1.5 py-1 ring-1 ring-white/[0.08] shadow-[inset_0_-1px_0_rgba(0,0,0,0.45)]"
     >
       {tabs.map((t, i) => {
@@ -1810,8 +1824,11 @@ function TabStrip({
             // within the strip (audit #18).
             tabIndex={active ? 0 : -1}
             title={t.url || label(t)}
-            onClick={() => onActivate(t.id)}
+            onClick={() => {
+              if (inputEnabled) onActivate(t.id);
+            }}
             onKeyDown={(e) => {
+              if (!inputEnabled) return;
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 onActivate(t.id);
@@ -1860,6 +1877,7 @@ function TabStrip({
                 type="button"
                 aria-label="Close tab"
                 title="Close tab"
+                disabled={!inputEnabled}
                 onClick={(e) => {
                   // Don't let the close click bubble to the tab's activate handler.
                   e.stopPropagation();
@@ -1898,6 +1916,7 @@ function TabStrip({
         type="button"
         aria-label="New tab"
         title="New tab"
+        disabled={!inputEnabled}
         onClick={onNew}
         className="ml-0.5 flex shrink-0 items-center justify-center rounded-md px-2 text-white/45 transition hover:bg-white/10 hover:text-white/85"
       >
@@ -4675,6 +4694,9 @@ export function SimulatorWindow(): JSX.Element {
             setSessionEnded({ reason: s.closedReason });
             return;
           }
+          if (s.capabilityReport !== undefined) {
+            setSessionCapabilityReport(s.capabilityReport);
+          }
           // Finding #11 — this same 5s round-trip already carries the live pair state
           // (s.pairKind), but it was thrown away. In pair mode the AGENT autonomously
           // grabs/releases driving control server-side; without this the GUI keeps
@@ -5217,6 +5239,23 @@ export function SimulatorWindow(): JSX.Element {
   // SimulatorWindow has no SDK client → lib/agent-session-control raw-fetches
   // (reads {apiKey,baseUrl} via loadSettings). null mode = not loaded yet.
   const [controlMode, setControlMode] = useState<SessionMode | null>(null);
+  // The harness is the authority on whether the fork can currently accept
+  // human input and whether capture/egress is healthy. Older servers omit this
+  // report, which deliberately preserves the historical permissive behaviour.
+  const [sessionCapabilityReport, setSessionCapabilityReport] =
+    useState<AgentSessionCapabilityReport | null>(null);
+  const manualInputAvailable = sessionCapabilityReport?.manual_input_available;
+  const streamingHealth = sessionCapabilityReport?.streaming_state;
+  const egressHealth = sessionCapabilityReport?.egress_state;
+  const streamingUnavailable = streamingHealth === 'blank' || streamingHealth === 'failed';
+  useEffect(() => {
+    if (manualInputAvailable !== false) return;
+    touchCursorRef.current?.hide();
+    setDotPressed(false);
+    keyboardVisibleRef.current = false;
+    keyboardOverlayRef.current = false;
+    setKeyboardVisible(false);
+  }, [manualInputAvailable]);
   // #6 — a fresh-reads mirror for the long-lived onData effect (deps [room, ...], so
   // it does NOT re-subscribe on every controlMode change): without this the
   // inputFocused→keyboard handler would close over a STALE mode and could pop the
@@ -5300,6 +5339,7 @@ export function SimulatorWindow(): JSX.Element {
       activeRecIdRef.current = null;
     }
     setControlMode(null);
+    setSessionCapabilityReport(null);
     setControlModeConfirmed(false);
     setPairKind(null);
     controlActionRef.current = null;
@@ -5412,7 +5452,8 @@ export function SimulatorWindow(): JSX.Element {
   // — not the instant the Room object exists (room !== null fired during "connecting…",
   // so a URL typed then trickled a fake loading bar and silently did nothing). Mirrors
   // the box readiness the navigate actually needs.
-  const canNavigate = connState === 'connected' && publisherState === 'publishing';
+  const canNavigate =
+    connState === 'connected' && publisherState === 'publishing' && manualInputAvailable !== false;
   // Keep the current session + action ownership readable from late async callbacks so a
   // getAgentSession result can't apply to the WRONG session (in-place relaunch
   // swaps sessionId without remount) or clobber an in-flight mode mutation —
@@ -5441,6 +5482,9 @@ export function SimulatorWindow(): JSX.Element {
         // handler); a defaulted-to-manual (control unreachable) must not.
         setControlModeConfirmed(true);
         setPairKind(s.pairKind);
+        if (s.capabilityReport !== undefined) {
+          setSessionCapabilityReport(s.capabilityReport);
+        }
         // P1a — the SAME round-trip carries lifecycle liveness. A terminal status
         // (the worker browser closed / the session was destroyed/errored/reaped)
         // latches the "Session ended" state so the reconnect/freeze machinery
@@ -6463,7 +6507,8 @@ export function SimulatorWindow(): JSX.Element {
             }
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}
-            inputEnabled={controlMode !== 'ai'}
+            inputEnabled={controlMode !== 'ai' && manualInputAvailable !== false}
+            inputUnavailableReason={manualInputAvailable === false ? 'device' : 'agent'}
           />
           {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between
               the toolbar and the address bar, gated on browserMode exactly like the
@@ -6475,6 +6520,7 @@ export function SimulatorWindow(): JSX.Element {
               tabs={tabs}
               activeTabId={activeTabId}
               switchingTabId={switchingTabId}
+              inputEnabled={manualInputAvailable !== false}
               onActivate={onActivateTab}
               onClose={onCloseTab}
               onNew={onNewTab}
@@ -6557,7 +6603,7 @@ export function SimulatorWindow(): JSX.Element {
                     AI-driving pill live outside this stack (different screen regions). */}
                 <div
                   data-component="top-advisory-stack"
-                  className="pointer-events-none absolute inset-x-0 top-12 z-20 flex flex-col items-center gap-2 px-3"
+                  className="pointer-events-none absolute inset-x-0 top-12 z-30 flex flex-col items-center gap-2 px-3"
                 >
                   {notice !== null && (
                     <div
@@ -6617,6 +6663,24 @@ export function SimulatorWindow(): JSX.Element {
                       <span>Connection catching up — input paused briefly</span>
                     </div>
                   )}
+                  {manualInputAvailable === false && (
+                    <div
+                      role="status"
+                      data-component="view-only-capability-badge"
+                      className="pointer-events-auto rounded-full bg-amber-400/95 px-3 py-1 text-[10px] font-semibold text-black shadow"
+                    >
+                      View only — device input is unavailable
+                    </div>
+                  )}
+                  {egressHealth === 'dead_proxy' && (
+                    <div
+                      role="alert"
+                      data-component="dead-proxy-capability-badge"
+                      className="pointer-events-auto rounded-full bg-status-error px-3 py-1 text-[10px] font-semibold text-white shadow"
+                    >
+                      Proxy connection failed — browsing is unavailable
+                    </div>
+                  )}
                   {/* #135 — SOFT load-stall advisory (A3 box 5eeaf794a: a main-frame
                       nav that hasn't finished in ~40s). NON-blocking — the page is still
                       trying, so a gentle banner with a Retry, NOT the full-screen
@@ -6665,12 +6729,28 @@ export function SimulatorWindow(): JSX.Element {
                     }
                   </LiveConnectionStatsSubscriber>
                 </div>
+                {streamingUnavailable && (
+                  <div
+                    role="alert"
+                    data-component="streaming-capability-error"
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/80 px-6 text-center text-white"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-status-error">
+                      Video unavailable
+                    </span>
+                    <span className="max-w-xs text-sm">
+                      {streamingHealth === 'blank'
+                        ? 'The device is connected, but its capture is blank.'
+                        : 'The device could not start its video capture.'}
+                    </span>
+                  </div>
+                )}
                 {/* A3 W2845 — frozen-renderer ("stalled") badge. The page hung
                   (the last frame is still showing, the stream still reports live),
                   so we overlay a calm reconnecting indicator on the visible frame
                   rather than blanking to black. Cleared the moment the box reports
                   any non-stalled page state. */}
-                {pageStalled && (
+                {pageStalled && !streamingUnavailable && (
                   <div
                     role="status"
                     data-component="page-stalled-badge"
@@ -6689,7 +6769,7 @@ export function SimulatorWindow(): JSX.Element {
                   recovering" only once a recovery (resubscribe / Room rebuild) is
                   actually in flight (`recovering`). It never claims to be reconnecting
                   when nothing is. */}
-                {videoFrozen && !pageStalled && pageError === null && (
+                {videoFrozen && !pageStalled && pageError === null && !streamingUnavailable && (
                   <div
                     role="status"
                     data-component="video-frozen-badge"
@@ -6730,7 +6810,7 @@ export function SimulatorWindow(): JSX.Element {
                   lib/page-error-copy) over the last frame + a Try again that
                   re-navigates the current address. Cleared on any loading/loaded/
                   stalled state and on every navigate. */}
-                {pageError !== null && (
+                {pageError !== null && !streamingUnavailable && (
                   <div
                     data-component="page-error-overlay"
                     className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center"
@@ -6779,8 +6859,10 @@ export function SimulatorWindow(): JSX.Element {
                   // bg-black so any object-contain margin around the aspect-locked
                   // video reads as bezel-black, never a light see-through border
                   // (founder 2026-06-23 white-border / A3 W2827).
-                  className={`relative min-h-0 flex-1 bg-black ${controlMode === 'ai' ? '' : 'cursor-none'}`}
-                  onPointerDownCapture={inputCongested ? undefined : showTap}
+                  className={`relative min-h-0 flex-1 bg-black ${controlMode === 'ai' || manualInputAvailable === false ? '' : 'cursor-none'}`}
+                  onPointerDownCapture={
+                    inputCongested || manualInputAvailable === false ? undefined : showTap
+                  }
                   onPointerMove={moveTouchPoint}
                   onPointerEnter={moveTouchPoint}
                   onPointerLeave={hideTouchPoint}
@@ -6807,7 +6889,7 @@ export function SimulatorWindow(): JSX.Element {
                     // Forward mouse/keyboard to the device only in manual/pair
                     // mode; in AI mode the agent is driving, so local input would
                     // fight it.
-                    interactive={controlMode !== 'ai'}
+                    interactive={controlMode !== 'ai' && manualInputAvailable !== false}
                     onVideoDimensions={handleVideoDimensions}
                     onRoom={handleRoom}
                     onStateChange={(s) => setConnState(s.kind)}
@@ -6845,10 +6927,12 @@ export function SimulatorWindow(): JSX.Element {
                     pointer over the screen (the PC arrow is hidden via cursor-none
                     on the host). Shrinks + brightens on press. pointer-events-none
                     so it never intercepts the real tap. */}
-                  {controlMode !== 'ai' && <TouchCursorOverlay ref={touchCursorRef} />}
+                  {controlMode !== 'ai' && manualInputAvailable !== false && (
+                    <TouchCursorOverlay ref={touchCursorRef} />
+                  )}
                   {/* iOS tap cursor — a ring that blooms at each tap point then
                     fades. pointer-events-none so it never intercepts the tap. */}
-                  <TapRippleOverlay ref={tapRippleRef} />
+                  {manualInputAvailable !== false && <TapRippleOverlay ref={tapRippleRef} />}
                   {/* #75b — OVERLAY keyboard: on a short laptop work area the
                     docked-below keyboard would overflow the screen and trip the
                     screen-clamp, which carves KEYBOARD_H out of the video and narrows
@@ -6861,7 +6945,7 @@ export function SimulatorWindow(): JSX.Element {
                     correctly hit the keyboard. Anchored INSIDE simulator-screen so its
                     bottom-row corners follow the rounded display mask — which is what a
                     real on-screen iPhone keyboard does (it lives inside the display). */}
-                  {keyboardOverlay && controlMode !== 'ai' && (
+                  {keyboardOverlay && controlMode !== 'ai' && manualInputAvailable !== false && (
                     <div
                       data-tauri-drag-region="false"
                       data-component="ios-keyboard-overlay"
@@ -6897,25 +6981,28 @@ export function SimulatorWindow(): JSX.Element {
                   input would fight it). Emits the SAME keyDown/keyUp the host keyboard
                   does — pure chrome, no fingerprint change (the viewport-resize that
                   WOULD change the page's view is deferred to A3, W2992). */}
-              {keyboardVisible && !keyboardOverlay && controlMode !== 'ai' && (
-                <div
-                  data-tauri-drag-region="false"
-                  data-component="ios-keyboard-docked"
-                  className="shrink-0"
-                >
-                  <IOSKeyboard
-                    room={room}
-                    width={inputLogical.width}
-                    onDismiss={() => {
-                      if (!keyboardVisibleRef.current) return;
-                      keyboardVisibleRef.current = false;
-                      keyboardOverlayRef.current = false;
-                      setKeyboardVisible(false);
-                      fitWindow(browserMode);
-                    }}
-                  />
-                </div>
-              )}
+              {keyboardVisible &&
+                !keyboardOverlay &&
+                controlMode !== 'ai' &&
+                manualInputAvailable !== false && (
+                  <div
+                    data-tauri-drag-region="false"
+                    data-component="ios-keyboard-docked"
+                    className="shrink-0"
+                  >
+                    <IOSKeyboard
+                      room={room}
+                      width={inputLogical.width}
+                      onDismiss={() => {
+                        if (!keyboardVisibleRef.current) return;
+                        keyboardVisibleRef.current = false;
+                        keyboardOverlayRef.current = false;
+                        setKeyboardVisible(false);
+                        fitWindow(browserMode);
+                      }}
+                    />
+                  </div>
+                )}
             </div>
             {/* Activity-bar drawer (founder 2026-06-24) — the icon RAIL is ALWAYS
               docked beside the phone (VS Code's activity bar). The window widens by
@@ -7113,6 +7200,7 @@ export function SimulatorWindow(): JSX.Element {
                         </div>
                         <SessionControlSection
                           mode={controlMode}
+                          manualInputAvailable={manualInputAvailable}
                           pairKind={pairKind}
                           action={controlAction}
                           composerText={composerText}

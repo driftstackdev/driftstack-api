@@ -55,6 +55,21 @@ export const AgentSessionSchema = z.object({
       fresh: z.boolean(),
     })
     .optional(),
+  /** Latest ownership-validated harness capability state for this live agent
+   * session. Omitted until the worker reports it and on closed sessions. */
+  capability_report: z
+    .object({
+      timestamp: z.string(),
+      manual_input_available: z.boolean().nullable(),
+      streaming_state: z.enum(['provisioning', 'live', 'blank', 'failed']).nullable(),
+      egress_state: z.enum(['live', 'dead_proxy']).nullable(),
+      proxy_kind: z.enum(['socks5', 'openvpn', 'wireguard']),
+      proxy_udp_supported: z.boolean(),
+      transport_mode_requested: z.enum(['h2-only', 'h2-and-h3']),
+      transport_mode_active: z.enum(['h2-only', 'h2-and-h3']),
+      safeguards_passed: z.boolean(),
+    })
+    .optional(),
 });
 
 export type AgentSession = z.infer<typeof AgentSessionSchema>;

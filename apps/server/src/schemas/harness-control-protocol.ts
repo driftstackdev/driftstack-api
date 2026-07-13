@@ -712,33 +712,53 @@ export const ErrorEventSchema = z.object({
   retryable: z.boolean(),
 });
 
-export const CapabilityReportSchema = z.object({
+const CapabilityReportPayloadSchema = z.object({
   type: z.literal('capabilityReport'),
-  sessionId: z.string(),
-  timestamp: z.string(),
-  egressPhase: z.string(),
-  proxyKind: z.string(),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  timestamp: z.string().min(1).max(64),
+  egressPhase: z.enum(['phase_1_socks5', 'phase_2_openvpn', 'phase_3_wireguard']),
+  proxyKind: z.enum(['socks5', 'openvpn', 'wireguard']),
   proxyUdpSupported: z.boolean(),
   proxyIpv4Supported: z.boolean(),
   proxyIpv6Supported: z.boolean(),
-  proxyGeoCountry: z.string().optional(),
-  proxyGeoRegion: z.string().optional(),
-  proxyIpType: z.string().optional(),
-  transportModeRequested: z.string(),
-  transportModeActive: z.string(),
+  proxyGeoCountry: z.string().max(64).optional(),
+  proxyGeoRegion: z.string().max(128).optional(),
+  proxyIpType: z.enum(['residential', 'mobile', 'datacenter', 'isp']).optional(),
+  transportModeRequested: z.enum(['h2-only', 'h2-and-h3']),
+  transportModeActive: z.enum(['h2-only', 'h2-and-h3']),
   h3InterposeLoaded: z.boolean(),
   httpsSkipActive: z.boolean(),
-  safeguardChecks: z.array(
-    z.object({
-      layer: z.string(),
-      passed: z.boolean(),
-      detail: z.string().optional(),
-      timestamp: z.string(),
-    }),
-  ),
-  archetypeId: z.string(),
-  webkitForkBuild: z.string().optional(),
+  safeguardChecks: z
+    .array(
+      z.object({
+        layer: z.string().min(1).max(64),
+        passed: z.boolean(),
+        detail: z.string().max(4096).optional(),
+        timestamp: z.string().min(1).max(64),
+      }),
+    )
+    .max(16),
+  archetypeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  webkitForkBuild: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+  // W1397/W2216/EGRESS-2 — these are the customer-visible state signals the
+  // harness already emits. Keep optional for older nodes, but never strip them:
+  // the registry relay drives the installed GUI and persistence from this data.
+  manualInputAvailable: z.boolean().optional(),
+  streamingState: z.enum(['provisioning', 'live', 'blank', 'failed']).optional(),
+  egressState: z.enum(['live', 'dead_proxy']).optional(),
 });
+
+export const CapabilityReportSchema = CapabilityReportPayloadSchema.transform((frame, ctx) => {
+  if (Buffer.byteLength(JSON.stringify(frame), 'utf8') > 64 * 1024) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'capabilityReport must serialize to at most 65536 bytes',
+    });
+    return z.NEVER;
+  }
+  return frame;
+});
+export type CapabilityReport = z.infer<typeof CapabilityReportSchema>;
 
 // ── HarnessOutbound.profileSaved (harness → server; A3 W417) ──────────
 // Emitted on session end for PROFILE-BACKED sessions only. Two shapes:

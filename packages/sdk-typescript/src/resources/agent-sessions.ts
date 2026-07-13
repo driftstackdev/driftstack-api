@@ -139,6 +139,23 @@ export interface AgentSession {
    * session — treat absent as "unknown, trust the binding", never as "dead".
    */
   liveness?: { state: 'active' | 'provisioning' | 'idle' | 'terminating' | null; fresh: boolean };
+  /**
+   * Latest ownership-validated worker capabilities for this live session.
+   * Absent until reported (and on closed sessions). A false
+   * `manual_input_available` means the video is view-only; blank/failed and
+   * dead_proxy are explicit degraded states, not successful input/video.
+   */
+  capability_report?: {
+    timestamp: string;
+    manual_input_available: boolean | null;
+    streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | null;
+    egress_state: 'live' | 'dead_proxy' | null;
+    proxy_kind: 'socks5' | 'openvpn' | 'wireguard';
+    proxy_udp_supported: boolean;
+    transport_mode_requested: 'h2-only' | 'h2-and-h3';
+    transport_mode_active: 'h2-only' | 'h2-and-h3';
+    safeguards_passed: boolean;
+  };
 }
 
 /**

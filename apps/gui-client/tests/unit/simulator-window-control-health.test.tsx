@@ -18,6 +18,7 @@ import { render, fireEvent, act } from '@testing-library/react';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
 const sendActivateTab = vi.fn(() => Promise.resolve('req_test'));
+const getAgentSession = vi.fn((): Promise<unknown> => new Promise(() => {}));
 
 // Browser mode defaults ON (founder 2026-06-21), which hosts the URL bar in the
 // toolbar and hides the panel's NavigateAddressBar. These tests exercise the
@@ -27,6 +28,8 @@ beforeEach(() => {
   sendNavigate.mockClear();
   sendActivateTab.mockReset();
   sendActivateTab.mockResolvedValue('req_test');
+  getAgentSession.mockReset();
+  getAgentSession.mockImplementation(() => new Promise(() => {}));
   const store = new Map<string, string>([
     ['ds-sim-browser-mode', '0'],
     ['ds-sim-navigated', '1'],
@@ -74,6 +77,7 @@ const panelCbs: {
   onRoom?: (room: unknown) => void;
   onStateChange?: (s: { kind: string }) => void;
   onPublisher?: (p: string) => void;
+  interactive?: boolean;
 } = {};
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
@@ -82,12 +86,14 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
     onRoom?: (room: unknown) => void;
     onStateChange?: (s: { kind: string }) => void;
     onPublisher?: (p: string) => void;
+    interactive?: boolean;
   }) => {
     panelCbs.onPublishError = props.onPublishError;
     panelCbs.onInputCongestionChange = props.onInputCongestionChange;
     panelCbs.onRoom = props.onRoom;
     panelCbs.onStateChange = props.onStateChange;
     panelCbs.onPublisher = props.onPublisher;
+    panelCbs.interactive = props.interactive;
     return <div data-component="agent-session-panel-mock" />;
   },
 }));
@@ -98,7 +104,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => new Promise(() => {}),
+  getAgentSession,
   getAgentSessionPageState: () => Promise.resolve(null),
   // The cookies drawer poll (founder #48) calls this once the room connects; the
   // mock must export it or the poll's tick throws + crashes the component.
@@ -134,6 +140,42 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
     // A fresh/reconnected room clears it (the latch is gone).
     act(() => panelCbs.onRoom?.(fakeRoom));
     expect(container.querySelector('[data-component="control-unreachable-badge"]')).toBeNull();
+  });
+});
+
+describe('SimulatorWindow — harness capability health', () => {
+  it('becomes honestly view-only and surfaces blank capture + dead proxy state', async () => {
+    localStorage.setItem('ds-sim-browser-mode', '1');
+    getAgentSession.mockResolvedValueOnce({
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+      capabilityReport: {
+        manual_input_available: false,
+        streaming_state: 'blank',
+        egress_state: 'dead_proxy',
+      },
+    });
+
+    const { container } = renderSim();
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-component="view-only-capability-badge"]'),
+      ).not.toBeNull();
+    });
+    expect(panelCbs.interactive).toBe(false);
+    expect(
+      container.querySelector('[data-component="streaming-capability-error"]'),
+    ).toHaveTextContent('capture is blank');
+    expect(
+      container.querySelector('[data-component="dead-proxy-capability-badge"]'),
+    ).toHaveTextContent('Proxy connection failed');
+    expect(container.querySelector('[role="tablist"]')).toHaveAttribute('aria-disabled', 'true');
+    expect(container.querySelector('[aria-label="New tab"]')).toBeDisabled();
+    expect(container.querySelector('[data-component="simulator-keyboard-toggle"]')).toBeDisabled();
+    expect(container.querySelector('[data-component="touch-cursor-overlay"]')).toBeNull();
   });
 });
 

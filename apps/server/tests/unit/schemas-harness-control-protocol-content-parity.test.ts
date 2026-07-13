@@ -683,12 +683,21 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // errorEvent
     expect(body).toMatch(/export const ErrorEventSchema = z\.object\(\{/);
     expect(body).toMatch(/customerActionable: z\.boolean\(\),\s*\n?\s*retryable: z\.boolean\(\),/);
-    // capabilityReport (incl. the nested safeguardChecks array)
-    expect(body).toMatch(/export const CapabilityReportSchema = z\.object\(\{/);
-    expect(body).toMatch(
-      /safeguardChecks: z\.array\(\s*\n?\s*z\.object\(\{\s*\n?\s*layer: z\.string\(\),\s*\n?\s*passed: z\.boolean\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*\}\),\s*\n?\s*\),/,
+    // capabilityReport — bounded payload + the three live customer signals the
+    // harness emits (these used to be stripped, making the whole channel inert).
+    expect(body).toContain('const CapabilityReportPayloadSchema = z.object({');
+    expect(body).toContain(
+      'export const CapabilityReportSchema = CapabilityReportPayloadSchema.transform((frame, ctx) => {',
     );
-    expect(body).toMatch(/archetypeId: z\.string\(\),/);
+    expect(body).toContain('safeguardChecks: z');
+    expect(body).toContain('.max(16),');
+    expect(body).toContain('detail: z.string().max(4096).optional(),');
+    expect(body).toContain('manualInputAvailable: z.boolean().optional(),');
+    expect(body).toContain(
+      "streamingState: z.enum(['provisioning', 'live', 'blank', 'failed']).optional(),",
+    );
+    expect(body).toContain("egressState: z.enum(['live', 'dead_proxy']).optional(),");
+    expect(body).toContain("message: 'capabilityReport must serialize to at most 65536 bytes',");
   });
 
   it('behavioral: HarnessOutbound accepts a valid heartbeat + rejects a malformed one (now typed, not passthrough)', () => {
@@ -704,6 +713,69 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
     // missing required fields → rejected (was accepted under passthrough).
     expect(HarnessOutboundSchema.safeParse({ type: 'heartbeat' }).success).toBe(false);
+  });
+
+  it('behavioral: capabilityReport preserves live health signals and rejects invalid or oversized values', () => {
+    const valid = {
+      type: 'capabilityReport' as const,
+      sessionId: 'agt_1',
+      timestamp: '2026-07-13T06:00:00.000Z',
+      egressPhase: 'phase_1_socks5',
+      proxyKind: 'socks5',
+      proxyUdpSupported: true,
+      proxyIpv4Supported: true,
+      proxyIpv6Supported: false,
+      transportModeRequested: 'h2-and-h3',
+      transportModeActive: 'h2-only',
+      h3InterposeLoaded: false,
+      httpsSkipActive: true,
+      safeguardChecks: [{ layer: 'dns', passed: true, timestamp: 't' }],
+      archetypeId: 'iphone16pro_ios18_6_safari18_6',
+      manualInputAvailable: false,
+      streamingState: 'blank',
+      egressState: 'dead_proxy',
+    };
+    const parsed = HarnessOutboundSchema.safeParse(valid);
+    expect(parsed.success).toBe(true);
+    if (parsed.success && parsed.data.type === 'capabilityReport') {
+      expect(parsed.data).toMatchObject({
+        manualInputAvailable: false,
+        streamingState: 'blank',
+        egressState: 'dead_proxy',
+      });
+    }
+    expect(
+      HarnessOutboundSchema.safeParse({ ...valid, streamingState: 'looks-fine' }).success,
+    ).toBe(false);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...valid,
+        safeguardChecks: Array.from({ length: 17 }, (_, i) => ({
+          layer: `layer-${i}`,
+          passed: true,
+          timestamp: 't',
+        })),
+      }).success,
+    ).toBe(false);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...valid,
+        safeguardChecks: [
+          { layer: 'dns', passed: false, timestamp: 't', detail: 'x'.repeat(65_536) },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...valid,
+        safeguardChecks: Array.from({ length: 16 }, (_, i) => ({
+          layer: `layer-${i}`,
+          passed: false,
+          timestamp: 't',
+          detail: 'x'.repeat(4096),
+        })),
+      }).success,
+    ).toBe(false);
   });
 
   it('fleet-admin telemetry fields decode through (no longer stripped) — file-48 §A5 / A3 W2189-W2199', () => {

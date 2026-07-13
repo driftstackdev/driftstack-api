@@ -73,3 +73,23 @@ def test_models_module_has_expected_classes() -> None:
     actual = {name for name in dir(models) if not name.startswith("_")}
     missing = expected - actual
     assert not missing, f"missing models: {missing}"
+
+
+def test_agent_session_capability_report_preserves_degraded_states() -> None:
+    """The generated SDK must not flatten view-only/blank/dead-proxy signals."""
+    report = models.CapabilityReport.model_validate(
+        {
+            "timestamp": "2026-07-13T06:00:00Z",
+            "manual_input_available": False,
+            "streaming_state": "blank",
+            "egress_state": "dead_proxy",
+            "proxy_kind": "socks5",
+            "proxy_udp_supported": False,
+            "transport_mode_requested": "h2-and-h3",
+            "transport_mode_active": "h2-only",
+            "safeguards_passed": True,
+        }
+    )
+    assert report.manual_input_available is False
+    assert report.streaming_state == "blank"
+    assert report.egress_state == "dead_proxy"

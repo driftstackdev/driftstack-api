@@ -20,6 +20,11 @@ const base = {
 };
 
 describe('SessionControlSection', () => {
+  it('labels manual mode as view-only when the harness reports input unavailable', () => {
+    render(<SessionControlSection {...base} mode="manual" manualInputAvailable={false} />);
+    expect(screen.getByText('Manual mode — view only (device input unavailable)')).toBeVisible();
+  });
+
   it('renders the Agent/Pair/Manual segments; the active mode is aria-checked', () => {
     render(<SessionControlSection {...base} mode="manual" />);
     expect(screen.getByRole('radio', { name: 'Manual mode' }).getAttribute('aria-checked')).toBe(

@@ -31,10 +31,12 @@ import { FleetNodeAuthImpl } from '../services/fleet-node-auth.js';
 import { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import { SessionPageStateStore } from '../services/session-page-state-store.js';
 import { SessionLivenessStore } from '../services/session-liveness-store.js';
+import { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
 import { makeSessionPageStateRelay } from '../services/session-page-state-relay.js';
+import { makeSessionCapabilityReportRelay } from '../services/session-capability-report-relay.js';
 import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
 import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.js';
 import { reconcileNodeBootChange } from '../services/node-boot-reconcile.js';
@@ -1634,6 +1636,11 @@ export async function createProductionDeps(
         // + in-memory (same posture as sessionPageStateStore); absent in prod
         // (no fleet control plane) → the read field defaults to "unknown".
         const sessionLivenessStore = new SessionLivenessStore();
+        // HIGH #21 — latest ownership-gated capability report per AGENT
+        // session. Public agent-session reads expose the view-only/streaming/
+        // egress state to the installed GUI; the same relay persists the raw +
+        // derived report on its linked driver session.
+        const sessionCapabilityReportStore = new SessionCapabilityReportStore();
         // Worker-disconnect fix (2026-06-19) — close a node's active agent
         // sessions when its control-plane connection drops and doesn't
         // reconnect within DRIFTSTACK_WORKER_DISCONNECT_GRACE_SECONDS (default
@@ -1653,6 +1660,7 @@ export async function createProductionDeps(
           fleetNonceCache,
           sessionPageStateStore,
           sessionLivenessStore,
+          sessionCapabilityReportStore,
           // Profile-backed session persistence (A3 W417): when R2 is configured,
           // a `profileSaved` frame from a node writes the customer's sealed store
           // to R2; without R2 the frame is accepted + ignored (stateless).
@@ -1786,11 +1794,18 @@ export async function createProductionDeps(
                 reportingNodeId,
                 logger,
                 livenessStore: sessionLivenessStore,
+                sessionCapabilityReportStore,
               }),
             // Cross-session spoof guard (audit M1 extended to the correlated reply
             // path) — threaded into every connection's request correlators so a
             // dropped result frame (sessionId mismatch) logs one warn.
             logger,
+            makeSessionCapabilityReportRelay(
+              agentSessionsRepo,
+              sessionsService,
+              sessionCapabilityReportStore,
+              logger,
+            ),
           )),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The

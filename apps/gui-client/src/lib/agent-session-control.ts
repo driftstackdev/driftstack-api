@@ -23,6 +23,12 @@ import { loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
 
+export interface AgentSessionCapabilityReport {
+  manual_input_available: boolean | null;
+  streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | null;
+  egress_state: 'live' | 'dead_proxy' | null;
+}
+
 /** Per-session control credential, threaded from the protected internal query
  *  through SimulatorWindow into each
  *  control call. `null` → use the account API key (in-app window).
@@ -55,6 +61,9 @@ export interface AgentSessionControlState {
    *  (e.g. 'idle_timeout', 'browser-closed'). null when the field is absent. */
   status: string | null;
   closedReason: string | null;
+  /** Present once the owning harness has emitted a validated capabilityReport.
+   *  Omitted on older/control-plane-disabled servers. */
+  capabilityReport?: AgentSessionCapabilityReport;
 }
 
 export class AgentSessionControlError extends Error {
@@ -77,6 +86,7 @@ interface ApiSession {
   status?: string;
   closed_reason?: string | null;
   closed_at?: string | null;
+  capability_report?: unknown;
 }
 
 function isMode(v: unknown): v is SessionMode {
@@ -111,6 +121,26 @@ function isTerminalSession(body: ApiSession): boolean {
   if (typeof body.closed_at === 'string' && body.closed_at.length > 0) return true;
   if (typeof body.closed_reason === 'string' && body.closed_reason.length > 0) return true;
   return false;
+}
+
+function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | undefined {
+  const value = body.capability_report;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const report = value as Record<string, unknown>;
+  const streaming = report.streaming_state;
+  const egress = report.egress_state;
+  return {
+    manual_input_available:
+      typeof report.manual_input_available === 'boolean' ? report.manual_input_available : null,
+    streaming_state:
+      streaming === 'provisioning' ||
+      streaming === 'live' ||
+      streaming === 'blank' ||
+      streaming === 'failed'
+        ? streaming
+        : null,
+    egress_state: egress === 'live' || egress === 'dead_proxy' ? egress : null,
+  };
 }
 
 async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): Promise<unknown> {
@@ -246,6 +276,8 @@ export async function getAgentSession(
         ? body.closed_reason
         : null,
   };
+  const capabilityReport = capabilityReportOf(body);
+  if (capabilityReport !== undefined) state.capabilityReport = capabilityReport;
   // The simulator already polls this lifecycle endpoint every five seconds.
   // When that exact window owns pair-mode control, reuse the poll to refresh
   // the API heartbeat. Keep it best-effort so liveness telemetry can never make

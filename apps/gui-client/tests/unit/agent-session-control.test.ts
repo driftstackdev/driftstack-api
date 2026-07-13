@@ -125,6 +125,52 @@ describe('agent-session-control transport', () => {
     expect((mockFetch.mock.calls[0] as [string, RequestInit])[1].method).toBe('GET');
   });
 
+  it('getAgentSession preserves validated harness input, streaming, and egress health', async () => {
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        status: 'active',
+        capability_report: {
+          manual_input_available: false,
+          streaming_state: 'blank',
+          egress_state: 'dead_proxy',
+          proxy_kind: 'socks5',
+        },
+      }),
+    );
+    expect(await getAgentSession('agt_1')).toMatchObject({
+      capabilityReport: {
+        manual_input_available: false,
+        streaming_state: 'blank',
+        egress_state: 'dead_proxy',
+      },
+    });
+  });
+
+  it('getAgentSession omits a malformed capability envelope and nulls unknown nested states', async () => {
+    mockFetch.mockResolvedValue(
+      ok({ mode: 'manual', status: 'active', capability_report: 'not-an-object' }),
+    );
+    expect((await getAgentSession('agt_1')).capabilityReport).toBeUndefined();
+
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        status: 'active',
+        capability_report: {
+          manual_input_available: 'yes',
+          streaming_state: 'fine',
+          egress_state: 'maybe',
+        },
+      }),
+    );
+    expect((await getAgentSession('agt_1')).capabilityReport).toEqual({
+      manual_input_available: null,
+      streaming_state: null,
+      egress_state: null,
+    });
+  });
+
   it('getAgentSession refreshes the exact pair controller heartbeat after a human-driving read', async () => {
     mockFetch
       .mockResolvedValueOnce(

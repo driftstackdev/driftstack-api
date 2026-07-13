@@ -41,6 +41,7 @@
 import type { AgentSessionsRepo } from './agent-sessions.js';
 import type { SessionLivenessStore } from './session-liveness-store.js';
 import type { SessionPageStateStore } from './session-page-state-store.js';
+import type { SessionCapabilityReportStore } from './session-capability-report-store.js';
 import type { SessionStatus } from '../schemas/harness-control-protocol.js';
 import type { Logger } from '../lib/logger.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
@@ -78,6 +79,7 @@ export interface CloseAgentSessionOnTerminalStatusDeps {
    * fleet control plane / stateless deploy) → skipped.
    */
   readonly sessionPageStateStore?: SessionPageStateStore;
+  readonly sessionCapabilityReportStore?: SessionCapabilityReportStore;
 }
 
 /**
@@ -88,8 +90,15 @@ export interface CloseAgentSessionOnTerminalStatusDeps {
 export async function closeAgentSessionOnTerminalStatus(
   deps: CloseAgentSessionOnTerminalStatusDeps,
 ): Promise<void> {
-  const { agentSessions, frame, reportingNodeId, logger, livenessStore, sessionPageStateStore } =
-    deps;
+  const {
+    agentSessions,
+    frame,
+    reportingNodeId,
+    logger,
+    livenessStore,
+    sessionPageStateStore,
+    sessionCapabilityReportStore,
+  } = deps;
   const reason = frame.reason ?? `session-${frame.status}`;
   try {
     const existing = await agentSessions.get(frame.sessionId);
@@ -150,6 +159,7 @@ export async function closeAgentSessionOnTerminalStatus(
     // dead session's last (possibly 'stalled') report doesn't keep serving
     // from GET /:id/page-state after the worker has told us it's gone.
     sessionPageStateStore?.delete(frame.sessionId);
+    sessionCapabilityReportStore?.delete(frame.sessionId);
   } catch (err) {
     // A close failure must not crash the WS receive loop (an uncaught throw
     // there is a process-level uncaughtException). Log + leave the

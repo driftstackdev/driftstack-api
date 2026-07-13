@@ -30,13 +30,53 @@ describe('agent-session response schema parity', () => {
     const ifaceFields = [...ifaceBody.matchAll(/^\s+(\w+)\??:/gm)]
       .map((x) => x[1])
       .filter((f): f is string => f !== undefined);
-    expect(ifaceFields.length).toBe(17);
+    expect(ifaceFields.length).toBe(18);
     expect(new Set(Object.keys(AgentSessionSchema.shape))).toEqual(new Set(ifaceFields));
   });
 
   it('OpenAPI registers AgentSession as a named component (Pydantic/Go/TS codegen gets a named type, not an inline anonymous shape)', () => {
     const oapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     expect(oapi).toMatch(/r\.register\('AgentSession', AgentSessionSchema\);/);
+  });
+
+  it('types the optional capability_report degraded states without accepting invented values', () => {
+    const base = {
+      id: 'agt_1',
+      account_id: 'acc_1',
+      driftstack_session_id: null,
+      status: 'active',
+      closed_reason: null,
+      token_budget_total: 100,
+      token_budget_remaining: 100,
+      transcript_length: 0,
+      closed_at: null,
+      created_by_user_id: null,
+      mode: 'manual',
+      model: 'claude-opus-4-8',
+      pair_mode_state: null,
+      created_at: '2026-07-13T06:00:00.000Z',
+      updated_at: '2026-07-13T06:00:00.000Z',
+    };
+    const capabilityReport = {
+      timestamp: '2026-07-13T06:00:00.000Z',
+      manual_input_available: false,
+      streaming_state: 'blank',
+      egress_state: 'dead_proxy',
+      proxy_kind: 'socks5',
+      proxy_udp_supported: false,
+      transport_mode_requested: 'h2-and-h3',
+      transport_mode_active: 'h2-only',
+      safeguards_passed: true,
+    };
+    expect(
+      AgentSessionSchema.safeParse({ ...base, capability_report: capabilityReport }).success,
+    ).toBe(true);
+    expect(
+      AgentSessionSchema.safeParse({
+        ...base,
+        capability_report: { ...capabilityReport, streaming_state: 'fine' },
+      }).success,
+    ).toBe(false);
   });
 
   it('OpenAPI references AgentSessionSchema on the 3 read endpoints — bare on POST 201 + GET by-id, array-wrapped on GET list (was z.object({}))', () => {

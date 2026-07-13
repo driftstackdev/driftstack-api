@@ -470,6 +470,54 @@
               }
             },
             "required": ["state", "fresh"]
+          },
+          "capability_report": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string"
+              },
+              "manual_input_available": {
+                "type": ["boolean", "null"]
+              },
+              "streaming_state": {
+                "type": ["string", "null"],
+                "enum": ["provisioning", "live", "blank", "failed"]
+              },
+              "egress_state": {
+                "type": ["string", "null"],
+                "enum": ["live", "dead_proxy"]
+              },
+              "proxy_kind": {
+                "type": "string",
+                "enum": ["socks5", "openvpn", "wireguard"]
+              },
+              "proxy_udp_supported": {
+                "type": "boolean"
+              },
+              "transport_mode_requested": {
+                "type": "string",
+                "enum": ["h2-only", "h2-and-h3"]
+              },
+              "transport_mode_active": {
+                "type": "string",
+                "enum": ["h2-only", "h2-and-h3"]
+              },
+              "safeguards_passed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "timestamp",
+              "manual_input_available",
+              "streaming_state",
+              "egress_state",
+              "proxy_kind",
+              "proxy_udp_supported",
+              "transport_mode_requested",
+              "transport_mode_active",
+              "safeguards_passed"
+            ]
           }
         },
         "required": [
@@ -16378,6 +16426,54 @@
                         }
                       },
                       "required": ["state", "fresh"]
+                    },
+                    "capability_report": {
+                      "type": "object",
+                      "properties": {
+                        "timestamp": {
+                          "type": "string"
+                        },
+                        "manual_input_available": {
+                          "type": ["boolean", "null"]
+                        },
+                        "streaming_state": {
+                          "type": ["string", "null"],
+                          "enum": ["provisioning", "live", "blank", "failed"]
+                        },
+                        "egress_state": {
+                          "type": ["string", "null"],
+                          "enum": ["live", "dead_proxy"]
+                        },
+                        "proxy_kind": {
+                          "type": "string",
+                          "enum": ["socks5", "openvpn", "wireguard"]
+                        },
+                        "proxy_udp_supported": {
+                          "type": "boolean"
+                        },
+                        "transport_mode_requested": {
+                          "type": "string",
+                          "enum": ["h2-only", "h2-and-h3"]
+                        },
+                        "transport_mode_active": {
+                          "type": "string",
+                          "enum": ["h2-only", "h2-and-h3"]
+                        },
+                        "safeguards_passed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "timestamp",
+                        "manual_input_available",
+                        "streaming_state",
+                        "egress_state",
+                        "proxy_kind",
+                        "proxy_udp_supported",
+                        "transport_mode_requested",
+                        "transport_mode_active",
+                        "safeguards_passed"
+                      ]
                     }
                   },
                   "required": [
@@ -16572,6 +16668,54 @@
                               }
                             },
                             "required": ["state", "fresh"]
+                          },
+                          "capability_report": {
+                            "type": "object",
+                            "properties": {
+                              "timestamp": {
+                                "type": "string"
+                              },
+                              "manual_input_available": {
+                                "type": ["boolean", "null"]
+                              },
+                              "streaming_state": {
+                                "type": ["string", "null"],
+                                "enum": ["provisioning", "live", "blank", "failed"]
+                              },
+                              "egress_state": {
+                                "type": ["string", "null"],
+                                "enum": ["live", "dead_proxy"]
+                              },
+                              "proxy_kind": {
+                                "type": "string",
+                                "enum": ["socks5", "openvpn", "wireguard"]
+                              },
+                              "proxy_udp_supported": {
+                                "type": "boolean"
+                              },
+                              "transport_mode_requested": {
+                                "type": "string",
+                                "enum": ["h2-only", "h2-and-h3"]
+                              },
+                              "transport_mode_active": {
+                                "type": "string",
+                                "enum": ["h2-only", "h2-and-h3"]
+                              },
+                              "safeguards_passed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "timestamp",
+                              "manual_input_available",
+                              "streaming_state",
+                              "egress_state",
+                              "proxy_kind",
+                              "proxy_udp_supported",
+                              "transport_mode_requested",
+                              "transport_mode_active",
+                              "safeguards_passed"
+                            ]
                           }
                         },
                         "required": [
@@ -16761,6 +16905,54 @@
                         }
                       },
                       "required": ["state", "fresh"]
+                    },
+                    "capability_report": {
+                      "type": "object",
+                      "properties": {
+                        "timestamp": {
+                          "type": "string"
+                        },
+                        "manual_input_available": {
+                          "type": ["boolean", "null"]
+                        },
+                        "streaming_state": {
+                          "type": ["string", "null"],
+                          "enum": ["provisioning", "live", "blank", "failed"]
+                        },
+                        "egress_state": {
+                          "type": ["string", "null"],
+                          "enum": ["live", "dead_proxy"]
+                        },
+                        "proxy_kind": {
+                          "type": "string",
+                          "enum": ["socks5", "openvpn", "wireguard"]
+                        },
+                        "proxy_udp_supported": {
+                          "type": "boolean"
+                        },
+                        "transport_mode_requested": {
+                          "type": "string",
+                          "enum": ["h2-only", "h2-and-h3"]
+                        },
+                        "transport_mode_active": {
+                          "type": "string",
+                          "enum": ["h2-only", "h2-and-h3"]
+                        },
+                        "safeguards_passed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "timestamp",
+                        "manual_input_available",
+                        "streaming_state",
+                        "egress_state",
+                        "proxy_kind",
+                        "proxy_udp_supported",
+                        "transport_mode_requested",
+                        "transport_mode_active",
+                        "safeguards_passed"
+                      ]
                     }
                   },
                   "required": [
@@ -17178,6 +17370,54 @@
                                 }
                               },
                               "required": ["state", "fresh"]
+                            },
+                            "capability_report": {
+                              "type": "object",
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string"
+                                },
+                                "manual_input_available": {
+                                  "type": ["boolean", "null"]
+                                },
+                                "streaming_state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["provisioning", "live", "blank", "failed"]
+                                },
+                                "egress_state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["live", "dead_proxy"]
+                                },
+                                "proxy_kind": {
+                                  "type": "string",
+                                  "enum": ["socks5", "openvpn", "wireguard"]
+                                },
+                                "proxy_udp_supported": {
+                                  "type": "boolean"
+                                },
+                                "transport_mode_requested": {
+                                  "type": "string",
+                                  "enum": ["h2-only", "h2-and-h3"]
+                                },
+                                "transport_mode_active": {
+                                  "type": "string",
+                                  "enum": ["h2-only", "h2-and-h3"]
+                                },
+                                "safeguards_passed": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "manual_input_available",
+                                "streaming_state",
+                                "egress_state",
+                                "proxy_kind",
+                                "proxy_udp_supported",
+                                "transport_mode_requested",
+                                "transport_mode_active",
+                                "safeguards_passed"
+                              ]
                             }
                           },
                           "required": [
@@ -17835,6 +18075,54 @@
                                 }
                               },
                               "required": ["state", "fresh"]
+                            },
+                            "capability_report": {
+                              "type": "object",
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string"
+                                },
+                                "manual_input_available": {
+                                  "type": ["boolean", "null"]
+                                },
+                                "streaming_state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["provisioning", "live", "blank", "failed"]
+                                },
+                                "egress_state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["live", "dead_proxy"]
+                                },
+                                "proxy_kind": {
+                                  "type": "string",
+                                  "enum": ["socks5", "openvpn", "wireguard"]
+                                },
+                                "proxy_udp_supported": {
+                                  "type": "boolean"
+                                },
+                                "transport_mode_requested": {
+                                  "type": "string",
+                                  "enum": ["h2-only", "h2-and-h3"]
+                                },
+                                "transport_mode_active": {
+                                  "type": "string",
+                                  "enum": ["h2-only", "h2-and-h3"]
+                                },
+                                "safeguards_passed": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "manual_input_available",
+                                "streaming_state",
+                                "egress_state",
+                                "proxy_kind",
+                                "proxy_udp_supported",
+                                "transport_mode_requested",
+                                "transport_mode_active",
+                                "safeguards_passed"
+                              ]
                             }
                           },
                           "required": [
@@ -17969,6 +18257,54 @@
                                 }
                               },
                               "required": ["state", "fresh"]
+                            },
+                            "capability_report": {
+                              "type": "object",
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string"
+                                },
+                                "manual_input_available": {
+                                  "type": ["boolean", "null"]
+                                },
+                                "streaming_state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["provisioning", "live", "blank", "failed"]
+                                },
+                                "egress_state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["live", "dead_proxy"]
+                                },
+                                "proxy_kind": {
+                                  "type": "string",
+                                  "enum": ["socks5", "openvpn", "wireguard"]
+                                },
+                                "proxy_udp_supported": {
+                                  "type": "boolean"
+                                },
+                                "transport_mode_requested": {
+                                  "type": "string",
+                                  "enum": ["h2-only", "h2-and-h3"]
+                                },
+                                "transport_mode_active": {
+                                  "type": "string",
+                                  "enum": ["h2-only", "h2-and-h3"]
+                                },
+                                "safeguards_passed": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "manual_input_available",
+                                "streaming_state",
+                                "egress_state",
+                                "proxy_kind",
+                                "proxy_udp_supported",
+                                "transport_mode_requested",
+                                "transport_mode_active",
+                                "safeguards_passed"
+                              ]
                             }
                           },
                           "required": [

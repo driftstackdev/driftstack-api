@@ -7,7 +7,7 @@
 // the liveness-store entry is dropped; a repo failure is swallowed (never throws
 // into the WS receive loop).
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import { SessionLivenessStore } from '../../src/services/session-liveness-store.js';
 import { SessionPageStateStore } from '../../src/services/session-page-state-store.js';
@@ -15,6 +15,7 @@ import { closeAgentSessionOnTerminalStatus } from '../../src/services/agent-sess
 import type { AgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import type { SessionStatus, PageStateFrame } from '../../src/schemas/harness-control-protocol.js';
 import type { Logger } from '../../src/lib/logger.js';
+import type { SessionCapabilityReportStore } from '../../src/services/session-capability-report-store.js';
 
 const noopLogger = { info: () => {}, warn: () => {} } as unknown as Logger;
 
@@ -145,6 +146,24 @@ describe('closeAgentSessionOnTerminalStatus (A3 W2682)', () => {
     });
 
     expect(liveness.get(created.id)).toBeNull();
+  });
+
+  it('evicts the capability-report entry when the worker reports the session terminal', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    const deleteCapabilityReport = vi.fn();
+    const capabilityReports = {
+      delete: deleteCapabilityReport,
+    } as unknown as SessionCapabilityReportStore;
+
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
+      logger: noopLogger,
+      sessionCapabilityReportStore: capabilityReports,
+    });
+
+    expect(deleteCapabilityReport).toHaveBeenCalledWith(created.id);
   });
 
   // Audit 2026-07-01 (MEDIUM) — the exact gap the audit flagged: this

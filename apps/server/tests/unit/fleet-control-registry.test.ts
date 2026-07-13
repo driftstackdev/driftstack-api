@@ -21,6 +21,7 @@ import type {
   IntentDispatch,
   Heartbeat,
   SessionStatus,
+  CapabilityReport,
 } from '../../src/schemas/harness-control-protocol.js';
 
 function dispatch(intentId: string, sessionId = 'ses_x'): IntentDispatch {
@@ -791,6 +792,54 @@ describe('FleetControlRegistry', () => {
         reason: 'customer_closed',
       },
     ]);
+  });
+
+  it('routes a validated capabilityReport with the authenticated reporting node id', () => {
+    const seen: Array<{ frame: CapabilityReport; nodeId: string }> = [];
+    const reg = new FleetControlRegistry(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (frame, nodeId) => seen.push({ frame, nodeId }),
+    );
+    const conn = reg.register('node-1', () => {});
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'capabilityReport',
+        sessionId: 'agt_1',
+        timestamp: '2026-07-13T06:00:00.000Z',
+        egressPhase: 'phase_1_socks5',
+        proxyKind: 'socks5',
+        proxyUdpSupported: true,
+        proxyIpv4Supported: true,
+        proxyIpv6Supported: false,
+        transportModeRequested: 'h2-and-h3',
+        transportModeActive: 'h2-and-h3',
+        h3InterposeLoaded: true,
+        httpsSkipActive: true,
+        safeguardChecks: [{ layer: 'dns', passed: true, timestamp: 't' }],
+        archetypeId: 'iphone16pro_ios18_6_safari18_6',
+        manualInputAvailable: false,
+        streamingState: 'blank',
+        egressState: 'dead_proxy',
+      }),
+    );
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      nodeId: 'node-1',
+      frame: {
+        sessionId: 'agt_1',
+        manualInputAvailable: false,
+        streamingState: 'blank',
+        egressState: 'dead_proxy',
+      },
+    });
   });
 
   it('unregister is idempotent (double-close is a no-op)', () => {

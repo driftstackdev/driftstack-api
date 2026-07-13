@@ -16,7 +16,8 @@
 // discriminated union `{type, …}`. We route the two we consume — `intentResult`
 // → the correlator's onResultFrame; the errored `sessionStatus`
 // (detail "intent_dispatch_no_session: …") → onSessionError (fast-fail) — and
-// accept-but-ignore heartbeat / capabilityReport / errorEvent for now.
+// heartbeat/capabilityReport → their injected consumers. errorEvent remains an
+// ops-only accepted frame until its node-IP-safe customer contract is defined.
 
 import {
   HarnessOutboundSchema,
@@ -32,6 +33,7 @@ import {
   type PageStateFrame,
   type Heartbeat,
   type SessionStatus,
+  type CapabilityReport,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 import {
@@ -127,6 +129,7 @@ export class FleetControlConnection {
   ) => void;
   private readonly onHeartbeat?: (frame: Heartbeat) => void;
   private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void;
+  private readonly onCapabilityReport?: (frame: CapabilityReport, reportingNodeId: string) => void;
   private readonly logger: Logger | null;
   // Actively closes THIS connection's underlying socket. Called from `supersede()`
   // when a newer connection for the node replaces this one, so a half-open box socket
@@ -166,6 +169,9 @@ export class FleetControlConnection {
     // Closes this connection's socket — threaded from the WS route so `supersede()` can
     // actively terminate a replaced/half-open socket (P0 2026-07-11).
     terminate?: () => void,
+    // Appended (rather than inserted among the historical positional handlers)
+    // so legacy direct/test constructors keep their exact argument meaning.
+    onCapabilityReport?: (frame: CapabilityReport, reportingNodeId: string) => void,
   ) {
     this.send = send;
     this.terminate = terminate;
@@ -175,6 +181,7 @@ export class FleetControlConnection {
     this.onProfileSaveFailed = onProfileSaveFailed;
     this.onHeartbeat = onHeartbeat;
     this.onSessionStatus = onSessionStatus;
+    this.onCapabilityReport = onCapabilityReport;
     const log = logger ?? null;
     this.logger = log;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
@@ -545,7 +552,14 @@ export class FleetControlConnection {
             this.onHeartbeat?.(frame);
           }
           break;
-        // capabilityReport / errorEvent: accepted, not yet consumed.
+        case 'capabilityReport':
+          // Live session capability/health changes (manual-input availability,
+          // streaming blank/failed recovery, dead/recovered upstream proxy).
+          // The ownership-gated consumer updates GUI state and the linked
+          // driver-session egress persistence/webhook path.
+          this.onCapabilityReport?.(frame, this.nodeId);
+          break;
+        // errorEvent: accepted, not yet consumed.
         //
         // FORWARD-GUARD (A3 bus W1859): an `errorEvent` (summary/detail) and an
         // errored `sessionStatus.detail` can carry the Mac fleet NODE's real IP on
@@ -674,6 +688,11 @@ export class FleetControlRegistry {
      * (stateless deploy / tests) → the guard still DROPS the frame silently.
      */
     private readonly logger?: Logger | null,
+    // Appended for positional back-compat; threaded into every new connection.
+    private readonly onCapabilityReport?: (
+      frame: CapabilityReport,
+      reportingNodeId: string,
+    ) => void,
   ) {}
 
   register(
@@ -701,6 +720,7 @@ export class FleetControlRegistry {
       this.onSessionStatus,
       this.logger,
       terminate,
+      this.onCapabilityReport,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

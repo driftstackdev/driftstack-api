@@ -67,6 +67,7 @@ import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
 import type { SessionLivenessStore } from '../services/session-liveness-store.js';
+import type { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { AccountProxiesRepo } from '../db/account-proxies-repo.js';
@@ -557,6 +558,9 @@ export interface AppDeps {
    * "unknown" (the client trusts the binding; never treated as dead).
    */
   sessionLivenessStore?: SessionLivenessStore;
+  /** Latest ownership-gated harness capability/stream/egress state for the
+   * installed agent-session GUI. Present with the fleet control plane. */
+  sessionCapabilityReportStore?: SessionCapabilityReportStore;
   /**
    * Local fleet-demo session-dispatch config. Present only when the fleet
    * control plane is enabled (bootstrap assembles it alongside the registry);
@@ -1422,6 +1426,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // plane wired the store; absent → `liveness` defaults to "unknown".
       ...(deps.sessionLivenessStore !== undefined
         ? { sessionLivenessStore: deps.sessionLivenessStore }
+        : {}),
+      ...(deps.sessionCapabilityReportStore !== undefined
+        ? { sessionCapabilityReportStore: deps.sessionCapabilityReportStore }
         : {}),
       ...(deps.byokAnthropicService !== undefined
         ? { byokService: deps.byokAnthropicService }

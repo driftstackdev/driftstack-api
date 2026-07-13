@@ -86,6 +86,10 @@ import type {
   SessionLivenessStore,
   SessionLivenessState,
 } from '../services/session-liveness-store.js';
+import type {
+  SessionCapabilityReport,
+  SessionCapabilityReportStore,
+} from '../services/session-capability-report-store.js';
 import type { SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
@@ -332,6 +336,9 @@ interface PublicAgentSession {
   // explicit "store wired, session seen, but worker reports no live
   // state" signal. Optional so older SDKs ignore it.
   liveness?: { state: SessionLivenessState | null; fresh: boolean };
+  /** Latest validated harness capability/health state. Omitted until a report
+   * arrives (or when the fleet control plane is disabled). */
+  capability_report?: SessionCapabilityReport;
 }
 
 /** LK.4 — LiveKit join info auto-populated on session-create + the
@@ -367,6 +374,7 @@ function publicAgentSession(
   rec: AgentSessionRecord,
   livekit?: PublicLivekitInfo,
   livenessStore?: SessionLivenessStore,
+  capabilityReportStore?: SessionCapabilityReportStore,
 ): PublicAgentSession {
   const liveness = sessionLiveness(rec, livenessStore);
   const base: PublicAgentSession = {
@@ -398,6 +406,10 @@ function publicAgentSession(
   // Omit-when-unknown (field absent) so older SDKs + the prod no-fleet-CP path
   // are byte-identical; only set it when the store reported a live state.
   if (liveness !== undefined) base.liveness = liveness;
+  if (rec.status !== 'closed') {
+    const capabilityReport = capabilityReportStore?.get(rec.id) ?? null;
+    if (capabilityReport !== null) base.capability_report = capabilityReport;
+  }
   return base;
 }
 
@@ -544,6 +556,8 @@ export interface AgentSessionsRoutesDeps {
    * (= "unknown, trust the binding"; prod has no fleet control plane).
    */
   sessionLivenessStore?: SessionLivenessStore;
+  /** Latest ownership-gated capabilityReport per agent session. */
+  sessionCapabilityReportStore?: SessionCapabilityReportStore;
   /**
    * Local fleet-demo dispatch config: the archetype / behavior profile /
    * landing URL / SOCKS5 proxy the dispatched session browses with. Wired
@@ -1438,6 +1452,7 @@ export function registerAgentSessionsRoutes(
     fleetControlRegistry,
     sessionPageStateStore,
     sessionLivenessStore,
+    sessionCapabilityReportStore,
     sessionDispatch,
     profilesService,
     authRepo,
@@ -1778,7 +1793,16 @@ export function registerAgentSessionsRoutes(
             ctx.account.region,
             existing.nodeId,
           );
-          return reply.code(201).send(publicAgentSession(existing, livekit, sessionLivenessStore));
+          return reply
+            .code(201)
+            .send(
+              publicAgentSession(
+                existing,
+                livekit,
+                sessionLivenessStore,
+                sessionCapabilityReportStore,
+              ),
+            );
         }
       }
 
@@ -1935,7 +1959,16 @@ export function registerAgentSessionsRoutes(
               ctx.account.region,
               winner.nodeId,
             );
-            return reply.code(201).send(publicAgentSession(winner, livekit, sessionLivenessStore));
+            return reply
+              .code(201)
+              .send(
+                publicAgentSession(
+                  winner,
+                  livekit,
+                  sessionLivenessStore,
+                  sessionCapabilityReportStore,
+                ),
+              );
           }
         }
         throw err;
@@ -2074,7 +2107,16 @@ export function registerAgentSessionsRoutes(
         } catch {
           /* swallow */
         }
-        return reply.code(201).send(publicAgentSession(dispatched, livekit, sessionLivenessStore));
+        return reply
+          .code(201)
+          .send(
+            publicAgentSession(
+              dispatched,
+              livekit,
+              sessionLivenessStore,
+              sessionCapabilityReportStore,
+            ),
+          );
       } catch (err) {
         // #3 — release the phantom 'active' slot: the row was created (slot
         // acquired) but the create couldn't be completed, so close it so it stops
@@ -2114,7 +2156,9 @@ export function registerAgentSessionsRoutes(
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
       });
       return {
-        data: page.items.map((rec) => publicAgentSession(rec, undefined, sessionLivenessStore)),
+        data: page.items.map((rec) =>
+          publicAgentSession(rec, undefined, sessionLivenessStore, sessionCapabilityReportStore),
+        ),
         has_more: page.nextCursor !== null,
         next_cursor: page.nextCursor,
       };
@@ -2143,7 +2187,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
-      return publicAgentSession(rec, undefined, sessionLivenessStore);
+      return publicAgentSession(rec, undefined, sessionLivenessStore, sessionCapabilityReportStore);
     },
   );
 
@@ -3317,7 +3361,12 @@ export function registerAgentSessionsRoutes(
       if (rec.mode === target) {
         // Idempotent — no-op return preserves pair_mode_state when
         // the session is already in pair mode mid-takeover.
-        return publicAgentSession(rec, undefined, sessionLivenessStore);
+        return publicAgentSession(
+          rec,
+          undefined,
+          sessionLivenessStore,
+          sessionCapabilityReportStore,
+        );
       }
       // S42 follow-up 2026-07-07 — the /mode flip is the OTHER ordering of
       // the create-edge aiAgent gate: without this, a free/personal account
@@ -3363,7 +3412,12 @@ export function registerAgentSessionsRoutes(
       } catch {
         /* swallow */
       }
-      return publicAgentSession(updated, undefined, sessionLivenessStore);
+      return publicAgentSession(
+        updated,
+        undefined,
+        sessionLivenessStore,
+        sessionCapabilityReportStore,
+      );
     },
   );
 
@@ -3859,7 +3913,12 @@ export function registerAgentSessionsRoutes(
         if (result.kind === 'logged-manual') {
           return {
             kind: result.kind,
-            session: publicAgentSession(result.session, undefined, sessionLivenessStore),
+            session: publicAgentSession(
+              result.session,
+              undefined,
+              sessionLivenessStore,
+              sessionCapabilityReportStore,
+            ),
           };
         }
         // 2026-05-22 — V-666.AI cost telemetry per turn. The decomposer
@@ -3902,7 +3961,12 @@ export function registerAgentSessionsRoutes(
           const usage = publicUsage(plan.usage);
           return {
             kind: result.kind,
-            session: publicAgentSession(result.session, undefined, sessionLivenessStore),
+            session: publicAgentSession(
+              result.session,
+              undefined,
+              sessionLivenessStore,
+              sessionCapabilityReportStore,
+            ),
             intents: plan.intents,
             results: result.executor.results,
             ok: result.executor.ok,
@@ -3913,7 +3977,12 @@ export function registerAgentSessionsRoutes(
           const usage = publicUsage(result.decomposer.usage);
           return {
             kind: result.kind,
-            session: publicAgentSession(result.session, undefined, sessionLivenessStore),
+            session: publicAgentSession(
+              result.session,
+              undefined,
+              sessionLivenessStore,
+              sessionCapabilityReportStore,
+            ),
             clarifying_question: result.decomposer.clarifyingQuestion,
             ...(usage !== undefined ? { usage } : {}),
           };
@@ -3922,7 +3991,12 @@ export function registerAgentSessionsRoutes(
         const usage = publicUsage(result.decomposer.usage);
         return {
           kind: result.kind,
-          session: publicAgentSession(result.session, undefined, sessionLivenessStore),
+          session: publicAgentSession(
+            result.session,
+            undefined,
+            sessionLivenessStore,
+            sessionCapabilityReportStore,
+          ),
           refuse_reason: result.decomposer.refuseReason,
           ...(usage !== undefined ? { usage } : {}),
         };
@@ -3994,6 +4068,7 @@ export function registerAgentSessionsRoutes(
       // documented on-session-end eviction. Idempotent + gated (no-op when the
       // fleet control plane / store isn't wired).
       sessionPageStateStore?.delete(req.params.id);
+      sessionCapabilityReportStore?.delete(req.params.id);
       // Review follow-up 2026-07-01 — same rationale: precisely evict this
       // session's lifetime upload counters on the customer-close path (the
       // one path with a cheap known session id), rather than relying solely

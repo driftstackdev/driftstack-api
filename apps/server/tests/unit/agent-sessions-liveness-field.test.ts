@@ -11,6 +11,8 @@ import { registerAgentSessionsRoutes } from '../../src/routes/agent-sessions.js'
 import type { AgentRuntime } from '../../src/services/agent-runtime.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import { SessionLivenessStore } from '../../src/services/session-liveness-store.js';
+import { SessionCapabilityReportStore } from '../../src/services/session-capability-report-store.js';
+import type { CapabilityReport } from '../../src/schemas/harness-control-protocol.js';
 
 const ACC = 'acc_liveness';
 
@@ -39,7 +41,10 @@ function makeRecord(id: string): AgentSessionRecord {
   };
 }
 
-async function buildApp(opts: { livenessStore?: SessionLivenessStore }) {
+async function buildApp(opts: {
+  livenessStore?: SessionLivenessStore;
+  capabilityReportStore?: SessionCapabilityReportStore;
+}) {
   const rec = makeRecord('agt_live');
   const sessions = {
     get: (id: string) => Promise.resolve(id === rec.id ? rec : null),
@@ -61,6 +66,9 @@ async function buildApp(opts: { livenessStore?: SessionLivenessStore }) {
     runtime: {} as unknown as AgentRuntime,
     sessions,
     ...(opts.livenessStore !== undefined ? { sessionLivenessStore: opts.livenessStore } : {}),
+    ...(opts.capabilityReportStore !== undefined
+      ? { sessionCapabilityReportStore: opts.capabilityReportStore }
+      : {}),
   });
   await app.ready();
   return app;
@@ -105,6 +113,55 @@ describe('agent-sessions read shape — liveness field (W2679)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<{ liveness?: { state: string | null; fresh: boolean } }>();
     expect(body.liveness).toEqual({ state: 'active', fresh: false });
+    await app.close();
+  });
+});
+
+describe('agent-sessions read shape — capability_report', () => {
+  it('omits an unknown report and exposes the latest customer-safe report when present', async () => {
+    const store = new SessionCapabilityReportStore();
+    const appWithoutReport = await buildApp({ capabilityReportStore: store });
+    const unknown = await appWithoutReport.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_live',
+    });
+    expect(unknown.statusCode).toBe(200);
+    expect('capability_report' in unknown.json<Record<string, unknown>>()).toBe(false);
+    await appWithoutReport.close();
+
+    store.set({
+      type: 'capabilityReport',
+      sessionId: 'agt_live',
+      timestamp: '2026-07-13T06:00:00.000Z',
+      egressPhase: 'phase_1_socks5',
+      proxyKind: 'socks5',
+      proxyUdpSupported: false,
+      proxyIpv4Supported: true,
+      proxyIpv6Supported: false,
+      transportModeRequested: 'h2-and-h3',
+      transportModeActive: 'h2-only',
+      h3InterposeLoaded: false,
+      httpsSkipActive: true,
+      safeguardChecks: [{ layer: 'dns', passed: true, timestamp: 't' }],
+      archetypeId: 'iphone16pro_ios18_6_safari18_6',
+      manualInputAvailable: false,
+      streamingState: 'blank',
+      egressState: 'dead_proxy',
+    } satisfies CapabilityReport);
+    const app = await buildApp({ capabilityReportStore: store });
+    const res = await app.inject({ method: 'GET', url: '/v1/agent-sessions/agt_live' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ capability_report?: unknown }>().capability_report).toEqual({
+      timestamp: '2026-07-13T06:00:00.000Z',
+      manual_input_available: false,
+      streaming_state: 'blank',
+      egress_state: 'dead_proxy',
+      proxy_kind: 'socks5',
+      proxy_udp_supported: false,
+      transport_mode_requested: 'h2-and-h3',
+      transport_mode_active: 'h2-only',
+      safeguards_passed: true,
+    });
     await app.close();
   });
 });

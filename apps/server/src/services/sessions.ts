@@ -1215,9 +1215,9 @@ export class SessionsService {
    * webhook event fires on every successful persist. Returns null
    * when the session doesn't exist (harness race).
    *
-   * Called from the eg.2 WebSocket control-plane handler when it
-   * lands; today exposed for direct service-layer testing + admin
-   * tooling. Best-effort webhook emit: a failure logs but doesn't
+   * Called from the ownership-gated capabilityReport WebSocket relay.
+   * Also exposed for direct service-layer testing + admin tooling.
+   * Best-effort webhook emit: a failure logs but doesn't
    * roll back the persist (matches the session.completed pattern).
    */
   async ingestEgressCapabilityReport(args: {
