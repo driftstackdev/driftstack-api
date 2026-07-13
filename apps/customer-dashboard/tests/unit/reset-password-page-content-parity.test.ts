@@ -112,9 +112,20 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
   it('one-time reset consumption is single-flight and bounded', () => {
     expect(body).toMatch(/const RESET_REQUEST_TIMEOUT_MS = 15_000;/);
     expect(body).toMatch(/let resetInFlight = false;/);
-    expect(body).toMatch(/if \(resetInFlight\) return;/);
+    expect(body).toMatch(/let resetOutcomeUnknown = false;/);
+    expect(body).toMatch(/if \(resetInFlight \|\| resetOutcomeUnknown\) return;/);
     expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), RESET_REQUEST_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\);\s*resetInFlight = false;/);
+  });
+
+  it('never replays a consumed reset link after an ambiguous timeout', () => {
+    expect(body).toContain('data-unknown-recovery');
+    expect(body).toContain('Try signing in with the new password');
+    expect(body).toContain('Request a fresh reset link');
+    expect(body).toContain('Password-reset outcome is unknown because the request timed out.');
+    expect(body).toContain('consumed this one-time link');
+    expect(body).toContain('Do not submit this link again.');
+    expect(body).toContain('submitBtn.disabled = on || resetOutcomeUnknown;');
   });
 });

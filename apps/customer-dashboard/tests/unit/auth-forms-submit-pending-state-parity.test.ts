@@ -35,7 +35,11 @@ describe('auth forms submit pending-state parity', () => {
       it('captures the submit button + defines setSubmitting (disabled + aria-busy + pending label)', () => {
         expect(body).toMatch(/form\.querySelector\('button\[type="submit"\]'\)/);
         expect(body).toMatch(/function setSubmitting\(on\)/);
-        expect(body).toMatch(/submitBtn\.disabled = on;/);
+        if (file === 'reset-password.astro') {
+          expect(body).toMatch(/submitBtn\.disabled = on \|\| resetOutcomeUnknown;/);
+        } else {
+          expect(body).toMatch(/submitBtn\.disabled = on;/);
+        }
         expect(body).toMatch(/submitBtn\.setAttribute\('aria-busy', on \? 'true' : 'false'\);/);
         expect(body).toContain(pending);
       });

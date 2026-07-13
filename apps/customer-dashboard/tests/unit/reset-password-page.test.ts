@@ -183,7 +183,7 @@ describe('reset-password page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
   });
 
-  it('serializes duplicate submits and recovers when the bounded request times out', async () => {
+  it('serializes duplicate submits and makes an ambiguous timeout terminal for the one-shot link', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       url: TOKEN_URL,
       requestTimeoutImmediately: true,
@@ -206,9 +206,24 @@ describe('reset-password page — local integration', () => {
     const submitBtn = window.document.querySelector(
       '[data-form] button[type="submit"]',
     ) as HTMLButtonElement;
-    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.disabled).toBe(true);
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
-    expect(submitBtn.textContent).toBe('Reset password + sign in');
-    expect(bannerText(window)).toMatch(/took too long.*check your connection/i);
+    expect(submitBtn.textContent).toBe('Reset outcome unknown');
+    expect(isHidden(window, '[data-form]')).toBe(true);
+    expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
+    expect(
+      window.document.querySelector('[data-unknown-recovery] a[href="/login"]')?.textContent,
+    ).toMatch(/try signing in with the new password/i);
+    expect(
+      window.document.querySelector('[data-unknown-recovery] a[href="/forgot-password"]')
+        ?.textContent,
+    ).toMatch(/request a fresh reset link/i);
+    expect(bannerText(window)).toMatch(
+      /outcome is unknown.*may already have changed your password.*consumed this one-time link.*do not submit this link again.*try signing in.*if that fails.*fresh reset link/i,
+    );
+
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
   });
 });
