@@ -12,6 +12,8 @@ describe('DashboardLayout legal acceptance deadline', () => {
     expect(layout).toContain('const LEGAL_REQUEST_TIMEOUT_MS = 15_000;');
     expect(layout).toContain('const controller = new AbortController();');
     expect(layout).toContain('clearTimeout(timeoutId);');
+    expect(layout).toContain('keepLegalDeadlineThroughBody(response, timeoutId)');
+    expect(layout).toMatch(/read\.apply\(response, arguments\)\)\.finally\(clearDeadline\)/);
     expect(layout).toMatch(
       /fetchLegalWithDeadline\(apiBaseUrl \+ '\/v1\/legal\/required', \{ headers \}\)/,
     );
@@ -59,7 +61,7 @@ describe('DashboardLayout account shell reliability', () => {
       "fetchAccountShellWithDeadline(apiBaseUrl + '/v1/admin/audit-log?limit=1'",
     );
     expect(layout).toMatch(
-      /function fetchAccountShellWithDeadline[\s\S]*?controller\.abort\(\)[\s\S]*?clearTimeout\(timeoutId\)/,
+      /function fetchAccountShellWithDeadline[\s\S]*?controller\.abort\(\)[\s\S]*?keepAccountShellDeadlineThroughBody\(response, timeoutId\)/,
     );
   });
 });

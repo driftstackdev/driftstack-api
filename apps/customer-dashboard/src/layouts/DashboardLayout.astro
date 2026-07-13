@@ -1044,14 +1044,41 @@ const navSections: NavSection[] = [
           }
 
           const ACCOUNT_SHELL_TIMEOUT_MS = 10_000;
+          function keepAccountShellDeadlineThroughBody(response, timeoutId) {
+            let cleared = false;
+            function clearDeadline() {
+              if (cleared) return;
+              cleared = true;
+              clearTimeout(timeoutId);
+            }
+            for (const method of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
+              const read = response[method];
+              if (typeof read !== 'function') continue;
+              response[method] = function () {
+                try {
+                  return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
+                } catch (error) {
+                  clearDeadline();
+                  throw error;
+                }
+              };
+            }
+            // 204/HEAD-style responses have nothing left to consume.
+            if (!response.body) clearDeadline();
+            return response;
+          }
           function fetchAccountShellWithDeadline(url, init) {
             const controller = new AbortController();
             const timeoutId = setTimeout(function () {
               controller.abort();
             }, ACCOUNT_SHELL_TIMEOUT_MS);
-            return fetch(url, Object.assign({}, init, { signal: controller.signal })).finally(
-              function () {
+            return fetch(url, Object.assign({}, init, { signal: controller.signal })).then(
+              function (response) {
+                return keepAccountShellDeadlineThroughBody(response, timeoutId);
+              },
+              function (error) {
                 clearTimeout(timeoutId);
+                throw error;
               },
             );
           }
@@ -1507,14 +1534,41 @@ const navSections: NavSection[] = [
         // an api-key / creating a session and has no path forward.
         (function () {
           const LEGAL_REQUEST_TIMEOUT_MS = 15_000;
+          function keepLegalDeadlineThroughBody(response, timeoutId) {
+            let cleared = false;
+            function clearDeadline() {
+              if (cleared) return;
+              cleared = true;
+              clearTimeout(timeoutId);
+            }
+            for (const method of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
+              const read = response[method];
+              if (typeof read !== 'function') continue;
+              response[method] = function () {
+                try {
+                  return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
+                } catch (error) {
+                  clearDeadline();
+                  throw error;
+                }
+              };
+            }
+            // 204/HEAD-style responses have nothing left to consume.
+            if (!response.body) clearDeadline();
+            return response;
+          }
           function fetchLegalWithDeadline(url, init) {
             const controller = new AbortController();
             const timeoutId = setTimeout(function () {
               controller.abort();
             }, LEGAL_REQUEST_TIMEOUT_MS);
-            return fetch(url, Object.assign({}, init, { signal: controller.signal })).finally(
-              function () {
+            return fetch(url, Object.assign({}, init, { signal: controller.signal })).then(
+              function (response) {
+                return keepLegalDeadlineThroughBody(response, timeoutId);
+              },
+              function (error) {
                 clearTimeout(timeoutId);
+                throw error;
               },
             );
           }

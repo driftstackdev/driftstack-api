@@ -34,6 +34,13 @@ function abortError(message: string): Error {
 function setUpDom(route: (call: FetchCall) => Response | Promise<Response>): {
   window: JSDOM['window'];
   fetchCalls: FetchCall[];
+};
+function setUpDom(
+  route: (call: FetchCall) => Response | Promise<Response>,
+  beforeEval?: (window: JSDOM['window']) => void,
+): {
+  window: JSDOM['window'];
+  fetchCalls: FetchCall[];
 } {
   const scripts: string[] = [];
   const html = readFileSync(BUILT_PAGE, 'utf8').replace(
@@ -57,6 +64,7 @@ function setUpDom(route: (call: FetchCall) => Response | Promise<Response>): {
     return Promise.resolve(route(call));
   };
   window.localStorage.setItem('ds_web_session_token', 'tok');
+  beforeEval?.(window);
   const legalScript = scripts.find((script) => script.includes('LEGAL_REQUEST_TIMEOUT_MS'));
   if (!legalScript) throw new Error('legal acceptance inline script not found');
   // @ts-expect-error — jsdom exposes eval for deliberate inline-script execution.
@@ -89,6 +97,59 @@ describe('DashboardLayout legal acceptance reconciliation', () => {
   afterEach(() => {
     win?.close?.();
     win = null;
+  });
+
+  it('keeps the transport deadline armed while a JSON response body is still pending', async () => {
+    let fireDeadline = () => undefined;
+    let clearCalls = 0;
+    let requestSignal: AbortSignal | null = null;
+    const stalled = new Response('{"data":[]}');
+    Object.defineProperty(stalled, 'json', {
+      configurable: true,
+      value: () => new Promise<never>(() => undefined),
+    });
+
+    const { window } = setUpDom(
+      (call) => {
+        requestSignal = call.init?.signal ?? null;
+        return stalled;
+      },
+      (target) => {
+        target.setTimeout = ((handler: TimerHandler) => {
+          fireDeadline = () => {
+            if (typeof handler === 'function') handler();
+          };
+          return 1;
+        }) as typeof target.setTimeout;
+        target.clearTimeout = (() => {
+          clearCalls += 1;
+        }) as typeof target.clearTimeout;
+      },
+    );
+    win = window;
+    await flush();
+
+    expect(clearCalls).toBe(0);
+    expect(requestSignal?.aborted).toBe(false);
+    fireDeadline();
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it('clears the transport deadline after JSON decoding settles', async () => {
+    let clearCalls = 0;
+    const { window } = setUpDom(
+      () => json({ data: [] }),
+      (target) => {
+        target.setTimeout = (() => 1) as typeof target.setTimeout;
+        target.clearTimeout = (() => {
+          clearCalls += 1;
+        }) as typeof target.clearTimeout;
+      },
+    );
+    win = window;
+    await flush();
+
+    expect(clearCalls).toBe(1);
   });
 
   it('reveals a failed initial check and retries with GET only before enabling acceptance', async () => {
