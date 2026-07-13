@@ -112,6 +112,7 @@ interface RouterOpts {
   billing?: Record<string, unknown>;
   usage?: Record<string, unknown>;
   usageSeries?: Record<string, unknown>;
+  usageSeriesStatus?: number;
   teamMembers?: Array<Record<string, unknown>>;
   teamStatus?: number;
   status?: Record<string, unknown>;
@@ -129,7 +130,8 @@ function makeRouter(opts: RouterOpts): (c: MockFetchCall) => Response {
     if (/\/v1\/sessions$/.test(u)) return json({ data: opts.sessions ?? [] });
     if (/\/v1\/billing$/.test(u)) return json(opts.billing ?? {});
     if (/\/v1\/usage$/.test(u)) return json(opts.usage ?? { totals: {} });
-    if (/\/v1\/usage\/series\?days=14$/.test(u)) return json(opts.usageSeries ?? { buckets: [] });
+    if (/\/v1\/usage\/series\?days=14$/.test(u))
+      return json(opts.usageSeries ?? { buckets: [] }, opts.usageSeriesStatus ?? 200);
     if (/\/v1\/team\/members$/.test(u)) {
       if (opts.teamStatus) return json({ detail: 'forbidden' }, opts.teamStatus);
       return json({ data: opts.teamMembers ?? [] });
@@ -166,7 +168,7 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
   });
 
   it('account/me: populates name, tier label, concurrent usage + cap, and profile usage + cap', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter({
         me: {
@@ -187,6 +189,8 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-stat-concurrent-cap]')).toBe('5');
     expect(text(window, '[data-stat-profiles]')).toBe('3');
     expect(text(window, '[data-stat-profiles-cap]')).toBe('/ 10');
+    expect(fetchCalls).toHaveLength(8);
+    expect(fetchCalls.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(true);
   });
 
   it('api-keys: the active-keys stat excludes revoked keys', async () => {
@@ -374,6 +378,21 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     await flush();
     expect(isHidden(window, '[data-usage-empty]')).toBe(false);
     expect(isHidden(window, '[data-usage-chart]')).toBe(true);
+  });
+
+  it('usage series: a load failure is labeled as a failure, never as honest zero activity', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        usageSeriesStatus: 503,
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-usage-empty]')).toBe(false);
+    expect(text(window, '[data-usage-empty]')).toBe('Could not load usage history.');
+    expect(text(window, '[data-usage-empty]')).not.toContain('No usage recorded');
   });
 
   it('usage series: non-zero buckets render one bar per day + the first/last-day legend', async () => {

@@ -65,9 +65,9 @@ describe('W337.C dashboard /index overview endpoint parity', () => {
     expect(routes).toContain("'/v1/team/members'");
   });
 
-  it('cites the PUBLIC GET /v1/status (status pill, NO Authorization header — plain fetch, not getJson) and the route is registered server-side', () => {
+  it('cites the PUBLIC GET /v1/status (status pill, NO Authorization header — bounded direct read, not getJson) and the route is registered server-side', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/status', \{ headers: \{ accept: 'application\/json' \} \}\)/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/status', \{ headers: \{ accept: 'application\/json' \} \}\)/,
     );
     expect(routes).toContain("'/v1/status'");
   });

@@ -412,6 +412,15 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     (function () {
       const root = document.querySelector('[data-page="overview"]');
       if (!root) return;
+      const OVERVIEW_TIMEOUT_MS = 15_000;
+
+      function boundedFetch(url, init = {}) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), OVERVIEW_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(function () {
+          window.clearTimeout(timeout);
+        });
+      }
 
       function getToken() {
         try {
@@ -585,7 +594,15 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       };
 
       async function getJson(path) {
-        const r = await fetch(apiBaseUrl + path, { headers });
+        let r;
+        try {
+          r = await boundedFetch(apiBaseUrl + path, { headers });
+        } catch (err) {
+          if (err && err.name === 'AbortError') {
+            throw new Error('Request timed out. Try again.');
+          }
+          throw err;
+        }
         if (!r.ok) {
           // Surface the server's problem+json `detail` (W151/W152 baseline)
           // rather than the internal path + raw status, so a visible
@@ -823,7 +840,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         })
         .catch(function () {
           const empty = root.querySelector('[data-usage-empty]');
-          if (empty) empty.classList.remove('hidden');
+          if (empty) {
+            empty.textContent = 'Could not load usage history.';
+            empty.classList.remove('hidden');
+          }
         });
 
       // ─── /v1/team/members ──────────────────────────────────────────────
@@ -844,7 +864,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // ─── /v1/status (PUBLIC — no Authorization header) ─────────────────
       // Platform-status pill. Fail-open: any error leaves it hidden, the
       // same posture as the endpoint itself.
-      fetch(apiBaseUrl + '/v1/status', { headers: { accept: 'application/json' } })
+      boundedFetch(apiBaseUrl + '/v1/status', { headers: { accept: 'application/json' } })
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
