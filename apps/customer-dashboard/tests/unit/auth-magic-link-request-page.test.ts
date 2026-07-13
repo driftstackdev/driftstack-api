@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'auth', 'magic-link-request', 'index.html');
@@ -43,6 +44,7 @@ function setUpDom(html: string): { window: JSDOM['window']; fetchCalls: MockFetc
     }
     return nativeSetTimeout(handler, timeout, ...args);
   }) as typeof window.setTimeout;
+  installDashboardDeadline(window);
   const script = scripts.find((body) => body.includes('data-page="magic-link-request"'));
   if (!script) throw new Error('magic-link request inline script not found');
   // @ts-expect-error — jsdom global has eval

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'team', 'accept', 'index.html');
@@ -46,6 +47,7 @@ function setUpDom(
     return Promise.resolve(handler(call));
   };
   window.localStorage.setItem('ds_web_session_token', 'web_session_123');
+  installDashboardDeadline(window);
 
   const pageScript = scriptBodies.find((body) => body.includes('data-page="team-accept"'));
   if (!pageScript) throw new Error('team-accept inline script not found');

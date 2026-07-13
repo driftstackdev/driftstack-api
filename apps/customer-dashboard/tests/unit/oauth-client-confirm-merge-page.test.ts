@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(
@@ -54,6 +55,7 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve(handler(call));
   };
+  installDashboardDeadline(window);
 
   const pageScript = scriptBodies.find((body) => body.includes('data-page="oauth-confirm-merge"'));
   if (!pageScript) throw new Error('oauth confirm-merge inline script not found');

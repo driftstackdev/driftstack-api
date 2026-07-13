@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'forgot-password', 'index.html');
@@ -73,6 +74,7 @@ function setUpDom(
       return nativeSetTimeout(handler, timeout, ...args);
     }) as typeof window.setTimeout;
   }
+  installDashboardDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="forgot-password"'));
   if (!pageScript) throw new Error('forgot-password inline script not found');
