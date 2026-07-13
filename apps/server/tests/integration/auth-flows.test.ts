@@ -653,6 +653,74 @@ describe('POST /v1/auth/magic-link', () => {
     expect(body.session.token).toBeDefined();
   });
 
+  it('successful consume invalidates every older outstanding magic link', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: {
+        email: 'magic-siblings@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    const firstRequest = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/magic-link/request',
+      payload: { email: 'magic-siblings@driftstack.local' },
+    });
+    const secondRequest = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/magic-link/request',
+      payload: { email: 'magic-siblings@driftstack.local' },
+    });
+    const firstToken = firstRequest.json<{ debug_token: string }>().debug_token;
+    const secondToken = secondRequest.json<{ debug_token: string }>().debug_token;
+
+    const winner = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/magic-link/consume',
+      payload: { token: secondToken },
+    });
+    expect(winner.statusCode).toBe(200);
+
+    const stale = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/magic-link/consume',
+      payload: { token: firstToken },
+    });
+    expect(stale.statusCode).not.toBe(200);
+  });
+
+  it('two different magic links racing can mint only one session', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'magic-race@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const requests = await Promise.all(
+      [0, 1].map(() =>
+        fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/magic-link/request',
+          payload: { email: 'magic-race@driftstack.local' },
+        }),
+      ),
+    );
+    const tokens = requests.map((response) => response.json<{ debug_token: string }>().debug_token);
+    const consumes = await Promise.all(
+      tokens.map((token) =>
+        fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/magic-link/consume',
+          payload: { token },
+        }),
+      ),
+    );
+    expect(consumes.filter((response) => response.statusCode === 200)).toHaveLength(1);
+    expect(consumes.filter((response) => response.statusCode !== 200)).toHaveLength(1);
+  });
+
   // Audit fix 2026-07-01: same canonical-fallback closing the Gmail
   // dot-variant lockout gap as login (see that describe block).
   it('issues a consumable magic link when requested with a Gmail dot-variant of the signup address', async () => {

@@ -1028,9 +1028,15 @@ export class AuthFlowsService {
     });
     if (row === null) throw new AuthFlowError('invalid_auth_token');
 
-    // Single-use under concurrency: reject a concurrent loser so the same
-    // magic link can't mint two web sessions.
-    const consumed = await this.repo.consumeAuthToken({ kind: 'magic_link', id: row.id, at: now });
+    // Claim every outstanding magic-link sibling for this account in the same
+    // atomic UPDATE. One successful passwordless sign-in invalidates older
+    // emails, and two different live links racing cannot mint two sessions.
+    const consumed = await this.repo.consumeAuthTokenFamily({
+      kind: 'magic_link',
+      id: row.id,
+      accountId: row.accountId,
+      at: now,
+    });
     if (!consumed) throw new AuthFlowError('invalid_auth_token');
     const account = await this.requireAccount(row.accountId);
     if (account.status !== 'active') throw new AuthFlowError('account_suspended');

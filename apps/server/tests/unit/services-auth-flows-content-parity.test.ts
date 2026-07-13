@@ -225,7 +225,10 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/'password-reset requested for unknown email — no-op',/);
   });
 
-  it('consumeMagicLink: implicit email verification (clicking the link demonstrates inbox ownership)', () => {
+  it('consumeMagicLink: atomically invalidates siblings, then implicitly verifies inbox ownership', () => {
+    expect(body).toMatch(
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'magic_link',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);/,
+    );
     expect(body).toMatch(
       /\/\/ Magic-link consumption also implicitly verifies the email — the user\s*\n?\s*\/\/ demonstrably owns the inbox by clicking the link\./,
     );
