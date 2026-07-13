@@ -378,6 +378,47 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     expect(got).toHaveLength(1);
   });
 
+  const ambiguousReplayIntents: Array<[AgentIntent, string]> = [
+    [{ kind: 'scroll', direction: 'down', amount_px: 600 }, 'relative scroll'],
+    [{ kind: 'behavioral_pause', reading_word_count: 120 }, 'reading pause with scroll-through'],
+    [{ kind: 'behavioral_pause', duration_ms: 2_000 }, 'explicit dwell'],
+  ];
+  it.each(ambiguousReplayIntents)(
+    'does NOT auto-retry a session_error on %s (%s may already have changed movement/pacing)',
+    async (intent, _description) => {
+      const { got, dispatcher } = mockDispatcher((d) =>
+        failResult(d.intentId, 'intent_dispatch_error'),
+      );
+      const { sleep, calls } = instantSleep();
+      const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+        maxRetries: 2,
+        sleep,
+      });
+      const res = await exec.execute(planArgs([intent]));
+
+      expect(res.ok).toBe(false);
+      expect(got).toHaveLength(1);
+      expect(calls).toHaveLength(0);
+    },
+  );
+
+  it('intent_session_not_established on a top-level scroll still retries patiently (proven not executed)', async () => {
+    let n = 0;
+    const { got, dispatcher } = mockDispatcher((d) =>
+      n++ === 0
+        ? failResult(d.intentId, 'intent_session_not_established')
+        : okResult(d.intentId, d.sessionId),
+    );
+    const { sleep } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { sleep });
+    const res = await exec.execute(
+      planArgs([{ kind: 'scroll', direction: 'down', amount_px: 600 }]),
+    );
+
+    expect(res.ok).toBe(true);
+    expect(got).toHaveLength(2);
+  });
+
   it('a session_error on a NON-side-effecting kind (navigate) STILL retries — double-apply is harmless there', async () => {
     // navigate to the same URL twice is idempotent, so the maybe-executed
     // concern does not apply; keep the useful transient-recovery retry.
