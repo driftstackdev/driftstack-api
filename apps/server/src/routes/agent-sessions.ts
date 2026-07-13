@@ -3968,6 +3968,11 @@ export function registerAgentSessionsRoutes(
           ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
           keySource,
         });
+        if (result.kind === 'turn-in-progress') {
+          throw new ConflictError(
+            'Another turn is already running for this agent session. Retry after it completes.',
+          );
+        }
         if (result.kind === 'session-closed') {
           throw new ConflictError(
             `Agent session is ${result.session.status} (${result.reason}). Start a new agent session.`,

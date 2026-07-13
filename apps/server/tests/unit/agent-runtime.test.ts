@@ -946,7 +946,7 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
     }
   });
 
-  it('two concurrent approvals of one paused plan dispatch it exactly once', async () => {
+  it('two concurrent approvals of one paused plan dispatch it exactly once; the sibling is rejected before transcript/action work', async () => {
     const sessions = new InMemoryAgentSessionsRepo();
     const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
     const runtime = new AgentRuntime({
@@ -980,11 +980,133 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
     const completed = results.filter(
       (result) => result.kind === 'plan-executed' && result.executor.ok,
     );
-    const halted = results.filter(
-      (result) => result.kind === 'plan-executed' && result.executor.awaitingConfirmation === true,
-    );
+    const inProgress = results.filter((result) => result.kind === 'turn-in-progress');
     expect(completed).toHaveLength(1);
-    expect(halted).toHaveLength(1);
+    expect(inProgress).toHaveLength(1);
+  });
+});
+
+describe('AgentRuntime.runTurn — per-session in-flight gate', () => {
+  it('rejects a concurrent same-session turn before a second append/decompose/dispatch, then accepts after release', async () => {
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const calls = { n: 0 };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async () => {
+          calls.n += 1;
+          markStarted();
+          await blocker;
+          return {
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'Which page?',
+            tokensConsumed: 1,
+          };
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const first = runtime.runTurn({ agentSessionId: seed.id, userMessage: 'first' });
+    await started;
+    const concurrent = await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'second' });
+    expect(concurrent.kind).toBe('turn-in-progress');
+    expect(calls.n).toBe(1);
+    expect((await sessions.get(seed.id))?.transcript).toHaveLength(1); // only first user entry
+
+    release();
+    expect((await first).kind).toBe('clarify');
+    const after = await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'third' });
+    expect(after.kind).toBe('clarify');
+    expect(calls.n).toBe(2);
+  });
+
+  it('keeps different sessions parallel', async () => {
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markBothStarted!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      markBothStarted = resolve;
+    });
+    let calls = 0;
+    const sessions = new InMemoryAgentSessionsRepo();
+    const firstSession = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+    });
+    const secondSession = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+    });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async () => {
+          calls += 1;
+          if (calls === 2) markBothStarted();
+          await blocker;
+          return {
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'Which page?',
+            tokensConsumed: 1,
+          };
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const turns = [
+      runtime.runTurn({ agentSessionId: firstSession.id, userMessage: 'one' }),
+      runtime.runTurn({ agentSessionId: secondSession.id, userMessage: 'two' }),
+    ];
+    await bothStarted;
+    expect(calls).toBe(2);
+    release();
+    expect((await Promise.all(turns)).map((result) => result.kind)).toEqual(['clarify', 'clarify']);
+  });
+
+  it('releases the session gate when a turn throws', async () => {
+    let calls = 0;
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () => {
+          calls += 1;
+          if (calls === 1) {
+            return Promise.reject(new Error('Anthropic response is not valid JSON'));
+          }
+          return Promise.resolve({
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'Recovered',
+            tokensConsumed: 1,
+          });
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    await expect(
+      runtime.runTurn({ agentSessionId: seed.id, userMessage: 'first' }),
+    ).rejects.toThrow(/not valid JSON/);
+    expect((await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'second' })).kind).toBe(
+      'clarify',
+    );
   });
 });
 

@@ -3396,7 +3396,8 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       409: {
-        description: 'Agent session is closed or paused; start a new session.',
+        description:
+          'Agent session is closed/paused, or another turn is already running for this session.',
         content: problemContent,
       },
       503: {

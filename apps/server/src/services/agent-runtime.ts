@@ -85,6 +85,12 @@ export type RunTurnResult =
       session: AgentSessionRecord;
     }
   | {
+      /** A turn is already decomposing/executing for this exact session. The
+       *  caller maps this non-mutating result to 409 and retries later. */
+      kind: 'turn-in-progress';
+      session: AgentSessionRecord;
+    }
+  | {
       // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through.
       // The user_message was recorded as an actor='operator' transcript
       // entry; no decompose / executor ran. Customer's gui-client is
@@ -256,6 +262,14 @@ function delay(ms: number): Promise<void> {
 }
 
 export class AgentRuntime {
+  // One browser plan at a time per agent session. The production app owns one
+  // singleton runtime in one systemd process, so an in-process set is the exact
+  // current execution boundary. Reject instead of queueing: an API burst must
+  // not become an unbounded chain of stale natural-language tasks. Different
+  // session ids remain independent. A horizontally scaled API must promote
+  // this same contract to a distributed per-session lock.
+  private readonly activeTurnSessionIds = new Set<string>();
+
   constructor(private readonly deps: AgentRuntimeDeps) {}
 
   /**
@@ -326,6 +340,25 @@ export class AgentRuntime {
   }
 
   async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
+    if (this.activeTurnSessionIds.has(args.agentSessionId)) {
+      const session = await this.deps.sessions.get(args.agentSessionId);
+      if (session === null) {
+        throw new Error(`AgentSession ${args.agentSessionId} not found`);
+      }
+      return { kind: 'turn-in-progress', session };
+    }
+
+    this.activeTurnSessionIds.add(args.agentSessionId);
+    try {
+      return await this.runExclusiveTurn(args);
+    } finally {
+      // Covers success, controlled result variants, decomposer failures, and
+      // executor/repository throws. A failed turn can never strand the session.
+      this.activeTurnSessionIds.delete(args.agentSessionId);
+    }
+  }
+
+  private async runExclusiveTurn(args: RunTurnArgs): Promise<RunTurnResult> {
     const at = (args.now ?? new Date()).toISOString();
     const session = await this.deps.sessions.get(args.agentSessionId);
     if (session === null) {
