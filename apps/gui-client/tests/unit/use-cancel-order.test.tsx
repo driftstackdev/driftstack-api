@@ -22,6 +22,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('V-534.Y useCancelOrder — starting state', () => {
@@ -84,10 +85,57 @@ describe('V-534.Y useCancelOrder — happy path', () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_test');
+    expect(init?.signal).toBeTruthy();
   });
 });
 
 describe('V-534.Y useCancelOrder — error paths', () => {
+  it('single-flights duplicate cancellation and resets cleanly after a stalled request', () => {
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>(() => {
+          // Intentionally pending until reset aborts the caller signal.
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCancelOrder());
+    act(() => {
+      void result.current.cancel('ord_x');
+      void result.current.cancel('ord_x');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    act(() => result.current.reset());
+    expect(result.current.state.kind).toBe('idle');
+  });
+
+  it('bounds a stalled cancellation and restores an actionable failure', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useCancelOrder());
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.cancel('ord_x');
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await act(async () => pending);
+    expect(result.current.state).toEqual({
+      kind: 'failed',
+      orderId: 'ord_x',
+      status: 0,
+      message: 'Cancellation timed out. Check your connection and try again.',
+    });
+  });
+
   it('failed with status=0 when no API key is configured', async () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },

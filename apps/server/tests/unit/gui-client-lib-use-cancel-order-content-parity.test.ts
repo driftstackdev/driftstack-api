@@ -50,9 +50,10 @@ describe('W470.B apps/gui-client/src/lib/use-cancel-order.ts content parity', ()
     );
   });
 
-  it("Imports: useCallback + useState from 'react' (NO useEffect — action hook, not fetch-on-mount) + readApiErrorMessage + useSettings + type CryptoOrderData from './use-crypto-order'", () => {
-    expect(body).toMatch(/import \{ useCallback, useState \} from 'react';/);
+  it("Imports lifecycle hooks + shared deadline + readApiErrorMessage + useSettings + type CryptoOrderData from './use-crypto-order'", () => {
+    expect(body).toMatch(/import \{ useCallback, useEffect, useRef, useState \} from 'react';/);
     expect(body).toMatch(/import \{ readApiErrorMessage \} from '\.\/api-errors';/);
+    expect(body).toMatch(/import \{ fetchWithDeadline \} from '\.\/fetch-with-deadline';/);
     expect(body).toMatch(/import \{ useSettings \} from '\.\/SettingsContext';/);
     expect(body).toMatch(/import type \{ CryptoOrderData \} from '\.\/use-crypto-order';/);
   });
@@ -81,24 +82,28 @@ describe('W470.B apps/gui-client/src/lib/use-cancel-order.ts content parity', ()
   it('Request: setState submitting{orderId} pre-fetch + trailing-slash strip + POST `${baseUrl}/v1/billing/crypto-orders/${orderId}/cancel` + Bearer + accept JSON (NO Content-Type since no body)', () => {
     expect(body).toMatch(/setState\(\{ kind: 'submitting', orderId \}\);/);
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{orderId\}\/cancel`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{orderId\}\/cancel`,\s*\{\s*method: 'POST',\s*signal: controller\.signal,\s*headers: \{\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*accept: 'application\/json',\s*\},\s*\},\s*\);/,
     );
   });
 
   it('!res.ok → failed{orderId, status: res.status, message: readApiErrorMessage}; res.ok → succeeded{order: body as CryptoOrderData}; catch → failed{orderId, status: 0, message: instance-of-Error fallback}', () => {
+    expect(body).toMatch(/const message = await readApiErrorMessage\(res\);/);
     expect(body).toMatch(
-      /if \(!res\.ok\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'failed',\s*\n?\s*orderId,\s*\n?\s*status: res\.status,\s*\n?\s*message: await readApiErrorMessage\(res\),\s*\n?\s*\}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*const body = \(await res\.json\(\)\) as CryptoOrderData;\s*\n?\s*setState\(\{ kind: 'succeeded', order: body \}\);/,
+      /if \(sequence === sequenceRef\.current\) \{\s*setState\(\{ kind: 'failed', orderId, status: res\.status, message \}\);/,
     );
     expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'failed',\s*\n?\s*orderId,\s*\n?\s*status: 0,\s*\n?\s*message: err instanceof Error \? err\.message : String\(err\),\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'succeeded', order: body \}\);/,
     );
+    expect(body).toMatch(/Cancellation timed out\. Check your connection and try again\./);
   });
 
-  it("cancel useCallback deps [settings.apiKey, settings.baseUrl]; reset useCallback: setState({kind:'idle'}) with empty deps []", () => {
+  it('keeps cancel dependencies and makes reset/unmount abort and invalidate active work', () => {
     expect(body).toMatch(/\[settings\.apiKey, settings\.baseUrl\],\s*\n?\s*\);/);
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(
-      /const reset = useCallback\(\(\): void => \{\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*\}, \[\]\);\s*\n?\s*return \{ state, cancel, reset \};/,
+      /const reset = useCallback\(\(\): void => \{[\s\S]*?requestRef\.current\?\.abort\(\);[\s\S]*?setState\(\{ kind: 'idle' \}\);/,
     );
+    expect(body).toMatch(/useEffect\([\s\S]*?requestRef\.current\?\.abort\(\);/);
   });
 
   it('file exists at canonical path', () => {

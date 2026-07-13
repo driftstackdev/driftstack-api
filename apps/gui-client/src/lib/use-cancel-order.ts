@@ -6,8 +6,9 @@
 // `cancel(orderId)` to fire the request. `reset()` returns to idle so
 // the same hook instance can be reused across multiple orders.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 import type { CryptoOrderData } from './use-crypto-order';
 
@@ -26,9 +27,13 @@ export interface UseCancelOrderResult {
 export function useCancelOrder(): UseCancelOrderResult {
   const { settings } = useSettings();
   const [state, setState] = useState<CancelOrderState>({ kind: 'idle' });
+  const requestRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
   const cancel = useCallback(
     async (orderId: string): Promise<void> => {
+      if (inFlightRef.current) return;
       if (!settings.apiKey) {
         setState({
           kind: 'failed',
@@ -38,42 +43,74 @@ export function useCancelOrder(): UseCancelOrderResult {
         });
         return;
       }
+      inFlightRef.current = true;
+      const sequence = ++sequenceRef.current;
+      const controller = new AbortController();
+      requestRef.current = controller;
       setState({ kind: 'submitting', orderId });
       try {
         const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-        const res = await fetch(`${baseUrl}/v1/billing/crypto-orders/${orderId}/cancel`, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${settings.apiKey}`,
-            accept: 'application/json',
+        const res = await fetchWithDeadline(
+          `${baseUrl}/v1/billing/crypto-orders/${orderId}/cancel`,
+          {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              authorization: `Bearer ${settings.apiKey}`,
+              accept: 'application/json',
+            },
           },
-        });
+        );
         if (!res.ok) {
-          setState({
-            kind: 'failed',
-            orderId,
-            status: res.status,
-            message: await readApiErrorMessage(res),
-          });
+          const message = await readApiErrorMessage(res);
+          if (sequence === sequenceRef.current) {
+            setState({ kind: 'failed', orderId, status: res.status, message });
+          }
           return;
         }
         const body = (await res.json()) as CryptoOrderData;
-        setState({ kind: 'succeeded', order: body });
+        if (sequence === sequenceRef.current) setState({ kind: 'succeeded', order: body });
       } catch (err) {
-        setState({
-          kind: 'failed',
-          orderId,
-          status: 0,
-          message: err instanceof Error ? err.message : String(err),
-        });
+        if (sequence === sequenceRef.current) {
+          setState({
+            kind: 'failed',
+            orderId,
+            status: 0,
+            message:
+              err instanceof DOMException && err.name === 'AbortError'
+                ? 'Cancellation timed out. Check your connection and try again.'
+                : err instanceof Error
+                  ? err.message
+                  : String(err),
+          });
+        }
+      } finally {
+        if (requestRef.current === controller) {
+          requestRef.current = null;
+          inFlightRef.current = false;
+        }
       }
     },
     [settings.apiKey, settings.baseUrl],
   );
 
   const reset = useCallback((): void => {
+    sequenceRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    inFlightRef.current = false;
     setState({ kind: 'idle' });
   }, []);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      inFlightRef.current = false;
+    },
+    [],
+  );
 
   return { state, cancel, reset };
 }
