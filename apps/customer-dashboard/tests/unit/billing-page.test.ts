@@ -409,5 +409,104 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     const authKey = Object.keys(headers).find((h) => h.toLowerCase() === 'authorization');
     expect(authKey).toBeDefined();
     expect(headers[authKey!]).toBe('Bearer tok');
+    expect(receiptCall?.init?.signal).toBeInstanceOf(window.AbortSignal);
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+    expect(btn.textContent).toBe('Receipt (PDF)');
+  });
+
+  it('crypto receipt click: single-flights, shows busy feedback, and restores the button', async () => {
+    let resolveReceipt!: (response: Response) => void;
+    const pendingReceipt = new Promise<Response>((resolve) => {
+      resolveReceipt = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/receipt\.pdf$/.test(call.url)) return pendingReceipt;
+        if (/\/v1\/billing\/crypto-orders\?limit=5$/.test(call.url)) {
+          return json({
+            orders: [
+              {
+                order_id: 'cro_paid1',
+                product: 'team_manual',
+                price_cents: 24900,
+                price_currency: 'USD',
+                status: 'paid',
+                created_at: '2026-06-20T10:00:00.000Z',
+              },
+            ],
+          });
+        }
+        return json({ subscription: null });
+      },
+    });
+    win = window;
+    // @ts-expect-error — jsdom global is loose
+    window.URL.createObjectURL = () => 'blob:stub';
+    // @ts-expect-error — jsdom global is loose
+    window.URL.revokeObjectURL = () => {};
+    await flush();
+    const btn = window.document.querySelector('[data-crypto-receipt]') as HTMLButtonElement;
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(1);
+    expect(fetchCalls.filter((call) => /receipt\.pdf$/.test(call.url))).toHaveLength(1);
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.textContent).toBe('Downloading…');
+
+    resolveReceipt(
+      new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 }),
+    );
+    await flush();
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+    expect(btn.textContent).toBe('Receipt (PDF)');
+  });
+
+  it('crypto receipt click: finally-cleans the anchor and blob URL when click throws', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/receipt\.pdf$/.test(call.url)) {
+          return new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });
+        }
+        if (/\/v1\/billing\/crypto-orders\?limit=5$/.test(call.url)) {
+          return json({
+            orders: [
+              {
+                order_id: 'cro_paid1',
+                product: 'team_manual',
+                price_cents: 24900,
+                price_currency: 'USD',
+                status: 'paid',
+                created_at: '2026-06-20T10:00:00.000Z',
+              },
+            ],
+          });
+        }
+        return json({ subscription: null });
+      },
+    });
+    win = window;
+    let revoked = '';
+    // @ts-expect-error — jsdom global is loose
+    window.URL.createObjectURL = () => 'blob:cleanup';
+    // @ts-expect-error — jsdom global is loose
+    window.URL.revokeObjectURL = (url: string) => {
+      revoked = url;
+    };
+    window.HTMLAnchorElement.prototype.click = () => {
+      throw new Error('click blocked');
+    };
+    await flush();
+    const btn = window.document.querySelector('[data-crypto-receipt]') as HTMLButtonElement;
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    expect(window.document.querySelector('a[href="blob:cleanup"]')).toBeNull();
+    expect(revoked).toBe('blob:cleanup');
+    expect(btn.disabled).toBe(false);
+    expect(text(window, '[data-banner]')).toContain("Couldn't download the receipt");
   });
 });

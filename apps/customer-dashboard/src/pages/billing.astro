@@ -251,7 +251,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
       }
+      const BILLING_REQUEST_TIMEOUT_MS = 15_000;
       function authedFetch(path, init = {}) {
+        const controller = new AbortController();
+        const callerSignal = init.signal;
+        const forwardAbort = function () {
+          controller.abort(callerSignal && callerSignal.reason);
+        };
+        if (callerSignal && callerSignal.aborted) forwardAbort();
+        else if (callerSignal) callerSignal.addEventListener('abort', forwardAbort, { once: true });
+        const timeout = window.setTimeout(function () {
+          controller.abort();
+        }, BILLING_REQUEST_TIMEOUT_MS);
         return fetch(apiBaseUrl + path, {
           ...init,
           headers: {
@@ -264,6 +275,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               : {}),
           },
           credentials: 'include',
+          signal: controller.signal,
+        }).finally(function () {
+          window.clearTimeout(timeout);
+          if (callerSignal) callerSignal.removeEventListener('abort', forwardAbort);
         });
       }
 
@@ -288,7 +303,6 @@ const apiBaseUrl = resolveApiBaseUrl();
       const cancelHint = root.querySelector('[data-field="cancel-hint"]');
 
       let portalLoading = false;
-      const PORTAL_REQUEST_TIMEOUT_MS = 15_000;
       function setPortalLoading(loading) {
         portalLoading = loading;
         [portalBtn, cancelBtn].forEach((btn) => {
@@ -311,13 +325,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (portalLoading) return;
         setPortalLoading(true);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), PORTAL_REQUEST_TIMEOUT_MS);
         try {
           const response = await authedFetch('/v1/billing/portal-session', {
             method: 'POST',
             body: '{}',
-            signal: controller.signal,
           });
           if (!response.ok) throw new Error('portal unavailable');
           const body = await response.json();
@@ -326,7 +337,6 @@ const apiBaseUrl = resolveApiBaseUrl();
         } catch {
           showBanner("Couldn't open Stripe right now — check your connection and try again.");
         } finally {
-          clearTimeout(timeoutId);
           setPortalLoading(false);
         }
       }
@@ -481,6 +491,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         partial: 'bg-tk-busy/10 text-tk-busy-text',
         cancelled: 'bg-tk-hover text-tk-ink-2',
       };
+      const receiptDownloadsInFlight = new WeakSet();
       function fmtPrice(cents, currency) {
         const n = Number(cents);
         if (!isFinite(n)) return '—';
@@ -537,7 +548,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           // blob to the browser as a download.
           list.querySelectorAll('[data-crypto-receipt]').forEach(function (btn) {
             btn.addEventListener('click', function () {
+              if (receiptDownloadsInFlight.has(btn)) return;
               const id = btn.getAttribute('data-crypto-receipt');
+              const originalLabel = btn.textContent;
+              receiptDownloadsInFlight.add(btn);
+              btn.disabled = true;
+              btn.setAttribute('aria-busy', 'true');
+              btn.textContent = 'Downloading…';
+              let objectUrl = null;
+              let anchor = null;
               authedFetch('/v1/billing/crypto-orders/' + encodeURIComponent(id) + '/receipt.pdf', {
                 method: 'GET',
               })
@@ -545,17 +564,27 @@ const apiBaseUrl = resolveApiBaseUrl();
                   return r.ok ? r.blob() : Promise.reject(new Error('HTTP ' + r.status));
                 })
                 .then(function (blob) {
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'driftstack-receipt-' + id + '.pdf';
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                  URL.revokeObjectURL(url);
+                  objectUrl = URL.createObjectURL(blob);
+                  anchor = document.createElement('a');
+                  anchor.href = objectUrl;
+                  anchor.download = 'driftstack-receipt-' + id + '.pdf';
+                  document.body.appendChild(anchor);
+                  anchor.click();
                 })
-                .catch(function () {
-                  showBanner("Couldn't download the receipt — try again in a moment.");
+                .catch(function (err) {
+                  showBanner(
+                    err && err.name === 'AbortError'
+                      ? 'Receipt download took too long. Check your connection and try again.'
+                      : "Couldn't download the receipt — try again in a moment.",
+                  );
+                })
+                .finally(function () {
+                  if (anchor && anchor.parentNode) anchor.parentNode.removeChild(anchor);
+                  if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
+                  receiptDownloadsInFlight.delete(btn);
+                  btn.disabled = false;
+                  btn.setAttribute('aria-busy', 'false');
+                  btn.textContent = originalLabel;
                 });
             });
           });

@@ -55,6 +55,21 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     expect(body).toMatch(
       /\/\/ V-331b — act-as header for team-scoped requests\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
     );
+    expect(body).toContain('const BILLING_REQUEST_TIMEOUT_MS = 15_000;');
+    expect(body).toContain('signal: controller.signal,');
+    expect(body).toContain("callerSignal.addEventListener('abort', forwardAbort, { once: true })");
+    expect(body).toContain("callerSignal.removeEventListener('abort', forwardAbort)");
+  });
+
+  it('receipt downloads are single-flight, honest while busy, and finally-clean temporary resources', () => {
+    expect(body).toContain('const receiptDownloadsInFlight = new WeakSet();');
+    expect(body).toContain('if (receiptDownloadsInFlight.has(btn)) return;');
+    expect(body).toContain("btn.textContent = 'Downloading…';");
+    expect(body).toContain(
+      'if (anchor && anchor.parentNode) anchor.parentNode.removeChild(anchor);',
+    );
+    expect(body).toContain('if (objectUrl !== null) URL.revokeObjectURL(objectUrl);');
+    expect(body).toContain('receiptDownloadsInFlight.delete(btn);');
   });
 
   it("Cancel button → handlePortal indirection: 'cancellation goes through Stripe portal' inline comment + cancelBtn.addEventListener('click', handlePortal) — pinned so customers can't accidentally land on a self-serve cancel API path that bypasses Stripe's retention/save offers (Stripe portal is the canonical cancel surface, with their own UX for offering pauses/discounts)", () => {
