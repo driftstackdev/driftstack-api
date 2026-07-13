@@ -154,8 +154,16 @@ describe('security page — web-session management (security)', () => {
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
   it('coalesces forced duplicate password-reset actions into one bounded request', async () => {
+    const baseRouter = makeRouter([]);
+    let releaseReset: (response: Response) => void = () => {};
+    const pendingReset = new Promise<Response>((resolve) => {
+      releaseReset = resolve;
+    });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
-      route: makeRouter([]),
+      route: (call) =>
+        /\/v1\/auth\/password-reset\/request$/.test(call.url) && call.init?.method === 'POST'
+          ? pendingReset
+          : baseRouter(call),
     });
     win = window;
     await flush();
@@ -170,6 +178,15 @@ describe('security page — web-session management (security)', () => {
     );
     expect(resets).toHaveLength(1);
     expect(resets[0]?.init?.signal).toBeDefined();
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.textContent?.trim()).toBe('Sending…');
+
+    releaseReset(json({ sent: true }));
+    await flush();
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+    expect(btn.textContent?.trim()).toBe('Change password');
     expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
       'Password-reset email sent',
     );
@@ -275,12 +292,49 @@ describe('security page — web-session management (security)', () => {
     await flush();
     expect(revokeBtn.disabled).toBe(true);
     expect(revokeBtn.getAttribute('aria-busy')).toBe('true');
+    expect(revokeBtn.textContent?.trim()).toBe('Revoking…');
     expect(revokeAllBtn.disabled).toBe(true);
+    expect(revokeAllBtn.textContent?.trim()).toBe('Sign out everywhere else');
     expect(fetchCalls.filter((c) => c.init?.method === 'DELETE')).toHaveLength(1);
 
     releaseDelete(new Response(null, { status: 204 }));
     await flush();
     expect(revokeAllBtn.disabled).toBe(false);
+    expect(revokeAllBtn.textContent?.trim()).toBe('Sign out everywhere else');
+  });
+
+  it('shows bulk sign-out progress and restores its retained control after failure', async () => {
+    const sessions = [
+      mkSession({ id: 'sess_current', current: true }),
+      mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
+    ];
+    const baseRouter = makeRouter(sessions);
+    let releaseDelete: (response: Response) => void = () => {};
+    const pendingDelete = new Promise<Response>((resolve) => {
+      releaseDelete = resolve;
+    });
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) =>
+        call.init?.method === 'DELETE' && /\/web-sessions\?keep=current$/.test(call.url)
+          ? pendingDelete
+          : baseRouter(call),
+    });
+    win = window;
+    await flush();
+    const revokeAllBtn = window.document.querySelector(
+      '[data-button="web-sessions-revoke-all"]',
+    ) as HTMLButtonElement;
+    revokeAllBtn.click();
+    await flush();
+    expect(revokeAllBtn.disabled).toBe(true);
+    expect(revokeAllBtn.getAttribute('aria-busy')).toBe('true');
+    expect(revokeAllBtn.textContent?.trim()).toBe('Signing out…');
+
+    releaseDelete(json({}, 500));
+    await flush();
+    expect(revokeAllBtn.disabled).toBe(false);
+    expect(revokeAllBtn.hasAttribute('aria-busy')).toBe(false);
+    expect(revokeAllBtn.textContent?.trim()).toBe('Sign out everywhere else');
   });
 
   it('single revoke timeout refreshes a committed removal before suggesting retry', async () => {

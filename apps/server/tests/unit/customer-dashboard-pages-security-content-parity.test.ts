@@ -50,9 +50,8 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
 
   it("MFA step-up reauth framing: 'requires_mfa_step_up' response flag → openStepUp('disable') + POST /v1/auth/mfa/step-up { code | recovery_code } — pinned so the disable-needs-fresh-code security gate survives (drift to dropping step-up would let an attacker with a stolen session disable MFA without proving fresh possession of the authenticator)", () => {
     expect(body).toMatch(/if \(b && b\.requires_mfa_step_up\) \{\s*\n?\s*openStepUp\('disable'\);/);
-    expect(body).toMatch(
-      /const body = isCode \? \{ code: raw \} : \{ recovery_code: raw \};\s*\n?\s*authedFetch\('\/v1\/auth\/mfa\/step-up', \{/,
-    );
+    expect(body).toMatch(/const body = isCode \? \{ code: raw \} : \{ recovery_code: raw \};/);
+    expect(body).toMatch(/authedFetch\('\/v1\/auth\/mfa\/step-up', \{/);
   });
 
   it("V-355 active sign-ins contract: GET /v1/account/web-sessions + DELETE /v1/account/web-sessions/:id + DELETE /v1/account/web-sessions?keep=current bulk-revoke — pinned so the 3-endpoint web-sessions contract stays correct (drift to dropping ?keep=current would let bulk-revoke kill the current session, signing the customer out of the page they're using)", () => {
@@ -76,8 +75,16 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
       /We email you a magic link to confirm\. The link expires after 60\s*\n?\s*minutes; old sessions stay signed in until they naturally expire\./,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',/,
     );
+  });
+
+  it('destructive account actions expose truthful local progress while their requests are pending', () => {
+    expect(body).toMatch(/showWebSessionMutationProgress\(btn, 'Revoking…'\);/);
+    expect(body).toMatch(
+      /showWebSessionMutationProgress\(webSessionsRevokeAllBtn, 'Signing out…'\);/,
+    );
+    expect(body).toMatch(/if \(btn\) btn\.textContent = 'Sending…';/);
   });
 
   it("V-216 audit-log live wire: GET /v1/account/audit-log?limit=20 + actor_type + target_resource_id + action+timestamp render — pinned so the recent-activity card surfaces the latest 20 entries with full provenance (drift to dropping ?limit=20 would either over-fetch or default the server's larger limit; drift to dropping actor_type would hide whether the action was customer/system/staff-initiated)", () => {

@@ -699,6 +699,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         return true;
       }
 
+      function showWebSessionMutationProgress(activeButton, pendingLabel) {
+        if (!activeButton) return;
+        if (!activeButton.hasAttribute('data-idle-label')) {
+          activeButton.setAttribute('data-idle-label', activeButton.textContent || '');
+        }
+        activeButton.textContent = pendingLabel;
+      }
+
       function endWebSessionMutation(activeButton) {
         webSessionMutationInFlight = false;
         const controls = webSessionsList
@@ -708,7 +716,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           control.disabled = false;
         });
         if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.disabled = false;
-        if (activeButton) activeButton.removeAttribute('aria-busy');
+        if (activeButton) {
+          const idleLabel = activeButton.getAttribute('data-idle-label');
+          if (idleLabel !== null) {
+            activeButton.textContent = idleLabel;
+            activeButton.removeAttribute('data-idle-label');
+          }
+          activeButton.removeAttribute('aria-busy');
+        }
       }
 
       function fmtRelative(iso) {
@@ -874,6 +889,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               ))
             )
               return;
+            showWebSessionMutationProgress(btn, 'Revoking…');
             await revokeWebSession(id);
           } finally {
             endWebSessionMutation(btn);
@@ -892,6 +908,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               ))
             )
               return;
+            showWebSessionMutationProgress(webSessionsRevokeAllBtn, 'Signing out…');
             await authedFetch('/v1/account/web-sessions?keep=current', { method: 'DELETE' })
               .then((r) =>
                 r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)),
@@ -932,6 +949,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (passwordResetInFlight || passwordResetOutcomeUnknown) return;
         passwordResetInFlight = true;
+        const idleLabel = btn ? btn.textContent || 'Change password' : '';
         if (btn) {
           btn.disabled = true;
           btn.setAttribute('aria-busy', 'true');
@@ -958,6 +976,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (!entered || !entered.trim()) return;
             email = entered.trim();
           }
+          if (btn) btn.textContent = 'Sending…';
           showBanner('Sending password-reset email…');
           const response = await boundedFetch(apiBaseUrl + '/v1/auth/password-reset/request', {
             method: 'POST',
@@ -983,6 +1002,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (btn) {
             btn.disabled = passwordResetOutcomeUnknown;
             btn.setAttribute('aria-busy', 'false');
+            if (!passwordResetOutcomeUnknown) btn.textContent = idleLabel;
           }
         }
       }

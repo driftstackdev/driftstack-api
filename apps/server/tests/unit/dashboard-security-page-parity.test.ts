@@ -112,7 +112,7 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
     const p = read(PAGE);
 
     expect(p).toMatch(/\/\/ V-079 — change password trigger via password-reset request\./);
-    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{/);
+    expect(p).toMatch(/boundedFetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{/);
   });
 
   it('CRITICAL V-216 audit-log live-wire pinned with limit=20 cap. /security shows a recent-activity summary not the full log (full lives at /audit-log).', () => {
