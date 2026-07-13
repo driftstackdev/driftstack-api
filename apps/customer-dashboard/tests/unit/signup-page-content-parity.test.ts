@@ -65,11 +65,17 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/let oauthStartInFlight = false/);
     expect(body).toMatch(/if \(!provider \|\| oauthStartInFlight\) return/);
     expect(body).toMatch(/oauthStartInFlight = true/);
-    expect(body).toMatch(/button\.disabled = true/);
-    expect(body).toMatch(/button\.setAttribute\('aria-busy', button === btn \? 'true' : 'false'\)/);
+    expect(body).toMatch(/setOauthButtonsDisabled\(true, btn\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
     expect(body).toMatch(/Signup provider took too long/);
+  });
+
+  it('email/password and OAuth signup share one mutually exclusive lane', () => {
+    expect(body).toMatch(/if \(oauthStartInFlight\) return/);
+    expect(body).toMatch(/if \(signupInFlight\) return/);
+    expect(body).toMatch(/setOauthButtonsDisabled\(true\)/);
+    expect(body).toMatch(/if \(submitBtn\) submitBtn\.disabled = true/);
   });
 
   it('password minlength=12 + passphrase guidance pinned', () => {

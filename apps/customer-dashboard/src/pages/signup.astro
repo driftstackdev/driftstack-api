@@ -301,9 +301,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
         if (signupInFlight) return;
+        if (oauthStartInFlight) return;
         banner.classList.add('hidden');
         signupInFlight = true;
         setSubmitting(true);
+        setOauthButtonsDisabled(true);
         const fd = new FormData(form);
         const payload = {
           email: fd.get('email'),
@@ -376,6 +378,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             clearTimeout(timeoutId);
             signupInFlight = false;
             setSubmitting(false);
+            setOauthButtonsDisabled(false);
           });
       });
 
@@ -385,16 +388,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       const oauthButtons = root.querySelectorAll('[data-oauth]');
       const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
       let oauthStartInFlight = false;
+      function setOauthButtonsDisabled(disabled, activeButton) {
+        oauthButtons.forEach((button) => {
+          button.disabled = disabled;
+          button.setAttribute(
+            'aria-busy',
+            disabled && button === activeButton ? 'true' : 'false',
+          );
+        });
+      }
       oauthButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
-          banner.classList.add('hidden');
           const provider = btn.getAttribute('data-oauth');
           if (!provider || oauthStartInFlight) return;
+          if (signupInFlight) return;
+          banner.classList.add('hidden');
           oauthStartInFlight = true;
-          oauthButtons.forEach((button) => {
-            button.disabled = true;
-            button.setAttribute('aria-busy', button === btn ? 'true' : 'false');
-          });
+          setOauthButtonsDisabled(true, btn);
+          if (submitBtn) submitBtn.disabled = true;
           // Preserve ?next= through the OAuth round-trip so deep links
           // resume after the IDP redirect.
           const params = new URLSearchParams(window.location.search);
@@ -436,10 +447,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             .finally(() => {
               clearTimeout(timeoutId);
               oauthStartInFlight = false;
-              oauthButtons.forEach((button) => {
-                button.disabled = false;
-                button.setAttribute('aria-busy', 'false');
-              });
+              setOauthButtonsDisabled(false);
+              if (submitBtn) submitBtn.disabled = false;
             });
         });
       });

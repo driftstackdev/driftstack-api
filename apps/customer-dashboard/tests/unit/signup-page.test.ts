@@ -263,6 +263,40 @@ describe('signup page — local integration', () => {
     expect(bannerText(window)).toMatch(/signup provider took too long.*check your connection/i);
   });
 
+  it('email signup blocks a competing OAuth start until it settles', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => new Promise<Response>(() => {})],
+    });
+    win = window;
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
+    oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.url).toMatch(/\/v1\/auth\/signup$/);
+    expect(oauth.disabled).toBe(true);
+    expect(oauth.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('OAuth signup blocks a competing email submit until it settles', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => new Promise<Response>(() => {})],
+    });
+    win = window;
+    const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
+    oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.url).toMatch(/\/v1\/auth\/oauth-client\/start$/);
+    const submit = window.document.querySelector(
+      '[data-form="signup"] button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
   it('V-269 ?next= round-trip: the "sign in" login link carries the next target', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       url: 'https://app.driftstack.dev/signup/?next=' + encodeURIComponent('/cli/authorize'),
