@@ -154,22 +154,93 @@ export class InMemoryCliAuthorizeStore implements CliAuthorizeStore {
 
 export type CliCodeStatus = 'pending' | 'bound';
 
-interface StoredCode {
+interface StoredCodeBase {
   state: string;
-  status: CliCodeStatus;
   client_label: string | null;
+  created_at: number;
+}
+
+interface StoredPendingCode extends StoredCodeBase {
+  status: 'pending';
+  secret_blob: null;
+  encrypted: false;
+  account_id: null;
+}
+
+interface StoredBoundCode extends StoredCodeBase {
+  status: 'bound';
   /**
-   * Set when status='bound'. The minted API key held for the CLI / GUI's
-   * next exchange poll. When `encrypted` is true this is base64 of the
+   * The minted API key held for the CLI / GUI's next exchange poll. This is
+   * base64 of the
    * AES-256-GCM `[IV|tag|ciphertext]` blob (D1 — the plaintext key never
    * sits in Redis at rest).
    */
-  secret_blob: string | null;
-  /** D1 — true for every bound entry; false only while pending. */
-  encrypted: boolean;
-  /** Set when status='bound'. */
-  account_id: string | null;
-  created_at: number;
+  secret_blob: string;
+  /** D1 — true for every bound entry. */
+  encrypted: true;
+  account_id: string;
+}
+
+type StoredCode = StoredPendingCode | StoredBoundCode;
+
+/**
+ * Redis is an external trust boundary: deploy drift, operator writes, or a
+ * partial restore can leave syntactically-valid JSON whose runtime shape no
+ * longer matches StoredCode. Reconstruct a normalized discriminated union
+ * instead of casting so malformed values never reach constant-time comparison
+ * or secret decryption with attacker-controlled types.
+ */
+function parseStoredCode(raw: string): StoredCode | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.state !== 'string' ||
+    record.state.length === 0 ||
+    (record.client_label !== null && typeof record.client_label !== 'string') ||
+    typeof record.created_at !== 'number' ||
+    !Number.isFinite(record.created_at) ||
+    record.created_at < 0
+  ) {
+    return null;
+  }
+
+  const common: StoredCodeBase = {
+    state: record.state,
+    client_label: record.client_label,
+    created_at: record.created_at,
+  };
+  if (
+    record.status === 'pending' &&
+    record.secret_blob === null &&
+    record.encrypted === false &&
+    record.account_id === null
+  ) {
+    return { ...common, status: 'pending', secret_blob: null, encrypted: false, account_id: null };
+  }
+  if (
+    record.status === 'bound' &&
+    typeof record.secret_blob === 'string' &&
+    record.secret_blob.length > 0 &&
+    record.encrypted === true &&
+    typeof record.account_id === 'string' &&
+    record.account_id.length > 0
+  ) {
+    return {
+      ...common,
+      status: 'bound',
+      secret_blob: record.secret_blob,
+      encrypted: true,
+      account_id: record.account_id,
+    };
+  }
+  return null;
 }
 
 export interface CliAuthorizeServiceOptions {
@@ -287,11 +358,18 @@ export class CliAuthorizeService {
   }
 
   async bind(input: BindInput): Promise<BindResult> {
-    const raw = await this.store.get(this.key(input.code));
+    const key = this.key(input.code);
+    const raw = await this.store.get(key);
     if (raw === null) {
       throw new CliAuthorizeError('not_found', 'Authorization code not found or expired.');
     }
-    const stored = JSON.parse(raw) as StoredCode;
+    const stored = parseStoredCode(raw);
+    if (stored === null) {
+      // Irrecoverable external state must not stay retryable for the rest of
+      // its TTL. Consume it before returning the stable public error surface.
+      await this.store.del(key);
+      throw new CliAuthorizeError('invalid_code', 'Authorization code state is invalid.');
+    }
 
     if (!constantTimeStringEqual(stored.state, input.state)) {
       throw new CliAuthorizeError('state_mismatch', 'State parameter does not match.');
@@ -320,7 +398,6 @@ export class CliAuthorizeService {
     // window to poll exchange even if the user took ~4:30 to log in and
     // click Authorize. The post-bind window (D1) is deliberately shorter
     // than the pre-bind one — the client is now actively polling.
-    const key = this.key(input.code);
     const didBind = await this.store.compareAndSetEx(
       key,
       raw,
@@ -336,7 +413,11 @@ export class CliAuthorizeService {
       if (latestRaw === null) {
         throw new CliAuthorizeError('not_found', 'Authorization code not found or expired.');
       }
-      const latest = JSON.parse(latestRaw) as StoredCode;
+      const latest = parseStoredCode(latestRaw);
+      if (latest === null) {
+        await this.store.del(key);
+        throw new CliAuthorizeError('invalid_code', 'Authorization code state is invalid.');
+      }
       if (!constantTimeStringEqual(latest.state, input.state)) {
         throw new CliAuthorizeError('state_mismatch', 'State parameter does not match.');
       }
@@ -353,13 +434,18 @@ export class CliAuthorizeService {
   }
 
   async exchange(input: ExchangeInput): Promise<ExchangeResult> {
-    const raw = await this.store.get(this.key(input.code));
+    const key = this.key(input.code);
+    const raw = await this.store.get(key);
     if (raw === null) {
       // Either never existed OR Redis evicted on TTL — treat both as
       // expired from the CLI / GUI's perspective.
       return { status: 'expired' };
     }
-    const stored = JSON.parse(raw) as StoredCode;
+    const stored = parseStoredCode(raw);
+    if (stored === null) {
+      await this.store.del(key);
+      throw new CliAuthorizeError('invalid_code', 'Authorization code state is invalid.');
+    }
 
     if (!constantTimeStringEqual(stored.state, input.state)) {
       throw new CliAuthorizeError('state_mismatch', 'State parameter does not match.');
@@ -370,37 +456,27 @@ export class CliAuthorizeService {
     }
 
     if (stored.status === 'bound') {
-      if (stored.secret_blob === null || stored.account_id === null) {
-        throw new CliAuthorizeError(
-          'invalid_code',
-          'Internal: bound code missing secret or account_id.',
-        );
-      }
       // C2 — atomic one-shot claim. getDel removes the entry and returns
       // its value indivisibly, so of two concurrent bound polls exactly
       // one wins; the loser sees `null` and gets `expired` (no
       // double-delivery of the one-shot key). Delete-before-return also
       // means a later exception can't leak a re-deliverable secret.
-      const claimedRaw = await this.store.getDel(this.key(input.code));
+      const claimedRaw = await this.store.getDel(key);
       if (claimedRaw === null) {
         return { status: 'expired' };
       }
-      const claimed = JSON.parse(claimedRaw) as StoredCode;
-      if (claimed.secret_blob === null || claimed.account_id === null) {
-        throw new CliAuthorizeError(
-          'invalid_code',
-          'Internal: bound code missing secret or account_id.',
-        );
+      const claimed = parseStoredCode(claimedRaw);
+      // A correctly-bound record is immutable until this getDel. If the
+      // claimed bytes differ from the peeked bytes, or no longer describe a
+      // bound record, fail closed rather than delivering a swapped secret.
+      if (claimedRaw !== raw || claimed?.status !== 'bound') {
+        throw new CliAuthorizeError('invalid_code', 'Authorization code state is invalid.');
       }
       // D1 — recover the plaintext from the at-rest blob only at the
       // moment of delivery. A decrypt failure (e.g. the key rotated out
       // from under a bound code) surfaces as expired rather than a 500,
       // so the CLI simply restarts the flow.
       let apiKey: string;
-      // Fail closed for any legacy/malformed plaintext-bound entry. Correct
-      // deployments have always written encrypted=true; accepting false here
-      // would keep recoverable credentials live after the activation fix.
-      if (!claimed.encrypted) return { status: 'expired' };
       try {
         apiKey = decryptPlatformSecret(
           Buffer.from(claimed.secret_blob, 'base64'),

@@ -119,20 +119,21 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
   });
 
-  it('CliCodeStatus 2-literal union + StoredCode 7 fields with bound-only secret_blob + encrypted flag + account_id', () => {
+  it('CliCodeStatus + runtime-validated StoredCode discriminated union keep pending plaintext-free and bound encrypted-only', () => {
     expect(body).toMatch(/export type CliCodeStatus = 'pending' \| 'bound';/);
-    expect(body).toMatch(/interface StoredCode \{/);
-    expect(body).toMatch(/state: string;/);
-    expect(body).toMatch(/status: CliCodeStatus;/);
-    expect(body).toMatch(/client_label: string \| null;/);
-    // D1 — the minted key is stored as an encrypted base64 blob (not
-    // plaintext); false is valid only for a still-pending entry.
-    expect(body).toMatch(/secret_blob: string \| null;/);
-    expect(body).toMatch(/encrypted: boolean;/);
     expect(body).toMatch(
-      /\/\*\* Set when status='bound'\. \*\/\s*\n?\s*account_id: string \| null;/,
+      /interface StoredCodeBase \{\s*\n?\s*state: string;\s*\n?\s*client_label: string \| null;\s*\n?\s*created_at: number;/,
     );
-    expect(body).toMatch(/created_at: number;/);
+    expect(body).toMatch(
+      /interface StoredPendingCode extends StoredCodeBase \{\s*\n?\s*status: 'pending';\s*\n?\s*secret_blob: null;\s*\n?\s*encrypted: false;\s*\n?\s*account_id: null;/,
+    );
+    expect(body).toMatch(
+      /interface StoredBoundCode extends StoredCodeBase \{[\s\S]+?status: 'bound';[\s\S]+?secret_blob: string;[\s\S]+?encrypted: true;\s*\n?\s*account_id: string;/,
+    );
+    expect(body).toMatch(/type StoredCode = StoredPendingCode \| StoredBoundCode;/);
+    expect(body).toMatch(
+      /function parseStoredCode\(raw: string\): StoredCode \| null \{[\s\S]+?value = JSON\.parse\(raw\);[\s\S]+?Number\.isFinite\(record\.created_at\)[\s\S]+?record\.status === 'pending'[\s\S]+?record\.status === 'bound'/,
+    );
   });
 
   it('CliAuthorizeError: 5-code union (invalid_code / state_mismatch / already_bound / not_found / expired)', () => {
@@ -178,6 +179,9 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
       /if \(raw === null\) \{\s*\n?\s*throw new CliAuthorizeError\('not_found', 'Authorization code not found or expired\.'\);/,
     );
     expect(body).toMatch(
+      /const stored = parseStoredCode\(raw\);\s*\n?\s*if \(stored === null\) \{\s*\n?\s*[\s\S]+?await this\.store\.del\(key\);\s*\n?\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
+    );
+    expect(body).toMatch(
       /if \(!constantTimeStringEqual\(stored\.state, input\.state\)\) \{\s*\n?\s*throw new CliAuthorizeError\('state_mismatch', 'State parameter does not match\.'\);/,
     );
     expect(body).toMatch(
@@ -201,12 +205,14 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
     // C2 — atomic getDel claim replaced the non-atomic store.del: exactly
     // one concurrent bound poll wins; the loser sees null → expired.
-    expect(body).toMatch(
-      /const claimedRaw = await this\.store\.getDel\(this\.key\(input\.code\)\);/,
-    );
+    expect(body).toMatch(/const claimedRaw = await this\.store\.getDel\(key\);/);
     expect(body).toMatch(/if \(claimedRaw === null\) \{\s*\n?\s*return \{ status: 'expired' \};/);
-    // D1 — decrypt the at-rest blob only at delivery; decrypt failure → expired.
-    expect(body).toMatch(/if \(!claimed\.encrypted\) return \{ status: 'expired' \};/);
+    // Claimed bytes are immutable and must still parse as encrypted bound state;
+    // decrypt the at-rest blob only at delivery; decrypt failure → expired.
+    expect(body).toMatch(/const claimed = parseStoredCode\(claimedRaw\);/);
+    expect(body).toMatch(
+      /if \(claimedRaw !== raw \|\| claimed\?\.status !== 'bound'\) \{\s*\n?\s*throw new CliAuthorizeError\('invalid_code', 'Authorization code state is invalid\.'\);/,
+    );
     expect(body).toMatch(/apiKey = decryptPlatformSecret\(/);
     expect(body).toMatch(
       /return \{\s*\n?\s*status: 'bound',\s*\n?\s*api_key: apiKey,\s*\n?\s*account_id: claimed\.account_id,\s*\n?\s*\};/,

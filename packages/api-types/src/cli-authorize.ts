@@ -8,8 +8,8 @@
 //   2. CLI/GUI opens browser_url; user signs in to the dashboard if
 //      not already, sees a confirmation screen, clicks Authorize.
 //   3. Dashboard calls /v1/auth/cli-authorize/bind with web-session
-//      bearer auth; server mints a scoped API key and stores the
-//      plaintext keyed by `code` (Redis, 5-minute TTL).
+//      bearer auth; server mints a scoped API key and stores only its
+//      encrypted envelope under `sha256(code)` (Redis, 2-minute bound TTL).
 //   4. CLI/GUI polls /v1/auth/cli-authorize/exchange until status
 //      flips from `pending` → `bound` → returns plaintext API key.
 //

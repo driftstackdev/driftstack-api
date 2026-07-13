@@ -5,11 +5,11 @@
 //     pending status, builds browser_url with code + state query
 //   - bind(): not_found on missing/expired, state_mismatch on wrong
 //     state, already_bound on second bind, happy path transitions
-//     pending → bound and stores plaintext + account_id
+//     pending → bound and stores encrypted secret + account_id
 //   - exchange(): expired on missing key, state_mismatch on wrong
 //     state, pending while not bound, bound returns plaintext +
 //     account and deletes (one-shot — second call returns expired),
-//     invalid_code if a bound entry is missing plaintext (defensive)
+//     invalid_code + consumption for malformed external store state
 
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
@@ -34,6 +34,15 @@ function makeSvc(overrides: { dashboardOrigin?: string } = {}): {
     secretEncryptionKeyBase64: ENC_KEY,
   });
   return { svc, store };
+}
+
+class SwappingClaimStore extends InMemoryCliAuthorizeStore {
+  claimedOverride: string | null = null;
+
+  override async getDel(key: string): Promise<string | null> {
+    const claimed = await super.getDel(key);
+    return this.claimedOverride ?? claimed;
+  }
 }
 
 describe('V-553.B-22 CliAuthorizeService.initiate', () => {
@@ -153,6 +162,24 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
       expect(['ds_live_first', 'ds_live_second']).toContain(exchange.api_key);
     }
   });
+
+  it('consumes malformed JSON and returns invalid_code instead of a repeat 500', async () => {
+    const { svc, store } = makeSvc();
+    const { code } = await svc.initiate({ state: 's' });
+    const key = cliAuthorizeRedisKey(code);
+    await store.setEx(key, '{"state":', 300);
+
+    await expect(
+      svc.bind({
+        code,
+        state: 's',
+        account_id: 'acc_bad',
+        api_key_plaintext: 'ds_live_never_stored',
+        scopes: ['read'],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_code' });
+    expect(await store.get(key)).toBeNull();
+  });
 });
 
 describe('V-553.B-22 CliAuthorizeService.exchange', () => {
@@ -203,6 +230,61 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
     const second = await svc.exchange({ code, state: 's' });
     expect(second.status).toBe('expired');
   });
+
+  it.each([
+    ['wrong pending secret shape', { secret_blob: 'plaintext' }],
+    ['wrong pending encrypted flag', { encrypted: true }],
+    ['wrong account type', { account_id: 42 }],
+    ['non-finite creation time', { created_at: Number.POSITIVE_INFINITY }],
+    ['unknown status', { status: 'approved' }],
+  ])('consumes %s store corruption and then reports expired', async (_name, override) => {
+    const { svc, store } = makeSvc();
+    const { code } = await svc.initiate({ state: 's' });
+    const key = cliAuthorizeRedisKey(code);
+    const raw = await store.get(key);
+    expect(raw).not.toBeNull();
+    const pending = JSON.parse(raw ?? '{}') as Record<string, unknown>;
+    await store.setEx(key, JSON.stringify({ ...pending, ...override }), 300);
+
+    await expect(svc.exchange({ code, state: 's' })).rejects.toMatchObject({
+      code: 'invalid_code',
+    });
+    await expect(svc.exchange({ code, state: 's' })).resolves.toEqual({ status: 'expired' });
+  });
+
+  it('fails closed when the atomic claim differs from the record that passed state validation', async () => {
+    const store = new SwappingClaimStore();
+    const svc = new CliAuthorizeService({
+      store,
+      dashboardOrigin: 'https://app.driftstack.dev',
+      secretEncryptionKeyBase64: ENC_KEY,
+    });
+    const first = await svc.initiate({ state: STATE });
+    await svc.bind({
+      code: first.code,
+      state: STATE,
+      account_id: 'acc_first',
+      api_key_plaintext: 'ds_live_first',
+      scopes: ['read'],
+    });
+    const second = await svc.initiate({ state: STATE });
+    await svc.bind({
+      code: second.code,
+      state: STATE,
+      account_id: 'acc_second',
+      api_key_plaintext: 'ds_live_second',
+      scopes: ['read'],
+    });
+    store.claimedOverride = await store.get(cliAuthorizeRedisKey(second.code));
+    expect(store.claimedOverride).not.toBeNull();
+
+    await expect(svc.exchange({ code: first.code, state: STATE })).rejects.toMatchObject({
+      code: 'invalid_code',
+    });
+    await expect(svc.exchange({ code: first.code, state: STATE })).resolves.toEqual({
+      status: 'expired',
+    });
+  });
 });
 
 describe('V-266 D1 — encryption of the minted key at rest', () => {
@@ -232,7 +314,7 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
     if (ex.status === 'bound') expect(ex.api_key).toBe('ds_live_secret_at_rest');
   });
 
-  it('rejects a legacy plaintext-bound entry instead of returning the credential', async () => {
+  it('consumes a legacy plaintext-bound entry instead of returning the credential', async () => {
     const store = new InMemoryCliAuthorizeStore();
     const svc = new CliAuthorizeService({
       store,
@@ -254,8 +336,10 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
       }),
       120,
     );
-    const ex = await svc.exchange({ code, state: STATE });
-    expect(ex).toEqual({ status: 'expired' });
+    await expect(svc.exchange({ code, state: STATE })).rejects.toMatchObject({
+      code: 'invalid_code',
+    });
+    await expect(svc.exchange({ code, state: STATE })).resolves.toEqual({ status: 'expired' });
   });
 });
 

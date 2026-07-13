@@ -144,18 +144,25 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     expect(p).toMatch(/\| 'expired',/);
   });
 
-  // ─── StoredCode 6-field shape ────────────────────────────────
+  // ─── StoredCode runtime-validated discriminated shape ────────
 
-  it("CRITICAL StoredCode has 7 fields — state + status + client_label (nullable) + secret_blob (nullable, bound-only, encrypted at rest per D1) + encrypted flag + account_id (nullable, bound-only) + created_at. The JSON shape is what's serialised to Redis.", () => {
+  it('CRITICAL StoredCode is reconstructed as a pending-or-bound discriminated union; pending carries no secret/account and bound requires an encrypted secret/account', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
-    expect(p).toMatch(/interface StoredCode \{/);
-    expect(p).toMatch(/state: string;/);
-    expect(p).toMatch(/status: CliCodeStatus;/);
-    expect(p).toMatch(/client_label: string \| null;/);
-    expect(p).toMatch(/secret_blob: string \| null;/);
-    expect(p).toMatch(/encrypted: boolean;/);
-    expect(p).toMatch(/account_id: string \| null;/);
-    expect(p).toMatch(/created_at: number;/);
+    expect(p).toMatch(/interface StoredCodeBase \{/);
+    expect(p).toMatch(/interface StoredPendingCode extends StoredCodeBase \{/);
+    expect(p).toMatch(/status: 'pending';/);
+    expect(p).toMatch(/secret_blob: null;/);
+    expect(p).toMatch(/encrypted: false;/);
+    expect(p).toMatch(/account_id: null;/);
+    expect(p).toMatch(/interface StoredBoundCode extends StoredCodeBase \{/);
+    expect(p).toMatch(/status: 'bound';/);
+    expect(p).toMatch(/secret_blob: string;/);
+    expect(p).toMatch(/encrypted: true;/);
+    expect(p).toMatch(/account_id: string;/);
+    expect(p).toMatch(/type StoredCode = StoredPendingCode \| StoredBoundCode;/);
+    expect(p).toMatch(/function parseStoredCode\(raw: string\): StoredCode \| null \{/);
+    expect(p).toMatch(/value = JSON\.parse\(raw\);/);
+    expect(p).toMatch(/!Number\.isFinite\(record\.created_at\)/);
   });
 
   // ─── CliAuthorizeStore interface ────────────────────────
