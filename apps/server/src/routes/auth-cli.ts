@@ -111,18 +111,21 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
           expires_at: result.expires_at.toISOString(),
         };
       } catch (err) {
-        if (err instanceof CliAuthorizeError) {
-          // Revoke the just-minted key — the bind failed, so the
-          // plaintext we created above can't reach a client. Best-effort;
-          // the key remains in the DB as `revoked` if revoke fails for
-          // any reason, which is the safe direction.
-          try {
-            await apiKeysService.revoke(ctx, created.row.id);
-          } catch {
-            /* swallow */
-          }
-          throw mapCliAuthorizeError(err);
+        // Every failed bind must retire the just-minted key, including
+        // infrastructure/serialization failures that are not expressed as
+        // CliAuthorizeError. Otherwise its plaintext cannot reach a client
+        // but the credential remains active. Keep the original bind error as
+        // the response cause; log a secondary compensation failure so an
+        // operator can revoke the key by id without exposing its plaintext.
+        try {
+          await apiKeysService.revoke(ctx, created.row.id);
+        } catch (revokeErr) {
+          req.log.error(
+            { err: revokeErr, apiKeyId: created.row.id },
+            'Failed to revoke API key after CLI authorization bind failure',
+          );
         }
+        if (err instanceof CliAuthorizeError) throw mapCliAuthorizeError(err);
         throw err;
       }
     },

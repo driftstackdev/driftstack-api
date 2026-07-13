@@ -14,12 +14,14 @@
 // via the V-079 signup → verify-email flow that the test fixture
 // already wires.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CliAuthorizeService } from '../../src/services/cli-authorize.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   if (fx) await fx.cleanup();
 });
 
@@ -387,5 +389,36 @@ describe('V-266 — security + edge cases', () => {
     expect(deviceKeys).toHaveLength(2);
     expect(deviceKeys.filter((key) => key.revokedAt === null)).toHaveLength(1);
     expect(deviceKeys.filter((key) => key.revokedAt !== null)).toHaveLength(1);
+  });
+
+  it('revokes the minted device key when bind fails with an infrastructure error', async () => {
+    fx = await buildTestApp();
+    const { token: sessionToken } = await freshSessionToken(fx);
+    await acceptAllLegal(fx, sessionToken);
+
+    const initiate = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/initiate',
+      headers,
+      payload: { state: STATE },
+    });
+    const { code } = initiate.json<InitiateResponse>();
+    vi.spyOn(CliAuthorizeService.prototype, 'bind').mockRejectedValueOnce(
+      new Error('simulated Redis transport failure'),
+    );
+
+    const bind = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/bind',
+      headers: { ...headers, authorization: `Bearer ${sessionToken}` },
+      payload: { code, state: STATE },
+    });
+    expect(bind.statusCode).toBe(500);
+
+    const deviceKeys = (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items.filter(
+      (key) => key.provenance === 'cli_device',
+    );
+    expect(deviceKeys).toHaveLength(1);
+    expect(deviceKeys[0]?.revokedAt).toBeInstanceOf(Date);
   });
 });

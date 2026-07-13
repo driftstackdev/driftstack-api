@@ -13,9 +13,9 @@
 //     DEFAULT_SCOPES=['account_owner'].
 //   • Schemas sourced from @driftstack/api-types: Initiate/Bind/
 //     Exchange request schemas + ApiKeyScope type.
-//   • Bind compensation: revoke just-minted key on CliAuthorizeError
-//     (best-effort; revoked-in-DB on revoke failure is the safe
-//     direction — key stays revoked).
+//   • Bind compensation: revoke the just-minted key on every thrown bind
+//     failure, log a secondary revoke failure, and preserve/map the
+//     original bind error.
 //   • account_id stamped as `acc_${ctx.account.id}` template.
 //   • CliAuthorizeError → HTTP map: state_mismatch+already_bound+
 //     invalid_code → 400 BadRequestError; not_found+expired → 404
@@ -102,12 +102,12 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     expect(body).toMatch(/api_key_plaintext: created\.plaintext,/);
   });
 
-  it('Bind compensation pinned: revoke just-minted key on CliAuthorizeError; best-effort with safe-direction rationale on revoke failure', () => {
+  it('Bind compensation pinned: every bind failure revokes the just-minted key, logs secondary revoke failure, and preserves/maps the original error', () => {
     expect(body).toMatch(
-      /\/\/ Revoke the just-minted key — the bind failed, so the\s*\n?\s*\/\/ plaintext we created above can't reach a client\. Best-effort;\s*\n?\s*\/\/ the key remains in the DB as `revoked` if revoke fails for\s*\n?\s*\/\/ any reason, which is the safe direction\./,
+      /\/\/ Every failed bind must retire the just-minted key, including\s*\n?\s*\/\/ infrastructure\/serialization failures that are not expressed as\s*\n?\s*\/\/ CliAuthorizeError\./,
     );
     expect(body).toMatch(
-      /try \{\s*\n?\s*await apiKeysService\.revoke\(ctx, created\.row\.id\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}\s*\n?\s*throw mapCliAuthorizeError\(err\);/,
+      /try \{\s*\n?\s*await apiKeysService\.revoke\(ctx, created\.row\.id\);\s*\n?\s*\} catch \(revokeErr\) \{[\s\S]*?req\.log\.error\([\s\S]*?apiKeyId: created\.row\.id[\s\S]*?\);\s*\n?\s*\}\s*\n?\s*if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);\s*\n?\s*throw err;/,
     );
   });
 

@@ -94,14 +94,14 @@ describe('W1034 routes/auth-cli V-266 cross-source invariant', () => {
     expect(p).toMatch(/scopes,/);
   });
 
-  it("CRITICAL bind revoke-on-failure framing — 'Revoke the just-minted key — the bind failed, so the plaintext we created above can't reach a client. Best-effort; the key remains in the DB as revoked if revoke fails for any reason, which is the safe direction'.", () => {
+  it('CRITICAL bind compensation covers every thrown bind failure, logs a secondary revoke failure, and preserves/maps the original error.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts'));
-    expect(p).toMatch(/\/\/ Revoke the just-minted key — the bind failed, so the/);
-    expect(p).toMatch(/\/\/ plaintext we created above can't reach a client\. Best-effort;/);
-    expect(p).toMatch(/\/\/ the key remains in the DB as `revoked` if revoke fails for/);
-    expect(p).toMatch(/\/\/ any reason, which is the safe direction\./);
+    expect(p).toMatch(/\/\/ Every failed bind must retire the just-minted key, including/);
     expect(p).toMatch(/await apiKeysService\.revoke\(ctx, created\.row\.id\);/);
-    expect(p).toMatch(/\/\* swallow \*\//);
+    expect(p).toMatch(/catch \(revokeErr\)/);
+    expect(p).toMatch(/apiKeyId: created\.row\.id/);
+    expect(p).toMatch(/if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);/);
+    expect(p).toMatch(/throw err;/);
   });
 
   it("CRITICAL mapCliAuthorizeError 5-branch — 'state_mismatch' → BadRequestError 'State parameter does not match.' + 'already_bound' → BadRequestError + 'not_found'/'expired' → NotFoundError 'Authorization code not found or expired.' + 'invalid_code' → BadRequestError 'Authorization code is invalid.'.", () => {
