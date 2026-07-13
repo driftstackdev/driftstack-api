@@ -513,7 +513,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         // GET callers pass no init and behave exactly as before.
         var opts = init || {};
         var headers = Object.assign({ authorization: 'Bearer ' + token }, opts.headers || {});
-        return fetch(apiBaseUrl + path, Object.assign({ credentials: 'include' }, opts, { headers: headers }));
+        var controller = new AbortController();
+        var timeout = window.setTimeout(() => controller.abort(), 15_000);
+        return fetch(
+          apiBaseUrl + path,
+          Object.assign({ credentials: 'include' }, opts, {
+            headers: headers,
+            signal: controller.signal,
+          }),
+        )
+          .catch((err) => {
+            if (err && err.name === 'AbortError') {
+              throw new Error('Request timed out. Try again.');
+            }
+            throw err;
+          })
+          .finally(() => window.clearTimeout(timeout));
       }
 
       // Replace the SSR mock tier bars with the live distribution from
@@ -1167,16 +1182,31 @@ const apiBaseUrl = resolveApiBaseUrl();
       // feed. fetchOverview's errors are swallowed in the .catch
       // so a transient overview-fetch failure doesn't break the
       // audit-feed indicator.
-      function refreshAll() {
-        void fetchAudit();
-        void fetchOverview().catch(() => {});
-        void fetchSessionStats().catch(() => {});
-        void fetchOpenIncidents().catch(() => {});
-        void fetchPayingTiers().catch(() => {});
-        void fetchPlatformStatus().catch(() => {});
-        void fetchPricing().catch(() => {});
-      }
+      let refreshAllInFlight = false;
       const refreshBtn = root.querySelector('[data-live-refresh]');
+      function refreshAll() {
+        if (refreshAllInFlight) return Promise.resolve();
+        refreshAllInFlight = true;
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-busy', 'true');
+        }
+        return Promise.allSettled([
+          fetchAudit(),
+          fetchOverview(),
+          fetchSessionStats(),
+          fetchOpenIncidents(),
+          fetchPayingTiers(),
+          fetchPlatformStatus(),
+          fetchPricing(),
+        ]).finally(() => {
+          refreshAllInFlight = false;
+          if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.removeAttribute('aria-busy');
+          }
+        });
+      }
       if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);
       setInterval(refreshAll, 30_000);
       function fmtAge(ms) {

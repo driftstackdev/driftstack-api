@@ -177,7 +177,7 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
   });
 
   it('live data: count tiles + total annotation + DLQ depth populate from /v1/admin/overview', async () => {
-    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: makeRouter({
         overview: {
@@ -193,6 +193,37 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-field="suspended-accounts"]')).toBe('3');
     expect(text(window, '[data-field="total-accounts-annotation"]')).toContain('of 50 total');
     expect(text(window, '[data-field="dlq-depth"]')).toBe('7');
+    expect(fetchCalls).toHaveLength(8);
+    expect(fetchCalls.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(true);
+  });
+
+  it('Refresh now is single-flight across the seven polled resources and restores busy state', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    const before = fetchCalls.length;
+    const refresh = window.document.querySelector('[data-live-refresh]') as HTMLButtonElement;
+    refresh.click();
+    refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(refresh.disabled).toBe(true);
+    expect(refresh.getAttribute('aria-busy')).toBe('true');
+    await flush();
+    const refreshCalls = fetchCalls.slice(before);
+    expect(refreshCalls).toHaveLength(7);
+    expect(refreshCalls.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(
+      true,
+    );
+    expect(refresh.disabled).toBe(false);
+    expect(refresh.hasAttribute('aria-busy')).toBe(false);
   });
 
   it('open-incidents KPI: counts non-resolved incidents from /v1/admin/incidents (status !== resolved)', async () => {
