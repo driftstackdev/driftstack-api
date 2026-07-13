@@ -1508,85 +1508,150 @@ const navSections: NavSection[] = [
             { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
             window.driftstackActAsHeaders ? window.driftstackActAsHeaders() : {},
           );
-          fetchLegalWithDeadline(apiBaseUrl + '/v1/legal/required', { headers })
-            .then(function (res) {
-              return res.ok ? res.json() : null;
-            })
-            .then(function (body) {
-              // /v1/legal/required returns { data: [...] }, NOT { required: [...] }
-              // (2026-05-20 fix — earlier rev silently no-op'd the banner).
-              const required = body && Array.isArray(body.data) ? body.data : [];
+          let required = [];
+          let reloadOnly = false;
+          // 2026-05-20 — server's document_key for the
+          // Terms-of-Service doc is 'tos' but the marketing-site
+          // URL slug is /legal/terms/. Map the one mismatch.
+          const DOC_URL_SLUG = { tos: 'terms' };
+          const DOC_LABEL = {
+            tos: 'Terms of Service',
+            privacy: 'Privacy Policy',
+            dpa: 'Data Processing Addendum',
+            aup: 'Acceptable Use Policy',
+          };
+
+          function fetchRequiredLegal() {
+            return fetchLegalWithDeadline(apiBaseUrl + '/v1/legal/required', { headers })
+              .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+              })
+              .then(function (body) {
+                // /v1/legal/required returns { data: [...] }, NOT { required: [...] }
+                // (2026-05-20 fix — earlier rev silently no-op'd the banner).
+                return body && Array.isArray(body.data) ? body.data : [];
+              });
+          }
+
+          function renderRequiredLegal(docs) {
+            list.textContent = '';
+            docs.forEach(function (doc) {
+              const li = document.createElement('li');
+              li.className = 'flex items-center gap-2';
+              const dot = document.createElement('span');
+              dot.className = 'inline-block size-1.5 rounded-full bg-tk-accent';
+              const a = document.createElement('a');
+              const slug = DOC_URL_SLUG[doc.document_key] || doc.document_key;
+              a.href = 'https://driftstack.dev/legal/' + slug + '/';
+              a.target = '_blank';
+              a.rel = 'noopener noreferrer';
+              a.className =
+                'text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2';
+              a.textContent = DOC_LABEL[doc.document_key] || doc.title || doc.document_key;
+              const ver = document.createElement('span');
+              ver.className = 'text-xs text-tk-ink-3';
+              ver.textContent = '(v' + doc.current_version + ')';
+              li.append(dot, a, ver);
+              list.append(li);
+            });
+          }
+
+          function finishLegalAcceptance() {
+            statusEl.textContent = 'Accepted — reloading…';
+            acceptAllBtn.disabled = true;
+            setTimeout(function () {
+              window.location.reload();
+            }, 400);
+          }
+
+          function requireLegalReload() {
+            reloadOnly = true;
+            acceptAllBtn.disabled = false;
+            acceptAllBtn.textContent = 'Reload to verify';
+            acceptAllBtn.title = 'Reload before sending any acceptance again';
+            statusEl.textContent =
+              'Acceptance outcome is unknown. Reload to check what remains before retrying.';
+          }
+
+          function reconcileLegalAcceptance(attempted) {
+            return fetchRequiredLegal()
+              .then(function (pending) {
+                required = pending;
+                if (required.length === 0) {
+                  finishLegalAcceptance();
+                  return;
+                }
+                const pendingKeys = new Set(
+                  required.map(function (doc) {
+                    return doc.document_key;
+                  }),
+                );
+                const recordedCount = attempted.filter(function (doc) {
+                  return !pendingKeys.has(doc.document_key);
+                }).length;
+                renderRequiredLegal(required);
+                acceptAllBtn.disabled = false;
+                acceptAllBtn.textContent = 'Accept remaining and continue';
+                statusEl.textContent =
+                  recordedCount > 0
+                    ? recordedCount +
+                      ' accepted; ' +
+                      required.length +
+                      (required.length === 1
+                        ? ' document still requires acceptance. '
+                        : ' documents still require acceptance. ') +
+                      'Only the remaining documents will be sent.'
+                    : 'No acceptance was confirmed. Review the remaining documents before retrying.';
+              })
+              .catch(function () {
+                requireLegalReload();
+              });
+          }
+
+          acceptAllBtn.addEventListener('click', function () {
+            if (reloadOnly) {
+              window.location.reload();
+              return;
+            }
+            const attempted = required.slice();
+            if (attempted.length === 0) return;
+            acceptAllBtn.disabled = true;
+            acceptAllBtn.removeAttribute('title');
+            statusEl.textContent = 'Recording acceptance…';
+            // 2026-05-20 — /v1/legal/accept REQUIRES content_hash
+            // (64-char SHA-256 hex); GET /v1/legal/required already
+            // includes it on each entry so pass it through.
+            Promise.allSettled(
+              attempted.map(function (doc) {
+                return fetchLegalWithDeadline(apiBaseUrl + '/v1/legal/accept', {
+                  method: 'POST',
+                  headers: headers,
+                  body: JSON.stringify({
+                    document_key: doc.document_key,
+                    version: doc.current_version,
+                    content_hash: doc.content_hash,
+                  }),
+                });
+              }),
+            ).then(function (results) {
+              const allOk = results.every(function (result) {
+                return result.status === 'fulfilled' && result.value.ok;
+              });
+              if (allOk) {
+                finishLegalAcceptance();
+                return;
+              }
+              return reconcileLegalAcceptance(attempted);
+            });
+          });
+
+          fetchRequiredLegal()
+            .then(function (pending) {
+              required = pending;
               if (required.length === 0) return;
               banner.classList.remove('hidden');
-              // 2026-05-20 — server's document_key for the
-              // Terms-of-Service doc is 'tos' but the marketing-site
-              // URL slug is /legal/terms/. Map the one mismatch.
-              const DOC_URL_SLUG = { tos: 'terms' };
-              const DOC_LABEL = {
-                tos: 'Terms of Service',
-                privacy: 'Privacy Policy',
-                dpa: 'Data Processing Addendum',
-                aup: 'Acceptable Use Policy',
-              };
-              required.forEach(function (doc) {
-                const li = document.createElement('li');
-                li.className = 'flex items-center gap-2';
-                const dot = document.createElement('span');
-                dot.className = 'inline-block size-1.5 rounded-full bg-tk-accent';
-                const a = document.createElement('a');
-                const slug = DOC_URL_SLUG[doc.document_key] || doc.document_key;
-                a.href = 'https://driftstack.dev/legal/' + slug + '/';
-                a.target = '_blank';
-                a.rel = 'noopener noreferrer';
-                a.className = 'text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2';
-                a.textContent = DOC_LABEL[doc.document_key] || doc.title || doc.document_key;
-                const ver = document.createElement('span');
-                ver.className = 'text-xs text-tk-ink-3';
-                ver.textContent = '(v' + doc.current_version + ')';
-                li.append(dot, a, ver);
-                list.append(li);
-              });
-              acceptAllBtn.addEventListener('click', function () {
-                acceptAllBtn.disabled = true;
-                statusEl.textContent = 'Recording acceptance…';
-                // 2026-05-20 — /v1/legal/accept REQUIRES content_hash
-                // (64-char SHA-256 hex); GET /v1/legal/required already
-                // includes it on each entry so pass it through.
-                Promise.all(
-                  required.map(function (doc) {
-                    return fetchLegalWithDeadline(apiBaseUrl + '/v1/legal/accept', {
-                      method: 'POST',
-                      headers: headers,
-                      body: JSON.stringify({
-                        document_key: doc.document_key,
-                        version: doc.current_version,
-                        content_hash: doc.content_hash,
-                      }),
-                    });
-                  }),
-                )
-                  .then(function (responses) {
-                    const allOk = responses.every(function (r) {
-                      return r.ok;
-                    });
-                    if (!allOk) {
-                      statusEl.textContent = 'One or more acceptances failed — please reload.';
-                      acceptAllBtn.disabled = false;
-                      return;
-                    }
-                    statusEl.textContent = 'Accepted — reloading…';
-                    setTimeout(function () {
-                      window.location.reload();
-                    }, 400);
-                  })
-                  .catch(function (err) {
-                    statusEl.textContent =
-                      err && err.name === 'AbortError'
-                        ? 'Acceptance took too long — check your connection and retry.'
-                        : 'Network error — please retry.';
-                    acceptAllBtn.disabled = false;
-                  });
-              });
+              renderRequiredLegal(required);
             })
             .catch(function () {
               /* swallow — banner stays hidden on transient failures */

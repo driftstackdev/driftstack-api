@@ -18,13 +18,14 @@ describe('DashboardLayout legal acceptance deadline', () => {
     expect(layout).toMatch(/fetchLegalWithDeadline\(apiBaseUrl \+ '\/v1\/legal\/accept', \{/);
   });
 
-  it('restores the disabled accept action with a specific timeout message', () => {
-    expect(layout).toContain(
-      "err && err.name === 'AbortError'\n                        ? 'Acceptance took too long — check your connection and retry.'",
-    );
-    expect(layout).toMatch(
-      /\.catch\(function \(err\) \{[\s\S]*?acceptAllBtn\.disabled = false;[\s\S]*?\}\);/,
-    );
+  it('waits for every write, reconciles the authoritative remainder, and never blind-retries an unknown outcome', () => {
+    expect(layout).toMatch(/Promise\.allSettled\(/);
+    expect(layout).toMatch(/function reconcileLegalAcceptance\(attempted\)/);
+    expect(layout).toMatch(/required = pending/);
+    expect(layout).toMatch(/Accept remaining and continue/);
+    expect(layout).toMatch(/let reloadOnly = false/);
+    expect(layout).toMatch(/if \(reloadOnly\) \{\s*window\.location\.reload\(\);\s*return;/);
+    expect(layout).toMatch(/Acceptance outcome is unknown\. Reload to check what remains/);
   });
 });
 
