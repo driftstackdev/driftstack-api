@@ -310,7 +310,7 @@ const escapeAttribute = (value) =>
 
 const page = (title, body, { description, canonicalPath, noindex = false }) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="${escapeAttribute(description)}"><meta name="robots" content="${noindex ? 'noindex,nofollow' : 'index,follow'}">${
+<meta name="theme-color" content="#0b0f14"><meta name="description" content="${escapeAttribute(description)}"><meta name="robots" content="${noindex ? 'noindex,nofollow' : 'index,follow'}">${
   !noindex && canonicalPath
     ? `<link rel="canonical" href="https://errors.driftstack.dev${canonicalPath}">`
     : ''

@@ -88,12 +88,14 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
 
   it('every real error page is indexable with a description and exact final-URL canonical', () => {
     const index = readFileSync(resolve(DIST, 'index.html'), 'utf8');
+    expect(index.match(/<meta name="theme-color" content="#0b0f14">/g)).toHaveLength(1);
     expect(index).toMatch(/<meta name="description" content="[^"]+">/);
     expect(index).toContain('<meta name="robots" content="index,follow">');
     expect(index).toContain('<link rel="canonical" href="https://errors.driftstack.dev/">');
 
     for (const slug of pageSlugs) {
       const rendered = readFileSync(resolve(DIST, slug, 'index.html'), 'utf8');
+      expect(rendered.match(/<meta name="theme-color" content="#0b0f14">/g), slug).toHaveLength(1);
       expect(rendered, slug).toMatch(/<meta name="description" content="[^"]+">/);
       expect(rendered, slug).toContain('<meta name="robots" content="index,follow">');
       expect(rendered, slug).toContain(
@@ -104,6 +106,7 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
 
   it('unknown-slug 404 is described but noindex with no conflicting canonical', () => {
     const rendered = readFileSync(resolve(DIST, '404.html'), 'utf8');
+    expect(rendered.match(/<meta name="theme-color" content="#0b0f14">/g)).toHaveLength(1);
     expect(rendered).toMatch(/<meta name="description" content="[^"]+">/);
     expect(rendered).toContain('<meta name="robots" content="noindex,nofollow">');
     expect(rendered).not.toContain('<link rel="canonical"');
