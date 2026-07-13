@@ -50,9 +50,11 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
     expect(body).toMatch(/server's error envelope updates both paths in one place\./);
   });
 
-  it('Constants + _build_headers: DEFAULT_TIMEOUT_S = 30.0 + USER_AGENT = driftstack-sdk-python/{version} + headers = Authorization Bearer + User-Agent + Accept + conditional Content-Type', () => {
+  it('Constants + _build_headers: 30s timeout + 8 MiB response cap + versioned User-Agent + Authorization Bearer + Accept + conditional Content-Type', () => {
     expect(body).toMatch(/^DEFAULT_TIMEOUT_S = 30\.0$/m);
     expect(body).toMatch(/^USER_AGENT = f"driftstack-sdk-python\/\{__version__\}"$/m);
+    expect(body).toMatch(/^MAX_RESPONSE_BODY_BYTES = 8 \* 1024 \* 1024$/m);
+    expect(body).toMatch(/^_RESPONSE_CHUNK_BYTES = 64 \* 1024$/m);
     expect(body).toMatch(
       /^def _build_headers\(\s*\n\s*api_key: str, has_body: bool, effective_account: str \| None = None\s*\n\s*\) -> dict\[str, str\]:\s*\n\s*headers = \{\s*\n\s*"authorization": f"Bearer \{api_key\}",(\s*\n\s*#[^\n]*)*\s*\n\s*\*\*\(\{"x-driftstack-account": effective_account\} if effective_account else \{\}\),\s*\n\s*"user-agent": USER_AGENT,\s*\n\s*"accept": "application\/json",\s*\n\s*\}\s*\n\s*if has_body:\s*\n\s*headers\["content-type"\] = "application\/json"\s*\n\s*return headers/m,
     );
@@ -112,6 +114,7 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
     expect(body).toMatch(
       /except httpx\.HTTPError as err:\s*\n\s*raise TransportError\(str\(err\), status=0\) from err/,
     );
+    expect(body).toMatch(/with self\._client\.stream\(/);
     expect(body).toMatch(/return with_retry\(_do, retry or self\._retry\)/);
   });
 
@@ -125,18 +128,35 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
     );
     expect(body).toMatch(/async def __aenter__\(self\) -> AsyncHttpClient:/);
     expect(body).toMatch(/async def __aexit__\(self, \*_excinfo: Any\) -> None:/);
+    expect(body).toMatch(/async with self\._client\.stream\(/);
     expect(body).toMatch(/return await with_retry_async\(_do, retry or self\._retry\)/);
   });
 
-  it('_decode_or_raise shared: 2xx + 204/no-content → None + JSONDecode/ValueError → TransportError("failed to parse JSON response body") + non-2xx raises _error_from_response_data with retry-after header', () => {
+  it('sync+async streaming readers reject declared oversize, count decoded chunks into a bounded bytearray, and share a fixed credential-safe TransportError', () => {
+    expect(body).toMatch(/def _declares_oversized_body\(response: httpx\.Response\) -> bool:/);
+    expect(body).toMatch(/response\.headers\.get\("content-length"\)/);
+    expect(body).toMatch(/int\(declared\) > MAX_RESPONSE_BODY_BYTES/);
+    expect(body).toMatch(/def _read_bounded_response\(response: httpx\.Response\) -> bytes:/);
+    expect(body).toMatch(/for chunk in response\.iter_bytes\(chunk_size=_RESPONSE_CHUNK_BYTES\):/);
     expect(body).toMatch(
-      /^def _decode_or_raise\(response: httpx\.Response\) -> Any:\s*\n\s*"""2xx → parsed JSON \(or None on 204\)\. Anything else → raise typed error\."""\s*\n\s*if 200 <= response\.status_code < 300:\s*\n\s*if response\.status_code == 204 or not response\.content:\s*\n\s*return None/m,
+      /async for chunk in response\.aiter_bytes\(chunk_size=_RESPONSE_CHUNK_BYTES\):/,
     );
+    expect(body.match(/if len\(body\) \+ len\(chunk\) > MAX_RESPONSE_BODY_BYTES:/g)).toHaveLength(
+      2,
+    );
+    expect(body).toMatch(/f"response body exceeds \{MAX_RESPONSE_BODY_BYTES\}-byte limit"/);
+  });
+
+  it('_decode_or_raise shared: supplied bounded bytes + 2xx 204/no-content → None + JSONDecode/ValueError → TransportError + non-2xx RFC7807 mapping with retry-after', () => {
+    expect(body).toMatch(
+      /^def _decode_or_raise\(response: httpx\.Response, content: bytes\) -> Any:\s*\n\s*"""2xx → parsed JSON \(or None on 204\)\. Anything else → raise typed error\."""\s*\n\s*if 200 <= response\.status_code < 300:\s*\n\s*if response\.status_code == 204 or not content:\s*\n\s*return None/m,
+    );
+    expect(body).toMatch(/return json\.loads\(content\)/);
     expect(body).toMatch(
       /except \(json\.JSONDecodeError, ValueError\) as err:\s*\n\s*raise TransportError\(\s*\n\s*"failed to parse JSON response body",\s*\n\s*status=response\.status_code,\s*\n\s*\) from err/,
     );
     expect(body).toMatch(
-      /raise _error_from_response_data\(\s*\n\s*status=response\.status_code,\s*\n\s*text=response\.text,\s*\n\s*retry_after_header=response\.headers\.get\("retry-after"\),\s*\n\s*\)/,
+      /raise _error_from_response_data\(\s*\n\s*status=response\.status_code,\s*\n\s*text=content\.decode\("utf-8", errors="replace"\),\s*\n\s*retry_after_header=response\.headers\.get\("retry-after"\),\s*\n\s*\)/,
     );
   });
 

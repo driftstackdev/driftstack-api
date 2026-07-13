@@ -22,6 +22,7 @@ function read(p: string): string {
 
 const TS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/http.ts');
 const PY = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/http.py');
+const GO = resolve(REPO_ROOT, 'packages/sdk-go/client.go');
 
 describe('W821 cross-SDK HTTP layer parity', () => {
   it('both HTTP layer files exist at canonical paths', () => {
@@ -57,6 +58,16 @@ describe('W821 cross-SDK HTTP layer parity', () => {
   it('CRITICAL both SDKs declare a 30-second default request timeout. TS: DEFAULT_TIMEOUT_MS = 30_000; Python: DEFAULT_TIMEOUT_S = 30.0. Matches W819 client-constructor parity (DEFAULT_TIMEOUT = 30s cross-SDK).', () => {
     expect(read(TS)).toMatch(/const DEFAULT_TIMEOUT_MS = 30_000;/);
     expect(read(PY)).toMatch(/^DEFAULT_TIMEOUT_S = 30\.0$/m);
+  });
+
+  it('CRITICAL all three SDKs cap decoded API responses at 8 MiB before JSON parsing; TS/Python stream and cancel/close on overflow while Go reads one byte past the ceiling to detect truncation', () => {
+    expect(read(TS)).toMatch(/const MAX_RESPONSE_BODY_BYTES = 8 \* 1024 \* 1024;/);
+    expect(read(TS)).toMatch(/bytesRead \+= value\.byteLength;/);
+    expect(read(PY)).toMatch(/^MAX_RESPONSE_BODY_BYTES = 8 \* 1024 \* 1024$/m);
+    expect(read(PY)).toMatch(/response\.iter_bytes\(chunk_size=_RESPONSE_CHUNK_BYTES\)/);
+    expect(read(PY)).toMatch(/response\.aiter_bytes\(chunk_size=_RESPONSE_CHUNK_BYTES\)/);
+    expect(read(GO)).toMatch(/const maxBodyBytes = 8 \* 1024 \* 1024/);
+    expect(read(GO)).toMatch(/io\.LimitReader\(resp\.Body, maxBodyBytes\+1\)/);
   });
 
   // ─── Bearer Authorization header ──────────────────────────────

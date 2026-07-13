@@ -40,6 +40,11 @@ from driftstack.retry import RetryConfig, with_retry, with_retry_async
 
 DEFAULT_TIMEOUT_S = 30.0
 USER_AGENT = f"driftstack-sdk-python/{__version__}"
+# Matches the Go and TypeScript SDK response ceiling. API JSON and RFC 7807
+# bodies are normally tiny; this leaves generous list-response headroom while
+# preventing a compromised server or intermediary from exhausting the client.
+MAX_RESPONSE_BODY_BYTES = 8 * 1024 * 1024
+_RESPONSE_CHUNK_BYTES = 64 * 1024
 
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
@@ -337,20 +342,23 @@ class HttpClient:
 
         def _do() -> Any:
             try:
-                response = self._client.request(
+                # Use a streaming context instead of Client.request(), which
+                # eagerly buffers the whole body before returning. The shared
+                # reader enforces the response ceiling before JSON decoding.
+                with self._client.stream(
                     method,
                     url,
                     params=params,
                     json=json_body,
                     headers=headers,
                     **request_kwargs,
-                )
+                ) as response:
+                    content = _read_bounded_response(response)
+                    return _decode_or_raise(response, content)
             except httpx.TimeoutException as err:
                 raise TransportError("request timed out", status=0) from err
             except httpx.HTTPError as err:
                 raise TransportError(str(err), status=0) from err
-
-            return _decode_or_raise(response)
 
         # Retry SAFETY gate — only auto-retry idempotent requests (or a
         # POST/PATCH carrying an Idempotency-Key); a keyless create must
@@ -426,20 +434,22 @@ class AsyncHttpClient:
 
         async def _do() -> Any:
             try:
-                response = await self._client.request(
+                # AsyncClient.request() is eager too; stream and count decoded
+                # chunks before retaining them, mirroring the sync path.
+                async with self._client.stream(
                     method,
                     url,
                     params=params,
                     json=json_body,
                     headers=headers,
                     **request_kwargs,
-                )
+                ) as response:
+                    content = await _read_bounded_response_async(response)
+                    return _decode_or_raise(response, content)
             except httpx.TimeoutException as err:
                 raise TransportError("request timed out", status=0) from err
             except httpx.HTTPError as err:
                 raise TransportError(str(err), status=0) from err
-
-            return _decode_or_raise(response)
 
         # Retry SAFETY gate — see the sync :meth:`HttpClient.request`.
         if not _is_retry_safe(method, headers):
@@ -477,13 +487,51 @@ def parse_model(model_cls: type[_ModelT], data: Any) -> _ModelT:
         ) from err
 
 
-def _decode_or_raise(response: httpx.Response) -> Any:
+def _declares_oversized_body(response: httpx.Response) -> bool:
+    declared = response.headers.get("content-length")
+    return declared is not None and declared.isdecimal() and int(declared) > MAX_RESPONSE_BODY_BYTES
+
+
+def _body_too_large(status: int) -> TransportError:
+    return TransportError(
+        f"response body exceeds {MAX_RESPONSE_BODY_BYTES}-byte limit",
+        status=status,
+    )
+
+
+def _read_bounded_response(response: httpx.Response) -> bytes:
+    """Stream one sync response through the shared decoded-byte ceiling."""
+    if _declares_oversized_body(response):
+        raise _body_too_large(response.status_code)
+
+    body = bytearray()
+    for chunk in response.iter_bytes(chunk_size=_RESPONSE_CHUNK_BYTES):
+        if len(body) + len(chunk) > MAX_RESPONSE_BODY_BYTES:
+            raise _body_too_large(response.status_code)
+        body.extend(chunk)
+    return bytes(body)
+
+
+async def _read_bounded_response_async(response: httpx.Response) -> bytes:
+    """Stream one async response through the shared decoded-byte ceiling."""
+    if _declares_oversized_body(response):
+        raise _body_too_large(response.status_code)
+
+    body = bytearray()
+    async for chunk in response.aiter_bytes(chunk_size=_RESPONSE_CHUNK_BYTES):
+        if len(body) + len(chunk) > MAX_RESPONSE_BODY_BYTES:
+            raise _body_too_large(response.status_code)
+        body.extend(chunk)
+    return bytes(body)
+
+
+def _decode_or_raise(response: httpx.Response, content: bytes) -> Any:
     """2xx → parsed JSON (or None on 204). Anything else → raise typed error."""
     if 200 <= response.status_code < 300:
-        if response.status_code == 204 or not response.content:
+        if response.status_code == 204 or not content:
             return None
         try:
-            return response.json()
+            return json.loads(content)
         except (json.JSONDecodeError, ValueError) as err:
             raise TransportError(
                 "failed to parse JSON response body",
@@ -492,6 +540,6 @@ def _decode_or_raise(response: httpx.Response) -> Any:
 
     raise _error_from_response_data(
         status=response.status_code,
-        text=response.text,
+        text=content.decode("utf-8", errors="replace"),
         retry_after_header=response.headers.get("retry-after"),
     )
