@@ -104,9 +104,7 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toContain('let legalReloadOnly = false;');
     expect(body).toMatch(/pendingAcceptances\.length === 0 \|\| legalAcceptInFlight/);
     expect(body).toMatch(/acceptAllBtn\.setAttribute\('aria-busy', 'true'\)/);
-    expect(body).toMatch(
-      /window\.setTimeout\(\(\) => controller\.abort\(\), LEGAL_ACCEPT_TIMEOUT_MS\)/,
-    );
+    expect(body).toMatch(/driftstackFetchWithDeadline\([\s\S]*LEGAL_ACCEPT_TIMEOUT_MS/);
     expect(body).toMatch(/function fetchCliLegalWithDeadline\(url, init\)/);
     expect(body).toMatch(/Promise\.allSettled\(canonical\.map\(postCliLegalAcceptance\)\)/);
     expect(body).toMatch(/function reconcileCliLegalAcceptance\(attempted\)/);

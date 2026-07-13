@@ -253,33 +253,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       const BILLING_REQUEST_TIMEOUT_MS = 15_000;
       function authedFetch(path, init = {}) {
-        const controller = new AbortController();
-        const callerSignal = init.signal;
-        const forwardAbort = function () {
-          controller.abort(callerSignal && callerSignal.reason);
-        };
-        if (callerSignal && callerSignal.aborted) forwardAbort();
-        else if (callerSignal) callerSignal.addEventListener('abort', forwardAbort, { once: true });
-        const timeout = window.setTimeout(function () {
-          controller.abort();
-        }, BILLING_REQUEST_TIMEOUT_MS);
-        return fetch(apiBaseUrl + path, {
-          ...init,
-          headers: {
-            ...(init.headers || {}),
-            authorization: 'Bearer ' + token,
-            'content-type': 'application/json',
-            // V-331b — act-as header for team-scoped requests.
-            ...(typeof window.driftstackActAsHeaders === 'function'
-              ? window.driftstackActAsHeaders()
-              : {}),
+        return window.driftstackFetchWithDeadline(
+          apiBaseUrl + path,
+          {
+            ...init,
+            headers: {
+              ...(init.headers || {}),
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+              // V-331b — act-as header for team-scoped requests.
+              ...(typeof window.driftstackActAsHeaders === 'function'
+                ? window.driftstackActAsHeaders()
+                : {}),
+            },
+            credentials: 'include',
           },
-          credentials: 'include',
-          signal: controller.signal,
-        }).finally(function () {
-          window.clearTimeout(timeout);
-          if (callerSignal) callerSignal.removeEventListener('abort', forwardAbort);
-        });
+          BILLING_REQUEST_TIMEOUT_MS,
+        );
       }
 
       // audit w2flmiw48 #4 — the account-email header was seeded from MOCK_ACCOUNT and

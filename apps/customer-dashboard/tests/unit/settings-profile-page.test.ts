@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'settings', 'index.html');
@@ -91,6 +92,7 @@ function setUpDom(route: (call: FetchCall) => Response | Promise<Response>): {
   window.localStorage.setItem('ds_web_session_token', 'tok');
   const pageScript = scripts.find((body) => body.includes('data-page="settings"'));
   if (!pageScript) throw new Error('settings inline script not found');
+  installDashboardDeadline(window);
   // @ts-expect-error — eval is the intended built-page seam.
   window.eval(pageScript);
   return { window: window as JSDOM['window'], fetchCalls };

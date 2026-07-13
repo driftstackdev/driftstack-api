@@ -391,11 +391,7 @@ const EMAIL_EVENTS = [
       let bannerGeneration = 0;
 
       function boundedFetch(url, init = {}) {
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), SETTINGS_TIMEOUT_MS);
-        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
-          window.clearTimeout(timeout);
-        });
+        return window.driftstackFetchWithDeadline(url, init, SETTINGS_TIMEOUT_MS);
       }
 
       function requestErrorMessage(err, fallback) {

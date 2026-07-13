@@ -248,6 +248,61 @@ const navSections: NavSection[] = [
         </script>
       )
     }
+    <script is:inline data-dashboard-fetch-deadline>
+      // Installed before every slotted page script so dashboard transport
+      // deadlines cover response decoding, not only response headers.
+      (function () {
+        window.driftstackFetchWithDeadline = function (url, init, timeoutMs, suppliedController) {
+          var controller = suppliedController || new AbortController();
+          var callerSignal = init && init.signal;
+          var forwardAbort = function () {
+            controller.abort(callerSignal && callerSignal.reason);
+          };
+          if (callerSignal && callerSignal !== controller.signal) {
+            if (callerSignal.aborted) forwardAbort();
+            else callerSignal.addEventListener('abort', forwardAbort, { once: true });
+          }
+          var timeout = window.setTimeout(function () {
+            controller.abort();
+          }, timeoutMs);
+          var requestInit = Object.assign({}, init || {}, { signal: controller.signal });
+          return fetch(url, requestInit).then(
+            function (response) {
+              var cleared = false;
+              function clearDeadline() {
+                if (cleared) return;
+                cleared = true;
+                window.clearTimeout(timeout);
+                if (callerSignal && callerSignal !== controller.signal) {
+                  callerSignal.removeEventListener('abort', forwardAbort);
+                }
+              }
+              ['arrayBuffer', 'blob', 'formData', 'json', 'text'].forEach(function (method) {
+                var read = response[method];
+                if (typeof read !== 'function') return;
+                response[method] = function () {
+                  try {
+                    return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
+                  } catch (error) {
+                    clearDeadline();
+                    throw error;
+                  }
+                };
+              });
+              if (!response.body) clearDeadline();
+              return response;
+            },
+            function (error) {
+              window.clearTimeout(timeout);
+              if (callerSignal && callerSignal !== controller.signal) {
+                callerSignal.removeEventListener('abort', forwardAbort);
+              }
+              throw error;
+            },
+          );
+        };
+      })();
+    </script>
   </head>
   <body class="relative">
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the sidebar nav. */}
@@ -1044,42 +1099,11 @@ const navSections: NavSection[] = [
           }
 
           const ACCOUNT_SHELL_TIMEOUT_MS = 10_000;
-          function keepAccountShellDeadlineThroughBody(response, timeoutId) {
-            let cleared = false;
-            function clearDeadline() {
-              if (cleared) return;
-              cleared = true;
-              clearTimeout(timeoutId);
-            }
-            for (const method of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
-              const read = response[method];
-              if (typeof read !== 'function') continue;
-              response[method] = function () {
-                try {
-                  return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
-                } catch (error) {
-                  clearDeadline();
-                  throw error;
-                }
-              };
-            }
-            // 204/HEAD-style responses have nothing left to consume.
-            if (!response.body) clearDeadline();
-            return response;
-          }
           function fetchAccountShellWithDeadline(url, init) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(function () {
-              controller.abort();
-            }, ACCOUNT_SHELL_TIMEOUT_MS);
-            return fetch(url, Object.assign({}, init, { signal: controller.signal })).then(
-              function (response) {
-                return keepAccountShellDeadlineThroughBody(response, timeoutId);
-              },
-              function (error) {
-                clearTimeout(timeoutId);
-                throw error;
-              },
+            return window.driftstackFetchWithDeadline(
+              url,
+              init,
+              ACCOUNT_SHELL_TIMEOUT_MS,
             );
           }
 
@@ -1534,42 +1558,11 @@ const navSections: NavSection[] = [
         // an api-key / creating a session and has no path forward.
         (function () {
           const LEGAL_REQUEST_TIMEOUT_MS = 15_000;
-          function keepLegalDeadlineThroughBody(response, timeoutId) {
-            let cleared = false;
-            function clearDeadline() {
-              if (cleared) return;
-              cleared = true;
-              clearTimeout(timeoutId);
-            }
-            for (const method of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
-              const read = response[method];
-              if (typeof read !== 'function') continue;
-              response[method] = function () {
-                try {
-                  return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
-                } catch (error) {
-                  clearDeadline();
-                  throw error;
-                }
-              };
-            }
-            // 204/HEAD-style responses have nothing left to consume.
-            if (!response.body) clearDeadline();
-            return response;
-          }
           function fetchLegalWithDeadline(url, init) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(function () {
-              controller.abort();
-            }, LEGAL_REQUEST_TIMEOUT_MS);
-            return fetch(url, Object.assign({}, init, { signal: controller.signal })).then(
-              function (response) {
-                return keepLegalDeadlineThroughBody(response, timeoutId);
-              },
-              function (error) {
-                clearTimeout(timeoutId);
-                throw error;
-              },
+            return window.driftstackFetchWithDeadline(
+              url,
+              init,
+              LEGAL_REQUEST_TIMEOUT_MS,
             );
           }
           const banner = document.querySelector('[data-legal-banner]');

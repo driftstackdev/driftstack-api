@@ -472,8 +472,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function boundedFetch(url, init = {}, suppliedController = null) {
         const controller = suppliedController || new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), SECURITY_TIMEOUT_MS);
-        return fetch(url, { ...init, signal: controller.signal })
+        return window.driftstackFetchWithDeadline(url, init, SECURITY_TIMEOUT_MS, controller)
           .catch((err) => {
             if (err && err.name === 'AbortError') {
               const timeoutError = new Error(
@@ -483,8 +482,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               throw timeoutError;
             }
             throw err;
-          })
-          .finally(() => window.clearTimeout(timeout));
+          });
       }
 
       // Load the account identity (GET /v1/account/me).

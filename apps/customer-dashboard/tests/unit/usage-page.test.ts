@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'usage', 'index.html');
@@ -71,6 +72,7 @@ function setUpDom(html: string, opts: SetUpOpts): SetUpResult {
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="usage"'));
   if (!pageScript) throw new Error('usage inline script not found');
+  installDashboardDeadline(window);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
   return { window: window as JSDOM['window'], fetchCalls, hydratedCount: () => hydrated };

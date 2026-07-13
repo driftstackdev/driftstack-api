@@ -499,9 +499,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       let editInFlight = false;
 
       function boundedFetch(url, init = {}) {
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-        return fetch(url, { ...init, signal: controller.signal })
+        return window.driftstackFetchWithDeadline(url, init, WEBHOOK_TIMEOUT_MS)
           .catch((err) => {
             if (err && err.name === 'AbortError') {
               const timeoutError = new Error(
@@ -511,8 +509,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               throw timeoutError;
             }
             throw err;
-          })
-          .finally(() => window.clearTimeout(timeout));
+          });
       }
 
       // V-347 — wire the create form.

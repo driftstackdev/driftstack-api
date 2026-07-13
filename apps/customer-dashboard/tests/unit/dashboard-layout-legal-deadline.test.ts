@@ -10,9 +10,8 @@ const layout = readFileSync(
 describe('DashboardLayout legal acceptance deadline', () => {
   it('bounds both legal hydration and acceptance writes with a timer-cleaned signal', () => {
     expect(layout).toContain('const LEGAL_REQUEST_TIMEOUT_MS = 15_000;');
-    expect(layout).toContain('const controller = new AbortController();');
-    expect(layout).toContain('clearTimeout(timeoutId);');
-    expect(layout).toContain('keepLegalDeadlineThroughBody(response, timeoutId)');
+    expect(layout).toContain('data-dashboard-fetch-deadline');
+    expect(layout).toContain('window.driftstackFetchWithDeadline = function');
     expect(layout).toMatch(/read\.apply\(response, arguments\)\)\.finally\(clearDeadline\)/);
     expect(layout).toMatch(
       /fetchLegalWithDeadline\(apiBaseUrl \+ '\/v1\/legal\/required', \{ headers \}\)/,
@@ -61,7 +60,7 @@ describe('DashboardLayout account shell reliability', () => {
       "fetchAccountShellWithDeadline(apiBaseUrl + '/v1/admin/audit-log?limit=1'",
     );
     expect(layout).toMatch(
-      /function fetchAccountShellWithDeadline[\s\S]*?controller\.abort\(\)[\s\S]*?keepAccountShellDeadlineThroughBody\(response, timeoutId\)/,
+      /function fetchAccountShellWithDeadline[\s\S]*?driftstackFetchWithDeadline\([\s\S]*?ACCOUNT_SHELL_TIMEOUT_MS/,
     );
   });
 });

@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'security', 'index.html');
@@ -73,6 +74,7 @@ function setUpDom(
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="security"'));
   if (!pageScript) throw new Error('security inline script not found');
+  installDashboardDeadline(window);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
   return { window: window as JSDOM['window'], fetchCalls };

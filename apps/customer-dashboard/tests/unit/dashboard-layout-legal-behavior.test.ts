@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'index.html');
@@ -65,6 +66,7 @@ function setUpDom(
   };
   window.localStorage.setItem('ds_web_session_token', 'tok');
   beforeEval?.(window);
+  installDashboardDeadline(window);
   const legalScript = scripts.find((script) => script.includes('LEGAL_REQUEST_TIMEOUT_MS'));
   if (!legalScript) throw new Error('legal acceptance inline script not found');
   // @ts-expect-error — jsdom exposes eval for deliberate inline-script execution.

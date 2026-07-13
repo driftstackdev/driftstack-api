@@ -321,10 +321,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       const USAGE_TIMEOUT_MS = 15_000;
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
-        const timeout = window.setTimeout(() => controller.abort(), USAGE_TIMEOUT_MS);
-        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
-          window.clearTimeout(timeout);
-        });
+        return window.driftstackFetchWithDeadline(url, init, USAGE_TIMEOUT_MS, controller);
       }
 
       function showBanner(text) {

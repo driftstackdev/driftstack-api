@@ -415,11 +415,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       const OVERVIEW_TIMEOUT_MS = 15_000;
 
       function boundedFetch(url, init = {}) {
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), OVERVIEW_TIMEOUT_MS);
-        return fetch(url, { ...init, signal: controller.signal }).finally(function () {
-          window.clearTimeout(timeout);
-        });
+        return window.driftstackFetchWithDeadline(url, init, OVERVIEW_TIMEOUT_MS);
       }
 
       function getToken() {

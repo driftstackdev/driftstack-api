@@ -69,8 +69,9 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toContain('let passwordResetInFlight = false;');
     expect(body).toMatch(/if \(passwordResetInFlight \|\| passwordResetOutcomeUnknown\) return;/);
     expect(body).toMatch(/const controller = new AbortController\(\);/);
-    expect(body).toMatch(/signal: controller\.signal/);
-    expect(body).toMatch(/\.finally\(\(\) => window\.clearTimeout\(timeout\)\)/);
+    expect(body).toMatch(
+      /window\.driftstackFetchWithDeadline\(url, init, SECURITY_TIMEOUT_MS, controller\)/,
+    );
     expect(body).toContain('Request took too long. Check your connection and try again.');
     expect(body).toMatch(/passwordResetInFlight = false;/);
     expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\)/);

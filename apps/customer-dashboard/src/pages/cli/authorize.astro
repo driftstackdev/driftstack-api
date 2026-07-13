@@ -410,12 +410,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       let legalReloadOnly = false;
 
       function fetchCliLegalWithDeadline(url, init) {
-        const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), LEGAL_ACCEPT_TIMEOUT_MS);
-        return fetch(url, Object.assign({}, init, { signal: controller.signal })).finally(
-          function () {
-            window.clearTimeout(timeout);
-          },
+        return window.driftstackFetchWithDeadline(
+          url,
+          init,
+          LEGAL_ACCEPT_TIMEOUT_MS,
         );
       }
 

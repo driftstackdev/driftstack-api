@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'cli', 'authorize', 'index.html');
@@ -68,6 +69,7 @@ function setUpDom(
   };
   // Customer-test-only window setup (localStorage seeding etc.).
   beforeScripts(window as JSDOM['window']);
+  installDashboardDeadline(window);
   // Execute the cli-authorize page script (the LAST <script> body,
   // after DashboardLayout's act-as picker + legal banner scripts).
   // Use window.eval so the script runs inside jsdom's window context
