@@ -4,8 +4,6 @@ title: Acceptable Use Policy
 description: Prohibited targets, prohibited techniques, customer responsibility framing, enforcement.
 ---
 
-# Driftstack — Acceptable Use Policy
-
 **Version:** 1.0 · **Effective:** 2026-05-07
 
 This Acceptable Use Policy ("**AUP**") governs Customer's use of the

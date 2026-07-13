@@ -4,8 +4,6 @@ title: Sub-processors
 description: The third parties Driftstack uses to deliver the service, what each receives, where they store it, and the cadence on which we publish changes.
 ---
 
-# Driftstack — Sub-processor List
-
 **Version:** 1.1 · **Effective:** 2026-07-07
 
 This page enumerates the sub-processors Driftstack engages to deliver

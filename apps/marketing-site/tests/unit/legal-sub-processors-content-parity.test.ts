@@ -181,9 +181,9 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
     expect(body).not.toMatch(/consolidated onto AWS/);
   });
 
-  it('cross-links: dpa.md + privacy.md + /docs/security-overview + the docs data-residency page (S49: redirected successor)', () => {
-    expect(body).toMatch(/\[Data Processing Addendum\]\(dpa\.md\)/);
-    expect(body).toMatch(/\[Privacy Policy\]\(privacy\.md\)/);
+  it('cross-links: canonical DPA + privacy routes + /docs/security-overview + the docs data-residency page (S49: redirected successor)', () => {
+    expect(body).toMatch(/\[Data Processing Addendum\]\(\/legal\/dpa\/\)/);
+    expect(body).toMatch(/\[Privacy Policy\]\(\/legal\/privacy\/\)/);
     expect(body).toMatch(/\[\/docs\/security-overview\]\(\/docs\/security-overview\)/);
     expect(body).toMatch(
       /\[docs\.driftstack\.dev\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/\)/,
@@ -195,7 +195,7 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
 
   it('DPA section 4 cross-reference + "authoritative list" framing pinned', () => {
     expect(body).toMatch(
-      /referenced from the\s+\[Data Processing Addendum\]\(dpa\.md\) \(section 4 — "Sub-processors"\)/,
+      /referenced from the\s+\[Data Processing Addendum\]\(\/legal\/dpa\/\) \(section 4 — "Sub-processors"\)/,
     );
     expect(body).toMatch(/the authoritative list at the date marked above/);
   });

@@ -4,8 +4,6 @@ title: Data Processing Agreement
 description: Article 28 GDPR processor terms for Customer Data, Session content, and Customer-Provided Secrets.
 ---
 
-# Driftstack — Data Processing Agreement
-
 **Version:** 1.0 · **Effective:** 2026-05-07
 
 This Data Processing Agreement ("**DPA**") forms part of the

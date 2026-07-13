@@ -4,8 +4,6 @@ title: Refund Policy
 description: Refund eligibility, timing, card refund mechanics, the non-refundable posture on crypto payments, prorated downgrades, and the SLA-credit relationship.
 ---
 
-# Driftstack — Refund Policy
-
 **Version:** 1.0 · **Effective:** 2026-05-11
 
 This Refund Policy explains how Driftstack issues refunds for paid

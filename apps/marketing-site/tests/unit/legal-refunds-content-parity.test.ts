@@ -39,7 +39,7 @@ describe('W378.B marketing-site /legal/refunds.md content parity', () => {
 
   it('ToS §8.7 binding-contractual cross-reference pinned', () => {
     expect(body).toMatch(/section 8\.7 of the Terms is the binding contractual statement/);
-    expect(body).toMatch(/\[Terms of Service\]\(terms\.md\)/);
+    expect(body).toMatch(/\[Terms of Service\]\(\/legal\/terms\/\)/);
   });
 
   it('4 refund-eligible scenarios pinned (Failed delivery / Service failure / 14-day-no-usage / Duplicate)', () => {

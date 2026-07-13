@@ -37,4 +37,14 @@ describe('W290.B legal/* cross-link integrity', () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  it('each legal document delegates its sole H1 to LegalLayout and keeps a frontmatter title', () => {
+    for (const f of files) {
+      const body = read(resolve(LEGAL, f));
+      expect(body, `${f} has a frontmatter title for the visible hero H1`).toMatch(
+        /^---[\s\S]*?^title: .+$/m,
+      );
+      expect(body, `${f} must not render a second, visually-hidden H1`).not.toMatch(/^#\s+/m);
+    }
+  });
 });

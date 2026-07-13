@@ -8,9 +8,8 @@
 //   • Frontmatter-or-prop title/description resolution + "Legal"
 //     fallback / "Driftstack legal documents." fallback.
 //   • Hero strip with mono-uppercase "Legal" chip + H1 from props.
-//   • Prose styling: prose-h1:hidden (load-bearing — the markdown
-//     H1 is rendered, hero H1 carries the title), oxblood-700
-//     prose-a, slate-100 prose-code, slate-900 prose-pre.
+//   • Prose styling begins at H2 because the hero owns the document's
+//     single H1; links/code/pre retain the shared legal-page treatment.
 //   • 5-link "Other legal documents" nav at the bottom: Terms /
 //     Privacy / DPA / AUP / Sub-processors — load-bearing per-doc
 //     navigation customers rely on.
@@ -79,8 +78,9 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     expect(body).toMatch(/\{title\}/);
   });
 
-  it('prose-h1:hidden treatment (load-bearing: hero carries the title, markdown H1 hidden)', () => {
-    expect(body).toMatch(/prose-h1:hidden/);
+  it('hero is the only H1 owner; the prose does not silently hide duplicate headings', () => {
+    expect(body.match(/<h1\b/g)).toHaveLength(1);
+    expect(body).not.toMatch(/prose-h1:hidden/);
   });
 
   it('prose link styling: tk-accent-text + hover-underline (S24 2026-07-06: link base tone is the AA-safe accent-text pair, S23 link pattern; prose-invert dropped with the light default)', () => {

@@ -262,8 +262,8 @@ describe('W378.A marketing-site /legal/dpa.md content parity', () => {
   });
 
   it('cross-links: terms.md + privacy.md', () => {
-    expect(body).toMatch(/\[Terms of Service\]\(terms\.md\)/);
-    expect(body).toMatch(/\[Privacy Policy\]\(privacy\.md#9-retention\)/);
+    expect(body).toMatch(/\[Terms of Service\]\(\/legal\/terms\/\)/);
+    expect(body).toMatch(/\[Privacy Policy\]\(\/legal\/privacy\/#9-retention\)/);
     const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal');
     expect(existsSync(resolve(dir, 'terms.md'))).toBe(true);
     expect(existsSync(resolve(dir, 'privacy.md'))).toBe(true);

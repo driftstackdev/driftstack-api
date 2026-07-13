@@ -4,8 +4,6 @@ title: Terms of Service
 description: The master commercial agreement between Driftstack B.V. and Customer.
 ---
 
-# Driftstack — Terms of Service
-
 **Version:** 1.0 · **Effective:** 2026-05-07
 
 These Terms of Service ("**ToS**") govern Customer's access to and

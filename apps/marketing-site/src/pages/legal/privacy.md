@@ -4,8 +4,6 @@ title: Privacy Policy
 description: How Driftstack processes personal data as a Controller — GDPR-aligned disclosures.
 ---
 
-# Driftstack — Privacy Policy
-
 **Version:** 1.0 · **Effective:** 2026-05-07
 
 This Privacy Policy describes how Driftstack Processes Personal Data
