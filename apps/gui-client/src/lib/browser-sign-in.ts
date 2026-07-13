@@ -21,6 +21,7 @@ import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { parseDeepLink } from './deep-link';
 import { diagnosticFetchError } from './diagnostic-fetch-error';
+import { humanizeError } from './humanize-error';
 import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
 
@@ -178,12 +179,19 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         const body = await readBoundedDiagnosticJson<{ detail?: string }>(initiateRes).catch(
           (): { detail?: string } => ({}),
         );
-        throw new Error(body.detail ?? `HTTP ${initiateRes.status.toString()}`);
+        const error = new Error(body.detail ?? `HTTP ${initiateRes.status.toString()}`);
+        if (typeof body.detail === 'string' && body.detail.length > 0) {
+          Object.assign(error, { customerSafe: true });
+        }
+        throw error;
       }
       const initiate = await readBoundedApiJson<InitiateResponse>(initiateRes);
       if (!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(initiate.user_code)) {
-        throw new Error(
-          'This server does not support secure browser sign-in. Update the server and desktop app together, or paste an API key.',
+        throw Object.assign(
+          new Error(
+            'This server does not support secure browser sign-in. Update the server and desktop app together, or paste an API key.',
+          ),
+          { customerSafe: true },
         );
       }
       await openInBrowser(initiate.browser_url);
@@ -244,9 +252,16 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       // path is often the first network call a new customer makes;
       // an opaque "Load failed" gives them no path forward.
       const diag = diagnosticFetchError(err, trimmedUrl);
+      const customerSafeMessage =
+        err instanceof Error && (err as Error & { customerSafe?: boolean }).customerSafe === true
+          ? err.message
+          : null;
       setState({
         kind: 'error',
-        message: diag ?? (err instanceof Error ? err.message : 'Failed to start browser sign-in.'),
+        message:
+          diag ??
+          customerSafeMessage ??
+          humanizeError(err, 'Failed to start browser sign-in. Check Settings and try again.'),
       });
     }
   }

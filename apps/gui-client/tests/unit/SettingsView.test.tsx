@@ -273,6 +273,54 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     expect(screen.queryByText(/stale123/)).toBeNull();
   });
 
+  it('keeps target-aware connection guidance without raw network internals', async () => {
+    useSettingsMock.mockReturnValue({
+      settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev', telemetryOptIn: null },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.reject(new Error('Load failed private-api.internal /Users/customer token=secret')),
+      ),
+    );
+    renderWithToasts();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+
+    expect(
+      await screen.findByText(/Couldn't reach https:\/\/api\.driftstack\.dev/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/private-api|\/Users|token=secret|Underlying error/i)).toBeNull();
+  });
+
+  it('maps a failed connection response without rendering a bare HTTP status', async () => {
+    useSettingsMock.mockReturnValue({
+      settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev', telemetryOptIn: null },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('', { status: 503 }))),
+    );
+    renderWithToasts();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+
+    expect(
+      await screen.findByText(/The service is temporarily unavailable\. Try again shortly\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('HTTP 503')).toBeNull();
+  });
+
   it('aborts post-save key validation on unmount', async () => {
     const update = vi.fn(() => Promise.resolve());
     useSettingsMock.mockReturnValue({

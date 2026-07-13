@@ -11,9 +11,10 @@
 // the generic diagnostic shouldn't override).
 
 /**
- * Returns a multi-line diagnostic string when the error is a fetch
- * network failure; null otherwise. Caller must use `whitespace-pre-line`
- * on the rendered <p> for the newlines to render.
+ * Returns a multi-line diagnostic string when the error is a fetch network
+ * failure; null otherwise. The raw exception is used only for classification
+ * and never copied into the result. Caller must use `whitespace-pre-line` on
+ * the rendered <p> for the newlines to render.
  */
 export function diagnosticFetchError(err: unknown, targetUrl: string): string | null {
   const raw =
@@ -33,7 +34,6 @@ export function diagnosticFetchError(err: unknown, targetUrl: string): string | 
     isLocalhost
       ? '• No server set up? Switch to Cloud mode in Settings and use https://api.driftstack.dev with a key from app.driftstack.dev — no install needed.'
       : '• Does the URL use the correct scheme (http vs https)?',
-    `• Underlying error: ${raw}`,
   ];
   return lines.join('\n');
 }

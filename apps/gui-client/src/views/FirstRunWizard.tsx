@@ -36,6 +36,7 @@ import { TitleBar } from '../components/TitleBar';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { useSettings } from '../lib/SettingsContext';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { humanizeError } from '../lib/humanize-error';
 
 type WizardStep = 'welcome' | 'mode' | 'apikey' | 'profile' | 'done';
 type DeploymentMode = 'cloud' | 'self-hosted';
@@ -877,8 +878,8 @@ function friendlyError(err: unknown, mode?: 'cloud' | 'self-hosted', baseUrl?: s
     }
     return 'Authentication failed (401). Double-check the key, or create a new one at app.driftstack.dev/api-keys.';
   }
-  if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
-    return err.message;
+  if (err instanceof DriftstackError) {
+    return `${err.title}: ${err.detail ?? err.message}`;
   }
-  return String(err);
+  return humanizeError(err, "Couldn't complete setup. Check the details and try again.");
 }

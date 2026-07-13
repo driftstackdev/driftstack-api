@@ -96,4 +96,19 @@ describe('V-669 ProfileStep — archetype picker', () => {
     const createBtn = screen.getByRole('button', { name: /create profile/i });
     expect(createBtn).toBeDisabled();
   });
+
+  it('does not render an unknown local profile-creation exception', async () => {
+    profilesCreate.mockRejectedValueOnce(
+      new Error('SQLite failed /Users/customer token=secret private-store.internal'),
+    );
+    render(<ProfileStep onSkip={vi.fn()} onCreated={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText(/profile name/i), 'safe-error');
+    await userEvent.click(screen.getByRole('button', { name: /create profile/i }));
+
+    expect(
+      await screen.findByText("Couldn't complete setup. Check the details and try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/\/Users|token=secret|private-store|SQLite/i)).toBeNull();
+  });
 });

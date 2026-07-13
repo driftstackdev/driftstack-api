@@ -198,6 +198,24 @@ describe('useBrowserSignIn — error paths', () => {
     );
   });
 
+  it('does not expose an unknown browser-launch exception', async () => {
+    fetchSpy.mockResolvedValueOnce(makeResponse(initiateBody));
+    vi.mocked(mockOpenInBrowser).mockRejectedValueOnce(
+      new Error('spawn failed /Users/customer token=secret private-browser.internal'),
+    );
+
+    const { result } = renderHook(() => useBrowserSignIn(defaultOpts()));
+    act(() => result.current.start());
+
+    await waitFor(() => expect(result.current.state.kind).toBe('error'));
+    expect(result.current.state.kind === 'error' && result.current.state.message).toBe(
+      'Failed to start browser sign-in. Check Settings and try again.',
+    );
+    expect(result.current.state.kind === 'error' && result.current.state.message).not.toMatch(
+      /\/Users|token=secret|private-browser/i,
+    );
+  });
+
   it('exchange returns expired → error state', async () => {
     fetchSpy
       .mockResolvedValueOnce(makeResponse(initiateBody))

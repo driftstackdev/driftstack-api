@@ -23,6 +23,7 @@ import { ConnectivityView } from './ConnectivityView';
 import { RelativeTime } from '../components/RelativeTime';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { humanizeError } from '../lib/humanize-error';
 import { disposeResponseBody } from '../lib/dispose-response-body';
 import { readBoundedDiagnosticJson } from '../lib/read-bounded-json';
 import { friendlySettingsActionError } from '../lib/settings-error-copy';
@@ -308,7 +309,7 @@ export function SettingsView(): JSX.Element {
       }
       if (!res.ok) {
         await disposeResponseBody(res);
-        setTestState({ kind: 'fail', message: `HTTP ${res.status.toString()}` });
+        setTestState({ kind: 'fail', message: settingsProbeResponseError(res.status) });
         return;
       }
       const body = await readBoundedDiagnosticJson<{ git_sha?: string }>(res).catch(
@@ -321,7 +322,8 @@ export function SettingsView(): JSX.Element {
       const diag = diagnosticFetchError(err, target);
       setTestState({
         kind: 'fail',
-        message: diag ?? (err instanceof Error ? err.message : String(err)),
+        message:
+          diag ?? humanizeError(err, 'Connection test failed. Check the server URL and try again.'),
       });
     } finally {
       window.clearTimeout(timer);
@@ -457,13 +459,13 @@ export function SettingsView(): JSX.Element {
         setKeyCheck({
           kind: 'fail',
           message: isCloudBaseUrl(url)
-            ? 'Saved, but the key failed authentication (401). Double-check it, or create a new one at app.driftstack.dev/api-keys.'
-            : `Saved, but the key failed authentication (401) against ${url}. In self-hosted mode the key must be created on that server's own dashboard — a key from app.driftstack.dev won't authenticate here.`,
+            ? 'Saved, but the key was not accepted. Double-check it, or create a new one at app.driftstack.dev/api-keys.'
+            : `Saved, but the key was not accepted by ${url}. In self-hosted mode the key must be created on that server's own dashboard — a key from app.driftstack.dev won't authenticate here.`,
         });
       } else {
         setKeyCheck({
           kind: 'fail',
-          message: `Saved, but validation got HTTP ${String(res.status)} from ${url}.`,
+          message: `Saved. ${settingsProbeResponseError(res.status)}`,
         });
       }
     } catch (err) {
@@ -1185,6 +1187,15 @@ export function SettingsView(): JSX.Element {
       </div>
     </div>
   );
+}
+
+function settingsProbeResponseError(status: number): string {
+  if (status === 401 || status === 403) {
+    return 'The server did not accept the sign-in or API key. Check it and try again.';
+  }
+  if (status === 429) return 'The server is receiving too many requests. Try again shortly.';
+  if (status >= 500) return 'The service is temporarily unavailable. Try again shortly.';
+  return 'The server returned an unexpected response. Check the URL and try again.';
 }
 
 // Console-style sectioned panel: a rounded, hairline-bordered raised card

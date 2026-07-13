@@ -32,10 +32,13 @@ describe('diagnosticFetchError', () => {
     }
   });
 
-  it('includes the target URL and the underlying raw error in the message', () => {
-    const out = diagnosticFetchError(new Error('Load failed'), URL_REMOTE);
+  it('includes the target URL without exposing the underlying raw error', () => {
+    const out = diagnosticFetchError(
+      new Error('Load failed private-api.internal /Users/customer token=secret'),
+      URL_REMOTE,
+    );
     expect(out).toContain(URL_REMOTE);
-    expect(out).toContain('Underlying error: Load failed');
+    expect(out).not.toMatch(/private-api|\/Users|token=secret|Underlying error/i);
   });
 
   it('localhost target → self-host setup guidance (start the server / Cloud mode)', () => {
