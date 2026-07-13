@@ -145,4 +145,33 @@ describe('settings page — email notification preferences', () => {
     expect(banner?.classList.contains('hidden')).toBe(false);
     expect(banner?.textContent).toContain("Couldn't save email preference");
   });
+
+  it('serializes duplicate preference and profile mutations and gives every request an abort signal', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), { route: routerWithEmailPref(204) });
+    win = window;
+    await flush();
+
+    const checkbox = window.document.querySelector(
+      'input[data-event-type="billing-receipt"]',
+    ) as HTMLInputElement;
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+    const profile = window.document.querySelector('[data-form="profile"]') as HTMLFormElement;
+    profile.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    profile.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const mutations = fetchCalls.filter((call) =>
+      ['PUT', 'PATCH'].includes(call.init?.method || ''),
+    );
+    expect(mutations.map((call) => call.init?.method)).toEqual(['PUT', 'PATCH']);
+    expect(mutations.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(true);
+    expect(checkbox.disabled).toBe(false);
+    expect(checkbox.hasAttribute('aria-busy')).toBe(false);
+    const save = window.document.querySelector('[data-button="profile-save"]') as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    expect(save.hasAttribute('aria-busy')).toBe(false);
+  });
 });

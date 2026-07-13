@@ -368,6 +368,23 @@ const EMAIL_EVENTS = [
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const token = localStorage.getItem('ds_web_session_token');
+      const SETTINGS_TIMEOUT_MS = 15_000;
+
+      function boundedFetch(url, init = {}) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), SETTINGS_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       function showBanner(text) {
         if (!banner) return;
@@ -400,6 +417,7 @@ const EMAIL_EVENTS = [
       const profileError = root.querySelector('[data-field="profile-error"]');
       const profileStatus = root.querySelector('[data-field="profile-status"]');
       const profileSaveBtn = root.querySelector('[data-button="profile-save"]');
+      let profileSaveInFlight = false;
 
       function showProfileError(msg) {
         if (!profileError) return;
@@ -412,6 +430,8 @@ const EMAIL_EVENTS = [
       const avatarInput = root.querySelector('[data-field="avatar-input"]');
       const avatarRemoveBtn = root.querySelector('[data-button="avatar-remove"]');
       const avatarError = root.querySelector('[data-field="avatar-error"]');
+      let avatarUploadInFlight = false;
+      let avatarRemoveInFlight = false;
 
       function showAvatarError(msg) {
         if (!avatarError) return;
@@ -458,7 +478,7 @@ const EMAIL_EVENTS = [
 
       // Load current profile values (GET /v1/account/me).
       if (token && profileNameInput && profileTzInput) {
-        fetch(apiBaseUrl + '/v1/account/me', {
+        boundedFetch(apiBaseUrl + '/v1/account/me', {
           headers: { authorization: 'Bearer ' + token },
         })
           .then((r) => (r.ok ? r.json() : null))
@@ -487,6 +507,7 @@ const EMAIL_EVENTS = [
       // V-352b — avatar upload handler.
       if (avatarInput) {
         avatarInput.addEventListener('change', (ev) => {
+          if (avatarUploadInFlight) return;
           clearAvatarError();
           const target = ev.target;
           if (!(target instanceof HTMLInputElement)) return;
@@ -507,9 +528,12 @@ const EMAIL_EVENTS = [
             target.value = '';
             return;
           }
+          avatarUploadInFlight = true;
+          target.disabled = true;
+          target.setAttribute('aria-busy', 'true');
           fileToBase64(file)
             .then((b64) =>
-              fetch(apiBaseUrl + '/v1/account/me/avatar', {
+              boundedFetch(apiBaseUrl + '/v1/account/me/avatar', {
                 method: 'POST',
                 headers: {
                   'content-type': 'application/json',
@@ -533,9 +557,12 @@ const EMAIL_EVENTS = [
               setAvatarPreview(body.avatar_url || null);
             })
             .catch((err) => {
-              showAvatarError(err && err.message ? err.message : 'Upload failed.');
+              showAvatarError(requestErrorMessage(err, 'Upload failed.'));
             })
             .finally(() => {
+              avatarUploadInFlight = false;
+              target.disabled = false;
+              target.removeAttribute('aria-busy');
               target.value = '';
             });
         });
@@ -544,12 +571,16 @@ const EMAIL_EVENTS = [
       // V-352b — avatar remove handler.
       if (avatarRemoveBtn) {
         avatarRemoveBtn.addEventListener('click', () => {
+          if (avatarRemoveInFlight) return;
           clearAvatarError();
           if (!token) {
             showAvatarError('Sign in to remove your avatar.');
             return;
           }
-          fetch(apiBaseUrl + '/v1/account/me/avatar', {
+          avatarRemoveInFlight = true;
+          avatarRemoveBtn.disabled = true;
+          avatarRemoveBtn.setAttribute('aria-busy', 'true');
+          boundedFetch(apiBaseUrl + '/v1/account/me/avatar', {
             method: 'DELETE',
             headers: { authorization: 'Bearer ' + token },
           })
@@ -564,7 +595,12 @@ const EMAIL_EVENTS = [
               setAvatarPreview(null);
             })
             .catch((err) => {
-              showAvatarError(err && err.message ? err.message : 'Remove failed.');
+              showAvatarError(requestErrorMessage(err, 'Remove failed.'));
+            })
+            .finally(() => {
+              avatarRemoveInFlight = false;
+              avatarRemoveBtn.disabled = false;
+              avatarRemoveBtn.removeAttribute('aria-busy');
             });
         });
       }
@@ -572,6 +608,7 @@ const EMAIL_EVENTS = [
       if (profileForm) {
         profileForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
+          if (profileSaveInFlight) return;
           if (profileError) {
             profileError.classList.add('hidden');
             profileError.textContent = '';
@@ -583,8 +620,10 @@ const EMAIL_EVENTS = [
           const name = profileNameInput.value.trim();
           const tz = profileTzInput.value.trim();
           const slug = profileSlugInput ? profileSlugInput.value.trim() : '';
+          profileSaveInFlight = true;
           if (profileSaveBtn) {
             profileSaveBtn.disabled = true;
+            profileSaveBtn.setAttribute('aria-busy', 'true');
             profileSaveBtn.textContent = 'Saving…';
           }
           const body = {
@@ -601,7 +640,7 @@ const EMAIL_EVENTS = [
             const region = profileRegionInput.value || '';
             body.region = region.length > 0 ? region : null;
           }
-          fetch(apiBaseUrl + '/v1/account/me', {
+          boundedFetch(apiBaseUrl + '/v1/account/me', {
             method: 'PATCH',
             headers: {
               'content-type': 'application/json',
@@ -626,11 +665,13 @@ const EMAIL_EVENTS = [
               }
             })
             .catch((err) => {
-              showProfileError(err && err.message ? err.message : 'Failed to save.');
+              showProfileError(requestErrorMessage(err, 'Failed to save.'));
             })
             .finally(() => {
+              profileSaveInFlight = false;
               if (profileSaveBtn) {
                 profileSaveBtn.disabled = false;
+                profileSaveBtn.removeAttribute('aria-busy');
                 profileSaveBtn.textContent = 'Save';
               }
             });
@@ -638,7 +679,7 @@ const EMAIL_EVENTS = [
       }
 
       function authedFetch(path, init = {}) {
-        return fetch(apiBaseUrl + path, {
+        return boundedFetch(apiBaseUrl + path, {
           ...init,
           headers: {
             ...(init.headers || {}),
@@ -656,6 +697,7 @@ const EMAIL_EVENTS = [
       // V-204 — email preferences live wire.
       const emailPrefsList = root.querySelector('[data-list="email-prefs"]');
       const emailPrefsStatus = root.querySelector('[data-field="email-prefs-status"]');
+      const emailPrefsInFlight = new WeakSet();
 
       function setEmailPrefsState(prefs) {
         if (!emailPrefsList) return;
@@ -678,14 +720,19 @@ const EMAIL_EVENTS = [
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => setEmailPrefsState(body.data || []))
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
             showBanner("Couldn't load email preferences (" + msg + ').');
           });
       }
 
       function saveEmailPref(eventType, optedIn, input) {
         if (!token) return;
-        if (input) input.disabled = true;
+        if (input && emailPrefsInFlight.has(input)) return;
+        if (input) {
+          emailPrefsInFlight.add(input);
+          input.disabled = true;
+          input.setAttribute('aria-busy', 'true');
+        }
         authedFetch('/v1/account/email-preferences', {
           method: 'PUT',
           body: JSON.stringify({ event_type: eventType, opted_in: optedIn }),
@@ -704,11 +751,15 @@ const EMAIL_EVENTS = [
             // actually has, instead of silently lying about whether the
             // customer is opted in/out of this email.
             if (input) input.checked = !optedIn;
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
             showBanner("Couldn't save email preference (" + msg + ').');
           })
           .finally(() => {
-            if (input) input.disabled = false;
+            if (input) {
+              emailPrefsInFlight.delete(input);
+              input.disabled = false;
+              input.removeAttribute('aria-busy');
+            }
           });
       }
 
@@ -735,6 +786,7 @@ const EMAIL_EVENTS = [
       // wire exactly once (Save), never re-displayed.
       const byokForm = document.querySelector('[data-byok-form]');
       const byokInput = document.querySelector('#byok-key');
+      const byokSaveBtn = byokForm && byokForm.querySelector('button[type="submit"]');
       const byokTestBtn = document.querySelector('[data-byok-test]');
       const byokClearBtn = document.querySelector('[data-byok-clear]');
       const byokError = document.querySelector('[data-byok-error]');
@@ -746,6 +798,9 @@ const EMAIL_EVENTS = [
       const byokRetryBtn = document.querySelector('[data-byok-retry]');
       const byokSetAt = document.querySelector('[data-byok-set-at]');
       const byokPrefix = document.querySelector('[data-byok-prefix]');
+      let byokSaveInFlight = false;
+      let byokTestInFlight = false;
+      let byokClearInFlight = false;
 
       function byokShowState(name) {
         [byokStateLoading, byokStateEmpty, byokStateSet, byokStateError].forEach((el) => {
@@ -766,7 +821,7 @@ const EMAIL_EVENTS = [
       function loadByokAnthropic() {
         if (!token) return;
         byokShowState('loading');
-        fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
+        return boundedFetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
           headers: { authorization: 'Bearer ' + token },
         })
           .then((r) => {
@@ -800,7 +855,7 @@ const EMAIL_EVENTS = [
             // S35 2026-07-07 (fable-frontend-audit) — a load FAILURE is
             // not an empty keyring: showing 'empty' here told a customer
             // with a stored key "No key on file" on any transient non-2xx.
-            byokShowError(err && err.message ? err.message : 'network error');
+            byokShowError(requestErrorMessage(err, 'network error'));
             byokShowState('error');
           });
       }
@@ -810,6 +865,7 @@ const EMAIL_EVENTS = [
       if (byokForm) {
         byokForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
+          if (byokSaveInFlight) return;
           if (!byokInput || !token) return;
           const key = byokInput.value.trim();
           if (key.length === 0) {
@@ -817,7 +873,13 @@ const EMAIL_EVENTS = [
             return;
           }
           byokHideError();
-          fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
+          byokSaveInFlight = true;
+          if (byokSaveBtn) {
+            byokSaveBtn.disabled = true;
+            byokSaveBtn.setAttribute('aria-busy', 'true');
+            byokSaveBtn.textContent = 'Saving…';
+          }
+          boundedFetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
             method: 'PUT',
             headers: {
               authorization: 'Bearer ' + token,
@@ -837,23 +899,34 @@ const EMAIL_EVENTS = [
             })
             .then(() => {
               if (byokInput) byokInput.value = '';
-              loadByokAnthropic();
+              return loadByokAnthropic();
             })
-            .catch((err) => byokShowError(err && err.message ? err.message : 'network error'));
+            .catch((err) => byokShowError(requestErrorMessage(err, 'network error')))
+            .finally(() => {
+              byokSaveInFlight = false;
+              if (byokSaveBtn) {
+                byokSaveBtn.disabled = false;
+                byokSaveBtn.removeAttribute('aria-busy');
+                byokSaveBtn.textContent = 'Save key';
+              }
+            });
         });
       }
 
       if (byokTestBtn) {
         byokTestBtn.addEventListener('click', () => {
+          if (byokTestInFlight) return;
           if (!byokInput || !token) return;
           const key = byokInput.value.trim();
           // Test the field's content if present (e.g. before save);
           // otherwise test the stored key (server reads ciphertext).
           const payload = key.length > 0 ? { api_key: key } : {};
+          byokTestInFlight = true;
           byokTestBtn.disabled = true;
+          byokTestBtn.setAttribute('aria-busy', 'true');
           byokTestBtn.textContent = 'Testing…';
           byokHideError();
-          fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key/test', {
+          boundedFetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key/test', {
             method: 'POST',
             headers: {
               authorization: 'Bearer ' + token,
@@ -875,6 +948,7 @@ const EMAIL_EVENTS = [
               setTimeout(() => {
                 byokTestBtn.textContent = 'Test';
                 byokTestBtn.disabled = false;
+                byokTestBtn.removeAttribute('aria-busy');
               }, 2000);
               if (body.ok !== true) byokShowError(body.detail || 'Test call failed.');
             })
@@ -883,36 +957,48 @@ const EMAIL_EVENTS = [
               setTimeout(() => {
                 byokTestBtn.textContent = 'Test';
                 byokTestBtn.disabled = false;
+                byokTestBtn.removeAttribute('aria-busy');
               }, 2000);
-              byokShowError(err && err.message ? err.message : 'network error');
+              byokShowError(requestErrorMessage(err, 'network error'));
+            })
+            .finally(() => {
+              byokTestInFlight = false;
             });
         });
       }
 
       if (byokClearBtn) {
         byokClearBtn.addEventListener('click', async () => {
+          if (byokClearInFlight) return;
           if (!token) return;
-          if (
-            !(await window.driftstackConfirm(
+          byokClearInFlight = true;
+          byokClearBtn.disabled = true;
+          byokClearBtn.setAttribute('aria-busy', 'true');
+          try {
+            if (!(await window.driftstackConfirm(
               'Clear your stored Anthropic key? Agent sessions will fall back to the bundled key (if available on your tier).',
               { confirmLabel: 'Clear key', destructive: true },
-            ))
-          )
-            return;
-          fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
-            method: 'DELETE',
-            headers: { authorization: 'Bearer ' + token },
-          })
-            .then((r) => {
-              // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx.
-              if (!r.ok && r.status !== 404)
-                return r
-                  .json()
-                  .catch(() => ({}))
-                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
-              loadByokAnthropic();
-            })
-            .catch((err) => byokShowError(err && err.message ? err.message : 'network error'));
+            ))) return;
+            const response = await boundedFetch(
+              apiBaseUrl + '/v1/account/me/byok-anthropic-key',
+              {
+                method: 'DELETE',
+                headers: { authorization: 'Bearer ' + token },
+              },
+            );
+            // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx.
+            if (!response.ok && response.status !== 404) {
+              const body = await response.json().catch(() => ({}));
+              throw new Error(body.detail || 'HTTP ' + response.status);
+            }
+            await loadByokAnthropic();
+          } catch (err) {
+            byokShowError(requestErrorMessage(err, 'network error'));
+          } finally {
+            byokClearInFlight = false;
+            byokClearBtn.disabled = false;
+            byokClearBtn.removeAttribute('aria-busy');
+          }
         });
       }
 

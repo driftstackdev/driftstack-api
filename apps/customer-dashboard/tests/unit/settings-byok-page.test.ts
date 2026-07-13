@@ -268,4 +268,44 @@ describe('settings page — BYOK Anthropic key', () => {
     ).toBe(false);
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
   });
+
+  it('serializes duplicate save, test, and pre-confirm clear actions with signaled requests', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: makeRouter(newByok({ set: true })),
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-byok-form]') as HTMLFormElement;
+    const input = window.document.querySelector('#byok-key') as HTMLInputElement;
+    input.value = 'sk-ant-api03-SECRET';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+
+    const test = window.document.querySelector('[data-byok-test]') as HTMLButtonElement;
+    test.click();
+    test.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+    const clear = window.document.querySelector('[data-byok-clear]') as HTMLButtonElement;
+    clear.click();
+    clear.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    const byokMutations = fetchCalls.filter(
+      (call) =>
+        /\/v1\/account\/me\/byok-anthropic-key(?:\/test)?$/.test(call.url) &&
+        ['PUT', 'POST', 'DELETE'].includes(call.init?.method || ''),
+    );
+    expect(byokMutations.map((call) => call.init?.method).sort()).toEqual([
+      'DELETE',
+      'POST',
+      'PUT',
+    ]);
+    expect(byokMutations.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(
+      true,
+    );
+    expect(clear.disabled).toBe(false);
+    expect(clear.hasAttribute('aria-busy')).toBe(false);
+  });
 });
