@@ -235,7 +235,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(secondKey).not.toBe(firstKey);
   });
 
-  it('bounds the initial subscription read and aborts it when the page is left', async () => {
+  it('bounds the initial subscription transport and aborts it when the page is left', async () => {
     vi.useFakeTimers();
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
@@ -266,6 +266,37 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     const secondRead = second.fetchCalls.find((call) => /\/v1\/billing$/.test(call.url));
     second.window.dispatchEvent(new second.window.Event('pagehide'));
     expect(secondRead?.init?.signal?.aborted).toBe(true);
+  });
+
+  it('keeps the initial subscription deadline armed while its JSON body is stalled', async () => {
+    vi.useFakeTimers();
+    const stalledBody = new ReadableStream<Uint8Array>({
+      start() {
+        // Headers arrive, but the body deliberately never produces or closes.
+      },
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) {
+          return new Response(stalledBody, {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return json({});
+      },
+    });
+    win = window;
+    const billingRead = fetchCalls.find((call) => /\/v1\/billing$/.test(call.url));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(billingRead?.init?.signal?.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(billingRead?.init?.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(billingRead?.init?.signal?.aborted).toBe(true);
   });
 
   it('Stripe buy-tier 503 (billing unwired): shows the "setup in progress" soft message', async () => {

@@ -255,6 +255,13 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           ? window.setTimeout(() => controller.abort(), AUTHED_REQUEST_TIMEOUT_MS)
           : null;
         if (controller) ownedRequestControllers.add(controller);
+        let cleaned = false;
+        function cleanupOwnedRequest() {
+          if (cleaned || !ownsController) return;
+          cleaned = true;
+          if (timeout !== null) window.clearTimeout(timeout);
+          if (controller) ownedRequestControllers.delete(controller);
+        }
         return fetch(apiBaseUrl + path, {
           ...init,
           signal,
@@ -264,10 +271,43 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             'content-type': 'application/json',
           },
           credentials: 'include',
-        }).finally(() => {
-          if (timeout !== null) window.clearTimeout(timeout);
-          if (controller) ownedRequestControllers.delete(controller);
-        });
+        }).then(
+          (response) => {
+            // Fetch resolves when response HEADERS arrive, not when JSON/text
+            // finishes. Keep the owned deadline armed through body decoding so
+            // the initial subscription hydrate cannot hang forever on a
+            // truncated/stalled response and leave every tier looking eligible.
+            // Caller-owned mutation signals are intentionally untouched: their
+            // withBusy/crypto leases already span the complete operation.
+            if (!ownsController) return response;
+            if (response.body === null) {
+              cleanupOwnedRequest();
+              return response;
+            }
+            let wrappedBodyMethod = false;
+            ['arrayBuffer', 'blob', 'formData', 'json', 'text'].forEach((method) => {
+              const original = response[method];
+              if (typeof original !== 'function') return;
+              wrappedBodyMethod = true;
+              response[method] = function () {
+                let decoded;
+                try {
+                  decoded = original.apply(response, arguments);
+                } catch (error) {
+                  cleanupOwnedRequest();
+                  throw error;
+                }
+                return Promise.resolve(decoded).finally(cleanupOwnedRequest);
+              };
+            });
+            if (!wrappedBodyMethod) cleanupOwnedRequest();
+            return response;
+          },
+          (error) => {
+            cleanupOwnedRequest();
+            throw error;
+          },
+        );
       }
       window.addEventListener('pagehide', () => {
         ownedRequestControllers.forEach((controller) => controller.abort());

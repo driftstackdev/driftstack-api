@@ -115,10 +115,12 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     );
   });
 
-  it('bounds authenticated reads without replacing mutation-owned signals', () => {
+  it('bounds authenticated response bodies without replacing mutation-owned signals', () => {
     expect(body).toContain('const AUTHED_REQUEST_TIMEOUT_MS = 15_000;');
     expect(body).toContain('const ownsController = !init.signal;');
     expect(body).toMatch(/signal = init\.signal \|\| controller\.signal/);
+    expect(body).toContain("['arrayBuffer', 'blob', 'formData', 'json', 'text']");
+    expect(body).toMatch(/Promise\.resolve\(decoded\)\.finally\(cleanupOwnedRequest\)/);
     expect(body).toMatch(
       /ownedRequestControllers\.forEach\(\(controller\) => controller\.abort\(\)\)/,
     );
