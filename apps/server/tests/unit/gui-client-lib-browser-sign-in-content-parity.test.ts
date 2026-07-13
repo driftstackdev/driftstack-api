@@ -107,7 +107,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /const trimmedUrl = opts\.baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);/,
     );
     expect(body).toMatch(
-      /const initiateRes = await fetch\(`\$\{trimmedUrl\}\/v1\/auth\/cli-authorize\/initiate`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*state: stateToken,\s*\n?\s*client_label: opts\.clientLabel \?\? `Driftstack desktop on \$\{navigator\.platform\}`,\s*\n?\s*\}\),\s*\n?\s*\}\);/,
+      /const initiateRes = await fetchWithDeadline\(`\$\{trimmedUrl\}\/v1\/auth\/cli-authorize\/initiate`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*state: stateToken,\s*\n?\s*client_label: opts\.clientLabel \?\? `Driftstack desktop on \$\{navigator\.platform\}`,\s*\n?\s*\}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /throw new Error\(body\.detail \?\? `HTTP \$\{initiateRes\.status\.toString\(\)\}`\);/,
@@ -137,7 +137,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
 
   it("pollOnce branches: POST /v1/auth/cli-authorize/exchange with {code, state: stateToken} + !res.ok 4xx (status>=400 && <500) → stop + setState error with body.detail fallback 'Authorization request rejected.' + body.status==='pending' return + 'expired' → 'Authorization expired. Click \"Sign in with browser\" to try again.' + 'bound' + api_key + account_id → stop + setState success + await opts.onSuccess(api_key, account_id) + outer catch silent retry on network blip", () => {
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ code, state: stateToken \}\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ code, state: stateToken \}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(res\.status >= 400 && res\.status < 500\) \{\s*\n?\s*stop\(\);\s*\n?\s*const body = \(await res\.json\(\)\.catch\(\(\) => \(\{\}\)\)\) as \{ detail\?: string \};\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: body\.detail \?\? 'Authorization request rejected\.',\s*\n?\s*\}\);\s*\n?\s*\}/,
@@ -159,6 +159,18 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
     expect(body).toMatch(/settledRef\.current = true;/);
     expect(body).toMatch(/settledRef\.current = false;/);
     expect(body).toMatch(/if \(settledRef\.current\) return;/);
+  });
+
+  it('bounds and cancels transport while keeping exchange polling single-flight', () => {
+    expect(body).toMatch(/const REQUEST_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(
+      /const activeControllersRef = useRef<Set<AbortController>>\(new Set\(\)\);/,
+    );
+    expect(body).toMatch(
+      /for \(const controller of activeControllersRef\.current\) controller\.abort\(\);/,
+    );
+    expect(body).toMatch(/if \(pollInFlightRef\.current \|\| settledRef\.current\) return;/);
+    expect(body).toMatch(/finally \{\s*\n?\s*pollInFlightRef\.current = false;/);
   });
 
   it('file exists at canonical path', () => {

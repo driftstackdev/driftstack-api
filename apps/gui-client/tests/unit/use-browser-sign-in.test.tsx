@@ -11,7 +11,7 @@
 // exposes timing knobs for tests instead of forcing the test to
 // drive timers manually.
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 vi.mock('@tauri-apps/plugin-shell', () => ({
@@ -61,11 +61,11 @@ function defaultOpts(onSuccess = vi.fn(() => Promise.resolve())) {
   };
 }
 
-let fetchSpy: ReturnType<typeof vi.spyOn>;
+let fetchSpy: MockInstance<typeof globalThis.fetch>;
 
 beforeEach(() => {
   vi.mocked(mockOpenInBrowser).mockClear();
-  fetchSpy = vi.spyOn(globalThis, 'fetch') as ReturnType<typeof vi.spyOn>;
+  fetchSpy = vi.spyOn(globalThis, 'fetch');
 });
 
 afterEach(() => {
@@ -115,6 +115,25 @@ describe('useBrowserSignIn — happy path: initiate → poll pending → poll bo
 });
 
 describe('useBrowserSignIn — error paths', () => {
+  it('bounds a stalled initiate request and leaves first-run auth retryable', async () => {
+    fetchSpy.mockImplementation(
+      (_url: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
+
+    const { result } = renderHook(() =>
+      useBrowserSignIn({ ...defaultOpts(), __requestTimeoutMs: 15 }),
+    );
+    act(() => result.current.start());
+
+    await waitFor(() => expect(result.current.state.kind).toBe('error'), { timeout: 200 });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('initiate rejection → error state with the server-supplied detail', async () => {
     fetchSpy.mockResolvedValueOnce(makeResponse({ detail: 'rate limited' }, 429));
 
@@ -340,6 +359,44 @@ describe('useBrowserSignIn — V-328 deep-link primary path', () => {
 });
 
 describe('useBrowserSignIn — cleanup paths', () => {
+  it('keeps exchange polling single-flight while transport is stalled', async () => {
+    fetchSpy.mockResolvedValueOnce(makeResponse(initiateBody)).mockImplementation(
+      () =>
+        new Promise<Response>(() => {
+          // Intentionally pending until unmount aborts the request.
+        }),
+    );
+
+    const { result, unmount } = renderHook(() =>
+      useBrowserSignIn({ ...defaultOpts(), __pollTimeoutMs: 5000 }),
+    );
+    act(() => result.current.start());
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('cancel aborts an active initiate without overwriting idle with an error', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    fetchSpy.mockImplementation(
+      (_url: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          capturedSignal = init?.signal ?? undefined;
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
+    const { result } = renderHook(() => useBrowserSignIn(defaultOpts()));
+    act(() => result.current.start());
+    await waitFor(() => expect(capturedSignal).toBeDefined());
+    act(() => result.current.cancel());
+    expect(capturedSignal?.aborted).toBe(true);
+    await act(async () => Promise.resolve());
+    expect(result.current.state.kind).toBe('idle');
+  });
+
   it('cancel() returns to idle + stops the poll loop', async () => {
     fetchSpy
       .mockResolvedValueOnce(makeResponse(initiateBody))

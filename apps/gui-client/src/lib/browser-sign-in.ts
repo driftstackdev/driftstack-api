@@ -24,6 +24,7 @@ import { diagnosticFetchError } from './diagnostic-fetch-error';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 15_000;
 
 interface InitiateResponse {
   code: string;
@@ -52,6 +53,8 @@ export interface UseBrowserSignInOptions {
   __pollIntervalMs?: number;
   /** Test-only: override the 5-minute backstop. */
   __pollTimeoutMs?: number;
+  /** Test-only: override the per-request network deadline. */
+  __requestTimeoutMs?: number;
   /**
    * V-328 test seam: override the deep-link listener registration so
    * unit tests can simulate a deep-link arrival without booting the
@@ -81,6 +84,8 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
   // listener; we call it on stop() and on unmount to keep the
   // deep-link channel from stacking up when the customer retries.
   const deepLinkUnlistenRef = useRef<(() => void) | null>(null);
+  const activeControllersRef = useRef<Set<AbortController>>(new Set());
+  const pollInFlightRef = useRef(false);
   // Once the flow reaches a terminal state (success / error / cancel /
   // unmount / timeout) stop() flips this. Any exchange response still
   // in-flight then becomes a no-op — so a late 2s-poll can't overwrite a
@@ -89,6 +94,21 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
   // after it sees the code already gone), and a late "bound" can't sign
   // the customer in after they cancelled.
   const settledRef = useRef(false);
+
+  const fetchWithDeadline = async (url: string, init: RequestInit): Promise<Response> => {
+    const controller = new AbortController();
+    activeControllersRef.current.add(controller);
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      opts.__requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+    );
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timeout);
+      activeControllersRef.current.delete(controller);
+    }
+  };
 
   const stop = (): void => {
     if (pollHandleRef.current !== null) {
@@ -107,6 +127,9 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       }
       deepLinkUnlistenRef.current = null;
     }
+    for (const controller of activeControllersRef.current) controller.abort();
+    activeControllersRef.current.clear();
+    pollInFlightRef.current = false;
     settledRef.current = true;
   };
 
@@ -130,7 +153,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
     const trimmedUrl = opts.baseUrl.trim().replace(/\/+$/, '');
     const stateToken = generateBrowserSignInState();
     try {
-      const initiateRes = await fetch(`${trimmedUrl}/v1/auth/cli-authorize/initiate`, {
+      const initiateRes = await fetchWithDeadline(`${trimmedUrl}/v1/auth/cli-authorize/initiate`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -188,6 +211,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         });
       }, opts.__pollTimeoutMs ?? POLL_TIMEOUT_MS);
     } catch (err) {
+      if (settledRef.current) return;
       // 2026-05-20 — surface a multi-line diagnostic for network
       // failures (Tauri WebKit "Load failed" / Chrome "Failed to fetch"
       // etc.) instead of the bare error.message. The browser sign-in
@@ -218,8 +242,10 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
   }
 
   async function pollOnce(serverUrl: string, code: string, stateToken: string): Promise<void> {
+    if (pollInFlightRef.current || settledRef.current) return;
+    pollInFlightRef.current = true;
     try {
-      const res = await fetch(`${serverUrl}/v1/auth/cli-authorize/exchange`, {
+      const res = await fetchWithDeadline(`${serverUrl}/v1/auth/cli-authorize/exchange`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ code, state: stateToken }),
@@ -256,6 +282,8 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       }
     } catch {
       // network blip — silent retry
+    } finally {
+      pollInFlightRef.current = false;
     }
   }
 
