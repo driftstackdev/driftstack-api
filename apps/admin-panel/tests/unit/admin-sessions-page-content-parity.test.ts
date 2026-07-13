@@ -94,4 +94,13 @@ describe('W361.C admin-panel /sessions page content parity', () => {
       /status:\s*'creating'\s*\|\s*'ready'\s*\|\s*'busy'\s*\|\s*'destroyed'\s*\|\s*'errored'/,
     );
   });
+
+  it('reconciles ambiguous force-destroy timeouts against the refreshed action state', () => {
+    expect(body).toMatch(/err && err\.name === 'AbortError'/);
+    expect(body).toMatch(/const refreshed = await load\(\)/);
+    expect(body).toMatch(/root\.querySelectorAll\('\[data-action="destroy"\]'\)/);
+    expect(body).toContain('no destroy action remains');
+    expect(body).toContain('do not submit the action again');
+    expect(body).toContain('Verify the session before retrying');
+  });
 });

@@ -340,7 +340,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
 
       let inFlight = 0;
       function load() {
-        if (!token) return Promise.resolve();
+        if (!token) return Promise.resolve(false);
         const myReq = ++inFlight;
         const params = buildQuery();
         if (loadController) loadController.abort();
@@ -360,7 +360,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const rows = body.data || [];
             if (tbody) {
               if (rows.length === 0) {
@@ -379,9 +379,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
                 '. Force-destroy fires POST /v1/admin/sessions/:id/destroy with audit log.';
             }
             hideBanner();
+            return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const msg = requestErrorMessage(err, 'network error');
             // W604 — clear the SSG mock table on ANY load failure. Leaving the
             // mock rows on screen is dangerous here: each row renders a live
@@ -400,6 +401,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             } else {
               showBanner("Couldn't load live sessions (" + msg + ').');
             }
+            return false;
           })
           .finally(() => {
             if (myReq === inFlight) {
@@ -464,7 +466,31 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           showBanner('Destroyed ' + id + '. Refreshing…');
           await load();
         } catch (err) {
-          showBanner("Couldn't destroy (" + requestErrorMessage(err, 'network error') + ').');
+          if (err && err.name === 'AbortError') {
+            const refreshed = await load();
+            const stillActionable = Array.from(
+              root.querySelectorAll('[data-action="destroy"]'),
+            ).some((button) => button.getAttribute('data-id') === id);
+            if (refreshed && !stillActionable) {
+              showBanner(
+                'Force-destroy outcome is unknown because the response timed out. Live sessions were refreshed and no destroy action remains for ' +
+                  id +
+                  '; it was likely destroyed, so do not submit the action again.',
+              );
+            } else if (refreshed) {
+              showBanner(
+                'Force-destroy outcome is unknown because the response timed out. Live sessions were refreshed and ' +
+                  id +
+                  ' is still actionable; retry force-destroy if the session must be ended.',
+              );
+            } else {
+              showBanner(
+                'Force-destroy outcome is unknown because the response timed out, and live sessions could not be refreshed. Verify the session before retrying.',
+              );
+            }
+          } else {
+            showBanner("Couldn't destroy (" + requestErrorMessage(err, 'network error') + ').');
+          }
         } finally {
           destroysInFlight.delete(id);
           if (btn && btn.isConnected) {

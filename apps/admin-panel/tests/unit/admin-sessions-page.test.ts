@@ -222,4 +222,39 @@ describe('admin sessions page — force-destroy (operator)', () => {
     expect(button.textContent).toBe('Force destroy');
     expect(button.hasAttribute('aria-busy')).toBe(false);
   });
+
+  it('reconciles a committed force-destroy timeout before advising another attempt', async () => {
+    const sessions = [mkSession({ id: 'agt_live', status: 'running' })];
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (method === 'POST' && /\/v1\/admin\/sessions\/agt_live\/destroy$/.test(call.url)) {
+          sessions[0]!.status = 'destroyed';
+          return Promise.reject(timeout);
+        }
+        return makeRouter(sessions)(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const button = window.document.querySelector(
+      '[data-action="destroy"][data-id="agt_live"]',
+    ) as HTMLButtonElement;
+    button.click();
+    await flush(15);
+
+    expect(
+      fetchCalls.filter(
+        (call) =>
+          call.init?.method === 'POST' &&
+          /\/v1\/admin\/sessions\/agt_live\/destroy$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-action="destroy"][data-id="agt_live"]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /force-destroy outcome is unknown.*live sessions were refreshed.*no destroy action remains.*likely destroyed.*do not submit the action again/i,
+    );
+  });
 });
