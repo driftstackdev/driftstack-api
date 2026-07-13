@@ -258,6 +258,100 @@ describe('HttpClient.request', () => {
     );
   });
 
+  it.each([200, 500])(
+    'rejects an oversized declared response body before reading it (status %i)',
+    async (status) => {
+      let cancelled = false;
+      const body = new ReadableStream<Uint8Array>({
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const http = new HttpClient({
+        apiKey: 'ds_live_test',
+        baseUrl: 'http://api.test',
+        fetch: vi.fn(() =>
+          Promise.resolve(
+            new Response(body, {
+              status,
+              headers: { 'content-length': String(8 * 1024 * 1024 + 1) },
+            }),
+          ),
+        ),
+        retry: NEVER_RETRY,
+      });
+
+      const err = await http
+        .request<unknown>({ method: 'GET', path: '/v1/x' })
+        .catch((caught: unknown) => caught);
+
+      expect(err).toBeInstanceOf(TransportError);
+      expect(err).toMatchObject({
+        message: 'response body exceeds 8388608-byte limit',
+        status,
+      });
+      expect(cancelled).toBe(true);
+    },
+  );
+
+  it('cancels an oversized chunked response at the raw-byte ceiling', async () => {
+    let chunksPulled = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunksPulled += 1;
+        controller.enqueue(new Uint8Array(1024 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: vi.fn(() => Promise.resolve(new Response(body, { status: 200 }))),
+      retry: NEVER_RETRY,
+    });
+
+    await expect(http.request<unknown>({ method: 'GET', path: '/v1/x' })).rejects.toMatchObject({
+      message: 'response body exceeds 8388608-byte limit',
+      status: 200,
+    });
+    expect(chunksPulled).toBeLessThanOrEqual(10);
+    expect(cancelled).toBe(true);
+  });
+
+  it('keeps the request timeout armed while the response body is stalled', async () => {
+    let aborted = false;
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      timeoutMs: 25,
+      fetch: vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+        const signal = init?.signal;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const fail = (): void => {
+              aborted = true;
+              controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+            };
+            if (signal?.aborted) fail();
+            else signal?.addEventListener('abort', fail, { once: true });
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200 }));
+      }),
+      retry: NEVER_RETRY,
+    });
+
+    await expect(http.request<unknown>({ method: 'GET', path: '/v1/x' })).rejects.toMatchObject({
+      name: 'TransportError',
+      message: 'request timed out',
+      status: 200,
+    });
+    expect(aborted).toBe(true);
+  });
+
   it('network failure throws TransportError', async () => {
     const http = new HttpClient({
       apiKey: 'ds_live_test',

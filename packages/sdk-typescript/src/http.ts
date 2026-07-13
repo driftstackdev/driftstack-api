@@ -43,6 +43,10 @@ export interface RequestOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+// Matches the Go SDK's response ceiling. API JSON and RFC 7807 bodies are
+// normally tiny; this leaves generous headroom for list responses while
+// preventing a compromised server or intermediary from exhausting a client.
+const MAX_RESPONSE_BODY_BYTES = 8 * 1024 * 1024;
 
 /**
  * Headroom added on top of a body-declared operation timeout when deriving the
@@ -115,8 +119,11 @@ export class HttpClient {
         }
 
         if (res.ok) {
-          if (res.status === 204) return undefined as T;
-          const text = await res.text();
+          if (res.status === 204) {
+            await res.body?.cancel().catch(() => undefined);
+            return undefined as T;
+          }
+          const text = await readBoundedResponseText(res);
           if (text.length === 0) return undefined as T;
           try {
             return JSON.parse(text) as T;
@@ -127,7 +134,7 @@ export class HttpClient {
 
         // Non-2xx — try to parse problem+json. If the body isn't a problem
         // doc, surface as TransportError with status.
-        const text = await res.text();
+        const text = await readBoundedResponseText(res);
         let problem: Problem | null = null;
         try {
           problem = JSON.parse(text) as Problem;
@@ -190,6 +197,55 @@ export class HttpClient {
     }
     return url.toString();
   }
+}
+
+/**
+ * Decode a response through a raw-byte ceiling. The request's AbortController
+ * remains armed in the caller until this completes, so a body that stalls
+ * after returning headers is still bounded by the request timeout.
+ */
+async function readBoundedResponseText(response: Response): Promise<string> {
+  const declaredLength = response.headers.get('content-length');
+  if (declaredLength !== null && /^\d+$/.test(declaredLength)) {
+    const declaredBytes = Number(declaredLength);
+    if (declaredBytes > MAX_RESPONSE_BODY_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      throw responseBodyTooLarge(response.status);
+    }
+  }
+
+  if (response.body === null) return '';
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let bytesRead = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_RESPONSE_BODY_BYTES) {
+        throw responseBodyTooLarge(response.status);
+      }
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return parts.join('');
+  } catch (err) {
+    await reader.cancel().catch(() => undefined);
+    if (err instanceof TransportError) throw err;
+    throw new TransportError(transportMessage(err), response.status, err);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function responseBodyTooLarge(status: number): TransportError {
+  return new TransportError(
+    `response body exceeds ${MAX_RESPONSE_BODY_BYTES.toString()}-byte limit`,
+    status,
+  );
 }
 
 /**

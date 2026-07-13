@@ -145,9 +145,22 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     );
   });
 
-  it('CRITICAL 2xx response handling — 3-branch parse: (1) status===204 → undefined (No Content); (2) text.length===0 → undefined (empty body); (3) JSON.parse(text) with TransportError fallback. Drift to dropping branch 1 would crash on DELETE responses (204 is the canonical success status for delete). Drift to dropping branch 2 would crash on POST 200 with no body.', () => {
+  it('CRITICAL 2xx response handling — 3-branch parse: (1) status===204 cancels any body and returns undefined (No Content); (2) bounded text.length===0 → undefined (empty body); (3) JSON.parse(text) with TransportError fallback. Drift to dropping branch 1 would retain an unread response stream or crash on DELETE responses. Drift to dropping branch 2 would crash on POST 200 with no body.', () => {
     expect(body).toMatch(
-      /if \(res\.ok\) \{\s*\n?\s*if \(res\.status === 204\) return undefined as T;\s*\n?\s*const text = await res\.text\(\);\s*\n?\s*if \(text\.length === 0\) return undefined as T;\s*\n?\s*try \{\s*\n?\s*return JSON\.parse\(text\) as T;\s*\n?\s*\} catch \(err\) \{\s*\n?\s*throw new TransportError\('failed to parse JSON response body', res\.status, err\);\s*\n?\s*\}\s*\n?\s*\}/,
+      /if \(res\.ok\) \{\s*\n?\s*if \(res\.status === 204\) \{\s*\n?\s*await res\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);\s*\n?\s*return undefined as T;\s*\n?\s*\}\s*\n?\s*const text = await readBoundedResponseText\(res\);\s*\n?\s*if \(text\.length === 0\) return undefined as T;\s*\n?\s*try \{\s*\n?\s*return JSON\.parse\(text\) as T;\s*\n?\s*\} catch \(err\) \{\s*\n?\s*throw new TransportError\('failed to parse JSON response body', res\.status, err\);\s*\n?\s*\}\s*\n?\s*\}/,
+    );
+  });
+
+  it('CRITICAL every success/error response is raw-byte bounded at the Go-parity 8 MiB ceiling, rejects oversized Content-Length before reading, stream-counts chunk byteLength, cancels on overflow, and emits a fixed TransportError', () => {
+    expect(body).toMatch(/const MAX_RESPONSE_BODY_BYTES = 8 \* 1024 \* 1024;/);
+    expect(body.match(/await readBoundedResponseText\(res\);/g)).toHaveLength(2);
+    expect(body).toMatch(/const declaredLength = response\.headers\.get\('content-length'\);/);
+    expect(body).toMatch(/if \(declaredBytes > MAX_RESPONSE_BODY_BYTES\)/);
+    expect(body).toMatch(/const reader = response\.body\.getReader\(\);/);
+    expect(body).toMatch(/bytesRead \+= value\.byteLength;/);
+    expect(body).toMatch(/await reader\.cancel\(\)\.catch\(\(\) => undefined\);/);
+    expect(body).toMatch(
+      /`response body exceeds \$\{MAX_RESPONSE_BODY_BYTES\.toString\(\)\}-byte limit`/,
     );
   });
 
