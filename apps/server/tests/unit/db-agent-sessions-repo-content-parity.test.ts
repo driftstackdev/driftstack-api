@@ -33,10 +33,10 @@ describe('db/agent-sessions-repo content parity', () => {
     );
   });
 
-  it("4-key-shape rules framing pinned: text PK agt_<uuid> + jsonb transcript append-only via full-row UPDATE rewrite + debitTokens floors remaining at 0 with CHECK remaining<=total + closeWithReason atomic status+closed_reason flip. 'a transcript with 100 messages is ~few KB jsonb' size-rationale. Drift on any of the 4 invariants would either lose atomicity (transcript appends) or break the budget contract (debitTokens floor)", () => {
+  it('4-key-shape rules framing pinned: text PK agt_<uuid> + encrypted jsonb transcript append-only via full-row UPDATE rewrite + debitTokens floors remaining at 0 with CHECK remaining<=total + closeWithReason atomic status+closed_reason flip. Legacy arrays convert on append; drift on any invariant would risk plaintext, lost appends, or budget breakage', () => {
     expect(body).toMatch(/\/\/\s+- text PK `agt_<uuid>` minted at create\./);
     expect(body).toMatch(
-      /\/\/\s+- jsonb transcript starts empty, grows append-only via\s*\n?\s*\/\/\s+appendTranscript \(full-row UPDATE rewrites the jsonb; OK at the\s*\n?\s*\/\/\s+expected per-session volume — a transcript with 100 messages is\s*\n?\s*\/\/\s+~few KB jsonb\)\./,
+      /\/\/\s+- jsonb transcript stores a versioned application-encrypted envelope and\s*\n?\s*\/\/\s+grows append-only via appendTranscript \(full-row UPDATE rewrites the\s*\n?\s*\/\/\s+encrypted jsonb; OK at the expected per-session volume — a transcript\s*\n?\s*\/\/\s+with 100 messages is ~few KB jsonb\)\. Legacy plaintext arrays remain\s*\n?\s*\/\/\s+readable and are converted on their next append\./,
     );
     expect(body).toMatch(
       /\/\/\s+- debitTokens floors remaining at 0 \(matches the in-memory\s*\n?\s*\/\/\s+`Math\.max\(0, \.\.\.\)`\); the CHECK constraint `remaining <= total`\s*\n?\s*\/\/\s+prevents the opposite drift\./,
@@ -44,6 +44,18 @@ describe('db/agent-sessions-repo content parity', () => {
     expect(body).toMatch(
       /\/\/\s+- closeWithReason flips status to 'closed' \+ writes closed_reason\s*\n?\s*\/\/\s+atomically\./,
     );
+  });
+
+  it('encrypts every production transcript write, converts legacy arrays under the existing FOR UPDATE lock, and fails closed when the key is unavailable', () => {
+    expect(body).toMatch(/encryptAgentTranscript\(\[\], this\.transcriptEncryptionKeyBase64\)/);
+    expect(body).toMatch(
+      /const currentTranscript = readAgentTranscript\(\s*existing\.transcript,\s*this\.transcriptEncryptionKeyBase64,\s*\);/,
+    );
+    expect(body).toMatch(
+      /const encryptedTranscript = encryptAgentTranscript\(\s*nextTranscript,\s*this\.transcriptEncryptionKeyBase64,\s*\);/,
+    );
+    expect(body).toMatch(/\.set\(\{ transcript: encryptedTranscript, updatedAt: now \}\)/);
+    expect(body).toMatch(/throw new Error\('Agent transcript encryption key is unavailable\.'\)/);
   });
 
   it('Concurrency note framing pinned (race CLOSED): debitTokens AND appendTranscript run their read-modify-write inside a db.transaction() that SELECTs the row FOR UPDATE first (mirrors setAccountTier), so the row lock SERIALISES concurrent same-session debits/appends — no debit lost (no under-billing), no transcript entry dropped (no data loss). Pinned so the atomic FOR-UPDATE approach stays documented, the false "single statement … serialize at the row level" claim cannot return, AND the now-fixed code cannot silently regress to a bare read-modify-write without this pin failing.', () => {

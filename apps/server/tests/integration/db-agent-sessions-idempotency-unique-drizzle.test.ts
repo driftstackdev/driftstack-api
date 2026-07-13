@@ -24,6 +24,7 @@ import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+const TRANSCRIPT_KEY = Buffer.alloc(32, 11).toString('base64');
 
 let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
@@ -68,7 +69,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         return;
       }
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
 
       const accountId = randomUUID();
       seeded.push(accountId);

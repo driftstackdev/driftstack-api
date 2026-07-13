@@ -227,7 +227,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('agent: two concurrent creates on the SAME profile → EXACTLY 1 binds, the other throws ProfileInUseError', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: Buffer.alloc(32, 11).toString('base64') },
+      );
       const { accountId } = await seedAccountWithKey(client);
       const profileId = await seedProfile(client, accountId);
 
@@ -246,7 +249,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('agent: a CLOSED session on the profile does NOT block a new bind', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: Buffer.alloc(32, 11).toString('base64') },
+      );
       const { accountId } = await seedAccountWithKey(client);
       const profileId = await seedProfile(client, accountId);
 
@@ -268,7 +274,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('agent: the SAME profile under a DIFFERENT account is isolated', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: Buffer.alloc(32, 11).toString('base64') },
+      );
       const a = await seedAccountWithKey(client);
       const b = await seedAccountWithKey(client);
       const profA = await seedProfile(client, a.accountId);
@@ -291,7 +300,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('agent: a create with NO profileId is never gated (two no-profile creates both bind)', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: Buffer.alloc(32, 11).toString('base64') },
+      );
       const { accountId } = await seedAccountWithKey(client);
 
       const settled = await Promise.allSettled([

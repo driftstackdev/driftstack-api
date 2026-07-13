@@ -2035,9 +2035,10 @@ export const agentSessions = pgTable(
       onDelete: 'set null',
     }),
     status: text('status').notNull(),
-    // jsonb transcript — `ReadonlyArray<TranscriptEntry>` at the
-    // service layer; Drizzle returns it as `unknown` so the repo
-    // casts on read.
+    // jsonb transcript — production stores a versioned AES-GCM envelope;
+    // legacy plaintext arrays remain readable and are encrypted on the next
+    // append. Drizzle returns jsonb as `unknown`; the repo validates both
+    // representations before exposing `ReadonlyArray<TranscriptEntry>`.
     transcript: jsonb('transcript')
       .notNull()
       .default(sql`'[]'::jsonb`),

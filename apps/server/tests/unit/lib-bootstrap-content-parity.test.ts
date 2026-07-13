@@ -61,6 +61,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it('wires the validated platform encryption key into the production agent-session repository', () => {
+    expect(body).toMatch(
+      /const agentSessionsRepo = new DrizzleAgentSessionsRepo\(dbHandle, \{\s*\.\.\.\(config\.mfaEncryptionKey !== undefined\s*\? \{ transcriptEncryptionKeyBase64: config\.mfaEncryptionKey \}\s*: \{\}\),\s*\}\);/,
+    );
+  });
+
   it('header framing pinned: pure-factory; pass-in deps NOT lazy; every external connection (Postgres pool, Redis, R2, Sentry, Postmark) opened HERE so SIGTERM handler closes them deterministically', () => {
     expect(body).toMatch(/\/\/ Production bootstrap\./);
     expect(body).toMatch(

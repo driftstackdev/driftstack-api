@@ -4,10 +4,11 @@
 //
 // Key shape rules (matching the in-memory variant + migration 0042):
 //   - text PK `agt_<uuid>` minted at create.
-//   - jsonb transcript starts empty, grows append-only via
-//     appendTranscript (full-row UPDATE rewrites the jsonb; OK at the
-//     expected per-session volume — a transcript with 100 messages is
-//     ~few KB jsonb).
+//   - jsonb transcript stores a versioned application-encrypted envelope and
+//     grows append-only via appendTranscript (full-row UPDATE rewrites the
+//     encrypted jsonb; OK at the expected per-session volume — a transcript
+//     with 100 messages is ~few KB jsonb). Legacy plaintext arrays remain
+//     readable and are converted on their next append.
 //   - debitTokens floors remaining at 0 (matches the in-memory
 //     `Math.max(0, ...)`); the CHECK constraint `remaining <= total`
 //     prevents the opposite drift.
@@ -35,6 +36,10 @@ import { ProfileInUseError } from '../lib/errors.js';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
+import {
+  encryptAgentTranscript,
+  readAgentTranscript,
+} from '../services/agent-transcript-encryption.js';
 import type {
   AgentSessionListPage,
   AgentSessionRecord,
@@ -48,13 +53,16 @@ import type {
 // a non-matching value falls through to a first-page response).
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord {
+function rowToRecord(
+  row: typeof agentSessions.$inferSelect,
+  transcriptEncryptionKeyBase64: string | undefined,
+): AgentSessionRecord {
   return {
     id: row.id,
     accountId: row.accountId,
     driftstackSessionId: row.driftstackSessionId,
     status: row.status as AgentSessionStatus,
-    transcript: (row.transcript as ReadonlyArray<TranscriptEntry>) ?? [],
+    transcript: readAgentTranscript(row.transcript, transcriptEncryptionKeyBase64),
     tokenBudgetTotal: row.tokenBudgetTotal,
     tokenBudgetRemaining: row.tokenBudgetRemaining,
     closedReason: row.closedReason,
@@ -85,10 +93,19 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
 }
 
 export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
+  private readonly clock: () => Date;
+  private readonly transcriptEncryptionKeyBase64: string | undefined;
+
   constructor(
     private readonly database: Database,
-    private readonly clock: () => Date = () => new Date(),
-  ) {}
+    options: {
+      transcriptEncryptionKeyBase64?: string;
+      clock?: () => Date;
+    } = {},
+  ) {
+    this.clock = options.clock ?? (() => new Date());
+    this.transcriptEncryptionKeyBase64 = options.transcriptEncryptionKeyBase64;
+  }
 
   async create(args: CreateAgentSessionArgs): Promise<AgentSessionRecord> {
     const id = `agt_${randomUUID()}`;
@@ -100,7 +117,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         accountId: args.accountId,
         driftstackSessionId: args.driftstackSessionId ?? null,
         status: 'active',
-        transcript: [],
+        transcript:
+          this.transcriptEncryptionKeyBase64 !== undefined
+            ? encryptAgentTranscript([], this.transcriptEncryptionKeyBase64)
+            : [],
         tokenBudgetTotal: args.tokenBudgetTotal,
         tokenBudgetRemaining: args.tokenBudgetTotal,
         // v2-#19 hardening columns — partial unique index on
@@ -127,7 +147,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     if (!row) {
       throw new Error('AgentSession insert returned no rows');
     }
-    return rowToRecord(row);
+    return rowToRecord(row, this.transcriptEncryptionKeyBase64);
   }
 
   async createIfUnderActiveCap(
@@ -194,7 +214,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
           accountId: args.accountId,
           driftstackSessionId: args.driftstackSessionId ?? null,
           status: 'active',
-          transcript: [],
+          transcript:
+            this.transcriptEncryptionKeyBase64 !== undefined
+              ? encryptAgentTranscript([], this.transcriptEncryptionKeyBase64)
+              : [],
           tokenBudgetTotal: args.tokenBudgetTotal,
           tokenBudgetRemaining: args.tokenBudgetTotal,
           idempotencyKey: args.idempotencyKey ?? null,
@@ -210,7 +233,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       if (!row) {
         throw new Error('AgentSession insert returned no rows');
       }
-      return rowToRecord(row);
+      return rowToRecord(row, this.transcriptEncryptionKeyBase64);
     });
   }
 
@@ -221,7 +244,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .where(eq(agentSessions.id, id))
       .limit(1);
     const row = rows[0];
-    return row ? rowToRecord(row) : null;
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
   async listByAccount(
@@ -238,7 +261,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .where(eq(agentSessions.accountId, accountId))
       .orderBy(desc(agentSessions.createdAt), desc(agentSessions.id));
     const rows = opts?.limit !== undefined ? await base.limit(opts.limit) : await base;
-    return rows.map(rowToRecord);
+    return rows.map((row) => rowToRecord(row, this.transcriptEncryptionKeyBase64));
   }
 
   async listPageByAccount(
@@ -278,7 +301,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     const items = hasMore ? rows.slice(0, opts.limit) : rows;
     const last = items[items.length - 1];
     return {
-      items: items.map(rowToRecord),
+      items: items.map((row) => rowToRecord(row, this.transcriptEncryptionKeyBase64)),
       nextCursor: hasMore && last ? last.id : null,
     };
   }
@@ -320,18 +343,28 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       if (!existing) {
         throw new Error(`AgentSession ${id} not found`);
       }
-      const currentTranscript = (existing.transcript as ReadonlyArray<TranscriptEntry>) ?? [];
+      if (this.transcriptEncryptionKeyBase64 === undefined) {
+        throw new Error('Agent transcript encryption key is unavailable.');
+      }
+      const currentTranscript = readAgentTranscript(
+        existing.transcript,
+        this.transcriptEncryptionKeyBase64,
+      );
       const nextTranscript = [...currentTranscript, entry];
+      const encryptedTranscript = encryptAgentTranscript(
+        nextTranscript,
+        this.transcriptEncryptionKeyBase64,
+      );
       const updated = await tx
         .update(agentSessions)
-        .set({ transcript: nextTranscript, updatedAt: now })
+        .set({ transcript: encryptedTranscript, updatedAt: now })
         .where(eq(agentSessions.id, id))
         .returning();
       const row = updated[0];
       if (!row) {
         throw new Error(`AgentSession ${id} disappeared mid-transaction`);
       }
-      return rowToRecord(row);
+      return rowToRecord(row, this.transcriptEncryptionKeyBase64);
     });
   }
 
@@ -365,7 +398,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       if (!row) {
         throw new Error(`AgentSession ${id} disappeared mid-transaction`);
       }
-      return rowToRecord(row);
+      return rowToRecord(row, this.transcriptEncryptionKeyBase64);
     });
   }
 
@@ -405,7 +438,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .returning();
     const row = updated[0];
     if (row) {
-      return rowToRecord(row);
+      return rowToRecord(row, this.transcriptEncryptionKeyBase64);
     }
     const existing = await this.get(id);
     if (!existing) {
@@ -449,7 +482,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .where(eq(agentSessions.id, id))
       .returning();
     const row = updated[0];
-    return row ? rowToRecord(row) : null;
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
   async closeActiveByNode(nodeId: string, reason: string): Promise<number> {
@@ -534,7 +567,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     if (!row) {
       throw new Error(`AgentSession ${args.id} not found`);
     }
-    return rowToRecord(row);
+    return rowToRecord(row, this.transcriptEncryptionKeyBase64);
   }
 
   async setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord> {
@@ -548,7 +581,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     if (!row) {
       throw new Error(`AgentSession ${id} not found`);
     }
-    return rowToRecord(row);
+    return rowToRecord(row, this.transcriptEncryptionKeyBase64);
   }
 
   async setMode(
@@ -571,7 +604,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     if (!row) {
       throw new Error(`AgentSession ${id} not found`);
     }
-    return rowToRecord(row);
+    return rowToRecord(row, this.transcriptEncryptionKeyBase64);
   }
 
   async findByIdempotencyKey(
@@ -591,6 +624,6 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       )
       .limit(1);
     const row = rows[0];
-    return row ? rowToRecord(row) : null;
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 }

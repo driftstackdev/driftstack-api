@@ -32,6 +32,7 @@ import type { TranscriptEntry } from '../../src/services/agent-decomposer.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+const TRANSCRIPT_KEY = Buffer.alloc(32, 11).toString('base64');
 
 let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
@@ -76,7 +77,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('concurrent debitTokens never lose an update (FOR UPDATE row lock serialises → 100-30-40=30)', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
 
       const accountId = randomUUID();
       seeded.push(accountId);
@@ -94,7 +98,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('concurrent appendTranscript never drop an entry (FOR UPDATE row lock serialises → length 2)', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
 
       const accountId = randomUUID();
       seeded.push(accountId);
@@ -114,6 +121,39 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(after?.transcript.length).toBe(2);
       const bodies = (after?.transcript ?? []).map((e) => e.body).sort();
       expect(bodies).toEqual(['msg-A', 'msg-B']);
+
+      const [stored] =
+        await client`SELECT transcript::text AS transcript FROM agent_sessions WHERE id = ${session.id}`;
+      expect(stored?.transcript).not.toContain('msg-A');
+      expect(stored?.transcript).not.toContain('msg-B');
+      expect(stored?.transcript).toContain('driftstack.agent-transcript');
+    });
+
+    it('legacy plaintext transcript arrays remain readable and convert to ciphertext on append', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-legacy-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+      const legacy = [{ at: 't0', role: 'user', body: 'legacy-secret' }];
+      await client`UPDATE agent_sessions SET transcript = ${JSON.stringify(legacy)}::jsonb WHERE id = ${session.id}`;
+
+      const before = await repo.get(session.id);
+      expect(before?.transcript).toEqual(legacy);
+      await repo.appendTranscript(session.id, { at: 't1', role: 'agent', body: 'new-secret' });
+      const after = await repo.get(session.id);
+      expect(after?.transcript.map((entry) => entry.body)).toEqual(['legacy-secret', 'new-secret']);
+      const [stored] =
+        await client`SELECT transcript::text AS transcript FROM agent_sessions WHERE id = ${session.id}`;
+      expect(stored?.transcript).not.toContain('legacy-secret');
+      expect(stored?.transcript).not.toContain('new-secret');
+      expect(stored?.transcript).toContain('driftstack.agent-transcript');
     });
 
     // Audit fix 2026-07-01 — closeWithReason TOCTOU race. Before the fix it was
@@ -130,7 +170,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     it('concurrent closeWithReason calls never both win: exactly one reason is persisted, never overwritten by the loser (real Postgres, distinct connections)', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
-      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
 
       const accountId = randomUUID();
       seeded.push(accountId);

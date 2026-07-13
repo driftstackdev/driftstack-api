@@ -902,7 +902,11 @@ export async function createProductionDeps(
   // The DeterministicAgentDecomposer remains the safe-default when
   // neither key path is available — agent-sessions routes still
   // return planned/clarified output rather than 503ing the customer.
-  const agentSessionsRepo = new DrizzleAgentSessionsRepo(dbHandle);
+  const agentSessionsRepo = new DrizzleAgentSessionsRepo(dbHandle, {
+    ...(config.mfaEncryptionKey !== undefined
+      ? { transcriptEncryptionKeyBase64: config.mfaEncryptionKey }
+      : {}),
+  });
   // W2808 — forward holder for the fleet control registry, constructed later in
   // the fleet-control-plane deps block. Declared HERE (moved up from that block)
   // so the #139 go-live routing dispatcher can read it lazily. `current` is unset

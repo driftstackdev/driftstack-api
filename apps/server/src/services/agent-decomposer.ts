@@ -52,8 +52,9 @@ export interface TranscriptEntry {
 
 /**
  * Customer-supplied credentials for log-in flows the agent might
- * need to drive. Held in-memory for the agent-session lifetime;
- * never persisted. Logged in transcripts as `[redacted]`.
+ * need to drive. Held in-memory for the agent-session lifetime and never
+ * persisted in plaintext; transcript copies are protected by the encrypted
+ * transcript envelope and rendered as `[redacted]` where applicable.
  */
 export interface CredentialBag {
   username?: string;
