@@ -427,11 +427,41 @@ const EMAIL_EVENTS = [
       const profileStatus = root.querySelector('[data-field="profile-status"]');
       const profileSaveBtn = root.querySelector('[data-button="profile-save"]');
       let profileSaveInFlight = false;
+      let profileHydrated = false;
+      let profileEditedBeforeHydration = false;
+      let profileStatusGeneration = 0;
 
       function showProfileError(msg) {
         if (!profileError) return;
         profileError.textContent = msg;
         profileError.classList.remove('hidden');
+      }
+
+      function showProfileStatus(msg, clearAfterMs = 0) {
+        const generation = ++profileStatusGeneration;
+        if (!profileStatus) return;
+        profileStatus.textContent = msg;
+        if (clearAfterMs > 0) {
+          window.setTimeout(() => {
+            if (profileStatus && generation === profileStatusGeneration) {
+              profileStatus.textContent = '';
+            }
+          }, clearAfterMs);
+        }
+      }
+
+      for (const control of [
+        profileNameInput,
+        profileTzInput,
+        profileSlugInput,
+        profileRegionInput,
+      ]) {
+        if (!control) continue;
+        const markProfileEdited = () => {
+          if (!profileHydrated) profileEditedBeforeHydration = true;
+        };
+        control.addEventListener('input', markProfileEdited);
+        control.addEventListener('change', markProfileEdited);
       }
 
       // V-352b — avatar elements + helpers.
@@ -511,6 +541,14 @@ const EMAIL_EVENTS = [
         );
       }
 
+      function accountMatchesProfile(account, desired) {
+        for (const field of ['name', 'timezone', 'slug', 'region']) {
+          if (!Object.prototype.hasOwnProperty.call(desired, field)) continue;
+          if ((account[field] ?? null) !== desired[field]) return false;
+        }
+        return true;
+      }
+
       function fileToBase64(file) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -534,10 +572,13 @@ const EMAIL_EVENTS = [
         fetchCurrentAccount()
           .then((me) => {
             if (!me) return;
-            if (me.name) profileNameInput.value = me.name;
-            if (me.timezone) profileTzInput.value = me.timezone;
-            if (profileSlugInput && me.slug) profileSlugInput.value = me.slug;
-            if (profileRegionInput && me.region) profileRegionInput.value = me.region;
+            if (!profileEditedBeforeHydration) {
+              profileNameInput.value = me.name || '';
+              profileTzInput.value = me.timezone || '';
+              if (profileSlugInput) profileSlugInput.value = me.slug || '';
+              if (profileRegionInput) profileRegionInput.value = me.region || '';
+            }
+            profileHydrated = true;
             // audit w2flmiw48 #3 — the header account-id used to be seeded
             // from the mock account and never overwritten by live data (so
             // every customer saw the mock id). Populate it from /account/me.
@@ -783,15 +824,31 @@ const EMAIL_EVENTS = [
                     .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
             )
             .then(() => {
-              if (profileStatus) {
-                profileStatus.textContent = 'Saved.';
-                window.setTimeout(() => {
-                  if (profileStatus) profileStatus.textContent = '';
-                }, 3000);
-              }
+              showProfileStatus('Saved.', 3000);
             })
             .catch((err) => {
-              showProfileError(requestErrorMessage(err, 'Failed to save.'));
+              if (!err || err.name !== 'AbortError') {
+                showProfileError(requestErrorMessage(err, 'Failed to save.'));
+                return;
+              }
+              return fetchCurrentAccount()
+                .then((account) => {
+                  if (accountMatchesProfile(account, body)) {
+                    showProfileStatus(
+                      'Saved. The response was lost, but the live profile matches your changes.',
+                      6000,
+                    );
+                    return;
+                  }
+                  showProfileError(
+                    'The save was not confirmed and the live profile differs. Your edits are still here; review them before trying again.',
+                  );
+                })
+                .catch(() => {
+                  showProfileError(
+                    'The save outcome is unknown. Your edits are still here; copy them, then reload to verify before trying again.',
+                  );
+                });
             })
             .finally(() => {
               profileSaveInFlight = false;

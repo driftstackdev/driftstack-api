@@ -65,6 +65,16 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
     expect(p).toMatch(/\/\/ V-298b — region from select; '' = no preference \(null\)\./);
   });
 
+  it('profile hydration preserves in-flight typing and timeout recovery requires exact live fields', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/if \(!profileHydrated\) profileEditedBeforeHydration = true/);
+    expect(p).toMatch(/if \(!profileEditedBeforeHydration\) \{/);
+    expect(p).toMatch(/accountMatchesProfile\(account, body\)/);
+    expect(p).toMatch(/live profile matches your changes/);
+    expect(p).toMatch(/Your edits are still here/);
+  });
+
   it('CRITICAL V-352b avatar upload + remove flow pinned. POST/DELETE /v1/account/me/avatar. Drift to a different endpoint would break the V-352b avatar lifecycle.', () => {
     const p = read(PAGE);
 
