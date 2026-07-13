@@ -651,9 +651,21 @@ const navSections: NavSection[] = [
                 data-cmdk-input
                 placeholder="Type a command or search…"
                 aria-label="Command palette search"
+                role="combobox"
+                aria-expanded="false"
+                aria-controls="command-palette-results"
+                aria-activedescendant=""
+                aria-autocomplete="list"
+                autocomplete="off"
                 class="w-full border-b border-tk-border bg-transparent px-4 py-3 text-sm text-tk-ink placeholder:text-tk-ink-3 focus:outline-none"
               />
-              <ul data-cmdk-list class="max-h-[52vh] overflow-y-auto py-1"></ul>
+              <ul
+                id="command-palette-results"
+                data-cmdk-list
+                role="listbox"
+                aria-label="Commands"
+                class="max-h-[52vh] overflow-y-auto py-1"
+              ></ul>
               <div
                 class="flex items-center gap-3 border-t border-tk-border px-4 py-2 text-[11px] text-tk-ink-3"
               >
@@ -663,6 +675,15 @@ const navSections: NavSection[] = [
               </div>
             </div>
           </div>
+        )}
+        {withSidebar && (
+          <p
+            data-command-status
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            class="pointer-events-none fixed bottom-6 left-1/2 z-[70] hidden max-w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-tk-border bg-tk-raised px-4 py-2.5 text-center text-sm text-tk-ink shadow-ambient-lg"
+          ></p>
         )}
         <main
           id="main-content"
@@ -1777,7 +1798,91 @@ const navSections: NavSection[] = [
         if (!overlay) return;
         var input = overlay.querySelector('[data-cmdk-input]');
         var list = overlay.querySelector('[data-cmdk-list]');
-        if (!input || !list) return;
+        var commandStatus = document.querySelector('[data-command-status]');
+        if (!input || !list || !commandStatus) return;
+        var commandStatusTimer = 0;
+        var copyAccountInFlight = false;
+        var previousFocus = null;
+
+        function showCommandStatus(message) {
+          commandStatus.textContent = message;
+          commandStatus.classList.remove('hidden');
+          if (commandStatusTimer) window.clearTimeout(commandStatusTimer);
+          commandStatusTimer = window.setTimeout(function () {
+            commandStatus.classList.add('hidden');
+          }, 4500);
+        }
+
+        function writeClipboard(value) {
+          try {
+            if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+              return Promise.reject(new Error('clipboard unavailable'));
+            }
+            return Promise.resolve(navigator.clipboard.writeText(value));
+          } catch (error) {
+            return Promise.reject(error);
+          }
+        }
+
+        function copyAccountId() {
+          if (copyAccountInFlight) {
+            showCommandStatus('Account ID copy is already in progress.');
+            return;
+          }
+
+          var activeOwnerId = '';
+          var token = '';
+          try {
+            activeOwnerId = localStorage.getItem('ds_act_as_account') || '';
+            token = localStorage.getItem('ds_web_session_token') || '';
+          } catch (_) {
+            /* storage unavailable */
+          }
+
+          if (!activeOwnerId && !token) {
+            showCommandStatus('Could not copy account ID — sign in again.');
+            return;
+          }
+
+          copyAccountInFlight = true;
+          var controller = new AbortController();
+          var timeout = window.setTimeout(function () {
+            controller.abort();
+          }, 10_000);
+          var accountIdPromise = activeOwnerId
+            ? Promise.resolve(activeOwnerId)
+            : fetch(apiBaseUrl + '/v1/account/me', {
+                headers: { authorization: 'Bearer ' + token },
+                signal: controller.signal,
+              }).then(function (response) {
+                if (!response.ok) throw new Error('account lookup failed');
+                return response.json().then(function (account) {
+                  if (!account || typeof account.id !== 'string' || account.id.length === 0) {
+                    throw new Error('account id missing');
+                  }
+                  return account.id;
+                });
+              });
+
+          accountIdPromise
+            .then(writeClipboard)
+            .then(function () {
+              showCommandStatus(
+                activeOwnerId ? 'Active team account ID copied.' : 'Account ID copied.',
+              );
+            })
+            .catch(function (error) {
+              showCommandStatus(
+                error && error.name === 'AbortError'
+                  ? 'Account ID lookup timed out — try again.'
+                  : 'Could not copy account ID — check clipboard permission and try again.',
+              );
+            })
+            .finally(function () {
+              window.clearTimeout(timeout);
+              copyAccountInFlight = false;
+            });
+        }
 
         function nav(href) {
           return function () {
@@ -1811,17 +1916,7 @@ const navSections: NavSection[] = [
           { label: 'Get the desktop app', run: function () { window.open('https://docs.driftstack.dev/quickstart/', '_blank', 'noopener'); } },
           {
             label: 'Copy account ID',
-            run: function () {
-              try {
-                var t = localStorage.getItem('ds_web_session_token') || '';
-                fetch(apiBaseUrl + '/v1/account/me', { headers: { authorization: 'Bearer ' + t } })
-                  .then(function (r) { return r.ok ? r.json() : null; })
-                  .then(function (me) {
-                    if (me && me.id && navigator.clipboard) navigator.clipboard.writeText(me.id);
-                  })
-                  .catch(function () {});
-              } catch (_) {}
-            },
+            run: copyAccountId,
           },
           { label: 'Theme: Light', run: setTheme('mode', 'light') },
           { label: 'Theme: Dark', run: setTheme('mode', 'dark') },
@@ -1845,7 +1940,9 @@ const navSections: NavSection[] = [
           filtered.forEach(function (a, i) {
             var li = document.createElement('li');
             li.textContent = a.label;
+            li.id = 'command-palette-option-' + String(i);
             li.setAttribute('role', 'option');
+            li.setAttribute('aria-selected', i === active ? 'true' : 'false');
             li.className =
               'cursor-pointer px-4 py-2 text-sm ' +
               (i === active ? 'bg-tk-accent/10 text-tk-accent-text' : 'text-tk-ink-2');
@@ -1859,6 +1956,10 @@ const navSections: NavSection[] = [
             });
             list.appendChild(li);
           });
+          input.setAttribute(
+            'aria-activedescendant',
+            filtered.length > 0 ? 'command-palette-option-' + String(active) : '',
+          );
         }
         function applyFilter() {
           var q = input.value.trim().toLowerCase();
@@ -1871,13 +1972,19 @@ const navSections: NavSection[] = [
           render();
         }
         function open() {
+          previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
           overlay.classList.remove('hidden');
+          input.setAttribute('aria-expanded', 'true');
           input.value = '';
           applyFilter();
           input.focus();
         }
         function close() {
           overlay.classList.add('hidden');
+          input.setAttribute('aria-expanded', 'false');
+          input.setAttribute('aria-activedescendant', '');
+          if (previousFocus && document.contains(previousFocus)) previousFocus.focus();
+          previousFocus = null;
         }
 
         input.addEventListener('input', applyFilter);
