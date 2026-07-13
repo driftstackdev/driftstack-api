@@ -69,7 +69,7 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
 
   it("Reason REQUIRED on revoke: branded driftstackPrompt('Reason for revoking N (required):') → !reason || !reason.trim() → 'Revoke cancelled — reason is required.' banner + bail — pinned so the audit-row 'reason' field never lands empty (drift to optional reason would break the customer-facing 'revoked by Driftstack: <reason>' surface)", () => {
     expect(body).toMatch(
-      /const reason = await window\.driftstackPrompt\('Reason for revoking ' \+ id \+ ' \(required\):', \{/,
+      /const reason = await window\.driftstackPrompt\(\s*\n?\s*'Reason for revoking ' \+ id \+ ' \(required\):',\s*\n?\s*\{/,
     );
     expect(body).toMatch(
       /if \(!reason \|\| !reason\.trim\(\)\) \{\s*\n?\s*showBanner\('Revoke cancelled — reason is required\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
@@ -82,11 +82,16 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
     );
   });
 
-  it("Revoke POST contract: /v1/admin/api-keys/{encodeURIComponent(id)}/revoke + JSON.stringify({reason: reason.trim()}) body + Bearer auth + content-type:application/json + credentials:'include' + 204 || r.ok success branch — pinned so the audit-row reason field gets the trimmed text and the success-without-body 204 response is correctly handled (drift to requiring JSON body on response would break)", () => {
+  it('Revoke POST contract stays deadline-bounded and async: encoded endpoint + trimmed reason + Bearer/JSON/cookie auth + 204-compatible success — pinned so the customer-visible audit reason is preserved without leaving the action unbounded', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/revoke', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ reason: reason\.trim\(\) \}\),\s*\n?\s*\}\)/,
+      /const response = await boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/admin\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/revoke',\s*\n?\s*\{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ reason: reason\.trim\(\) \}\),\s*\n?\s*\},\s*\n?\s*\);/,
     );
-    expect(body).toMatch(/if \(r\.status === 204 \|\| r\.ok\) return null;/);
+    expect(body).toMatch(/if \(response\.status !== 204 && !response\.ok\) \{/);
+    expect(body).toMatch(/const API_KEY_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/if \(!token \|\| revokesInFlight\.has\(id\)\) return;/);
+    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\);/);
+    expect(body).toMatch(/if \(err && err\.name === 'AbortError'\) \{/);
+    expect(body).toMatch(/const refreshed = await load\(\);/);
   });
 
   it("Revoked-row visual treatment: SSG row class:list with opacity-60 when revokedAt !== null + inline rowHtml opacityClass = revoked ? 'opacity-60' : '' — pinned so revoked keys stay visible but visually de-emphasized (drift to hiding revoked keys would lose audit-history visibility) and drift between SSG + inline opacity-class would cause a hydrate flash", () => {
