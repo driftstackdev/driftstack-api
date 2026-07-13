@@ -13,15 +13,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // to fail if the page silently regrows fictional claims.
 ---
 
-<BaseLayout title="Recordings (roadmap) — Driftstack developer docs" description="Session recordings: status, planned shape, what to do today.">
+<BaseLayout title="Managed recordings (roadmap) — Driftstack developer docs" description="Managed API recordings are planned; desktop-local recording is available today.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Recordings</h1>
 
     <p class="lead">
-      Session recordings are planned for a later release and not yet
-      exposed via the public API.
-      <strong>No endpoint, webhook event, or request body field
-      currently triggers recording today.</strong> This page describes
+      Managed session recordings are planned for a later release and not yet
+      exposed via the public API. The desktop app already offers a separate,
+      local recorder for hands-on sessions.
+      <strong>No public API endpoint, webhook event, or request body field
+      currently triggers managed recording today.</strong> This page describes
       the planned shape so customers building toward it can budget
       for the integration. (The W217.A parity test pins this page to
       "planned, not live" until the server registers the endpoint.)
@@ -60,10 +61,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>What works today</h2>
     <p>
-      Until recordings ship, drive your own observation pipeline
-      from inside the session lifecycle:
+      Choose the current option that matches how you run sessions:
     </p>
     <ul>
+      <li><strong>Desktop-local recording:</strong> while watching a live
+        session in the Driftstack desktop app, choose <strong>Record</strong>
+        to capture streamed frames. The app saves the recording in its local
+        app-data folder for replay and can export a portable JSON envelope.
+        This is manual, local-only frame capture; it does not enable the
+        planned API field, webhook, WebM file, cloud upload, or retention
+        policy.</li>
       <li><a href="/docs/sessions">Sessions API</a> —
         <code>POST /v1/sessions/:id/capture</code> with
         <code>{`{ "kind": "screenshot" }`}</code>,

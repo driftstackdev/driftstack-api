@@ -72,4 +72,12 @@ describe('W217.A recordings doc parity', () => {
     expect(doc).toMatch(/capture/i);
     expect(doc).toMatch(/\/docs\/sessions/);
   });
+
+  it('doc separates the shipped desktop-local recorder from the unshipped managed API', () => {
+    expect(doc).toMatch(/desktop app already offers a separate,\s+local recorder/);
+    expect(doc).toMatch(/manual, local-only frame capture/);
+    expect(doc).toMatch(
+      /does not enable the\s+planned API field, webhook, WebM file, cloud upload, or retention\s+policy/,
+    );
+  });
 });

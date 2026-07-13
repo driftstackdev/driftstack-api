@@ -5,13 +5,13 @@
 // the future-V-540 surface drift from documented expectations).
 //
 //   • V-692 + W217.A doc-comment framing.
-//   • 'No endpoint, webhook event, or request body field currently
-//     triggers recording today' explicit-no-live commitment.
+//   • 'No public API endpoint, webhook event, or request body field currently
+//     triggers managed recording today' explicit-no-live commitment.
 //   • Heads-up warning: record:true is a no-op today.
 //   • Planned shape 6-bullet: record:true field + WebM VP9 + GET
 //     /v1/sessions/:id/recording + session.recording_ready webhook +
 //     tier-dependent retention + redaction roadmap.
-//   • What works today: capture API + 6 live webhook event types.
+//   • What works today: desktop-local recorder + capture API + 6 live webhook event types.
 //   • developers@driftstack.dev support.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,9 +39,9 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     );
   });
 
-  it("Explicit 'No endpoint, webhook event, or request body field currently triggers recording today' commitment pinned — pinned so the 3-state explicit-no-live framing survives (drift to softening would let customers think a recording field exists; drift to dropping the explicit enumeration would lose the unambiguous 'all three are absent' signal)", () => {
+  it("Explicit 'No public API endpoint, webhook event, or request body field currently triggers managed recording today' commitment pinned — pinned so the 3-state explicit-no-live framing survives (drift to softening would let customers think a recording field exists; drift to dropping the explicit enumeration would lose the unambiguous 'all three are absent' signal)", () => {
     expect(body).toMatch(
-      /<strong>No endpoint, webhook event, or request body field\s*\n?\s*currently triggers recording today\.<\/strong>/,
+      /<strong>No public API endpoint, webhook event, or request body field\s*\n?\s*currently triggers managed recording today\.<\/strong>/,
     );
   });
 
@@ -71,6 +71,9 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
   });
 
   it("'What works today' fallback 2-state: Sessions API capture (screenshot/dom_snapshot/pdf) + the webhook event types that FIRE today (session.completed + session.failed + api_key.revoked + crypto.order.paid + crypto.order.failed) plus the test.ping synthetic — pinned so the 'what works today' surface lists only events with a production emitter. quota.warning_80pct + quota.exceeded are [DECLARED] (no emitter) so they're excluded here, though they stay in the full /docs/webhooks taxonomy", () => {
+    expect(body).toMatch(/<strong>Desktop-local recording:<\/strong>/);
+    expect(body).toMatch(/manual, local-only frame capture/);
+    expect(body).toMatch(/export a portable JSON envelope/);
     expect(body).toMatch(
       /<code>POST \/v1\/sessions\/:id\/capture<\/code> with\s*\n?\s*<code>\{`\{ "kind": "screenshot" \}`\}<\/code>,\s*\n?\s*<code>"dom_snapshot"<\/code>, or <code>"pdf"<\/code>/,
     );

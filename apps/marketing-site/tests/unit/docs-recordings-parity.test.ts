@@ -15,6 +15,8 @@
 //   • Tier-dependent retention sketch (7d / 30d / 90d / 180d /
 //     Enterprise custom) pinned — these are the "budget for" values
 //     customers integrate against.
+//   • Desktop-local recorder availability and explicit separation
+//     from the planned managed API/cloud recording surface.
 //   • "What works today" event list (session.completed,
 //     session.failed, api_key.revoked, crypto.order.paid,
 //     crypto.order.failed, test.ping) is a subset of
@@ -105,6 +107,17 @@ describe('W359.A /docs/recordings parity', () => {
     expect(body).toMatch(/<code>"dom_snapshot"<\/code>/);
     expect(body).toMatch(/<code>"pdf"<\/code>/);
     expect(body).toMatch(/inline base64 bytes/);
+  });
+
+  it('desktop-local recorder is distinguished from managed API/cloud recording', () => {
+    expect(body).toMatch(/<strong>Desktop-local recording:<\/strong>/);
+    expect(body).toMatch(/choose <strong>Record<\/strong>\s+to capture streamed frames/);
+    expect(body).toMatch(/local\s+app-data folder for replay/);
+    expect(body).toMatch(/export a portable JSON envelope/);
+    expect(body).toMatch(/manual, local-only frame capture/);
+    expect(body).toMatch(
+      /does not enable the\s+planned API field, webhook, WebM file, cloud upload, or retention\s+policy/,
+    );
   });
 
   it('all notification cross-links resolve (changelog + status-subscriptions + api-reference)', () => {
