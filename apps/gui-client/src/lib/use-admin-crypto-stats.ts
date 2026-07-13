@@ -3,17 +3,13 @@
 // Wraps GET /v1/admin/crypto-orders/stats (V-666.N + V-666.W). Admin-
 // only — requires the `driftstack_internal_admin` scope.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
 export type AdminCryptoStatsStatus =
-  | 'pending'
-  | 'confirming'
-  | 'paid'
-  | 'failed'
-  | 'partial'
-  | 'cancelled';
+  'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled';
 
 export interface AdminCryptoStatsData {
   total: number;
@@ -50,35 +46,67 @@ export function useAdminCryptoStats(opts: UseAdminCryptoStatsOpts = {}): UseAdmi
   const [state, setState] = useState<AdminCryptoStatsState>(
     opts.manual === true ? { kind: 'idle' } : { kind: 'loading' },
   );
+  const requestRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
   const fetcher = useCallback(async (): Promise<void> => {
+    if (inFlightRef.current) return;
     if (!settings.apiKey) {
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
+    inFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    requestRef.current = controller;
     setState({ kind: 'loading' });
     try {
       const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-      const res = await fetch(`${baseUrl}/v1/admin/crypto-orders/stats`, {
+      const res = await fetchWithDeadline(`${baseUrl}/v1/admin/crypto-orders/stats`, {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'application/json',
         },
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
       const body = (await res.json()) as AdminCryptoStatsData;
-      setState({ kind: 'ready', data: body });
+      if (sequence === sequenceRef.current) setState({ kind: 'ready', data: body });
     } catch (err) {
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'error',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Crypto stats timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        inFlightRef.current = false;
+      }
     }
   }, [settings.apiKey, settings.baseUrl]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      inFlightRef.current = false;
+    },
+    [settings.apiKey, settings.baseUrl],
+  );
 
   useEffect(() => {
     if (opts.manual === true) return;

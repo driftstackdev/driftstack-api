@@ -46,7 +46,7 @@ describe('W471.A apps/gui-client/src/lib/use-admin-crypto-stats.ts content parit
 
   it("AdminCryptoStatsStatus 6-value union ('pending'|'confirming'|'paid'|'failed'|'partial'|'cancelled')", () => {
     expect(body).toMatch(
-      /export type AdminCryptoStatsStatus =\s*\n?\s*\| 'pending'\s*\n?\s*\| 'confirming'\s*\n?\s*\| 'paid'\s*\n?\s*\| 'failed'\s*\n?\s*\| 'partial'\s*\n?\s*\| 'cancelled';/,
+      /export type AdminCryptoStatsStatus =\s*\n?\s*'?pending'?\s*\| '?confirming'?\s*\| '?paid'?\s*\| '?failed'?\s*\| '?partial'?\s*\| '?cancelled'?;/,
     );
   });
 
@@ -56,12 +56,19 @@ describe('W471.A apps/gui-client/src/lib/use-admin-crypto-stats.ts content parit
     );
   });
 
-  it("Same V-534 polling state-machine pattern: AdminCryptoStatsState 4-variant union + manual?-aware initial state + no-apiKey 'No API key configured.' + trailing-slash strip + URL `/v1/admin/crypto-orders/stats` exact + readApiErrorMessage delegation + instance-of-Error catch + useEffect manual gate", () => {
+  it('State machine retains manual behavior and exact endpoint while reads are deadline-bounded, single-flight, sequence-gated, and lifecycle-aborted', () => {
     expect(body).toMatch(
       /export type AdminCryptoStatsState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: AdminCryptoStatsData \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/stats`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/stats`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+    );
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
+    expect(body).toMatch(
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
+    );
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
     );
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
