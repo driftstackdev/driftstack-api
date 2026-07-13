@@ -79,10 +79,20 @@ import {
 } from './harness-control-codec.js';
 import type { Cookie } from '../schemas/harness-control-protocol.js';
 import type { Logger } from '../lib/logger.js';
+import {
+  FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES,
+  FleetInboundFrameBudget,
+  readLargeDownloadResultHeader,
+} from './fleet-inbound-frame-gate.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
  *  node's socket (the route adapts the real `ws.send`). */
 export type FleetNodeSocketSend = (data: string) => void;
+
+export type FleetInboundAdmission =
+  | 'accepted'
+  | 'uncorrelated-large-frame'
+  | 'parse-budget-exhausted';
 
 /**
  * One authenticated fleet-node connection. Owns the node's dispatch correlator
@@ -132,6 +142,7 @@ export class FleetControlConnection {
   private readonly onCapabilityReport?: (frame: CapabilityReport, reportingNodeId: string) => void;
   private readonly onErrorEvent?: (frame: HarnessErrorEvent, reportingNodeId: string) => void;
   private readonly logger: Logger | null;
+  private readonly admitInbound?: (byteLength: number, largeFrameCandidate: boolean) => boolean;
   // Actively closes THIS connection's underlying socket. Called from `supersede()`
   // when a newer connection for the node replaces this one, so a half-open box socket
   // can't linger + zombie-heartbeat forever (P0 2026-07-11). Optional (legacy/test
@@ -174,6 +185,9 @@ export class FleetControlConnection {
     // so legacy direct/test constructors keep their exact argument meaning.
     onCapabilityReport?: (frame: CapabilityReport, reportingNodeId: string) => void,
     onErrorEvent?: (frame: HarnessErrorEvent, reportingNodeId: string) => void,
+    // Production registry-owned token bucket. Appended for positional
+    // compatibility with direct unit constructors.
+    admitInbound?: (byteLength: number, largeFrameCandidate: boolean) => boolean,
   ) {
     this.send = send;
     this.terminate = terminate;
@@ -185,6 +199,7 @@ export class FleetControlConnection {
     this.onSessionStatus = onSessionStatus;
     this.onCapabilityReport = onCapabilityReport;
     this.onErrorEvent = onErrorEvent;
+    this.admitInbound = admitInbound;
     const log = logger ?? null;
     this.logger = log;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
@@ -394,6 +409,41 @@ export class FleetControlConnection {
    */
   sendControlCommand(command: ControlCommand): void {
     this.send(JSON.stringify(command));
+  }
+
+  /**
+   * Production receive entrypoint. Admission happens on raw bytes so rejected
+   * frames never allocate a same-sized UTF-8 string or parsed object graph.
+   * Oversized payloads consume an exact one-shot pending download fetch before
+   * parsing; all other traffic consumes the registry's per-node token buckets.
+   */
+  handleInboundBytes(raw: Buffer): FleetInboundAdmission {
+    if (this.stale) {
+      this.logger?.warn(
+        { component: 'fleet-control-registry', nodeId: this.nodeId },
+        'dropping inbound bytes on a stale/superseded FleetControlConnection',
+      );
+      return 'accepted';
+    }
+
+    const isLarge = raw.byteLength > FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES;
+    // Charge the raw-byte admission before the potentially near-96 MiB lexical
+    // scan. Large candidates have a separate tight bucket, so reconnecting
+    // cannot turn even the non-allocating scan itself into unbounded CPU work.
+    if (this.admitInbound?.(raw.byteLength, isLarge) === false) {
+      return 'parse-budget-exhausted';
+    }
+    if (isLarge) {
+      const header = readLargeDownloadResultHeader(raw);
+      if (
+        header === null ||
+        !this.downloadCorrelator.claimLargeFetchResult(header.requestId, header.sessionId)
+      ) {
+        return 'uncorrelated-large-frame';
+      }
+    }
+    this.handleInbound(raw.toString('utf8'));
+    return 'accepted';
   }
 
   /**
@@ -627,6 +677,8 @@ export class FleetControlConnection {
  */
 export class FleetControlRegistry {
   private readonly connections = new Map<string, FleetControlConnection>();
+  /** Shared by node id across reconnects; a reconnect cannot reset parse tokens. */
+  private readonly inboundFrameBudget = new FleetInboundFrameBudget();
   /**
    * Pending-teardown queue (founder bug, A3 W2859) — sessions whose close couldn't
    * reach the box because its control-WSS was down/flapping. `dispatchSessionEndOnClose`
@@ -728,6 +780,8 @@ export class FleetControlRegistry {
       terminate,
       this.onCapabilityReport,
       this.onErrorEvent,
+      (byteLength, largeFrameCandidate) =>
+        this.inboundFrameBudget.admit(nodeId, byteLength, largeFrameCandidate),
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

@@ -54,6 +54,9 @@ interface PendingDownload {
   // result frame whose sessionId disagrees (cross-session spoof guard). The list +
   // data result schemas both carry sessionId, so a single field covers both ops.
   sessionId: string;
+  kind: 'list' | 'fetch';
+  /** An oversized fetch reply gets one pre-parse admission attempt. */
+  largeResultClaimed: boolean;
 }
 
 export class DownloadRequestCorrelator {
@@ -70,7 +73,7 @@ export class DownloadRequestCorrelator {
     req: ListDownloadsRequest,
     timeoutMs = DOWNLOAD_REQUEST_TIMEOUT_MS,
   ): Promise<DownloadOutcome> {
-    return this.dispatch(req.requestId, req.sessionId, timeoutMs, () =>
+    return this.dispatch(req.requestId, req.sessionId, 'list', timeoutMs, () =>
       this.transport.sendList(req),
     );
   }
@@ -81,7 +84,7 @@ export class DownloadRequestCorrelator {
     req: FetchDownloadRequest,
     timeoutMs = DOWNLOAD_REQUEST_TIMEOUT_MS,
   ): Promise<DownloadOutcome> {
-    return this.dispatch(req.requestId, req.sessionId, timeoutMs, () =>
+    return this.dispatch(req.requestId, req.sessionId, 'fetch', timeoutMs, () =>
       this.transport.sendFetch(req),
     );
   }
@@ -89,6 +92,7 @@ export class DownloadRequestCorrelator {
   private dispatch(
     requestId: string,
     sessionId: string,
+    kind: 'list' | 'fetch',
     timeoutMs: number,
     send: () => void,
   ): Promise<DownloadOutcome> {
@@ -96,7 +100,13 @@ export class DownloadRequestCorrelator {
       const timer = setTimeout(() => {
         this.settle(requestId, { status: 'timeout' });
       }, timeoutMs);
-      this.pending.set(requestId, { resolve, timer, sessionId });
+      this.pending.set(requestId, {
+        resolve,
+        timer,
+        sessionId,
+        kind,
+        largeResultClaimed: false,
+      });
       try {
         send();
       } catch (err) {
@@ -154,6 +164,26 @@ export class DownloadRequestCorrelator {
   /** Number of in-flight requests (test/inspection helper). */
   inFlight(): number {
     return this.pending.size;
+  }
+
+  /**
+   * Consume the one oversized-result admission attached to an exact pending
+   * fetch. This runs against a bounded lexical header before the WebSocket body
+   * becomes a UTF-8 string. A malformed first result cannot be replayed at near
+   * the transport cap while the same request waits for its timeout.
+   */
+  claimLargeFetchResult(requestId: string, sessionId: string): boolean {
+    const pending = this.pending.get(requestId);
+    if (
+      pending === undefined ||
+      pending.kind !== 'fetch' ||
+      pending.sessionId !== sessionId ||
+      pending.largeResultClaimed
+    ) {
+      return false;
+    }
+    pending.largeResultClaimed = true;
+    return true;
   }
 
   /**

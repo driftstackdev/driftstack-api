@@ -74,9 +74,10 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain('const conn = deps.registry.register(');
     expect(body).toContain('(data) => socket.send(data),');
     expect(body).toContain("socket.close(1012, 'superseded by a newer control connection')");
-    expect(body).toMatch(
-      /socket\.on\('message', \(data: WsMessageData\) => conn\.handleInbound\(messageToString\(data\)\)\);/,
-    );
+    expect(body).toContain("socket.on('message', (data: WsMessageData) => {");
+    expect(body).toContain('conn.handleInboundBytes(messageToBuffer(data))');
+    expect(body).toContain('socket.close(1008, admission)');
+    expect(body).toContain('if (inboundRejected) return;');
     // ws default auto-pong answers the node's ping; the explicit ping->pong
     // handler is a logged backup; a 30s server->node ping keeps the direction
     // warm. Must NOT terminate() — that RST surfaces as the box's ENOTCONN/Code-57

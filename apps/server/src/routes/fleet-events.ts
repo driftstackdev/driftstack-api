@@ -60,12 +60,13 @@ interface FleetSocket {
 }
 
 /** ws delivers a message as a Buffer, an array of Buffers (fragmented), or an
- *  ArrayBuffer. Normalise to a UTF-8 string for the JSON frame parser. */
+ *  ArrayBuffer. Keep it binary through admission; only accepted frames become
+ *  a UTF-8 string inside FleetControlConnection.handleInboundBytes. */
 type WsMessageData = Buffer | ArrayBuffer | Buffer[];
-function messageToString(data: WsMessageData): string {
-  if (Buffer.isBuffer(data)) return data.toString('utf8');
-  if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
-  return Buffer.from(data).toString('utf8');
+function messageToBuffer(data: WsMessageData): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  if (Array.isArray(data)) return Buffer.concat(data);
+  return Buffer.from(data);
 }
 
 export async function registerFleetEventsRoutes(
@@ -140,7 +141,18 @@ export async function registerFleetEventsRoutes(
           }
         },
       );
-      socket.on('message', (data: WsMessageData) => conn.handleInbound(messageToString(data)));
+      let inboundRejected = false;
+      socket.on('message', (data: WsMessageData) => {
+        if (inboundRejected) return;
+        const admission = conn.handleInboundBytes(messageToBuffer(data));
+        if (admission === 'accepted') return;
+        // Policy-close the whole authenticated socket after the first rejected
+        // frame. Do not log or reflect payload text; the bounded reason is
+        // enough for the node to reconnect/back off and for in-flight requests
+        // to fail through the normal close→unregister path.
+        inboundRejected = true;
+        socket.close(1008, admission);
+      });
       // Explicitly PONG every inbound ping from the node. With autoPong:false in
       // the plugin options, ws no longer auto-replies, so this is the single,
       // guaranteed source of pongs — a node keepalive ping is always answered, so

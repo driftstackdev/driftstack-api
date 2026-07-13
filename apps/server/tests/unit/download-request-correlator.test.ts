@@ -15,6 +15,7 @@ import {
   type DownloadTransport,
 } from '../../src/services/download-request-correlator.js';
 import { FleetControlConnection } from '../../src/services/fleet-control-registry.js';
+import { FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES } from '../../src/services/fleet-inbound-frame-gate.js';
 import type {
   ListDownloadsRequest,
   FetchDownloadRequest,
@@ -183,6 +184,22 @@ describe('DownloadRequestCorrelator', () => {
     expect(await p2).toEqual({ status: 'error', message: 'connection dropped' });
     expect(c.inFlight()).toBe(0);
   });
+
+  it('grants exactly one oversized-result claim to the exact pending fetch only', async () => {
+    const c = new DownloadRequestCorrelator({ sendList: () => {}, sendFetch: () => {} });
+    const list = c.requestList(listReq('rq_list', 'agt_A'));
+    const fetch = c.requestFetch(fetchReq('rq_fetch', 'agt_A'));
+
+    expect(c.claimLargeFetchResult('rq_list', 'agt_A')).toBe(false);
+    expect(c.claimLargeFetchResult('rq_fetch', 'agt_B')).toBe(false);
+    expect(c.claimLargeFetchResult('rq_unknown', 'agt_A')).toBe(false);
+    expect(c.claimLargeFetchResult('rq_fetch', 'agt_A')).toBe(true);
+    expect(c.claimLargeFetchResult('rq_fetch', 'agt_A')).toBe(false);
+
+    c.failAll('done');
+    await expect(list).resolves.toEqual({ status: 'error', message: 'done' });
+    await expect(fetch).resolves.toEqual({ status: 'error', message: 'done' });
+  });
 });
 
 describe('FleetControlConnection downloads (A3 W2856)', () => {
@@ -233,5 +250,29 @@ describe('FleetControlConnection downloads (A3 W2856)', () => {
     const p = conn.requestDownloadList('rq_1', 'agt_x');
     conn.close('socket closed');
     expect(await p).toEqual({ status: 'error', message: 'socket closed' });
+  });
+
+  it('parses one exact correlated large download and rejects unsolicited/replayed large frames', async () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    const dataB64Length = 4 * Math.ceil((FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES + 1024) / 4);
+    const raw = Buffer.from(
+      JSON.stringify({
+        type: 'downloadData',
+        requestId: 'rq_large',
+        sessionId: 'agt_A',
+        name: 'large.bin',
+        dataB64: 'A'.repeat(dataB64Length),
+      }),
+    );
+    expect(raw.byteLength).toBeGreaterThan(FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES);
+
+    expect(conn.handleInboundBytes(raw)).toBe('uncorrelated-large-frame');
+    const pending = conn.requestDownloadFetch('rq_large', 'agt_A', 'large.bin');
+    expect(conn.handleInboundBytes(raw)).toBe('accepted');
+    await expect(pending).resolves.toMatchObject({
+      status: 'data',
+      name: 'large.bin',
+    });
+    expect(conn.handleInboundBytes(raw)).toBe('uncorrelated-large-frame');
   });
 });

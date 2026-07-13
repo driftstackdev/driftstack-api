@@ -24,6 +24,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES } from '../../src/services/fleet-inbound-frame-gate.js';
 
 const subtle = webcrypto.subtle;
 
@@ -222,6 +223,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
       intentName: 'navigate',
       inputParams: base64Json({ url: 'https://example.test' }),
     });
+    const largeDownload = conn!.requestDownloadFetch('req-big', 'sess-1', 'big-file.bin');
 
     // Simulate the node replying to a fetchDownload with an ordinary moderately
     // large file (well under the 64 MiB per-file cap, but its dataB64 alone —
@@ -253,6 +255,36 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
     const result = await otherDispatch;
     expect(result.success).toBe(true);
     expect(result.intentId).toBe('other-intent');
+    await expect(largeDownload).resolves.toMatchObject({
+      status: 'data',
+      name: 'big-file.bin',
+    });
+  });
+
+  it('an uncorrelated oversized frame is policy-closed before normal parsing', async () => {
+    const ws = await connect({
+      authorization: `Bearer ${await freshJwt()}`,
+      [FLEET_NODE_ID_HEADER]: NODE_ID,
+    });
+    const closed = new Promise<{ code: number; reason: string }>((resolve) => {
+      ws.once('close', (code, reason) => resolve({ code, reason: reason.toString('utf8') }));
+    });
+    const dataB64Length = 4 * Math.ceil((FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES + 1024) / 4);
+    ws.send(
+      JSON.stringify({
+        type: 'downloadData',
+        requestId: 'not-pending',
+        sessionId: 'sess-1',
+        name: 'unsolicited.bin',
+        dataB64: 'A'.repeat(dataB64Length),
+      }),
+    );
+
+    await expect(closed).resolves.toEqual({
+      code: 1008,
+      reason: 'uncorrelated-large-frame',
+    });
+    await expect.poll(() => fx.fleetControlRegistry.size(), { timeout: 2000 }).toBe(0);
   });
 
   it('unknown-node JWT → upgrade refused with 401 (socket never opens)', async () => {
