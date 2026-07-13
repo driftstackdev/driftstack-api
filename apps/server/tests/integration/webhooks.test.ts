@@ -93,6 +93,23 @@ describe('POST /v1/webhooks', () => {
     }
   });
 
+  it('400 when URL contains userinfo credentials (never stored)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: {
+        url: 'https://user:plaintext-password@hooks.example.test/h',
+        events: ['session.completed'],
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<Record<string, unknown>>().detail).toMatch(/username or password credentials/);
+    await expect(fx.webhooksRepo.listEndpoints(fx.accountId)).resolves.toEqual([]);
+  });
+
   it('400 when events is empty', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
@@ -413,6 +430,32 @@ describe('PATCH /v1/webhooks/:id (V-351)', () => {
       payload: {},
     });
     expect(patch.statusCode).toBe(400);
+  });
+
+  it('400 when changed URL contains userinfo credentials and preserves the prior target', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/original', events: ['session.completed'] },
+    });
+    const created = create.json<{ id: string }>();
+
+    const patch = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/webhooks/${created.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { url: 'https://user:plaintext-password@x.test/replacement' },
+    });
+
+    expect(patch.statusCode).toBe(400);
+    const get = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/${created.id}`,
+      headers: auth(fx),
+    });
+    expect(get.json<Record<string, unknown>>().url).toBe('https://x.test/original');
   });
 
   it('409 when targeting a soft-deleted endpoint', async () => {

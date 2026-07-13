@@ -59,7 +59,7 @@ describe('W439.A apps/server/src/routes/webhooks.ts content parity', () => {
     );
   });
 
-  it('SSRF guard: create + update reject a webhook URL aimed at a private/reserved target', () => {
+  it('target guard: create + update reject private/reserved or credential-bearing webhook URLs', () => {
     expect(body).toMatch(
       /import \{ unsafeWebhookTargetReason \} from '\.\.\/lib\/webhook-target-guard\.js';/,
     );

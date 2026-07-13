@@ -19,6 +19,17 @@ describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () =
     expect(reason('ftp://example.com')).toBeTruthy();
   });
 
+  it('rejects URL userinfo credentials that fetch will not send', () => {
+    for (const url of [
+      'https://user:password@hooks.example.com/h',
+      'https://user@hooks.example.com/h',
+      'https://:password@hooks.example.com/h',
+      'https://user%40tenant:pa%24%24@hooks.example.com/h',
+    ]) {
+      expect(reason(url), url).toMatch(/username or password credentials/);
+    }
+  });
+
   it('rejects localhost + *.localhost', () => {
     expect(reason('https://localhost/hook')).toMatch(/localhost/);
     expect(reason('https://api.localhost/hook')).toMatch(/localhost/);
@@ -104,6 +115,7 @@ describe('unsafeWebhookTargetReason — allows legit public targets (NO false po
     expect(reason('https://[2606:4700::1111]/h')).toBeNull();
     expect(reason('https://hooks.example.com/driftstack')).toBeNull();
     expect(reason('https://app.customer.io/webhooks/abc?x=1')).toBeNull();
+    expect(reason('https://hooks.example.com/callback?signature=signed-value')).toBeNull();
   });
 
   it('allows a long-but-under-cap URL (e.g. a long signed callback path ≤2048) — no false rejection', () => {

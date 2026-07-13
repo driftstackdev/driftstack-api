@@ -49,6 +49,8 @@ BLOCK.addSubnet('64:ff9b::', 96, 'ipv6'); // NAT64 well-known prefix (RFC6052)
 BLOCK.addSubnet('2002::', 16, 'ipv6'); // 6to4 (embeds IPv4 in 2nd/3rd hextets)
 
 const PRIVATE_TARGET = 'Webhook URL must not target a private, loopback, or reserved address.';
+const URL_CREDENTIALS =
+  'Webhook URL must not include username or password credentials; use a signed path or query parameter instead.';
 // Length cap — every other customer-write string field is `.max()`-bounded, but
 // the create/update webhook `url` is only `z.string().url()` (no length bound),
 // so a pathologically long URL could be stored (bounded only by bodyLimit). Cap
@@ -270,9 +272,9 @@ export function classifyUnsafeVpnTargets(opts: {
 
 /**
  * Returns a rejection reason when `url` is an unsafe webhook target
- * (over-length, non-https, localhost, a numeric IP encoding, or a literal
- * private/reserved IP), else null. DNS hostnames are allowed here (rebind is
- * the connection-time layer).
+ * (over-length, non-https, credential-bearing, localhost, a numeric IP
+ * encoding, or a literal private/reserved IP), else null. DNS hostnames are
+ * allowed here (rebind is the connection-time layer).
  */
 export function unsafeWebhookTargetReason(url: string): string | null {
   // Fail fast on length before parsing — a multi-KB string shouldn't be parsed
@@ -288,6 +290,12 @@ export function unsafeWebhookTargetReason(url: string): string | null {
   }
   if (parsed.protocol !== 'https:') {
     return 'Webhook URL must use https://.';
+  }
+  // WHATWG fetch refuses URLs containing credentials instead of sending an
+  // Authorization header. Accepting one here therefore both stores plaintext
+  // endpoint credentials and creates a webhook that can never deliver.
+  if (parsed.username !== '' || parsed.password !== '') {
+    return URL_CREDENTIALS;
   }
   // Host-level classification (shared with the SOCKS5 egress backend); map the
   // kind back to the webhook-phrased messages this guard's callers/tests expect.
