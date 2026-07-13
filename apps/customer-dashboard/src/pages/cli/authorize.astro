@@ -385,10 +385,16 @@ const apiBaseUrl = resolveApiBaseUrl();
       // the customer doesn't have to click Authorize twice.
       const acceptAllBtn = sections.legalAccept.querySelector('[data-legal-accept-all]');
       const acceptStatus = sections.legalAccept.querySelector('[data-legal-status]');
+      const LEGAL_ACCEPT_TIMEOUT_MS = 15_000;
+      let legalAcceptInFlight = false;
       acceptAllBtn.addEventListener('click', function () {
-        if (pendingAcceptances.length === 0) return;
+        if (pendingAcceptances.length === 0 || legalAcceptInFlight) return;
+        legalAcceptInFlight = true;
         acceptAllBtn.disabled = true;
+        acceptAllBtn.setAttribute('aria-busy', 'true');
         acceptStatus.textContent = 'Recording acceptance…';
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), LEGAL_ACCEPT_TIMEOUT_MS);
         // /v1/legal/accept REQUIRES content_hash (64-char SHA-256
         // hex) — that field isn't in the LegalAcceptanceRequiredError's
         // pending_acceptances extension, so fetch the canonical
@@ -396,6 +402,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         // POST each acceptance with its matching {key, version, hash}.
         fetch(apiBaseUrl + '/v1/legal/required', {
           headers: { authorization: 'Bearer ' + sessionToken },
+          signal: controller.signal,
         })
           .then(function (r) {
             if (!r.ok) throw new Error('Failed to load legal documents (HTTP ' + r.status + ').');
@@ -433,6 +440,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                     version: canon.current_version,
                     content_hash: canon.content_hash,
                   }),
+                  signal: controller.signal,
                 });
               }),
             );
@@ -484,8 +492,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch(function (err) {
             acceptStatus.textContent =
-              'Network error — please retry. (' + (err && err.message ? err.message : err) + ')';
+              err && err.name === 'AbortError'
+                ? 'Recording acceptance took too long. Check your connection and try again.'
+                : 'Network error — please retry. (' +
+                  (err && err.message ? err.message : err) +
+                  ')';
+          })
+          .finally(function () {
+            window.clearTimeout(timeout);
+            legalAcceptInFlight = false;
             acceptAllBtn.disabled = false;
+            acceptAllBtn.setAttribute('aria-busy', 'false');
           });
       });
     })();

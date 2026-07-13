@@ -93,6 +93,21 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toContain('Authorization took too long. Check your connection and try again.');
   });
 
+  it('serializes and bounds the legal-acceptance lookup plus fan-out', () => {
+    expect(body).toContain('const LEGAL_ACCEPT_TIMEOUT_MS = 15_000;');
+    expect(body).toContain('let legalAcceptInFlight = false;');
+    expect(body).toMatch(/pendingAcceptances\.length === 0 \|\| legalAcceptInFlight/);
+    expect(body).toMatch(/acceptAllBtn\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(
+      /window\.setTimeout\(\(\) => controller\.abort\(\), LEGAL_ACCEPT_TIMEOUT_MS\)/,
+    );
+    expect(body.match(/signal: controller\.signal/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(body).toMatch(/window\.clearTimeout\(timeout\);\s*legalAcceptInFlight = false;/);
+    expect(body).toContain(
+      'Recording acceptance took too long. Check your connection and try again.',
+    );
+  });
+
   it('V-328e OS deep-link: driftstack://auth/callback?code=…&state=… after 600ms delay', () => {
     expect(body).toMatch(/V-328e/);
     expect(body).toMatch(

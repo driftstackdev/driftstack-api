@@ -272,11 +272,12 @@ describe('cli-authorize page — local integration', () => {
     (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
     await flush();
     await flush();
-    (
-      local.window.document.querySelector(
-        '[data-state="legal-accept"] [data-legal-accept-all]',
-      ) as HTMLButtonElement
-    ).click();
+    const acceptAllBtn = local.window.document.querySelector(
+      '[data-state="legal-accept"] [data-legal-accept-all]',
+    ) as HTMLButtonElement;
+    acceptAllBtn.dispatchEvent(new local.window.MouseEvent('click'));
+    acceptAllBtn.dispatchEvent(new local.window.MouseEvent('click'));
+    expect(local.fetchCalls.filter((c) => c.url.endsWith('/v1/legal/required'))).toHaveLength(1);
     await flush();
     await flush();
     await flush();
@@ -285,6 +286,11 @@ describe('cli-authorize page — local integration', () => {
     // 4 accept POSTs carry the canonical key + version + matching hash.
     const acceptCalls = local.fetchCalls.filter((c) => c.url.endsWith('/v1/legal/accept'));
     expect(acceptCalls.length).toBe(4);
+    const legalCalls = local.fetchCalls.filter(
+      (c) => c.url.endsWith('/v1/legal/required') || c.url.endsWith('/v1/legal/accept'),
+    );
+    expect(legalCalls.every((c) => c.init?.signal)).toBe(true);
+    expect(new Set(legalCalls.map((c) => c.init?.signal)).size).toBe(1);
     const bodies = acceptCalls.map((c) => JSON.parse(String(c.init?.body)));
     expect(bodies).toEqual([
       { document_key: 'tos', version: '1.2', content_hash: HASH.tos },
