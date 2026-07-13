@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
+import { disposeResponseBody } from '../lib/dispose-response-body';
 import { readBoundedDiagnosticJson } from '../lib/read-bounded-json';
 import { maskApiKey } from '../components/ApiKeyMaskedSpan';
 
@@ -42,7 +43,11 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 8_000);
     fetch(`${trimmed}/version`, { signal: controller.signal, cache: 'no-store' })
-      .then((r) => (r.ok ? readBoundedDiagnosticJson<ServerVersion>(r) : null))
+      .then(async (r) => {
+        if (r.ok) return readBoundedDiagnosticJson<ServerVersion>(r);
+        await disposeResponseBody(r);
+        return null;
+      })
       .then((info) => {
         if (!cancelled && info) setServerInfo(info);
       })

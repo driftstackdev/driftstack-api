@@ -14,6 +14,7 @@
 // across edits for any future "session ran on member X" reference.
 
 import { LazyStore } from '@tauri-apps/plugin-store';
+import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedDiagnosticJson } from './read-bounded-json';
 
 export interface FleetMember {
@@ -162,6 +163,7 @@ export async function pingFleetMember(member: FleetMember): Promise<FleetMemberP
     const res = await fetch(`${member.baseUrl}/version`, { signal: ctrl.signal });
     const dur = Math.round(performance.now() - start);
     if (!res.ok) {
+      await disposeResponseBody(res);
       return { ok: false, durationMs: dur, error: `HTTP ${res.status.toString()}` };
     }
     const body = await readBoundedDiagnosticJson<{

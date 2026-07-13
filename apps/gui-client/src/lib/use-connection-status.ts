@@ -19,6 +19,7 @@
 // session goes offline mid-run.
 
 import { useEffect, useRef, useState } from 'react';
+import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedDiagnosticJson } from './read-bounded-json';
 
 const PROBE_INTERVAL_MS = 30_000;
@@ -97,7 +98,10 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           // a stale cache after the upstream goes down.
           cache: 'no-store',
         });
-        if (cancelled) return;
+        if (cancelled) {
+          await disposeResponseBody(res);
+          return;
+        }
         if (res.ok) {
           // W625 — parse the driver from /version so the UI can warn on mock.
           // #139 — also parse agent_execution (the real "is automation live" signal).
@@ -131,6 +135,7 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           });
           return;
         }
+        await disposeResponseBody(res);
         setStatus((prev) => ({
           state: 'offline',
           lastOkAt: prev.lastOkAt,

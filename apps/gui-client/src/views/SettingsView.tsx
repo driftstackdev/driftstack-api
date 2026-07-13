@@ -23,6 +23,7 @@ import { ConnectivityView } from './ConnectivityView';
 import { RelativeTime } from '../components/RelativeTime';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { disposeResponseBody } from '../lib/dispose-response-body';
 import { readBoundedDiagnosticJson } from '../lib/read-bounded-json';
 import { friendlySettingsActionError } from '../lib/settings-error-copy';
 import { useSettings } from '../lib/SettingsContext';
@@ -301,8 +302,12 @@ export function SettingsView(): JSX.Element {
         signal: controller.signal,
         cache: 'no-store',
       });
-      if (connectionTestTokenRef.current !== token) return;
+      if (connectionTestTokenRef.current !== token) {
+        await disposeResponseBody(res);
+        return;
+      }
       if (!res.ok) {
+        await disposeResponseBody(res);
         setTestState({ kind: 'fail', message: `HTTP ${res.status.toString()}` });
         return;
       }
@@ -444,6 +449,7 @@ export function SettingsView(): JSX.Element {
         headers: { authorization: `Bearer ${draftKey}` },
         signal: controller.signal,
       });
+      await disposeResponseBody(res);
       if (validateTokenRef.current !== token) return; // superseded by a newer Save
       if (res.ok) {
         setKeyCheck({ kind: 'ok' });
