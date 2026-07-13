@@ -11,9 +11,9 @@ description: The master commercial agreement between Driftstack B.V. and Custome
 These Terms of Service ("**ToS**") govern Customer's access to and
 use of the Service offered by Driftstack. Capitalised terms are
 defined in Section 2 (Defined terms) below. The
-[Privacy Policy](privacy.md), the
-[Data Processing Agreement](dpa.md), and the
-[Acceptable Use Policy](aup.md) are incorporated
+[Privacy Policy](/legal/privacy/), the
+[Data Processing Agreement](/legal/dpa/), and the
+[Acceptable Use Policy](/legal/aup/) are incorporated
 by reference and form part of the agreement between the Parties.
 
 The Service is provided to **business customers** only. The Service
@@ -97,7 +97,7 @@ interacts with through the Service. The Service is general-purpose
 infrastructure; Driftstack does not pre-clear specific use cases.
 
 5.2 **AUP compliance.** Customer complies with the
-[Acceptable Use Policy](aup.md), which is part of
+[Acceptable Use Policy](/legal/aup/), which is part of
 this agreement.
 
 5.3 **Customer-Connected Services.** The Service relies on
@@ -310,11 +310,11 @@ obligations.
 ## 10. Data + privacy
 
 10.1 **Privacy Policy.** Driftstack's processing of Personal Data as
-**Controller** is governed by the [Privacy Policy](privacy.md).
+**Controller** is governed by the [Privacy Policy](/legal/privacy/).
 
 10.2 **DPA.** Driftstack's processing of Personal Data as
 **Processor** on Customer's behalf is governed by the
-[Data Processing Agreement](dpa.md), which is incorporated by
+[Data Processing Agreement](/legal/dpa/), which is incorporated by
 reference.
 
 10.3 **Customer-Provided Secrets.** Driftstack stores

@@ -10,14 +10,14 @@ description: How Driftstack processes personal data as a Controller — GDPR-ali
 
 This Privacy Policy describes how Driftstack Processes Personal Data
 in connection with the Service. Capitalised terms are defined in the
-[Terms of Service](terms.md).
+[Terms of Service](/legal/terms/).
 
 This Privacy Policy describes Driftstack's processing as a
 **Controller** (account, billing, support correspondence, marketing
 site analytics where applicable). Driftstack's processing as a
 **Processor** on Customer's behalf (Customer Data, Session content,
 Customer-Provided Secrets) is governed by the
-[Data Processing Agreement (DPA)](dpa.md), which is incorporated
+[Data Processing Agreement (DPA)](/legal/dpa/), which is incorporated
 into Customer's contract by reference.
 
 ## 1. Controller identity
@@ -49,7 +49,7 @@ This Privacy Policy does **not** apply to:
 
 1. Personal Data Customer routes through the Service in the course
    of its own automated browsing — that data is governed by the
-   [DPA](dpa.md), where Customer is the Controller and Driftstack is
+   [DPA](/legal/dpa/), where Customer is the Controller and Driftstack is
    the Processor.
 2. Personal Data Processed by Sub-processors under their own
    privacy policies (linked in Section 7).
@@ -141,7 +141,7 @@ debugging, audit, and replay. Recordings exist only when Customer
 explicitly enables recording per Session.
 
 **Legal basis:** Driftstack Processes Recordings as **Processor on
-Customer's behalf** under the [DPA](dpa.md), not as Controller. The
+Customer's behalf** under the [DPA](/legal/dpa/), not as Controller. The
 Customer is the Controller for Recording content. Customer's lawful
 basis for the underlying browsing (and therefore for the
 Recordings) is determined by Customer.
@@ -435,7 +435,7 @@ The Privacy Contact monitors threshold conditions and triggers DPO appointment w
 
 Driftstack implements technical and organisational measures
 appropriate to the risk under Article 32 GDPR. The measures are
-documented in detail in the [DPA Annex 2](dpa.md#annex-2--technical-and-organisational-measures-toms).
+documented in detail in the [DPA Annex 2](/legal/dpa/#annex-2--technical-and-organisational-measures-toms).
 Summarised:
 
 1. **Encryption in transit:** TLS 1.2+ for all API and Service

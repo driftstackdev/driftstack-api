@@ -188,9 +188,9 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
     expect(body).toMatch(/does not knowingly collect Personal Data of\s+children under 16/);
   });
 
-  it('cross-links: terms.md + dpa.md', () => {
-    expect(body).toMatch(/\[Terms of Service\]\(terms\.md\)/);
-    expect(body).toMatch(/\[Data Processing Agreement \(DPA\)\]\(dpa\.md\)/);
+  it('cross-links: canonical Terms + DPA routes', () => {
+    expect(body).toMatch(/\[Terms of Service\]\(\/legal\/terms\/\)/);
+    expect(body).toMatch(/\[Data Processing Agreement \(DPA\)\]\(\/legal\/dpa\/\)/);
     const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal');
     expect(existsSync(resolve(dir, 'terms.md'))).toBe(true);
     expect(existsSync(resolve(dir, 'dpa.md'))).toBe(true);

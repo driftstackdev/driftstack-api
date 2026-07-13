@@ -9,11 +9,11 @@ description: Article 28 GDPR processor terms for Customer Data, Session content,
 **Version:** 1.0 · **Effective:** 2026-05-07
 
 This Data Processing Agreement ("**DPA**") forms part of the
-[Terms of Service](terms.md) between Driftstack B.V. (the
+[Terms of Service](/legal/terms/) between Driftstack B.V. (the
 "**Processor**" or "**Driftstack**") and Customer (the "**Controller**"
 or "**Customer**"). It governs the Processing of Personal Data by
 Driftstack on Customer's behalf in the course of providing the
-Service. Capitalised terms are defined in the [Terms of Service](terms.md).
+Service. Capitalised terms are defined in the [Terms of Service](/legal/terms/).
 
 This DPA is structured to satisfy Article 28(3) GDPR. To the extent
 applicable to a Customer's processing in another jurisdiction (UK
@@ -351,7 +351,7 @@ international transfer.
 ## 11. Retention summary (cross-reference)
 
 The retention periods applicable to data Processed under this DPA
-are set out in Section 9 of the [Privacy Policy](privacy.md#9-retention) and apply equally here. Notably:
+are set out in Section 9 of the [Privacy Policy](/legal/privacy/#9-retention) and apply equally here. Notably:
 
 - Session Recordings: Customer-controlled (1–365 days, default 30).
 - Customer-Provided Secrets: deleted within 30 days of Account
@@ -488,7 +488,7 @@ Driftstack personnel are restricted and audited.
 
 ## Annex 3 — Sub-processors
 
-The same list as in [Privacy Policy Section 7](privacy.md#7-sub-processors) applies, summarised here for convenience:
+The same list as in [Privacy Policy Section 7](/legal/privacy/#7-sub-processors) applies, summarised here for convenience:
 
 | Sub-processor                             | Role                                     | Location                                                     | Transfer mechanism                      |
 | ----------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | --------------------------------------- |

@@ -10,7 +10,7 @@ description: Refund eligibility, timing, card refund mechanics, the non-refundab
 
 This Refund Policy explains how Driftstack issues refunds for paid
 Subscriptions and one-off charges. It is
-incorporated into the [Terms of Service](terms.md) by reference;
+incorporated into the [Terms of Service](/legal/terms/) by reference;
 section 8.7 of the Terms is the binding contractual statement and
 this policy expands on the operational mechanics.
 

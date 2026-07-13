@@ -166,10 +166,10 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     expect(body).toMatch(/US OFAC sanctions/);
   });
 
-  it('cross-links: privacy.md / dpa.md / aup.md all exist', () => {
-    expect(body).toMatch(/\[Privacy Policy\]\(privacy\.md\)/);
-    expect(body).toMatch(/\[Data Processing Agreement\]\(dpa\.md\)/);
-    expect(body).toMatch(/\[Acceptable Use Policy\]\(aup\.md\)/);
+  it('cross-links: canonical Privacy / DPA / AUP routes all exist', () => {
+    expect(body).toMatch(/\[Privacy Policy\]\(\/legal\/privacy\/\)/);
+    expect(body).toMatch(/\[Data Processing Agreement\]\(\/legal\/dpa\/\)/);
+    expect(body).toMatch(/\[Acceptable Use Policy\]\(\/legal\/aup\/\)/);
     const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal');
     expect(existsSync(resolve(dir, 'privacy.md'))).toBe(true);
     expect(existsSync(resolve(dir, 'dpa.md'))).toBe(true);

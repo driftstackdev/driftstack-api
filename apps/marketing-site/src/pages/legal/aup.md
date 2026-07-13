@@ -9,8 +9,8 @@ description: Prohibited targets, prohibited techniques, customer responsibility 
 **Version:** 1.0 · **Effective:** 2026-05-07
 
 This Acceptable Use Policy ("**AUP**") governs Customer's use of the
-Service. The AUP is incorporated into the [Terms of Service](terms.md) by reference. Capitalised terms are defined in the
-[Terms of Service](terms.md).
+Service. The AUP is incorporated into the [Terms of Service](/legal/terms/) by reference. Capitalised terms are defined in the
+[Terms of Service](/legal/terms/).
 
 The AUP exists because the Service is general-purpose infrastructure
 that can be misused. Customer is the party closest to the lawfulness
@@ -279,8 +279,8 @@ remediation options above.
 
 ## 8. Updates
 
-This AUP is a Document under the [Terms of Service](terms.md). Material updates trigger the
-re-acceptance flow described in the [Terms of Service](terms.md)
+This AUP is a Document under the [Terms of Service](/legal/terms/). Material updates trigger the
+re-acceptance flow described in the [Terms of Service](/legal/terms/)
 under "Acceptance". Patch-level updates (typo, formatting,
 clarification of an existing prohibition) do not.
 

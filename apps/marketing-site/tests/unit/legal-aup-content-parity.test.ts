@@ -187,8 +187,8 @@ describe('W377.C marketing-site /legal/aup.md content parity', () => {
     expect(body).toMatch(/Driftstack B\.V\., Amsterdam, the Netherlands/);
   });
 
-  it('cross-link: terms.md', () => {
-    expect(body).toMatch(/\[Terms of Service\]\(terms\.md\)/);
+  it('cross-link: canonical Terms route', () => {
+    expect(body).toMatch(/\[Terms of Service\]\(\/legal\/terms\/\)/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/terms.md'))).toBe(
       true,
     );
