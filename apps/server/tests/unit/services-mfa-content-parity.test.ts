@@ -83,13 +83,16 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     expect(body).toMatch(/createdAt: Date;/);
   });
 
-  it('MfaRepo: 8 methods (findByAccount / upsertSecret / touchLastUsed / deleteForAccount / insertRecoveryCodes / listUnusedRecoveryCodes / markRecoveryCodeUsed / markAllRecoveryCodesUsed)', () => {
+  it('MfaRepo exposes atomic credential issuance transitions plus replay-safe consumption', () => {
     expect(body).toMatch(/export interface MfaRepo \{/);
     expect(body).toMatch(
       /\/\*\* V-353b — return the MFA row for the account \(any state\) or null\. \*\/\s*\n?\s*findByAccount\(accountId: string\): Promise<MfaEnrollmentRow \| null>;/,
     );
     expect(body).toMatch(
-      /upsertSecret\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*ciphertext: string;\s*\n?\s*iv: string;\s*\n?\s*tag: string;\s*\n?\s*enrolledAt: Date \| null;\s*\n?\s*now: Date;\s*\n?\s*\}\): Promise<MfaEnrollmentRow>;/,
+      /startEnrollmentIfNotEnrolled\(args: \{[\s\S]*?\}\): Promise<MfaEnrollmentRow \| null>;/,
+    );
+    expect(body).toMatch(
+      /completeEnrollmentIfPending\(args: \{[\s\S]*?expectedUpdatedAt: Date;[\s\S]*?hashes: string\[\];[\s\S]*?\}\): Promise<boolean>;/,
     );
     expect(body).toMatch(
       /\/\*\* V-353b — touch `last_used_at` after a successful verify\. \*\/\s*\n?\s*touchLastUsed\(accountId: string, now: Date\): Promise<void>;/,
@@ -98,14 +101,11 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
       /\/\*\* V-353b — delete the MFA row \+ recovery codes \(cascade\)\. \*\/\s*\n?\s*deleteForAccount\(accountId: string\): Promise<void>;/,
     );
     expect(body).toMatch(
-      /insertRecoveryCodes\(args: \{ accountId: string; hashes: string\[\]; now: Date \}\): Promise<void>;/,
-    );
-    expect(body).toMatch(
       /listUnusedRecoveryCodes\(accountId: string\): Promise<RecoveryCodeRow\[\]>;/,
     );
     expect(body).toMatch(/markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean>;/);
     expect(body).toMatch(
-      /markAllRecoveryCodesUsed\(accountId: string, now: Date\): Promise<void>;/,
+      /replaceRecoveryCodesIfCurrent\(args: \{[\s\S]*?expectedUpdatedAt: Date;[\s\S]*?hashes: string\[\];[\s\S]*?\}\): Promise<boolean>;/,
     );
   });
 
@@ -126,18 +126,14 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     );
   });
 
-  it('startEnrollment: ConflictError 409 when already enrolled (must DELETE first); generateTotpSecret + encryptSecret + upsertSecret with enrolledAt=null', () => {
+  it('startEnrollment delegates the enrolled-state check and secret write to one atomic repo transition', () => {
     expect(body).toMatch(
       /async startEnrollment\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*email: string;\s*\n?\s*\}\): Promise<StartEnrollmentResult> \{/,
     );
-    expect(body).toMatch(
-      /if \(existing && existing\.enrolledAt !== null\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'MFA is already enrolled\. Disable first via DELETE \/v1\/account\/mfa, then re-enroll\.',\s*\n?\s*\);/,
-    );
+    expect(body).toMatch(/const started = await this\.repo\.startEnrollmentIfNotEnrolled\(\{/);
     expect(body).toMatch(/const \{ secretBase32, secretBytes \} = generateTotpSecret\(\);/);
     expect(body).toMatch(/const enc = encryptSecret\(secretBytes, this\.config\.encryptionKey\);/);
-    expect(body).toMatch(
-      /await this\.repo\.upsertSecret\(\{[\s\S]+?accountId: args\.accountId,\s*\n?\s*ciphertext: enc\.ciphertext,\s*\n?\s*iv: enc\.iv,\s*\n?\s*tag: enc\.tag,\s*\n?\s*enrolledAt: null,/,
-    );
+    expect(body).toMatch(/if \(started === null\) \{\s*\n?\s*throw new ConflictError\(/);
     expect(body).toMatch(/otpauthUri: otpauthUri\(\{ email: args\.email, secretBase32 \}\),/);
   });
 
@@ -154,6 +150,9 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ Hash the NORMALIZED form \(hyphen-stripped, uppercased\) so verify\s*\n?\s*\/\/ can check against either typed form \(with or without hyphen\)\.\s*\n?\s*const hashes = await Promise\.all\(codes\.map\(\(c\) => hashApiKey\(normalizeRecoveryCode\(c\)\)\)\);/,
     );
+    expect(body).toMatch(/const completed = await this\.repo\.completeEnrollmentIfPending\(\{/);
+    expect(body).toMatch(/expectedUpdatedAt: row\.updatedAt,/);
+    expect(body).toMatch(/if \(!completed\) \{\s*\n?\s*throw new ConflictError\(/);
   });
 
   it('completeEnrollment: emits account.mfa_enrolled audit; try/catch swallow', () => {
@@ -216,18 +215,17 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     expect(body).toMatch(/return 'recovery';/);
   });
 
-  it('regenerateRecoveryCodes: requires enrolled; markAllRecoveryCodesUsed + mint 10 fresh', () => {
+  it('regenerateRecoveryCodes: requires enrolled and atomically CAS-replaces one batch', () => {
     expect(body).toMatch(
       /async regenerateRecoveryCodes\(args: \{ accountId: string \}\): Promise<\{ recoveryCodes: string\[\] \}> \{/,
     );
     expect(body).toMatch(
       /if \(!row \|\| row\.enrolledAt === null\) \{\s*\n?\s*throw new NotFoundError\('MFA is not enrolled for this account\.'\);/,
     );
-    expect(body).toMatch(/await this\.repo\.markAllRecoveryCodesUsed\(args\.accountId, now\);/);
     expect(body).toMatch(/const codes = generateRecoveryCodes\(\);/);
-    expect(body).toMatch(
-      /await this\.repo\.insertRecoveryCodes\(\{ accountId: args\.accountId, hashes, now \}\);/,
-    );
+    expect(body).toMatch(/const replaced = await this\.repo\.replaceRecoveryCodesIfCurrent\(\{/);
+    expect(body).toMatch(/expectedUpdatedAt: row\.updatedAt,/);
+    expect(body).toMatch(/if \(!replaced\) \{\s*\n?\s*throw new ConflictError\(/);
   });
 
   it('getStatus: enrolled=false short-circuit when not enrolled; otherwise enrolled+enrolledAt+lastUsedAt+unusedRecoveryCodes count', () => {

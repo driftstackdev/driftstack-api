@@ -58,18 +58,23 @@ export interface RecoveryCodeRow {
 export interface MfaRepo {
   /** V-353b — return the MFA row for the account (any state) or null. */
   findByAccount(accountId: string): Promise<MfaEnrollmentRow | null>;
-  /** V-353b — upsert the encrypted secret for the account. Sets
-   *  `enrolled_at` only when explicitly provided (start-enrollment
-   *  passes null to leave it pending; complete-enrollment passes
-   *  the timestamp).  */
-  upsertSecret(args: {
+  /** Atomically insert/replace a pending secret only while the account is not
+   *  enrolled. Returns null when a concurrent request already enrolled it. */
+  startEnrollmentIfNotEnrolled(args: {
     accountId: string;
     ciphertext: string;
     iv: string;
     tag: string;
-    enrolledAt: Date | null;
     now: Date;
-  }): Promise<MfaEnrollmentRow>;
+  }): Promise<MfaEnrollmentRow | null>;
+  /** Atomically transition the exact pending snapshot to enrolled and insert
+   *  its first recovery-code batch. Returns false when the snapshot is stale. */
+  completeEnrollmentIfPending(args: {
+    accountId: string;
+    expectedUpdatedAt: Date;
+    hashes: string[];
+    now: Date;
+  }): Promise<boolean>;
   /** V-353b — touch `last_used_at` after a successful verify. */
   touchLastUsed(accountId: string, now: Date): Promise<void>;
   /**
@@ -83,17 +88,20 @@ export interface MfaRepo {
   consumeTotpCounter(args: { accountId: string; counter: number; now: Date }): Promise<boolean>;
   /** V-353b — delete the MFA row + recovery codes (cascade). */
   deleteForAccount(accountId: string): Promise<void>;
-  /** V-353b — bulk-insert N recovery code hashes for the account. */
-  insertRecoveryCodes(args: { accountId: string; hashes: string[]; now: Date }): Promise<void>;
   /** V-353b — list unused recovery codes (used by the verify path). */
   listUnusedRecoveryCodes(accountId: string): Promise<RecoveryCodeRow[]>;
   /** V-353b — atomically consume a single recovery code. Returns true iff THIS
    *  call flipped it from unused → used (rowCount === 1); false when it was
    *  already spent (a concurrent consume won the race). Gates double-spend (#5). */
   markRecoveryCodeUsed(id: string, now: Date): Promise<boolean>;
-  /** V-353b — bulk-mark every unused recovery code consumed (used by
-   *  regenerate). */
-  markAllRecoveryCodesUsed(accountId: string, now: Date): Promise<void>;
+  /** Atomically invalidate the existing batch and insert a replacement only
+   *  when the enrollment snapshot is still current. */
+  replaceRecoveryCodesIfCurrent(args: {
+    accountId: string;
+    expectedUpdatedAt: Date;
+    hashes: string[];
+    now: Date;
+  }): Promise<boolean>;
 }
 
 export interface MfaServiceConfig {
@@ -130,22 +138,20 @@ export class MfaService {
     accountId: string;
     email: string;
   }): Promise<StartEnrollmentResult> {
-    const existing = await this.repo.findByAccount(args.accountId);
-    if (existing && existing.enrolledAt !== null) {
-      throw new ConflictError(
-        'MFA is already enrolled. Disable first via DELETE /v1/account/mfa, then re-enroll.',
-      );
-    }
     const { secretBase32, secretBytes } = generateTotpSecret();
     const enc = encryptSecret(secretBytes, this.config.encryptionKey);
-    await this.repo.upsertSecret({
+    const started = await this.repo.startEnrollmentIfNotEnrolled({
       accountId: args.accountId,
       ciphertext: enc.ciphertext,
       iv: enc.iv,
       tag: enc.tag,
-      enrolledAt: null,
       now: new Date(),
     });
+    if (started === null) {
+      throw new ConflictError(
+        'MFA is already enrolled. Disable first via DELETE /v1/account/mfa, then re-enroll.',
+      );
+    }
     return {
       otpauthUri: otpauthUri({ email: args.email, secretBase32 }),
       secretBase32,
@@ -181,25 +187,21 @@ export class MfaService {
       throw new BadRequestError('Invalid 6-digit code. Try again.');
     }
 
-    const now = new Date();
-    await this.repo.upsertSecret({
-      accountId: args.accountId,
-      ciphertext: row.totpSecretCiphertext,
-      iv: row.totpSecretIv,
-      tag: row.totpSecretTag,
-      enrolledAt: now,
-      now,
-    });
-
     const codes = generateRecoveryCodes();
     // Hash the NORMALIZED form (hyphen-stripped, uppercased) so verify
     // can check against either typed form (with or without hyphen).
     const hashes = await Promise.all(codes.map((c) => hashApiKey(normalizeRecoveryCode(c))));
-    await this.repo.insertRecoveryCodes({
+    const completed = await this.repo.completeEnrollmentIfPending({
       accountId: args.accountId,
+      expectedUpdatedAt: row.updatedAt,
       hashes,
-      now,
+      now: new Date(),
     });
+    if (!completed) {
+      throw new ConflictError(
+        'MFA enrollment changed while the code was being verified. Retry with the latest enrollment.',
+      );
+    }
 
     if (this.accountAudit) {
       try {
@@ -348,11 +350,19 @@ export class MfaService {
     if (!row || row.enrolledAt === null) {
       throw new NotFoundError('MFA is not enrolled for this account.');
     }
-    const now = new Date();
-    await this.repo.markAllRecoveryCodesUsed(args.accountId, now);
     const codes = generateRecoveryCodes();
     const hashes = await Promise.all(codes.map((c) => hashApiKey(normalizeRecoveryCode(c))));
-    await this.repo.insertRecoveryCodes({ accountId: args.accountId, hashes, now });
+    const replaced = await this.repo.replaceRecoveryCodesIfCurrent({
+      accountId: args.accountId,
+      expectedUpdatedAt: row.updatedAt,
+      hashes,
+      now: new Date(),
+    });
+    if (!replaced) {
+      throw new ConflictError(
+        'MFA recovery codes changed during regeneration. Refresh and try again.',
+      );
+    }
     return { recoveryCodes: codes };
   }
 

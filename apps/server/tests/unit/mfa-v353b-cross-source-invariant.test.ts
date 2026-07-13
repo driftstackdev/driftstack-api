@@ -191,11 +191,14 @@ describe('W938 V-353b MFA cross-source invariant', () => {
     expect(p).toMatch(/markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean>;/);
   });
 
-  // ─── Disable wipes all recovery codes ────────────────────────
+  // ─── Atomic recovery-code rotation ───────────────────────────
 
-  it("CRITICAL markAllRecoveryCodesUsed in MfaRepo — wipes all recovery codes for an account. The 'wipes the row + recovery codes' contract on disable is what makes re-enrolling start fresh.", () => {
+  it('CRITICAL MfaRepo exposes one compare-and-set replacement primitive so invalidation and issuance cannot split', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa.ts'));
-    expect(p).toMatch(/markAllRecoveryCodesUsed\(accountId: string, now: Date\): Promise<void>;/);
+    expect(p).toMatch(/replaceRecoveryCodesIfCurrent\(args: \{/);
+    expect(p).toMatch(/expectedUpdatedAt: Date;/);
+    expect(p).toMatch(/hashes: string\[\];/);
+    expect(p).toMatch(/\): Promise<boolean>;/);
   });
 
   // ─── MFA primitives imported from lib/mfa-totp ───────────────

@@ -4,15 +4,9 @@
 //
 //   V-353b anchor — 'V-353b — Drizzle implementation of MfaRepo'.
 //
-//   DrizzleMfaRepo 8-method surface — findByAccount + upsertSecret +
-//     touchLastUsed + deleteForAccount + insertRecoveryCodes +
-//     listUnusedRecoveryCodes + markRecoveryCodeUsed +
-//     markAllRecoveryCodesUsed.
-//
-//   upsertSecret onConflictDoUpdate framing — target accountId; set
-//     ciphertext + iv + tag + updatedAt; preserve enrolledAt unless
-//     explicitly provided. The 'preserve enrolledAt' design lets
-//     mid-enrollment + post-enrollment-change paths share one method.
+//   Enrollment start/completion and recovery-code replacement serialize on a
+//     per-account transaction lock. Credential issuers also compare-and-set a
+//     monotonic updatedAt revision so only one plaintext batch can win.
 //
 //   deleteForAccount 2-delete framing — 'Recovery codes cascade via
 //   FK on accountId, but we rely on the accounts FK cascade —
@@ -25,9 +19,7 @@
 //   markRecoveryCodeUsed double-check — and(eq(id), isNull(usedAt))
 //     prevents replay (idempotency).
 //
-//   markAllRecoveryCodesUsed mass-set + same isNull(usedAt) guard.
-//
-//   insertRecoveryCodes early-return on empty hashes array.
+//   Recovery-code replacement invalidates and inserts in one transaction.
 //
 //   toEnrollmentRow 8-field shape — accountId + totpSecretCiphertext
 //     + totpSecretIv + totpSecretTag + enrolledAt + lastUsedAt +
@@ -59,49 +51,47 @@ describe('W997 db/mfa-repo V-353b cross-source invariant', () => {
     expect(p).toMatch(/export class DrizzleMfaRepo implements MfaRepo \{/);
   });
 
-  // ─── 8-method surface ────────────────────────────────────────
+  // ─── repository surface ─────────────────────────────────────
 
-  it('CRITICAL 8-method surface — findByAccount + upsertSecret + touchLastUsed + deleteForAccount + insertRecoveryCodes + listUnusedRecoveryCodes + markRecoveryCodeUsed + markAllRecoveryCodesUsed. The 8-method MfaRepo contract covers enrollment + recovery-code lifecycle.', () => {
+  it('CRITICAL surface includes atomic start/complete/replace credential transitions', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
     expect(p).toMatch(
       /async findByAccount\(accountId: string\): Promise<MfaEnrollmentRow \| null> \{/,
     );
-    expect(p).toMatch(/async upsertSecret\(args: \{/);
+    expect(p).toMatch(/async startEnrollmentIfNotEnrolled\(args: \{/);
+    expect(p).toMatch(/async completeEnrollmentIfPending\(args: \{/);
     expect(p).toMatch(/async touchLastUsed\(accountId: string, now: Date\): Promise<void> \{/);
     expect(p).toMatch(/async deleteForAccount\(accountId: string\): Promise<void> \{/);
-    expect(p).toMatch(/async insertRecoveryCodes\(args: \{/);
     expect(p).toMatch(
       /async listUnusedRecoveryCodes\(accountId: string\): Promise<RecoveryCodeRow\[\]> \{/,
     );
     expect(p).toMatch(/async markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean> \{/);
-    expect(p).toMatch(
-      /async markAllRecoveryCodesUsed\(accountId: string, now: Date\): Promise<void> \{/,
-    );
+    expect(p).toMatch(/async replaceRecoveryCodesIfCurrent\(args: \{/);
   });
 
-  // ─── upsertSecret onConflictDoUpdate ─────────────────────────
+  // ─── serialized issuance + monotonic CAS ─────────────────────
 
-  it('CRITICAL upsertSecret onConflictDoUpdate target = accountId. The conflict-on-accountId design enforces 1-row-per-account uniqueness.', () => {
+  it('CRITICAL all credential lifecycle transactions share the per-account advisory lock', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
-    expect(p).toMatch(/\.onConflictDoUpdate\(\{/);
-    expect(p).toMatch(/target: accountMfa\.accountId,/);
-    expect(p).toMatch(/set: setOnConflict,/);
+    expect(p.match(/pg_advisory_xact_lock/g)).toHaveLength(4);
+    expect(p.match(/mfa-credentials:/g)).toHaveLength(4);
   });
 
-  it('CRITICAL upsertSecret setOnConflict 4 always-fields — ciphertext + iv + tag + updatedAt. EnrolledAt is conditionally set only when args.enrolledAt !== null (preserves first-enrollment timestamp during rotation).', () => {
+  it('CRITICAL start refuses enrolled rows and advances pending revisions monotonically', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
+    expect(p).toMatch(/if \(existing\?\.enrolledAt != null\) return null;/);
     expect(p).toMatch(/totpSecretCiphertext: args\.ciphertext,/);
     expect(p).toMatch(/totpSecretIv: args\.iv,/);
     expect(p).toMatch(/totpSecretTag: args\.tag,/);
-    expect(p).toMatch(/updatedAt: args\.now,/);
-    expect(p).toMatch(
-      /if \(args\.enrolledAt !== null\) setOnConflict\.enrolledAt = args\.enrolledAt;/,
-    );
+    expect(p).toMatch(/updatedAt: nextRevision\(args\.now, existing\.updatedAt\),/);
   });
 
-  it("CRITICAL upsertSecret 'upsertSecret: insert returned no row' defensive check. The named-error captures the never-happens path.", () => {
+  it('CRITICAL completion CASes pending+expected revision before inserting the first code batch', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
-    expect(p).toMatch(/if \(!row\) throw new Error\('upsertSecret: insert returned no row'\);/);
+    expect(p).toMatch(/isNull\(accountMfa\.enrolledAt\),/);
+    expect(p).toMatch(/eq\(accountMfa\.updatedAt, args\.expectedUpdatedAt\),/);
+    expect(p).toMatch(/if \(!updated\) return false;/);
+    expect(p).toMatch(/await tx\.insert\(accountMfaRecoveryCodes\)\.values\(/);
   });
 
   // ─── touchLastUsed 2-field touch ─────────────────────────────
@@ -109,34 +99,18 @@ describe('W997 db/mfa-repo V-353b cross-source invariant', () => {
   it('CRITICAL touchLastUsed updates lastUsedAt + updatedAt. The 2-field touch keeps the audit-trail consistent.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
     expect(p).toMatch(/\.update\(accountMfa\)/);
-    expect(p).toMatch(/\.set\(\{ lastUsedAt: now, updatedAt: now \}\)/);
+    expect(p).toMatch(/lastUsedAt: now,/);
+    expect(p).toMatch(/GREATEST\(\$\{accountMfa\.updatedAt\} \+ INTERVAL '1 millisecond'/);
     expect(p).toMatch(/\.where\(eq\(accountMfa\.accountId, accountId\)\)/);
   });
 
   // ─── deleteForAccount 2-delete framing ───────────────────────
 
-  it("CRITICAL deleteForAccount 2-delete framing — 'Recovery codes cascade via FK on accountId, but we rely on the accounts FK cascade — accountMfa cascade is on accounts only. Belt-and-braces: explicit delete on the recovery codes table'. The belt-and-braces double-delete is defense-in-depth against FK-cascade misconfig.", () => {
+  it('CRITICAL deleteForAccount deletes recovery codes and enrollment inside the same locked transaction', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
-    expect(p).toMatch(/\/\/ Recovery codes cascade via FK on accountId, but we rely on the/);
-    expect(p).toMatch(/\/\/ accounts FK cascade — accountMfa cascade is on accounts only\./);
-    expect(p).toMatch(/\/\/ Belt-and-braces: explicit delete on the recovery codes table\./);
-    expect(p).toMatch(
-      /await this\.database\.db\.delete\(accountMfa\)\.where\(eq\(accountMfa\.accountId, accountId\)\);/,
-    );
-    expect(p).toMatch(/await this\.database\.db/);
+    expect(p).toMatch(/async deleteForAccount[\s\S]*?this\.database\.db\.transaction/);
     expect(p).toMatch(/\.delete\(accountMfaRecoveryCodes\)/);
-    expect(p).toMatch(/\.where\(eq\(accountMfaRecoveryCodes\.accountId, accountId\)\);/);
-  });
-
-  // ─── insertRecoveryCodes early-return ────────────────────────
-
-  it("CRITICAL insertRecoveryCodes early-return on empty hashes — 'if (args.hashes.length === 0) return;'. The 0-on-empty avoids emitting empty INSERT VALUES.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
-    expect(p).toMatch(/if \(args\.hashes\.length === 0\) return;/);
-    expect(p).toMatch(/args\.hashes\.map\(\(h\) => \(\{/);
-    expect(p).toMatch(/accountId: args\.accountId,/);
-    expect(p).toMatch(/codeHash: h,/);
-    expect(p).toMatch(/createdAt: args\.now,/);
+    expect(p).toMatch(/await tx\.delete\(accountMfa\)/);
   });
 
   // ─── listUnusedRecoveryCodes WHERE + ORDER ───────────────────
@@ -161,12 +135,16 @@ describe('W997 db/mfa-repo V-353b cross-source invariant', () => {
     expect(p).toMatch(/return updated\.length === 1;/);
   });
 
-  // ─── markAllRecoveryCodesUsed mass-set ───────────────────────
+  // ─── atomic recovery-code replacement ────────────────────────
 
-  it("CRITICAL markAllRecoveryCodesUsed mass-set — 'and(eq(accountId), isNull(usedAt))' affects every unused code. The mass-mark-used design is what V-353b 'regenerate-codes' flow calls before issuing fresh codes.", () => {
+  it('CRITICAL replacement CASes the enrolled revision and atomically invalidates+inserts', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
-    expect(p).toMatch(/eq\(accountMfaRecoveryCodes\.accountId, accountId\),/);
+    expect(p).toMatch(/async replaceRecoveryCodesIfCurrent\(args: \{/);
+    expect(p).toMatch(/sql`\$\{accountMfa\.enrolledAt\} IS NOT NULL`/);
+    expect(p).toMatch(/eq\(accountMfa\.updatedAt, args\.expectedUpdatedAt\)/);
+    expect(p).toMatch(/eq\(accountMfaRecoveryCodes\.accountId, args\.accountId\),/);
     expect(p).toMatch(/isNull\(accountMfaRecoveryCodes\.usedAt\),/);
+    expect(p).toMatch(/args\.hashes\.map\(\(codeHash\) => \(\{/);
   });
 
   // ─── toEnrollmentRow 8-field mapper ──────────────────────────

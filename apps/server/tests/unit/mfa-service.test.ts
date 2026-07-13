@@ -39,26 +39,60 @@ function makeRepo(): {
     audit: [] as string[],
     touchedAt: null as Date | null,
   };
+  const insertHashes = (args: { accountId: string; hashes: string[]; now: Date }): void => {
+    for (const h of args.hashes) {
+      state.codes.push({
+        id: `rc_${state.codes.length + 1}`,
+        accountId: args.accountId,
+        codeHash: h,
+        usedAt: null,
+        createdAt: args.now,
+      });
+    }
+  };
   const repo: MfaRepo = {
     findByAccount: () => Promise.resolve(state.row),
-    upsertSecret: ({ accountId, ciphertext, iv, tag, enrolledAt, now }) => {
+    startEnrollmentIfNotEnrolled: ({ accountId, ciphertext, iv, tag, now }) => {
+      if (state.row?.enrolledAt != null) return Promise.resolve(null);
+      const updatedAt = state.row
+        ? new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1))
+        : now;
       const row: MfaEnrollmentRow = {
         accountId,
         totpSecretCiphertext: ciphertext,
         totpSecretIv: iv,
         totpSecretTag: tag,
-        enrolledAt,
+        enrolledAt: null,
         lastUsedAt: state.row?.lastUsedAt ?? null,
         lastUsedTotpCounter: state.row?.lastUsedTotpCounter ?? null,
         createdAt: state.row?.createdAt ?? now,
-        updatedAt: now,
+        updatedAt,
       };
       state.row = row;
       return Promise.resolve(row);
     },
+    completeEnrollmentIfPending: ({ accountId, expectedUpdatedAt, hashes, now }) => {
+      if (
+        !state.row ||
+        state.row.enrolledAt !== null ||
+        state.row.updatedAt.getTime() !== expectedUpdatedAt.getTime()
+      ) {
+        return Promise.resolve(false);
+      }
+      state.row = {
+        ...state.row,
+        enrolledAt: now,
+        updatedAt: new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1)),
+      };
+      insertHashes({ accountId, hashes, now });
+      return Promise.resolve(true);
+    },
     touchLastUsed: (_acc, now) => {
       state.touchedAt = now;
-      if (state.row) state.row.lastUsedAt = now;
+      if (state.row) {
+        state.row.lastUsedAt = now;
+        state.row.updatedAt = new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1));
+      }
       return Promise.resolve();
     },
     // TOTP replay defence (migration 0090) — atomic strict-monotonic write.
@@ -69,24 +103,12 @@ function makeRepo(): {
         return Promise.resolve(false);
       }
       r.lastUsedTotpCounter = counter;
-      r.updatedAt = now;
+      r.updatedAt = new Date(Math.max(now.getTime(), r.updatedAt.getTime() + 1));
       return Promise.resolve(true);
     },
     deleteForAccount: () => {
       state.row = null;
       state.codes = [];
-      return Promise.resolve();
-    },
-    insertRecoveryCodes: ({ accountId, hashes, now }) => {
-      for (const h of hashes) {
-        state.codes.push({
-          id: `rc_${state.codes.length + 1}`,
-          accountId,
-          codeHash: h,
-          usedAt: null,
-          createdAt: now,
-        });
-      }
       return Promise.resolve();
     },
     listUnusedRecoveryCodes: () => Promise.resolve(state.codes.filter((c) => c.usedAt === null)),
@@ -100,9 +122,21 @@ function makeRepo(): {
       }
       return Promise.resolve(false);
     },
-    markAllRecoveryCodesUsed: (_acc, now) => {
+    replaceRecoveryCodesIfCurrent: ({ accountId, expectedUpdatedAt, hashes, now }) => {
+      if (
+        !state.row ||
+        state.row.enrolledAt === null ||
+        state.row.updatedAt.getTime() !== expectedUpdatedAt.getTime()
+      ) {
+        return Promise.resolve(false);
+      }
+      state.row = {
+        ...state.row,
+        updatedAt: new Date(Math.max(now.getTime(), state.row.updatedAt.getTime() + 1)),
+      };
       for (const c of state.codes) if (c.usedAt === null) c.usedAt = now;
-      return Promise.resolve();
+      insertHashes({ accountId, hashes, now });
+      return Promise.resolve(true);
     },
   };
   return { repo, state };
@@ -195,6 +229,41 @@ describe('V-553.B-11 MfaService.completeEnrollment', () => {
     // Audit entry should record account.mfa_enrolled.
     expect(calls).toHaveLength(1);
     expect((calls[0] as { action: string }).action).toBe('account.mfa_enrolled');
+  });
+
+  it('allows exactly one concurrent enrollment completion to issue recovery codes', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const code = computeTotpCode(base32Decode(start.secretBase32), Math.floor(Date.now() / 1000));
+
+    const results = await Promise.allSettled([
+      svc.completeEnrollment({ accountId: 'acc_1', code }),
+      svc.completeEnrollment({ accountId: 'acc_1', code }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(state.row?.enrolledAt).not.toBeNull();
+    expect(state.codes).toHaveLength(10);
+    expect(state.codes.filter((candidate) => candidate.usedAt === null)).toHaveLength(10);
+  });
+
+  it('does not let a stale completion overwrite a concurrently restarted enrollment', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const first = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const code = computeTotpCode(base32Decode(first.secretBase32), Math.floor(Date.now() / 1000));
+
+    const [completion, restart] = await Promise.allSettled([
+      svc.completeEnrollment({ accountId: 'acc_1', code }),
+      svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' }),
+    ]);
+
+    expect(completion.status).toBe('rejected');
+    expect(restart.status).toBe('fulfilled');
+    expect(state.row?.enrolledAt).toBeNull();
+    expect(state.codes).toHaveLength(0);
   });
 });
 
@@ -424,6 +493,24 @@ describe('V-553.B-11 MfaService.regenerateRecoveryCodes', () => {
     expect(state.codes).toHaveLength(20);
     const unused = state.codes.filter((c) => c.usedAt === null);
     expect(unused).toHaveLength(10);
+  });
+
+  it('allows exactly one concurrent regeneration to return a usable batch', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const totp = computeTotpCode(base32Decode(start.secretBase32), Math.floor(Date.now() / 1000));
+    await svc.completeEnrollment({ accountId: 'acc_1', code: totp });
+
+    const results = await Promise.allSettled([
+      svc.regenerateRecoveryCodes({ accountId: 'acc_1' }),
+      svc.regenerateRecoveryCodes({ accountId: 'acc_1' }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(state.codes).toHaveLength(20);
+    expect(state.codes.filter((candidate) => candidate.usedAt === null)).toHaveLength(10);
   });
 });
 
