@@ -114,6 +114,14 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
     );
   });
 
+  it('reconciles ambiguous clears against the refreshed account+bucket action', () => {
+    expect(body).toMatch(/err && err\.name === 'AbortError'/);
+    expect(body).toMatch(/const refreshed = await load\(\)/);
+    expect(body).toMatch(/root\.querySelectorAll\('\[data-action="clear"\]'\)/);
+    expect(body).toContain('clearing likely completed, so do not submit it again');
+    expect(body).toContain('Verify the override before retrying');
+  });
+
   it('localStorage key ds_web_session_token (admin-panel convention)', () => {
     expect(body).toContain("'ds_web_session_token'");
   });

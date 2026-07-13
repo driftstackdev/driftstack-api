@@ -158,6 +158,38 @@ describe('admin rate-limit-overrides page — clear-now (operator)', () => {
     ).toBeTruthy();
   });
 
+  it('reconciles a committed clear timeout before another override deletion', async () => {
+    const overrides = [{ ...OV_A }];
+    const base = makeRouter(overrides);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) => {
+        if (call.init?.method === 'DELETE') {
+          overrides.splice(0, 1);
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector(
+        '[data-action="clear"][data-account-id="acc_a"]',
+      ) as HTMLButtonElement
+    ).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(
+      window.document.querySelector('[data-action="clear"][data-account-id="acc_a"]'),
+    ).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /override-clear outcome is unknown.*overrides were refreshed.*sessions:create override for acc_a is absent.*clearing likely completed.*do not submit it again/i,
+    );
+  });
+
   it('clear cancelled: no DELETE fired, the override stays', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       confirmReturns: false,

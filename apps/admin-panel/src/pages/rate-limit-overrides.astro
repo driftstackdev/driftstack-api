@@ -292,7 +292,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let inFlight = 0;
       function load() {
-        if (!token) return Promise.resolve();
+        if (!token) return Promise.resolve(false);
         const myReq = ++inFlight;
         const params = buildQuery();
         if (loadController) loadController.abort();
@@ -312,7 +312,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const rows = body.data || [];
             if (rows.length === 0) {
               if (list) {
@@ -330,9 +330,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (emptyRegion) emptyRegion.classList.add('hidden');
             }
             hideBanner();
+            return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const msg = requestErrorMessage(err, 'network error');
             if (list) {
               list.classList.remove('hidden');
@@ -347,6 +348,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load overrides (" + msg + ').');
             }
+            return false;
           })
           .finally(() => {
             if (myReq === inFlight) {
@@ -397,8 +399,36 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Override cleared. Refreshing…');
           await load();
         } catch (err) {
-          const msg = requestErrorMessage(err, 'network error');
-          showBanner("Couldn't clear (" + msg + ').');
+          if (err && err.name === 'AbortError') {
+            const refreshed = await load();
+            const stillActionable = Array.from(
+              root.querySelectorAll('[data-action="clear"]'),
+            ).some(
+              (button) =>
+                button.getAttribute('data-account-id') === prefixedAccountId &&
+                button.getAttribute('data-bucket-key') === bucketKey,
+            );
+            if (refreshed && !stillActionable) {
+              showBanner(
+                'Override-clear outcome is unknown because the response timed out. Overrides were refreshed and the ' +
+                  bucketKey +
+                  ' override for ' +
+                  prefixedAccountId +
+                  ' is absent; clearing likely completed, so do not submit it again.',
+              );
+            } else if (refreshed) {
+              showBanner(
+                'Override-clear outcome is unknown because the response timed out. Overrides were refreshed and the override is still actionable; retry clearing if it must be removed.',
+              );
+            } else {
+              showBanner(
+                'Override-clear outcome is unknown because the response timed out, and overrides could not be refreshed. Verify the override before retrying.',
+              );
+            }
+          } else {
+            const msg = requestErrorMessage(err, 'network error');
+            showBanner("Couldn't clear (" + msg + ').');
+          }
         } finally {
           clearsInFlight.delete(operationKey);
           if (btn) {
