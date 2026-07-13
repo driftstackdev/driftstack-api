@@ -26,7 +26,9 @@ function makeFakeService(plaintext: string | null): BYOKAnthropicService {
 
 async function buildTestApp(args: {
   plaintext: string | null;
-  testResult: { ok: true } | { ok: false; reason: string };
+  testResult:
+    | { ok: true }
+    | { ok: false; outcome: 'invalid' | 'quota_exceeded' | 'unknown'; reason: string };
   metrics: MetricsRegistry;
 }) {
   const app = Fastify();
@@ -90,7 +92,7 @@ describe('Arc 7 obs.4 — byok_anthropic_test_total counter', () => {
   it('outcome="not_set" when no plaintext is stored', async () => {
     const app = await buildTestApp({
       plaintext: null,
-      testResult: { ok: false, reason: 'unused' },
+      testResult: { ok: false, outcome: 'unknown', reason: 'unused' },
       metrics,
     });
     const res = await app.inject({
@@ -103,25 +105,14 @@ describe('Arc 7 obs.4 — byok_anthropic_test_total counter', () => {
     await app.close();
   });
 
-  it('outcome="not_wired" when tester reports it is not yet wired', async () => {
+  it('outcome="quota_exceeded" comes from the typed tester result, not customer prose', async () => {
     const app = await buildTestApp({
       plaintext: 'sk-ant-api03-fakeplaintext',
-      testResult: { ok: false, reason: 'Connection tester not yet wired. AI-B1.b ships...' },
-      metrics,
-    });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/v1/account/me/byok-anthropic-key/test',
-    });
-    expect(res.statusCode).toBe(200);
-    expect(metrics.getValue(METRIC_NAMES.byokAnthropicTestTotal, { outcome: 'not_wired' })).toBe(1);
-    await app.close();
-  });
-
-  it('outcome="quota_exceeded" on quota / rate-limit reason strings', async () => {
-    const app = await buildTestApp({
-      plaintext: 'sk-ant-api03-fakeplaintext',
-      testResult: { ok: false, reason: 'Anthropic returned 429 rate limit exceeded' },
+      testResult: {
+        ok: false,
+        outcome: 'quota_exceeded',
+        reason: 'Stable customer guidance without a status code',
+      },
       metrics,
     });
     const res = await app.inject({
@@ -135,10 +126,14 @@ describe('Arc 7 obs.4 — byok_anthropic_test_total counter', () => {
     await app.close();
   });
 
-  it('outcome="invalid" on 401/403/invalid-key reason strings', async () => {
+  it('outcome="invalid" comes from the typed tester result, not customer prose', async () => {
     const app = await buildTestApp({
       plaintext: 'sk-ant-api03-fakeplaintext',
-      testResult: { ok: false, reason: 'Anthropic returned 401 Unauthorized: invalid api key' },
+      testResult: {
+        ok: false,
+        outcome: 'invalid',
+        reason: 'Check or rotate the provider key.',
+      },
       metrics,
     });
     const res = await app.inject({
@@ -146,14 +141,20 @@ describe('Arc 7 obs.4 — byok_anthropic_test_total counter', () => {
       url: '/v1/account/me/byok-anthropic-key/test',
     });
     expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: false, reason: 'Check or rotate the provider key.' });
+    expect(res.body).not.toContain('outcome');
     expect(metrics.getValue(METRIC_NAMES.byokAnthropicTestTotal, { outcome: 'invalid' })).toBe(1);
     await app.close();
   });
 
-  it('outcome="unknown" on unclassified reason strings', async () => {
+  it('outcome="unknown" is bounded even when the customer reason changes', async () => {
     const app = await buildTestApp({
       plaintext: 'sk-ant-api03-fakeplaintext',
-      testResult: { ok: false, reason: 'ECONNRESET while talking to api.anthropic.com' },
+      testResult: {
+        ok: false,
+        outcome: 'unknown',
+        reason: 'Could not complete the connection test.',
+      },
       metrics,
     });
     const res = await app.inject({

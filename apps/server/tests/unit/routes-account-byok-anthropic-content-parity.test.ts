@@ -46,27 +46,22 @@ describe('routes/account-byok-anthropic content parity', () => {
     );
   });
 
-  it("classifyTestOutcome 5-bounded-cardinality framing pinned: ok / invalid / quota_exceeded / not_wired / unknown — case-insensitive substring match. + 'Keeps label cardinality fixed even as the underlying error messages evolve.' Drift to a wider label space would create cardinality leaks in prometheus", () => {
+  it('classifyTestOutcome uses the typed tester outcome so customer copy cannot change metric cardinality', () => {
     expect(body).toMatch(
-      /function classifyTestOutcome\(\s*\n?\s*result: \{ ok: true \} \| \{ ok: false; reason: string \},\s*\n?\s*\): 'ok' \| 'invalid' \| 'quota_exceeded' \| 'not_wired' \| 'unknown' \{/,
+      /function classifyTestOutcome\(\s*\n?\s*result: AnthropicKeyTestResult,\s*\n?\s*\): 'ok' \| 'invalid' \| 'quota_exceeded' \| 'unknown' \{/,
     );
-    expect(body).toMatch(/if \(result\.ok\) return 'ok';/);
-    expect(body).toMatch(/if \(r\.includes\('not yet wired'\)\) return 'not_wired';/);
-    expect(body).toMatch(
-      /if \(r\.includes\('quota'\) \|\| r\.includes\('rate limit'\) \|\| r\.includes\('rate-limit'\)\) \{\s*\n?\s*return 'quota_exceeded';/,
-    );
-    expect(body).toMatch(
-      /if \(r\.includes\('invalid'\) \|\| r\.includes\('unauthorized'\) \|\| r\.includes\('forbidden'\)\) \{\s*\n?\s*return 'invalid';/,
-    );
+    expect(body).toMatch(/return result\.ok \? 'ok' : result\.outcome;/);
+    expect(body).not.toContain("includes('not yet wired')");
   });
 
-  it("defaultTestConnection deterministic-not-wired-stub framing pinned: 'The real Anthropic-SDK-backed tester lands with AI-B1.b. Until then, surface a deterministic \"not yet wired\" reason so the dashboard can render a meaningful state.' + { ok: false, reason: 'Connection tester not yet wired. AI-B1.b ships the Anthropic SDK call.' } — pinned so the AI-B1.b cross-reference + dashboard-renderable-meaningful-state contract stays documented", () => {
-    expect(body).toMatch(
-      /\/\/ The real Anthropic-SDK-backed tester lands with AI-B1\.b\. Until\s*\n?\s*\/\/ then, surface a deterministic "not yet wired" reason so the\s*\n?\s*\/\/ dashboard can render a meaningful state\./,
+  it('uses the live no-inference Anthropic tester by default while retaining test injection', () => {
+    expect(body).toContain(
+      "import { testAnthropicKey, type AnthropicKeyTestResult } from '../services/anthropic-key-tester.js';",
     );
-    expect(body).toMatch(
-      /reason: 'Connection tester not yet wired\. AI-B1\.b ships the Anthropic SDK call\.',/,
-    );
+    expect(body).toMatch(/testConnection\?: \(key: string\) => Promise<AnthropicKeyTestResult>;/);
+    expect(body).toMatch(/const testConnection = opts\.testConnection \?\? testAnthropicKey;/);
+    expect(body).not.toContain('defaultTestConnection');
+    expect(body).not.toContain('Connection tester not yet wired');
   });
 
   it("GET metadata-only-no-plaintext framing pinned: 'metadata only; NEVER returns plaintext. Read scope is sufficient (any account holder can see whether their account has a BYOK key set).' + 3-field response { has_key + set_at + last_used_at } — pinned so the no-plaintext + read-scope-sufficient + 3-field-metadata contract stays documented (drift to surfacing any key prefix/suffix on GET would defeat the encrypted-at-rest envelope)", () => {

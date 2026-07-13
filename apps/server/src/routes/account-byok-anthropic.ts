@@ -28,6 +28,7 @@ import type { AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError, FeatureUnavailableError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
+import { testAnthropicKey, type AnthropicKeyTestResult } from '../services/anthropic-key-tester.js';
 
 export interface AccountByokAnthropicRoutesOptions {
   service: BYOKAnthropicService;
@@ -36,7 +37,7 @@ export interface AccountByokAnthropicRoutesOptions {
   /** Connection-tester (test-injectable). Pure boundary so unit tests
    *  don't need to mock Anthropic SDK HTTP. Returns the result for the
    *  POST /test endpoint. */
-  testConnection?: (key: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  testConnection?: (key: string) => Promise<AnthropicKeyTestResult>;
   /** Arc 7 obs.4 — optional metrics registry. When wired, the
    *  /test endpoint increments
    *  `driftstack_byok_anthropic_test_total{outcome}` per call. */
@@ -52,32 +53,13 @@ export interface AccountByokAnthropicRoutesOptions {
   accountAudit?: AccountAuditService;
 }
 
-/** Map a connection-test result + reason string to one of the
- *  bounded `outcome` label values. Keeps label cardinality fixed
- *  even as the underlying error messages evolve. */
+/** Map a connection-test result to one of the bounded `outcome` label
+ *  values. The tester supplies a typed outcome so customer-facing copy can
+ *  evolve without changing metric or audit cardinality. */
 function classifyTestOutcome(
-  result: { ok: true } | { ok: false; reason: string },
-): 'ok' | 'invalid' | 'quota_exceeded' | 'not_wired' | 'unknown' {
-  if (result.ok) return 'ok';
-  const r = result.reason.toLowerCase();
-  if (r.includes('not yet wired')) return 'not_wired';
-  if (r.includes('quota') || r.includes('rate limit') || r.includes('rate-limit')) {
-    return 'quota_exceeded';
-  }
-  if (r.includes('invalid') || r.includes('unauthorized') || r.includes('forbidden')) {
-    return 'invalid';
-  }
-  return 'unknown';
-}
-
-function defaultTestConnection(): Promise<{ ok: false; reason: string }> {
-  // The real Anthropic-SDK-backed tester lands with AI-B1.b. Until
-  // then, surface a deterministic "not yet wired" reason so the
-  // dashboard can render a meaningful state.
-  return Promise.resolve({
-    ok: false,
-    reason: 'Connection tester not yet wired. AI-B1.b ships the Anthropic SDK call.',
-  });
+  result: AnthropicKeyTestResult,
+): 'ok' | 'invalid' | 'quota_exceeded' | 'unknown' {
+  return result.ok ? 'ok' : result.outcome;
 }
 
 export function registerAccountByokAnthropicRoutes(
@@ -86,7 +68,7 @@ export function registerAccountByokAnthropicRoutes(
 ): void {
   const { service } = opts;
   const now = opts.now ?? (() => new Date());
-  const testConnection = opts.testConnection ?? defaultTestConnection;
+  const testConnection = opts.testConnection ?? testAnthropicKey;
   const metrics = opts.metrics;
   const accountAudit = opts.accountAudit;
 
@@ -231,7 +213,7 @@ export function registerAccountByokAnthropicRoutes(
         // Swallow; metrics are best-effort.
       }
       // 2026-05-20 — audit emit. Payload carries the bounded outcome
-      // label (ok / invalid / quota_exceeded / not_wired / unknown)
+      // label (ok / invalid / quota_exceeded / unknown)
       // so customers can correlate test-failure cadence with their
       // own key-rotation activity. No plaintext, no key-prefix, no
       // Anthropic-side response body.

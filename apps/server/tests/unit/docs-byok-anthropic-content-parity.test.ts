@@ -54,7 +54,7 @@ describe('Arc 6 docs.byok-anthropic content parity', () => {
     // Matches the live route: returns ok:true or ok:false+reason (string,
     // not a stable enum); a missing key throws 400 Bad Request.
     expect(body).toMatch(/\{ "ok": true \}/);
-    expect(body).toMatch(/\{ "ok": false, "reason":/);
+    expect(body).toMatch(/"ok": false,\s*\n\s*"reason":/);
     expect(body).toMatch(/not a stable enum/);
     expect(body).toMatch(/`400 Bad Request`/);
   });
@@ -79,8 +79,9 @@ describe('Arc 6 docs.byok-anthropic content parity', () => {
     expect(body).toMatch(/\|\s*503\s*\| feature-unavailable/);
   });
 
-  it('privacy section: V-494 secret-scrubbing filter + no-caching-of-Anthropic-responses claim', () => {
+  it('privacy section: V-494 secret filter + fixed no-inference, no-body server probe', () => {
     expect(body).toMatch(/V-494/);
-    expect(body).toMatch(/does NOT proxy or cache/);
+    expect(body).toMatch(/fixed\s*\n?\s*Anthropic model-list endpoint/);
+    expect(body).toMatch(/does not run inference, read or proxy\s*\n?\s*the response body/);
   });
 });

@@ -54,7 +54,7 @@ describe('docs/api/byok-anthropic content parity', () => {
       /Required scope: `account_owner` \(team members can USE the resolved\s*\n?\s*key but cannot manage it — Q3 verdict\)\./,
     );
     expect(body).toMatch(
-      /Required scope: `account_owner`\s*\n?\s*\(team members would otherwise burn the owner's quota\)\./,
+      /Required scope:\s*\n?\s*`account_owner` \(team members would otherwise consume the owner's provider\s*\n?\s*request budget\)\./,
     );
     expect(body).toMatch(
       /Auth: any authenticated bearer \(the `read` scope is sufficient — the\s*\n?\s*GET metadata route requires only authentication, not a write scope\)\.\s*\n?\s*Any account member can check whether the account has a BYOK key set;\s*\n?\s*the plaintext stays inaccessible regardless\./,
@@ -72,7 +72,7 @@ describe('docs/api/byok-anthropic content parity', () => {
 
   it('test-response shape pinned: { ok: true } on success + { ok: false, reason } on failure (reason is advisory, not a stable enum) + 400 Bad Request when no key set — pinned so the live route contract (account-byok-anthropic.ts:241 + :219) stays documented; drift to a fabricated tested_at/error_kind/error_detail enum would mislead SDK error-routing logic', () => {
     expect(body).toMatch(/```json\s*\n\{ "ok": true \}\s*\n```/);
-    expect(body).toMatch(/\{ "ok": false, "reason":/);
+    expect(body).toMatch(/"ok": false,\s*\n\s*"reason":/);
     expect(body).toMatch(
       /it is not a stable enum, so do\s*\n?\s*not branch on its exact contents\./,
     );
@@ -81,13 +81,14 @@ describe('docs/api/byok-anthropic content parity', () => {
     );
   });
 
-  it("Test-response-never-echoes-key + Driftstack-does-NOT-proxy framing pinned: 'The test response NEVER echoes any part of the key (prefix or otherwise) — the customer's only audit trail is set_at / last_used_at plus this test result.' + 'Driftstack does NOT proxy or cache responses from the Anthropic API; the customer's BYOK key talks directly to Anthropic from the agent-runtime fork.' — pinned so the no-prefix-echo + direct-talk-no-proxy contract stays documented (privacy commitment to customer)", () => {
+  it('test response never echoes provider material and the server probe stays fixed, no-inference, and body-blind', () => {
     expect(body).toMatch(
-      /The test response NEVER echoes any part of the key \(prefix or\s*\n?\s*otherwise\) — the customer's only audit trail is `set_at` \/\s*\n?\s*`last_used_at` plus this test result\./,
+      /The test response NEVER echoes any part of the key, Anthropic response\s*\n?\s*body, or native transport error\./,
     );
     expect(body).toMatch(
-      /- Driftstack does NOT proxy or cache responses from the Anthropic\s*\n?\s*API; the customer's BYOK key talks directly to Anthropic from\s*\n?\s*the agent-runtime fork\./,
+      /- The API server sends the connection-test request only to the fixed\s*\n?\s*Anthropic model-list endpoint\. It does not run inference, read or proxy\s*\n?\s*the response body, or cache the response\./,
     );
+    expect(body).toMatch(/Audit and metrics retain\s*\n?\s*only a bounded outcome/);
   });
 
   it('Errors table 5-row roster pinned: 400 bad-request + 401 unauthorized + 403 forbidden + 502 byok-anthropic-required + 503 feature-unavailable — pinned so the 5-error-status roster (each with its trigger condition) stays stable', () => {

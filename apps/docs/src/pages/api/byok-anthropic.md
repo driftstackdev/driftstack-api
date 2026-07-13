@@ -91,9 +91,11 @@ leg (if the customer has opted into bundled-LLM) or surface
 
 `POST /v1/account/me/byok-anthropic-key/test`
 
-Sends a minimal Anthropic API ping with the stored key and reports
-whether the round-trip succeeded. Required scope: `account_owner`
-(team members would otherwise burn the owner's quota).
+Calls Anthropic's authenticated `GET /v1/models?limit=1` endpoint with
+the stored key and reports whether the round-trip succeeded. The test
+does not run a model or spend inference tokens. Required scope:
+`account_owner` (team members would otherwise consume the owner's provider
+request budget).
 
 Response (200) on a successful round-trip:
 
@@ -105,7 +107,10 @@ On a failed round-trip the response is still `200` with `ok: false`
 plus a human-readable `reason` string:
 
 ```json
-{ "ok": false, "reason": "Anthropic API returned 401 — key may be expired or revoked." }
+{
+  "ok": false,
+  "reason": "Anthropic rejected this API key as invalid or unauthorized. Check or rotate it and try again."
+}
 ```
 
 The `reason` text is advisory only — it is not a stable enum, so do
@@ -113,9 +118,12 @@ not branch on its exact contents. If no key is set on the account,
 the endpoint instead returns `400 Bad Request` (type `…/bad-request`)
 telling you to PUT a key first.
 
-The test response NEVER echoes any part of the key (prefix or
-otherwise) — the customer's only audit trail is `set_at` /
-`last_used_at` plus this test result.
+The test response NEVER echoes any part of the key, Anthropic response
+body, or native transport error. Provider failures map to fixed invalid-key,
+rate-limit, service, timeout, or network guidance. Audit and metrics retain
+only a bounded outcome; they do not record the upstream response. The
+customer can review `set_at` / `last_used_at`, the test result, and the
+corresponding account-audit event.
 
 ## Encryption at rest
 
@@ -159,8 +167,9 @@ satisfy the 90-day gate.
 - The plaintext key is encrypted at rest + never logged. Sentry
   breadcrumbs around the route paths scrub via the V-494 secret
   filter.
-- The connection-test endpoint does not log the key plaintext in
-  the test failure trail — only the Anthropic-side error code.
-- Driftstack does NOT proxy or cache responses from the Anthropic
-  API; the customer's BYOK key talks directly to Anthropic from
-  the agent-runtime fork.
+- The API server sends the connection-test request only to the fixed
+  Anthropic model-list endpoint. It does not run inference, read or proxy
+  the response body, or cache the response.
+- Normal agent turns continue to use the customer's key from the
+  agent-runtime fork; the connection-test route is the only server-side
+  provider probe described here.
