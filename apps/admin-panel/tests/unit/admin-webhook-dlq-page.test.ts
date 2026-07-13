@@ -235,6 +235,23 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
     expect(requeue.getAttribute('aria-busy')).toBe('true');
     expect(discard.disabled).toBe(true);
 
+    // A manual/automatic refresh replaces the row nodes. The replacement
+    // controls must retain the pending state instead of looking clickable
+    // while the id-level guard silently ignores them.
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+    const refreshedRequeue = window.document.querySelector(
+      '[data-action="requeue"][data-id="whd_1"]',
+    ) as HTMLButtonElement;
+    const refreshedDiscard = window.document.querySelector(
+      '[data-action="discard"][data-id="whd_1"]',
+    ) as HTMLButtonElement;
+    expect(refreshedRequeue).not.toBe(requeue);
+    expect(refreshedRequeue.disabled).toBe(true);
+    expect(refreshedRequeue.textContent).toBe('Requeueing…');
+    expect(refreshedRequeue.getAttribute('aria-busy')).toBe('true');
+    expect(refreshedDiscard.disabled).toBe(true);
+
     resolveMutation?.(json({ ok: true }));
     await flush();
   });

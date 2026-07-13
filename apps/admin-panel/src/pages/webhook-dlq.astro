@@ -213,8 +213,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch(() => ({}))
           .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
       }
-      const pendingMutations = new Set();
+      // Keep the action + phase, not only membership. Auto/manual refreshes
+      // rebuild the row DOM while a slow mutation may still be pending; the
+      // renderer uses this state to preserve the disabled/busy controls.
+      const pendingMutations = new Map();
       function setEntryBusy(id, action, busy, pendingLabel) {
+        if (busy) pendingMutations.set(id, { action: action, label: pendingLabel });
+        else pendingMutations.delete(id);
         if (!list) return;
         list.querySelectorAll('button[data-id]').forEach(function (button) {
           if (button.getAttribute('data-id') !== id) return;
@@ -258,6 +263,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function rowHtml(d) {
+        const pending = pendingMutations.get(d.id);
+        const controlsDisabled = pending ? ' disabled' : '';
+        const requeueBusy = pending && pending.action === 'requeue' ? ' aria-busy="true"' : '';
+        const discardBusy = pending && pending.action === 'discard' ? ' aria-busy="true"' : '';
+        const requeueLabel = pending && pending.action === 'requeue' ? pending.label : 'Requeue';
+        const discardLabel = pending && pending.action === 'discard' ? pending.label : 'Discard';
         const errorBlock = d.last_error
           ? '<div class="mt-4 rounded border border-red-200 bg-tk-surface px-3 py-2"><p class="font-mono text-xs text-red-900">' +
             escapeHtml(d.last_error) +
@@ -298,10 +309,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div class="mt-4 flex flex-wrap gap-3">' +
           '<button type="button" data-action="requeue" data-id="' +
           escapeHtml(d.id) +
-          '" class="text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50">Requeue</button>' +
+          '"' +
+          controlsDisabled +
+          requeueBusy +
+          ' class="text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50">' +
+          requeueLabel +
+          '</button>' +
           '<button type="button" data-action="discard" data-id="' +
           escapeHtml(d.id) +
-          '" class="text-sm font-medium text-rose-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50">Discard</button>' +
+          '"' +
+          controlsDisabled +
+          discardBusy +
+          ' class="text-sm font-medium text-rose-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50">' +
+          discardLabel +
+          '</button>' +
           '</div></li>'
         );
       }
@@ -385,7 +406,6 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function requeue(id) {
         if (!token || pendingMutations.has(id)) return Promise.resolve();
-        pendingMutations.add(id);
         setEntryBusy(id, 'requeue', true, 'Requeueing…');
         showBanner('Requeueing ' + id + '…');
         return boundedFetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/requeue', {
@@ -407,7 +427,6 @@ const apiBaseUrl = resolveApiBaseUrl();
             showBanner("Couldn't requeue " + id + ' (' + msg + ').');
           })
           .finally(() => {
-            pendingMutations.delete(id);
             setEntryBusy(id, 'requeue', false, '');
           });
       }
@@ -418,7 +437,6 @@ const apiBaseUrl = resolveApiBaseUrl();
       // mis-click doesn't destroy evidence.
       async function discard(id) {
         if (!token || pendingMutations.has(id)) return;
-        pendingMutations.add(id);
         setEntryBusy(id, 'discard', true, 'Confirming…');
         // destructive: true — this is the one hard-delete action on this page
         // (payload is irrecoverable). Without it the Discard button auto-
@@ -454,7 +472,6 @@ const apiBaseUrl = resolveApiBaseUrl();
           const msg = requestErrorMessage(err, 'network error');
           showBanner("Couldn't discard " + id + ' (' + msg + ').');
         } finally {
-          pendingMutations.delete(id);
           setEntryBusy(id, 'discard', false, '');
         }
       }
