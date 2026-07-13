@@ -60,6 +60,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 // rather than mocking the module (whose dynamic-import interception is flaky for
 // the module-level applyDockTile helper).
 const invoke = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>();
+const localStore = new Map<string, string>();
 
 // Capture the onCloseRequested handler so a test can fire a close + a preventable
 // event object so we can observe whether the manual path preventDefaults.
@@ -96,6 +97,21 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     endAgentSession.mockClear();
     destroy.mockClear();
     closeHandler = null;
+    localStore.clear();
+    vi.stubGlobal('localStorage', {
+      get length(): number {
+        return localStore.size;
+      },
+      getItem: (key: string): string | null => localStore.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        localStore.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        localStore.delete(key);
+      },
+      clear: (): void => localStore.clear(),
+      key: (index: number): string | null => [...localStore.keys()][index] ?? null,
+    });
     sessionMode = 'manual';
     // Default: control fetch succeeds → CONFIRMED mode (seeded from sessionMode).
     getAgentSession.mockReset();
@@ -168,10 +184,12 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
   });
 
   it('resets the Dock tile when there is no session', async () => {
+    localStorage.setItem('ds-gck-agt_legacy', 'gck_plaintext');
     window.history.pushState({}, '', '/?window=simulator');
     renderSim();
     await waitFor(() => {
       expect(invoke.mock.calls.some((c) => c[0] === 'reset_dock_tile')).toBe(true);
+      expect(localStorage.getItem('ds-gck-agt_legacy')).toBeNull();
     });
     expect(invoke.mock.calls.some((c) => c[0] === 'set_dock_tile')).toBe(false);
   });

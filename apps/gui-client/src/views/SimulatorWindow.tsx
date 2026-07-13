@@ -2498,16 +2498,19 @@ export function SimulatorWindow(): JSX.Element {
     // A new room/session starts with a clean control-health slate — never carry
     // a latched controlUnreachable badge across a session switch.
     setControlUnreachable(false);
-    if (sessionId === '') {
-      setControlAuth(null);
-      return;
-    }
     let cancelled = false;
     void (async () => {
       // Purge every legacy plaintext key before awaiting Keychain. The returned
       // map is an in-memory, current-launch fallback only when Keychain is locked.
+      // This deliberately runs even for a sessionless companion-app launch so
+      // upgrading/installing can scrub historical plaintext without waiting for
+      // the customer to start another session.
       const legacy = await migrateLegacyControlKeys();
       if (cancelled) return;
+      if (sessionId === '') {
+        setControlAuth(null);
+        return;
+      }
       // Fresh protected-file handoff — persist it for a later reopen. Failure is
       // intentionally memory-only; never create a plaintext fallback.
       if (controlKey !== '') {
