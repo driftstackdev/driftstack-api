@@ -534,6 +534,64 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(button.getAttribute('aria-busy')).toBeNull();
   });
 
+  it('keeps the pending pricing row visibly busy across a live refresh', async () => {
+    let resolveSave: ((response: Response) => void) | undefined;
+    const fallback = makeRouter({
+      overview: {
+        accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+        webhooks: { dlq_depth: 0 },
+      },
+      pricingStatus: 200,
+      pricing: { tiers: [{ tier: 'api_scale', monthly_cents: 149900 }] },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        if (
+          /\/v1\/admin\/owner\/pricing\/api_scale$/.test(call.url) &&
+          String(call.init?.method || '').toUpperCase() === 'PATCH'
+        ) {
+          return new Promise<Response>((resolve) => {
+            resolveSave = resolve;
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+    const input = window.document.querySelector('[data-edit-tier="api_scale"]') as HTMLInputElement;
+    const button = window.document.querySelector(
+      '[data-save-tier="api_scale"]',
+    ) as HTMLButtonElement;
+    input.value = '199900';
+    button.click();
+    await flush(1);
+
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush(2);
+    const refreshedInput = window.document.querySelector(
+      '[data-edit-tier="api_scale"]',
+    ) as HTMLInputElement;
+    const refreshedButton = window.document.querySelector(
+      '[data-save-tier="api_scale"]',
+    ) as HTMLButtonElement;
+    expect(refreshedInput).toBe(input);
+    expect(refreshedButton).toBe(button);
+    expect(refreshedInput.disabled).toBe(true);
+    expect(refreshedButton.disabled).toBe(true);
+    expect(refreshedButton.textContent).toBe('Saving…');
+    refreshedButton.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
+
+    resolveSave?.(json({ status: 'updated' }));
+    await flush();
+    expect(refreshedInput.disabled).toBe(false);
+    expect(refreshedButton.disabled).toBe(false);
+    expect(refreshedButton.textContent).toBe('Save');
+    expect(text(window, '[data-save-status="api_scale"]')).toContain('saved');
+  });
+
   it('owner pricing cancellation restores controls without PATCHing', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',

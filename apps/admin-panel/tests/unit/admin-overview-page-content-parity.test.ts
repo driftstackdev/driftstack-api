@@ -82,6 +82,7 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toMatch(/button\.textContent = 'Saving…'/);
     expect(body).toMatch(/button\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/pricingSavesInFlight\.delete\(tier\)/);
+    expect(body).toMatch(/if \(pricingSavesInFlight\.size > 0\) return;/);
   });
 
   it('reconciles ambiguous owner pricing saves against effective pricing', () => {

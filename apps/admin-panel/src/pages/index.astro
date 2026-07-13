@@ -807,6 +807,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         const card = root.querySelector('[data-owner-only="pricing"]');
         const list = root.querySelector('[data-list="owner-pricing"]');
         if (!card || !list || !Array.isArray(tiers)) return;
+        // A confirm dialog moves focus outside this list, so the focus guard
+        // below is not enough to protect a pending row from the 30s/manual
+        // poll. Keep the exact disabled/busy nodes mounted until every save
+        // lease settles; the next poll reconciles unrelated prices.
+        if (pricingSavesInFlight.size > 0) return;
         // Don't clobber an in-progress edit when the 30s poll re-renders.
         const active = window.document.activeElement;
         if (active && list.contains(active)) return;
