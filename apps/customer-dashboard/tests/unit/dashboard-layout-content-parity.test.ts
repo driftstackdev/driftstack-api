@@ -55,8 +55,8 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/withSidebar = true,/);
   });
 
-  it('noindex robots meta (private app surface)', () => {
-    expect(body).toMatch(/<meta name="robots" content="noindex" \/>/);
+  it('noindex,nofollow robots meta (private app surface)', () => {
+    expect(body).toMatch(/<meta name="robots" content="noindex,nofollow" \/>/);
   });
 
   it('shared confirm + prompt modals use one cross-type lease and release it only on close', () => {

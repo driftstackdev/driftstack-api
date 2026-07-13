@@ -209,13 +209,21 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     expect(mark).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
   });
 
-  it('CRITICAL customer-dashboard + admin-panel + status-site each ship their own public/_headers with the security-header set (X-Frame-Options + X-Content-Type-Options + Referrer-Policy + Permissions-Policy). status-site was added 2026-06-01 (the 2026-05-20 audit covered the other four but omitted it; separate Cloudflare Pages projects do NOT cross-inherit _headers, so it shipped with none). None of the three ship a robots.txt override.', () => {
+  it('CRITICAL customer-dashboard + admin-panel + status-site each ship their own public/_headers with the security-header set (X-Frame-Options + X-Content-Type-Options + Referrer-Policy + Permissions-Policy). Private customer/admin origins additionally send X-Robots-Tag: noindex, nofollow at the edge, including non-HTML/error responses. None of the three ship a robots.txt override.', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/public/_headers'))).toBe(true);
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/public/_headers'))).toBe(true);
     expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/public/_headers'))).toBe(true);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/public/robots.txt'))).toBe(false);
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/public/robots.txt'))).toBe(false);
     expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/public/robots.txt'))).toBe(false);
+
+    for (const app of ['customer-dashboard', 'admin-panel']) {
+      const headers = read(resolve(REPO_ROOT, `apps/${app}/public/_headers`));
+      expect(
+        headers.match(/^ {2}X-Robots-Tag: noindex, nofollow$/gm),
+        `${app} sends exactly one private-app indexing directive from /*`,
+      ).toHaveLength(1);
+    }
   });
 
   it('CRITICAL status-site/public/_headers ships the 4-header security set on /* (X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy) plus immutable /_astro/* caching — matches the other Pages apps so the public status surface is no longer header-less. Drift to dropping any weakens the framing/MIME/referrer defenses on status.driftstack.dev.', () => {
