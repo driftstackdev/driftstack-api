@@ -69,7 +69,21 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/consumeInFlight = true;/);
     expect(body).toMatch(/form\.setAttribute\('aria-busy', busy \? 'true' : 'false'\)/);
     expect(body).toMatch(/consumeSubmit\.textContent = busy \? 'Signing in…' : consumeSubmitText/);
-    expect(body).toMatch(/\.finally\(\(\) => \{\s*consumeInFlight = false;/);
+    expect(body).toMatch(
+      /\.finally\(\(\) => \{\s*window\.clearTimeout\(timeout\);\s*consumeInFlight = false;/,
+    );
+  });
+
+  it('bounds consume requests and recovers into the retry form on timeout', () => {
+    expect(body).toContain('const CONSUME_TIMEOUT_MS = 15_000;');
+    expect(body).toMatch(/const controller = new AbortController\(\);/);
+    expect(body).toMatch(/window\.setTimeout\(\(\) => controller\.abort\(\), CONSUME_TIMEOUT_MS\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/window\.clearTimeout\(timeout\)/);
+    expect(body).toContain(
+      'Signing in took too long. Check your connection and try the link again.',
+    );
+    expect(body).toMatch(/\.catch\(\(err\) => \{\s*showFallbackForm\(token\);/);
   });
 
   it('autocomplete="one-time-code" on token input (a11y + mobile OTP)', () => {

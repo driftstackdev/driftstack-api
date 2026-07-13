@@ -100,6 +100,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const emailInput = root.querySelector('#magic-link-email');
       const submitBtn = form.querySelector('button[type="submit"]');
       const submitLabel = submitBtn ? submitBtn.textContent : '';
+      const REQUEST_TIMEOUT_MS = 15_000;
 
       // Honor ?email= prefill — e.g. from a /login bounce after a failed
       // password attempt where the user wants to try magic-link instead.
@@ -131,10 +132,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         setSubmitting(true);
         banner.classList.add('hidden');
         const email = (new FormData(form).get('email') || '').toString();
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         fetch(apiBaseUrl + '/v1/auth/magic-link/request', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ email: email }),
+          signal: controller.signal,
         })
           .then((r) =>
             r.ok
@@ -164,9 +168,16 @@ const apiBaseUrl = resolveApiBaseUrl();
             success.classList.remove('hidden');
           })
           .catch((err) => {
-            showBanner(err && err.message ? err.message : 'Request failed.');
+            showBanner(
+              err && err.name === 'AbortError'
+                ? 'Sending the magic link took too long. Check your connection and try again.'
+                : err && err.message
+                  ? err.message
+                  : 'Request failed.',
+            );
           })
           .finally(() => {
+            window.clearTimeout(timeout);
             requestInFlight = false;
             setSubmitting(false);
           });

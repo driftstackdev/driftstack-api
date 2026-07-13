@@ -91,6 +91,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       const consumeSubmit = form ? form.querySelector('button[type="submit"]') : null;
       const consumeSubmitText = consumeSubmit ? consumeSubmit.textContent : '';
+      const CONSUME_TIMEOUT_MS = 15_000;
       let consumeInFlight = false;
       function setConsumeBusy(busy) {
         if (form) form.setAttribute('aria-busy', busy ? 'true' : 'false');
@@ -108,11 +109,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.add('hidden');
         if (intro) intro.textContent = 'Signing you in…';
 
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), CONSUME_TIMEOUT_MS);
+
         return fetch(apiBaseUrl + '/v1/auth/magic-link/consume', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ token: token }),
           credentials: 'include',
+          signal: controller.signal,
         })
           .then((r) =>
             r.ok
@@ -154,9 +159,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             showFallbackForm(token);
-            showBanner(err && err.message ? err.message : 'Magic-link sign-in failed.');
+            showBanner(
+              err && err.name === 'AbortError'
+                ? 'Signing in took too long. Check your connection and try the link again.'
+                : err && err.message
+                  ? err.message
+                  : 'Magic-link sign-in failed.',
+            );
           })
           .finally(() => {
+            window.clearTimeout(timeout);
             consumeInFlight = false;
             setConsumeBusy(false);
           });
