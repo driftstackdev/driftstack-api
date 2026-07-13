@@ -14,6 +14,7 @@ const transcript = [
     role: 'agent' as const,
     body: 'typed into #password',
     awaitingConfirmation: true,
+    resumeFromIntentIndex: 0,
     intents: [
       {
         kind: 'interact' as const,
@@ -45,6 +46,12 @@ describe('agent transcript encryption', () => {
     expect(() => readAgentTranscript({ ciphertext: 'raw' }, KEY)).toThrow(/malformed/i);
     expect(() =>
       readAgentTranscript([{ at: 'x', role: 'intruder', body: 'x' }], undefined),
+    ).toThrow();
+    expect(() =>
+      readAgentTranscript(
+        [{ at: 'x', role: 'agent', body: 'x', resumeFromIntentIndex: -1 }],
+        undefined,
+      ),
     ).toThrow();
   });
 });

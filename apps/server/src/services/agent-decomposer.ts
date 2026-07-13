@@ -54,6 +54,12 @@ export interface TranscriptEntry {
    * preceding entry carrying this marker; completed plans are never replayed.
    */
   awaitingConfirmation?: boolean;
+  /**
+   * Zero-based index of the first intent that did not execute because the plan
+   * paused for confirmation. Approval resumes from this exact suffix; omitting
+   * it fails closed instead of replaying an already-applied plan prefix.
+   */
+  resumeFromIntentIndex?: number;
 }
 
 /**

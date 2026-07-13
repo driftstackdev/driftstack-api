@@ -24,6 +24,7 @@ const TranscriptEntrySchema = z
     body: z.string(),
     intents: z.array(AgentIntentSchema).optional(),
     awaitingConfirmation: z.boolean().optional(),
+    resumeFromIntentIndex: z.number().int().nonnegative().optional(),
   })
   // Preserve additive transcript metadata written by a newer producer instead
   // of making an older reader brick the whole encrypted session.

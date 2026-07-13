@@ -214,14 +214,17 @@ const READBACK_MIN_BUDGET_TOKENS = 6_000;
 // 2x the token budget for ONE logical task, and (b) let the non-deterministic re-plan
 // DRIFT from what the customer reviewed (a same-phrase/different-target action could
 // be greenlit without re-review — the known v1.1 gate limitation, now live-reachable).
-// Plan turns persist their structured `intents` on the transcript entry (see the
-// plan-path `planEntry`). Resume is deliberately bound to the IMMEDIATELY preceding
-// agent entry and its explicit `awaitingConfirmation` marker. Scanning backward to
-// any structured plan would replay a completed/stale plan; forwarding a grant when
-// no marked plan exists would let a caller pre-authorize a newly decomposed action
-// without ever seeing the confirmation halt. Returned as a plan-kind result with
-// tokensConsumed 0 and NO usage, so the runtime writes no cost row + no token debit
-// (the resume is free). Returns null for a fresh, completed, stale, or malformed plan.
+// Plan turns persist their structured `intents` and exact halted index on the
+// transcript entry (see the plan-path `planEntry`). Resume is deliberately bound
+// to the IMMEDIATELY preceding agent entry and its explicit
+// `awaitingConfirmation` marker. Scanning backward to any structured plan would
+// replay a completed/stale plan; replaying the full marked plan would double every
+// already-successful prefix action. Forwarding a grant when no marked plan exists
+// would let a caller pre-authorize a newly decomposed action without ever seeing
+// the confirmation halt. Returned as a plan-kind result with tokensConsumed 0 and
+// NO usage, so the runtime writes no cost row + no token debit (the resume is free).
+// Returns null for a fresh, completed, stale, legacy-without-index, or malformed
+// plan; that fail-closed path re-decomposes and requires confirmation again.
 function reconstructHaltedPlan(
   transcript: ReadonlyArray<TranscriptEntry>,
 ): Extract<DecomposeResult, { kind: 'plan' }> | null {
@@ -229,15 +232,20 @@ function reconstructHaltedPlan(
   // the only plan it may authorize is exactly one entry earlier.
   const pending = transcript.at(-2);
   const intents = pending?.intents;
+  const resumeFrom = pending?.resumeFromIntentIndex;
   if (
     pending?.role !== 'agent' ||
     pending.awaitingConfirmation !== true ||
     intents === undefined ||
-    intents.length === 0
+    intents.length === 0 ||
+    !Number.isSafeInteger(resumeFrom) ||
+    resumeFrom === undefined ||
+    resumeFrom < 0 ||
+    resumeFrom >= intents.length
   ) {
     return null;
   }
-  return { kind: 'plan', intents, tokensConsumed: 0 };
+  return { kind: 'plan', intents: intents.slice(resumeFrom), tokensConsumed: 0 };
 }
 
 function delay(ms: number): Promise<void> {
@@ -582,9 +590,20 @@ export class AgentRuntime {
     // compatible: existing consumers reading `body` keep working;
     // recipe consumers iterate `intents` instead.
     const transcriptEntry = runResultToTranscriptEntry(executorResult, at);
+    // Executor results are ordered one-for-one with the plan prefix. A
+    // confirmation halt is always its final result, so results.length - 1 is
+    // the exact first unexecuted intent. Persist it with the reviewed plan: an
+    // approval must not replay the successful prefix (scroll/type/toggle/etc.).
+    const resumeFromIntentIndex =
+      executorResult.awaitingConfirmation === true &&
+      executorResult.results.length > 0 &&
+      executorResult.results.at(-1)?.kind === 'confirmation_required'
+        ? executorResult.results.length - 1
+        : undefined;
     const planEntry = {
       ...transcriptEntry,
       intents: decomposed.intents,
+      ...(resumeFromIntentIndex !== undefined ? { resumeFromIntentIndex } : {}),
     };
     const updated = await this.deps.sessions.appendTranscript(session.id, planEntry);
     this.deps.eventBus?.publish({

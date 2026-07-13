@@ -8,9 +8,13 @@
 import { describe, expect, it } from 'vitest';
 import { AgentRuntime, classifyDecomposerError } from '../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../src/services/agent-decomposer-deterministic.js';
-import { StubAgentExecutor, consequentialSignature } from '../../src/services/agent-executor.js';
+import {
+  StubAgentExecutor,
+  consequentialSignature,
+  type AgentExecutor,
+} from '../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
-import type { DecomposeArgs } from '../../src/services/agent-decomposer.js';
+import type { AgentIntent, DecomposeArgs } from '../../src/services/agent-decomposer.js';
 
 function fixedNow(iso: string): Date {
   return new Date(iso);
@@ -755,6 +759,86 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
       expect(second.executor.ok).toBe(true);
     }
     expect(calls.n).toBe(1); // the #130 fix: NO re-decompose (⇒ no 2nd charge) on approval
+  });
+
+  it('approval resumes at the halted consequential intent without replaying successful prefix actions', async () => {
+    const plans: AgentIntent[][] = [];
+    const stub = new StubAgentExecutor();
+    const executor: AgentExecutor = {
+      execute: (args) => {
+        plans.push([...args.plan.intents]);
+        return stub.execute(args);
+      },
+    };
+    const intents: AgentIntent[] = [
+      { kind: 'scroll', direction: 'down', amount_px: 600 },
+      { kind: 'interact', action: 'type', selector: '#quantity', value: '2' },
+      { kind: 'interact', action: 'tap', selector: 'Buy Now' },
+      { kind: 'capture', capture: 'screenshot' },
+    ];
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () => Promise.resolve({ kind: 'plan' as const, intents, tokensConsumed: 20 }),
+      },
+      executor,
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const first = await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'buy two' });
+    expect(first.kind).toBe('plan-executed');
+    if (first.kind !== 'plan-executed') throw new Error('narrow');
+    expect(first.executor.awaitingConfirmation).toBe(true);
+    expect(first.session.transcript.at(-1)?.resumeFromIntentIndex).toBe(2);
+
+    const approved = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'approve',
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'Buy Now')]),
+    });
+    expect(approved.kind).toBe('plan-executed');
+    if (approved.kind !== 'plan-executed') throw new Error('narrow');
+    expect(approved.executor.ok).toBe(true);
+    expect(plans).toEqual([intents, intents.slice(2)]);
+  });
+
+  it('fails closed instead of replaying a legacy awaiting plan with no halted index', async () => {
+    const calls = { n: 0 };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    await sessions.appendTranscript(seed.id, {
+      at: '2026-07-13T00:00:00.000Z',
+      role: 'agent',
+      body: 'legacy pending plan',
+      intents: [{ kind: 'interact', action: 'tap', selector: 'Buy Now' }],
+      awaitingConfirmation: true,
+    });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () => {
+          calls.n += 1;
+          return Promise.resolve({
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'Please confirm the current page state before I retry.',
+            tokensConsumed: 5,
+          });
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'approve',
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'Buy Now')]),
+    });
+
+    expect(result.kind).toBe('clarify');
+    expect(calls.n).toBe(1);
   });
 
   it('#130 — a fresh task carrying approvedConsequentialActions but NO prior plan falls back to a normal decompose', async () => {
