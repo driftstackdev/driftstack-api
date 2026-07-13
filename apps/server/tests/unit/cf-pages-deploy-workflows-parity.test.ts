@@ -83,7 +83,7 @@ describe('W725 Cloudflare Pages deploy workflows parity', () => {
   it('CRITICAL all 3 workflows use wrangler@^3 pages deploy with the canonical 4-flag set: --project-name + --branch + --commit-hash + --commit-message. Drift to dropping --commit-hash would lose the CF Pages deploy → commit-SHA correlation.', () => {
     for (const path of [MARKETING, DASHBOARD, DOCS]) {
       const w = read(path);
-      expect(w, `${path} wrangler version`).toMatch(/npx --yes wrangler@\^3 pages deploy/);
+      expect(w, `${path} locked wrangler`).toMatch(/npx --no-install wrangler pages deploy/);
       expect(w, `${path} --project-name`).toMatch(/--project-name="\$\{PROJECT_NAME\}"/);
       expect(w, `${path} --branch`).toMatch(/--branch="\$\{GITHUB_REF_NAME\}"/);
       expect(w, `${path} --commit-hash`).toMatch(/--commit-hash="\$\{GITHUB_SHA\}"/);
@@ -173,10 +173,10 @@ describe('W725 Cloudflare Pages deploy workflows parity', () => {
     expect(docs).not.toMatch(/CLOUDFLARE_DASHBOARD_PROJECT_NAME/);
   });
 
-  it('CRITICAL all 3 workflows install via `npm install --no-audit` (workspace-aware). Drift to npm ci would fail when package-lock.json drifts during dependabot updates.', () => {
+  it('CRITICAL all 3 workflows install from the committed lockfile via npm ci', () => {
     for (const path of [MARKETING, DASHBOARD, DOCS]) {
       const w = read(path);
-      expect(w, `${path} npm install`).toMatch(/npm install --no-audit/);
+      expect(w, `${path} npm ci`).toMatch(/npm ci --no-audit/);
     }
   });
 
@@ -200,7 +200,7 @@ describe('W725 Cloudflare Pages deploy workflows parity', () => {
       const w = read(path);
       expect(w, `${path}`).toMatch(/cancel-in-progress: false/);
       expect(w, `${path}`).toMatch(/CLOUDFLARE_API_TOKEN/);
-      expect(w, `${path}`).toMatch(/wrangler@\^3 pages deploy/);
+      expect(w, `${path}`).toMatch(/npx --no-install wrangler pages deploy/);
       expect(w, `${path}`).toMatch(/node-version: 22/);
     }
     expect(read(MARKETING)).toMatch(/V-469/);

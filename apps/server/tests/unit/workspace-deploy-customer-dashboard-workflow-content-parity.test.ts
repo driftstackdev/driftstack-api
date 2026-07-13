@@ -35,15 +35,13 @@ function read(p: string): string {
 describe('W543.A /.github/workflows/deploy-customer-dashboard.yml content parity', () => {
   const body = read(LIB);
 
-  it("Header + Astro-cloudflare-adapter + Pages-Functions framing pinned: '# Customer dashboard — deploy pipeline.' + 'Builds the Astro app at `apps/customer-dashboard/` (Astro + @astrojs/cloudflare adapter) and deploys the resulting `dist/` to Cloudflare Pages via the `wrangler` CLI.' + 'The dist contains both static HTML (most pages) and `_worker.js` (Pages Functions for any pages with prerender=false).' + 'Path-filter triggers are deliberate' + 'backend-only commits don't redeploy the dashboard.' — pinned so the @astrojs/cloudflare-adapter + Pages-Functions-via-_worker.js + prerender=false + path-filter-rationale + backend-only-commits-don't-redeploy commitment survives", () => {
+  it('Header pins static Astro output, Wrangler deployment, and narrow path filters', () => {
     expect(body).toMatch(/# Customer dashboard — deploy pipeline\./);
     expect(body).toMatch(
-      /Builds the Astro app at\s*\n#\s*`apps\/customer-dashboard\/` \(Astro \+ @astrojs\/cloudflare adapter\)/,
+      /Builds the Astro app at\s*\n#\s*`apps\/customer-dashboard\/` as static Astro output/,
     );
     expect(body).toMatch(/`wrangler` CLI/);
-    expect(body).toMatch(
-      /The dist contains both static HTML \(most pages\) and\s*\n#\s*`_worker\.js` \(Pages Functions for any pages with prerender=false\)\./,
-    );
+    expect(body).not.toMatch(/_worker\.js|Pages Functions|@astrojs\/cloudflare/);
     expect(body).toMatch(/Path-filter triggers are deliberate/);
     expect(body).toMatch(/backend-only commits don't redeploy the dashboard\./);
   });
@@ -113,7 +111,9 @@ describe('W543.A /.github/workflows/deploy-customer-dashboard.yml content parity
     expect(body).toMatch(
       /echo "CLOUDFLARE_DASHBOARD_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables\."/,
     );
-    expect(body).toMatch(/npx --yes wrangler@\^3 pages deploy apps\/customer-dashboard\/dist \\/);
+    expect(body).toMatch(
+      /npx --no-install wrangler pages deploy apps\/customer-dashboard\/dist \\/,
+    );
     expect(body).toMatch(/--project-name="\$\{PROJECT_NAME\}" \\/);
     expect(body).toMatch(/--branch="\$\{GITHUB_REF_NAME\}" \\/);
     expect(body).toMatch(/--commit-hash="\$\{GITHUB_SHA\}" \\/);

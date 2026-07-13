@@ -2,22 +2,22 @@
 
 Per V-259 / paired with V-258: consolidates all four Cloudflare Pages projects the Driftstack stack needs, in one runbook so the founder can do this in a single Cloudflare-dashboard session.
 
-Two of the four currently have GitHub Actions deploy workflows wired (marketing + docs). The other two (customer-dashboard + admin-panel) have astro configs but their deploy workflows haven't shipped yet — the projects can still be pre-created so the workflow rollouts are unblocked when they land.
+All four projects now have path-filtered GitHub Actions deploy workflows and production custom domains. This runbook remains the inventory, first-time setup, verification, and rollback reference.
 
 ## What this runbook covers
 
-| Project slug                    | Custom domain              | Workflow                                    | Status of deploy workflow                                         |
-| ------------------------------- | -------------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
-| `driftstack-marketing`          | `driftstack.dev` + `www.…` | `.github/workflows/deploy-marketing.yml`    | Wired (V-091 era)                                                 |
-| `driftstack-docs`               | `docs.driftstack.dev`      | `.github/workflows/deploy-docs.yml` (V-258) | Wired (V-258)                                                     |
-| `driftstack-customer-dashboard` | `app.driftstack.dev`       | (planned)                                   | Not yet wired — Astro SSR via `@astrojs/cloudflare`; future V-NNN |
-| `driftstack-admin-panel`        | `admin.driftstack.dev`     | (planned, V-135)                            | Not yet wired — gated on Cloudflare Access SSO config             |
+| Project slug                    | Custom domain              | Workflow                                          | Status |
+| ------------------------------- | -------------------------- | ------------------------------------------------- | ------ |
+| `driftstack-marketing`          | `driftstack.dev` + `www.…` | `.github/workflows/deploy-marketing.yml`          | Wired  |
+| `driftstack-docs`               | `docs.driftstack.dev`      | `.github/workflows/deploy-docs.yml`               | Wired  |
+| `driftstack-customer-dashboard` | `app.driftstack.dev`       | `.github/workflows/deploy-customer-dashboard.yml` | Wired  |
+| `driftstack-admin-panel`        | `admin.driftstack.dev`     | `.github/workflows/deploy-admin-panel.yml`        | Wired  |
 
 ## Shared prerequisites (do once)
 
 ### 1. Cloudflare API token
 
-`CLOUDFLARE_API_TOKEN` — single repo-wide secret used by both `deploy-marketing.yml` and `deploy-docs.yml` (and any future deploy workflow).
+`CLOUDFLARE_API_TOKEN` — single repo-wide secret used by all four Pages deploy workflows.
 
 - CF dashboard → top-right profile menu → **My Profile** → **API Tokens** → **Create Token** → use the **Edit Cloudflare Pages** template, OR custom token with these permissions:
   - `Account` → `Cloudflare Pages` → `Edit`.
@@ -63,43 +63,45 @@ Detailed runbook: `docs/founder-actions/v258-cloudflare-pages-docs-setup.md`. Su
 4. Wire custom domain `docs.driftstack.dev`.
 5. Verify quickstart, sdk/installation, license-activation, guides/profile-management, guides/session-lifecycle pages.
 
-### C. `driftstack-customer-dashboard` (workflow: planned)
-
-Pre-create the project so the future deploy workflow lands cleanly:
+### C. `driftstack-customer-dashboard` (workflow: `.github/workflows/deploy-customer-dashboard.yml`)
 
 1. CF: create Pages project `driftstack-customer-dashboard` via direct upload.
-2. Don't wire a domain yet — `app.driftstack.dev` waits for the dashboard SSR build (Astro + `@astrojs/cloudflare` adapter) and the deploy workflow that lands with it (future V-NNN).
-3. The repo variable name will be `CLOUDFLARE_DASHBOARD_PROJECT_NAME` when the workflow ships; create the variable with that name + value `driftstack-customer-dashboard` to pre-stage.
+2. Set repo variable `CLOUDFLARE_DASHBOARD_PROJECT_NAME` = `driftstack-customer-dashboard`.
+3. Trigger **Deploy customer dashboard** from `main`.
+4. Wire `app.driftstack.dev` and verify login plus one authenticated account page.
 
-### D. `driftstack-admin-panel` (workflow: planned, V-135)
-
-V-135 lands the admin-panel deploy + Cloudflare Access SSO gate. Pre-staging:
+### D. `driftstack-admin-panel` (workflow: `.github/workflows/deploy-admin-panel.yml`)
 
 1. CF: create Pages project `driftstack-admin-panel` via direct upload.
-2. The custom domain (`admin.driftstack.dev`) wiring waits for V-135 because the Access policy attaches at the origin level and needs to be configured against the live Pages project.
-3. Repo variable name will be `CLOUDFLARE_ADMIN_PROJECT_NAME` when the workflow ships.
+2. Set repo variable `CLOUDFLARE_ADMIN_PANEL_PROJECT_NAME` = `driftstack-admin-panel`.
+3. Trigger **Deploy admin panel** from `main`.
+4. Wire `admin.driftstack.dev`, retain the Cloudflare Access policy, and verify a staff-scoped account can open the panel while a non-staff account cannot.
 
 ## Verifying the workflows are wired correctly
 
-After completing A and B, trigger one push under `apps/marketing-site/**` AND one push under `apps/docs/**`. Each should trigger ONLY the matching workflow:
+Trigger one isolated change under each frontend directory. Each should trigger only its matching workflow:
 
 ```sh
 # A trivial change under apps/marketing-site/ → only Deploy marketing site runs.
 # A trivial change under apps/docs/ → only Deploy doc site runs.
-# A change under apps/server/ → neither runs.
+# A trivial change under apps/customer-dashboard/ → only Deploy customer dashboard runs.
+# A trivial change under apps/admin-panel/ → only Deploy admin panel runs.
+# A change under apps/server/ → no Pages workflow runs.
 ```
 
 This is the path-filter design preventing cross-deployment storms when only one app changes.
 
 ## Cost (informational)
 
+These workflows build in GitHub Actions and Direct Upload the prebuilt `dist/` directories with Wrangler. Cloudflare's Pages build quota applies to its built-in Git integration, so it is not the limiting compute budget for this deployment path. If the projects ever move to Git integration, the current Pages limits are:
+
 CF Pages free tier:
 
-- 500 builds per month per account.
+- 500 builds per month per project.
 - Unlimited bandwidth on static assets.
-- 1 build at a time per project (the `concurrency` group in each workflow respects this).
+- 1 concurrent build on the Free plan (Cloudflare counts concurrency per account; each workflow also serializes its own production deploys).
 
-The Driftstack stack pre-launch is well under the build cap. Post-launch, if the rate ever approaches 500/month, CF Pages Pro is $20/mo for 5,000 builds.
+The Driftstack stack pre-launch is well under the build cap. Cloudflare currently lists the Pro plan at $25/month with 5,000 builds per project and 5 concurrent builds; re-check the official limits and pricing pages before changing plans.
 
 ## Rollback
 
@@ -123,6 +125,6 @@ Same pattern across all projects:
 
 ## What's NOT in this runbook
 
-- **Cloudflare Access SSO** for `admin.driftstack.dev` — separate V-135 / V-246-P1-003 ops action; lands when the admin-panel deploy ships.
+- **Cloudflare Access policy administration** for `admin.driftstack.dev` — separate V-135 / V-246-P1-003 ops responsibility; this runbook only verifies the policy remains effective after deploys.
 - **Cloudflare R2 bucket setup** for session recordings + screenshots — separate ops action under the storage track; not Pages-related.
-- **Cloudflare Workers / Pages Functions** — not used by Driftstack today (all four projects are static-only or SSR-via-Astro-adapter).
+- **Cloudflare Workers / Pages Functions** — not used by the frontend projects today; all current pages build as static assets, and admin arbitrary-id routes use Pages 200 rewrites to static client-fetched shells.

@@ -75,7 +75,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies (workspace-aware)
-        run: npm install --no-audit
+        run: npm ci --no-audit
 
       - name: Build marketing site
         env:
@@ -105,7 +105,7 @@ jobs:
             echo "CLOUDFLARE_PAGES_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
             exit 1
           fi
-          npx --yes wrangler@^3 pages deploy apps/marketing-site/dist \
+          npx --no-install wrangler pages deploy apps/marketing-site/dist \
             --project-name="${PROJECT_NAME}" \
             --branch="${GITHUB_REF_NAME}" \
             --commit-hash="${GITHUB_SHA}" \

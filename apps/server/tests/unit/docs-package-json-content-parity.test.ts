@@ -7,10 +7,9 @@
 //   • Name: @driftstack/docs.
 //   • private: true + type: module.
 //   • Standard 4-script Astro pipeline (dev/build/preview/typecheck).
-//   • Critical deps: @astrojs/check + @astrojs/sitemap + @astrojs/
-//     tailwind + @tailwindcss/typography (for prose-heavy docs pages
-//     — distinct from dashboard+admin which deliberately exclude it)
-//     + astro + tailwindcss + typescript.
+//   • Critical deps: @astrojs/check + @astrojs/sitemap +
+//     @tailwindcss/vite + @tailwindcss/typography (for prose-heavy docs
+//     pages) + Astro 7 + Tailwind 4 + TypeScript.
 //   • S22.3 (2026-07-06): build chains `pagefind --site dist` after
 //     `astro build` — the fully-local search index (dist/pagefind/) is
 //     emitted INSIDE the workspace build script so both
@@ -59,10 +58,10 @@ describe('W537.B apps/docs/package.json content parity', () => {
     expect(pkg.dependencies).not.toHaveProperty('pagefind');
   });
 
-  it('Critical-dep + typography-plugin framing pinned: @astrojs/check + @astrojs/sitemap (for V-250 docs sitemap) + @tailwindcss/postcss (W368 — Tailwind v4 engine via PostCSS, replaced the v3 @astrojs/tailwind integration) + @tailwindcss/typography (load-bearing for prose-heavy long-form docs — distinct from dashboard+admin which deliberately exclude it for forms/tables-only surface) + astro + tailwindcss + typescript + NO @sentry/astro (parity with docs astro.config no-Sentry posture) — pinned so the dep set with typography-plugin commitment survives (drift to dropping @tailwindcss/typography would break prose rendering on docs.driftstack.dev pages; drift to dropping @astrojs/sitemap would break crawler discovery of docs pages)', () => {
+  it('pins Astro 7 with the Tailwind 4 Vite engine, sitemap and prose styling, while excluding customer telemetry', () => {
     expect(pkg.dependencies).toHaveProperty('@astrojs/check');
     expect(pkg.dependencies).toHaveProperty('@astrojs/sitemap');
-    expect(pkg.dependencies).toHaveProperty('@tailwindcss/postcss');
+    expect(pkg.dependencies['@tailwindcss/vite']).toBe('4.3.2');
     expect(pkg.dependencies).not.toHaveProperty('@astrojs/tailwind');
     expect(pkg.dependencies).toHaveProperty('@tailwindcss/typography');
     expect(pkg.dependencies).toHaveProperty('astro');

@@ -45,9 +45,8 @@ describe('W537.A apps/status-site/astro.config.mjs content parity', () => {
   });
 
   it("Tailwind no-base-styles + inlineStylesheets + no-Sentry framing pinned: 'integrations: [tailwind({ applyBaseStyles: false })]' (single integration — status-site is minimal, no sitemap/Sentry overhead) + 'inlineStylesheets: \"auto\"' — pinned so the Tailwind-no-base-styles + minimal-integration-array + NO @sentry/astro (parity with docs site — status-site is a read-only public surface with no customer-error-telemetry need) commitment survives (drift to adding Sentry would route status-page-load errors through customer telemetry; drift to adding sitemap would publish status incidents to search engines)", () => {
-    // W368 — Tailwind v4 via PostCSS (postcss.config.mjs): the @astrojs/tailwind
-    // integration was removed (no integrations array; @tailwindcss/vite breaks
-    // while astro 5+6 coexist). inlineStylesheets + no-Sentry posture unchanged.
+    expect(body).toMatch(/import tailwindcss from '@tailwindcss\/vite';/);
+    expect(body).toMatch(/vite: \{\s*\n\s*plugins: \[tailwindcss\(\)\],/);
     expect(body).not.toMatch(/@astrojs\/tailwind/);
     expect(body).not.toMatch(/integrations:/);
     expect(body).toMatch(/inlineStylesheets: 'auto',/);

@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIST = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts.astro');
-const DETAIL = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts/[id].astro');
+const DETAIL = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/account-detail.astro');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts');
 
 function walk(dir: string, out: string[] = []): string[] {

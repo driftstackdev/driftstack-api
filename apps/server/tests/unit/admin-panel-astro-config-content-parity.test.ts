@@ -2,20 +2,17 @@
 // Driftstack-staff-only admin panel at admin.driftstack.dev. Drift here
 // either changes the subdomain (would collapse the staff↔customer DNS
 // security boundary) or breaks the V-134/V-174 staff-API-key scope
-// requirement (would weaken staff access control) or breaks the V-200
-// Cloudflare adapter (would 404 dynamic /accounts/[id] etc).
+// requirement (would weaken staff access control) or drops the static
+// arbitrary-ID shell contract (which would 404 live detail links).
 //
 //   • Staff-only framing + admin.driftstack.dev (separate subdomain
 //     from app.driftstack.dev customer dashboard so security boundary
 //     is at DNS + TLS layer, not application logic).
 //   • Auth: driftstack_internal_admin scope + /v1/admin/* control plane
 //     + V-134 + V-174 preHandler enforcement.
-//   • V-200 @astrojs/cloudflare adapter for dynamic detail routes
-//     (e.g. /accounts/[id]).
-//   • prerender=true (or unmarked under output:'static') → static HTML
-//     to dist/; prerender=false → Worker at request time.
-//   • platformProxy.enabled: false.
-//   • Tailwind applyBaseStyles: false + inlineStylesheets: 'auto'.
+//   • Static output with `_redirects`-backed account/incident shells.
+//   • Astro 7 compatibility compression + inlineStylesheets: 'auto'.
+//   • Explicit Tailwind PostCSS pipeline, no framework integration.
 //   • NO Sentry integration on admin-panel (unlike marketing-site +
 //     customer-dashboard — staff-only surface intentionally excluded
 //     from customer-facing error telemetry surfaces).
@@ -51,20 +48,17 @@ describe('W527.A apps/admin-panel/astro.config.mjs content parity', () => {
     );
   });
 
-  it("V-200 Cloudflare-adapter framing pinned: 'Cloudflare Pages with Workers — V-200 added the @astrojs/cloudflare adapter so dynamic detail routes (e.g. /accounts/[id]) can SSR for arbitrary live UUIDs. Pages with `prerender = true` (or unmarked in `output: \"static\"`) still emit static HTML to dist/. Pages with `prerender = false` are served by the Worker at request time and can fetch live data per request.' + cloudflare import + 'adapter: cloudflare({ platformProxy: { enabled: false } })' — pinned so the V-200 anchor + /accounts/[id]-example + prerender-true-static-vs-false-Worker routing + platformProxy-disabled commitment survives", () => {
-    expect(body).toMatch(/import cloudflare from '@astrojs\/cloudflare';/);
+  it('Static Cloudflare Pages framing pins URL-preserving detail-shell rewrites and forbids a Worker adapter', () => {
     expect(body).toMatch(
-      /\/\/ Cloudflare Pages with Workers — V-200 added the @astrojs\/cloudflare\s*\n?\s*\/\/ adapter so dynamic detail routes \(e\.g\. \/accounts\/\[id\]\) can SSR for\s*\n?\s*\/\/ arbitrary live UUIDs\. Pages with `prerender = true` \(or unmarked\s*\n?\s*\/\/ in `output: 'static'`\) still emit static HTML to dist\/\. Pages with\s*\n?\s*\/\/ `prerender = false` are served by the Worker at request time and\s*\n?\s*\/\/ can fetch live data per request\./,
+      /\/\/ Cloudflare Pages serves static output directly\. Arbitrary account and\s*\n?\s*\/\/ incident ids use `_redirects` 200 rewrites to deterministic client-fetched\s*\n?\s*\/\/ shells; no Worker\/SSR adapter is required\./,
     );
-    expect(body).toMatch(
-      /adapter: cloudflare\(\{\s*\n?\s*platformProxy: \{ enabled: false \},\s*\n?\s*\}\),/,
-    );
+    expect(body).not.toMatch(/@astrojs\/cloudflare|adapter:/);
+    expect(body).toMatch(/compressHTML: true,/);
   });
 
-  it("Tailwind no-base-styles + inlineStylesheets framing pinned: '@ts-check' + 'integrations: [tailwind({ applyBaseStyles: false })]' (admin-panel does NOT pull Tailwind preflight; staff styles applied via admin src/styles) + 'inlineStylesheets: \"auto\"' build option — pinned so the JSDoc-typecheck + Tailwind-no-base-styles + inline-stylesheets-auto + single-integration-array (NO Sentry on admin-panel — staff-only surface intentionally excluded from customer-error-telemetry) commitment survives", () => {
+  it('pins typed static config, automatic inline styles, and the deliberate absence of framework integrations and Sentry', () => {
     expect(body).toMatch(/\/\/ @ts-check/);
-    expect(body).toMatch(/import tailwind from '@astrojs\/tailwind';/);
-    expect(body).toMatch(/integrations: \[tailwind\(\{ applyBaseStyles: false \}\)\],/);
+    expect(body).not.toMatch(/@astrojs\/tailwind|integrations:/);
     expect(body).toMatch(/inlineStylesheets: 'auto',/);
     expect(body).not.toMatch(/import sentry from '@sentry\/astro';/);
     expect(body).not.toMatch(/sentry\(/);

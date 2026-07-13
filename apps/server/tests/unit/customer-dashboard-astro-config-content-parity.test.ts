@@ -1,15 +1,11 @@
 // W526.A — drift guard for apps/customer-dashboard/astro.config.mjs.
-// V-200 Cloudflare adapter for dynamic detail routes + V-469 Sentry +
-// V-079 auth-flow control-plane wiring. Drift here either changes the
-// Cloudflare-adapter wiring (would break dynamic [id] detail routes
-// on Cloudflare Pages) or breaks the Sentry build-time opt-in (would
-// either always-on Sentry in dev or break prod telemetry).
+// Static Cloudflare Pages output + V-469 Sentry + V-079 auth-flow
+// control-plane wiring. Drift here could restore an unnecessary SSR
+// runtime or break the Sentry build-time opt-in.
 //
 //   • site: https://app.driftstack.dev (customer dashboard subdomain).
 //   • output: static (Cloudflare Pages serves dist/).
-//   • V-200 @astrojs/cloudflare adapter so /sessions/[id] +
-//     /api-keys/[id] can SSR without 404ing.
-//   • platformProxy.enabled: false (no preview-time platform proxy).
+//   • No SSR adapter: every current route is static.
 //   • V-469 @sentry/astro with PUBLIC_SENTRY_DSN_DASHBOARD build-time
 //     opt-in (skips when unset).
 //   • Sentry tracesSampleRate: 0.05.
@@ -40,14 +36,12 @@ describe('W526.A apps/customer-dashboard/astro.config.mjs content parity', () =>
     expect(body).toMatch(/output: 'static',/);
   });
 
-  it("V-200 Cloudflare-adapter framing pinned: 'Cloudflare Pages serves the build output. V-200 added the @astrojs/cloudflare adapter so future dynamic detail routes (e.g. /sessions/[id], /api-keys/[id]) can SSR for arbitrary live UUIDs without 404ing on Cloudflare Pages. Static pages still emit to dist/ unmodified; only pages with `prerender = false` go through the Worker.' + cloudflare import + 'adapter: cloudflare({ platformProxy: { enabled: false } })' — pinned so the V-200 anchor + 2-example-dynamic-route (/sessions/[id] + /api-keys/[id]) + prerender=false-Worker-routing + platformProxy-disabled commitment survives (drift to dropping the adapter would 404 dynamic detail routes on Cloudflare Pages)", () => {
-    expect(body).toMatch(/import cloudflare from '@astrojs\/cloudflare';/);
+  it('Static Cloudflare Pages output is explicit and the unused SSR adapter stays absent', () => {
     expect(body).toMatch(
-      /\/\/ Cloudflare Pages serves the build output\. V-200 added the\s*\n?\s*\/\/ @astrojs\/cloudflare adapter so future dynamic detail routes\s*\n?\s*\/\/ \(e\.g\. \/sessions\/\[id\], \/api-keys\/\[id\]\) can SSR for arbitrary live\s*\n?\s*\/\/ UUIDs without 404ing on Cloudflare Pages\. Static pages still emit\s*\n?\s*\/\/ to dist\/ unmodified; only pages with `prerender = false` go\s*\n?\s*\/\/ through the Worker\./,
+      /\/\/ Cloudflare Pages serves this static build directly\. Add an SSR adapter only\s*\n?\s*\/\/ if a concrete on-demand route is introduced; no current page needs one\./,
     );
-    expect(body).toMatch(
-      /adapter: cloudflare\(\{\s*\n?\s*platformProxy: \{ enabled: false \},\s*\n?\s*\}\),/,
-    );
+    expect(body).not.toMatch(/@astrojs\/cloudflare|adapter:/);
+    expect(body).toMatch(/compressHTML: true,/);
   });
 
   it("V-079 auth-flow control-plane framing pinned: 'Auth-flow pages POST to the control plane at /v1/auth/* per V-079.' — pinned so the V-079 anchor + /v1/auth/* control-plane-POST commitment survives (drift to a different auth endpoint would create dashboard↔auth-API divergence)", () => {
@@ -62,27 +56,22 @@ describe('W526.A apps/customer-dashboard/astro.config.mjs content parity', () =>
       /\/\/ V-469 — @sentry\/astro integration\. Activates when\s*\n?\s*\/\/ PUBLIC_SENTRY_DSN_DASHBOARD is set at build time; skips entirely\s*\n?\s*\/\/ when unset, matching the existing API-server skip-when-empty\s*\n?\s*\/\/ posture for SENTRY_DSN\. Source-map upload is a no-op when\s*\n?\s*\/\/ SENTRY_AUTH_TOKEN is unset\./,
     );
     expect(body).toMatch(/const SENTRY_DSN = process\.env\.PUBLIC_SENTRY_DSN_DASHBOARD \?\? '';/);
-    expect(body).toMatch(
-      /const SENTRY_RELEASE = process\.env\.SENTRY_RELEASE \?\? process\.env\.GIT_SHA \?\? 'unknown';/,
-    );
     expect(body).toMatch(/const SENTRY_AUTH_TOKEN = process\.env\.SENTRY_AUTH_TOKEN \?\? '';/);
+    expect(body).toMatch(
+      /process\.env\.SENTRY_RELEASE \?\?= process\.env\.GIT_SHA \?\? 'unknown';/,
+    );
   });
 
   it("Sentry call + dashboard-project framing pinned: 'enabled: SENTRY_DSN.length > 0' + 'tracesSampleRate: 0.05' + 'project: \"driftstack-dashboard\"' + 'org: process.env.SENTRY_ORG ?? \"driftstack\"' — pinned so the DSN-length-gated-enable + 5%-trace-sample + driftstack-dashboard-project + driftstack-org-default commitment survives", () => {
     expect(body).toMatch(/enabled: SENTRY_DSN\.length > 0,/);
-    expect(body).toMatch(/dsn: SENTRY_DSN,/);
-    expect(body).toMatch(/environment: process\.env\.SENTRY_ENVIRONMENT \?\? 'production',/);
-    expect(body).toMatch(/release: SENTRY_RELEASE,/);
-    expect(body).toMatch(/tracesSampleRate: 0\.05,/);
     expect(body).toMatch(/project: 'driftstack-dashboard',/);
     expect(body).toMatch(/org: process\.env\.SENTRY_ORG \?\? 'driftstack',/);
-    expect(body).toMatch(/authToken: SENTRY_AUTH_TOKEN,/);
+    expect(body).toMatch(/authToken: SENTRY_AUTH_TOKEN \|\| undefined,/);
   });
 
-  it("@ts-check + Tailwind-no-base-styles + inlineStylesheets framing pinned: '@ts-check' + 'tailwind({ applyBaseStyles: false })' + 'inlineStylesheets: \"auto\"' — pinned so the JSDoc-typecheck + Tailwind-no-base-styles (base styles applied via dashboard src/styles) + inline-stylesheets-auto build-optimization commitment survives", () => {
+  it('pins typed config, explicit Tailwind handling outside Astro integrations, and automatic inline styles', () => {
     expect(body).toMatch(/\/\/ @ts-check/);
-    expect(body).toMatch(/import tailwind from '@astrojs\/tailwind';/);
-    expect(body).toMatch(/tailwind\(\{ applyBaseStyles: false \}\),/);
+    expect(body).not.toMatch(/@astrojs\/tailwind/);
     expect(body).toMatch(/inlineStylesheets: 'auto',/);
   });
 

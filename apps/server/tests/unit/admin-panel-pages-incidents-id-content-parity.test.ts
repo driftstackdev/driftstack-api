@@ -1,6 +1,5 @@
-// Drift guard for apps/admin-panel/src/pages/incidents/[id].astro.
-// Pins the V-344 doc-comment + the 3-severity / 4-status badge
-// taxonomies + the SSG-from-MOCK_INCIDENTS pattern.
+// Drift guard for the static incident-detail shell. Pins the V-344
+// live wiring, exact URL derivation, and badge taxonomies.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,13 +8,13 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/[id].astro');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/incident-detail.astro');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('admin-panel incidents/[id] content parity', () => {
+describe('admin-panel incident-detail static shell content parity', () => {
   const body = read(PAGE);
 
   it('file exists at canonical path', () => {
@@ -26,13 +25,14 @@ describe('admin-panel incidents/[id] content parity', () => {
     expect(body).toMatch(/\/\/ V-344 — apiBaseUrl exposed to inline script for live form wiring\./);
   });
 
-  it('V-200* SSR pattern pinned: export const prerender = false (Worker serves ANY incident id at request time) + MOCK_INCIDENTS is only a paint-shell fallback (?? placeholder shell keyed by Astro.params.id). The prior getStaticPaths build-time enumeration 404d every REAL incident id (only mock ids had pages), so the incident-management surface was dead for live incidents. Drift back to getStaticPaths would re-introduce that 404.', () => {
-    expect(body).toMatch(/export const prerender = false;/);
+  it('Static rewrite shell pinned: no SSR/getStaticPaths, exact two-segment incident URL derivation', () => {
+    expect(body).not.toMatch(/export const prerender = false;/);
     expect(body).not.toMatch(/export function getStaticPaths\(\)/);
-    expect(body).toMatch(/const incident = MOCK_INCIDENTS\.find\(\(inc\) => inc\.id === id\) \?\?/);
+    expect(body).not.toMatch(/Astro\.params/);
+    expect(body).toMatch(/pathParts\.length === 2 && pathParts\[0\] === 'incidents'/);
   });
 
-  it('No build-time redirect: the SSR page renders a placeholder shell for non-mock ids (then the inline script populates from GET /v1/admin/incidents/:id) rather than redirecting. Drift back to Astro.redirect would re-couple the page to the build-time mock enumeration.', () => {
+  it('renders one placeholder shell for arbitrary ids rather than redirecting or enumerating build-time incidents', () => {
     expect(body).not.toMatch(/Astro\.redirect\('\/incidents'\)/);
   });
 

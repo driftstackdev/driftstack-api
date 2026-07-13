@@ -70,7 +70,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies (workspace-aware)
-        run: npm install --no-audit
+        run: npm ci --no-audit
 
       - name: Build doc site
         run: npm run build --workspace apps/docs
@@ -90,7 +90,7 @@ jobs:
             echo "CLOUDFLARE_DOCS_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
             exit 1
           fi
-          npx --yes wrangler@^3 pages deploy apps/docs/dist \
+          npx --no-install wrangler pages deploy apps/docs/dist \
             --project-name="${PROJECT_NAME}" \
             --branch="${GITHUB_REF_NAME}" \
             --commit-hash="${GITHUB_SHA}" \

@@ -1,36 +1,20 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
-import { MOCK_INCIDENTS } from '../../data/mocks.ts';
 
-// V-200* — converted from `getStaticPaths` static enumeration (mock ids
-// only) to SSR via the @astrojs/cloudflare adapter, mirroring the
-// accounts/[id].astro V-200 fix. The page now serves ANY incident id at
-// request time; Cloudflare Pages routes /incidents/<inc_…> to the Worker
-// which renders this template with `Astro.params.id` set. The prior
-// getStaticPaths build-time enumeration 404'd every REAL incident id (only
-// the MOCK_INCIDENTS ids had pages), so the whole incident-management
-// surface (Post update / Mark resolved / Reopen) was dead for live
-// incidents. MOCK_INCIDENTS is now only a paint-shell fallback when the URL
-// id matches a mock entry; non-mock ids render a minimal placeholder shell
-// that the inline script then populates from GET /v1/admin/incidents/:id.
-export const prerender = false;
-
-const { id } = Astro.params;
-const incident = MOCK_INCIDENTS.find((inc) => inc.id === id) ?? {
-  // Placeholder shell when the URL id isn't in the mock list. The inline
-  // script's loadIncident() rewrites every value once the live fetch
-  // completes; what's rendered statically here is the loading / no-token /
-  // fetch-error fallback only. Shell defaults to a non-resolved state so the
-  // Post-update + Mark-resolved forms render in the shell (the script hides
-  // them + reveals the Reopen form once the live status comes back resolved).
-  id: id ?? '',
+// This is a deterministic static shell. Cloudflare Pages internally rewrites
+// /incidents/<id> here without changing the browser URL; the inline script
+// derives the live id from window.location and fills the shell from the
+// authenticated API. Arbitrary incident deep links therefore work without
+// a Pages Worker or SSR adapter.
+const incident = {
+  id: '',
   title: 'Incident',
   description: '',
   severity: 'minor' as 'minor' | 'major' | 'outage',
   status: 'investigating' as 'investigating' | 'identified' | 'monitoring' | 'resolved',
   affectedComponents: [] as string[],
   public: true,
-  startedAt: new Date().toISOString(),
+  startedAt: null as string | null,
   resolvedAt: null as string | null,
   updates: [] as { id: string; message: string; status: string; postedAt: string }[],
 };
@@ -39,7 +23,8 @@ const incident = MOCK_INCIDENTS.find((inc) => inc.id === id) ?? {
 import { resolveApiBaseUrl } from '../../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 
-function fmtIso(iso: string): string {
+function fmtIso(iso: string | null): string {
+  if (iso === null) return '—';
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
 
@@ -149,7 +134,7 @@ const isResolved = incident.status === 'resolved';
     </section>
 
     {/* Active-incident forms (Post update + Mark resolved). Always rendered in
-        the DOM now that the page is SSR (the shell can't know the live status
+        the static shell (the build can't know the live status
         at build time); the inline script reveals or hides this group based on
         the live status returned from GET /v1/admin/incidents/:id. Initial
         hidden state derives from the shell's isResolved. */}
@@ -246,7 +231,7 @@ const isResolved = incident.status === 'resolved';
         or regression on a previously-resolved issue. Only shows
         when incident is in 'resolved' state. Same body shape as
         the resolve form (just a message); audit-action
-        'incident.reopened' via migration 0063. Always rendered in the SSR
+        'incident.reopened' via migration 0063. Always rendered in the static
         DOM; the inline script reveals it only when the live status is
         resolved (initial hidden state derives from the shell's isResolved). */}
     <div data-form-group="resolved" class:list={[isResolved ? '' : 'hidden']}>
@@ -294,12 +279,15 @@ const isResolved = incident.status === 'resolved';
     </div>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl, incidentId: incident.id }}>
+  <script is:inline define:vars={{ apiBaseUrl }}>
     // V-344 — wires Post-update + Mark-resolved forms to the live
     // /v1/admin/incidents/:id/{updates,resolve} endpoints. Replaces
     // the V-295a alert-stubs.
     (function () {
       const banner = document.querySelector('[data-banner]');
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const incidentId =
+        pathParts.length === 2 && pathParts[0] === 'incidents' ? pathParts[1] || '' : '';
       const INCIDENT_TIMEOUT_MS = 15_000;
       let loadController = null;
       let loadGeneration = 0;
@@ -351,8 +339,7 @@ const isResolved = incident.status === 'resolved';
       }
 
       // V-200* — populate the page from the live incident at request time.
-      // The page is now SSR; the SSG body is only a paint shell (especially
-      // for non-mock ids, which previously 404'd entirely). loadIncident()
+      // The built body is only a paint shell. loadIncident()
       // fetches GET /v1/admin/incidents/:id and rewrites the header, timeline,
       // and form-group visibility from the live status.
       const SEVERITY_BADGE = {
@@ -464,6 +451,11 @@ const isResolved = incident.status === 'resolved';
         if (loadController) loadController.abort();
         const generation = ++loadGeneration;
         const token = getToken();
+        if (!incidentId) {
+          showBanner('Invalid incident link.', true);
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return Promise.resolve(false);
+        }
         if (!token) {
           showBanner('Sign in with a staff admin account to see this incident.', true);
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();

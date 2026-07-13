@@ -107,7 +107,7 @@ describe('W543.C /.github/workflows/deploy-marketing.yml content parity', () => 
     expect(body).toMatch(
       /echo "CLOUDFLARE_PAGES_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables\."/,
     );
-    expect(body).toMatch(/npx --yes wrangler@\^3 pages deploy apps\/marketing-site\/dist \\/);
+    expect(body).toMatch(/npx --no-install wrangler pages deploy apps\/marketing-site\/dist \\/);
     expect(body).toMatch(/--project-name="\$\{PROJECT_NAME\}" \\/);
     expect(body).toMatch(/--branch="\$\{GITHUB_REF_NAME\}" \\/);
     expect(body).toMatch(/--commit-hash="\$\{GITHUB_SHA\}" \\/);

@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
+import tailwindcss from '@tailwindcss/vite';
 
 // V-250 — Driftstack docs site (docs.driftstack.dev). Static Astro
 // build deployed to Cloudflare Pages, mirroring apps/marketing-site
@@ -8,8 +9,11 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
   site: 'https://docs.driftstack.dev',
   output: 'static',
-  // Tailwind v4 via PostCSS (postcss.config.mjs) — see status-site; the
-  // @tailwindcss/vite plugin breaks while astro 5 + 6 coexist in the monorepo.
+  // Preserve Astro 6's HTML-aware whitespace semantics under Astro 7.
+  compressHTML: true,
+  vite: {
+    plugins: [tailwindcss()],
+  },
   integrations: [
     sitemap({
       filter: (page) => !page.includes('/404'),

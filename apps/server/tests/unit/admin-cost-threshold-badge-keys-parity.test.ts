@@ -25,7 +25,7 @@ function read(rel: string): string {
 // The pages that render a thresholdState badge keyed by the emitted value.
 const BADGE_PAGES = [
   'apps/admin-panel/src/pages/cost.astro',
-  'apps/admin-panel/src/pages/accounts/[id].astro',
+  'apps/admin-panel/src/pages/shells/account-detail.astro',
 ];
 
 describe('admin cost-badge keys ↔ ThresholdState union', () => {

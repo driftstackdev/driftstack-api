@@ -21,7 +21,7 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const LIB = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/[id].astro');
+const LIB = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/incident-detail.astro');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -37,11 +37,15 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
     );
   });
 
-  it("V-200* SSR migration: export const prerender = false + MOCK_INCIDENTS.find(...) ?? placeholder shell keyed by Astro.params.id (no getStaticPaths, no Astro.redirect) — pinned so the Worker serves ANY incident id at request time. The prior getStaticPaths enumerated only mock ids, so every REAL incident 404'd and the whole incident-management surface (Post update / Mark resolved / Reopen) was dead. Drift back to getStaticPaths would re-introduce that 404.", () => {
-    expect(body).toMatch(/export const prerender = false;/);
+  it('Static Pages shell serves arbitrary incident ids via a URL-preserving internal rewrite without SSR', () => {
+    expect(body).toMatch(/deterministic static shell/);
+    expect(body).toMatch(/internally rewrites\s*\n?\s*\/\/ \/incidents\/<id>/);
+    expect(body).toMatch(/without\s*\n?\s*\/\/ a Pages Worker or SSR adapter/);
+    expect(body).not.toMatch(/export const prerender = false;/);
     expect(body).not.toMatch(/export function getStaticPaths\(\)/);
     expect(body).not.toMatch(/Astro\.redirect\('\/incidents'\)/);
-    expect(body).toMatch(/const incident = MOCK_INCIDENTS\.find\(\(inc\) => inc\.id === id\) \?\?/);
+    expect(body).not.toMatch(/Astro\.params/);
+    expect(body).toMatch(/pathParts\.length === 2 && pathParts\[0\] === 'incidents'/);
   });
 
   it("SEVERITY_BADGE 3-tone (minor amber-50 / major orange-50 / outage red-50) + STATUS_BADGE 4-tone (investigating amber-50 / identified blue-50 / monitoring indigo-50 / resolved emerald-50) — pinned so the dual badge taxonomies stay distinct (severity = how bad, status = where in the lifecycle) and don't collide in tone (drift to using emerald for both 'resolved status' AND 'minor severity' would confuse operators)", () => {
@@ -53,7 +57,7 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
     );
   });
 
-  it("isResolved gate (SSR-safe): const isResolved = incident.status === 'resolved'; the Post-update + Mark-resolved forms live in <div data-form-group=\"active\"> (hidden when isResolved) and the Reopen form in <div data-form-group=\"resolved\"> (hidden when !isResolved). Both groups are always rendered in the SSR DOM (the shell can't know the live status at build time); the inline script's applyIncident() toggles the .hidden class from the live status. Pinned so a resolved incident still can't show the post/resolve forms (state-corruption guard) while the Reopen form becomes reachable for live resolved incidents (previously dead under getStaticPaths).", () => {
+  it('isResolved gate is shell-safe: both form groups render and live state toggles them after fetch', () => {
     expect(body).toMatch(/const isResolved = incident\.status === 'resolved';/);
     expect(body).toMatch(
       /<div data-form-group="active" class:list=\{\[isResolved \? 'hidden' : ''\]\}>/,
@@ -86,26 +90,21 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
   });
 
   it("bind(formId, urlSuffix, includeStatus) helper: shared submit handler for both forms; includeStatus controls whether the 'status' field gets pulled from FormData; encodeURIComponent on incidentId — pinned so the same code path handles both forms (drift to per-form duplicate handlers would mean post-update could land at /resolve endpoint if the URL suffixes get swapped — a critical bug)", () => {
-    expect(body).toMatch(
-      /function bind\(formId, urlSuffix, includeStatus\) \{\s*\n?\s*const form = document\.getElementById\(formId\);\s*\n?\s*if \(!form\) return;/,
-    );
+    expect(body).toMatch(/function bind\(formId, urlSuffix, includeStatus\)/);
     expect(body).toMatch(/bind\('add-update-form', '\/updates', true\);/);
     expect(body).toMatch(/bind\('resolve-form', '\/resolve', false\);/);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/incidents\/' \+ encodeURIComponent\(incidentId\) \+ urlSuffix, \{/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/admin\/incidents\/' \+ encodeURIComponent\(incidentId\) \+ urlSuffix, \{/,
     );
   });
 
   it("Submit-button state machine: submit.disabled = true + dataset.origText preservation + 'Posting…' label during fetch; on error: re-enable + restore origText (fallback 'Submit') — pinned so failed posts don't leave the button stuck in 'Posting…' forever (UX-locked button is one of the most common ops-tool footguns)", () => {
-    expect(body).toMatch(
-      /submit\.disabled = true;\s*\n?\s*submit\.dataset\.origText = submit\.textContent \|\| '';\s*\n?\s*submit\.textContent = 'Posting…';/,
-    );
-    expect(body).toMatch(
-      /submit\.disabled = false;\s*\n?\s*submit\.textContent = submit\.dataset\.origText \|\| 'Submit';/,
-    );
+    expect(body).toMatch(/activeSubmit\.dataset\.origText = activeSubmit\.textContent \|\| '';/);
+    expect(body).toMatch(/activeSubmit\.textContent = 'Posting…';/);
+    expect(body).toMatch(/activeSubmit\.dataset\.origText \|\| 'Submit'/);
   });
 
-  it("Private-incident badge: data-field='private-badge' 'private' slate-100 badge alongside severity + status, hidden when incident.public (SSR class:list toggle) + the inline script flips it from the live incident.public — pinned so internal-only incidents are visually distinguishable from public ones (operators need to know at-a-glance whether their actions affect the status page or stay internal)", () => {
+  it('Private-incident badge is hidden from the static placeholder and toggled from live incident.public so operators can distinguish internal incidents', () => {
     expect(body).toMatch(/data-field="private-badge"/);
     expect(body).toMatch(/incident\.public \? 'hidden' : ''/);
     expect(body).toMatch(/>\s*\n?\s*private\s*\n?\s*<\/span>/);

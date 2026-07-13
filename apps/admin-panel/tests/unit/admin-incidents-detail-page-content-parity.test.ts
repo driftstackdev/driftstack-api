@@ -29,7 +29,8 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/[id].astro');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/incident-detail.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/admin-panel/public/_redirects');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts');
 
 function read(p: string): string {
@@ -39,6 +40,12 @@ function read(p: string): string {
 describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () => {
   const body = read(PAGE);
   const route = read(ROUTE);
+
+  it('static Pages shell preserves arbitrary incident deep links', () => {
+    expect(body).not.toMatch(/export const prerender = false/);
+    expect(read(REDIRECTS)).toMatch(/^\/incidents\/:id \/shells\/incident-detail 200$/m);
+    expect(body).toMatch(/window\.location\.pathname/);
+  });
 
   it('SEVERITY_BADGE covers all 3 incident-severity values (minor / major / outage)', () => {
     for (const s of ['minor', 'major', 'outage']) {
@@ -75,8 +82,8 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).toMatch(/The status page will show a green banner once propagated/);
   });
 
-  it('resolved-incident view hides the active forms (isResolved gate, SSR-safe)', () => {
-    // V-200* — the page is now SSR (prerender = false). The shell can't
+  it('resolved-incident view hides the active forms (isResolved gate, shell-safe)', () => {
+    // The static shell can't
     // know the live status at build time, so the Post-update + Mark-
     // resolved forms live in <div data-form-group="active"> (hidden when
     // isResolved) and the Reopen form in <div data-form-group="resolved">

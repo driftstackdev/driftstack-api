@@ -1,6 +1,5 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import tailwind from '@astrojs/tailwind';
 import sitemap from '@astrojs/sitemap';
 import sentry from '@sentry/astro';
 
@@ -30,8 +29,9 @@ process.env.SENTRY_RELEASE ??= process.env.GIT_SHA ?? 'unknown';
 export default defineConfig({
   site: 'https://driftstack.dev',
   output: 'static',
+  // Preserve Astro 5/6's HTML-aware whitespace semantics under Astro 7.
+  compressHTML: true,
   integrations: [
-    tailwind({ applyBaseStyles: false }),
     sitemap({
       // 404 and noindex utility routes (e.g. /newtab) don't belong
       // in the sitemap.

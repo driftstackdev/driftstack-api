@@ -45,7 +45,7 @@ describe('W587 deploy-frontend.sh safe-deploy wrapper', () => {
     // The abort must happen BEFORE the actual deploy command (not the
     // `wrangler pages deploy` mention in the header comment).
     const abortIdx = src.indexOf('NOT deploying');
-    const deployIdx = src.indexOf('npx wrangler pages deploy');
+    const deployIdx = src.indexOf('npx --no-install wrangler pages deploy');
     expect(abortIdx).toBeGreaterThan(-1);
     expect(deployIdx).toBeGreaterThan(abortIdx);
   });

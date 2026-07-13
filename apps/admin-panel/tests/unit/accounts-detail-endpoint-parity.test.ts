@@ -7,8 +7,8 @@
 //   • AccountStatusSchema ↔ STATUS_BADGE keys parity (catches a
 //     new status value going un-styled)
 //   • acc_ id prefix display convention
-//   • SSR-disabled (export const prerender = false) — the page is
-//     deep-linkable by arbitrary UUID
+//   • Static shell + Pages rewrite — the page remains deep-linkable
+//     by arbitrary UUID without a Worker
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +18,8 @@ import { AccountStatusSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts/[id].astro');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/account-detail.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/admin-panel/public/_redirects');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts');
 const AUDIT_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts');
 
@@ -75,16 +76,15 @@ describe('W341.C admin /accounts/[id] detail endpoint parity', () => {
     expect(keys).toEqual(schemaValues);
   });
 
-  it('page is SSR-only (prerender=false) so any UUID deep-links', () => {
-    // V-200 — the detail page is no longer pre-built from a static
-    // mock list. Pin the export so a refactor doesn't accidentally
-    // flip back to SSG (which would re-introduce the 404 problem
-    // for live, non-mock account UUIDs).
-    expect(page).toMatch(/export const prerender\s*=\s*false/);
+  it('static shell rewrite keeps arbitrary UUID deep links without SSR', () => {
+    expect(page).not.toMatch(/export const prerender\s*=\s*false/);
+    expect(read(REDIRECTS)).toMatch(/^\/accounts\/:id \/shells\/account-detail 200$/m);
+    expect(page).toMatch(/window\.location\.pathname\.split\('\/'\)/);
   });
 
-  it('displays the acc_ id prefix convention (acc_{account.id})', () => {
-    expect(page).toMatch(/acc_\{account\.id\}/);
+  it('displays the acc_ id prefix convention from the requested URL', () => {
+    expect(page).toContain("const prefixedId = 'acc_' + accountUuid");
+    expect(page).toContain("setText('account-id', accountUuid ? prefixedId : '—')");
   });
 
   it('"Back to accounts" breadcrumb resolves to the list page', () => {

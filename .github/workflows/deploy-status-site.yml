@@ -59,7 +59,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies (workspace-aware)
-        run: npm install --no-audit
+        run: npm ci --no-audit
 
       - name: Build status site
         run: npm run build --workspace apps/status-site
@@ -79,7 +79,7 @@ jobs:
             echo "CLOUDFLARE_STATUS_SITE_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
             exit 1
           fi
-          npx --yes wrangler@^3 pages deploy apps/status-site/dist \
+          npx --no-install wrangler pages deploy apps/status-site/dist \
             --project-name="${PROJECT_NAME}" \
             --branch="${GITHUB_REF_NAME}" \
             --commit-hash="${GITHUB_SHA}" \

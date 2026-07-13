@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import tailwindcss from '@tailwindcss/vite';
 
 // V-295c — public service status page.
 //
@@ -10,9 +11,11 @@ import { defineConfig } from 'astro/config';
 export default defineConfig({
   site: 'https://status.driftstack.dev',
   output: 'static',
-  // Tailwind v4 via the PostCSS plugin (postcss.config.mjs) — decoupled from
-  // Astro's bundled Vite version (the @tailwindcss/vite plugin breaks in this
-  // monorepo while astro 5 + 6 coexist: createIdResolver Vite-version conflict).
+  // Preserve Astro 6's HTML-aware whitespace semantics under Astro 7.
+  compressHTML: true,
+  vite: {
+    plugins: [tailwindcss()],
+  },
   build: {
     inlineStylesheets: 'auto',
   },

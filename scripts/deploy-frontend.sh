@@ -70,5 +70,5 @@ if [ "$NEEDS_API" = "1" ]; then
 fi
 
 echo "[deploy-frontend] deploying $APP -> Pages project $SLUG..."
-npx wrangler pages deploy dist --project-name="$SLUG" --branch=main --commit-dirty=true
+npx --no-install wrangler pages deploy dist --project-name="$SLUG" --branch=main --commit-dirty=true
 echo "[deploy-frontend] done: $APP -> $SLUG"

@@ -48,7 +48,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.private).toBe(true);
     expect(pkg.type).toBe('module');
     expect(pkg.license).toBe('MIT');
-    expect(pkg.engines.node).toBe('>=22');
+    expect(pkg.engines.node).toBe('>=22.12.0');
   });
 
   it("workspaces 2-glob framing pinned: 'apps/*' + 'packages/*' — pinned so the npm-workspaces include glob (every app + package gets npm-link'd, every workspace script runs across apps/* + packages/*) commitment survives (drift to dropping packages/* would orphan sdk-typescript + api-types from the monorepo)", () => {

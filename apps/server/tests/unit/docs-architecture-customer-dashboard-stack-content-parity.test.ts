@@ -158,7 +158,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     );
   });
 
-  it("Related-docs 5-link framing pinned: '## Related docs' + '`docs/architecture/team-roles-taxonomy.md` (V-142) — owner / admin / member / viewer roles + scope mapping' + '`docs/architecture/webhook-system-design.md` — webhook subscription + event-type model' + '`docs/architecture/api-versioning.md` (V-220) — deprecation cycle for any UI-exposed breaking change' + '`docs/api/webhook-events.md` (V-203) — canonical event-type catalog' + '`apps/marketing-site/public/_headers` + `docs/deployment/cdn-strategy.md` (V-221) — marketing site uses Cloudflare Pages' + 'the dashboard SSR build at `app.driftstack.dev` uses the @astrojs/cloudflare adapter' + 'no public caching of authenticated pages — `Cache-Control: private, no-store`' — pinned so the 5-related-link (V-142-team-roles + webhook-system-design + V-220-api-versioning + V-203-webhook-events + V-221-cdn-strategy) + @astrojs/cloudflare-adapter + private-no-store-discipline commitment survives", () => {
+  it('pins the five related architecture links plus the static Pages and private-cache posture', () => {
     expect(body).toMatch(/## Related docs/);
     expect(body).toMatch(
       /- `docs\/architecture\/team-roles-taxonomy\.md` \(V-142\) — owner \/ admin \/ member \/ viewer roles \+ scope mapping/,
@@ -173,14 +173,12 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
       /- `docs\/api\/webhook-events\.md` \(V-203\) — canonical event-type catalog/,
     );
     expect(body).toMatch(
-      /- `apps\/marketing-site\/public\/_headers` \+ `docs\/deployment\/cdn-strategy\.md` \(V-221\) — marketing site uses Cloudflare Pages/,
+      /- `apps\/marketing-site\/public\/_headers` \+ `docs\/deployment\/cdn-strategy\.md` \(V-221\) — marketing and the static dashboard build/,
     );
     expect(body).toMatch(
-      /the dashboard SSR build at `app\.driftstack\.dev` uses the @astrojs\/cloudflare adapter/,
+      /the static dashboard build at `app\.driftstack\.dev` use Cloudflare Pages/,
     );
-    expect(body).toMatch(
-      /no public caching of authenticated pages — `Cache-Control: private, no-store`/,
-    );
+    expect(body).toMatch(/no customer data in generated HTML or publicly cacheable responses/);
   });
 
   it('file exists at canonical path', () => {

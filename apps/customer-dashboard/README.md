@@ -1,55 +1,39 @@
 # @driftstack/customer-dashboard
 
-The signed-in customer dashboard for Driftstack — `app.driftstack.dev`.
-
-> **Status:** scaffolding only as of V-099 + V-108. Customer-visible copy + visual treatments on the onboarding flow + management pages are pending founder review per the standing marketing-copy + brand-surface cadence. The project init, design tokens, layout, and route shells are committed; per-page copy lands as Tier 3 drafts surfaced to the founder.
+The pre-launch customer account portal served at `app.driftstack.dev`.
 
 ## Stack
 
-- Astro 5 (static-build output) → Cloudflare Pages
-- Tailwind CSS (tokens shared with `apps/marketing-site/`)
-- Geist Sans + Berkeley Mono (same as marketing site)
-- React islands TBD (per V-084 dashboard-stack proposal — Option A approved by default; landing once founder confirms)
+- Astro 7 static output on Cloudflare Pages
+- Tailwind CSS 3 through PostCSS, with tokens shared with `apps/marketing-site/`
+- Geist Sans and JetBrains Mono/Berkeley Mono fallbacks
+- Browser-side API hydration against `api.driftstack.dev`
+- Optional Sentry telemetry when `PUBLIC_SENTRY_DSN_DASHBOARD` is set at build time
 
-The decision rationale lives in `docs/architecture/customer-dashboard-stack.md`.
+No current route requires server-side rendering or a Pages Function. If a future route needs on-demand server execution, choose and document the runtime at that point instead of keeping an unused adapter in every build.
 
-## Local dev
+## Local development
 
-```bash
-npm install                                          # at repo root, once
-npm run dev --workspace apps/customer-dashboard      # → http://localhost:4322
-```
-
-Pages currently use mock data from `src/data/mocks.ts`. Live wiring against the control plane (`/v1/billing`, `/v1/profiles`, `/v1/api-keys`, `/v1/sessions`, `/v1/usage`) lands once the dashboard moves past scaffolding.
-
-## Layout
-
-```
-src/
-├── data/mocks.ts        — MOCK_ACCOUNT, MOCK_SUBSCRIPTION, MOCK_PROFILES, etc.
-├── layouts/
-│   └── DashboardLayout.astro  — sidebar nav + main slot, withSidebar prop
-├── pages/
-│   ├── index.astro      — overview (concurrent / profiles / API keys / sessions / subscription summary)
-│   └── 404.astro        — not-found page
-└── styles/base.css      — Tailwind layers + .dashboard-card component
-```
-
-The sidebar nav lists 9 items (Overview, Profiles, Sessions, API keys, Usage, Billing, Webhooks, Team, Settings). Sub-pages are pending — each lands as a Tier 3 draft for founder review when the copy + visual decisions are made.
-
-## Auth model
-
-When dashboard pages wire to real APIs:
-
-- The page reads a `driftstack_web_session` cookie (sha256-hashed token from V-079 web sessions).
-- Each page fetches its data via `/v1/...` endpoints with `Authorization: Bearer <api-key>` for SDK-style reads, OR via session-cookie auth path (separate endpoint set, TBD).
-- Onboarding flow (signup → verify-email → legal-accept → tier-select → payment-redirect → first-key) hits `/v1/auth/*` directly.
-
-## Build + deploy
+From the repository root:
 
 ```bash
-npm run build --workspace apps/customer-dashboard
-# → apps/customer-dashboard/dist/
+npm install
+npm run dev --workspace @driftstack/customer-dashboard
 ```
 
-Deploy pipeline lands when founder confirms the dashboard-stack proposal. Pattern will mirror `.github/workflows/deploy-marketing.yml`: path-filtered trigger on `apps/customer-dashboard/**`, build, push to a Cloudflare Pages project at `driftstack-customer-dashboard`.
+The local Astro server uses the same static page modules and client-side API wiring as production. Set `PUBLIC_API_BASE_URL` only when intentionally targeting a non-default control plane.
+
+## Authentication
+
+The dashboard uses the web-session flow under `/v1/auth/*`. Browser code reads the current `ds_web_session_token`, sends it as a bearer credential to the control plane, and includes cookies where the endpoint contract requires them. API keys remain a separate SDK credential surface.
+
+## Build and deploy
+
+```bash
+npm run typecheck --workspace @driftstack/customer-dashboard
+npm run build --workspace @driftstack/customer-dashboard
+```
+
+The build writes static assets to `apps/customer-dashboard/dist/`. `.github/workflows/deploy-customer-dashboard.yml` and `scripts/deploy-frontend.sh customer-dashboard` deploy that directory to the `driftstack-customer-dashboard` Cloudflare Pages project. The production custom domain is `app.driftstack.dev`.
+
+Security headers and retired-route redirects live in `public/_headers` and `public/_redirects`. Keep authenticated data out of generated HTML and browser-persistent caches.

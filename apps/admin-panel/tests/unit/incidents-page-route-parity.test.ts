@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIST = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/index.astro');
-const DETAIL = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/[id].astro');
+const DETAIL = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/incident-detail.astro');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts');
 
 function read(p: string): string {

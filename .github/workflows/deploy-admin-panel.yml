@@ -1,9 +1,8 @@
 # Admin panel — deploy pipeline.
 #
 # Triggered on push to main. Builds the Astro app at
-# `apps/admin-panel/` (Astro + @astrojs/cloudflare adapter) and
-# deploys the resulting `dist/` to Cloudflare Pages via the
-# `wrangler` CLI.
+# `apps/admin-panel/` as static Astro output and deploys the resulting
+# `dist/` to Cloudflare Pages via the `wrangler` CLI.
 #
 # Path-filter triggers are deliberate: only runs when something under
 # `apps/admin-panel/`, this workflow file, or shared root manifests
@@ -75,7 +74,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies (workspace-aware)
-        run: npm install --no-audit
+        run: npm ci --no-audit
 
       - name: Build api-types (admin-panel depends on @driftstack/api-types)
         run: npm run build --workspace @driftstack/api-types
@@ -105,7 +104,7 @@ jobs:
             echo "::error::CLOUDFLARE_ADMIN_PANEL_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
             exit 1
           fi
-          npx --yes wrangler@^3 pages deploy apps/admin-panel/dist \
+          npx --no-install wrangler pages deploy apps/admin-panel/dist \
             --project-name="${PROJECT_NAME}" \
             --branch="${GITHUB_REF_NAME}" \
             --commit-hash="${GITHUB_SHA}" \

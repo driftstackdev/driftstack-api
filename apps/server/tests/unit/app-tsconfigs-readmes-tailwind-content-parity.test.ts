@@ -72,38 +72,21 @@ describe('W624 app tsconfigs + READMEs + tailwind content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/gui-client/tsconfig.json'))).toBe(true);
   });
 
-  it('apps/customer-dashboard/README.md: @driftstack/customer-dashboard scaffolding V-099+V-108 + Astro 5 CF Pages + Tailwind (tokens shared with marketing-site) + Geist+Berkeley + V-084 dashboard-stack proposal + 9-item sidebar nav + V-079 driftstack_web_session cookie + path-filtered deploy mirror of marketing pinned', () => {
+  it('apps/customer-dashboard/README.md pins the current Astro 7 static Pages, auth, and deployment contract', () => {
     const body = read('apps/customer-dashboard/README.md');
     expect(body).toMatch(/^# @driftstack\/customer-dashboard$/m);
-    expect(body).toMatch(
-      /The signed-in customer dashboard for Driftstack — `app\.driftstack\.dev`/,
-    );
-    expect(body).toMatch(/\*\*Status:\*\* scaffolding only as of V-099 \+ V-108\./);
+    expect(body).toMatch(/The pre-launch customer account portal served at `app\.driftstack\.dev`/);
     expect(body).toMatch(/^## Stack$/m);
-    expect(body).toMatch(/Astro 5 \(static-build output\) → Cloudflare Pages/);
-    expect(body).toMatch(/Tailwind CSS \(tokens shared with `apps\/marketing-site\/`\)/);
-    expect(body).toMatch(/Geist Sans \+ Berkeley Mono \(same as marketing site\)/);
-    expect(body).toMatch(/React islands TBD \(per V-084 dashboard-stack proposal/);
-    expect(body).toMatch(/`docs\/architecture\/customer-dashboard-stack\.md`/);
-    expect(body).toMatch(/^## Local dev$/m);
-    expect(body).toMatch(
-      /npm run dev --workspace apps\/customer-dashboard\s+# → http:\/\/localhost:4322/,
-    );
-    expect(body).toMatch(/Pages currently use mock data from `src\/data\/mocks\.ts`/);
-    expect(body).toMatch(/^## Layout$/m);
-    expect(body).toMatch(
-      /data\/mocks\.ts\s+— MOCK_ACCOUNT, MOCK_SUBSCRIPTION, MOCK_PROFILES, etc\./,
-    );
-    expect(body).toMatch(/DashboardLayout\.astro\s+— sidebar nav \+ main slot, withSidebar prop/);
-    expect(body).toMatch(
-      /The sidebar nav lists 9 items \(Overview, Profiles, Sessions, API keys, Usage, Billing, Webhooks, Team, Settings\)\./,
-    );
-    expect(body).toMatch(/^## Auth model$/m);
-    expect(body).toMatch(
-      /The page reads a `driftstack_web_session` cookie \(sha256-hashed token from V-079 web sessions\)\./,
-    );
-    expect(body).toMatch(/^## Build \+ deploy$/m);
-    expect(body).toMatch(/Pattern will mirror `\.github\/workflows\/deploy-marketing\.yml`/);
+    expect(body).toMatch(/Astro 7 static output on Cloudflare Pages/);
+    expect(body).toMatch(/Tailwind CSS 3 through PostCSS/);
+    expect(body).toMatch(/No current route requires server-side rendering or a Pages Function/);
+    expect(body).toMatch(/^## Local development$/m);
+    expect(body).toMatch(/npm run dev --workspace @driftstack\/customer-dashboard/);
+    expect(body).toMatch(/^## Authentication$/m);
+    expect(body).toMatch(/web-session flow under `\/v1\/auth\/\*`/);
+    expect(body).toMatch(/^## Build and deploy$/m);
+    expect(body).toMatch(/deploy-customer-dashboard\.yml/);
+    expect(body).toMatch(/scripts\/deploy-frontend\.sh customer-dashboard/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/README.md'))).toBe(true);
   });
 

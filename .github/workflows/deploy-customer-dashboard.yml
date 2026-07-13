@@ -1,10 +1,8 @@
 # Customer dashboard — deploy pipeline.
 #
 # Triggered on push to main. Builds the Astro app at
-# `apps/customer-dashboard/` (Astro + @astrojs/cloudflare adapter)
-# and deploys the resulting `dist/` to Cloudflare Pages via the
-# `wrangler` CLI. The dist contains both static HTML (most pages) and
-# `_worker.js` (Pages Functions for any pages with prerender=false).
+# `apps/customer-dashboard/` as static Astro output and deploys the
+# resulting `dist/` to Cloudflare Pages via the `wrangler` CLI.
 #
 # Path-filter triggers are deliberate: only runs when something under
 # `apps/customer-dashboard/`, this workflow file, or shared root
@@ -72,7 +70,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies (workspace-aware)
-        run: npm install --no-audit
+        run: npm ci --no-audit
 
       - name: Build api-types (customer-dashboard depends on @driftstack/api-types)
         run: npm run build --workspace @driftstack/api-types
@@ -110,7 +108,7 @@ jobs:
             echo "CLOUDFLARE_DASHBOARD_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
             exit 1
           fi
-          npx --yes wrangler@^3 pages deploy apps/customer-dashboard/dist \
+          npx --no-install wrangler pages deploy apps/customer-dashboard/dist \
             --project-name="${PROJECT_NAME}" \
             --branch="${GITHUB_REF_NAME}" \
             --commit-hash="${GITHUB_SHA}" \

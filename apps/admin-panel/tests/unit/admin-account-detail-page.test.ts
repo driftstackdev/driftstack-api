@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts/[id].astro');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/account-detail.astro');
 
 interface FetchCall {
   url: string;
@@ -51,6 +51,7 @@ describe('admin account detail mutation reconciliation', () => {
          <span data-field="title-name"></span><span data-field="title-email"></span>
          <span data-field="tier"></span><span data-field="status">active</span>
          <span data-field="created"></span><span data-field="updated"></span>
+         <span data-field="account-id"></span><a data-field="full-audit-link"></a>
          <span data-field="status-badge"></span>
          <div data-field="action-row">
            <button data-action="change-tier">Change tier</button>

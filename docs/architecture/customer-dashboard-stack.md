@@ -139,4 +139,4 @@ This is **architectural / structural** — surfaces for founder review per the D
 - `docs/architecture/webhook-system-design.md` — webhook subscription + event-type model; the `/webhooks` page in the dashboard is the customer surface for this.
 - `docs/architecture/api-versioning.md` (V-220) — deprecation cycle for any UI-exposed breaking change (e.g. scope rename surfacing in the API-keys page).
 - `docs/api/webhook-events.md` (V-203) — canonical event-type catalog displayed in the webhook subscription UI.
-- `apps/marketing-site/public/_headers` + `docs/deployment/cdn-strategy.md` (V-221) — marketing site uses Cloudflare Pages; the dashboard SSR build at `app.driftstack.dev` uses the @astrojs/cloudflare adapter and follows similar caching discipline (no public caching of authenticated pages — `Cache-Control: private, no-store`).
+- `apps/marketing-site/public/_headers` + `docs/deployment/cdn-strategy.md` (V-221) — marketing and the static dashboard build at `app.driftstack.dev` use Cloudflare Pages and follow the same authenticated-data discipline (no customer data in generated HTML or publicly cacheable responses).

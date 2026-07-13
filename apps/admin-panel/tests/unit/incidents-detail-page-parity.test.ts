@@ -24,7 +24,7 @@ import { IncidentSeveritySchema, IncidentStatusSchema } from '@driftstack/api-ty
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
-const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/[id].astro');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/incident-detail.astro');
 const INDEX = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/index.astro');
 
 function read(p: string): string {
@@ -42,7 +42,7 @@ function badgeKeys(src: string, name: string): string[] {
 describe('W352.C admin /incidents/[id] detail page parity', () => {
   const body = read(PAGE);
 
-  it('page file exists at the conventional /incidents/[id] path', () => {
+  it('static incident detail shell exists', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
@@ -81,7 +81,7 @@ describe('W352.C admin /incidents/[id] detail page parity', () => {
   });
 
   it('"Private" tag rendered for non-public incidents', () => {
-    // V-200* — the page is now SSR; the private badge is always in the
+    // The static shell keeps the private badge in the
     // DOM with data-field="private-badge", hidden via a class:list
     // toggle when incident.public (the inline script re-flips it from
     // the live incident.public). Pin the data-hook + the public-gated

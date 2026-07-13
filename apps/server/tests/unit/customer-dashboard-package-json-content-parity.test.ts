@@ -1,18 +1,17 @@
 // W526.C — drift guard for apps/customer-dashboard/package.json.
 // Customer-dashboard package manifest. Pins identity + build pipeline +
 // load-bearing deps. Drift here either changes a script (would break
-// CI typecheck or deploy workflow) or drops a critical dep (e.g.
-// removing @astrojs/cloudflare would silently break V-200 dynamic-route
-// SSR; removing @driftstack/api-types would silently un-type the
-// dashboard's API client calls).
+// CI typecheck or deploy workflow), restores the unused SSR adapter,
+// drops the explicit Tailwind PostCSS toolchain, or removes shared API
+// types from the dashboard client.
 //
 //   • Name: @driftstack/customer-dashboard (monorepo-scoped).
 //   • private: true (never publish to npm).
 //   • type: module (ESM).
 //   • 4 scripts: dev/build/preview/typecheck via astro * commands.
-//   • Critical deps: @astrojs/check + @astrojs/cloudflare (V-200) +
-//     @astrojs/tailwind + @driftstack/api-types (shared types) +
-//     @sentry/astro (V-469) + astro + tailwindcss + typescript.
+//   • Critical deps: @astrojs/check + @driftstack/api-types +
+//     @sentry/astro + Astro 7 + Tailwind 3/PostCSS/autoprefixer +
+//     TypeScript; no SSR adapter or deprecated Tailwind integration.
 //   • NOTE: package version intentionally NOT pinned (unreleased
 //     monorepo package, will bump with no behavioral signal).
 
@@ -52,14 +51,15 @@ describe('W526.C apps/customer-dashboard/package.json content parity', () => {
     expect(pkg.scripts.typecheck).toBe('astro check');
   });
 
-  it("Critical-dep set framing pinned: @astrojs/check + @astrojs/cloudflare (V-200 dynamic-route SSR adapter) + @astrojs/tailwind + @driftstack/api-types (shared monorepo types so dashboard ↔ server can't drift) + @sentry/astro (V-469 build-time telemetry) + astro + tailwindcss + typescript — pinned so the load-bearing dep set survives (drift to dropping @astrojs/cloudflare silently breaks V-200 dynamic-route SSR; dropping @driftstack/api-types un-types every API call; dropping @sentry/astro silently breaks V-469 telemetry)", () => {
+  it('pins the static Astro 7 + explicit Tailwind PostCSS dependency set and retains shared types and Sentry telemetry', () => {
     expect(pkg.dependencies).toHaveProperty('@astrojs/check');
-    expect(pkg.dependencies).toHaveProperty('@astrojs/cloudflare');
-    expect(pkg.dependencies).toHaveProperty('@astrojs/tailwind');
+    expect(pkg.dependencies).not.toHaveProperty('@astrojs/cloudflare');
+    expect(pkg.dependencies).not.toHaveProperty('@astrojs/tailwind');
+    expect(pkg.dependencies).toMatchObject({ autoprefixer: '10.5.2', postcss: '8.5.19' });
     expect(pkg.dependencies).toHaveProperty('@driftstack/api-types');
     expect(pkg.dependencies).toHaveProperty('@sentry/astro');
-    expect(pkg.dependencies).toHaveProperty('astro');
-    expect(pkg.dependencies).toHaveProperty('tailwindcss');
+    expect(pkg.dependencies.astro).toBe('7.0.7');
+    expect(pkg.dependencies.tailwindcss).toBe('3.4.19');
     expect(pkg.dependencies).toHaveProperty('typescript');
   });
 

@@ -1,7 +1,5 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import tailwind from '@astrojs/tailwind';
-import cloudflare from '@astrojs/cloudflare';
 import sentry from '@sentry/astro';
 
 // Customer dashboard for app.driftstack.dev. Static-build per the
@@ -10,12 +8,8 @@ import sentry from '@sentry/astro';
 // marketing site). When founder approves, React islands land alongside;
 // for now the scaffolding is pure-Astro static.
 //
-// Cloudflare Pages serves the build output. V-200 added the
-// @astrojs/cloudflare adapter so future dynamic detail routes
-// (e.g. /sessions/[id], /api-keys/[id]) can SSR for arbitrary live
-// UUIDs without 404ing on Cloudflare Pages. Static pages still emit
-// to dist/ unmodified; only pages with `prerender = false` go
-// through the Worker.
+// Cloudflare Pages serves this static build directly. Add an SSR adapter only
+// if a concrete on-demand route is introduced; no current page needs one.
 //
 // Auth-flow pages POST to the control plane at /v1/auth/* per V-079.
 //
@@ -37,11 +31,9 @@ process.env.SENTRY_RELEASE ??= process.env.GIT_SHA ?? 'unknown';
 export default defineConfig({
   site: 'https://app.driftstack.dev',
   output: 'static',
-  adapter: cloudflare({
-    platformProxy: { enabled: false },
-  }),
+  // Preserve Astro 5/6's HTML-aware whitespace semantics under Astro 7.
+  compressHTML: true,
   integrations: [
-    tailwind({ applyBaseStyles: false }),
     sentry({
       enabled: SENTRY_DSN.length > 0,
       project: 'driftstack-dashboard',

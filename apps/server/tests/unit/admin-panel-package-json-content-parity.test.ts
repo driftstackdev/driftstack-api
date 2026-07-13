@@ -1,17 +1,16 @@
 // W527.C — drift guard for apps/admin-panel/package.json.
 // Admin-panel package manifest. Pins identity + build pipeline + load-
-// bearing deps. Drift here either drops @astrojs/cloudflare (would
-// silently break V-200 SSR for /accounts/[id]) or drops
-// @driftstack/api-types (would un-type the admin's API client calls
-// and risk silently routing admin actions through wrong endpoints).
+// bearing deps. Drift here either restores the retired SSR adapter,
+// drops the explicit Tailwind PostCSS toolchain, or drops
+// @driftstack/api-types (which would un-type the admin's API calls).
 //
 //   • Name: @driftstack/admin-panel (monorepo-scoped, staff-only).
 //   • private: true (NEVER publish — staff-only surface).
 //   • type: module.
 //   • 4 scripts: dev/build/preview/typecheck via astro * commands.
-//   • Critical deps: @astrojs/check + @astrojs/cloudflare (V-200) +
-//     @astrojs/tailwind + @driftstack/api-types + astro + tailwindcss
-//     + typescript.
+//   • Critical deps: @astrojs/check + @driftstack/api-types + Astro 7 +
+//     Tailwind 3/PostCSS/autoprefixer + TypeScript; no SSR adapter or
+//     deprecated Astro Tailwind integration.
 //   • NO @sentry/astro in admin-panel deps (unlike marketing-site +
 //     customer-dashboard — staff-only surface, no customer-error
 //     telemetry).
@@ -52,13 +51,14 @@ describe('W527.C apps/admin-panel/package.json content parity', () => {
     expect(pkg.scripts.typecheck).toBe('astro check');
   });
 
-  it('Critical-dep set + Sentry-absent framing pinned: @astrojs/check + @astrojs/cloudflare (V-200 SSR adapter) + @astrojs/tailwind + @driftstack/api-types (shared monorepo types) + astro + tailwindcss + typescript — pinned so the load-bearing dep set survives AND admin-panel intentionally excludes @sentry/astro (staff-only surface, no customer error telemetry) — drift to adding @sentry/astro on admin-panel would route staff error data through customer telemetry pipelines', () => {
+  it('pins the static Astro 7 + explicit Tailwind PostCSS dependency set and excludes SSR, deprecated Tailwind integration, and customer Sentry telemetry', () => {
     expect(pkg.dependencies).toHaveProperty('@astrojs/check');
-    expect(pkg.dependencies).toHaveProperty('@astrojs/cloudflare');
-    expect(pkg.dependencies).toHaveProperty('@astrojs/tailwind');
+    expect(pkg.dependencies).not.toHaveProperty('@astrojs/cloudflare');
+    expect(pkg.dependencies).not.toHaveProperty('@astrojs/tailwind');
+    expect(pkg.dependencies).toMatchObject({ autoprefixer: '10.5.2', postcss: '8.5.19' });
     expect(pkg.dependencies).toHaveProperty('@driftstack/api-types');
-    expect(pkg.dependencies).toHaveProperty('astro');
-    expect(pkg.dependencies).toHaveProperty('tailwindcss');
+    expect(pkg.dependencies.astro).toBe('7.0.7');
+    expect(pkg.dependencies.tailwindcss).toBe('3.4.19');
     expect(pkg.dependencies).toHaveProperty('typescript');
     expect(pkg.dependencies).not.toHaveProperty('@sentry/astro');
   });

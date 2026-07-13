@@ -11,9 +11,9 @@
 //   • type: module (ESM).
 //   • 4 scripts: dev=astro dev / build=astro build / preview=astro
 //     preview / typecheck=astro check.
-//   • Critical deps: @astrojs/check + @astrojs/sitemap + @astrojs/tailwind
-//     + @sentry/astro + @tailwindcss/typography + astro + tailwindcss +
-//     typescript.
+//   • Critical deps: @astrojs/check + @astrojs/sitemap + @sentry/astro +
+//     @tailwindcss/typography + Astro 7 + explicit Tailwind 3/PostCSS/
+//     autoprefixer + TypeScript; no deprecated Astro Tailwind integration.
 //
 // NOTE: version field (currently '0.0.1') is intentionally NOT pinned
 // since marketing-site versions are unreleased and will bump with no
@@ -55,14 +55,15 @@ describe('W525.C apps/marketing-site/package.json content parity', () => {
     expect(pkg.scripts.typecheck).toBe('astro check');
   });
 
-  it('Critical dep set framing pinned: @astrojs/check + @astrojs/sitemap + @astrojs/tailwind + @sentry/astro + @tailwindcss/typography + astro + tailwindcss + typescript — pinned so the load-bearing dep set survives (drift to dropping any of these silently disables a feature — e.g. dropping @sentry/astro silently breaks V-469 build-time error telemetry; dropping @astrojs/sitemap silently breaks V-106 sitemap auto-generation; dropping @tailwindcss/typography silently breaks legal/docs prose styling)', () => {
+  it('pins the Astro 7 + explicit Tailwind PostCSS dependency set and retains sitemap, telemetry, and prose styling', () => {
     expect(pkg.dependencies).toHaveProperty('@astrojs/check');
     expect(pkg.dependencies).toHaveProperty('@astrojs/sitemap');
-    expect(pkg.dependencies).toHaveProperty('@astrojs/tailwind');
+    expect(pkg.dependencies).not.toHaveProperty('@astrojs/tailwind');
+    expect(pkg.dependencies).toMatchObject({ autoprefixer: '10.5.2', postcss: '8.5.19' });
     expect(pkg.dependencies).toHaveProperty('@sentry/astro');
     expect(pkg.dependencies).toHaveProperty('@tailwindcss/typography');
-    expect(pkg.dependencies).toHaveProperty('astro');
-    expect(pkg.dependencies).toHaveProperty('tailwindcss');
+    expect(pkg.dependencies.astro).toBe('7.0.7');
+    expect(pkg.dependencies.tailwindcss).toBe('3.4.19');
     expect(pkg.dependencies).toHaveProperty('typescript');
   });
 

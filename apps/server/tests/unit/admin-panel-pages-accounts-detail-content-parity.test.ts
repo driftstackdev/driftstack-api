@@ -1,16 +1,12 @@
-// W490.C — drift guard for apps/admin-panel/src/pages/accounts/[id].astro.
-// V-191 + V-200 per-account detail page with manual-operations
-// surface. Drift here either drops the V-200 SSR migration framing
-// (regressing to getStaticPaths would re-introduce the 404-on-
-// non-mock-UUID bug) or breaks the V-281 audit-only support
+// W490.C — drift guard for the static account-detail shell.
+// V-191 + V-200 per-account manual-operations surface. Drift here
+// either breaks the URL-preserving arbitrary-ID rewrite contract or
+// breaks the V-281 audit-only support
 // tooling (record-refund could silently issue real refunds if the
 // 'Stripe dashboard' framing is lost).
 //
-//   • V-191 + V-200 framing pinned: 'progressive-enhancement
-//     against /v1/admin/accounts/:id + per-account audit slice +
-//     admin-action POSTs' + 'converted from getStaticPaths static
-//     enumeration to SSR via the @astrojs/cloudflare adapter'.
-//   • export const prerender = false (SSR mode).
+//   • Deterministic static shell, exact two-segment URL derivation,
+//     and `_redirects`-backed arbitrary account IDs.
 //   • 6 admin actions: change-tier / suspend / unsuspend / set-
 //     override / add-note / record-refund.
 //   • Conditional visibility: suspend visible when status==='active';
@@ -29,13 +25,13 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const LIB = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts/[id].astro');
+const LIB = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/account-detail.astro');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity', () => {
+describe('W490.C admin account-detail static shell content parity', () => {
   const body = read(LIB);
 
   it("V-191 framing pinned: 'progressive-enhancement against /v1/admin/accounts/:id + per-account audit slice + admin-action POSTs (change tier, suspend, unsuspend).' — pinned so the 3 canonical admin actions stay enumerated in the source-of-truth comment (drift to '2 actions' or adding new actions without updating this list would create comment/code mismatch)", () => {
@@ -44,11 +40,13 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
     );
   });
 
-  it("V-200 SSR migration framing pinned: 'converted from getStaticPaths static enumeration to SSR via the @astrojs/cloudflare adapter. The page now serves any UUID at request time; Cloudflare Pages routes /accounts/<uuid> to the Worker which renders this template with Astro.params.id set. Mock-id matching for the SSG paint shell is preserved when the URL id matches one of the mock entries; non-mock UUIDs render with minimal placeholder content that the inline script then replaces from /v1/admin/accounts/:id. No more 404 on direct deep-links to live (non-mock) UUIDs from /accounts list page.' — pinned so the SSR migration + the 'no more 404' fix stay documented (drift back to getStaticPaths would re-introduce the bug)", () => {
-    expect(body).toMatch(
-      /\/\/ V-200 — converted from `getStaticPaths` static enumeration to SSR\s*\n?\s*\/\/ via the @astrojs\/cloudflare adapter\. The page now serves any UUID\s*\n?\s*\/\/ at request time; Cloudflare Pages routes \/accounts\/<uuid> to the\s*\n?\s*\/\/ Worker which renders this template with `Astro\.params\.id` set\./,
-    );
-    expect(body).toMatch(/export const prerender = false;/);
+  it('Static Pages shell framing is pinned: arbitrary account ids are served by an internal rewrite, the browser URL is preserved, and no SSR/Worker API is used', () => {
+    expect(body).toMatch(/deterministic static shell/);
+    expect(body).toMatch(/internally rewrites \/accounts\/<id>/);
+    expect(body).toMatch(/preserving the\s*\n?\s*\/\/ browser URL/);
+    expect(body).toMatch(/without a Pages Worker or SSR adapter/);
+    expect(body).not.toMatch(/export const prerender = false/);
+    expect(body).not.toMatch(/Astro\.params/);
   });
 
   it('Admin actions 6-button row: change-tier / suspend / unsuspend / set-override / add-note / record-refund — pinned so the canonical operator-action vocabulary stays complete (drift to dropping record-refund would lose V-281 audit-only support tooling)', () => {
@@ -60,7 +58,7 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
     expect(body).toMatch(/data-action="record-refund"/);
   });
 
-  it("Conditional visibility: suspend visible iff status === 'active' + unsuspend visible iff status === 'suspended' (SSG class:list 'hidden' toggle + inline classList.remove/add) — pinned so the active/suspended state machine doesn't show contradictory buttons (drift to showing both would let operators click 'Suspend' on an already-suspended account, which would 409)", () => {
+  it("Conditional visibility: suspend visible iff status === 'active' + unsuspend visible iff status === 'suspended' in both the static shell and live-data update", () => {
     expect(body).toMatch(/account\.status === 'active' \? '' : 'hidden',/);
     expect(body).toMatch(/account\.status === 'suspended' \? '' : 'hidden',/);
     expect(body).toMatch(
@@ -101,9 +99,9 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
   });
 
   it("V-281 audit-only support tooling: addSupportNote prompts for free-form note (max 2000 chars) and POSTs to /audit-note; recordRefund prompts for external_reference (Stripe charge/payment_intent/invoice id) + amount_cents (positive int) + reason (required) and POSTs to /refund-record with 'Reminder: actual refund is issued via Stripe dashboard — this endpoint is audit-only.' confirmation — pinned so the audit-only framing survives (drift to actual refund integration would couple admin panel to Stripe API and could double-issue refunds)", () => {
-    expect(body).toMatch(
-      /async function addSupportNote\(\) \{\s*\n?\s*const note = await window\.driftstackPrompt\(\s*\n?\s*'Support note \(free-form, max 2000 chars\)\. Recorded on this customer\\'s audit log \+ admin audit:',/,
-    );
+    expect(body).toMatch(/async function addSupportNote\(\)/);
+    expect(body).toMatch(/Support note \(free-form, max 2000 chars\)/);
+    expect(body).toMatch(/\/audit-note'/);
     expect(body).toMatch(
       /'Refund recorded\. Reminder: actual refund is issued via Stripe dashboard — this endpoint is audit-only\.',/,
     );
@@ -118,12 +116,12 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
     );
   });
 
-  it("path-derive accountUuid pattern: pathParts = location.pathname.split('/').filter(Boolean) + accountUuid = pathParts[pathParts.length - 1] + prefixedId = 'acc_' + accountUuid — pinned so the live UUID is read from the URL (not the SSG-baked attribute) so the script works on non-mock UUIDs in SSR mode + the 'acc_' prefix is applied consistently for the /v1/admin/accounts/:id endpoint", () => {
+  it("derives accountUuid from an exact two-segment /accounts/:id path and consistently applies the server's acc_ prefix", () => {
     expect(body).toMatch(
-      /\/\/ Derive the live UUID from the URL path rather than the SSG-baked\s*\n?\s*\/\/ attribute so a fallback \/ SSR conversion works without changing\s*\n?\s*\/\/ this script\./,
+      /\/\/ The Pages rewrite preserves the requested URL, so the live UUID is\s*\n?\s*\/\/ available here even though every detail request shares one shell\./,
     );
     expect(body).toMatch(
-      /const pathParts = window\.location\.pathname\.split\('\/'\)\.filter\(Boolean\);\s*\n?\s*const accountUuid = pathParts\[pathParts\.length - 1\] \|\| '';\s*\n?\s*const prefixedId = 'acc_' \+ accountUuid;/,
+      /const pathParts = window\.location\.pathname\.split\('\/'\)\.filter\(Boolean\);\s*\n?\s*const accountUuid =\s*\n?\s*pathParts\.length === 2 && pathParts\[0\] === 'accounts' \? pathParts\[1\] \|\| '' : '';\s*\n?\s*const prefixedId = 'acc_' \+ accountUuid;/,
     );
   });
 
@@ -134,7 +132,8 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
   });
 
   it("Full-audit-log deep-link: /audit-log?target_id=acc_{account.id} — pinned so the 'Full audit log for this account →' anchor uses the server's filter param name (`target_id`, which admin-audit-log.ts filters by; the prior `account=` param was ignored by both the server route AND the audit-log page) and clicking lands on a view scoped to this account; the server strips the acc_ prefix via maybeUuidFromInput", () => {
-    expect(body).toMatch(/href=\{`\/audit-log\?target_id=acc_\$\{account\.id\}`\}/);
+    expect(body).toMatch(/data-field="full-audit-link"/);
+    expect(body).toMatch(/'\/audit-log\?target_id=' \+ encodeURIComponent\(prefixedId\)/);
   });
 
   it('file exists at canonical path', () => {

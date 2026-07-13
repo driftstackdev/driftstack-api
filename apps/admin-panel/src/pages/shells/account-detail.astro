@@ -1,30 +1,17 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
-import { MOCK_ACCOUNTS, MOCK_AUDIT_LOG } from '../../data/mocks.ts';
 
 // V-191 — progressive-enhancement against /v1/admin/accounts/:id +
 // per-account audit slice + admin-action POSTs (change tier, suspend,
 // unsuspend).
 //
-// V-200 — converted from `getStaticPaths` static enumeration to SSR
-// via the @astrojs/cloudflare adapter. The page now serves any UUID
-// at request time; Cloudflare Pages routes /accounts/<uuid> to the
-// Worker which renders this template with `Astro.params.id` set.
-// Mock-id matching for the SSG paint shell is preserved when the URL
-// id matches one of the mock entries; non-mock UUIDs render with
-// minimal placeholder content that the inline script then replaces
-// from /v1/admin/accounts/:id. No more 404 on direct deep-links to
-// live (non-mock) UUIDs from /accounts list page.
-
-export const prerender = false;
-
-const { id } = Astro.params;
-const account = MOCK_ACCOUNTS.find((a) => a.id === id) ?? {
-  // Placeholder shell when the URL id isn't in the mock list. The
-  // inline script's `applyAccount(...)` rewrites every value once
-  // the live fetch completes; what's rendered statically here is the
-  // "no token / fetch error" fallback only.
-  id: id ?? '',
+// The detail surface is a deterministic static shell. Cloudflare Pages
+// internally rewrites /accounts/<id> to this file while preserving the
+// browser URL; the inline script reads the id from window.location and
+// replaces every placeholder from the authenticated API response. This
+// keeps arbitrary live deep links without a Pages Worker or SSR adapter.
+const account = {
+  id: '',
   email: '—',
   name: null as string | null,
   tier: '—',
@@ -33,7 +20,14 @@ const account = MOCK_ACCOUNTS.find((a) => a.id === id) ?? {
   lastSeenAt: null as string | null,
 };
 
-const auditSlice = MOCK_AUDIT_LOG.filter((e) => e.targetAccountId === account.id);
+const auditSlice: Array<{
+  id: string;
+  ts: string;
+  action: string;
+  adminEmail: string;
+  result: 'success' | 'failure';
+  metadata: Record<string, unknown>;
+}> = [];
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
@@ -76,7 +70,9 @@ const accountId = account.id;
           >{account.name ?? account.email}</h1>
           <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
           <p class="mt-1 text-sm text-tk-ink-3" data-field="title-email">{account.email}</p>
-          <p class="mt-2 font-mono text-xs text-tk-ink-3">acc_{account.id}</p>
+          <p class="mt-2 font-mono text-xs text-tk-ink-3" data-field="account-id">
+            {account.id ? `acc_${account.id}` : '—'}
+          </p>
         </div>
         <span
           data-field="status-badge"
@@ -366,7 +362,8 @@ const accountId = account.id;
           view scoped to this account. The server strips the acc_ prefix via
           maybeUuidFromInput, so the prefixed id works once the param matches. */}
       <a
-        href={`/audit-log?target_id=acc_${account.id}`}
+        href="/audit-log"
+        data-field="full-audit-link"
         class="mt-4 inline-flex text-sm text-tk-accent hover:underline"
       >
         Full audit log for this account →
@@ -386,11 +383,11 @@ const accountId = account.id;
       let hydrationGeneration = 0;
       let auditEntries = [];
 
-      // Derive the live UUID from the URL path rather than the SSG-baked
-      // attribute so a fallback / SSR conversion works without changing
-      // this script.
+      // The Pages rewrite preserves the requested URL, so the live UUID is
+      // available here even though every detail request shares one shell.
       const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const accountUuid = pathParts[pathParts.length - 1] || '';
+      const accountUuid =
+        pathParts.length === 2 && pathParts[0] === 'accounts' ? pathParts[1] || '' : '';
       const prefixedId = 'acc_' + accountUuid;
 
       const STATUS_BADGE = {
@@ -496,6 +493,15 @@ const accountId = account.id;
         }
       }
 
+      setText('account-id', accountUuid ? prefixedId : '—');
+      const fullAuditLink = root.querySelector('[data-field="full-audit-link"]');
+      if (fullAuditLink && accountUuid) {
+        fullAuditLink.setAttribute(
+          'href',
+          '/audit-log?target_id=' + encodeURIComponent(prefixedId),
+        );
+      }
+
       function renderAudit(entries) {
         auditEntries = Array.isArray(entries) ? entries : [];
         if (!list) return;
@@ -534,6 +540,11 @@ const accountId = account.id;
       }
 
       function load() {
+        if (!accountUuid) {
+          showBanner('Invalid account link.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return Promise.resolve(false);
+        }
         if (!token) return Promise.resolve(false);
         if (hydrationController) hydrationController.abort();
         const controller = new AbortController();

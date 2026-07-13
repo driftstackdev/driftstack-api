@@ -5,9 +5,8 @@
 // records — every action needs a registered route + audit
 // action. Pinned:
 //
-//   • SSR-via-cloudflare conversion: `export const prerender =
-//     false` stays (V-200 — deep-links to non-mock UUIDs no
-//     longer 404).
+//   • Static-shell Cloudflare Pages rewrite keeps deep links to
+//     non-mock UUIDs working without an SSR Worker.
 //   • All 5 admin-action endpoints used by the page registered
 //     server-side: POST .../tier, .../suspend, .../unsuspend,
 //     .../audit-note, .../refund-record (note: refund-record
@@ -37,7 +36,8 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts/[id].astro');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/account-detail.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/admin-panel/public/_redirects');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts');
 
 function read(p: string): string {
@@ -48,11 +48,10 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
   const body = read(PAGE);
   const route = read(ROUTE);
 
-  it('V-200 SSR-via-cloudflare flag pinned (export const prerender = false)', () => {
-    expect(body).toMatch(/export const prerender = false/);
-    // The page's intent is documented; pin so a future "back to
-    // SSG" refactor surfaces in this test.
-    expect(body).toMatch(/Cloudflare Pages routes \/accounts\/<uuid> to the\s*\n?\s*\/\/\s*Worker/);
+  it('static Pages shell preserves arbitrary account deep links', () => {
+    expect(body).not.toMatch(/export const prerender = false/);
+    expect(read(REDIRECTS)).toMatch(/^\/accounts\/:id \/shells\/account-detail 200$/m);
+    expect(body).toMatch(/window\.location\.pathname/);
   });
 
   it('CRITICAL per-account cost fetch uses the BARE accountUuid, NOT the acc_-prefixed id — /v1/admin/cost/accounts/:id matches accounts.id (a bare uuid) directly (unlike the prefix-stripping /v1/admin/accounts/:id), so a prefixed id 404s + soft-fails to "No cost data this cycle yet"', () => {

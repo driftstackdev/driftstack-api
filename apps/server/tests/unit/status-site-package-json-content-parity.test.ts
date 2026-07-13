@@ -7,10 +7,8 @@
 //   • Name: @driftstack/status-site.
 //   • private: true + type: module.
 //   • 4-script Astro pipeline.
-//   • Minimal-dep set: @astrojs/check + @astrojs/tailwind + astro +
-//     tailwindcss + typescript (5 only — NO sitemap (status incidents
-//     shouldn't be indexed), NO typography (no prose surface), NO
-//     Sentry (parity with docs)).
+//   • Minimal-dep set: @astrojs/check + @tailwindcss/vite + Astro 7 +
+//     Tailwind 4 + TypeScript (5 only — no sitemap, typography, or Sentry).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -45,11 +43,11 @@ describe('W537.C apps/status-site/package.json content parity', () => {
     expect(pkg.scripts.typecheck).toBe('astro check');
   });
 
-  it('Minimal 5-dep set framing pinned (W368 — Tailwind v4): @astrojs/check + @tailwindcss/postcss (v4 engine via PostCSS, replaced the v3 @astrojs/tailwind integration) + astro 6 + tailwindcss 4 + typescript (exactly 5 deps, ZERO others) + NO @astrojs/sitemap (status incidents intentionally not indexed by crawlers) + NO @tailwindcss/typography (no prose surface — status-site renders dynamic incident JSON) + NO @sentry/astro (public read-only surface, no customer-error telemetry) — pinned so the minimal-5-dep + 3-intentional-omission commitment survives', () => {
+  it('pins the minimal five-dependency Astro 7 + Tailwind 4 Vite toolchain', () => {
     expect(pkg.dependencies).toEqual({
-      '@astrojs/check': '^0.9.4',
-      '@tailwindcss/postcss': '^4.3.0',
-      astro: '^6.4.8',
+      '@astrojs/check': '0.9.9',
+      '@tailwindcss/vite': '4.3.2',
+      astro: '7.0.7',
       tailwindcss: '^4.3.0',
       typescript: '^5.7.0',
     });

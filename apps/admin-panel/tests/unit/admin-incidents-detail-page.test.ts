@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/[id].astro');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/shells/incident-detail.astro');
 
 interface FetchCall {
   url: string;
@@ -16,7 +16,7 @@ interface FetchCall {
 function scriptBody(): string {
   const source = readFileSync(PAGE, 'utf8');
   const match = source.match(
-    /<script is:inline define:vars=\{\{ apiBaseUrl, incidentId: incident\.id \}\}>([\s\S]*?)<\/script>/,
+    /<script is:inline define:vars=\{\{ apiBaseUrl \}\}>([\s\S]*?)<\/script>/,
   );
   if (!match?.[1]) throw new Error('incident detail inline script not found');
   return match[1];
@@ -92,9 +92,7 @@ describe('admin incident detail mutation lifecycle', () => {
       );
     };
     dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-    dom.window.eval(
-      `const apiBaseUrl = 'https://api.driftstack.dev'; const incidentId = 'inc_test';${scriptBody()}`,
-    );
+    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 
@@ -178,9 +176,7 @@ describe('admin incident detail mutation lifecycle', () => {
       );
     };
     dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-    dom.window.eval(
-      `const apiBaseUrl = 'https://api.driftstack.dev'; const incidentId = 'inc_test';${scriptBody()}`,
-    );
+    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 
@@ -277,9 +273,7 @@ describe('admin incident detail mutation lifecycle', () => {
         );
       };
       dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-      dom.window.eval(
-        `const apiBaseUrl = 'https://api.driftstack.dev'; const incidentId = 'inc_test';${scriptBody()}`,
-      );
+      dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
       dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
       await flush();
 
@@ -347,9 +341,7 @@ describe('admin incident detail mutation lifecycle', () => {
       );
     };
     dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-    dom.window.eval(
-      `const apiBaseUrl = 'https://api.driftstack.dev'; const incidentId = 'inc_test';${scriptBody()}`,
-    );
+    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 

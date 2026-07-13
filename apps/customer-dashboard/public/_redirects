@@ -5,8 +5,7 @@
 # retired. Bookmarked links land on the dashboard home (which carries
 # the "Get the app" funnel) instead of a 404. 302 (temporary) so
 # nothing is permanently cached — the paths could be repurposed later.
-# CF Pages evaluates this file before the SSR worker, so the splat rules
-# also cover the old prerender=false sub-routes.
+# The splat rules also cover retired nested routes.
 /profiles          /   302
 /snapshots         /   302
 /sessions          /   302
