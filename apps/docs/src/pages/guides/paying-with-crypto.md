@@ -76,6 +76,7 @@ Two things to know about the request body:
   amount charged always comes from the server-side price table, so a
   tampered `price_cents` can't buy a tier at the wrong price. Fetch
   the current price first with `POST /v1/billing/crypto-checkout/quote`
+  (requires `read:billing`, broad `read`, or `account_owner`)
   (same `product` body) if you don't want to hardcode it.
 - **The settlement currency is locked to USD server-side.**
   NowPayments converts the USD amount to crypto with its own rate

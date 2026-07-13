@@ -32,6 +32,38 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it.each([
+    ['zero-scope', []],
+    ['write-only', ['write']],
+    ['unrelated granular', ['read:sessions']],
+  ] as const)('403 for a %s key', async (_label, scopes) => {
+    fx = await buildTestApp({ scopes: [...scopes] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout/quote',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { product: 'solo_manual' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toBe(
+      'This action requires the "read:billing" scope.',
+    );
+  });
+
+  it.each(['read:billing', 'read', 'account_owner'] as const)(
+    'allows a %s key to request a quote',
+    async (scope) => {
+      fx = await buildTestApp({ scopes: [scope] });
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/billing/crypto-checkout/quote',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: { product: 'solo_manual' },
+      });
+      expect(res.statusCode, res.body).toBe(200);
+    },
+  );
+
   it('returns the tier price + EUR default on happy path', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

@@ -59,6 +59,7 @@ export class TeamResource {
     });
   }
 
+  // Requires broad read or account_owner.
   /** List confirmed team members for the calling owner. */
   listMembers(): Promise<TeamMembersList> {
     return this.http.request<TeamMembersList>({
@@ -67,6 +68,7 @@ export class TeamResource {
     });
   }
 
+  // Requires broad read or account_owner.
   /** List pending (unaccepted, unexpired) invites for the calling owner. */
   listInvites(): Promise<TeamInvitesList> {
     return this.http.request<TeamInvitesList>({
@@ -78,6 +80,7 @@ export class TeamResource {
   /**
    * Accept a pending invite. The accepting account's email MUST match
    * the invitee email — server enforces; mismatched accept returns 409.
+   * Requires account_owner (dashboard web sessions satisfy it).
    */
   acceptInvite(token: string): Promise<AcceptInviteResponse> {
     return this.http.request<AcceptInviteResponse>({

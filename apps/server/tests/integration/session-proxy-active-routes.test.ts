@@ -28,6 +28,26 @@ describe('active /v1/sessions/:id/proxy route validation (sessionEgressService w
     if (fx) await fx.cleanup();
   });
 
+  it.each([
+    ['POST', 'write:sessions'],
+    ['GET', 'read:sessions'],
+  ] as const)(
+    '%s rejects a zero-scope key before the active handler',
+    async (method, requiredScope) => {
+      fx = await buildTestApp({ enableEgressSafeguard: true, scopes: [] });
+      const res = await fx.app.inject({
+        method,
+        url: `/v1/sessions/${SESSION_ID}/proxy`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        ...(method === 'POST' ? { payload: validBody(SESSION_ID) } : {}),
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json<{ detail: string }>().detail).toBe(
+        `This action requires the "${requiredScope}" scope.`,
+      );
+    },
+  );
+
   it('POST with a valid body → 503 FeatureUnavailable (route registered, backend not yet wired)', async () => {
     fx = await buildTestApp({ enableEgressSafeguard: true });
     const res = await fx.app.inject({

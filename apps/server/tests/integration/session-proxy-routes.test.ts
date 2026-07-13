@@ -23,6 +23,53 @@ describe('EG-API-1.2 — /v1/sessions/{id}/proxy (no backend wired)', () => {
     if (fx) await fx.cleanup();
   });
 
+  it.each(['POST', 'GET'] as const)(
+    '%s rejects unauthenticated callers before feature disclosure',
+    async (method) => {
+      fx = await buildTestApp();
+      const res = await fx.app.inject({
+        method,
+        url: '/v1/sessions/ses_xxx/proxy',
+        ...(method === 'POST'
+          ? {
+              payload: {
+                session_id: 'ses_xxx',
+                proxy: { type: 'socks5', socks5: { host: 'proxy.example.com', port: 1080 } },
+              },
+            }
+          : {}),
+      });
+      expect(res.statusCode).toBe(401);
+    },
+  );
+
+  it.each([
+    ['POST', 'write:sessions'],
+    ['GET', 'read:sessions'],
+  ] as const)(
+    '%s rejects a zero-scope key before feature disclosure',
+    async (method, requiredScope) => {
+      fx = await buildTestApp({ scopes: [] });
+      const res = await fx.app.inject({
+        method,
+        url: '/v1/sessions/ses_xxx/proxy',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        ...(method === 'POST'
+          ? {
+              payload: {
+                session_id: 'ses_xxx',
+                proxy: { type: 'socks5', socks5: { host: 'proxy.example.com', port: 1080 } },
+              },
+            }
+          : {}),
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json<{ detail: string }>().detail).toBe(
+        `This action requires the "${requiredScope}" scope.`,
+      );
+    },
+  );
+
   it('POST → 503 FeatureUnavailable with customer-facing egress disclosure (no internal planning-file jargon)', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

@@ -47,6 +47,18 @@ describe('routes/session-proxy content parity', () => {
     );
   });
 
+  it('GET and both disabled stubs preserve the matching granular scope boundary', () => {
+    expect(body).toMatch(
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/sessions\/:id\/proxy',\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\] \},/,
+    );
+    expect(body).toMatch(
+      /app\.post\('\/v1\/sessions\/:id\/proxy', \{\s*preHandler: \[app\.requireAuth, app\.requireScope\('write:sessions'\), app\.rateLimit\('global'\)\],\s*handler: stub,/,
+    );
+    expect(body).toMatch(
+      /app\.get\('\/v1\/sessions\/:id\/proxy', \{\s*preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],\s*handler: stub,/,
+    );
+  });
+
   it("Cross-agent contract body-shape framing pinned: '@driftstack/api-types/egress (EG-API-1.1)' + 3-field body shape (session_id matching URL :id + proxy + optional egress_safeguard defaulting safeguards-on). Drift to dropping the session_id-matches-URL check would let a body carry a different id than the URL and create an audit-log mismatch", () => {
     expect(body).toMatch(
       /\/\/ The route consumes the cross-agent contract schema from\s*\n?\s*\/\/ `@driftstack\/api-types\/egress` \(EG-API-1\.1\)\. Body shape:/,

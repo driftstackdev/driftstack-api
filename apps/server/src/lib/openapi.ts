@@ -908,7 +908,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/team/invites',
-    summary: 'List pending invites for the calling owner',
+    summary: 'List pending invites for the calling owner (requires broad read)',
     tags: ['team'],
     security: auth,
     responses: {
@@ -923,7 +923,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/team/invites/accept',
-    summary: 'Accept a pending team invite',
+    summary: 'Accept a pending team invite (requires account_owner)',
     tags: ['team'],
     security: auth,
     request: {
@@ -955,7 +955,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/team/members',
-    summary: 'List confirmed team members for the calling owner',
+    summary: 'List confirmed team members for the calling owner (requires broad read)',
     tags: ['team'],
     security: auth,
     responses: {
@@ -970,7 +970,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/team/owners',
-    summary: 'List owner accounts the caller is a member of (V-326c)',
+    summary: 'List owner accounts the caller is a member of (requires broad read)',
     tags: ['team'],
     security: auth,
     responses: {
@@ -4226,7 +4226,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/billing/crypto-checkout/quote',
-    summary: 'Preview a crypto-checkout price without minting an order',
+    summary: 'Preview a crypto-checkout price (requires read:billing)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {

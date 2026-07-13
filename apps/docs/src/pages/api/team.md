@@ -11,6 +11,11 @@ more member-accounts joined to it via the `/v1/team/*` endpoints.
 Each member uses their own login + their own dashboard sessions. API
 keys remain account-scoped (shared across the team) and admin-gated.
 
+Team directory reads (`GET /v1/team/invites`, `/members`, and
+`/owners`) require broad `read` or `account_owner`. Team membership
+mutations—including accepting an invite—require `account_owner`.
+The dashboard's web session carries `account_owner` automatically.
+
 > **Status (shipped — May 2026):** end-to-end. Members can read the
 > owner's resources via `X-Driftstack-Account: acc_<owner-uuid>` on
 > any `/v1/*` request; members with the `admin` role can also write.
@@ -85,10 +90,14 @@ entry has `owner_account_id`, `owner_email` (falls back to
 dashboards. The same data is also embedded in `GET /v1/account/me`
 under `teams[]`.
 
+Requires broad `read` or `account_owner`.
+
 ## Invite a team member
 
 `POST /v1/team/invites` — sends an email with a 7-day accept link to
 the invitee.
+
+Requires `account_owner`.
 
 Request:
 
@@ -111,6 +120,8 @@ accept.
 `GET /v1/team/invites` — pending (unaccepted, unexpired) invites for
 the calling owner.
 
+Requires broad `read` or `account_owner`.
+
 ```json
 {
   "data": [
@@ -132,6 +143,8 @@ the calling owner.
 
 `POST /v1/team/invites/accept` — invitee calls this after signing in
 to their own Driftstack account.
+
+Requires `account_owner`; a dashboard web session satisfies this.
 
 Request:
 
@@ -163,6 +176,8 @@ an invite addressed to someone else even if they share the URL.
 ## List members
 
 `GET /v1/team/members` — confirmed memberships for the calling owner.
+
+Requires broad `read` or `account_owner`.
 
 ## Remove a member
 

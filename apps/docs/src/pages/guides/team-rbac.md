@@ -18,6 +18,10 @@ You'll need:
 - A Driftstack web session (sign in to the dashboard) OR an API key
   with `account_owner` scope.
 
+The `account_owner` requirement covers invite, acceptance, and removal.
+If an integration only lists team members, pending invites, or joined
+owners, broad `read` is sufficient.
+
 For the API reference (every endpoint, every field), see
 [/api/team](/api/team/). This guide focuses on the customer flow.
 

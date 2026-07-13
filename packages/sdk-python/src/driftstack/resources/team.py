@@ -64,14 +64,17 @@ class TeamResource:
         data = self._http.request("POST", "/v1/team/invites", json_body=body)
         return data  # {"message": ...}
 
+    # Requires broad read or account_owner.
     def list_members(self) -> TeamMembersList:
         data = self._http.request("GET", "/v1/team/members")
         return parse_model(TeamMembersList, data)
 
+    # Requires broad read or account_owner.
     def list_invites(self) -> TeamInvitesList:
         data = self._http.request("GET", "/v1/team/invites")
         return parse_model(TeamInvitesList, data)
 
+    # Requires account_owner.
     def accept_invite(self, token: str) -> AcceptInviteResponse:
         data = self._http.request("POST", "/v1/team/invites/accept", json_body={"token": token})
         return parse_model(AcceptInviteResponse, data)
@@ -93,14 +96,17 @@ class AsyncTeamResource:
         data = await self._http.request("POST", "/v1/team/invites", json_body=body)
         return data
 
+    # Requires broad read or account_owner.
     async def list_members(self) -> TeamMembersList:
         data = await self._http.request("GET", "/v1/team/members")
         return parse_model(TeamMembersList, data)
 
+    # Requires broad read or account_owner.
     async def list_invites(self) -> TeamInvitesList:
         data = await self._http.request("GET", "/v1/team/invites")
         return parse_model(TeamInvitesList, data)
 
+    # Requires account_owner.
     async def accept_invite(self, token: str) -> AcceptInviteResponse:
         data = await self._http.request(
             "POST", "/v1/team/invites/accept", json_body={"token": token}

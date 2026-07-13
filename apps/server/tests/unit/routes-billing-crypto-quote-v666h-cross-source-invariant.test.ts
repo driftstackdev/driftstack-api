@@ -109,9 +109,11 @@ describe('W1021 routes/billing-crypto-quote V-666.H cross-source invariant', () 
     expect(p).toMatch(/pay_max_amount: null,/);
   });
 
-  it("CRITICAL preHandler [requireAuth, rateLimit('global')].", () => {
+  it("CRITICAL preHandler [requireAuth, requireScope('read:billing'), rateLimit('global')].", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-quote.ts'));
-    expect(p).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/);
+    expect(p).toMatch(
+      /\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:billing'\), app\.rateLimit\('global'\)\] \},/,
+    );
   });
 
   it('test file metadata — file exists at canonical path', () => {

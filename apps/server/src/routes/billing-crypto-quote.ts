@@ -10,6 +10,8 @@
 //
 // Quote responses are stateless — no DB write — so re-fetching is
 // cheap and the route is not rate-limited beyond the global bucket.
+// The authoritative price table is billing data, so callers need
+// read:billing (also satisfied by broad read/account_owner).
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AccountTier } from '@driftstack/api-types';
@@ -56,7 +58,7 @@ export interface CryptoQuoteRoutesDeps {
 export function registerCryptoQuoteRoutes(app: FastifyInstance, deps: CryptoQuoteRoutesDeps): void {
   app.post(
     '/v1/billing/crypto-checkout/quote',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (req: FastifyRequest, reply) => {
       const parsed = QuoteSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());

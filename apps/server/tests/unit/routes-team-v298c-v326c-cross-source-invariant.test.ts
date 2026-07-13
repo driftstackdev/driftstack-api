@@ -178,14 +178,13 @@ describe('W1050 routes/team V-298c + V-326c cross-source invariant', () => {
 
   // ─── Auth + rate-limit on every route ────────────────────────
 
-  it('CRITICAL requireAuth + global rate-limit on every team route; account_owner on create-invite + remove-member (V-481).', () => {
+  it('CRITICAL requireAuth + global rate-limit on every team route; broad read on directories and account_owner on membership mutations.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/team.ts'));
-    // create-invite + remove-member now carry app.requireScope('account_owner')
-    // between requireAuth and rateLimit, so count each guard independently
-    // rather than as an adjacent pair. (accept-invite stays scope-free —
-    // the invitee uses their own key.)
+    // create-invite, accept-invite, and remove-member are account-control
+    // mutations; the three directory reads carry broad read.
     expect((p.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(6);
     expect((p.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(6);
-    expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBe(2);
+    expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBe(3);
+    expect((p.match(/app\.requireScope\('read'\)/g) ?? []).length).toBe(3);
   });
 });

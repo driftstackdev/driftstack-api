@@ -86,7 +86,8 @@ func (o *ListCryptoOrdersOptions) query() url.Values {
 }
 
 // Quote previews the fiat-cents price + crypto pay-range without
-// minting an order (V-666.H).
+// minting an order (V-666.H). Requires read:billing; broad read or
+// account_owner also satisfies it.
 func (r *CryptoOrdersResource) Quote(ctx context.Context, body CryptoQuoteRequest) (CryptoQuoteResponse, error) {
 	var out CryptoQuoteResponse
 	if err := r.client.do(ctx, requestOptions{

@@ -63,6 +63,7 @@ class CryptoOrdersResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
+    # Requires read:billing; broad read/account_owner also satisfy it.
     def quote(self, body: dict[str, Any]) -> dict[str, Any]:
         """V-666.H — preview the fiat-cents price + crypto pay-range without minting an order."""
         return self._http.request(

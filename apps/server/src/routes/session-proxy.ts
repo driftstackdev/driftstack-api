@@ -92,7 +92,7 @@ export function registerSessionProxyRoutes(
 
   app.get<{ Params: { id: string } }>(
     '/v1/sessions/:id/proxy',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')] },
     (req): never => {
       requireCtx(req);
       // EG-API-1.6 backs this with a real read from session-egress
@@ -124,8 +124,17 @@ export function registerSessionProxyDisabledRoutes(app: FastifyInstance): void {
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };
-  app.post('/v1/sessions/:id/proxy', stub);
-  app.get('/v1/sessions/:id/proxy', stub);
+  // Disabled feature posture must preserve the live route's auth boundary.
+  // Otherwise unauthenticated and unrelated-scope callers can probe deployment
+  // state, and enabling the feature silently changes 503 responses into 401/403.
+  app.post('/v1/sessions/:id/proxy', {
+    preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
+    handler: stub,
+  });
+  app.get('/v1/sessions/:id/proxy', {
+    preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')],
+    handler: stub,
+  });
 }
 
 // Re-export the ProxyConfigSchema for testability — consumers that

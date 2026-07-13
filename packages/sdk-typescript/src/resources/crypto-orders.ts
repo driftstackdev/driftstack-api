@@ -33,6 +33,7 @@ export type ListCryptoOrdersOptions = ListCryptoOrdersQuery;
 export class CryptoOrdersResource {
   constructor(private readonly http: HttpClient) {}
 
+  // Requires read:billing (broad read/account_owner also satisfy it).
   /** V-666.H — preview the fiat-cents price + crypto pay-range without minting an order. */
   quote(body: CryptoQuoteRequest): Promise<CryptoQuoteResponse> {
     return this.http.request<CryptoQuoteResponse>({

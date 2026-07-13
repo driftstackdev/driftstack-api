@@ -71,9 +71,9 @@ describe('W411.C apps/server/src/routes/billing-crypto-quote.ts content parity',
     );
   });
 
-  it('Route registration: POST + preHandler [app.requireAuth, app.rateLimit("global")]', () => {
+  it('Route registration: POST + read:billing scope before the global rate limit', () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/billing\/crypto-checkout\/quote',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.post\(\s*\n?\s*'\/v1\/billing\/crypto-checkout\/quote',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:billing'\), app\.rateLimit\('global'\)\] \},/,
     );
   });
 

@@ -11,6 +11,60 @@ afterEach(async () => {
 
 const headers = { 'content-type': 'application/json' };
 
+describe('team route API-key scope floor', () => {
+  it.each([
+    ['zero-scope', []],
+    ['write-only', ['write']],
+    ['unrelated granular', ['read:sessions']],
+  ] as const)('blocks a %s key from team directory reads', async (_label, scopes) => {
+    fx = await buildTestApp({ scopes: [...scopes] });
+    for (const url of ['/v1/team/invites', '/v1/team/members', '/v1/team/owners']) {
+      const res = await fx.app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+      expect(res.statusCode, url).toBe(403);
+      expect(res.json<{ detail: string }>().detail, url).toBe(
+        'This action requires the "read" scope.',
+      );
+    }
+  });
+
+  it.each(['read', 'account_owner'] as const)(
+    'allows a %s key to read each team directory',
+    async (scope) => {
+      fx = await buildTestApp({ scopes: [scope] });
+      for (const url of ['/v1/team/invites', '/v1/team/members', '/v1/team/owners']) {
+        const res = await fx.app.inject({
+          method: 'GET',
+          url,
+          headers: { authorization: `Bearer ${fx.plaintext}` },
+        });
+        expect(res.statusCode, `${url}: ${res.body}`).toBe(200);
+      }
+    },
+  );
+
+  it.each([
+    ['zero-scope', []],
+    ['read-only', ['read']],
+    ['write-only', ['write']],
+  ] as const)('blocks a %s key from accepting a team invite', async (_label, scopes) => {
+    fx = await buildTestApp({ scopes: [...scopes] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/team/invites/accept',
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { token: 'x'.repeat(20) },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toBe(
+      'This action requires the "account_owner" scope.',
+    );
+  });
+});
+
 describe('POST /v1/team/invites', () => {
   it('202 sends invite + records email + creates pending row', async () => {
     fx = await buildTestApp();

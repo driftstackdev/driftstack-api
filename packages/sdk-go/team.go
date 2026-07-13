@@ -31,6 +31,7 @@ func (r *TeamResource) Invite(ctx context.Context, body *TeamInviteRequest) (*Te
 }
 
 // ListMembers returns confirmed memberships for the calling owner.
+// Requires broad read or account_owner.
 func (r *TeamResource) ListMembers(ctx context.Context) (*TeamMembersList, error) {
 	var out TeamMembersList
 	if err := r.client.do(ctx, requestOptions{
@@ -44,7 +45,7 @@ func (r *TeamResource) ListMembers(ctx context.Context) (*TeamMembersList, error
 }
 
 // ListInvites returns pending (unaccepted, unexpired) invites for the
-// calling owner.
+// calling owner. Requires broad read or account_owner.
 func (r *TeamResource) ListInvites(ctx context.Context) (*TeamInvitesList, error) {
 	var out TeamInvitesList
 	if err := r.client.do(ctx, requestOptions{
@@ -58,6 +59,7 @@ func (r *TeamResource) ListInvites(ctx context.Context) (*TeamInvitesList, error
 }
 
 // AcceptInvite consumes a token and creates the membership.
+// Requires account_owner.
 func (r *TeamResource) AcceptInvite(ctx context.Context, token string) (*TeamAcceptResponse, error) {
 	var out TeamAcceptResponse
 	if err := r.client.do(ctx, requestOptions{
