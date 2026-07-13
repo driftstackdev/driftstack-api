@@ -50,6 +50,12 @@ function emittedTypes(): string[] {
 function eventsOfType(type: string): InputEvent[] {
   return sendInputEvent.mock.calls.map((c) => c[1] as InputEvent).filter((e) => e.type === type);
 }
+function emittedWithReliability(): { event: InputEvent; reliable: boolean }[] {
+  return sendInputEvent.mock.calls.map((c) => ({
+    event: c[1] as InputEvent,
+    reliable: (c[2] as { reliable?: boolean } | undefined)?.reliable ?? true,
+  }));
+}
 
 /** Dispatch a MouseEvent with a CONTROLLED timeStamp (the gesture model is
  *  time-sensitive; jsdom would otherwise stamp every synchronous event ~equal). */
@@ -159,6 +165,26 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(types).toContain('touchStart');
     expect(types).toContain('touchMove');
     expect(types).toContain('touchEnd');
+  });
+
+  it('orders reliable lifecycle anchors around lossy drag moves (start → first move → final move → end)', () => {
+    const video = mountCapture();
+    fireMouse(video, 'mousedown', 200, 400, 1000);
+    fireMouse(video, 'mousemove', 200, 340, 1030); // commits: reliable first move
+    fireMouse(video, 'mousemove', 200, 300, 1060); // high-rate intermediate: lossy
+    fireMouse(video, 'mouseup', 200, 280, 1300); // reliable final coordinate + end
+
+    const wire = emittedWithReliability().filter(({ event }) => event.type.startsWith('touch'));
+    expect(wire.map(({ event }) => event.type)).toEqual([
+      'touchStart',
+      'touchMove',
+      'touchMove',
+      'touchMove',
+      'touchEnd',
+    ]);
+    expect(wire.map(({ reliable }) => reliable)).toEqual([true, true, false, true, true]);
+    expect(wire.at(-2)?.event).toMatchObject({ type: 'touchMove', x: 200, y: 280 });
+    expect(wire.at(-1)?.event).toMatchObject({ type: 'touchEnd', x: 200, y: 280 });
   });
 
   it('SUSTAINED SMALL DRAG (>14px held >140ms): commits to a scroll', () => {
@@ -437,6 +463,14 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
       expect(eventsOfType('touchEnd').length).toBe(0);
       vi.advanceTimersByTime(360); // a real > 320ms idle gap closes it exactly once.
       expect(eventsOfType('touchEnd').length).toBe(1);
+      const wire = emittedWithReliability().filter(({ event }) => event.type.startsWith('touch'));
+      expect(wire[0]).toMatchObject({ event: { type: 'touchStart' }, reliable: true });
+      expect(wire[1]).toMatchObject({ event: { type: 'touchMove' }, reliable: true });
+      expect(wire.at(-2)).toMatchObject({ event: { type: 'touchMove' }, reliable: true });
+      expect(wire.at(-1)).toMatchObject({ event: { type: 'touchEnd' }, reliable: true });
+      expect(
+        wire.slice(2, -2).some(({ event, reliable }) => event.type === 'touchMove' && !reliable),
+      ).toBe(true);
     } finally {
       vi.useRealTimers();
     }

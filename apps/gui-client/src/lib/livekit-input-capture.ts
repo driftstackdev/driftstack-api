@@ -33,8 +33,12 @@
 // Reliability:
 //   - touchStart/touchEnd, key down/up, swipe: reliable=true (must arrive
 //     in order; a missed start/end breaks the gesture).
-//   - touchMove: reliable=false (lossy ok — a dropped move jitters then
-//     recovers; reliable=true would congest the data channel on a fast drag).
+//   - the first committed touchMove and the final pre-end touchMove are
+//     reliable lifecycle anchors. LiveKit does not preserve order ACROSS its
+//     reliable/lossy DataChannels, so these keep every committed gesture's
+//     start→move→end causally ordered even if all lossy moves reorder/drop.
+//   - intermediate touchMoves remain reliable=false (lossy ok — a dropped move
+//     jitters then recovers; making the high-rate stream reliable congests it).
 //
 // Pointer-capture: when the press (mousedown) fires the capture pointer-
 // captures the video element so subsequent move/release land even when the
@@ -522,6 +526,19 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       });
     };
 
+    // LiveKit's reliable and lossy DataChannels are each ordered internally but
+    // have NO cross-channel ordering. Ending a committed gesture directly on the
+    // reliable channel can therefore overtake its lossy moves, producing
+    // START→END(moves=0) at the harness while the orphan moves arrive outside the
+    // lifecycle. Put one absolute final move immediately before the end on the
+    // same reliable channel. Repeating the current coordinate is harmless (zero
+    // delta) when a lossy copy already arrived; when it did not, this preserves the
+    // full final displacement and makes the gesture observably scroll.
+    const endCommittedTouch = (x: number, y: number, touchId: number): void => {
+      send({ type: 'touchMove', x, y, touchId }, true);
+      send({ type: 'touchEnd', x, y, touchId }, true);
+    };
+
     // Clamp a glide/scroll point inside the per-archetype captured-frame logical
     // device frame (the live `logical` dims, default 402×874), NOT
     // video.videoWidth/Height — the SFU downscales the track, so clamping to the
@@ -539,7 +556,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       window.clearTimeout(f.timer);
       fling.current = null;
       if (endTouch) {
-        send({ type: 'touchEnd', x: clampX(f.x), y: devY(clampY(f.y)), touchId: f.touchId }, true);
+        endCommittedTouch(clampX(f.x), devY(clampY(f.y)), f.touchId);
       }
     };
     // Replay a decelerating flick as timed touchMove events, then a final touchEnd.
@@ -549,7 +566,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       cancelFling(false);
       const path = computeFlingPath(x0, y0, vx, vy);
       if (path.length === 0) {
-        send({ type: 'touchEnd', x: clampX(x0), y: devY(clampY(y0)), touchId }, true);
+        endCommittedTouch(clampX(x0), devY(clampY(y0)), touchId);
         return;
       }
       fling.current = { touchId, x: x0, y: y0, timer: 0 };
@@ -562,7 +579,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         if (pt === undefined) {
           // Glide exhausted (or a defensive miss) — lift the finger at the last
           // point we sent (f.x/f.y track it), settling the momentum scroll.
-          send({ type: 'touchEnd', x: clampX(f.x), y: devY(clampY(f.y)), touchId }, true);
+          endCommittedTouch(clampX(f.x), devY(clampY(f.y)), touchId);
           fling.current = null;
           return;
         }
@@ -616,11 +633,13 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // buffered touchStart at the PRESS point, then stream moves. Commit needs the
     // cursor past MOVE_DEADZONE AND (held > DRAG_HOLD_MS = a deliberate scroll, OR
     // moved past DRAG_HARD_PX = a decisive/fast flick) — so a quick drifty click
-    // never crosses into a scroll. touchMove is lossy (reliable=false); a dropped
-    // move jitters then recovers, while reliable=true would congest a fast drag.
+    // never crosses into a scroll. The FIRST committed touchMove is reliable so it
+    // cannot overtake the reliable touchStart on LiveKit's separate lossy channel;
+    // later high-rate moves are lossy so a fast drag cannot congest reliable input.
     const onMouseMove = (e: MouseEvent): void => {
       const g = active.current;
       if (g === null) return;
+      let lifecycleAnchor = false;
       let p = pointerToViewport(e, video, logical);
       if (p === null) {
         // Off the video. An uncommitted gesture stays buffered (ignore). A COMMITTED
@@ -654,6 +673,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
           far > DRAG_HARD_PX * DRAG_HARD_PX;
         if (!commit) return; // still possibly a tap — keep buffering (send nothing)
         g.committed = true;
+        lifecycleAnchor = true;
         // Emit the buffered touchStart at the press point so the scroll originates
         // there, then seed velocity tracking from the COMMIT point (the current move),
         // NOT the press — otherwise the initial dwell (up to DRAG_HOLD_MS) folds into
@@ -678,7 +698,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       g.lastX = p.x;
       g.lastY = p.y;
       g.lastT = t;
-      send({ type: 'touchMove', x: p.x, y: devY(p.y), touchId: g.touchId }, false);
+      send({ type: 'touchMove', x: p.x, y: devY(p.y), touchId: g.touchId }, lifecycleAnchor);
     };
     // The SINGLE gesture-release handler, wired to the element mouseup AND the
     // window mouseup + pointerup. CRITICAL ordering (audit w5q5vvdca B1): a real
@@ -706,14 +726,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (p === null) {
         // Committed drag released OFF the surface → lift at the last in-bounds point
         // (NOT 0,0 — the Mac injector honors the end coord, so 0,0 reads as a flick).
-        send(
-          {
-            type: 'touchEnd',
-            x: clampX(g.lastX ?? g.startX),
-            y: devY(clampY(g.lastY ?? g.startY)),
-            touchId: g.touchId,
-          },
-          true,
+        endCommittedTouch(
+          clampX(g.lastX ?? g.startX),
+          devY(clampY(g.lastY ?? g.startY)),
+          g.touchId,
         );
         return;
       }
@@ -726,7 +742,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         startFling(g.touchId, p.x, p.y, g.vx as number, g.vy as number);
         return;
       }
-      send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
+      endCommittedTouch(p.x, devY(p.y), g.touchId);
     };
     // Lift a COMMITTED active finger at its last known point + null the gesture. A no-op
     // for an uncommitted (buffered tap — no touchStart sent yet) or absent gesture. Used
@@ -736,15 +752,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       const g = active.current;
       active.current = null;
       if (g === null || !g.committed) return;
-      send(
-        {
-          type: 'touchEnd',
-          x: clampX(g.lastX ?? g.startX),
-          y: devY(clampY(g.lastY ?? g.startY)),
-          touchId: g.touchId,
-        },
-        true,
-      );
+      endCommittedTouch(clampX(g.lastX ?? g.startX), devY(clampY(g.lastY ?? g.startY)), g.touchId);
     };
     // A gesture stream interrupted mid-flight WITHOUT a release: a system gesture
     // (3/4-finger swipe, Mission Control → pointercancel), the window losing focus
@@ -786,7 +794,8 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     //      touchEnd momentum on THIS path (would double it — A3 keeps Step-B fork momentum
     //      to genuine finger-touch only).
     // Content DOWN (deltaY>0) = finger swipes UP (y↓).
-    let wheelDrag: { touchId: number; x: number; y: number } | null = null;
+    type WheelDrag = { touchId: number; x: number; y: number; hasReliableMove: boolean };
+    let wheelDrag: WheelDrag | null = null;
     let wheelTimer = 0;
     let wheelRaf = 0;
     let wheelPendingDx = 0;
@@ -828,7 +837,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       wheelDrag = null;
       resetWheelAccum();
       if (wd === null) return;
-      send({ type: 'touchEnd', x: clampX(wd.x), y: devY(clampY(wd.y)), touchId: wd.touchId }, true);
+      endCommittedTouch(clampX(wd.x), devY(clampY(wd.y)), wd.touchId);
     };
     const endWheelDrag = (): void => {
       // True end of the gesture — drop any remainder too (idle timeout / new mousedown).
@@ -836,9 +845,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       wheelPendingDy = 0;
       liftWheelFinger();
     };
-    const startWheelDrag = (x: number, y: number): { touchId: number; x: number; y: number } => {
+    const startWheelDrag = (x: number, y: number): WheelDrag => {
       const touchId = touchIdSeq.current++;
-      const wd = { touchId, x: clampX(x), y: clampY(y) };
+      const wd = { touchId, x: clampX(x), y: clampY(y), hasReliableMove: false };
       wheelDrag = wd;
       send({ type: 'touchStart', x: wd.x, y: devY(wd.y), touchId }, true);
       return wd;
@@ -954,7 +963,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       wheelTravel = newTravel;
 
       // Finger moves OPPOSITE to content along the locked direction.
-      const w = wheelDrag as { touchId: number; x: number; y: number };
+      const w = wheelDrag as WheelDrag;
       const nx = w.x - wheelDirX * advance;
       const ny = w.y - wheelDirY * advance;
 
@@ -983,13 +992,16 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         wheelDirY = keepDirY;
         re.x = clampX(re.x - keepDirX * advance);
         re.y = clampY(re.y - keepDirY * advance);
-        send({ type: 'touchMove', x: re.x, y: devY(re.y), touchId: re.touchId }, false);
+        re.hasReliableMove = true;
+        send({ type: 'touchMove', x: re.x, y: devY(re.y), touchId: re.touchId }, true);
         armWheelTail();
         return;
       }
       w.x = clampX(nx);
       w.y = clampY(ny);
-      send({ type: 'touchMove', x: w.x, y: devY(w.y), touchId: w.touchId }, false);
+      const lifecycleAnchor = !w.hasReliableMove;
+      w.hasReliableMove = true;
+      send({ type: 'touchMove', x: w.x, y: devY(w.y), touchId: w.touchId }, lifecycleAnchor);
       armWheelTail();
     };
     const onWheel = (e: WheelEvent): void => {
@@ -1172,14 +1184,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // gesture sent no touchStart, so it needs no touchEnd.
       const g = active.current;
       if (g !== null && g.committed) {
-        send(
-          {
-            type: 'touchEnd',
-            x: clampX(g.lastX ?? g.startX),
-            y: devY(clampY(g.lastY ?? g.startY)),
-            touchId: g.touchId,
-          },
-          true,
+        endCommittedTouch(
+          clampX(g.lastX ?? g.startX),
+          devY(clampY(g.lastY ?? g.startY)),
+          g.touchId,
         );
       }
       cancelFling(true);

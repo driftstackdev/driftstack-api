@@ -255,9 +255,22 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(emitted().map((e) => e.type)).toEqual(['touchStart', 'touchMove']);
 
     fireDC(false, 0);
-    expect(emitted().map((e) => e.type)).toEqual(['touchStart', 'touchMove', 'touchEnd']);
+    // Cleanup emits a final reliable coordinate anchor immediately before the
+    // mandatory release. In production sendInputEvent may shed that anchor after
+    // the congestion latch flips, but the touchEnd remains mandatory either way.
+    expect(emitted().map((e) => e.type)).toEqual([
+      'touchStart',
+      'touchMove',
+      'touchMove',
+      'touchEnd',
+    ]);
     fireMouse(window, 'pointerup', 100, 240, 1250);
-    expect(emitted().map((e) => e.type)).toEqual(['touchStart', 'touchMove', 'touchEnd']);
+    expect(emitted().map((e) => e.type)).toEqual([
+      'touchStart',
+      'touchMove',
+      'touchMove',
+      'touchEnd',
+    ]);
   });
 
   it('sheds new key intent while congested and resumes after drain', () => {
