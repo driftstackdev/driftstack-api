@@ -6,6 +6,10 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { makeChallengeRelay } from '../../src/services/challenge-relay.js';
+import {
+  BOUNDED_NODE_LATEST_RELAY_MAX_CONCURRENT,
+  BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
+} from '../../src/services/bounded-node-latest-relay.js';
 import type { ChallengeDetected } from '../../src/schemas/harness-control-protocol.js';
 import type { Logger } from '../../src/lib/logger.js';
 
@@ -109,5 +113,36 @@ describe('W393 makeChallengeRelay', () => {
     expect(enqueued.challenge.detail).toContain('direct=[redacted]');
     // bare IPv4 (the customer's own proxied= exit) is also redacted (defence-in-depth).
     expect(enqueued.challenge.detail).not.toContain('1.2.3.4');
+  });
+
+  it('bounds unique-session ownership/webhook work for one authenticated node', () => {
+    const sessions = {
+      get: vi.fn(() => new Promise<never>(() => undefined)),
+    };
+    const webhooks = { enqueueEvent: vi.fn() };
+    const log = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as unknown as Logger;
+    const relay = makeChallengeRelay(sessions, webhooks, log);
+
+    for (let i = 0; i < BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS; i += 1) {
+      relay({ ...FRAME, sessionId: `agt_${i}`, challengeId: `chl_${i}` }, 'node-1');
+    }
+    relay({ ...FRAME, sessionId: 'agt_overflow' }, 'node-1');
+    relay({ ...FRAME, sessionId: 'agt_overflow_2' }, 'node-1');
+
+    expect(sessions.get).toHaveBeenCalledTimes(BOUNDED_NODE_LATEST_RELAY_MAX_CONCURRENT);
+    expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reportingNodeId: 'node-1',
+        sessionBudget: BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
+        sessionId: 'agt_overflow',
+      }),
+      expect.stringContaining('exceeded its relay session budget'),
+    );
   });
 });

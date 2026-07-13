@@ -141,4 +141,42 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     expect(enqueued.detail).not.toContain('10.0.0.7');
     expect(enqueued.detail).toContain('direct=[redacted]');
   });
+
+  it('coalesces repeated pending save outcomes to the newest frame per session', async () => {
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let lookups = 0;
+    const sessions = {
+      get: vi.fn(async () => {
+        lookups += 1;
+        if (lookups === 1) await first;
+        return { accountId: 'acc_9', nodeId: 'node-1' };
+      }),
+    };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+
+    relay({ ...FRAME, profile_id: 'prof_first' }, 'node-1');
+    relay({ ...FRAME, profile_id: 'prof_superseded' }, 'node-1');
+    relay({ ...FRAME, profile_id: 'prof_latest' }, 'node-1');
+    expect(sessions.get).toHaveBeenCalledTimes(1);
+
+    releaseFirst();
+    await vi.waitFor(() => expect(webhooks.enqueueEvent).toHaveBeenCalledTimes(2));
+    expect(sessions.get).toHaveBeenCalledTimes(2);
+    expect(webhooks.enqueueEvent).toHaveBeenNthCalledWith(
+      1,
+      'acc_9',
+      'session.profile_save_failed',
+      expect.objectContaining({ profile_id: 'prof_first' }),
+    );
+    expect(webhooks.enqueueEvent).toHaveBeenNthCalledWith(
+      2,
+      'acc_9',
+      'session.profile_save_failed',
+      expect.objectContaining({ profile_id: 'prof_latest' }),
+    );
+  });
 });

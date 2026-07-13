@@ -19,6 +19,7 @@
 import type { ChallengeDetected } from '../schemas/harness-control-protocol.js';
 import type { WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
+import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
 import { scrubNodeDiagnostics } from './scrub-node-diagnostics.js';
 
@@ -46,69 +47,74 @@ export function makeChallengeRelay(
   webhooks: ChallengeRelayWebhooks,
   logger: Logger,
 ): (frame: ChallengeDetected, reportingNodeId: string) => void {
-  return (frame: ChallengeDetected, reportingNodeId: string): void => {
-    void sessions
-      .get(frame.sessionId)
-      .then((session) => {
-        if (session === null) {
-          logger.warn(
-            {
-              component: 'challenge-relay',
-              sessionId: frame.sessionId,
-              challengeId: frame.challengeId,
-            },
-            'challengeDetected for unknown session — dropping relay',
-          );
-          return;
-        }
-        // audit M1 — only the session's OWNING node may fire its challenge
-        // webhook. Drop a frame from a non-owning node (cross-node spoof).
-        if (isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
-          logger.warn(
-            {
-              component: 'challenge-relay',
-              sessionId: frame.sessionId,
-              ownerNodeId: session.nodeId,
-              reportingNodeId,
-            },
-            'dropped challengeDetected from a non-owning node (cross-node spoof guard)',
-          );
-          return;
-        }
-        // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
-        // from the free-form challenge.detail before it reaches the customer webhook.
-        const challenge =
-          typeof frame.challenge.detail === 'string'
-            ? { ...frame.challenge, detail: scrubNodeDiagnostics(frame.challenge.detail) }
-            : frame.challenge;
-        return webhooks
-          .enqueueEvent(session.accountId, 'session.challenge_detected', {
-            session_id: frame.sessionId,
-            challenge_id: frame.challengeId,
-            challenge,
-          })
-          .then((endpoints) => {
-            logger.info(
-              {
-                component: 'challenge-relay',
-                sessionId: frame.sessionId,
-                challengeId: frame.challengeId,
-                endpoints,
-              },
-              'relayed session.challenge_detected webhook',
-            );
-          });
-      })
-      .catch((err: unknown) => {
-        logger.error(
-          {
-            component: 'challenge-relay',
-            sessionId: frame.sessionId,
-            challengeId: frame.challengeId,
-            err,
-          },
-          'failed to relay session.challenge_detected',
-        );
-      });
+  const process = async (frame: ChallengeDetected, reportingNodeId: string): Promise<void> => {
+    const session = await sessions.get(frame.sessionId);
+    if (session === null) {
+      logger.warn(
+        {
+          component: 'challenge-relay',
+          sessionId: frame.sessionId,
+          challengeId: frame.challengeId,
+        },
+        'challengeDetected for unknown session — dropping relay',
+      );
+      return;
+    }
+    // audit M1 — only the session's OWNING node may fire its challenge
+    // webhook. Drop a frame from a non-owning node (cross-node spoof).
+    if (isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
+      logger.warn(
+        {
+          component: 'challenge-relay',
+          sessionId: frame.sessionId,
+          ownerNodeId: session.nodeId,
+          reportingNodeId,
+        },
+        'dropped challengeDetected from a non-owning node (cross-node spoof guard)',
+      );
+      return;
+    }
+    // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
+    // from the free-form challenge.detail before it reaches the customer webhook.
+    const challenge =
+      typeof frame.challenge.detail === 'string'
+        ? { ...frame.challenge, detail: scrubNodeDiagnostics(frame.challenge.detail) }
+        : frame.challenge;
+    const endpoints = await webhooks.enqueueEvent(session.accountId, 'session.challenge_detected', {
+      session_id: frame.sessionId,
+      challenge_id: frame.challengeId,
+      challenge,
+    });
+    logger.info(
+      {
+        component: 'challenge-relay',
+        sessionId: frame.sessionId,
+        challengeId: frame.challengeId,
+        endpoints,
+      },
+      'relayed session.challenge_detected webhook',
+    );
   };
+
+  return makeBoundedNodeLatestRelay({
+    getSessionId: (frame) => frame.sessionId,
+    process,
+    onError: ({ error, frame, sessionId }) => {
+      logger.error(
+        {
+          component: 'challenge-relay',
+          sessionId,
+          challengeId: frame.challengeId,
+          err: error,
+        },
+        'failed to relay session.challenge_detected',
+      );
+    },
+    onOverflow: ({ reportingNodeId, sessionBudget, sessionId }) => {
+      logger.warn(
+        { component: 'challenge-relay', reportingNodeId, sessionBudget, sessionId },
+        'dropped challengeDetected because the reporting node exceeded its relay session budget',
+      );
+    },
+  });
 }

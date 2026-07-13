@@ -20,6 +20,7 @@
 import type { ProfileSaveFailed } from '../schemas/harness-control-protocol.js';
 import type { WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
+import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
 import { scrubNodeDiagnostics } from './scrub-node-diagnostics.js';
 
@@ -47,69 +48,83 @@ export function makeProfileSaveFailedRelay(
   webhooks: ProfileSaveFailedRelayWebhooks,
   logger: Logger,
 ): (frame: ProfileSaveFailed, reportingNodeId: string) => void {
-  return (frame: ProfileSaveFailed, reportingNodeId: string): void => {
-    void sessions
-      .get(frame.sessionId)
-      .then((session) => {
-        if (session === null) {
-          logger.warn(
-            {
-              component: 'profile-save-failed-relay',
-              sessionId: frame.sessionId,
-              profileId: frame.profile_id,
-              reason: frame.reason,
-            },
-            'profileSaveFailed for unknown session — dropping relay',
-          );
-          return;
-        }
-        // audit M1 — only the session's OWNING node may fire its save-failed
-        // webhook. Drop a frame from a non-owning node (cross-node spoof).
-        if (isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
-          logger.warn(
-            {
-              component: 'profile-save-failed-relay',
-              sessionId: frame.sessionId,
-              ownerNodeId: session.nodeId,
-              reportingNodeId,
-            },
-            'dropped profileSaveFailed from a non-owning node (cross-node spoof guard)',
-          );
-          return;
-        }
-        return webhooks
-          .enqueueEvent(session.accountId, 'session.profile_save_failed', {
-            session_id: frame.sessionId,
-            profile_id: frame.profile_id,
-            reason: frame.reason,
-            // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
-            // from the free-form detail before it reaches the customer webhook.
-            ...(frame.detail !== undefined ? { detail: scrubNodeDiagnostics(frame.detail) } : {}),
-          })
-          .then((endpoints) => {
-            logger.info(
-              {
-                component: 'profile-save-failed-relay',
-                sessionId: frame.sessionId,
-                profileId: frame.profile_id,
-                reason: frame.reason,
-                endpoints,
-              },
-              'relayed session.profile_save_failed webhook',
-            );
-          });
-      })
-      .catch((err: unknown) => {
-        logger.error(
-          {
-            component: 'profile-save-failed-relay',
-            sessionId: frame.sessionId,
-            profileId: frame.profile_id,
-            reason: frame.reason,
-            err,
-          },
-          'failed to relay session.profile_save_failed',
-        );
-      });
+  const process = async (frame: ProfileSaveFailed, reportingNodeId: string): Promise<void> => {
+    const session = await sessions.get(frame.sessionId);
+    if (session === null) {
+      logger.warn(
+        {
+          component: 'profile-save-failed-relay',
+          sessionId: frame.sessionId,
+          profileId: frame.profile_id,
+          reason: frame.reason,
+        },
+        'profileSaveFailed for unknown session — dropping relay',
+      );
+      return;
+    }
+    // audit M1 — only the session's OWNING node may fire its save-failed
+    // webhook. Drop a frame from a non-owning node (cross-node spoof).
+    if (isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
+      logger.warn(
+        {
+          component: 'profile-save-failed-relay',
+          sessionId: frame.sessionId,
+          ownerNodeId: session.nodeId,
+          reportingNodeId,
+        },
+        'dropped profileSaveFailed from a non-owning node (cross-node spoof guard)',
+      );
+      return;
+    }
+    const endpoints = await webhooks.enqueueEvent(
+      session.accountId,
+      'session.profile_save_failed',
+      {
+        session_id: frame.sessionId,
+        profile_id: frame.profile_id,
+        reason: frame.reason,
+        // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
+        // from the free-form detail before it reaches the customer webhook.
+        ...(frame.detail !== undefined ? { detail: scrubNodeDiagnostics(frame.detail) } : {}),
+      },
+    );
+    logger.info(
+      {
+        component: 'profile-save-failed-relay',
+        sessionId: frame.sessionId,
+        profileId: frame.profile_id,
+        reason: frame.reason,
+        endpoints,
+      },
+      'relayed session.profile_save_failed webhook',
+    );
   };
+
+  return makeBoundedNodeLatestRelay({
+    getSessionId: (frame) => frame.sessionId,
+    process,
+    onError: ({ error, frame, sessionId }) => {
+      logger.error(
+        {
+          component: 'profile-save-failed-relay',
+          sessionId,
+          profileId: frame.profile_id,
+          reason: frame.reason,
+          err: error,
+        },
+        'failed to relay session.profile_save_failed',
+      );
+    },
+    onOverflow: ({ reportingNodeId, sessionBudget, sessionId }) => {
+      logger.warn(
+        {
+          component: 'profile-save-failed-relay',
+          reportingNodeId,
+          sessionBudget,
+          sessionId,
+        },
+        'dropped profileSaveFailed because the reporting node exceeded its relay session budget',
+      );
+    },
+  });
 }
