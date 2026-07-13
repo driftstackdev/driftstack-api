@@ -102,6 +102,14 @@ interface Invite {
   expires_at: string;
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 // Stateful router over mutable members[] + invites[]. POST invite →
 // 202 (the page treats 202 as success); DELETE member → 204.
 function makeRouter(members: Member[], invites: Invite[]): (c: MockFetchCall) => Response {
@@ -282,6 +290,58 @@ describe('team page — local integration', () => {
     expect(window.document.querySelector('[data-invite-error]')?.textContent).toMatch(
       /outcome is unknown.*list was refreshed.*do not send it again.*replaces the first link.*another email/i,
     );
+  });
+
+  it('a delayed initial refresh cannot overwrite the newer post-invite list', async () => {
+    const initialMembers = deferred<Response>();
+    const initialInvites = deferred<Response>();
+    const invites: Invite[] = [];
+    let memberGets = 0;
+    let inviteGets = 0;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/team\/members$/.test(call.url) && method === 'GET') {
+          memberGets += 1;
+          return memberGets === 1 ? initialMembers.promise : json({ data: [] });
+        }
+        if (/\/v1\/team\/invites$/.test(call.url) && method === 'GET') {
+          inviteGets += 1;
+          return inviteGets === 1 ? initialInvites.promise : json({ data: invites });
+        }
+        if (/\/v1\/team\/invites$/.test(call.url) && method === 'POST') {
+          const body = JSON.parse(String(call.init?.body || '{}'));
+          invites.push({
+            id: 'inv_new',
+            invitee_email: body.email,
+            created_at: '2026-05-29T10:00:00.000Z',
+            expires_at: '2026-06-05T10:00:00.000Z',
+          });
+          return json({ status: 'invited' }, 202);
+        }
+        return json({}, 500);
+      },
+    });
+    win = window;
+    await flush();
+
+    (window.document.querySelector('[data-show-invite]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-invite-form]') as HTMLFormElement;
+    (form.querySelector('input[name="email"]') as HTMLInputElement).value = 'new@example.com';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    expect(text(window, '[data-invites-list]')).toContain('new@example.com');
+    const initialReads = fetchCalls
+      .filter((call) => (call.init?.method || 'GET') === 'GET')
+      .slice(0, 2);
+    expect(initialReads.every((call) => call.init?.signal?.aborted === true)).toBe(true);
+
+    initialMembers.resolve(json({ data: [] }));
+    initialInvites.resolve(json({ data: [] }));
+    await flush(8);
+    expect(text(window, '[data-invites-list]')).toContain('new@example.com');
   });
 
   it('remove: confirm-gated DELETE /v1/team/members/:id then refresh drops the member', async () => {

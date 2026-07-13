@@ -105,6 +105,16 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     expect(body).toMatch(/membersList\.querySelectorAll\('\[data-remove\]'\)/);
   });
 
+  it('supersedes stale members/invites refresh pairs and cancels them on page exit', () => {
+    expect(body).toContain('let refreshGeneration = 0;');
+    expect(body).toContain('let refreshControllers = [];');
+    expect(body).toContain('const generation = ++refreshGeneration;');
+    expect(body).toContain('if (generation !== refreshGeneration) return false;');
+    expect(body).toContain("window.addEventListener(\n        'pagehide'");
+    expect(body).toContain('refreshControllers.forEach(function (controller)');
+    expect(body).toContain('controller.abort();');
+  });
+
   it('per-member-uses-own-login + per-member-dashboard-sessions framing pinned', () => {
     // Load-bearing privacy claim — members never share login
     // credentials. The team page is the only customer surface
