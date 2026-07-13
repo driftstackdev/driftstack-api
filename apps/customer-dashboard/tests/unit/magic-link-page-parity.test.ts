@@ -53,4 +53,11 @@ describe('#190 magic-link consume page parity', () => {
     expect(body).toContain('/login');
     expect(existsSync(LOGIN_PAGE)).toBe(true);
   });
+
+  it('does not replay a one-shot token after an ambiguous timeout', () => {
+    expect(body).toContain('let consumeOutcomeUnknown = false;');
+    expect(body).toContain('consumeInFlight || consumeOutcomeUnknown');
+    expect(body).toContain('Magic-link sign-in outcome is unknown after the request timed out.');
+    expect(body).toContain('Request a fresh sign-in link');
+  });
 });

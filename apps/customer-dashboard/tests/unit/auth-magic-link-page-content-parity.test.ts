@@ -65,25 +65,28 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('URL auto-consume and fallback form share one accessible request lease', () => {
     expect(body).toMatch(/let consumeInFlight = false;/);
-    expect(body).toMatch(/if \(consumeInFlight\) return Promise\.resolve\(false\);/);
+    expect(body).toMatch(/let consumeOutcomeUnknown = false;/);
+    expect(body).toMatch(
+      /if \(consumeInFlight \|\| consumeOutcomeUnknown\) return Promise\.resolve\(false\);/,
+    );
     expect(body).toMatch(/consumeInFlight = true;/);
     expect(body).toMatch(/form\.setAttribute\('aria-busy', busy \? 'true' : 'false'\)/);
-    expect(body).toMatch(/consumeSubmit\.textContent = busy \? 'Signing in…' : consumeSubmitText/);
+    expect(body).toMatch(/consumeSubmit\.disabled = busy \|\| consumeOutcomeUnknown/);
     expect(body).toMatch(
       /\.finally\(\(\) => \{\s*window\.clearTimeout\(timeout\);\s*consumeInFlight = false;/,
     );
   });
 
-  it('bounds consume requests and recovers into the retry form on timeout', () => {
+  it('bounds consume requests and makes an ambiguous timeout terminal', () => {
     expect(body).toContain('const CONSUME_TIMEOUT_MS = 15_000;');
     expect(body).toMatch(/const controller = new AbortController\(\);/);
     expect(body).toMatch(/window\.setTimeout\(\(\) => controller\.abort\(\), CONSUME_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/window\.clearTimeout\(timeout\)/);
-    expect(body).toContain(
-      'Signing in took too long. Check your connection and try the link again.',
-    );
-    expect(body).toMatch(/\.catch\(\(err\) => \{\s*showFallbackForm\(token\);/);
+    expect(body).toContain('Magic-link sign-in outcome is unknown after the request timed out.');
+    expect(body).toContain('consumed this one-time link');
+    expect(body).toContain('Do not try this link again; request a fresh sign-in link.');
+    expect(body).toContain('Request a fresh sign-in link');
   });
 
   it('autocomplete="one-time-code" on token input (a11y + mobile OTP)', () => {
@@ -99,10 +102,8 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     );
   });
 
-  it('error path: fallback form revealed + banner shown (retry by paste)', () => {
-    expect(body).toMatch(
-      /\.catch\(\(err\) => \{\s*\n?\s*showFallbackForm\(token\);\s*\n?\s*showBanner/,
-    );
+  it('authoritative error path: fallback form revealed + banner shown (retry by paste)', () => {
+    expect(body).toMatch(/showFallbackForm\(token\);\s*\n?\s*showBanner/);
     expect(body).toMatch(/data-state="fallback"/);
   });
 

@@ -37,6 +37,15 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
 
+      <div
+        data-unknown-recovery
+        class="mb-5 hidden rounded-lg border border-tk-border bg-tk-surface px-4 py-4 text-sm text-tk-ink-2"
+      >
+        <a href="/login" class="btn-primary flex w-full items-center justify-center"
+          >Request a fresh sign-in link</a
+        >
+      </div>
+
       <form data-form="magic-link" class="hidden space-y-5" data-state="fallback">
         <p class="text-sm text-tk-ink-2">
           We couldn't find a token in the URL. Paste the one from your magic-link email below
@@ -75,6 +84,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const form = root.querySelector('[data-form="magic-link"]');
       const tokenInput = root.querySelector('#magic-link-token');
+      const unknownRecovery = root.querySelector('[data-unknown-recovery]');
 
       function showBanner(text) {
         banner.textContent = text;
@@ -93,17 +103,22 @@ const apiBaseUrl = resolveApiBaseUrl();
       const consumeSubmitText = consumeSubmit ? consumeSubmit.textContent : '';
       const CONSUME_TIMEOUT_MS = 15_000;
       let consumeInFlight = false;
+      let consumeOutcomeUnknown = false;
       function setConsumeBusy(busy) {
         if (form) form.setAttribute('aria-busy', busy ? 'true' : 'false');
-        if (tokenInput) tokenInput.disabled = busy;
+        if (tokenInput) tokenInput.disabled = busy || consumeOutcomeUnknown;
         if (consumeSubmit) {
-          consumeSubmit.disabled = busy;
-          consumeSubmit.textContent = busy ? 'Signing in…' : consumeSubmitText;
+          consumeSubmit.disabled = busy || consumeOutcomeUnknown;
+          consumeSubmit.textContent = busy
+            ? 'Signing in…'
+            : consumeOutcomeUnknown
+              ? 'Sign-in outcome unknown'
+              : consumeSubmitText;
         }
       }
 
       function submitToken(token) {
-        if (consumeInFlight) return Promise.resolve(false);
+        if (consumeInFlight || consumeOutcomeUnknown) return Promise.resolve(false);
         consumeInFlight = true;
         setConsumeBusy(true);
         banner.classList.add('hidden');
@@ -158,14 +173,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             window.location.href = safeNextPath(params.get('next'), window.location.origin);
           })
           .catch((err) => {
+            if (err && err.name === 'AbortError') {
+              consumeOutcomeUnknown = true;
+              if (form) form.classList.add('hidden');
+              if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+              if (intro) intro.textContent = 'Sign-in outcome unknown';
+              showBanner(
+                'Magic-link sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time link and created a session whose credential did not reach this browser. Do not try this link again; request a fresh sign-in link.',
+              );
+              return;
+            }
             showFallbackForm(token);
-            showBanner(
-              err && err.name === 'AbortError'
-                ? 'Signing in took too long. Check your connection and try the link again.'
-                : err && err.message
-                  ? err.message
-                  : 'Magic-link sign-in failed.',
-            );
+            showBanner(err && err.message ? err.message : 'Magic-link sign-in failed.');
           })
           .finally(() => {
             window.clearTimeout(timeout);
