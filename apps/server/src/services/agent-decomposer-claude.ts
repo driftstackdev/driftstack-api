@@ -361,7 +361,9 @@ function buildMessages(args: DecomposeArgs): AgentRequestMessage[] {
   const messages: AgentRequestMessage[] = [];
   for (const entry of args.history) {
     messages.push({
-      role: entry.role === 'user' ? 'user' : 'assistant',
+      // Both user and operator entries are human-authored. Only output from
+      // the agent itself may be represented to Anthropic as assistant text.
+      role: entry.role === 'agent' ? 'assistant' : 'user',
       content: entry.body,
     });
   }

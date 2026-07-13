@@ -761,7 +761,7 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(body.messages[0]?.content).toContain('ambiguous');
     });
 
-    it('threads prior transcript history as user / assistant messages', async () => {
+    it('preserves human authorship when threading prior transcript history', async () => {
       const { fetch, calls } = sequenceFetch([
         jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
       ]);
@@ -772,6 +772,11 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
           history: [
             { at: '2026-05-17T10:00:00Z', role: 'user', body: 'first task' },
             { at: '2026-05-17T10:00:05Z', role: 'agent', body: '{"kind":"plan","intents":[]}' },
+            {
+              at: '2026-05-17T10:00:30Z',
+              role: 'operator',
+              body: 'continue manually from this page',
+            },
             { at: '2026-05-17T10:01:00Z', role: 'user', body: 'follow-up' },
           ],
         }),
@@ -781,10 +786,11 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       };
       // History contains the current task as its last user entry; we
       // don't re-append it.
-      expect(body.messages).toHaveLength(3);
-      expect(body.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
-      expect(body.messages[2]?.content).toContain('[archetype:');
-      expect(body.messages[2]?.content).toContain('follow-up');
+      expect(body.messages).toHaveLength(4);
+      expect(body.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'user']);
+      expect(body.messages[2]?.content).toBe('continue manually from this page');
+      expect(body.messages[3]?.content).toContain('[archetype:');
+      expect(body.messages[3]?.content).toContain('follow-up');
     });
 
     it('AUP pre-filter corpus mirrors the deterministic decomposer (same five patterns)', () => {
