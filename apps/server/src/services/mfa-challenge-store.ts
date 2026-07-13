@@ -43,8 +43,9 @@ export interface MfaChallengeStore {
    *  customer can still retry. */
   peek(key: string): Promise<string | null>;
   /** V-353d.A — atomically increment the per-challenge failed-attempt
-   *  counter under `key` and return the new count. Sets `ttlSeconds` on
-   *  first increment so the counter expires with the challenge. Used to
+   *  counter under `key` and return the new count. Ensures the counter has
+   *  `ttlSeconds` on first increment (and repairs legacy no-TTL counters) so
+   *  it expires with the challenge. Used to
    *  cap brute-force on the 6-digit code (the challenge token itself is
    *  left alive on a wrong code; this bounds how many wrong codes one
    *  token accepts before it's invalidated). */
@@ -79,11 +80,21 @@ export class RedisMfaChallengeStore implements MfaChallengeStore {
   }
 
   async incrAttempts(key: string, ttlSeconds: number): Promise<number> {
-    // INCR is atomic; concurrent failed attempts can't undercount. Set the
-    // TTL on the first increment so the counter expires with the challenge.
-    const n = await this.redis.incr(key);
-    if (n === 1) await this.redis.expire(key, ttlSeconds);
-    return n;
+    // Reserve and attach the expiry in one Redis step. A separate INCR then
+    // EXPIRE can strand an immortal counter if the process/connection dies
+    // between commands, permanently locking account-scoped step-up attempts.
+    // Checking TTL also repairs any such legacy counter without extending the
+    // window for counters that already expire.
+    const result = await this.redis.eval(
+      "local count = redis.call('INCR', KEYS[1]); " +
+        "local ttl = redis.call('TTL', KEYS[1]); " +
+        "if ttl < 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end; " +
+        'return count',
+      1,
+      key,
+      ttlSeconds.toString(),
+    );
+    return Number(result);
   }
 
   async releaseAttempt(key: string): Promise<void> {

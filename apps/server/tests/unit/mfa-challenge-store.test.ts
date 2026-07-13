@@ -7,12 +7,33 @@
 // store implementation must satisfy.
 
 import { describe, expect, it, vi } from 'vitest';
+import type { Redis } from 'ioredis';
 import {
   InMemoryMfaChallengeStore,
   MFA_CHALLENGE_TTL_SECONDS,
+  RedisMfaChallengeStore,
   generateChallengeToken,
   redisKey,
 } from '../../src/services/mfa-challenge-store.js';
+
+describe('V-353d.A RedisMfaChallengeStore — atomic attempt reservation TTL', () => {
+  it('increments and attaches or repairs TTL in one Lua command', async () => {
+    const evalFn = vi.fn().mockResolvedValue(3);
+    const store = new RedisMfaChallengeStore({ eval: evalFn } as unknown as Redis);
+
+    await expect(store.incrAttempts('attempt-key', 300)).resolves.toBe(3);
+    expect(evalFn).toHaveBeenCalledOnce();
+
+    const [script, numberOfKeys, key, ttl] = evalFn.mock.calls[0] ?? [];
+    expect(script).toContain("redis.call('INCR', KEYS[1])");
+    expect(script).toContain("redis.call('TTL', KEYS[1])");
+    expect(script).toContain("if ttl < 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end");
+    expect(script).toContain('return count');
+    expect(numberOfKeys).toBe(1);
+    expect(key).toBe('attempt-key');
+    expect(ttl).toBe('300');
+  });
+});
 
 describe('V-553.B-4 generateChallengeToken', () => {
   it('returns a base64url string of ≥40 chars (≥256 bits)', () => {

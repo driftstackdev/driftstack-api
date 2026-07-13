@@ -180,6 +180,16 @@ describe('W917 V-353d MFA challenge store cross-source invariant', () => {
     expect(p).toMatch(/builds both run 7\.x\)/);
   });
 
+  it('CRITICAL Redis attempt increment and TTL attachment are one atomic Lua step that repairs no-TTL counters without extending an existing expiry.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa-challenge-store.ts'));
+    expect(p).toMatch(/local count = redis\.call\('INCR', KEYS\[1\]\)/);
+    expect(p).toMatch(/local ttl = redis\.call\('TTL', KEYS\[1\]\)/);
+    expect(p).toMatch(/if ttl < 0 then redis\.call\('EXPIRE', KEYS\[1\], ARGV\[1\]\) end/);
+    expect(p).toMatch(/ttlSeconds\.toString\(\),/);
+    expect(p).not.toMatch(/this\.redis\.incr\(key\)/);
+    expect(p).not.toMatch(/this\.redis\.expire\(key, ttlSeconds\)/);
+  });
+
   // ─── Failed challenges do not consume token ──────────────────
 
   it("CRITICAL failed-challenges framing — 'Failed challenges DO NOT consume the token (caller can retry up to maxAttempts; rate-limit + abandon)'. The non-consuming-failure contract is what makes typo-retry possible without re-issuing.", () => {

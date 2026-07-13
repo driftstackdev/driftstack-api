@@ -134,11 +134,15 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
     );
   });
 
-  it('V-353d.A attempt reservations use Redis INCR plus expiry-safe Lua release', () => {
+  it('V-353d.A attempt reservations and releases are expiry-safe Lua steps', () => {
     expect(body).toMatch(/incrAttempts\(key: string, ttlSeconds: number\): Promise<number>;/);
-    // Redis: atomic INCR, set TTL on first.
-    expect(body).toMatch(/const n = await this\.redis\.incr\(key\);/);
-    expect(body).toMatch(/if \(n === 1\) await this\.redis\.expire\(key, ttlSeconds\);/);
+    // Redis: increment + missing-expiry attachment/repair are one atomic step.
+    expect(body).toMatch(/const result = await this\.redis\.eval\(/);
+    expect(body).toMatch(/redis\.call\('INCR', KEYS\[1\]\)/);
+    expect(body).toMatch(/redis\.call\('TTL', KEYS\[1\]\)/);
+    expect(body).toMatch(/if ttl < 0 then redis\.call\('EXPIRE', KEYS\[1\], ARGV\[1\]\) end/);
+    expect(body).toMatch(/ttlSeconds\.toString\(\),/);
+    expect(body).toMatch(/return Number\(result\);/);
     expect(body).toMatch(/async releaseAttempt\(key: string\): Promise<void> \{/);
     expect(body).toMatch(/await this\.redis\.eval\(/);
     expect(body).toMatch(/redis\.call\('DEL', KEYS\[1\]\)/);
