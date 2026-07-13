@@ -24591,7 +24591,7 @@
     },
     "/v1/auth/cli-authorize/initiate": {
       "post": {
-        "summary": "Start the CLI/GUI activation flow; returns a code + browser URL",
+        "summary": "Start CLI/GUI activation; returns a device user code + browser URL",
         "tags": ["auth"],
         "requestBody": {
           "content": {
@@ -24617,7 +24617,7 @@
         },
         "responses": {
           "200": {
-            "description": "Activation code + browser URL the CLI/GUI opens. Code expires after ~5min.",
+            "description": "Opaque activation code, separate device-displayed user code, and browser URL. Codes expire after ~5min.",
             "content": {
               "application/json": {
                 "schema": {
@@ -24625,6 +24625,10 @@
                   "properties": {
                     "code": {
                       "type": "string"
+                    },
+                    "user_code": {
+                      "type": "string",
+                      "pattern": "^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$"
                     },
                     "browser_url": {
                       "type": "string",
@@ -24636,7 +24640,7 @@
                       "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                     }
                   },
-                  "required": ["code", "browser_url", "expires_at"]
+                  "required": ["code", "user_code", "browser_url", "expires_at"]
                 }
               }
             }
@@ -24684,9 +24688,9 @@
         }
       }
     },
-    "/v1/auth/cli-authorize/bind": {
+    "/v1/auth/cli-authorize/bind-device-code": {
       "post": {
-        "summary": "Web-session-authed: bind the CLI/GUI's code to the calling account; mints an API key",
+        "summary": "Verify the device user code and bind activation to the calling web session",
         "tags": ["auth"],
         "security": [
           {
@@ -24708,6 +24712,10 @@
                     "type": "string",
                     "minLength": 16,
                     "maxLength": 128
+                  },
+                  "user_code": {
+                    "type": "string",
+                    "pattern": "^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$"
                   },
                   "scopes": {
                     "type": "array",
@@ -24738,7 +24746,7 @@
                     "minItems": 1
                   }
                 },
-                "required": ["code", "state"]
+                "required": ["code", "state", "user_code"]
               }
             }
           }

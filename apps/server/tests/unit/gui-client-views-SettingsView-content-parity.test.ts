@@ -147,12 +147,12 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("Browser sign-in 5-state branch in first-run section: idle → 'Sign in with browser' button / opening → 'Opening browser…' / waiting → animate-pulse dot + 'Waiting for browser confirmation…' + Cancel button / success → 'Authorized. Key saved.' status-success / error → message + 'Try again' button", () => {
+  it('Browser sign-in waiting state displays the separate verification code and anti-phishing copy', () => {
     expect(body).toMatch(
       /\{browserSignIn\.state\.kind === 'idle' && \(\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*className="btn-primary mt-3"\s*\n?\s*onClick=\{\(\) => void browserSignIn\.start\(\)\}\s*\n?\s*>\s*\n?\s*Sign in with browser/,
     );
     expect(body).toMatch(
-      /\{browserSignIn\.state\.kind === 'waiting' && \(\s*\n?\s*<div className="mt-3 flex items-center gap-3">\s*\n?\s*<div className="h-3 w-3 animate-pulse rounded-full bg-accent" aria-hidden="true" \/>\s*\n?\s*<p className="text-xs text-ink-secondary">Waiting for browser confirmation…<\/p>/,
+      /\{browserSignIn\.state\.kind === 'waiting' && \([\s\S]*?Enter this verification code in the browser\.[\s\S]*?Never share it with someone who[\s\S]*?\{browserSignIn\.state\.userCode\}/,
     );
     expect(body).toMatch(
       /\{browserSignIn\.state\.kind === 'success' && \(\s*\n?\s*<p className="mt-3 text-xs text-status-success">Authorized\. Key saved\.<\/p>/,

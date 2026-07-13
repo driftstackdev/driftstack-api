@@ -7,7 +7,7 @@
 //
 //   3-endpoint inventory:
 //     - POST /v1/auth/cli-authorize/initiate — public; CLI/GUI starts.
-//     - POST /v1/auth/cli-authorize/bind     — auth required;
+//     - POST /v1/auth/cli-authorize/bind-device-code — auth required;
 //       dashboard binds the code.
 //     - POST /v1/auth/cli-authorize/exchange — public; CLI/GUI polls
 //       for the issued key.
@@ -20,9 +20,9 @@
 //   DEFAULT_KEY_NAME = 'Desktop client'.
 //   DEFAULT_SCOPES = ['account_owner'].
 //
-//   initiate returns { code, browser_url, expires_at (ISO) }.
+//   initiate returns { code, user_code, browser_url, expires_at (ISO) }.
 //
-//   bind 5-arg cli-authorize call — code + state + account_id (acc_
+//   bind 6-arg cli-authorize call — code + state + user_code + account_id (acc_
 //     prefix) + api_key_plaintext + scopes.
 //
 //   bind revoke-on-failure framing — 'Revoke the just-minted key —
@@ -58,7 +58,7 @@ describe('W1034 routes/auth-cli V-266 cross-source invariant', () => {
       /POST \/v1\/auth\/cli-authorize\/initiate\s+— public; CLI\/GUI starts the flow/,
     );
     expect(p).toMatch(
-      /POST \/v1\/auth\/cli-authorize\/bind\s+— auth required; dashboard binds the code/,
+      /POST \/v1\/auth\/cli-authorize\/bind-device-code\s+— auth required; dashboard binds the code/,
     );
     expect(p).toMatch(
       /POST \/v1\/auth\/cli-authorize\/exchange\s+— public; CLI\/GUI polls for the issued key/,
@@ -78,17 +78,19 @@ describe('W1034 routes/auth-cli V-266 cross-source invariant', () => {
     expect(p).toMatch(/const DEFAULT_SCOPES: ApiKeyScope\[\] = \['account_owner'\];/);
   });
 
-  it('CRITICAL initiate returns { code, browser_url, expires_at (ISO) }.', () => {
+  it('CRITICAL initiate returns the separate device-displayed user_code.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts'));
     expect(p).toMatch(/code: result\.code,/);
+    expect(p).toMatch(/user_code: result\.user_code,/);
     expect(p).toMatch(/browser_url: result\.browser_url,/);
     expect(p).toMatch(/expires_at: result\.expires_at\.toISOString\(\),/);
   });
 
-  it('CRITICAL bind 5-arg cli-authorize call — code + state + account_id (acc_ prefix) + api_key_plaintext + scopes.', () => {
+  it('CRITICAL bind forwards code + state + user_code + account/key data.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts'));
     expect(p).toMatch(/code: parsed\.data\.code,/);
     expect(p).toMatch(/state: parsed\.data\.state,/);
+    expect(p).toMatch(/user_code: parsed\.data\.user_code,/);
     expect(p).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
     expect(p).toMatch(/api_key_plaintext: created\.plaintext,/);
     expect(p).toMatch(/scopes,/);
@@ -104,10 +106,12 @@ describe('W1034 routes/auth-cli V-266 cross-source invariant', () => {
     expect(p).toMatch(/throw err;/);
   });
 
-  it("CRITICAL mapCliAuthorizeError 5-branch — 'state_mismatch' → BadRequestError 'State parameter does not match.' + 'already_bound' → BadRequestError + 'not_found'/'expired' → NotFoundError 'Authorization code not found or expired.' + 'invalid_code' → BadRequestError 'Authorization code is invalid.'.", () => {
+  it('CRITICAL mapCliAuthorizeError exposes a generic device-code mismatch without expected-value leakage.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts'));
     expect(p).toMatch(/case 'state_mismatch':/);
     expect(p).toMatch(/return new BadRequestError\('State parameter does not match\.'\);/);
+    expect(p).toMatch(/case 'user_code_mismatch':/);
+    expect(p).toMatch(/return new BadRequestError\('Device verification code does not match\.'\);/);
     expect(p).toMatch(/case 'already_bound':/);
     expect(p).toMatch(
       /return new BadRequestError\('Authorization code has already been bound\.'\);/,

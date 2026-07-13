@@ -1,7 +1,7 @@
 // V-266 — Browser-OAuth-style activation flow for CLI / GUI clients.
 //
 //   POST /v1/auth/cli-authorize/initiate   — public; CLI/GUI starts the flow
-//   POST /v1/auth/cli-authorize/bind       — auth required; dashboard binds the code
+//   POST /v1/auth/cli-authorize/bind-device-code — auth required; dashboard binds the code
 //   POST /v1/auth/cli-authorize/exchange   — public; CLI/GUI polls for the issued key
 //
 // The bind endpoint requires an authenticated account (typically via
@@ -63,13 +63,14 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
     });
     return {
       code: result.code,
+      user_code: result.user_code,
       browser_url: result.browser_url,
       expires_at: result.expires_at.toISOString(),
     };
   });
 
   app.post(
-    '/v1/auth/cli-authorize/bind',
+    '/v1/auth/cli-authorize/bind-device-code',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (req) => {
       const ctx = req.account;
@@ -101,6 +102,7 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
         const result = await cliAuthorizeService.bind({
           code: parsed.data.code,
           state: parsed.data.state,
+          user_code: parsed.data.user_code,
           account_id: `acc_${ctx.account.id}`,
           api_key_plaintext: created.plaintext,
           scopes,
@@ -152,6 +154,8 @@ function mapCliAuthorizeError(err: CliAuthorizeError): Error {
   switch (err.code) {
     case 'state_mismatch':
       return new BadRequestError('State parameter does not match.');
+    case 'user_code_mismatch':
+      return new BadRequestError('Device verification code does not match.');
     case 'already_bound':
       return new BadRequestError('Authorization code has already been bound.');
     case 'not_found':

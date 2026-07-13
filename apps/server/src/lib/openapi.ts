@@ -4887,14 +4887,15 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/auth/cli-authorize/initiate',
-    summary: 'Start the CLI/GUI activation flow; returns a code + browser URL',
+    summary: 'Start CLI/GUI activation; returns a device user code + browser URL',
     tags: ['auth'],
     request: {
       body: { content: { 'application/json': { schema: CliAuthorizeInitiateRequestSchema } } },
     },
     responses: {
       200: {
-        description: 'Activation code + browser URL the CLI/GUI opens. Code expires after ~5min.',
+        description:
+          'Opaque activation code, separate device-displayed user code, and browser URL. Codes expire after ~5min.',
         content: { 'application/json': { schema: CliAuthorizeInitiateResponseSchema } },
       },
       ...errors4xx,
@@ -4902,8 +4903,8 @@ function buildRegistry(): OpenAPIRegistry {
   });
   registerRoute(r, {
     method: 'post',
-    path: '/v1/auth/cli-authorize/bind',
-    summary: "Web-session-authed: bind the CLI/GUI's code to the calling account; mints an API key",
+    path: '/v1/auth/cli-authorize/bind-device-code',
+    summary: 'Verify the device user code and bind activation to the calling web session',
     tags: ['auth'],
     security: auth,
     request: {

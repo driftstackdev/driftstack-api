@@ -24,8 +24,8 @@
 //   • exchange: null-raw → expired; state mismatch throws; pending
 //     short-circuit; bound deletes BEFORE returning (no leak on
 //     JSON.stringify failure downstream).
-//   • CliAuthorizeError 5-code union (invalid_code / state_mismatch /
-//     already_bound / not_found / expired).
+//   • CliAuthorizeError 6-code union (invalid_code / state_mismatch /
+//     user_code_mismatch / already_bound / not_found / expired).
 //   • constantTimeStringEqual: byte-length check + timingSafeEqual buffer
 //     comparison (mitigates state-parameter timing attack).
 
@@ -122,7 +122,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
   it('CliCodeStatus + runtime-validated StoredCode discriminated union keep pending plaintext-free and bound encrypted-only', () => {
     expect(body).toMatch(/export type CliCodeStatus = 'pending' \| 'bound';/);
     expect(body).toMatch(
-      /interface StoredCodeBase \{\s*\n?\s*state: string;\s*\n?\s*client_label: string \| null;\s*\n?\s*created_at: number;/,
+      /interface StoredCodeBase \{\s*\n?\s*state: string;[\s\S]*?user_code_hash: string;\s*\n?\s*client_label: string \| null;\s*\n?\s*created_at: number;/,
     );
     expect(body).toMatch(
       /interface StoredPendingCode extends StoredCodeBase \{\s*\n?\s*status: 'pending';\s*\n?\s*secret_blob: null;\s*\n?\s*encrypted: false;\s*\n?\s*account_id: null;/,
@@ -136,10 +136,10 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
   });
 
-  it('CliAuthorizeError: 5-code union (invalid_code / state_mismatch / already_bound / not_found / expired)', () => {
+  it('CliAuthorizeError: 6-code union includes the device verification mismatch', () => {
     expect(body).toMatch(/export class CliAuthorizeError extends Error \{/);
     expect(body).toMatch(
-      /public readonly code:\s*\n?\s*\| 'invalid_code'\s*\n?\s*\| 'state_mismatch'\s*\n?\s*\| 'already_bound'\s*\n?\s*\| 'not_found'\s*\n?\s*\| 'expired',/,
+      /public readonly code:\s*\n?\s*\| 'invalid_code'\s*\n?\s*\| 'state_mismatch'\s*\n?\s*\| 'user_code_mismatch'\s*\n?\s*\| 'already_bound'\s*\n?\s*\| 'not_found'\s*\n?\s*\| 'expired',/,
     );
     expect(body).toMatch(/this\.name = 'CliAuthorizeError';/);
   });

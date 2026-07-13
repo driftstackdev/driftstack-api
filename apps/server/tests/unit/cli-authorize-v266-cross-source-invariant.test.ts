@@ -30,10 +30,9 @@
 //     { status: 'pending' } | { status: 'bound'; api_key; account_id }
 //       | { status: 'expired' }.
 //
-//   CliAuthorizeError 5-code union — 'invalid_code' | 'state_mismatch'
-//     | 'already_bound' | 'not_found' | 'expired'.
+//   CliAuthorizeError includes a distinct user_code_mismatch branch.
 //
-//   StoredCode (7-field shape): state + status + client_label
+//   StoredCode includes a domain-separated user_code_hash plus state + status + client_label
 //     (nullable) + secret_blob (nullable, bound-only, encrypted at rest
 //     per D1) + encrypted flag + account_id (nullable, bound-only) +
 //     created_at.
@@ -134,11 +133,12 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
 
   // ─── CliAuthorizeError 5-code union ──────────────────────────
 
-  it("CRITICAL CliAuthorizeError 5 codes — 'invalid_code' | 'state_mismatch' | 'already_bound' | 'not_found' | 'expired'. The 5-code taxonomy distinguishes user-error (invalid_code/state_mismatch) from race outcomes (already_bound/expired/not_found).", () => {
+  it('CRITICAL user-code mismatch is a distinct safe bind error', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/export class CliAuthorizeError extends Error \{/);
     expect(p).toMatch(/\| 'invalid_code'/);
     expect(p).toMatch(/\| 'state_mismatch'/);
+    expect(p).toMatch(/\| 'user_code_mismatch'/);
     expect(p).toMatch(/\| 'already_bound'/);
     expect(p).toMatch(/\| 'not_found'/);
     expect(p).toMatch(/\| 'expired',/);
@@ -149,6 +149,7 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
   it('CRITICAL StoredCode is reconstructed as a pending-or-bound discriminated union; pending carries no secret/account and bound requires an encrypted secret/account', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/interface StoredCodeBase \{/);
+    expect(p).toMatch(/user_code_hash: string;/);
     expect(p).toMatch(/interface StoredPendingCode extends StoredCodeBase \{/);
     expect(p).toMatch(/status: 'pending';/);
     expect(p).toMatch(/secret_blob: null;/);
@@ -244,11 +245,12 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
 
   // ─── BindInput 5-field shape ─────────────────────────────────
 
-  it('CRITICAL BindInput has 5 fields — code + state + account_id + api_key_plaintext + scopes (readonly ApiKeyScope[]). The 5-field bind carries everything the GUI poll needs to retrieve.', () => {
+  it('CRITICAL BindInput requires the device-displayed user_code', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/export interface BindInput \{/);
     expect(p).toMatch(/code: string;/);
     expect(p).toMatch(/state: string;/);
+    expect(p).toMatch(/user_code: string;/);
     expect(p).toMatch(/account_id: string;/);
     expect(p).toMatch(/api_key_plaintext: string;/);
     expect(p).toMatch(/scopes: readonly ApiKeyScope\[\];/);

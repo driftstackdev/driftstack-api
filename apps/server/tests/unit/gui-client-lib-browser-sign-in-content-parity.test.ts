@@ -20,9 +20,9 @@
 //     Both paths converge on the same setState path.'
 //   • Module constants: POLL_INTERVAL_MS = 2000 + POLL_TIMEOUT_MS
 //     = 5 * 60 * 1000 (multiplied form, not literal 300000).
-//   • InitiateResponse 3-field + ExchangeResponse 3-state union
+//   • InitiateResponse 4-field + ExchangeResponse 3-state union
 //     ('pending' | 'bound' | 'expired') + api_key? + account_id?.
-//   • BrowserSignInState 5-variant with waiting{code+state+
+//   • BrowserSignInState 5-variant with waiting{code+userCode+state+
 //     expiresAt}; UseBrowserSignInOptions: baseUrl + clientLabel?
 //     + onSuccess + 3 test seams (__pollIntervalMs +
 //     __pollTimeoutMs + __onOpenUrl) with V-328 framing on the
@@ -72,18 +72,18 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
     expect(body).toMatch(/const POLL_TIMEOUT_MS = 5 \* 60 \* 1000;/);
   });
 
-  it("InitiateResponse 3-field (code + browser_url + expires_at) + ExchangeResponse 3-status union ('pending' | 'bound' | 'expired') + api_key? + account_id? — pinned so the 3-state exchange protocol can't be silently widened without test failure", () => {
+  it('InitiateResponse includes the separate user_code + ExchangeResponse retains the 3-status union', () => {
     expect(body).toMatch(
-      /interface InitiateResponse \{\s*\n?\s*code: string;\s*\n?\s*browser_url: string;\s*\n?\s*expires_at: string;\s*\n?\s*\}/,
+      /interface InitiateResponse \{\s*\n?\s*code: string;\s*\n?\s*user_code: string;\s*\n?\s*browser_url: string;\s*\n?\s*expires_at: string;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /interface ExchangeResponse \{\s*\n?\s*status: 'pending' \| 'bound' \| 'expired';\s*\n?\s*api_key\?: string;\s*\n?\s*account_id\?: string;\s*\n?\s*\}/,
     );
   });
 
-  it("BrowserSignInState 5-variant with waiting{code+state+expiresAt}; UseBrowserSignInOptions: baseUrl + clientLabel? + onSuccess(apiKey, accountId) => void|Promise<void> + 3 test seams (__pollIntervalMs 'override the 2s poll cadence' + __pollTimeoutMs 'override the 5-minute backstop' + V-328 __onOpenUrl deep-link listener seam)", () => {
+  it('BrowserSignInState carries userCode while waiting and options retain the timing/deep-link seams', () => {
     expect(body).toMatch(
-      /export type BrowserSignInState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'opening' \}\s*\n?\s*\| \{ kind: 'waiting'; code: string; state: string; expiresAt: number \}\s*\n?\s*\| \{ kind: 'success' \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
+      /export type BrowserSignInState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'opening' \}\s*\n?\s*\| \{ kind: 'waiting'; code: string; userCode: string; state: string; expiresAt: number \}\s*\n?\s*\| \{ kind: 'success' \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
       /export interface UseBrowserSignInOptions \{\s*\n?\s*baseUrl: string;\s*\n?\s*clientLabel\?: string;\s*\n?\s*onSuccess: \(apiKey: string, accountId: string\) => void \| Promise<void>;\s*\n?\s*\/\*\* Test-only: override the 2s poll cadence\. \*\/\s*\n?\s*__pollIntervalMs\?: number;\s*\n?\s*\/\*\* Test-only: override the 5-minute backstop\. \*\/\s*\n?\s*__pollTimeoutMs\?: number;/,
@@ -102,7 +102,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
     );
   });
 
-  it("Initiate flow: baseUrl trim() + replace(/\\/+$/,'') + POST /v1/auth/cli-authorize/initiate with state stateToken + client_label default `Driftstack desktop on ${navigator.platform}` + body.detail ?? HTTP fallback error + openInBrowser(initiate.browser_url) + setState waiting{code, state, expiresAt: new Date(expires_at).getTime()}", () => {
+  it('Initiate flow opens the browser and exposes the returned user_code only in waiting state', () => {
     expect(body).toMatch(
       /const trimmedUrl = opts\.baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);/,
     );
@@ -113,7 +113,10 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /throw new Error\(body\.detail \?\? `HTTP \$\{initiateRes\.status\.toString\(\)\}`\);/,
     );
     expect(body).toMatch(
-      /setState\(\{ kind: 'waiting', code: initiate\.code, state: stateToken, expiresAt \}\);/,
+      /if \(!\/\^\[A-HJ-NP-Z2-9\]\{4\}-\[A-HJ-NP-Z2-9\]\{4\}\$\/\.test\(initiate\.user_code\)\) \{[\s\S]*?does not support secure browser sign-in[\s\S]*?\}/,
+    );
+    expect(body).toMatch(
+      /setState\(\{\s*\n?\s*kind: 'waiting',\s*\n?\s*code: initiate\.code,\s*\n?\s*userCode: initiate\.user_code,\s*\n?\s*state: stateToken,\s*\n?\s*expiresAt,\s*\n?\s*\}\);/,
     );
   });
 
@@ -140,7 +143,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /const res = await fetchWithDeadline\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ code, state: stateToken \}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(res\.status >= 400 && res\.status < 500\) \{\s*\n?\s*stop\(\);\s*\n?\s*const body = \(await res\.json\(\)\.catch\(\(\) => \(\{\}\)\)\) as \{ detail\?: string \};\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: body\.detail \?\? 'Authorization request rejected\.',\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /if \(res\.status >= 400 && res\.status < 500\) \{\s*\n?\s*stop\(\);\s*\n?\s*const body = await readBoundedDiagnosticJson<\{ detail\?: string \}>\(res\)\.catch\([\s\S]*?\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: body\.detail \?\? 'Authorization request rejected\.',\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(body\.status === 'expired'\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\n?\s*\}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(body\.status === 'bound' && body\.api_key && body\.account_id\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{ kind: 'success' \}\);\s*\n?\s*await opts\.onSuccess\(body\.api_key, body\.account_id\);\s*\n?\s*\}/,

@@ -93,13 +93,13 @@ async function setup(
     headers: json,
     payload: { state: STATE, client_label: 'Test device' },
   });
-  const { code } = initiate.json<{ code: string }>();
+  const { code, user_code } = initiate.json<{ code: string; user_code: string }>();
 
   const bind = await f.app.inject({
     method: 'POST',
-    url: '/v1/auth/cli-authorize/bind',
+    url: '/v1/auth/cli-authorize/bind-device-code',
     headers: { ...json, authorization: `Bearer ${token}` },
-    payload: { code, state: STATE },
+    payload: { code, state: STATE, user_code },
   });
   expect(bind.statusCode, `bind failed: ${bind.body}`).toBe(200);
 
@@ -136,8 +136,8 @@ const DENY_REQUESTS: Array<{ method: string; url: string; template: string }> = 
   { method: 'POST', url: '/v1/api-keys/key_x/rotate', template: 'POST:/v1/api-keys/:id/rotate' },
   {
     method: 'POST',
-    url: '/v1/auth/cli-authorize/bind',
-    template: 'POST:/v1/auth/cli-authorize/bind',
+    url: '/v1/auth/cli-authorize/bind-device-code',
+    template: 'POST:/v1/auth/cli-authorize/bind-device-code',
   },
   { method: 'POST', url: '/v1/account/mfa/enroll', template: 'POST:/v1/account/mfa/enroll' },
   { method: 'POST', url: '/v1/account/mfa/verify', template: 'POST:/v1/account/mfa/verify' },
@@ -305,12 +305,12 @@ describe('C1 — /bind requires an interactive web session (self-mint laundering
       headers: json,
       payload: { state: STATE },
     });
-    const { code } = initiate.json<{ code: string }>();
+    const { code, user_code } = initiate.json<{ code: string; user_code: string }>();
     const bind = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...json, authorization: `Bearer ${ordinaryKey}` },
-      payload: { code, state: STATE },
+      payload: { code, state: STATE, user_code },
     });
     expect(bind.statusCode).toBe(403);
     expect(bind.body).toContain('interactive dashboard session');

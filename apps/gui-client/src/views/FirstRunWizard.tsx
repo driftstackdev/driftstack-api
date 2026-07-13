@@ -524,14 +524,24 @@ export function ApiKeyStep({
           )}
 
           {browserState.kind === 'waiting' && (
-            <div className="rounded-md border border-surface-divider bg-surface-raised p-4">
+            <div
+              className="rounded-md border border-surface-divider bg-surface-raised p-4"
+              role="status"
+              aria-live="polite"
+            >
               <div className="flex items-center gap-3">
                 <div className="h-3 w-3 animate-pulse rounded-full bg-accent" aria-hidden="true" />
                 <p className="text-sm text-ink-primary">Waiting for browser confirmation…</p>
               </div>
               <p className="mt-2 text-xs text-ink-secondary">
-                Complete the authorization in your browser tab. This page updates automatically once
-                you confirm.
+                Enter this verification code in the browser. Never share it with someone who
+                contacted you.
+              </p>
+              <p className="mono mt-3 text-center text-2xl font-semibold tracking-[0.2em] text-ink-primary">
+                {browserState.userCode}
+              </p>
+              <p className="mt-2 text-xs text-ink-secondary">
+                The page updates automatically after you enter the code and confirm.
               </p>
               <button type="button" className="btn-secondary mt-3" onClick={cancelBrowserSignIn}>
                 Cancel

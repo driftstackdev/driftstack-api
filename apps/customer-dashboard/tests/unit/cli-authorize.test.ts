@@ -91,6 +91,11 @@ function setUpDom(
     console.error('[cli-authorize test] inline-script eval threw:', err);
     throw err;
   }
+  // Every authorization attempt in this suite represents the customer
+  // entering the code displayed by the initiating desktop. Individual
+  // validation tests may clear or replace this fixture value.
+  const userCode = window.document.querySelector('[data-user-code]') as HTMLInputElement | null;
+  if (userCode) userCode.value = 'ABCD-EFGH';
   return {
     window: window as JSDOM['window'],
     fetchCalls,
@@ -148,9 +153,8 @@ describe('cli-authorize page — local integration', () => {
     });
     await flush();
     expect(visibleState(dom.window)).toBe('confirm');
-    // Code preview is populated.
-    const preview = dom.window.document.querySelector('[data-code-preview]');
-    expect(preview?.textContent).toContain('ABCDEF'.slice(0, 6));
+    const userCode = dom.window.document.querySelector('[data-user-code]') as HTMLInputElement;
+    expect(userCode.placeholder).toBe('XXXX-XXXX');
   });
 
   it('coalesces forced duplicate authorize clicks into one bind request', async () => {
@@ -169,7 +173,31 @@ describe('cli-authorize page — local integration', () => {
     authorizeBtn.dispatchEvent(new local.window.MouseEvent('click'));
     expect(local.fetchCalls).toHaveLength(1);
     expect(local.fetchCalls[0]?.init?.signal).toBeDefined();
+    expect(JSON.parse(String(local.fetchCalls[0]?.init?.body))).toEqual({
+      code: 'ABCDEF',
+      state: 'XYZ123',
+      user_code: 'ABCD-EFGH',
+    });
     await flush();
+  });
+
+  it('does not bind until a complete device verification code is entered', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    const userCode = local.window.document.querySelector('[data-user-code]') as HTMLInputElement;
+    userCode.value = 'ABCD';
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+
+    expect(local.fetchCalls).toHaveLength(0);
+    expect(userCode.getAttribute('aria-invalid')).toBe('true');
+    expect(local.window.document.querySelector('[data-user-code-error]')?.textContent).toMatch(
+      /8-character code shown in the Driftstack desktop app/,
+    );
+    expect(local.window.document.activeElement).toBe(userCode);
   });
 
   it('turns an ambiguous bind timeout into desktop-handoff-only mode with no second bind', async () => {
@@ -196,7 +224,9 @@ describe('cli-authorize page — local integration', () => {
     retry.dispatchEvent(new local.window.MouseEvent('click'));
     await flush();
     expect(
-      local.fetchCalls.filter((call) => call.url.endsWith('/v1/auth/cli-authorize/bind')),
+      local.fetchCalls.filter((call) =>
+        call.url.endsWith('/v1/auth/cli-authorize/bind-device-code'),
+      ),
     ).toHaveLength(1);
   });
 
@@ -230,7 +260,9 @@ describe('cli-authorize page — local integration', () => {
     await flush();
     expect(visibleState(local.window)).toBe('success');
     expect(
-      local.fetchCalls.filter((call) => call.url.endsWith('/v1/auth/cli-authorize/bind')),
+      local.fetchCalls.filter((call) =>
+        call.url.endsWith('/v1/auth/cli-authorize/bind-device-code'),
+      ),
     ).toHaveLength(2);
   });
 

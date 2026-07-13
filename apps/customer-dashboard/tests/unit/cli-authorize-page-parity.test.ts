@@ -2,7 +2,7 @@
 // Pins the three-step CLI-pairing protocol the page implements to
 // the live server routes:
 //   POST /v1/auth/cli-authorize/initiate  (CLI/GUI starts the flow)
-//   POST /v1/auth/cli-authorize/bind      (dashboard binds)
+//   POST /v1/auth/cli-authorize/bind-device-code (dashboard binds)
 //   POST /v1/auth/cli-authorize/exchange  (CLI/GUI polls for key)
 //
 // The dashboard ONLY interacts with /bind (it doesn't initiate or
@@ -27,14 +27,14 @@ describe('W251.B /cli/authorize page ↔ auth-cli routes parity', () => {
   const page = read(PAGE);
   const route = read(SERVER_ROUTE);
 
-  it('page POSTs /v1/auth/cli-authorize/bind which the server registers', () => {
-    expect(page).toContain('/v1/auth/cli-authorize/bind');
-    expect(route).toContain(`'/v1/auth/cli-authorize/bind'`);
+  it('page POSTs /v1/auth/cli-authorize/bind-device-code which the server registers', () => {
+    expect(page).toContain('/v1/auth/cli-authorize/bind-device-code');
+    expect(route).toContain(`'/v1/auth/cli-authorize/bind-device-code'`);
   });
 
   it('server registers all three CLI-authorize endpoints', () => {
     expect(route).toContain(`'/v1/auth/cli-authorize/initiate'`);
-    expect(route).toContain(`'/v1/auth/cli-authorize/bind'`);
+    expect(route).toContain(`'/v1/auth/cli-authorize/bind-device-code'`);
     expect(route).toContain(`'/v1/auth/cli-authorize/exchange'`);
   });
 

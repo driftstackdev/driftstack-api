@@ -1,5 +1,5 @@
 // W273.A — drift-guard for customer-dashboard /cli/authorize page.
-// Pins POST /v1/auth/cli-authorize/bind to its live registration in
+// Pins POST /v1/auth/cli-authorize/bind-device-code to its live registration in
 // auth-cli.ts.
 
 import { readFileSync } from 'node:fs';
@@ -16,13 +16,13 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W273.A /cli/authorize page ↔ /v1/auth/cli-authorize/bind parity', () => {
+describe('W273.A /cli/authorize page ↔ /v1/auth/cli-authorize/bind-device-code parity', () => {
   const page = read(PAGE);
   const auth = read(AUTH_CLI);
 
-  it('POST /v1/auth/cli-authorize/bind is registered on the server', () => {
-    expect(page).toMatch(/\/v1\/auth\/cli-authorize\/bind/);
-    expect(auth).toMatch(/['"`]\/v1\/auth\/cli-authorize\/bind['"`]/);
+  it('POST /v1/auth/cli-authorize/bind-device-code is registered on the server', () => {
+    expect(page).toMatch(/\/v1\/auth\/cli-authorize\/bind-device-code/);
+    expect(auth).toMatch(/['"`]\/v1\/auth\/cli-authorize\/bind-device-code['"`]/);
   });
 
   it('uses ds_web_session_token for auth (binding step requires login)', () => {

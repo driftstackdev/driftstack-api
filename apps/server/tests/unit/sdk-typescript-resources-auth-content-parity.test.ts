@@ -175,21 +175,21 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
     );
   });
 
-  it('V-460/V-266 cliAuthorizeInitiate JSDoc — CSRF nonce + optional client label inputs; one-shot code + browser URL outputs. CLI/GUI opens browser, user signs in to dashboard and confirms activation, then CLI/GUI polls cliAuthorizeExchange. Public route — CLI is UNAUTHENTICATED (asking to BE authorized). Drift to requiring auth would break the entire CLI activation flow.', () => {
+  it('V-460/V-266 cliAuthorizeInitiate documents the separate device-displayed user code', () => {
     expect(body).toMatch(
-      /\*\s*V-460 — V-266 CLI\/GUI activation flow: initiate\.\s*\n?\s*\*\s*\n?\s*\*\s*The CLI\/GUI calls this with a CSRF nonce \+ optional client label\.\s*\n?\s*\*\s*Returns a one-shot code \+ browser URL the CLI\/GUI opens; the user\s*\n?\s*\*\s*signs in to the dashboard and confirms the activation, after which\s*\n?\s*\*\s*the CLI\/GUI polls `cliAuthorizeExchange` to receive the API key\./,
+      /Returns a one-shot code, a separate user code displayed by the\s*\n?\s*\*\s*initiating device, and the browser URL\.[\s\S]*?types that code in\s*\n?\s*\*\s*the dashboard before the CLI\/GUI can receive the API key/,
     );
     expect(body).toMatch(
       /cliAuthorizeInitiate\(body: CliAuthorizeInitiateRequest\): Promise<CliAuthorizeInitiateResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeInitiateResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/initiate',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('V-460/V-266 cliAuthorizeBind JSDoc — Web-session-AUTHENTICATED; dashboard /cli/authorize confirmation page. Mints API key + stages for delivery via exchange. CRITICAL: "Default scopes are `[\\"account_owner\\"]` server-side" — drift to widening default scopes would silently let CLIs assume more privilege than the user intended.', () => {
+  it('V-460/V-266 cliAuthorizeBind requires the initiating-device user_code', () => {
     expect(body).toMatch(
-      /\*\s*V-460 — V-266 CLI\/GUI activation flow: bind\.\s*\n?\s*\*\s*\n?\s*\*\s*Web-session-authenticated\. Called by the dashboard's\s*\n?\s*\*\s*\/cli\/authorize confirmation page after the user clicks Authorize:\s*\n?\s*\*\s*mints an API key on the calling account and stages it for delivery\s*\n?\s*\*\s*to the CLI\/GUI through the exchange endpoint\. Default scopes are\s*\n?\s*\*\s*`\["account_owner"\]` server-side\./,
+      /Web-session-authenticated\. Called by the dashboard's\s*\n?\s*\*\s*\/cli\/authorize confirmation page after the user enters the initiating\s*\n?\s*\*\s*device's `user_code` and clicks Authorize:[\s\S]*?Default scopes are\s*\n?\s*\*\s*`\["account_owner"\]` server-side\./,
     );
     expect(body).toMatch(
-      /cliAuthorizeBind\(body: CliAuthorizeBindRequest\): Promise<CliAuthorizeBindResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeBindResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/bind',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /cliAuthorizeBind\(body: CliAuthorizeBindRequest\): Promise<CliAuthorizeBindResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeBindResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/bind-device-code',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 

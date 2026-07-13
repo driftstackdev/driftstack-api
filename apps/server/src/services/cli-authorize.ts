@@ -28,6 +28,11 @@ const TTL_SECONDS = 5 * 60;
 // ceiling caps how long the (encrypted) API key sits in Redis while
 // still comfortably covering a slow poll loop.
 const BIND_TTL_SECONDS = 2 * 60;
+// RFC 8628 recommends at least 27 bits of entropy for a user code. Eight
+// unambiguous base32 symbols provide 40 bits while remaining easy to compare
+// and type as `XXXX-XXXX` from the desktop into the dashboard.
+const USER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const USER_CODE_HASH_DOMAIN = 'driftstack:cli-authorize:user-code:v1\0';
 
 export function cliAuthorizeRedisKey(code: string): string {
   return `${REDIS_KEY_PREFIX}${createHash('sha256').update(code).digest('hex')}`;
@@ -156,6 +161,8 @@ export type CliCodeStatus = 'pending' | 'bound';
 
 interface StoredCodeBase {
   state: string;
+  /** Domain-separated SHA-256 of the device-displayed user code. */
+  user_code_hash: string;
   client_label: string | null;
   created_at: number;
 }
@@ -203,6 +210,8 @@ function parseStoredCode(raw: string): StoredCode | null {
   if (
     typeof record.state !== 'string' ||
     record.state.length === 0 ||
+    typeof record.user_code_hash !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(record.user_code_hash) ||
     (record.client_label !== null && typeof record.client_label !== 'string') ||
     typeof record.created_at !== 'number' ||
     !Number.isFinite(record.created_at) ||
@@ -213,6 +222,7 @@ function parseStoredCode(raw: string): StoredCode | null {
 
   const common: StoredCodeBase = {
     state: record.state,
+    user_code_hash: record.user_code_hash,
     client_label: record.client_label,
     created_at: record.created_at,
   };
@@ -269,6 +279,7 @@ export interface InitiateInput {
 
 export interface InitiateResult {
   code: string;
+  user_code: string;
   browser_url: string;
   expires_at: Date;
 }
@@ -276,6 +287,8 @@ export interface InitiateResult {
 export interface BindInput {
   code: string;
   state: string;
+  /** Human verification code shown only by the initiating device. */
+  user_code: string;
   account_id: string;
   api_key_plaintext: string;
   /** Recorded for observability; the actual scopes live on the minted key. */
@@ -302,6 +315,7 @@ export class CliAuthorizeError extends Error {
     public readonly code:
       | 'invalid_code'
       | 'state_mismatch'
+      | 'user_code_mismatch'
       | 'already_bound'
       | 'not_found'
       | 'expired',
@@ -335,8 +349,10 @@ export class CliAuthorizeService {
     // 32 bytes → 43 url-safe chars (base64url, no padding). Plenty of
     // entropy for a 5-minute one-shot code.
     const code = randomBytes(32).toString('base64url');
+    const userCode = generateUserCode();
     const stored: StoredCode = {
       state: input.state,
+      user_code_hash: hashUserCode(userCode),
       status: 'pending',
       client_label: input.client_label ?? null,
       secret_blob: null,
@@ -352,6 +368,7 @@ export class CliAuthorizeService {
 
     return {
       code,
+      user_code: userCode,
       browser_url: browserUrl.toString(),
       expires_at: new Date(stored.created_at + TTL_SECONDS * 1000),
     };
@@ -373,6 +390,9 @@ export class CliAuthorizeService {
 
     if (!constantTimeStringEqual(stored.state, input.state)) {
       throw new CliAuthorizeError('state_mismatch', 'State parameter does not match.');
+    }
+    if (!constantTimeStringEqual(stored.user_code_hash, hashUserCode(input.user_code))) {
+      throw new CliAuthorizeError('user_code_mismatch', 'Device verification code does not match.');
     }
     if (stored.status === 'bound') {
       throw new CliAuthorizeError(
@@ -505,4 +525,30 @@ function constantTimeStringEqual(a: string, b: string): boolean {
   const bBytes = Buffer.from(b);
   if (aBytes.length !== bBytes.length) return false;
   return timingSafeEqual(aBytes, bBytes);
+}
+
+function normalizeUserCode(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '');
+}
+
+function hashUserCode(value: string): string {
+  return createHash('sha256')
+    .update(USER_CODE_HASH_DOMAIN)
+    .update(normalizeUserCode(value))
+    .digest('hex');
+}
+
+function generateUserCode(): string {
+  const bytes = randomBytes(5);
+  let value = 0n;
+  for (const byte of bytes) value = (value << 8n) | BigInt(byte);
+  let code = '';
+  for (let i = 0; i < 8; i += 1) {
+    code = USER_CODE_ALPHABET[Number(value & 31n)] + code;
+    value >>= 5n;
+  }
+  return `${code.slice(0, 4)}-${code.slice(4)}`;
 }

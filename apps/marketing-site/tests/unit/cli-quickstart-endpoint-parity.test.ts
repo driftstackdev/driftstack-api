@@ -37,7 +37,7 @@ describe('W305.A /docs/cli-quickstart ↔ auth-cli route parity', () => {
   }
 
   it('server still registers the bind endpoint for the dashboard /cli/authorize flow', () => {
-    expect(route).toContain(`'/v1/auth/cli-authorize/bind'`);
+    expect(route).toContain(`'/v1/auth/cli-authorize/bind-device-code'`);
   });
 
   it('page references the DRIFTSTACK_API_KEY env var (canonical CI env-var name)', () => {

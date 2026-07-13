@@ -74,10 +74,9 @@ class AuthResource:
     def cli_authorize_initiate(self, body: dict[str, Any]) -> dict[str, Any]:
         """V-460 / V-266 CLI/GUI activation flow: initiate.
 
-        Returns a one-shot ``code`` + ``browser_url``; the CLI/GUI opens
-        the URL, the user signs in to the dashboard and confirms the
-        activation, after which ``cli_authorize_exchange`` returns the
-        plaintext API key.
+        Returns a one-shot ``code``, device-displayed ``user_code``, and
+        ``browser_url``. The user types that code in the dashboard before
+        ``cli_authorize_exchange`` can return the plaintext API key.
         """
         return self._http.request(
             "POST", "/v1/auth/cli-authorize/initiate", json_body=coerce_body(body)
@@ -87,11 +86,12 @@ class AuthResource:
         """V-460 / V-266 CLI/GUI activation flow: bind.
 
         Web-session-authenticated. Called by the dashboard's confirm page
-        after the user clicks Authorize: mints a scoped API key on the
-        calling account and stages it for delivery via exchange.
+        after the user submits the initiating device's ``user_code`` and
+        clicks Authorize: mints a scoped API key on the calling account and
+        stages it for delivery via exchange.
         """
         return self._http.request(
-            "POST", "/v1/auth/cli-authorize/bind", json_body=coerce_body(body)
+            "POST", "/v1/auth/cli-authorize/bind-device-code", json_body=coerce_body(body)
         )
 
     def cli_authorize_exchange(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -164,7 +164,7 @@ class AsyncAuthResource:
 
     async def cli_authorize_bind(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request(
-            "POST", "/v1/auth/cli-authorize/bind", json_body=coerce_body(body)
+            "POST", "/v1/auth/cli-authorize/bind-device-code", json_body=coerce_body(body)
         )
 
     async def cli_authorize_exchange(self, body: dict[str, Any]) -> dict[str, Any]:

@@ -45,6 +45,7 @@ function makeResponse(body: unknown, status = 200): FetchResponseShape {
 
 const initiateBody = {
   code: 'abc123code',
+  user_code: 'ABCD-EFGH',
   browser_url: 'http://localhost:5173/cli/authorize?code=abc123code&state=stateXXX',
   expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
 };
@@ -115,6 +116,26 @@ describe('useBrowserSignIn — happy path: initiate → poll pending → poll bo
 });
 
 describe('useBrowserSignIn — error paths', () => {
+  it('fails closed against a legacy server that omits the device verification code', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      makeResponse({
+        code: initiateBody.code,
+        browser_url: initiateBody.browser_url,
+        expires_at: initiateBody.expires_at,
+      }),
+    );
+
+    const { result } = renderHook(() => useBrowserSignIn(defaultOpts()));
+    act(() => result.current.start());
+
+    await waitFor(() => expect(result.current.state.kind).toBe('error'));
+    expect(result.current.state.kind === 'error' && result.current.state.message).toMatch(
+      /does not support secure browser sign-in/,
+    );
+    expect(mockOpenInBrowser).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('bounds a stalled initiate request and leaves first-run auth retryable', async () => {
     fetchSpy.mockImplementation(
       (_url: RequestInfo | URL, init?: RequestInit) =>
@@ -238,6 +259,9 @@ describe('useBrowserSignIn — error paths', () => {
     await waitFor(() => {
       expect(result.current.state.kind).toBe('waiting');
     });
+    expect(result.current.state.kind === 'waiting' && result.current.state.userCode).toBe(
+      'ABCD-EFGH',
+    );
 
     // Backstop is 100ms; wait past it.
     await waitFor(

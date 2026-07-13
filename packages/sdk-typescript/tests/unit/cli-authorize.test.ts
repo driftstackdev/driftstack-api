@@ -77,7 +77,7 @@ describe('AuthResource cli-authorize flow (V-460)', () => {
     }
   });
 
-  it('bind POSTs code + state + scopes', async () => {
+  it('bind POSTs code + state + user_code + scopes', async () => {
     const seen: RequestOpts[] = [];
     const request = vi.fn((opts: RequestOpts) => {
       seen.push(opts);
@@ -92,14 +92,16 @@ describe('AuthResource cli-authorize flow (V-460)', () => {
     const out = await r.cliAuthorizeBind({
       code: 'cliauth_abc',
       state: 'csrfnonce-1234567890abcdef',
+      user_code: 'ABCD-EFGH',
       scopes: ['account_owner'],
     });
     expect(seen[0]).toMatchObject({
       method: 'POST',
-      path: '/v1/auth/cli-authorize/bind',
+      path: '/v1/auth/cli-authorize/bind-device-code',
       body: {
         code: 'cliauth_abc',
         state: 'csrfnonce-1234567890abcdef',
+        user_code: 'ABCD-EFGH',
         scopes: ['account_owner'],
       },
     });

@@ -47,7 +47,7 @@ describe('W256.A docs/api/auth ↔ /v1/auth/* parity', () => {
   it('CLI-authorize three-step flow uses the registered endpoints', () => {
     for (const path of [
       '/v1/auth/cli-authorize/initiate',
-      '/v1/auth/cli-authorize/bind',
+      '/v1/auth/cli-authorize/bind-device-code',
       '/v1/auth/cli-authorize/exchange',
     ]) {
       expect(doc).toContain(path);

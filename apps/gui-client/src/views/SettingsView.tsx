@@ -623,12 +623,17 @@ export function SettingsView(): JSX.Element {
             <p className="mt-3 text-xs text-ink-secondary">Opening browser…</p>
           )}
           {browserSignIn.state.kind === 'waiting' && (
-            <div className="mt-3 flex items-center gap-3">
-              <div className="h-3 w-3 animate-pulse rounded-full bg-accent" aria-hidden="true" />
-              <p className="text-xs text-ink-secondary">Waiting for browser confirmation…</p>
+            <div className="mt-3" role="status" aria-live="polite">
+              <p className="text-xs text-ink-secondary">
+                Enter this verification code in the browser. Never share it with someone who
+                contacted you.
+              </p>
+              <p className="mono mt-2 text-lg font-semibold tracking-[0.18em] text-ink-primary">
+                {browserSignIn.state.userCode}
+              </p>
               <button
                 type="button"
-                className="text-xs text-ink-muted underline"
+                className="mt-2 text-xs text-ink-muted underline"
                 onClick={browserSignIn.cancel}
               >
                 Cancel

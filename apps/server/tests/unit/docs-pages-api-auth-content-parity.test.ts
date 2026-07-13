@@ -191,11 +191,11 @@ describe('W764 docs /api/auth content parity', () => {
     expect(p).toMatch(/Step 3 — \*\*Exchange\*\* — the CLI\/GUI polls/);
   });
 
-  it("CRITICAL CLI bind stores plaintext keyed by code in Redis with 5-min TTL pinned. The '(Redis, 5-minute TTL)' wording is the load-bearing security framing — exchange is one-shot. (S27 re-pin: same sentence, unindented paragraph instead of list-item continuation.)", () => {
+  it('CRITICAL CLI bind stores only an encrypted key envelope under a hashed identifier', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /the server mints a scoped API key on the calling account\s*\n?\s*and stores the plaintext keyed by `code` \(Redis, 5-minute TTL\)\./,
+      /the server mints a scoped API key on the calling\s*\n?\s*account and stores only its encrypted envelope under a hashed code\s*\n?\s*identifier \(Redis, 2-minute post-bind TTL\)\./,
     );
   });
 
@@ -259,7 +259,7 @@ describe('W764 docs /api/auth content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`POST \/v1\/auth\/cli-authorize\/initiate`/);
-    expect(p).toMatch(/`POST \/v1\/auth\/cli-authorize\/bind`/);
+    expect(p).toMatch(/`POST \/v1\/auth\/cli-authorize\/bind-device-code`/);
     expect(p).toMatch(/`POST \/v1\/auth\/cli-authorize\/exchange`/);
   });
 

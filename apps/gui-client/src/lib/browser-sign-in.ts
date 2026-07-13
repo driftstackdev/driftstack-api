@@ -30,6 +30,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 interface InitiateResponse {
   code: string;
+  user_code: string;
   browser_url: string;
   expires_at: string;
 }
@@ -43,7 +44,7 @@ interface ExchangeResponse {
 export type BrowserSignInState =
   | { kind: 'idle' }
   | { kind: 'opening' }
-  | { kind: 'waiting'; code: string; state: string; expiresAt: number }
+  | { kind: 'waiting'; code: string; userCode: string; state: string; expiresAt: number }
   | { kind: 'success' }
   | { kind: 'error'; message: string };
 
@@ -180,6 +181,11 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         throw new Error(body.detail ?? `HTTP ${initiateRes.status.toString()}`);
       }
       const initiate = await readBoundedApiJson<InitiateResponse>(initiateRes);
+      if (!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(initiate.user_code)) {
+        throw new Error(
+          'This server does not support secure browser sign-in. Update the server and desktop app together, or paste an API key.',
+        );
+      }
       await openInBrowser(initiate.browser_url);
 
       // If the user cancelled (Cancel / "paste a key instead") during the
@@ -193,7 +199,13 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       }
 
       const expiresAt = new Date(initiate.expires_at).getTime();
-      setState({ kind: 'waiting', code: initiate.code, state: stateToken, expiresAt });
+      setState({
+        kind: 'waiting',
+        code: initiate.code,
+        userCode: initiate.user_code,
+        state: stateToken,
+        expiresAt,
+      });
 
       // V-328 — register the deep-link listener BEFORE arming the
       // poll so a fast OS hand-off (sub-second) is captured. The

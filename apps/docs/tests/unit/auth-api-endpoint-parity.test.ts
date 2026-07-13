@@ -56,7 +56,7 @@ describe('W313.A /api/auth ↔ auth route parity', () => {
 
   it('page covers the three CLI authorize endpoints (initiate/bind/exchange)', () => {
     expect(page).toContain('/v1/auth/cli-authorize/initiate');
-    expect(page).toContain('/v1/auth/cli-authorize/bind');
+    expect(page).toContain('/v1/auth/cli-authorize/bind-device-code');
     expect(page).toContain('/v1/auth/cli-authorize/exchange');
   });
 

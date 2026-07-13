@@ -29,6 +29,7 @@ const headers = { 'content-type': 'application/json' };
 
 interface InitiateResponse {
   code: string;
+  user_code: string;
   browser_url: string;
   expires_at: string;
 }
@@ -117,9 +118,11 @@ describe('V-266 — POST /v1/auth/cli-authorize/initiate', () => {
     const body = res.json<InitiateResponse>();
     expect(body.code).toBeTruthy();
     expect(body.code.length).toBeGreaterThanOrEqual(40);
+    expect(body.user_code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
     expect(body.browser_url).toMatch(/^http:\/\/localhost:5173\/cli\/authorize\?/);
     expect(body.browser_url).toContain(`code=${body.code.replace(/=/g, '%3D')}`);
     expect(body.browser_url).toContain('state=');
+    expect(body.browser_url).not.toContain(body.user_code);
     expect(new Date(body.expires_at).getTime()).toBeGreaterThan(Date.now());
   });
 
@@ -170,14 +173,14 @@ describe('V-266 — full happy path: initiate → bind → exchange', () => {
       headers,
       payload: { state: STATE, client_label: 'Test desktop' },
     });
-    const { code } = initiate.json<InitiateResponse>();
+    const { code, user_code } = initiate.json<InitiateResponse>();
 
     // 2. Dashboard binds (with web-session bearer auth)
     const bind = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...headers, authorization: `Bearer ${sessionToken}` },
-      payload: { code, state: STATE },
+      payload: { code, state: STATE, user_code: user_code.toLowerCase() },
     });
     expect(bind.statusCode).toBe(200);
     expect(bind.json<{ ok: true; account_id: string }>().account_id).toBe(accountId);
@@ -206,6 +209,33 @@ describe('V-266 — full happy path: initiate → bind → exchange', () => {
 });
 
 describe('V-266 — security + edge cases', () => {
+  it('removes the legacy bind route so mixed dashboard/API releases fail closed', async () => {
+    fx = await buildTestApp();
+    const { token: sessionToken } = await freshSessionToken(fx);
+    await acceptAllLegal(fx, sessionToken);
+    const initiate = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/initiate',
+      headers,
+      payload: { state: STATE },
+    });
+    const { code, user_code } = initiate.json<InitiateResponse>();
+
+    const legacyBind = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/bind',
+      headers: { ...headers, authorization: `Bearer ${sessionToken}` },
+      payload: { code, state: STATE, user_code },
+    });
+
+    expect(legacyBind.statusCode).toBe(404);
+    expect(
+      (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items.filter(
+        (key) => key.provenance === 'cli_device',
+      ),
+    ).toHaveLength(0);
+  });
+
   it('exchange after one successful exchange returns expired (one-shot)', async () => {
     fx = await buildTestApp();
     const { token: sessionToken } = await freshSessionToken(fx);
@@ -217,13 +247,13 @@ describe('V-266 — security + edge cases', () => {
       headers,
       payload: { state: STATE },
     });
-    const { code } = initiate.json<InitiateResponse>();
+    const { code, user_code } = initiate.json<InitiateResponse>();
 
     await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...headers, authorization: `Bearer ${sessionToken}` },
-      payload: { code, state: STATE },
+      payload: { code, state: STATE, user_code },
     });
 
     const first = await fx.app.inject({
@@ -255,13 +285,13 @@ describe('V-266 — security + edge cases', () => {
       headers,
       payload: { state: STATE },
     });
-    const { code } = initiate.json<InitiateResponse>();
+    const { code, user_code } = initiate.json<InitiateResponse>();
 
     const bind = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...headers, authorization: `Bearer ${sessionToken}` },
-      payload: { code, state: 'different-state-1234567890' },
+      payload: { code, state: 'different-state-1234567890', user_code },
     });
     expect(bind.statusCode).toBe(400);
   });
@@ -293,13 +323,13 @@ describe('V-266 — security + edge cases', () => {
       headers,
       payload: { state: STATE },
     });
-    const { code } = initiate.json<InitiateResponse>();
+    const { code, user_code } = initiate.json<InitiateResponse>();
 
     const bind = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers,
-      payload: { code, state: STATE },
+      payload: { code, state: STATE, user_code },
     });
     expect(bind.statusCode).toBe(401);
   });
@@ -311,9 +341,13 @@ describe('V-266 — security + edge cases', () => {
 
     const bind = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...headers, authorization: `Bearer ${sessionToken}` },
-      payload: { code: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', state: STATE },
+      payload: {
+        code: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        state: STATE,
+        user_code: 'ABCD-EFGH',
+      },
     });
     expect(bind.statusCode).toBe(404);
   });
@@ -341,21 +375,21 @@ describe('V-266 — security + edge cases', () => {
       headers,
       payload: { state: STATE },
     });
-    const { code } = initiate.json<InitiateResponse>();
+    const { code, user_code } = initiate.json<InitiateResponse>();
 
     const first = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...headers, authorization: `Bearer ${sessionToken}` },
-      payload: { code, state: STATE },
+      payload: { code, state: STATE, user_code },
     });
     expect(first.statusCode).toBe(200);
 
     const second = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...headers, authorization: `Bearer ${sessionToken}` },
-      payload: { code, state: STATE },
+      payload: { code, state: STATE, user_code },
     });
     expect(second.statusCode).toBe(400);
   });
@@ -371,13 +405,13 @@ describe('V-266 — security + edge cases', () => {
       headers,
       payload: { state: STATE },
     });
-    const { code } = initiate.json<InitiateResponse>();
+    const { code, user_code } = initiate.json<InitiateResponse>();
     const bindRequest = () =>
       fx.app.inject({
         method: 'POST',
-        url: '/v1/auth/cli-authorize/bind',
+        url: '/v1/auth/cli-authorize/bind-device-code',
         headers: { ...headers, authorization: `Bearer ${sessionToken}` },
-        payload: { code, state: STATE },
+        payload: { code, state: STATE, user_code },
       });
 
     const [first, second] = await Promise.all([bindRequest(), bindRequest()]);
@@ -402,18 +436,72 @@ describe('V-266 — security + edge cases', () => {
       headers,
       payload: { state: STATE },
     });
-    const { code } = initiate.json<InitiateResponse>();
+    const { code, user_code } = initiate.json<InitiateResponse>();
     vi.spyOn(CliAuthorizeService.prototype, 'bind').mockRejectedValueOnce(
       new Error('simulated Redis transport failure'),
     );
 
     const bind = await fx.app.inject({
       method: 'POST',
-      url: '/v1/auth/cli-authorize/bind',
+      url: '/v1/auth/cli-authorize/bind-device-code',
+      headers: { ...headers, authorization: `Bearer ${sessionToken}` },
+      payload: { code, state: STATE, user_code },
+    });
+    expect(bind.statusCode).toBe(500);
+
+    const deviceKeys = (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items.filter(
+      (key) => key.provenance === 'cli_device',
+    );
+    expect(deviceKeys).toHaveLength(1);
+    expect(deviceKeys[0]?.revokedAt).toBeInstanceOf(Date);
+  });
+
+  it('rejects a missing user code before minting a device key', async () => {
+    fx = await buildTestApp();
+    const { token: sessionToken } = await freshSessionToken(fx);
+    await acceptAllLegal(fx, sessionToken);
+    const initiate = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/initiate',
+      headers,
+      payload: { state: STATE },
+    });
+    const { code } = initiate.json<InitiateResponse>();
+
+    const bind = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/bind-device-code',
       headers: { ...headers, authorization: `Bearer ${sessionToken}` },
       payload: { code, state: STATE },
     });
-    expect(bind.statusCode).toBe(500);
+    expect(bind.statusCode).toBe(400);
+    expect(
+      (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items.filter(
+        (key) => key.provenance === 'cli_device',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('rejects a wrong user code and revokes the compensating device key', async () => {
+    fx = await buildTestApp();
+    const { token: sessionToken } = await freshSessionToken(fx);
+    await acceptAllLegal(fx, sessionToken);
+    const initiate = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/initiate',
+      headers,
+      payload: { state: STATE },
+    });
+    const { code, user_code } = initiate.json<InitiateResponse>();
+    const wrongUserCode = (user_code.startsWith('A') ? 'B' : 'A') + user_code.slice(1);
+
+    const bind = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/bind-device-code',
+      headers: { ...headers, authorization: `Bearer ${sessionToken}` },
+      payload: { code, state: STATE, user_code: wrongUserCode },
+    });
+    expect(bind.statusCode).toBe(400);
 
     const deviceKeys = (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items.filter(
       (key) => key.provenance === 'cli_device',

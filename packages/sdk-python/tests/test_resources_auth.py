@@ -75,7 +75,7 @@ def test_sync_cli_authorize_bind() -> None:
         "expires_at": "2026-05-09T18:05:00Z",
     }
     with respx.mock(base_url=BASE) as mock:
-        route = mock.post("/v1/auth/cli-authorize/bind").mock(
+        route = mock.post("/v1/auth/cli-authorize/bind-device-code").mock(
             return_value=httpx.Response(200, json=response),
         )
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
@@ -83,6 +83,7 @@ def test_sync_cli_authorize_bind() -> None:
                 {
                     "code": "cliauth_abc",
                     "state": "csrfnonce-1234567890abcdef",
+                    "user_code": "ABCD-EFGH",
                     "scopes": ["account_owner"],
                 }
             )

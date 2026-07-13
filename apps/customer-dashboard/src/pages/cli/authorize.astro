@@ -9,11 +9,11 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 //   2. Page checks localStorage.ds_web_session_token — if missing,
 //      redirects to /signup?next=<this-url> (Sign in lands when the
 //      login page exists; for now, signup completes a session as well).
-//   3. Page shows a confirmation: "Authorize Driftstack desktop client?"
-//      with the code's first 6 chars + the account email.
-//   4. On Authorize: POST /v1/auth/cli-authorize/bind with
-//      `Bearer <session-token>` + `{code, state}`. Server mints a key,
-//      stores plaintext for the GUI's next exchange poll.
+//   3. Page requires the separate verification code displayed only by
+//      the initiating desktop app.
+//   4. On Authorize: POST /v1/auth/cli-authorize/bind-device-code with
+//      `Bearer <session-token>` + `{code, state, user_code}`. Server
+//      verifies the code and stages an encrypted key for exchange.
 //   5. Success screen: "Authorized — return to the desktop app."
 //
 // Per V-266: this page is the ONLY surface where a customer's web
@@ -70,16 +70,32 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div data-state="confirm" class="mt-8 hidden">
       <p class="text-sm text-tk-ink-2">
-        The Driftstack desktop client on this device is requesting an API key bound to
-        your account. The key gives the desktop app the same access as your web session
-        and remains active until you revoke it from <a href="/api-keys" class="text-tk-accent-text underline">API keys</a>.
+        The Driftstack desktop client is requesting a restricted device key bound to your
+        account. It remains active until you revoke it from <a href="/api-keys" class="text-tk-accent-text underline">API keys</a>.
       </p>
-      <div class="mt-6 rounded-md border border-tk-border bg-tk-bg px-4 py-3">
-        <div class="flex items-center justify-between gap-4 text-xs text-tk-ink-3">
-          <span>Authorization code</span>
-          <span class="font-mono text-tk-ink-2" data-code-preview></span>
-        </div>
-      </div>
+      <label class="mt-6 block text-sm font-medium text-tk-ink-2">
+        Verification code from the desktop app
+        <input
+          data-user-code
+          type="text"
+          inputmode="text"
+          autocomplete="one-time-code"
+          autocapitalize="characters"
+          spellcheck="false"
+          maxlength="9"
+          placeholder="XXXX-XXXX"
+          aria-describedby="device-code-help device-code-error"
+          aria-invalid="false"
+          class="mt-2 block w-full rounded-md border border-tk-border bg-tk-bg px-3 py-2 text-center font-mono text-lg uppercase tracking-[0.18em] text-tk-ink"
+        />
+      </label>
+      <p id="device-code-error" data-user-code-error class="mt-2 hidden text-xs text-tk-err-text" role="alert">
+        Enter the 8-character code shown in the Driftstack desktop app.
+      </p>
+      <p id="device-code-help" class="mt-3 text-xs text-tk-ink-3">
+        Only continue if you started this sign-in yourself. Never use a code sent by
+        another person.
+      </p>
       <div class="mt-6 grid grid-cols-2 gap-3">
         <button
           type="button"
@@ -93,8 +109,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </button>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
-        Authorizing will mint a new API key named "Desktop client" with the same scope
-        as your dashboard session.
+        Authorizing will mint a new restricted API key named "Desktop client".
       </p>
     </div>
 
@@ -225,9 +240,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
-      // 3. Confirmation UI
-      const codePreview = sections.confirm.querySelector('[data-code-preview]');
-      if (codePreview) codePreview.textContent = code.slice(0, 6) + '…';
+      // 3. Confirmation UI. The device code remains in the URL for record
+      // lookup, but cannot authorize without the separate device-displayed
+      // human verification code.
+      const userCodeInput = sections.confirm.querySelector('[data-user-code]');
+      const userCodeError = sections.confirm.querySelector('[data-user-code-error]');
       show('confirm');
 
       // 4. Wire buttons
@@ -237,6 +254,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       const AUTHORIZE_TIMEOUT_MS = 15_000;
       let authorizeInFlight = false;
       let authorizeOutcomeUnknown = false;
+
+      function normalizedUserCode() {
+        const compact = String(userCodeInput && userCodeInput.value ? userCodeInput.value : '')
+          .trim()
+          .toUpperCase()
+          .replace(/[\s-]+/g, '');
+        return compact.length === 8 ? compact.slice(0, 4) + '-' + compact.slice(4) : '';
+      }
+
+      if (userCodeInput) {
+        userCodeInput.addEventListener('input', function () {
+          if (userCodeError) userCodeError.classList.add('hidden');
+          userCodeInput.setAttribute('aria-invalid', 'false');
+        });
+      }
 
       function returnToDesktop(delayMs) {
         window.setTimeout(() => {
@@ -277,7 +309,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       // 2026-05-20 — stash the pending list in a closure variable so
       // the "Accept all" click handler reads the canonical
       // {document_key, current_version} pairs that came back from
-      // /v1/auth/cli-authorize/bind's 409 body. Earlier rev tried to
+      // /v1/auth/cli-authorize/bind-device-code's 409 body. Earlier rev tried to
       // reconstruct document_key by parsing the rendered <a href>,
       // which broke for tos (URL slug is /legal/terms/, document_key
       // is 'tos') and lost version precision on text-node parsing.
@@ -312,6 +344,13 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function authorize() {
         if (authorizeInFlight) return;
+        const userCode = normalizedUserCode();
+        if (!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(userCode)) {
+          if (userCodeError) userCodeError.classList.remove('hidden');
+          if (userCodeInput) userCodeInput.setAttribute('aria-invalid', 'true');
+          if (userCodeInput) userCodeInput.focus();
+          return;
+        }
         authorizeInFlight = true;
         authorizeOutcomeUnknown = false;
         retryBtn.textContent = 'Try again';
@@ -321,13 +360,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         authorizeBtn.textContent = 'Authorizing…';
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), AUTHORIZE_TIMEOUT_MS);
-        fetch(apiBaseUrl + '/v1/auth/cli-authorize/bind', {
+        fetch(apiBaseUrl + '/v1/auth/cli-authorize/bind-device-code', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
             authorization: 'Bearer ' + sessionToken,
           },
-          body: JSON.stringify({ code: code, state: state }),
+          body: JSON.stringify({ code: code, state: state, user_code: userCode }),
           signal: controller.signal,
         })
           .then((r) => {

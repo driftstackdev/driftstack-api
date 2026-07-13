@@ -33,7 +33,7 @@ describe('W264.D /docs/cli-quickstart ↔ live cli-authorize parity', () => {
       expect(route).toContain(`'${path}'`);
     }
     // Verify /bind exists on the route file even though the doc doesn't cite it.
-    expect(route).toContain(`'/v1/auth/cli-authorize/bind'`);
+    expect(route).toContain(`'/v1/auth/cli-authorize/bind-device-code'`);
   });
 
   it('5-minute activation TTL claim matches the live service constant', () => {

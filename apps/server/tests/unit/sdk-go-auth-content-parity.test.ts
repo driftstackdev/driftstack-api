@@ -159,32 +159,39 @@ describe('W589.A packages/sdk-go/auth.go content parity', () => {
     expect(body).toMatch(/method: "POST",\s*\n\s*path:\s+"\/v1\/auth\/mfa\/step-up",/);
   });
 
-  it('CliAuthorizeInitiate — V-460/V-266 STEP 1 of the CLI/GUI activation 3-step. Returns a one-shot code + browser_url; the CLI/GUI opens the URL, user signs in + confirms, then CliAuthorizeExchange returns the plaintext API key. NO API key required on initiate — fully unauthenticated; the auth happens server-side when the user signs in to the browser flow.', () => {
+  it('CliAuthorizeInitiate returns a separate device-displayed user_code', () => {
     expect(body).toMatch(
       /\/\/ CliAuthorizeInitiate — V-460 \/ V-266\. Start the CLI\/GUI activation/,
     );
-    expect(body).toMatch(
-      /\/\/ flow\. Returns a one-shot code \+ browser_url; the CLI\/GUI opens the/,
-    );
-    expect(body).toMatch(/\/\/ URL, the user signs in to the dashboard and confirms, after which/);
-    expect(body).toMatch(/\/\/ CliAuthorizeExchange returns the plaintext API key\./);
+    expect(body).toMatch(/\/\/ flow\. Returns a one-shot code, device-displayed user_code, and/);
+    expect(body).toMatch(/\/\/ browser_url\. The user types that code in the dashboard before/);
+    expect(body).toMatch(/\/\/ CliAuthorizeExchange can return the plaintext API key\./);
     expect(body).toMatch(
       /func \(r \*AuthResource\) CliAuthorizeInitiate\(ctx context\.Context, body \*CliAuthorizeInitiateRequest\) \(\*CliAuthorizeInitiateResponse, error\)/,
     );
     expect(body).toMatch(/method: "POST",\s*\n\s*path:\s+"\/v1\/auth\/cli-authorize\/initiate",/);
   });
 
-  it('CliAuthorizeBind — V-460/V-266 STEP 2 (web-session-authenticated). Called by dashboard\'s confirm page after user clicks Authorize: mints a scoped API key on the calling account + stages it for delivery via CliAuthorizeExchange. CRITICAL: "scoped" API key — drift to minting a full-power admin key would let a phishing-CLI-flow escalate.', () => {
+  it('CliAuthorizeBind documents the required initiating-device UserCode', () => {
     expect(body).toMatch(
       /\/\/ CliAuthorizeBind — V-460 \/ V-266\. Web-session-authenticated\. Called/,
     );
-    expect(body).toMatch(/\/\/ by the dashboard's confirm page after the user clicks Authorize:/);
-    expect(body).toMatch(/\/\/ mints a scoped API key on the calling account and stages it for/);
-    expect(body).toMatch(/\/\/ delivery via CliAuthorizeExchange\./);
+    expect(body).toMatch(
+      /\/\/ by the dashboard's confirm page after the user submits the initiating/,
+    );
+    expect(body).toMatch(/\/\/ device's UserCode and clicks Authorize:/);
+    expect(body).toMatch(
+      /\/\/ device's UserCode and clicks Authorize: mints a scoped API key on the/,
+    );
+    expect(body).toMatch(
+      /\/\/ calling account and stages it for delivery via CliAuthorizeExchange\./,
+    );
     expect(body).toMatch(
       /func \(r \*AuthResource\) CliAuthorizeBind\(ctx context\.Context, body \*CliAuthorizeBindRequest\) \(\*CliAuthorizeBindResponse, error\)/,
     );
-    expect(body).toMatch(/method: "POST",\s*\n\s*path:\s+"\/v1\/auth\/cli-authorize\/bind",/);
+    expect(body).toMatch(
+      /method: "POST",\s*\n\s*path:\s+"\/v1\/auth\/cli-authorize\/bind-device-code",/,
+    );
   });
 
   it('CliAuthorizeExchange — V-460/V-266 STEP 3 (polled by CLI/GUI). 3-state status discriminator: "pending" (keep polling) / "bound" (one-shot delivery; APIKey + AccountID populated) / "expired" (restart the flow). CRITICAL "one-shot delivery" framing: once exchange returns "bound", a subsequent poll will return "expired" — the key is not re-retrievable, mirroring the broader plaintext-once contract.', () => {

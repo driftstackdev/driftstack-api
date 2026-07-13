@@ -157,9 +157,9 @@ export class AuthResource {
    * V-460 — V-266 CLI/GUI activation flow: initiate.
    *
    * The CLI/GUI calls this with a CSRF nonce + optional client label.
-   * Returns a one-shot code + browser URL the CLI/GUI opens; the user
-   * signs in to the dashboard and confirms the activation, after which
-   * the CLI/GUI polls `cliAuthorizeExchange` to receive the API key.
+   * Returns a one-shot code, a separate user code displayed by the
+   * initiating device, and the browser URL. The user types that code in
+   * the dashboard before the CLI/GUI can receive the API key.
    */
   cliAuthorizeInitiate(body: CliAuthorizeInitiateRequest): Promise<CliAuthorizeInitiateResponse> {
     return this.http.request<CliAuthorizeInitiateResponse>({
@@ -173,7 +173,8 @@ export class AuthResource {
    * V-460 — V-266 CLI/GUI activation flow: bind.
    *
    * Web-session-authenticated. Called by the dashboard's
-   * /cli/authorize confirmation page after the user clicks Authorize:
+   * /cli/authorize confirmation page after the user enters the initiating
+   * device's `user_code` and clicks Authorize:
    * mints an API key on the calling account and stages it for delivery
    * to the CLI/GUI through the exchange endpoint. Default scopes are
    * `["account_owner"]` server-side.
@@ -181,7 +182,7 @@ export class AuthResource {
   cliAuthorizeBind(body: CliAuthorizeBindRequest): Promise<CliAuthorizeBindResponse> {
     return this.http.request<CliAuthorizeBindResponse>({
       method: 'POST',
-      path: '/v1/auth/cli-authorize/bind',
+      path: '/v1/auth/cli-authorize/bind-device-code',
       body,
     });
   }

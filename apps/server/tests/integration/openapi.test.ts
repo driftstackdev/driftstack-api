@@ -179,7 +179,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/auth/password-reset/confirm',
         '/v1/auth/password-reset/request',
         // V-460 — V-266 CLI/GUI activation flow
-        '/v1/auth/cli-authorize/bind',
+        '/v1/auth/cli-authorize/bind-device-code',
         '/v1/auth/cli-authorize/exchange',
         '/v1/auth/cli-authorize/initiate',
         // V-456 profile base CRUD

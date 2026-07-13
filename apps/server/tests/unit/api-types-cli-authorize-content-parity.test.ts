@@ -15,7 +15,7 @@
 //   • CliAuthorizeInitiateRequest: state 16..128 + optional
 //     client_label 1..120.
 //   • CliAuthorizeBindRequest (web-session-auth): code 16..128 +
-//     state 16..128 + optional scopes .min(1); defaults to
+//     state 16..128 + required user_code + optional scopes .min(1); defaults to
 //     ["account_owner"] server-side.
 //   • CliAuthorizeBindResponse: ok:true literal + account_id (no
 //     plaintext key — only via /exchange).
@@ -45,13 +45,13 @@ describe('W433.B packages/api-types/src/cli-authorize.ts content parity', () => 
       /\/\/ Replaces the "find your API key in the dashboard, paste it into the\s*\n?\s*\/\/ GUI" flow with an OAuth-style browser handshake:/,
     );
     expect(body).toMatch(
-      /\/\/\s*1\. CLI\/GUI calls \/v1\/auth\/cli-authorize\/initiate, gets a one-shot\s*\n?\s*\/\/\s+`code` \+ a `browser_url` to open\./,
+      /\/\/\s*1\. CLI\/GUI calls \/v1\/auth\/cli-authorize\/initiate, gets a one-shot\s*\n?\s*\/\/\s+`code`, a device-displayed `user_code`, and a `browser_url` to open\./,
     );
     expect(body).toMatch(
-      /\/\/\s*2\. CLI\/GUI opens browser_url; user signs in to the dashboard if\s*\n?\s*\/\/\s+not already, sees a confirmation screen, clicks Authorize\./,
+      /\/\/\s*2\. CLI\/GUI opens browser_url; user signs in to the dashboard if\s*\n?\s*\/\/\s+not already, types the user_code shown by their device, and clicks\s*\n?\s*\/\/\s+Authorize\. The browser URL alone cannot approve another device\./,
     );
     expect(body).toMatch(
-      /\/\/\s*3\. Dashboard calls \/v1\/auth\/cli-authorize\/bind with web-session\s*\n?\s*\/\/\s+bearer auth; server mints a scoped API key and stores the\s*\n?\s*\/\/\s+plaintext keyed by `code` \(Redis, 5-minute TTL\)\./,
+      /\/\/\s*3\. Dashboard calls \/v1\/auth\/cli-authorize\/bind-device-code with web-session\s*\n?\s*\/\/\s+bearer auth plus the user_code; server mints a scoped API key and\s*\n?\s*\/\/\s+stores only its encrypted envelope under `sha256\(code\)` \(Redis,\s*\n?\s*\/\/\s+2-minute bound TTL\)\./,
     );
     expect(body).toMatch(
       /\/\/\s*4\. CLI\/GUI polls \/v1\/auth\/cli-authorize\/exchange until status\s*\n?\s*\/\/\s+flips from `pending` → `bound` → returns plaintext API key\./,
@@ -78,18 +78,18 @@ describe('W433.B packages/api-types/src/cli-authorize.ts content parity', () => 
     );
   });
 
-  it('CliAuthorizeInitiateResponse: one-shot opaque code (never displayed) + browser_url URL + expires_at wall-clock', () => {
+  it('CliAuthorizeInitiateResponse: opaque URL code + separate displayed user_code + browser URL', () => {
     expect(body).toMatch(
-      /\/\*\* One-shot opaque code; never displayed to the user\. \*\/\s*\n?\s*code: z\.string\(\),\s*\n?\s*\/\*\* URL the CLI\/GUI opens in the system browser\. The dashboard's\s*\n?\s*\*\s*\/cli\/authorize page reads `code` \+ `state` from the query string\. \*\/\s*\n?\s*browser_url: z\.string\(\)\.url\(\),\s*\n?\s*\/\*\* Wall-clock expiry of the code; the CLI\/GUI gives up polling after this\. \*\/\s*\n?\s*expires_at: Iso8601Schema,/,
+      /\/\*\* One-shot opaque device code; never displayed to the user\. \*\/\s*\n?\s*code: z\.string\(\),[\s\S]*?user_code: CliAuthorizeUserCodeSchema,[\s\S]*?browser_url: z\.string\(\)\.url\(\),[\s\S]*?expires_at: Iso8601Schema/,
     );
   });
 
-  it('CliAuthorizeBindRequest (web-session auth required): code/state 16..128 + optional scopes .min(1); defaults to ["account_owner"] server-side rationale', () => {
+  it('CliAuthorizeBindRequest requires the device-displayed user_code', () => {
     expect(body).toMatch(
-      /\/\/ ─── \/v1\/auth\/cli-authorize\/bind \(web-session auth required\) ───────/,
+      /\/\/ ─── \/v1\/auth\/cli-authorize\/bind-device-code \(web-session auth required\) ───/,
     );
     expect(body).toMatch(
-      /export const CliAuthorizeBindRequestSchema = z\.object\(\{\s*\n?\s*code: z\.string\(\)\.min\(16\)\.max\(128\),\s*\n?\s*state: z\.string\(\)\.min\(16\)\.max\(128\),\s*\n?\s*\/\*\* Scopes to attach to the minted API key\. Defaults to\s*\n?\s*\*\s*\["account_owner"\] server-side if omitted\. \*\/\s*\n?\s*scopes: z\.array\(ApiKeyScopeSchema\)\.min\(1\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CliAuthorizeBindRequestSchema = z\.object\(\{\s*\n?\s*code: z\.string\(\)\.min\(16\)\.max\(128\),\s*\n?\s*state: z\.string\(\)\.min\(16\)\.max\(128\),[\s\S]*?user_code: CliAuthorizeUserCodeSchema,[\s\S]*?scopes: z\.array\(ApiKeyScopeSchema\)\.min\(1\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 

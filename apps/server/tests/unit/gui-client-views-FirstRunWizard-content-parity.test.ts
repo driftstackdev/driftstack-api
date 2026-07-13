@@ -123,6 +123,8 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(/browserState\.kind === 'idle'/);
     expect(body).toMatch(/browserState\.kind === 'opening'/);
     expect(body).toMatch(/browserState\.kind === 'waiting'/);
+    expect(body).toMatch(/\{browserState\.userCode\}/);
+    expect(body).toMatch(/Never share it with someone who\s*\n?\s*contacted you/);
     expect(body).toMatch(/browserState\.kind === 'success'/);
     expect(body).toMatch(/browserState\.kind === 'error'/);
     expect(body).toMatch(/mint an API key bound to your account and store it in the OS keychain/);

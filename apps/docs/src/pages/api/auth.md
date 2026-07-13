@@ -268,19 +268,20 @@ below.
 
 Step 1 — **Initiate** — the CLI/GUI generates a CSRF nonce + optional
 client label, calls `POST /v1/auth/cli-authorize/initiate`, and
-gets back a one-shot `code` + a `browser_url` that opens the
-dashboard's Authorize page.
+gets back a one-shot `code`, a separate device-displayed `user_code`,
+and a `browser_url` that opens the dashboard's Authorize page.
 
 ## Bind activation (dashboard)
 
-`POST /v1/auth/cli-authorize/bind`
+`POST /v1/auth/cli-authorize/bind-device-code`
 
 Step 2 — **Bind** — the user signs in to the dashboard (if not already),
-sees a confirmation screen ("Driftstack desktop on John's
-MacBook"), and clicks Authorize. The dashboard hits
-`POST /v1/auth/cli-authorize/bind` with the user's web-session
-bearer; the server mints a scoped API key on the calling account
-and stores the plaintext keyed by `code` (Redis, 5-minute TTL).
+types the `user_code` shown by the initiating device, and clicks
+Authorize. The dashboard hits
+`POST /v1/auth/cli-authorize/bind-device-code` with the user's
+web-session bearer; the server mints a scoped API key on the calling
+account and stores only its encrypted envelope under a hashed code
+identifier (Redis, 2-minute post-bind TTL).
 
 ## Exchange for the API key
 
@@ -305,10 +306,11 @@ a code that wasn't issued in the same session.
 ## SDK example
 
 ```ts
-const { code, browser_url } = await client.auth.cliAuthorizeInitiate({
+const { code, user_code, browser_url } = await client.auth.cliAuthorizeInitiate({
   state: crypto.randomUUID(),
   client_label: 'My CLI on darwin-arm64',
 });
+console.log(`Enter ${user_code} in the browser to approve this device.`);
 open(browser_url); // open in system browser
 
 for (;;) {
@@ -327,6 +329,7 @@ out = client.auth.cli_authorize_initiate({
     "state": secrets.token_urlsafe(24),
     "client_label": "My CLI",
 })
+print(f'Enter {out["user_code"]} in the browser to approve this device.')
 webbrowser.open(out["browser_url"])
 
 while True:
@@ -347,6 +350,7 @@ init, _ := client.Auth.CliAuthorizeInitiate(ctx, &driftstack.CliAuthorizeInitiat
     State:       state,
     ClientLabel: "My Go CLI",
 })
+fmt.Printf("Enter %s in the browser to approve this device.\n", init.UserCode)
 exec.Command("open", init.BrowserURL).Run()
 
 for {

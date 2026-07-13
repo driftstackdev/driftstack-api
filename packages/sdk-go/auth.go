@@ -180,9 +180,9 @@ func (r *AuthResource) MfaStepUp(ctx context.Context, body *MfaStepUpRequest) (*
 }
 
 // CliAuthorizeInitiate — V-460 / V-266. Start the CLI/GUI activation
-// flow. Returns a one-shot code + browser_url; the CLI/GUI opens the
-// URL, the user signs in to the dashboard and confirms, after which
-// CliAuthorizeExchange returns the plaintext API key.
+// flow. Returns a one-shot code, device-displayed user_code, and
+// browser_url. The user types that code in the dashboard before
+// CliAuthorizeExchange can return the plaintext API key.
 func (r *AuthResource) CliAuthorizeInitiate(ctx context.Context, body *CliAuthorizeInitiateRequest) (*CliAuthorizeInitiateResponse, error) {
 	var out CliAuthorizeInitiateResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -197,14 +197,14 @@ func (r *AuthResource) CliAuthorizeInitiate(ctx context.Context, body *CliAuthor
 }
 
 // CliAuthorizeBind — V-460 / V-266. Web-session-authenticated. Called
-// by the dashboard's confirm page after the user clicks Authorize:
-// mints a scoped API key on the calling account and stages it for
-// delivery via CliAuthorizeExchange.
+// by the dashboard's confirm page after the user submits the initiating
+// device's UserCode and clicks Authorize: mints a scoped API key on the
+// calling account and stages it for delivery via CliAuthorizeExchange.
 func (r *AuthResource) CliAuthorizeBind(ctx context.Context, body *CliAuthorizeBindRequest) (*CliAuthorizeBindResponse, error) {
 	var out CliAuthorizeBindResponse
 	if err := r.client.do(ctx, requestOptions{
 		method: "POST",
-		path:   "/v1/auth/cli-authorize/bind",
+		path:   "/v1/auth/cli-authorize/bind-device-code",
 		body:   body,
 		out:    &out,
 	}); err != nil {

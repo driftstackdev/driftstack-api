@@ -11,7 +11,7 @@
 //     account and deletes (one-shot — second call returns expired),
 //     invalid_code + consumption for malformed external store state
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   CliAuthorizeError,
@@ -53,11 +53,24 @@ describe('V-553.B-22 CliAuthorizeService.initiate', () => {
     expect(out.browser_url).toContain('https://app.driftstack.dev/cli/authorize');
     expect(out.browser_url).toContain('state=st_xyz');
     expect(out.browser_url).toContain(`code=${encodeURIComponent(out.code)}`);
+    expect(out.user_code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
+    expect(out.browser_url).not.toContain(out.user_code);
     expect(out.expires_at).toBeInstanceOf(Date);
     const redisKey = cliAuthorizeRedisKey(out.code);
     expect(redisKey).toMatch(/^cli-auth:code:[0-9a-f]{64}$/);
     expect(redisKey).not.toContain(out.code);
-    expect(await store.get(redisKey)).not.toBeNull();
+    const stored = await store.get(redisKey);
+    expect(stored).not.toBeNull();
+    expect(stored).not.toContain(out.user_code);
+    const storedRecord = JSON.parse(stored ?? '{}') as Record<string, unknown>;
+    expect(storedRecord).not.toHaveProperty('user_code');
+    expect(storedRecord).toMatchObject({
+      user_code_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(storedRecord.user_code_hash).not.toBe(
+      createHash('sha256').update(out.user_code.replace('-', '')).digest('hex'),
+    );
+    expect(new URL(out.browser_url).searchParams.has('user_code')).toBe(false);
   });
 
   it('uses dashboardPath override when supplied', async () => {
@@ -80,6 +93,7 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
       svc.bind({
         code: 'nope',
         state: 's',
+        user_code: 'ABCD-EFGH',
         account_id: 'acc',
         api_key_plaintext: 'ds_live_x',
         scopes: ['read'],
@@ -89,11 +103,12 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
 
   it('throws state_mismatch when state does not match the stored value', async () => {
     const { svc } = makeSvc();
-    const { code } = await svc.initiate({ state: 'correct' });
+    const { code, user_code } = await svc.initiate({ state: 'correct' });
     await expect(
       svc.bind({
         code,
         state: 'wrong',
+        user_code,
         account_id: 'acc',
         api_key_plaintext: 'ds_live_x',
         scopes: ['read'],
@@ -103,10 +118,11 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
 
   it('throws already_bound on a second bind for the same code', async () => {
     const { svc } = makeSvc();
-    const { code } = await svc.initiate({ state: 's' });
+    const { code, user_code } = await svc.initiate({ state: 's' });
     await svc.bind({
       code,
       state: 's',
+      user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'ds_live_x',
       scopes: ['read'],
@@ -115,6 +131,7 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
       svc.bind({
         code,
         state: 's',
+        user_code,
         account_id: 'acc_1',
         api_key_plaintext: 'ds_live_y',
         scopes: ['read'],
@@ -124,10 +141,11 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
 
   it('happy path transitions pending → bound + returns the account_id', async () => {
     const { svc } = makeSvc();
-    const { code } = await svc.initiate({ state: 's' });
+    const { code, user_code } = await svc.initiate({ state: 's' });
     const result = await svc.bind({
       code,
       state: 's',
+      user_code,
       account_id: 'acc_99',
       api_key_plaintext: 'ds_live_secret',
       scopes: ['account_owner'],
@@ -138,11 +156,12 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
 
   it('atomically permits exactly one of two overlapping binds', async () => {
     const { svc } = makeSvc();
-    const { code } = await svc.initiate({ state: 's' });
+    const { code, user_code } = await svc.initiate({ state: 's' });
     const bind = (suffix: string) =>
       svc.bind({
         code,
         state: 's',
+        user_code,
         account_id: `acc_${suffix}`,
         api_key_plaintext: `ds_live_${suffix}`,
         scopes: ['read'],
@@ -163,9 +182,38 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
     }
   });
 
+  it('requires the device-displayed user code and accepts normalized case', async () => {
+    const { svc } = makeSvc();
+    const initiated = await svc.initiate({ state: 's' });
+    const wrongUserCode =
+      (initiated.user_code.startsWith('A') ? 'B' : 'A') + initiated.user_code.slice(1);
+
+    await expect(
+      svc.bind({
+        code: initiated.code,
+        state: 's',
+        user_code: wrongUserCode,
+        account_id: 'acc_wrong',
+        api_key_plaintext: 'ds_live_wrong',
+        scopes: ['read'],
+      }),
+    ).rejects.toMatchObject({ code: 'user_code_mismatch' });
+
+    await expect(
+      svc.bind({
+        code: initiated.code,
+        state: 's',
+        user_code: initiated.user_code.toLowerCase(),
+        account_id: 'acc_right',
+        api_key_plaintext: 'ds_live_right',
+        scopes: ['read'],
+      }),
+    ).resolves.toMatchObject({ account_id: 'acc_right' });
+  });
+
   it('consumes malformed JSON and returns invalid_code instead of a repeat 500', async () => {
     const { svc, store } = makeSvc();
-    const { code } = await svc.initiate({ state: 's' });
+    const { code, user_code } = await svc.initiate({ state: 's' });
     const key = cliAuthorizeRedisKey(code);
     await store.setEx(key, '{"state":', 300);
 
@@ -173,6 +221,7 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
       svc.bind({
         code,
         state: 's',
+        user_code,
         account_id: 'acc_bad',
         api_key_plaintext: 'ds_live_never_stored',
         scopes: ['read'],
@@ -212,10 +261,11 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
 
   it('returns bound + plaintext + account_id once, then expired (one-shot)', async () => {
     const { svc } = makeSvc();
-    const { code } = await svc.initiate({ state: 's' });
+    const { code, user_code } = await svc.initiate({ state: 's' });
     await svc.bind({
       code,
       state: 's',
+      user_code,
       account_id: 'acc_42',
       api_key_plaintext: 'ds_live_one_shot',
       scopes: ['read'],
@@ -232,6 +282,7 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
   });
 
   it.each([
+    ['missing user-code verifier', { user_code_hash: undefined }],
     ['wrong pending secret shape', { secret_blob: 'plaintext' }],
     ['wrong pending encrypted flag', { encrypted: true }],
     ['wrong account type', { account_id: 42 }],
@@ -263,6 +314,7 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
     await svc.bind({
       code: first.code,
       state: STATE,
+      user_code: first.user_code,
       account_id: 'acc_first',
       api_key_plaintext: 'ds_live_first',
       scopes: ['read'],
@@ -271,6 +323,7 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
     await svc.bind({
       code: second.code,
       state: STATE,
+      user_code: second.user_code,
       account_id: 'acc_second',
       api_key_plaintext: 'ds_live_second',
       scopes: ['read'],
@@ -295,10 +348,11 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
       dashboardOrigin: 'https://app.driftstack.dev',
       secretEncryptionKeyBase64: ENC_KEY,
     });
-    const { code } = await svc.initiate({ state: STATE });
+    const { code, user_code } = await svc.initiate({ state: STATE });
     await svc.bind({
       code,
       state: STATE,
+      user_code,
       account_id: 'acc_enc',
       api_key_plaintext: 'ds_live_secret_at_rest',
       scopes: ['read'],
@@ -351,10 +405,11 @@ describe('V-266 C2 — atomic one-shot exchange (no double-delivery under concur
       dashboardOrigin: 'https://app.driftstack.dev',
       secretEncryptionKeyBase64: ENC_KEY,
     });
-    const { code } = await svc.initiate({ state: STATE });
+    const { code, user_code } = await svc.initiate({ state: STATE });
     await svc.bind({
       code,
       state: STATE,
+      user_code,
       account_id: 'acc_race',
       api_key_plaintext: 'ds_live_race',
       scopes: ['read'],

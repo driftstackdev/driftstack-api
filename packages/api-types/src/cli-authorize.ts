@@ -4,12 +4,14 @@
 // GUI" flow with an OAuth-style browser handshake:
 //
 //   1. CLI/GUI calls /v1/auth/cli-authorize/initiate, gets a one-shot
-//      `code` + a `browser_url` to open.
+//      `code`, a device-displayed `user_code`, and a `browser_url` to open.
 //   2. CLI/GUI opens browser_url; user signs in to the dashboard if
-//      not already, sees a confirmation screen, clicks Authorize.
-//   3. Dashboard calls /v1/auth/cli-authorize/bind with web-session
-//      bearer auth; server mints a scoped API key and stores only its
-//      encrypted envelope under `sha256(code)` (Redis, 2-minute bound TTL).
+//      not already, types the user_code shown by their device, and clicks
+//      Authorize. The browser URL alone cannot approve another device.
+//   3. Dashboard calls /v1/auth/cli-authorize/bind-device-code with web-session
+//      bearer auth plus the user_code; server mints a scoped API key and
+//      stores only its encrypted envelope under `sha256(code)` (Redis,
+//      2-minute bound TTL).
 //   4. CLI/GUI polls /v1/auth/cli-authorize/exchange until status
 //      flips from `pending` → `bound` → returns plaintext API key.
 //
@@ -17,10 +19,19 @@
 // supplied by the CLI/GUI on initiate, echoed in the browser URL,
 // verified by the dashboard on bind, and re-verified by the CLI/GUI
 // on exchange — defends against the dashboard binding a code that
-// wasn't issued in the same session.
+// wasn't issued in the same session. The separate 40-bit `user_code`
+// is never placed in the URL and proves access to the initiating device.
 
 import { z } from 'zod';
 import { ApiKeyScopeSchema, Iso8601Schema } from './common.js';
+
+/** RFC 8628-style device verification code. Ambiguous I/O/0/1 symbols are
+ * excluded; input is normalized so customers can type lowercase safely. */
+export const CliAuthorizeUserCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
 
 // ─── /v1/auth/cli-authorize/initiate ──────────────────────────────
 
@@ -37,8 +48,11 @@ export const CliAuthorizeInitiateRequestSchema = z.object({
 export type CliAuthorizeInitiateRequest = z.infer<typeof CliAuthorizeInitiateRequestSchema>;
 
 export const CliAuthorizeInitiateResponseSchema = z.object({
-  /** One-shot opaque code; never displayed to the user. */
+  /** One-shot opaque device code; never displayed to the user. */
   code: z.string(),
+  /** Separate code displayed in the initiating app and typed into the
+   *  dashboard. A copied browser URL is insufficient to authorize. */
+  user_code: CliAuthorizeUserCodeSchema,
   /** URL the CLI/GUI opens in the system browser. The dashboard's
    *  /cli/authorize page reads `code` + `state` from the query string. */
   browser_url: z.string().url(),
@@ -47,11 +61,13 @@ export const CliAuthorizeInitiateResponseSchema = z.object({
 });
 export type CliAuthorizeInitiateResponse = z.infer<typeof CliAuthorizeInitiateResponseSchema>;
 
-// ─── /v1/auth/cli-authorize/bind (web-session auth required) ───────
+// ─── /v1/auth/cli-authorize/bind-device-code (web-session auth required) ───
 
 export const CliAuthorizeBindRequestSchema = z.object({
   code: z.string().min(16).max(128),
   state: z.string().min(16).max(128),
+  /** Must match the separate verification code shown by the device. */
+  user_code: CliAuthorizeUserCodeSchema,
   /** Scopes to attach to the minted API key. Defaults to
    *  ["account_owner"] server-side if omitted. */
   scopes: z.array(ApiKeyScopeSchema).min(1).optional(),

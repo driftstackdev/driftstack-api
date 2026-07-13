@@ -15,7 +15,7 @@
 //   • Sign-in gate redirect: /login?next= + /signup?next= both
 //     encode the current URL (pathname + search), so deep-link
 //     resumes cleanly after auth.
-//   • POST /v1/auth/cli-authorize/bind registered server-side
+//   • POST /v1/auth/cli-authorize/bind-device-code registered server-side
 //     + Bearer-token request shape.
 //   • V-328e OS deep-link: driftstack://auth/callback?code=…&
 //     state=… after 600ms delay (so user sees success first).
@@ -74,12 +74,14 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/signupLink\.setAttribute\('href', '\/signup\?next=' \+ next\)/);
   });
 
-  it('POST /v1/auth/cli-authorize/bind wired client + registered server-side (Bearer-token)', () => {
+  it('POST /v1/auth/cli-authorize/bind-device-code wired client + server-side (Bearer-token)', () => {
     expect(existsSync(AUTH_CLI_ROUTE)).toBe(true);
-    expect(read(AUTH_CLI_ROUTE)).toContain("'/v1/auth/cli-authorize/bind'");
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/auth\/cli-authorize\/bind'/);
+    expect(read(AUTH_CLI_ROUTE)).toContain("'/v1/auth/cli-authorize/bind-device-code'");
+    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/auth\/cli-authorize\/bind-device-code'/);
     expect(body).toMatch(/authorization: 'Bearer ' \+ sessionToken/);
-    expect(body).toMatch(/body: JSON\.stringify\(\{ code: code, state: state \}\)/);
+    expect(body).toMatch(
+      /body: JSON\.stringify\(\{ code: code, state: state, user_code: userCode \}\)/,
+    );
   });
 
   it('serializes and bounds the consequential bind request', () => {
@@ -124,16 +126,17 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/returnToDesktop\(600\);/);
   });
 
-  it('code preview: first 6 chars + ellipsis (no full-code leak in UI)', () => {
-    expect(body).toMatch(/codePreview\.textContent = code\.slice\(0, 6\) \+ '…';/);
+  it('requires the separate device-displayed code and never previews the URL credential', () => {
+    expect(body).toContain('data-user-code');
+    expect(body).toContain('placeholder="XXXX-XXXX"');
+    expect(body).toContain('Never use a code sent by');
+    expect(body).not.toMatch(/codePreview|code\.slice\(0, 6\)/);
   });
 
-  it('"API key named \'Desktop client\'" + same-scope-as-dashboard security framing pinned', () => {
+  it('restricted Desktop client key + explicit revoke framing pinned', () => {
+    expect(body).toMatch(/Authorizing will mint a new restricted API key named "Desktop client"/);
     expect(body).toMatch(
-      /Authorizing will mint a new API key named "Desktop client" with the same scope\s+as your dashboard session/,
-    );
-    expect(body).toMatch(
-      /The key gives the desktop app the same access as your web session\s+and remains active until you revoke it from <a href="\/api-keys"/,
+      /restricted device key bound to your\s+account\. It remains active until you revoke it from <a href="\/api-keys"/,
     );
   });
 

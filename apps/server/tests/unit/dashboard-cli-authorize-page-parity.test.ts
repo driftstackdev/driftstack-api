@@ -31,14 +31,15 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     expect(p).toMatch(/activation flow \(paired with V-266 backend cli-authorize routes\)/);
   });
 
-  it('CRITICAL 5-step canonical flow framing pinned. The flow is: GUI opens URL ?code=&state= → check session → confirmation UI → POST bind → success screen. Drift to a different step ordering would break the V-266 contract.', () => {
+  it('CRITICAL 5-step canonical flow includes the device-only verification code before bind', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/1\. GUI opens this URL with `\?code=…&state=…` query params/);
     expect(p).toMatch(/2\. Page checks localStorage\.ds_web_session_token — if missing/);
     expect(p).toMatch(/redirects to \/signup\?next=<this-url>/);
-    expect(p).toMatch(/3\. Page shows a confirmation: "Authorize Driftstack desktop client\?"/);
-    expect(p).toMatch(/4\. On Authorize: POST \/v1\/auth\/cli-authorize\/bind with/);
+    expect(p).toMatch(/3\. Page requires the separate verification code displayed only by/);
+    expect(p).toMatch(/initiating desktop app/);
+    expect(p).toMatch(/4\. On Authorize: POST \/v1\/auth\/cli-authorize\/bind-device-code with/);
     expect(p).toMatch(/5\. Success screen: "Authorized — return to the desktop app\."/);
   });
 
@@ -89,11 +90,11 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     expect(p).toMatch(/signupLink\.setAttribute\('href', '\/signup\?next=' \+ next\)/);
   });
 
-  it('CRITICAL bind contract pinned — POST /v1/auth/cli-authorize/bind with Bearer auth + body {code, state}. The Bearer-not-cookie auth is what threads the web session into the server (mirrors W703 CLI activation cross-SDK).', () => {
+  it('CRITICAL bind contract requires Bearer auth plus code, state, and device-displayed user_code', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/cli-authorize\/bind', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{\s*\n\s+'content-type': 'application\/json',\s*\n\s+authorization: 'Bearer ' \+ sessionToken,\s*\n\s+\},\s*\n\s+body: JSON\.stringify\(\{ code: code, state: state \}\),/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/cli-authorize\/bind-device-code', \{[\s\S]*?authorization: 'Bearer ' \+ sessionToken,[\s\S]*?body: JSON\.stringify\(\{ code: code, state: state, user_code: userCode \}\),/,
     );
   });
 
@@ -102,13 +103,11 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
 
     expect(p).toMatch(/V-328e — fire the OS deep-link redirect to hand off the/);
     expect(p).toMatch(/authorization to the desktop app's onOpenUrl listener/);
-    expect(p).toMatch(
-      /window\.setTimeout\(\(\) => \{\s*\n\s+try \{\s*\n\s+const target =\s*\n\s+'driftstack:\/\/auth\/callback\?code=' \+/,
-    );
+    expect(p).toMatch(/function returnToDesktop\(delayMs\) \{/);
     expect(p).toMatch(
       /'driftstack:\/\/auth\/callback\?code=' \+\s*\n\s+encodeURIComponent\(code\) \+\s*\n\s+'&state=' \+\s*\n\s+encodeURIComponent\(state\)/,
     );
-    expect(p).toMatch(/\}, 600\)/);
+    expect(p).toMatch(/returnToDesktop\(600\)/);
   });
 
   it('CRITICAL V-328 fallback framing pinned — "polling fallback in browser-sign-in.ts continues to work for installs where the URL scheme registration didn\'t take". The polling-as-fallback path is what guarantees GUI activation completes even when driftstack:// scheme isn\'t registered.', () => {
@@ -119,9 +118,12 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     );
   });
 
-  it("CRITICAL code-preview truncation to 6 chars pinned — `code.slice(0, 6) + '…'`. The 6-char preview is what gives the user visible confirmation that they're authorizing THIS code (not some random replay). Drift to longer would leak more entropy; drift to shorter would lose the discrimination value.", () => {
+  it('CRITICAL separate user-code input is required and normalized without exposing it in the URL', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/codePreview\.textContent = code\.slice\(0, 6\) \+ '…'/);
+    expect(p).toMatch(/data-user-code/);
+    expect(p).toMatch(/placeholder="XXXX-XXXX"/);
+    expect(p).toMatch(/\^\[A-HJ-NP-Z2-9\]\{4\}-\[A-HJ-NP-Z2-9\]\{4\}\$/);
+    expect(p).not.toMatch(/codePreview|code\.slice\(0, 6\)/);
   });
 
   it('CRITICAL Cancel button redirects to dashboard root. Drift to redirect-to-login would force re-authentication on cancel.', () => {
@@ -138,23 +140,22 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     );
   });
 
-  it('CRITICAL retry-button on error wired to authorize() handler. Drift to dropping would leave customers with a dead button after a transient network error.', () => {
+  it('CRITICAL retry avoids replay after an ambiguous bind timeout', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/retryBtn\.addEventListener\('click', authorize\)/);
+    expect(p).toMatch(/if \(authorizeOutcomeUnknown\) \{\s*\n\s+returnToDesktop\(0\)/);
+    expect(p).toMatch(/retryBtn\.textContent = 'Return to desktop'/);
   });
 
-  it('CRITICAL Desktop client name framing pinned — "Authorizing will mint a new API key named \'Desktop client\' with the same scope as your dashboard session". Drift to a different default name would mismatch the V-266 backend; the customer sees this name in /api-keys later.', () => {
+  it('CRITICAL customer copy identifies the minted key as restricted', () => {
     const p = read(PAGE);
-    expect(p).toMatch(
-      /Authorizing will mint a new API key named "Desktop client" with the same scope\s*\n\s+as your dashboard session/,
-    );
+    expect(p).toMatch(/Authorizing will mint a new restricted API key named "Desktop client"/);
   });
 
   it('CRITICAL /api-keys revoke-anytime framing pinned. The wording — "remains active until you revoke it from API keys" — tells customers how to undo a mistaken authorization.', () => {
     const p = read(PAGE);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /and remains active until you revoke it from <a href="\/api-keys" class="text-tk-accent-text underline">API keys<\/a>/,
+      /It remains active until you revoke it from <a href="\/api-keys" class="text-tk-accent-text underline">API keys<\/a>/,
     );
   });
 
@@ -162,10 +163,10 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /authorizeBtn\.disabled = true;\s*\n\s+authorizeBtn\.textContent = 'Authorizing…'/,
+      /authorizeBtn\.disabled = true;[\s\S]*?authorizeBtn\.setAttribute\('aria-busy', 'true'\);\s*\n\s+authorizeBtn\.textContent = 'Authorizing…'/,
     );
     expect(p).toMatch(
-      /\.finally\(\(\) => \{\s*\n\s+authorizeBtn\.disabled = false;\s*\n\s+authorizeBtn\.textContent = 'Authorize'/,
+      /\.finally\(\(\) => \{[\s\S]*?authorizeBtn\.disabled = false;[\s\S]*?authorizeBtn\.setAttribute\('aria-busy', 'false'\);\s*\n\s+authorizeBtn\.textContent = 'Authorize'/,
     );
   });
 

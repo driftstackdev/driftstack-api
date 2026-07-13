@@ -1,6 +1,6 @@
 // W321.C — drift guard for dashboard /cli/authorize page. The
 // dashboard side of the CLI auth flow binds an initiate code to
-// the signed-in account via POST /v1/auth/cli-authorize/bind.
+// the signed-in account via POST /v1/auth/cli-authorize/bind-device-code.
 // The server must register that route.
 
 import { readFileSync } from 'node:fs';
@@ -21,12 +21,12 @@ describe('W321.C dashboard /cli/authorize ↔ auth-cli route parity', () => {
   const page = read(PAGE);
   const route = read(ROUTE);
 
-  it('page calls POST /v1/auth/cli-authorize/bind', () => {
-    expect(page).toContain('/v1/auth/cli-authorize/bind');
+  it('page calls POST /v1/auth/cli-authorize/bind-device-code', () => {
+    expect(page).toContain('/v1/auth/cli-authorize/bind-device-code');
   });
 
-  it('server registers /v1/auth/cli-authorize/bind', () => {
-    expect(route).toContain("'/v1/auth/cli-authorize/bind'");
+  it('server registers /v1/auth/cli-authorize/bind-device-code', () => {
+    expect(route).toContain("'/v1/auth/cli-authorize/bind-device-code'");
   });
 
   it('server registers /v1/auth/cli-authorize/initiate (CLI side, kicks off flow)', () => {

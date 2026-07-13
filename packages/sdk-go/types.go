@@ -1000,11 +1000,11 @@ type CliAuthorizeInitiateRequest struct {
 	ClientLabel string `json:"client_label,omitempty"`
 }
 
-// CliAuthorizeInitiateResponse — one-shot code + browser URL the
-// CLI/GUI opens. The code is opaque and never displayed to the user;
-// the CLI/GUI polls /exchange with it.
+// CliAuthorizeInitiateResponse — one-shot device code, a separate
+// user verification code, and the browser URL the CLI/GUI opens.
 type CliAuthorizeInitiateResponse struct {
 	Code       string    `json:"code"`
+	UserCode   string    `json:"user_code"`
 	BrowserURL string    `json:"browser_url"`
 	ExpiresAt  time.Time `json:"expires_at"`
 }
@@ -1012,9 +1012,10 @@ type CliAuthorizeInitiateResponse struct {
 // CliAuthorizeBindRequest — web-session-authenticated. Scopes default
 // to ["account_owner"] server-side when omitted.
 type CliAuthorizeBindRequest struct {
-	Code   string   `json:"code"`
-	State  string   `json:"state"`
-	Scopes []string `json:"scopes,omitempty"`
+	Code     string   `json:"code"`
+	State    string   `json:"state"`
+	UserCode string   `json:"user_code"`
+	Scopes   []string `json:"scopes,omitempty"`
 }
 
 // CliAuthorizeBindResponse — the dashboard's confirmation UI gets

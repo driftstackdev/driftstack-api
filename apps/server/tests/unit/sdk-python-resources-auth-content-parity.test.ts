@@ -154,22 +154,22 @@ describe('W583.A packages/sdk-python/src/driftstack/resources/auth.py content pa
       /def cli_authorize_initiate\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /"""V-460 \/ V-266 CLI\/GUI activation flow: initiate\.\s*\n\s*\n\s*Returns a one-shot ``code`` \+ ``browser_url``; the CLI\/GUI opens\s*\n\s*the URL, the user signs in to the dashboard and confirms the\s*\n\s*activation, after which ``cli_authorize_exchange`` returns the\s*\n\s*plaintext API key\.\s*\n\s*"""/,
+      /Returns a one-shot ``code``, device-displayed ``user_code``, and\s*\n\s*``browser_url``\.[\s\S]*?``cli_authorize_exchange`` can return the plaintext API key/,
     );
     expect(body).toMatch(
       /"POST", "\/v1\/auth\/cli-authorize\/initiate", json_body=coerce_body\(body\)/,
     );
   });
 
-  it("Sync cli_authorize_bind — V-460/V-266 step 2/3 POST /v1/auth/cli-authorize/bind. WEB-SESSION-AUTHENTICATED — called by the dashboard's confirm page AFTER the user signs in. Mints a scoped API key on the calling account and stages it for delivery via exchange. Drift to allowing API-key auth on bind would defeat the human-in-the-loop dashboard-confirm step that prevents drive-by CLI authorization.", () => {
+  it("Sync cli_authorize_bind — V-460/V-266 step 2/3 verified bind. WEB-SESSION-AUTHENTICATED — called by the dashboard's confirm page AFTER the user signs in. Mints a scoped API key on the calling account and stages it for delivery via exchange. Drift to allowing API-key auth on bind would defeat the human-in-the-loop dashboard-confirm step that prevents drive-by CLI authorization.", () => {
     expect(body).toMatch(
       /def cli_authorize_bind\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /"""V-460 \/ V-266 CLI\/GUI activation flow: bind\.\s*\n\s*\n\s*Web-session-authenticated\. Called by the dashboard's confirm page\s*\n\s*after the user clicks Authorize: mints a scoped API key on the\s*\n\s*calling account and stages it for delivery via exchange\.\s*\n\s*"""/,
+      /Web-session-authenticated\. Called by the dashboard's confirm page\s*\n\s*after the user submits the initiating device's ``user_code`` and\s*\n\s*clicks Authorize:[\s\S]*?stages it for delivery via exchange/,
     );
     expect(body).toMatch(
-      /"POST", "\/v1\/auth\/cli-authorize\/bind", json_body=coerce_body\(body\)/,
+      /"POST", "\/v1\/auth\/cli-authorize\/bind-device-code", json_body=coerce_body\(body\)/,
     );
   });
 

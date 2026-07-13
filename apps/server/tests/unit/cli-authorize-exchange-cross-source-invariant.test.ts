@@ -89,7 +89,9 @@ describe('W881 CliAuthorizeExchange cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/cli-authorize.ts file header pins the 4-step flow — 1. CLI/GUI calls initiate; 2. user signs in; 3. dashboard binds; 4. CLI/GUI polls exchange. The 4-step doc is the canonical OAuth-handshake walkthrough.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/cli-authorize.ts'));
     expect(p).toMatch(/1\. CLI\/GUI calls \/v1\/auth\/cli-authorize\/initiate/);
-    expect(p).toMatch(/3\. Dashboard calls \/v1\/auth\/cli-authorize\/bind with web-session/);
+    expect(p).toMatch(
+      /3\. Dashboard calls \/v1\/auth\/cli-authorize\/bind-device-code with web-session/,
+    );
     expect(p).toMatch(
       /4\. CLI\/GUI polls \/v1\/auth\/cli-authorize\/exchange until status\s*\n\/\/\s+flips from `pending` → `bound` → returns plaintext API key/,
     );

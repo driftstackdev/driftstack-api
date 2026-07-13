@@ -42,7 +42,7 @@ export const DEVICE_KEY_DENY_ROUTES: ReadonlySet<string> = new Set<string>([
   'POST:/v1/api-keys/:id/rotate',
   // The device-authorize bind itself — belt-and-suspenders with the
   // web-session-only guard in routes/auth-cli.ts (no key-authed bind).
-  'POST:/v1/auth/cli-authorize/bind',
+  'POST:/v1/auth/cli-authorize/bind-device-code',
   // MFA — a device key must not enroll/disable/regenerate the human
   // second factor or its recovery codes.
   'POST:/v1/account/mfa/enroll',

@@ -40,6 +40,8 @@ describe('V-553.B-2 CliAuthorizeService — initiate', () => {
     expect(url.pathname).toBe('/cli/authorize');
     expect(url.searchParams.get('code')).toBe(r.code);
     expect(url.searchParams.get('state')).toBe('st_' + 'x'.repeat(20));
+    expect(r.user_code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
+    expect(r.browser_url).not.toContain(r.user_code);
     expect(r.expires_at.getTime() - start).toBeGreaterThanOrEqual(5 * 60 * 1000 - 10);
     expect(r.expires_at.getTime() - start).toBeLessThanOrEqual(5 * 60 * 1000 + 100);
   });
@@ -81,6 +83,7 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
     const r = await svc.bind({
       code: init.code,
       state: 'st_' + 'a'.repeat(20),
+      user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_test_plain_v553',
       scopes: ['write:sessions'],
@@ -97,6 +100,7 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
       svc.bind({
         code: 'made_up_code_' + 'x'.repeat(30),
         state: 'st_' + 'a'.repeat(20),
+        user_code: 'ABCD-EFGH',
         account_id: 'acc_1',
         api_key_plaintext: 'sk_test',
         scopes: [],
@@ -111,6 +115,7 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
       svc.bind({
         code: init.code,
         state: 'st_' + 'b'.repeat(20),
+        user_code: init.user_code,
         account_id: 'acc_1',
         api_key_plaintext: 'sk',
         scopes: [],
@@ -124,6 +129,7 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
     await svc.bind({
       code: init.code,
       state: 'st_' + 'a'.repeat(20),
+      user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_first',
       scopes: [],
@@ -132,6 +138,7 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
       svc.bind({
         code: init.code,
         state: 'st_' + 'a'.repeat(20),
+        user_code: init.user_code,
         account_id: 'acc_2',
         api_key_plaintext: 'sk_second',
         scopes: [],
@@ -155,6 +162,7 @@ describe('V-553.B-2 CliAuthorizeService — exchange', () => {
     await svc.bind({
       code: init.code,
       state: 'st_' + 'a'.repeat(20),
+      user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_one',
       scopes: [],
@@ -208,6 +216,7 @@ describe('V-553.B-2 CliAuthorizeService — TTL eviction', () => {
     await svc.bind({
       code: init.code,
       state: 'st_' + 'a'.repeat(20),
+      user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_refresh',
       scopes: [],

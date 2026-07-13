@@ -47,7 +47,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
       /POST \/v1\/auth\/cli-authorize\/initiate\s+— public; CLI\/GUI starts the flow/,
     );
     expect(body).toMatch(
-      /POST \/v1\/auth\/cli-authorize\/bind\s+— auth required; dashboard binds the code/,
+      /POST \/v1\/auth\/cli-authorize\/bind-device-code\s+— auth required; dashboard binds the code/,
     );
     expect(body).toMatch(
       /POST \/v1\/auth\/cli-authorize\/exchange\s+— public; CLI\/GUI polls for the issued key/,
@@ -72,7 +72,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
   });
 
-  it('Initiate: public but IP-gated (initiateGate preHandler, signup posture 5/min); cliAuthorizeService.initiate; returns code + browser_url + expires_at ISO', () => {
+  it('Initiate returns the separate device-displayed user_code', () => {
     expect(body).toMatch(
       /app\.post\('\/v1\/auth\/cli-authorize\/initiate', \{ preHandler: \[initiateGate\] \}, async \(req\) => \{\s*\n?\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
     );
@@ -82,13 +82,13 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     );
     expect(body).toMatch(/AUTH_IP_LIMITS\.cliAuthorizeInitiate\.capacity/);
     expect(body).toMatch(
-      /const result = await cliAuthorizeService\.initiate\(\{\s*\n?\s*state: parsed\.data\.state,\s*\n?\s*client_label: parsed\.data\.client_label \?\? null,\s*\n?\s*\}\);\s*\n?\s*return \{\s*\n?\s*code: result\.code,\s*\n?\s*browser_url: result\.browser_url,\s*\n?\s*expires_at: result\.expires_at\.toISOString\(\),\s*\n?\s*\};/,
+      /const result = await cliAuthorizeService\.initiate\([\s\S]*?return \{\s*\n?\s*code: result\.code,\s*\n?\s*user_code: result\.user_code,\s*\n?\s*browser_url: result\.browser_url,\s*\n?\s*expires_at: result\.expires_at\.toISOString\(\),\s*\n?\s*\};/,
     );
   });
 
   it("Bind: requireAuth + rateLimit('global'); apiKeysService.create with DEFAULT_KEY_NAME + scopes + expiresAt:null; account_id stamped as acc_<uuid>", () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/auth\/cli-authorize\/bind',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.post\(\s*\n?\s*'\/v1\/auth\/cli-authorize\/bind-device-code',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(/const scopes = parsed\.data\.scopes \?\? DEFAULT_SCOPES;/);
     // C1 — the minted device key is stamped provenance:'cli_device' so the
@@ -99,6 +99,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     // C1 — bind requires an interactive web session (no API-key-authed bind).
     expect(body).toMatch(/if \(ctx\.webSession === null\) \{/);
     expect(body).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
+    expect(body).toMatch(/user_code: parsed\.data\.user_code,/);
     expect(body).toMatch(/api_key_plaintext: created\.plaintext,/);
   });
 
@@ -127,10 +128,13 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     expect(body).toMatch(/AUTH_IP_LIMITS\.cliAuthorizeExchange\.capacity/);
   });
 
-  it('mapCliAuthorizeError: state_mismatch+already_bound+invalid_code → 400; not_found+expired → 404; exhaustive switch over union', () => {
+  it('mapCliAuthorizeError: user_code_mismatch has a stable 400 response', () => {
     expect(body).toMatch(/function mapCliAuthorizeError\(err: CliAuthorizeError\): Error \{/);
     expect(body).toMatch(
       /case 'state_mismatch':\s*\n?\s*return new BadRequestError\('State parameter does not match\.'\);/,
+    );
+    expect(body).toMatch(
+      /case 'user_code_mismatch':\s*\n?\s*return new BadRequestError\('Device verification code does not match\.'\);/,
     );
     expect(body).toMatch(
       /case 'already_bound':\s*\n?\s*return new BadRequestError\('Authorization code has already been bound\.'\);/,

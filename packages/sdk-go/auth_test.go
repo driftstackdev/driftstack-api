@@ -218,6 +218,7 @@ func TestAuth_CliAuthorizeInitiate(t *testing.T) {
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(CliAuthorizeInitiateResponse{
 			Code:       "cliauth_abc",
+			UserCode:   "ABCD-EFGH",
 			BrowserURL: "https://app.driftstack.dev/cli/authorize?code=cliauth_abc",
 			ExpiresAt:  expiresAt,
 		})
@@ -231,6 +232,9 @@ func TestAuth_CliAuthorizeInitiate(t *testing.T) {
 	}
 	if out.Code != "cliauth_abc" {
 		t.Errorf("code=%q", out.Code)
+	}
+	if out.UserCode != "ABCD-EFGH" {
+		t.Errorf("user_code=%q", out.UserCode)
 	}
 }
 
@@ -281,8 +285,15 @@ func TestAuth_CliAuthorizeBind(t *testing.T) {
 	t.Parallel()
 	expiresAt := time.Now().Add(5 * time.Minute).UTC().Truncate(time.Second)
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/auth/cli-authorize/bind" || r.Method != "POST" {
+		if r.URL.Path != "/v1/auth/cli-authorize/bind-device-code" || r.Method != "POST" {
 			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		var body CliAuthorizeBindRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode bind request: %v", err)
+		}
+		if body.UserCode != "ABCD-EFGH" {
+			t.Errorf("user_code=%q", body.UserCode)
 		}
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(CliAuthorizeBindResponse{
@@ -292,9 +303,10 @@ func TestAuth_CliAuthorizeBind(t *testing.T) {
 		})
 	})
 	out, err := client.Auth.CliAuthorizeBind(context.Background(), &CliAuthorizeBindRequest{
-		Code:   "cliauth_abc",
-		State:  "csrfnonce-1234567890abcdef",
-		Scopes: []string{"account_owner"},
+		Code:     "cliauth_abc",
+		State:    "csrfnonce-1234567890abcdef",
+		UserCode: "ABCD-EFGH",
+		Scopes:   []string{"account_owner"},
 	})
 	if err != nil {
 		t.Fatal(err)

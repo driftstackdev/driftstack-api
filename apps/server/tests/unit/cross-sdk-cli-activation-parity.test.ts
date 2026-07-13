@@ -10,10 +10,10 @@
 //
 //   Step 1: initiate (POST /v1/auth/cli-authorize/initiate)
 //     - PUBLIC route (CLI is unauthenticated at this point)
-//     - Returns one-shot code + browser_url
+//     - Returns one-shot code + device-displayed user_code + browser_url
 //     - CLI/GUI opens the URL; user signs in to dashboard
 //
-//   Step 2: bind (POST /v1/auth/cli-authorize/bind)
+//   Step 2: bind (POST /v1/auth/cli-authorize/bind-device-code)
 //     - WEB-SESSION-AUTHENTICATED (called by the dashboard's confirm
 //       page after the user clicks Authorize)
 //     - Mints a scoped API key on the calling account + stages it
@@ -44,7 +44,9 @@ function read(p: string): string {
 
 const TS_AUTH = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/auth.ts');
 const GO_AUTH = resolve(REPO_ROOT, 'packages/sdk-go/auth.go');
+const GO_TYPES = resolve(REPO_ROOT, 'packages/sdk-go/types.go');
 const PY_AUTH = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/auth.py');
+const API_TYPES = resolve(REPO_ROOT, 'packages/api-types/src/cli-authorize.ts');
 
 describe('W686 cross-SDK V-460/V-266 CLI 3-step activation parity', () => {
   it('all 3 SDK auth resource files exist at canonical paths', () => {
@@ -73,20 +75,23 @@ describe('W686 cross-SDK V-460/V-266 CLI 3-step activation parity', () => {
 
     for (const sdk of [ts, go, py]) {
       expect(sdk).toMatch(/\/v1\/auth\/cli-authorize\/initiate/);
-      expect(sdk).toMatch(/\/v1\/auth\/cli-authorize\/bind/);
+      expect(sdk).toMatch(/\/v1\/auth\/cli-authorize\/bind-device-code/);
       expect(sdk).toMatch(/\/v1\/auth\/cli-authorize\/exchange/);
     }
   });
 
-  it('CRITICAL Step 1 (initiate) — one-shot code + browser_url framing pinned in all 3 SDKs. The "Returns a one-shot code + browser_url" wording is what tells customers the CLI flow involves a browser hop (user signs in to dashboard, confirms activation, then CLI polls exchange).', () => {
+  it('CRITICAL separate user_code is present in initiate and required on bind across typed SDK contracts', () => {
     const ts = read(TS_AUTH);
+    const apiTypes = read(API_TYPES);
+    const go = read(GO_AUTH);
+    const goTypes = read(GO_TYPES);
     const py = read(PY_AUTH);
 
-    // sdk-typescript: "Returns a one-shot code + browser URL"
-    expect(ts).toMatch(/one-shot code \+ browser URL/);
-
-    // sdk-python: "Returns a one-shot ``code`` + ``browser_url``"
-    expect(py).toMatch(/one-shot ``code`` \+ ``browser_url``/);
+    expect(ts).toMatch(/separate user code displayed by the/);
+    expect(apiTypes).toMatch(/user_code: CliAuthorizeUserCodeSchema/);
+    expect(go).toMatch(/device-displayed user_code/);
+    expect(goTypes).toMatch(/UserCode\s+string\s+`json:"user_code"`/);
+    expect(py).toMatch(/device-displayed ``user_code``/);
   });
 
   it('CRITICAL Step 2 (bind) — web-session-authenticated invariant pinned in all 3 SDKs. CRITICAL: drift to allowing API-key auth on bind would defeat the human-in-the-loop dashboard-confirm step that prevents drive-by CLI authorization. Only a web session (= a user signed in to the dashboard) can mint a new API key for the CLI.', () => {
@@ -162,7 +167,7 @@ describe('W686 cross-SDK V-460/V-266 CLI 3-step activation parity', () => {
 
     for (const sdk of [ts, go, py]) {
       const initiatePos = sdk.search(/cli-authorize\/initiate/);
-      const bindPos = sdk.search(/cli-authorize\/bind/);
+      const bindPos = sdk.search(/cli-authorize\/bind-device-code/);
       const exchangePos = sdk.search(/cli-authorize\/exchange/);
 
       expect(initiatePos, 'initiate position').toBeGreaterThan(0);

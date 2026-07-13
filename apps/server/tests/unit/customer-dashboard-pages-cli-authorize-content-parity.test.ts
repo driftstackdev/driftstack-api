@@ -23,10 +23,10 @@ describe('customer-dashboard cli/authorize content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('V-267 + V-266 doc-comment framing pinned: pairs with V-266 backend cli-authorize routes (POST /v1/auth/cli-authorize/bind). Drift to renaming would orphan the frontend-backend pairing for the GUI activation flow', () => {
+  it('V-267 + V-266 doc-comment framing pins the verified bind route pairing', () => {
     expect(body).toMatch(/\/\/ V-267 — Browser-OAuth confirmation page for the GUI client/);
     expect(body).toMatch(/paired with V-266 backend cli-authorize routes/);
-    expect(body).toMatch(/POST \/v1\/auth\/cli-authorize\/bind/);
+    expect(body).toMatch(/POST \/v1\/auth\/cli-authorize\/bind-device-code/);
   });
 
   it("plaintext-key-never-traverses-page security invariant pinned: 'The plaintext key never traverses this page.' — drift would weaken the GUI-pairing security posture; the page only converts the code into a server-side mint, not into a plaintext-bearing response", () => {
@@ -42,8 +42,8 @@ describe('customer-dashboard cli/authorize content parity', () => {
     expect(body).toMatch(/GUI opens this URL with `\?code=…&state=…` query params/);
     expect(body).toMatch(/Page checks localStorage\.ds_web_session_token/);
     expect(body).toMatch(/redirects to \/signup\?next=<this-url>/);
-    expect(body).toMatch(/Authorize Driftstack desktop client/);
-    expect(body).toMatch(/On Authorize: POST \/v1\/auth\/cli-authorize\/bind/);
+    expect(body).toMatch(/Page requires the separate verification code displayed only by/);
+    expect(body).toMatch(/On Authorize: POST \/v1\/auth\/cli-authorize\/bind-device-code/);
   });
 
   it("withSidebar={false} on DashboardLayout — pinned so the GUI-pairing landing doesn't show the full nav, which would be confusing when arriving from the desktop client", () => {
