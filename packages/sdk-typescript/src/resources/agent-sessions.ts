@@ -156,6 +156,16 @@ export interface AgentSession {
     transport_mode_active: 'h2-only' | 'h2-and-h3';
     safeguards_passed: boolean;
   };
+  /** Latest ownership-validated harness launch/runtime failure. */
+  error_event?: {
+    timestamp: string;
+    code: string;
+    severity: 'info' | 'warn' | 'error' | 'fatal';
+    summary: string;
+    detail: string | null;
+    customer_actionable: boolean;
+    retryable: boolean;
+  } | null;
 }
 
 /**

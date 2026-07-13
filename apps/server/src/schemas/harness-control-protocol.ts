@@ -103,6 +103,9 @@ export const HARNESS_HEARTBEAT_MAX_CONCURRENT = 512;
 // retained or persisted must have its own much smaller semantic bound.
 export const HARNESS_FRAME_ID_MAX_LENGTH = 256;
 export const HARNESS_RESULT_ERROR_MAX_LENGTH = 4096;
+export const HARNESS_ERROR_EVENT_SUMMARY_MAX_LENGTH = 4096;
+export const HARNESS_ERROR_EVENT_DETAIL_MAX_LENGTH = 16 * 1024;
+export const HARNESS_ERROR_EVENT_MAX_SERIALIZED_BYTES = 20 * 1024;
 export const HARNESS_RESULT_FILENAME_MAX_LENGTH = 255;
 export const HARNESS_RESULT_MIME_MAX_LENGTH = 255;
 export const HARNESS_DOWNLOAD_MAX_FILES = 2000;
@@ -700,17 +703,29 @@ export const HeartbeatSchema = HeartbeatPayloadSchema.transform((frame, ctx) => 
 });
 export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 
-export const ErrorEventSchema = z.object({
+const ErrorEventPayloadSchema = z.object({
   type: z.literal('errorEvent'),
-  sessionId: z.string().optional(),
-  timestamp: z.string(),
-  code: z.string(),
-  severity: z.string(),
-  summary: z.string(),
-  detail: z.string().optional(),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+  timestamp: z.string().min(1).max(64),
+  code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/),
+  severity: z.enum(['info', 'warn', 'error', 'fatal']),
+  summary: z.string().max(HARNESS_ERROR_EVENT_SUMMARY_MAX_LENGTH),
+  detail: z.string().max(HARNESS_ERROR_EVENT_DETAIL_MAX_LENGTH).optional(),
   customerActionable: z.boolean(),
   retryable: z.boolean(),
 });
+
+export const ErrorEventSchema = ErrorEventPayloadSchema.transform((frame, ctx) => {
+  if (Buffer.byteLength(JSON.stringify(frame), 'utf8') > HARNESS_ERROR_EVENT_MAX_SERIALIZED_BYTES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `errorEvent must serialize to at most ${HARNESS_ERROR_EVENT_MAX_SERIALIZED_BYTES} bytes`,
+    });
+    return z.NEVER;
+  }
+  return frame;
+});
+export type HarnessErrorEvent = z.infer<typeof ErrorEventSchema>;
 
 const CapabilityReportPayloadSchema = z.object({
   type: z.literal('capabilityReport'),

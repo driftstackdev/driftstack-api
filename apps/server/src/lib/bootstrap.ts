@@ -37,6 +37,7 @@ import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
 import { makeSessionPageStateRelay } from '../services/session-page-state-relay.js';
 import { makeSessionCapabilityReportRelay } from '../services/session-capability-report-relay.js';
+import { makeSessionErrorEventRelay } from '../services/session-error-event-relay.js';
 import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
 import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.js';
 import { reconcileNodeBootChange } from '../services/node-boot-reconcile.js';
@@ -1806,6 +1807,7 @@ export async function createProductionDeps(
               sessionCapabilityReportStore,
               logger,
             ),
+            makeSessionErrorEventRelay(agentSessionsRepo, notificationEventBus, logger),
           )),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The

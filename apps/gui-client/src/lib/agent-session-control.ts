@@ -29,6 +29,14 @@ export interface AgentSessionCapabilityReport {
   egress_state: 'live' | 'dead_proxy' | null;
 }
 
+export interface AgentSessionErrorEvent {
+  code: string;
+  severity: 'info' | 'warn' | 'error' | 'fatal';
+  summary: string;
+  customer_actionable: boolean;
+  retryable: boolean;
+}
+
 /** Per-session control credential, threaded from the protected internal query
  *  through SimulatorWindow into each
  *  control call. `null` → use the account API key (in-app window).
@@ -64,6 +72,8 @@ export interface AgentSessionControlState {
   /** Present once the owning harness has emitted a validated capabilityReport.
    *  Omitted on older/control-plane-disabled servers. */
   capabilityReport?: AgentSessionCapabilityReport;
+  /** Latest authenticated harness launch/runtime failure. */
+  errorEvent?: AgentSessionErrorEvent;
 }
 
 export class AgentSessionControlError extends Error {
@@ -87,6 +97,7 @@ interface ApiSession {
   closed_reason?: string | null;
   closed_at?: string | null;
   capability_report?: unknown;
+  error_event?: unknown;
 }
 
 function isMode(v: unknown): v is SessionMode {
@@ -140,6 +151,29 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
         ? streaming
         : null,
     egress_state: egress === 'live' || egress === 'dead_proxy' ? egress : null,
+  };
+}
+
+function errorEventOf(body: ApiSession): AgentSessionErrorEvent | undefined {
+  const value = body.error_event;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const event = value as Record<string, unknown>;
+  const severity = event.severity;
+  if (
+    typeof event.code !== 'string' ||
+    typeof event.summary !== 'string' ||
+    (severity !== 'info' && severity !== 'warn' && severity !== 'error' && severity !== 'fatal') ||
+    typeof event.customer_actionable !== 'boolean' ||
+    typeof event.retryable !== 'boolean'
+  ) {
+    return undefined;
+  }
+  return {
+    code: event.code,
+    severity,
+    summary: event.summary,
+    customer_actionable: event.customer_actionable,
+    retryable: event.retryable,
   };
 }
 
@@ -278,6 +312,8 @@ export async function getAgentSession(
   };
   const capabilityReport = capabilityReportOf(body);
   if (capabilityReport !== undefined) state.capabilityReport = capabilityReport;
+  const errorEvent = errorEventOf(body);
+  if (errorEvent !== undefined) state.errorEvent = errorEvent;
   // The simulator already polls this lifecycle endpoint every five seconds.
   // When that exact window owns pair-mode control, reuse the poll to refresh
   // the API heartbeat. Keep it best-effort so liveness telemetry can never make

@@ -70,6 +70,22 @@ export const AgentSessionSchema = z.object({
       safeguards_passed: z.boolean(),
     })
     .optional(),
+  /** Latest ownership-validated harness launch/runtime failure. */
+  error_event: z
+    .object({
+      timestamp: z.string().min(1).max(64),
+      code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/),
+      severity: z.enum(['info', 'warn', 'error', 'fatal']),
+      summary: z.string().max(4096),
+      detail: z
+        .string()
+        .max(16 * 1024)
+        .nullable(),
+      customer_actionable: z.boolean(),
+      retryable: z.boolean(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type AgentSession = z.infer<typeof AgentSessionSchema>;

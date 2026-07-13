@@ -44,6 +44,7 @@ function makeSession(overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
     createdByUserId: null,
     closedAt: null,
     pairModeState: null,
+    lastErrorEvent: null,
     guiControlKeyExpiresAt: null,
     guiControlKeyCiphertext: null,
     mode: 'ai',

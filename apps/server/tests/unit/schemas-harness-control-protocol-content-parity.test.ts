@@ -40,6 +40,9 @@ import {
   HARNESS_HEARTBEAT_MAX_CONCURRENT,
   HARNESS_FRAME_ID_MAX_LENGTH,
   HARNESS_RESULT_ERROR_MAX_LENGTH,
+  HARNESS_ERROR_EVENT_SUMMARY_MAX_LENGTH,
+  HARNESS_ERROR_EVENT_DETAIL_MAX_LENGTH,
+  HARNESS_ERROR_EVENT_MAX_SERIALIZED_BYTES,
   HARNESS_RESULT_FILENAME_MAX_LENGTH,
   HARNESS_RESULT_MIME_MAX_LENGTH,
   HARNESS_DOWNLOAD_MAX_FILES,
@@ -681,7 +684,10 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'harnessVersion: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),',
     );
     // errorEvent
-    expect(body).toMatch(/export const ErrorEventSchema = z\.object\(\{/);
+    expect(body).toContain('const ErrorEventPayloadSchema = z.object({');
+    expect(body).toContain(
+      'export const ErrorEventSchema = ErrorEventPayloadSchema.transform((frame, ctx) => {',
+    );
     expect(body).toMatch(/customerActionable: z\.boolean\(\),\s*\n?\s*retryable: z\.boolean\(\),/);
     // capabilityReport — bounded payload + the three live customer signals the
     // harness emits (these used to be stripped, making the whole channel inert).
@@ -776,6 +782,39 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         })),
       }).success,
     ).toBe(false);
+  });
+
+  it('behavioral: errorEvent preserves the real producer shape but rejects oversized, malformed, and open severity values', () => {
+    const valid = {
+      type: 'errorEvent' as const,
+      sessionId: 'agt_1',
+      timestamp: '2026-07-13T06:00:00.000Z',
+      code: 'proxy_connection_failed',
+      severity: 'error',
+      summary: 'The configured proxy could not be reached.',
+      detail: 'Connection timed out.',
+      customerActionable: true,
+      retryable: true,
+    };
+    expect(HarnessOutboundSchema.safeParse(valid).success).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({ ...valid, summary: 'x'.repeat(8 * 1024 * 1024) }).success,
+    ).toBe(false);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...valid,
+        summary: 's'.repeat(HARNESS_ERROR_EVENT_SUMMARY_MAX_LENGTH),
+        detail: 'd'.repeat(HARNESS_ERROR_EVENT_DETAIL_MAX_LENGTH),
+      }).success,
+    ).toBe(false);
+    expect(HARNESS_ERROR_EVENT_MAX_SERIALIZED_BYTES).toBe(20 * 1024);
+    expect(HarnessOutboundSchema.safeParse({ ...valid, severity: 'critical' }).success).toBe(false);
+    expect(HarnessOutboundSchema.safeParse({ ...valid, code: 'Proxy failed now' }).success).toBe(
+      false,
+    );
+    expect(HarnessOutboundSchema.safeParse({ ...valid, sessionId: 'x'.repeat(257) }).success).toBe(
+      false,
+    );
   });
 
   it('fleet-admin telemetry fields decode through (no longer stripped) — file-48 §A5 / A3 W2189-W2199', () => {

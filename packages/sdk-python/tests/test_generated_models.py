@@ -93,3 +93,41 @@ def test_agent_session_capability_report_preserves_degraded_states() -> None:
     assert report.manual_input_available is False
     assert report.streaming_state == "blank"
     assert report.egress_state == "dead_proxy"
+
+
+def test_agent_session_error_event_preserves_customer_safe_diagnostics() -> None:
+    """The generated SDK exposes stable error metadata without requiring it."""
+    event = models.ErrorEvent.model_validate(
+        {
+            "timestamp": "2026-07-13T06:30:00Z",
+            "code": "launch_timeout",
+            "severity": "error",
+            "summary": "The browser did not become ready in time.",
+            "detail": None,
+            "customer_actionable": False,
+            "retryable": True,
+        }
+    )
+    assert event.code == "launch_timeout"
+    assert event.severity == "error"
+    assert event.retryable is True
+    assert models.AgentSession.model_fields["error_event"].default is None
+
+
+def test_agent_session_error_event_rejects_unknown_severity() -> None:
+    """The public severity is a closed enum, matching the fleet protocol."""
+    try:
+        models.ErrorEvent.model_validate(
+            {
+                "timestamp": "2026-07-13T06:30:00Z",
+                "code": "launch_timeout",
+                "severity": "critical",
+                "summary": "The browser did not become ready in time.",
+                "detail": None,
+                "customer_actionable": False,
+                "retryable": True,
+            }
+        )
+    except ValidationError:
+        return
+    raise AssertionError("expected ValidationError on unknown error severity")

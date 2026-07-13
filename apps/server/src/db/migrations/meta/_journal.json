@@ -708,6 +708,13 @@
       "when": 1780364400000,
       "tag": "0100_crypto_entitlements",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1780368000000,
+      "tag": "0101_agent_sessions_last_error_event",
+      "breakpoints": true
     }
   ]
 }

@@ -1107,7 +1107,7 @@ const LiveAutomationPanel = memo(function LiveAutomationPanel({
             s.status === 'closed' ||
             (typeof s.closed_at === 'string' && s.closed_at.length > 0) ||
             (typeof s.closed_reason === 'string' && s.closed_reason.length > 0);
-          if (ended) setSessionEnded({ reason: s.closed_reason });
+          if (ended) setSessionEnded({ reason: s.error_event?.code ?? s.closed_reason });
         })
         .catch(() => undefined); // a transient GET failure is not a terminal end
     };

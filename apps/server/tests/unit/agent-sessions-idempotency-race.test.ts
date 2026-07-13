@@ -29,6 +29,7 @@ function makeWinner(): AgentSessionRecord {
     createdByUserId: null,
     closedAt: null,
     pairModeState: null,
+    lastErrorEvent: null,
     mode: 'ai',
     model: 'claude-opus-4-7',
     nodeId: null,

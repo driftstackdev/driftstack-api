@@ -16,8 +16,7 @@
 // discriminated union `{type, …}`. We route the two we consume — `intentResult`
 // → the correlator's onResultFrame; the errored `sessionStatus`
 // (detail "intent_dispatch_no_session: …") → onSessionError (fast-fail) — and
-// heartbeat/capabilityReport → their injected consumers. errorEvent remains an
-// ops-only accepted frame until its node-IP-safe customer contract is defined.
+// heartbeat/capabilityReport/errorEvent → their ownership-aware consumers.
 
 import {
   HarnessOutboundSchema,
@@ -34,6 +33,7 @@ import {
   type Heartbeat,
   type SessionStatus,
   type CapabilityReport,
+  type HarnessErrorEvent,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 import {
@@ -130,6 +130,7 @@ export class FleetControlConnection {
   private readonly onHeartbeat?: (frame: Heartbeat) => void;
   private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void;
   private readonly onCapabilityReport?: (frame: CapabilityReport, reportingNodeId: string) => void;
+  private readonly onErrorEvent?: (frame: HarnessErrorEvent, reportingNodeId: string) => void;
   private readonly logger: Logger | null;
   // Actively closes THIS connection's underlying socket. Called from `supersede()`
   // when a newer connection for the node replaces this one, so a half-open box socket
@@ -172,6 +173,7 @@ export class FleetControlConnection {
     // Appended (rather than inserted among the historical positional handlers)
     // so legacy direct/test constructors keep their exact argument meaning.
     onCapabilityReport?: (frame: CapabilityReport, reportingNodeId: string) => void,
+    onErrorEvent?: (frame: HarnessErrorEvent, reportingNodeId: string) => void,
   ) {
     this.send = send;
     this.terminate = terminate;
@@ -182,6 +184,7 @@ export class FleetControlConnection {
     this.onHeartbeat = onHeartbeat;
     this.onSessionStatus = onSessionStatus;
     this.onCapabilityReport = onCapabilityReport;
+    this.onErrorEvent = onErrorEvent;
     const log = logger ?? null;
     this.logger = log;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
@@ -559,22 +562,23 @@ export class FleetControlConnection {
           // driver-session egress persistence/webhook path.
           this.onCapabilityReport?.(frame, this.nodeId);
           break;
-        // errorEvent: accepted, not yet consumed.
+        case 'errorEvent':
+          // Structured launch/runtime failure emitted after terminal
+          // sessionStatus. The consumer atomically verifies this authenticated
+          // node is still the persisted session owner before exposing it.
+          this.onErrorEvent?.(frame, this.nodeId);
+          break;
         //
         // FORWARD-GUARD (A3 bus W1859): an `errorEvent` (summary/detail) and an
         // errored `sessionStatus.detail` can carry the Mac fleet NODE's real IP on
         // an egress-leak diagnostic — detail like "proxied=<customer-proxy-exit>
         // direct=<node-ip>", where `direct=` is the node's own IP (the value the
         // proxy exists to hide; surfacing it to a customer is infra deanonymisation).
-        // These are node-local OPS diagnostics ONLY. Today no node IP reaches a
-        // customer: errorEvent is ignored here, and the consumed errored
-        // `sessionStatus` is prefix-filtered to `intent_dispatch_no_session` in
-        // onSessionError (so the egress-leak detail never matches). If a future
-        // consumer is wired here (or in onSessionError) that relays any of these to
-        // a CUSTOMER surface (webhook / SDK error / dashboard), it MUST scrub the
-        // `direct=` node IP from the detail/summary first. Do not widen this without
-        // that scrub. (A3 already scrubs the customer-facing ErrorEvent.summary
-        // harness-side; this guard keeps the CP-side relay boundary honest too.)
+        // The errorEvent relay now enforces this boundary server-side: it removes
+        // node IPs and credential-shaped text before durable/customer state. The
+        // consumed errored `sessionStatus` remains prefix-filtered to
+        // `intent_dispatch_no_session` in onSessionError, so no other diagnostic
+        // route can bypass that scrub.
       }
     } catch {
       // A handler threw on a valid frame — swallow so the node's receive loop (and
@@ -693,6 +697,8 @@ export class FleetControlRegistry {
       frame: CapabilityReport,
       reportingNodeId: string,
     ) => void,
+    // Appended for positional back-compat; durable customer/SDK error relay.
+    private readonly onErrorEvent?: (frame: HarnessErrorEvent, reportingNodeId: string) => void,
   ) {}
 
   register(
@@ -721,6 +727,7 @@ export class FleetControlRegistry {
       this.logger,
       terminate,
       this.onCapabilityReport,
+      this.onErrorEvent,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

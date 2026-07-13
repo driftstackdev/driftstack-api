@@ -27,10 +27,10 @@ describe('agent-session response schema parity', () => {
     // Top-level field names only (anchored to line start; skips comments +
     // the inline `{ kind: ... }` members of pair_mode_state).
     const ifaceBody = m?.[1] ?? '';
-    const ifaceFields = [...ifaceBody.matchAll(/^\s+(\w+)\??:/gm)]
+    const ifaceFields = [...ifaceBody.matchAll(/^ {2}(\w+)\??:/gm)]
       .map((x) => x[1])
       .filter((f): f is string => f !== undefined);
-    expect(ifaceFields.length).toBe(18);
+    expect(ifaceFields.length).toBe(19);
     expect(new Set(Object.keys(AgentSessionSchema.shape))).toEqual(new Set(ifaceFields));
   });
 
@@ -77,6 +77,30 @@ describe('agent-session response schema parity', () => {
         capability_report: { ...capabilityReport, streaming_state: 'fine' },
       }).success,
     ).toBe(false);
+  });
+
+  it('types the optional durable error_event with a closed severity vocabulary', () => {
+    const event = {
+      timestamp: '2026-07-13T06:30:00.000Z',
+      code: 'launch_timeout',
+      severity: 'error',
+      summary: 'The browser did not become ready in time.',
+      detail: null,
+      customer_actionable: false,
+      retryable: true,
+    } as const;
+    expect(AgentSessionSchema.shape.error_event.safeParse(event).success).toBe(true);
+    expect(
+      AgentSessionSchema.shape.error_event.safeParse({ ...event, severity: 'critical' }).success,
+    ).toBe(false);
+    expect(
+      AgentSessionSchema.shape.error_event.safeParse({ ...event, code: 'Launch Timeout' }).success,
+    ).toBe(false);
+    expect(
+      AgentSessionSchema.shape.error_event.safeParse({ ...event, summary: 'x'.repeat(4097) })
+        .success,
+    ).toBe(false);
+    expect(AgentSessionSchema.shape.error_event.safeParse(undefined).success).toBe(true);
   });
 
   it('OpenAPI references AgentSessionSchema on the 3 read endpoints — bare on POST 201 + GET by-id, array-wrapped on GET list (was z.object({}))', () => {

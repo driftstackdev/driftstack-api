@@ -22,6 +22,7 @@ import type {
   Heartbeat,
   SessionStatus,
   CapabilityReport,
+  HarnessErrorEvent,
 } from '../../src/schemas/harness-control-protocol.js';
 
 function dispatch(intentId: string, sessionId = 'ses_x'): IntentDispatch {
@@ -840,6 +841,43 @@ describe('FleetControlRegistry', () => {
         egressState: 'dead_proxy',
       },
     });
+  });
+
+  it('routes a bounded errorEvent with the authenticated reporting node id', () => {
+    const seen: Array<{ frame: HarnessErrorEvent; nodeId: string }> = [];
+    const reg = new FleetControlRegistry(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (frame, nodeId) => seen.push({ frame, nodeId }),
+    );
+    reg
+      .register('node-1', () => {})
+      .handleInbound(
+        JSON.stringify({
+          type: 'errorEvent',
+          sessionId: 'agt_1',
+          timestamp: '2026-07-13T06:00:00.000Z',
+          code: 'launch_timeout',
+          severity: 'error',
+          summary: 'Launch timed out.',
+          customerActionable: false,
+          retryable: true,
+        }),
+      );
+    expect(seen).toEqual([
+      {
+        nodeId: 'node-1',
+        frame: expect.objectContaining({ sessionId: 'agt_1', code: 'launch_timeout' }),
+      },
+    ]);
   });
 
   it('unregister is idempotent (double-close is a no-op)', () => {

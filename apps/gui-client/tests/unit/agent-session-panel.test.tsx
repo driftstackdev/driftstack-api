@@ -615,6 +615,11 @@ describe('AgentSessionPanel overlay UX', () => {
     ['budget-exhausted', 'Usage limit reached', 'configured usage limit'],
     ['customer-closed', 'Closed by you', 'closed from Driftstack'],
     ['browser_crashed', 'Browser stopped unexpectedly', 'stopped unexpectedly'],
+    ['proxy_connection_failed', 'Connection route unavailable', 'could not be established'],
+    ['egress_unreachable', 'Connection route unavailable', 'could not be established'],
+    ['launch_timeout', 'Browser could not start', 'try starting it again'],
+    ['webdriver_connect_failed', 'Browser could not start', 'try starting it again'],
+    ['session_config_invalid', 'Session configuration unavailable', 'current configuration'],
     ['node-restarted', 'Live worker unavailable', 'live worker stopped'],
     ['session-ended', 'Session completed', 'ended normally'],
   ])('renders truthful bounded recap copy for %s', async (reason, outcome, explanation) => {

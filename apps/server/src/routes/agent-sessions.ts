@@ -339,6 +339,17 @@ interface PublicAgentSession {
   /** Latest validated harness capability/health state. Omitted until a report
    * arrives (or when the fleet control plane is disabled). */
   capability_report?: SessionCapabilityReport;
+  /** Latest authenticated harness failure. Durable so the producer's
+   * post-terminal errorEvent remains available after close/restart. */
+  error_event: {
+    timestamp: string;
+    code: string;
+    severity: 'info' | 'warn' | 'error' | 'fatal';
+    summary: string;
+    detail: string | null;
+    customer_actionable: boolean;
+    retryable: boolean;
+  } | null;
 }
 
 /** LK.4 — LiveKit join info auto-populated on session-create + the
@@ -401,6 +412,18 @@ function publicAgentSession(
         : null,
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
+    error_event:
+      rec.lastErrorEvent === null
+        ? null
+        : {
+            timestamp: rec.lastErrorEvent.timestamp,
+            code: rec.lastErrorEvent.code,
+            severity: rec.lastErrorEvent.severity,
+            summary: rec.lastErrorEvent.summary,
+            detail: rec.lastErrorEvent.detail,
+            customer_actionable: rec.lastErrorEvent.customerActionable,
+            retryable: rec.lastErrorEvent.retryable,
+          },
   };
   if (livekit !== undefined) base.livekit = livekit;
   // Omit-when-unknown (field absent) so older SDKs + the prod no-fleet-CP path

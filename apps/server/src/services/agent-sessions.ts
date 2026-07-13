@@ -24,6 +24,7 @@
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
 import type { TranscriptEntry } from './agent-decomposer.js';
+import { z } from 'zod';
 
 export type AgentSessionStatus = 'active' | 'paused' | 'closed';
 
@@ -36,6 +37,20 @@ export type AgentSessionStatus = 'active' | 'paused' | 'closed';
  * an AI-driven run mid-flight.
  */
 export type AgentSessionMode = 'manual' | 'ai' | 'pair';
+
+export const AgentSessionErrorEventSchema = z.object({
+  timestamp: z.string().min(1).max(64),
+  code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/),
+  severity: z.enum(['info', 'warn', 'error', 'fatal']),
+  summary: z.string().max(4096),
+  detail: z
+    .string()
+    .max(16 * 1024)
+    .nullable(),
+  customerActionable: z.boolean(),
+  retryable: z.boolean(),
+});
+export type AgentSessionErrorEvent = z.infer<typeof AgentSessionErrorEventSchema>;
 
 export interface AgentSessionRecord {
   /** `agt_<uuid>` id; minted by the repo on create. */
@@ -118,6 +133,9 @@ export interface AgentSessionRecord {
    * takeover has been requested yet.
    */
   pairModeState: unknown;
+  /** Latest authenticated harness error for this session. Persists after the
+   * terminal status because the producer deliberately emits errorEvent second. */
+  lastErrorEvent: AgentSessionErrorEvent | null;
   /**
    * Arc 2 sub-slice 8.2 (v2-#8) — when the auto-minted 24h-TTL
    * gui_control_key expires. NULL when no key has been minted (e.g.
@@ -228,6 +246,15 @@ export interface AgentSessionsRepo {
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
+
+  /** Atomically persist a harness error only when the reporting node is still
+   * the session owner. Closed sessions are allowed because errorEvent follows
+   * terminal sessionStatus on the producer. */
+  recordErrorEvent(
+    id: string,
+    reportingNodeId: string,
+    event: AgentSessionErrorEvent,
+  ): Promise<AgentSessionRecord | null>;
 
   /** Count of an account's currently-active sessions — bounds the per-account
    *  concurrent-session cap so one account can't create unbounded rows / monopolise
@@ -386,6 +413,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       // 0089 — the profile this session runs (NULL for ephemeral sessions).
       profileId: args.profileId ?? null,
       pairModeState: null,
+      lastErrorEvent: null,
       guiControlKeyExpiresAt: null,
       guiControlKeyCiphertext: null,
       createdAt: now,
@@ -529,6 +557,22 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     const updated: AgentSessionRecord = {
       ...rec,
       tokenBudgetRemaining: Math.max(0, rec.tokenBudgetRemaining - tokens),
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  recordErrorEvent(
+    id: string,
+    reportingNodeId: string,
+    event: AgentSessionErrorEvent,
+  ): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (rec === undefined || rec.nodeId !== reportingNodeId) return Promise.resolve(null);
+    const updated: AgentSessionRecord = {
+      ...rec,
+      lastErrorEvent: event,
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);

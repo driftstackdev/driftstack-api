@@ -4691,7 +4691,7 @@ export function SimulatorWindow(): JSX.Element {
           // real end can't happen for the same id, and we must not let a stale/racing
           // poll un-end a closed session). A fresh session swap resets sessionEnded.
           if (s.terminal) {
-            setSessionEnded({ reason: s.closedReason });
+            setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
             return;
           }
           if (s.capabilityReport !== undefined) {
@@ -5490,7 +5490,7 @@ export function SimulatorWindow(): JSX.Element {
         // latches the "Session ended" state so the reconnect/freeze machinery
         // short-circuits. A non-terminal result is the normal case (don't touch
         // sessionEnded so a transient blip never clears a real terminal end).
-        if (s.terminal) setSessionEnded({ reason: s.closedReason });
+        if (s.terminal) setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
         // A successful control round-trip proves the session is reachable —
         // clear any stale "control may not be reaching the device" badge.
         setControlUnreachable(false);

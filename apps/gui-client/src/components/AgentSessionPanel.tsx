@@ -232,6 +232,33 @@ function friendlySessionEndCopy(reason: string | null): {
       explanation: 'The browser running this session stopped unexpectedly.',
     };
   }
+  if (/^(proxy_|egress_)/.test(normalized) || normalized === 'network_shim_boot_failed') {
+    return {
+      outcome: 'Connection route unavailable',
+      explanation: 'The secure connection route for this session could not be established.',
+    };
+  }
+  if (
+    /^(launch_|render_|webkit_|webdriver_)/.test(normalized) ||
+    normalized === 'no_free_port' ||
+    normalized === 'session_reserve_failed' ||
+    normalized === 'provisioning_interrupted'
+  ) {
+    return {
+      outcome: 'Browser could not start',
+      explanation: 'The remote browser did not become ready. You can try starting it again.',
+    };
+  }
+  if (
+    normalized === 'archetype_lookup_failed' ||
+    normalized === 'session_config_invalid' ||
+    normalized === 'invalid_session_id'
+  ) {
+    return {
+      outcome: 'Session configuration unavailable',
+      explanation: 'This session could not start with its current configuration.',
+    };
+  }
   if (
     /^(node_|worker_|egress_|resource_|shutdown$)/.test(normalized) ||
     normalized === 'session_errored'

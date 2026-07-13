@@ -2067,6 +2067,10 @@ export const agentSessions = pgTable(
     // Existing rows pick up mode='ai' from the CHECK default; SDK
     // surfaces the choice at create-time via mode='manual'|'ai'|'pair'.
     pairModeState: jsonb('pair_mode_state'),
+    // 0101 — latest ownership-validated harness errorEvent. The producer emits
+    // it after the terminal sessionStatus, so it must outlive process restarts
+    // and remain readable on a closed agent session.
+    lastErrorEvent: jsonb('last_error_event'),
     guiControlKeyExpiresAt: timestamp('gui_control_key_expires_at', { withTimezone: true }),
     guiControlKeyCiphertext: customType<{ data: Buffer; driverData: Buffer }>({
       dataType: () => 'bytea',

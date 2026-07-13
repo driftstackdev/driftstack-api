@@ -40,18 +40,25 @@ import {
   encryptAgentTranscript,
   readAgentTranscript,
 } from '../services/agent-transcript-encryption.js';
-import type {
-  AgentSessionListPage,
-  AgentSessionRecord,
-  AgentSessionStatus,
-  AgentSessionsRepo,
-  CreateAgentSessionArgs,
+import {
+  AgentSessionErrorEventSchema,
+  type AgentSessionErrorEvent,
+  type AgentSessionListPage,
+  type AgentSessionRecord,
+  type AgentSessionStatus,
+  type AgentSessionsRepo,
+  type CreateAgentSessionArgs,
 } from '../services/agent-sessions.js';
 
 // `agt_<uuid>` — the cursor we emit is the last row's id, so the keyset
 // anchor lookup only runs for a well-formed id (guards a hand-crafted cursor;
 // a non-matching value falls through to a first-page response).
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readLastErrorEvent(value: unknown): AgentSessionErrorEvent | null {
+  const parsed = AgentSessionErrorEventSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 function rowToRecord(
   row: typeof agentSessions.$inferSelect,
@@ -85,6 +92,7 @@ function rowToRecord(
     // column rows). The out-of-session trim reads it via countActiveForProfile.
     profileId: row.profileId,
     pairModeState: row.pairModeState,
+    lastErrorEvent: readLastErrorEvent(row.lastErrorEvent),
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
     guiControlKeyCiphertext: row.guiControlKeyCiphertext,
     createdAt: row.createdAt,
@@ -400,6 +408,21 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       }
       return rowToRecord(row, this.transcriptEncryptionKeyBase64);
     });
+  }
+
+  async recordErrorEvent(
+    id: string,
+    reportingNodeId: string,
+    event: AgentSessionErrorEvent,
+  ): Promise<AgentSessionRecord | null> {
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ lastErrorEvent: event, updatedAt: now })
+      .where(and(eq(agentSessions.id, id), eq(agentSessions.nodeId, reportingNodeId)))
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
   async closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {

@@ -16,7 +16,7 @@ import type { CapabilityReport } from '../../src/schemas/harness-control-protoco
 
 const ACC = 'acc_liveness';
 
-function makeRecord(id: string): AgentSessionRecord {
+function makeRecord(id: string, overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord {
   return {
     id,
     accountId: ACC,
@@ -29,6 +29,7 @@ function makeRecord(id: string): AgentSessionRecord {
     createdByUserId: null,
     closedAt: null,
     pairModeState: null,
+    lastErrorEvent: null,
     mode: 'ai',
     model: 'claude-opus-4-7',
     nodeId: null,
@@ -38,14 +39,16 @@ function makeRecord(id: string): AgentSessionRecord {
     guiControlKeyCiphertext: null,
     createdAt: new Date('2026-06-19T00:00:00Z'),
     updatedAt: new Date('2026-06-19T00:00:00Z'),
+    ...overrides,
   };
 }
 
 async function buildApp(opts: {
   livenessStore?: SessionLivenessStore;
   capabilityReportStore?: SessionCapabilityReportStore;
+  record?: AgentSessionRecord;
 }) {
-  const rec = makeRecord('agt_live');
+  const rec = opts.record ?? makeRecord('agt_live');
   const sessions = {
     get: (id: string) => Promise.resolve(id === rec.id ? rec : null),
   } as unknown as AgentSessionsRepo;
@@ -161,6 +164,42 @@ describe('agent-sessions read shape — capability_report', () => {
       transport_mode_requested: 'h2-and-h3',
       transport_mode_active: 'h2-only',
       safeguards_passed: true,
+    });
+    await app.close();
+  });
+});
+
+describe('agent-sessions read shape — durable error_event', () => {
+  it('returns null before a report and projects the persisted customer-safe event after terminal close', async () => {
+    const without = await buildApp({});
+    const empty = await without.inject({ method: 'GET', url: '/v1/agent-sessions/agt_live' });
+    expect(empty.json<{ error_event: unknown }>().error_event).toBeNull();
+    await without.close();
+
+    const rec = makeRecord('agt_live', {
+      status: 'closed',
+      closedReason: 'session_errored',
+      closedAt: new Date('2026-07-13T06:00:01.000Z'),
+      lastErrorEvent: {
+        timestamp: '2026-07-13T06:00:00.000Z',
+        code: 'launch_timeout',
+        severity: 'error',
+        summary: 'The live browser did not become ready in time.',
+        detail: null,
+        customerActionable: false,
+        retryable: true,
+      },
+    });
+    const app = await buildApp({ record: rec });
+    const res = await app.inject({ method: 'GET', url: '/v1/agent-sessions/agt_live' });
+    expect(res.json<{ error_event: unknown }>().error_event).toEqual({
+      timestamp: '2026-07-13T06:00:00.000Z',
+      code: 'launch_timeout',
+      severity: 'error',
+      summary: 'The live browser did not become ready in time.',
+      detail: null,
+      customer_actionable: false,
+      retryable: true,
     });
     await app.close();
   });

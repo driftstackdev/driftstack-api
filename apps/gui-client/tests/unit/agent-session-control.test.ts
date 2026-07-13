@@ -171,6 +171,34 @@ describe('agent-session-control transport', () => {
     });
   });
 
+  it('getAgentSession preserves a validated harness error and ignores malformed customer state', async () => {
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        status: 'closed',
+        error_event: {
+          code: 'launch_timeout',
+          severity: 'error',
+          summary: 'The live browser did not become ready in time.',
+          customer_actionable: false,
+          retryable: true,
+        },
+      }),
+    );
+    expect((await getAgentSession('agt_1')).errorEvent).toEqual({
+      code: 'launch_timeout',
+      severity: 'error',
+      summary: 'The live browser did not become ready in time.',
+      customer_actionable: false,
+      retryable: true,
+    });
+
+    mockFetch.mockResolvedValue(
+      ok({ mode: 'manual', status: 'closed', error_event: { code: 'x', severity: 'critical' } }),
+    );
+    expect((await getAgentSession('agt_1')).errorEvent).toBeUndefined();
+  });
+
   it('getAgentSession refreshes the exact pair controller heartbeat after a human-driving read', async () => {
     mockFetch
       .mockResolvedValueOnce(

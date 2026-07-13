@@ -518,6 +518,47 @@
               "transport_mode_active",
               "safeguards_passed"
             ]
+          },
+          "error_event": {
+            "type": ["object", "null"],
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "code": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,127}$"
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["info", "warn", "error", "fatal"]
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "detail": {
+                "type": ["string", "null"],
+                "maxLength": 16384
+              },
+              "customer_actionable": {
+                "type": "boolean"
+              },
+              "retryable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "timestamp",
+              "code",
+              "severity",
+              "summary",
+              "detail",
+              "customer_actionable",
+              "retryable"
+            ]
           }
         },
         "required": [
@@ -16474,6 +16515,47 @@
                         "transport_mode_active",
                         "safeguards_passed"
                       ]
+                    },
+                    "error_event": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "timestamp": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["info", "warn", "error", "fatal"]
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 4096
+                        },
+                        "detail": {
+                          "type": ["string", "null"],
+                          "maxLength": 16384
+                        },
+                        "customer_actionable": {
+                          "type": "boolean"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "timestamp",
+                        "code",
+                        "severity",
+                        "summary",
+                        "detail",
+                        "customer_actionable",
+                        "retryable"
+                      ]
                     }
                   },
                   "required": [
@@ -16716,6 +16798,47 @@
                               "transport_mode_active",
                               "safeguards_passed"
                             ]
+                          },
+                          "error_event": {
+                            "type": ["object", "null"],
+                            "properties": {
+                              "timestamp": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 64
+                              },
+                              "code": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                              },
+                              "severity": {
+                                "type": "string",
+                                "enum": ["info", "warn", "error", "fatal"]
+                              },
+                              "summary": {
+                                "type": "string",
+                                "maxLength": 4096
+                              },
+                              "detail": {
+                                "type": ["string", "null"],
+                                "maxLength": 16384
+                              },
+                              "customer_actionable": {
+                                "type": "boolean"
+                              },
+                              "retryable": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "timestamp",
+                              "code",
+                              "severity",
+                              "summary",
+                              "detail",
+                              "customer_actionable",
+                              "retryable"
+                            ]
                           }
                         },
                         "required": [
@@ -16952,6 +17075,47 @@
                         "transport_mode_requested",
                         "transport_mode_active",
                         "safeguards_passed"
+                      ]
+                    },
+                    "error_event": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "timestamp": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["info", "warn", "error", "fatal"]
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 4096
+                        },
+                        "detail": {
+                          "type": ["string", "null"],
+                          "maxLength": 16384
+                        },
+                        "customer_actionable": {
+                          "type": "boolean"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "timestamp",
+                        "code",
+                        "severity",
+                        "summary",
+                        "detail",
+                        "customer_actionable",
+                        "retryable"
                       ]
                     }
                   },
@@ -17417,6 +17581,47 @@
                                 "transport_mode_requested",
                                 "transport_mode_active",
                                 "safeguards_passed"
+                              ]
+                            },
+                            "error_event": {
+                              "type": ["object", "null"],
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 64
+                                },
+                                "code": {
+                                  "type": "string",
+                                  "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                                },
+                                "severity": {
+                                  "type": "string",
+                                  "enum": ["info", "warn", "error", "fatal"]
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "maxLength": 4096
+                                },
+                                "detail": {
+                                  "type": ["string", "null"],
+                                  "maxLength": 16384
+                                },
+                                "customer_actionable": {
+                                  "type": "boolean"
+                                },
+                                "retryable": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "code",
+                                "severity",
+                                "summary",
+                                "detail",
+                                "customer_actionable",
+                                "retryable"
                               ]
                             }
                           },
@@ -18123,6 +18328,47 @@
                                 "transport_mode_active",
                                 "safeguards_passed"
                               ]
+                            },
+                            "error_event": {
+                              "type": ["object", "null"],
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 64
+                                },
+                                "code": {
+                                  "type": "string",
+                                  "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                                },
+                                "severity": {
+                                  "type": "string",
+                                  "enum": ["info", "warn", "error", "fatal"]
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "maxLength": 4096
+                                },
+                                "detail": {
+                                  "type": ["string", "null"],
+                                  "maxLength": 16384
+                                },
+                                "customer_actionable": {
+                                  "type": "boolean"
+                                },
+                                "retryable": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "code",
+                                "severity",
+                                "summary",
+                                "detail",
+                                "customer_actionable",
+                                "retryable"
+                              ]
                             }
                           },
                           "required": [
@@ -18304,6 +18550,47 @@
                                 "transport_mode_requested",
                                 "transport_mode_active",
                                 "safeguards_passed"
+                              ]
+                            },
+                            "error_event": {
+                              "type": ["object", "null"],
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 64
+                                },
+                                "code": {
+                                  "type": "string",
+                                  "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                                },
+                                "severity": {
+                                  "type": "string",
+                                  "enum": ["info", "warn", "error", "fatal"]
+                                },
+                                "summary": {
+                                  "type": "string",
+                                  "maxLength": 4096
+                                },
+                                "detail": {
+                                  "type": ["string", "null"],
+                                  "maxLength": 16384
+                                },
+                                "customer_actionable": {
+                                  "type": "boolean"
+                                },
+                                "retryable": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "code",
+                                "severity",
+                                "summary",
+                                "detail",
+                                "customer_actionable",
+                                "retryable"
                               ]
                             }
                           },
