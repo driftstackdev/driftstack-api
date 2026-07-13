@@ -432,6 +432,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const token = localStorage.getItem('ds_web_session_token');
       const SECURITY_TIMEOUT_MS = 15_000;
       let passwordResetInFlight = false;
+      let passwordResetOutcomeUnknown = false;
       // Captured from the /v1/account/me load below so the change-password
       // flow doesn't re-prompt the signed-in customer for an email they
       // could mistype (a typo silently fails — the server returns
@@ -929,7 +930,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Sign in to change password.');
           return;
         }
-        if (passwordResetInFlight) return;
+        if (passwordResetInFlight || passwordResetOutcomeUnknown) return;
         passwordResetInFlight = true;
         if (btn) {
           btn.disabled = true;
@@ -967,12 +968,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           await response.json();
           showBanner('Password-reset email sent. Check your inbox.');
         } catch (err) {
+          if (err && err.name === 'AbortError') {
+            passwordResetOutcomeUnknown = true;
+            if (btn) btn.textContent = 'Check inbox before retrying';
+            showBanner(
+              'Password-reset outcome is unknown after the request timed out. The email may have been sent. Check your inbox and spam before doing anything; if multiple reset emails arrive, use the newest one and ignore the others. Reload Security to request another only if no message arrives.',
+            );
+            return;
+          }
           const msg = err && err.message ? err.message : 'network error';
           showBanner("Couldn't send password-reset (" + msg + ').');
         } finally {
           passwordResetInFlight = false;
           if (btn) {
-            btn.disabled = false;
+            btn.disabled = passwordResetOutcomeUnknown;
             btn.setAttribute('aria-busy', 'false');
           }
         }

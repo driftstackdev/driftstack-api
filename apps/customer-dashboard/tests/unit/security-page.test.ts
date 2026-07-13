@@ -175,6 +175,40 @@ describe('security page — web-session management (security)', () => {
     );
   });
 
+  it('makes a password-reset timeout terminal until reload so a committed email is not duplicated', async () => {
+    const base = makeRouter([]);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) =>
+        /\/v1\/auth\/password-reset\/request$/.test(call.url) && call.init?.method === 'POST'
+          ? Promise.reject(timeout)
+          : base(call),
+    });
+    win = window;
+    await flush();
+    const btn = window.document.querySelector(
+      '[data-action="change-password"]',
+    ) as HTMLButtonElement;
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(12);
+
+    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+    expect(btn.textContent).toContain('Check inbox before retrying');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*email may have been sent.*inbox and spam.*multiple reset emails.*newest one.*reload Security.*only if no message arrives/i,
+    );
+
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    expect(
+      fetchCalls.filter(
+        (call) =>
+          /\/v1\/auth\/password-reset\/request$/.test(call.url) && call.init?.method === 'POST',
+      ),
+    ).toHaveLength(1);
+  });
+
   it('renders active sign-ins: the non-current session gets a Revoke button; the current one shows the current badge', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       route: makeRouter([
