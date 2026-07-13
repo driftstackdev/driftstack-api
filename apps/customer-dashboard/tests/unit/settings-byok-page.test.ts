@@ -460,9 +460,11 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="error"]')).toBe(false);
     expect(isHidden(window, '[data-byok-state="empty"]')).toBe(true);
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(true);
-    // Parse-safe: the surfaced detail is the HTTP status, not a
-    // JSON-parse exception message from the HTML body.
-    expect(window.document.querySelector('[data-byok-error]')?.textContent).toBe('HTTP 502');
+    // Parse-safe and customer-safe: an HTML gateway body must surface
+    // neither decoder internals nor a bare HTTP status.
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).toBe(
+      'The service is temporarily unavailable. Try again shortly.',
+    );
     // Try again re-fires the GET; with the gateway back, the stored key
     // shows as set.
     gatewayDown = false;

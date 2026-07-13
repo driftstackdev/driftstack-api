@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'select-tier', 'index.html');
@@ -59,6 +60,7 @@ function setUpDom(
     return Promise.resolve(opts.route(call));
   };
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  installDashboardDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="select-tier"'));
   if (!pageScript) throw new Error('select-tier inline script not found');
@@ -208,7 +210,9 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     const secondKey = new Headers(attempts[1]?.init?.headers).get('idempotency-key');
     expect(firstKey).toBeTruthy();
     expect(secondKey).toBe(firstKey);
-    expect(text(window, '[data-banner]')).toContain('billing request took too long');
+    expect(text(window, '[data-banner]')).toContain(
+      'Request timed out. Check your connection and try again.',
+    );
   });
 
   it('starts a new checkout attempt after an HTTP response settles the prior key', async () => {

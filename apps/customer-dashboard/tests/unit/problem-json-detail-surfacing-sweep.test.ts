@@ -44,10 +44,12 @@ describe('W277.C customer-dashboard problem+json detail surfacing sweep', () => 
     const offenders: string[] = [];
     for (const f of fetchingPages) {
       const body = read(f);
-      // Either: parses problem+json body for detail, or surfaces
-      // err.message which is set to body.detail by the auth fetch
-      // wrapper. We accept either pattern.
-      const hasDetailRead = /\b(body|json|payload|data|err)\.(detail|message)\b/.test(body);
+      // Either: parses problem+json body for detail, surfaces err.message
+      // from an auth wrapper, or passes the parsed body to the shared
+      // response helper that explicitly marks server detail customer-safe.
+      const hasDetailRead =
+        /\b(body|json|payload|data|err)\.(detail|message)\b/.test(body) ||
+        /window\.driftstackResponseError\s*\(/.test(body);
       if (!hasDetailRead) {
         offenders.push(f.slice(REPO_ROOT.length + 1));
       }

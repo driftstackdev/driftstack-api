@@ -46,6 +46,6 @@ describe('W313.C /audit-log page export parity', () => {
     // A failed export returns problem+json (not the blob); the page must
     // read `detail` so a refused export (e.g. an export rate-limit)
     // explains why rather than showing "Export failed (HTTP 429)".
-    expect(page).toMatch(/throw new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)/);
+    expect(page).toMatch(/throw window\.driftstackResponseError\(r, b\)/);
   });
 });

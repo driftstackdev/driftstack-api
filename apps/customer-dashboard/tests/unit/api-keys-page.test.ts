@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'api-keys', 'index.html');
@@ -69,6 +70,7 @@ function setUpDom(
   // jsdom doesn't implement these; the reveal panes call scrollIntoView,
   // and copy buttons (not exercised here) touch navigator.clipboard.
   window.HTMLElement.prototype.scrollIntoView = () => {};
+  installDashboardDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="api-keys"'));
   if (!pageScript) throw new Error('api-keys inline script not found');

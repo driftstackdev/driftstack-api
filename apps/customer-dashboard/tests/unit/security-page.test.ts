@@ -419,11 +419,11 @@ describe('security page — web-session management (security)', () => {
     (window.document.querySelector('[data-revoke-id="sess_other"]') as HTMLButtonElement).click();
     await flushMicrotasks(40);
     const banner = window.document.querySelector('[data-banner]');
-    expect(banner?.textContent).toContain("Couldn't load active sign-ins");
+    expect(banner?.textContent).toContain('temporarily unavailable');
     expect(banner?.classList.contains('hidden')).toBe(false);
 
     await vi.advanceTimersByTimeAsync(2000);
-    expect(banner?.textContent).toContain("Couldn't load active sign-ins");
+    expect(banner?.textContent).toContain('temporarily unavailable');
     expect(banner?.classList.contains('hidden')).toBe(false);
   });
 
