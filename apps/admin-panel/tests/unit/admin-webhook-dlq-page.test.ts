@@ -203,6 +203,60 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
     expect(window.document.querySelectorAll('button[data-id]').length).toBe(0);
   });
 
+  it('requeue timeout refreshes a committed removal and warns against a second delivery attempt', async () => {
+    const entries = [mkEntry({ id: 'whd_1' })];
+    const base = makeRouter(entries);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/requeue$/.test(call.url)) {
+          entries.splice(0, 1);
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector('[data-action="requeue"][data-id="whd_1"]') as HTMLButtonElement
+    ).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(window.document.querySelector('[data-id="whd_1"]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*DLQ was refreshed.*gone.*likely re-enqueued.*do not submit it again/i,
+    );
+  });
+
+  it('discard timeout refreshes a committed removal and explains the remaining audit-only trace', async () => {
+    const entries = [mkEntry({ id: 'whd_1' })];
+    const base = makeRouter(entries);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/discard$/.test(call.url)) {
+          entries.splice(0, 1);
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector('[data-action="discard"][data-id="whd_1"]') as HTMLButtonElement
+    ).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(window.document.querySelector('[data-id="whd_1"]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*DLQ was refreshed.*gone.*likely discarded.*audit trace remains.*do not submit it again/i,
+    );
+  });
+
   it('locks both entry actions and sends only one requeue while the mutation is pending', async () => {
     let resolveMutation: ((response: Response) => void) | undefined;
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {

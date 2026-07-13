@@ -114,4 +114,12 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
     const usages = body.match(/r\.ok \? r\.json\(\) : mutationError\(r\)/g) ?? [];
     expect(usages.length).toBe(2);
   });
+
+  it('reconciles ambiguous requeue/discard row removals before any retry', () => {
+    expect(body).toContain('Requeue outcome is unknown after the request timed out.');
+    expect(body).toContain('it was likely re-enqueued; do not submit it again.');
+    expect(body).toContain('Discard outcome is unknown after the request timed out.');
+    expect(body).toContain('only its audit trace remains; do not submit it again.');
+    expect(body).toMatch(/const refreshed = await load\(\)/);
+  });
 });

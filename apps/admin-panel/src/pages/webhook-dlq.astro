@@ -346,7 +346,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let inFlight = 0;
       function load() {
-        if (!token) return Promise.resolve();
+        if (!token) return Promise.resolve(false);
         const myReq = ++inFlight;
         if (loadController) loadController.abort();
         const controller = new AbortController();
@@ -365,9 +365,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             renderEntries(body.data || []);
             hideBanner();
+            return true;
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
@@ -392,6 +393,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load DLQ (" + msg + ').');
             }
+            return false;
           })
           .finally(() => {
             if (myReq === inFlight) {
@@ -422,7 +424,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             showBanner('Requeued ' + id + '. Refreshing list…');
             return load();
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              const refreshed = await load();
+              showBanner(
+                'Requeue outcome is unknown after the request timed out. ' +
+                  (refreshed ? 'The DLQ was refreshed. ' : "We couldn't refresh the DLQ. ") +
+                  'If ' +
+                  id +
+                  ' is gone, it was likely re-enqueued; do not submit it again.',
+              );
+              return;
+            }
             const msg = requestErrorMessage(err, 'network error');
             showBanner("Couldn't requeue " + id + ' (' + msg + ').');
           })
@@ -469,6 +482,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Discarded ' + id + '. Refreshing list…');
           await load();
         } catch (err) {
+          if (err && err.name === 'AbortError') {
+            const refreshed = await load();
+            showBanner(
+              'Discard outcome is unknown after the request timed out. ' +
+                (refreshed ? 'The DLQ was refreshed. ' : "We couldn't refresh the DLQ. ") +
+                'If ' +
+                id +
+                ' is gone, it was likely discarded and only its audit trace remains; do not submit it again.',
+            );
+            return;
+          }
           const msg = requestErrorMessage(err, 'network error');
           showBanner("Couldn't discard " + id + ' (' + msg + ').');
         } finally {
