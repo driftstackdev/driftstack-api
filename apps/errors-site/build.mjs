@@ -300,9 +300,20 @@ li code{background:none;border:none;padding:0;color:#9ba6b2}
 footer{margin-top:48px;font-size:13px;color:#5c6770}
 `.trim();
 
-const page = (title, body) => `<!doctype html>
+const escapeAttribute = (value) =>
+  String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+
+const page = (title, body, { description, canonicalPath, noindex = false }) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="index,follow"><title>${title} · Driftstack errors</title><style>${css}</style></head>
+<meta name="description" content="${escapeAttribute(description)}"><meta name="robots" content="${noindex ? 'noindex,nofollow' : 'index,follow'}">${
+  !noindex && canonicalPath
+    ? `<link rel="canonical" href="https://errors.driftstack.dev${canonicalPath}">`
+    : ''
+}<title>${title} · Driftstack errors</title><style>${css}</style></head>
 <body><main>${body}<footer>Driftstack API error reference · <a href="https://docs.driftstack.dev">docs</a> · <a href="https://driftstack.dev">driftstack.dev</a></footer></main></body></html>`;
 
 rmSync(DIST, { recursive: true, force: true });
@@ -329,6 +340,10 @@ for (const slug of slugs) {
               .join('')}</ul>`
           : ''
       }`,
+      {
+        description: `Learn what the Driftstack API “${e.title}” error means and how to fix it.`,
+        canonicalPath: `/${slug}/`,
+      },
     ),
   );
 }
@@ -356,6 +371,11 @@ writeFileSync(
     `<p class="label">Driftstack</p><h1>API error reference</h1><p class="status">${slugs.length} problem types</p>
 <p>Every Driftstack API error is an <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a> <code>application/problem+json</code> body whose <code>type</code> URI points at one of these pages.</p>
 ${groupsHtml}`,
+    {
+      description:
+        'Reference for every Driftstack API RFC 9457 problem type, including its HTTP status, meaning, and recommended fix.',
+      canonicalPath: '/',
+    },
   ),
 );
 // 404 → index (Pages serves 404.html for unknown paths).
@@ -364,6 +384,11 @@ writeFileSync(
   page(
     'Unknown error type',
     `<p class="label">Driftstack</p><h1>Unknown error type</h1><p>No page for that error slug. See the <a href="/">full error reference</a>.</p>`,
+    {
+      description: 'The requested Driftstack API error type does not exist.',
+      canonicalPath: undefined,
+      noindex: true,
+    },
   ),
 );
 console.log(`errors-site: built ${slugs.length} error pages + index + 404 → dist/`);

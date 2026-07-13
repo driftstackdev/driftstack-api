@@ -7,12 +7,15 @@
 // documenting a page for a type that doesn't exist) fails the gate.
 
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const BUILD = resolve(REPO_ROOT, 'apps/errors-site/build.mjs');
+const DIST = resolve(REPO_ROOT, 'apps/errors-site/dist');
 
 const slugsIn = (file: string): Set<string> =>
   new Set(
@@ -30,6 +33,10 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
   const pageSlugs = new Set(
     [...(m?.[1] ?? '').matchAll(/^ {2}'?([a-z0-9-]+)'?: \{/gm)].map((x) => x[1] as string),
   );
+
+  beforeAll(() => {
+    execFileSync(process.execPath, [BUILD], { cwd: REPO_ROOT, stdio: 'pipe' });
+  });
 
   it('parses both slug sets', () => {
     expect(canonical.size).toBeGreaterThanOrEqual(29);
@@ -76,5 +83,28 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
       expect(block.match(new RegExp(header, 'g')), header).toHaveLength(1);
     }
     expect(siteSrc).toMatch(/writeFileSync\(join\(DIST, '_headers'\), SECURITY_HEADERS\);/);
+  });
+
+  it('every real error page is indexable with a description and exact final-URL canonical', () => {
+    const index = readFileSync(resolve(DIST, 'index.html'), 'utf8');
+    expect(index).toMatch(/<meta name="description" content="[^"]+">/);
+    expect(index).toContain('<meta name="robots" content="index,follow">');
+    expect(index).toContain('<link rel="canonical" href="https://errors.driftstack.dev/">');
+
+    for (const slug of pageSlugs) {
+      const rendered = readFileSync(resolve(DIST, slug, 'index.html'), 'utf8');
+      expect(rendered, slug).toMatch(/<meta name="description" content="[^"]+">/);
+      expect(rendered, slug).toContain('<meta name="robots" content="index,follow">');
+      expect(rendered, slug).toContain(
+        `<link rel="canonical" href="https://errors.driftstack.dev/${slug}/">`,
+      );
+    }
+  });
+
+  it('unknown-slug 404 is described but noindex with no conflicting canonical', () => {
+    const rendered = readFileSync(resolve(DIST, '404.html'), 'utf8');
+    expect(rendered).toMatch(/<meta name="description" content="[^"]+">/);
+    expect(rendered).toContain('<meta name="robots" content="noindex,nofollow">');
+    expect(rendered).not.toContain('<link rel="canonical"');
   });
 });
