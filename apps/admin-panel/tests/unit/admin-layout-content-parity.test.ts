@@ -149,9 +149,10 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
   });
 
   it('html lang="en" + charset UTF-8 + viewport meta', () => {
-    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
     expect(body).toMatch(/<meta charset="UTF-8" \/>/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
+    expect(body).toMatch(/<meta name="theme-color" content="#f2f3f6" \/>/);
   });
 
   it('shared confirm + prompt modals use one cross-type lease and release it only on close', () => {

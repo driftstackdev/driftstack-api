@@ -119,3 +119,23 @@
   --accent-soft: rgba(16, 154, 130, 0.13);
   --glow: rgba(16, 154, 130, 0.28);
 }
+
+/* The admin surface is intentionally light-only. Its Tailwind `tk-*`
+   namespace resolves through these variables; without an active mode block,
+   declarations such as `bg-tk-surface`, `text-tk-ink`, and
+   `border-tk-border` are invalid at computed-value time and disappear in the
+   browser. Keep this baseline byte-aligned with the shared Fleet light
+   palette used by the public/dashboard surfaces. */
+[data-mode='light'] {
+  --bg-rgb: 242 243 246;
+  --surface-rgb: 255 255 255;
+  --raised-rgb: 255 255 255;
+  --hover-rgb: 241 242 245;
+  --ink-rgb: 15 16 20;
+  --ink-2-rgb: 71 74 85;
+  --ink-3-rgb: 106 109 122;
+  --border-rgb: 228 230 236;
+  --ready-rgb: 12 154 93;
+  --busy-rgb: 201 138 18;
+  --err-rgb: 216 69 60;
+}
