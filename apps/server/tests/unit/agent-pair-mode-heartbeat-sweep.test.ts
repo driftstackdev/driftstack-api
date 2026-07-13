@@ -1,6 +1,6 @@
 // Arc 4 Wave 2.B sub-slice 8.13c (v2-#8) — heartbeat sweep tests.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import { AccountAuditService } from '../../src/services/account-audit.js';
 import { InMemoryAccountAuditRepo } from '../integration/_helpers/in-memory-account-audit-repo.js';
@@ -74,6 +74,57 @@ describe('Arc 4 Wave 2.B sub-slice 8.13c PairModeHeartbeatSweep', () => {
 
     // Tracker entry forgotten so next tick doesn't re-fire.
     expect(tracker.getLastHeartbeatAt(sessionId)).toBeNull();
+  });
+
+  it('a concurrent mode winner makes the timeout CAS inert — no stale state overwrite or false audit', async () => {
+    const tracker = new InMemoryPairModeHeartbeatTracker();
+    const { sessions, sessionId } = await setupPairSession({ state: 'human-driving' });
+    tracker.recordHeartbeat({ sessionId, at: T0 });
+    const auditRepo = new InMemoryAccountAuditRepo();
+    const accountAudit = new AccountAuditService(auditRepo);
+    const original = sessions.compareAndSetPairModeState.bind(sessions);
+    vi.spyOn(sessions, 'compareAndSetPairModeState').mockImplementationOnce(
+      async (id, expected, next) => {
+        await sessions.setMode(id, 'manual', null);
+        return original(id, expected, next);
+      },
+    );
+    const sweep = new PairModeHeartbeatSweep({ tracker, sessions, accountAudit });
+
+    const res = await sweep.tickOnce(T_PLUS_31S);
+    expect(res).toEqual({ inspected: 1, transitioned: 0, truncated: false });
+    expect(await sessions.get(sessionId)).toMatchObject({
+      mode: 'manual',
+      pairModeState: null,
+    });
+    expect(auditRepo.getAll()).toEqual([]);
+    expect(tracker.getLastHeartbeatAt(sessionId)).toEqual(T0);
+  });
+
+  it('a heartbeat refreshed during the timeout CAS rolls back only that timeout and remains tracked', async () => {
+    const tracker = new InMemoryPairModeHeartbeatTracker();
+    const { sessions, sessionId } = await setupPairSession({ state: 'human-driving' });
+    tracker.recordHeartbeat({ sessionId, at: T0 });
+    const refreshedAt = new Date(T_PLUS_31S.getTime() - 100);
+    const auditRepo = new InMemoryAccountAuditRepo();
+    const accountAudit = new AccountAuditService(auditRepo);
+    const original = sessions.compareAndSetPairModeState.bind(sessions);
+    vi.spyOn(sessions, 'compareAndSetPairModeState').mockImplementationOnce(
+      async (id, expected, next) => {
+        tracker.recordHeartbeat({ sessionId, at: refreshedAt });
+        return original(id, expected, next);
+      },
+    );
+    const sweep = new PairModeHeartbeatSweep({ tracker, sessions, accountAudit });
+
+    const res = await sweep.tickOnce(T_PLUS_31S);
+    expect(res).toEqual({ inspected: 1, transitioned: 0, truncated: false });
+    expect((await sessions.get(sessionId))?.pairModeState).toMatchObject({
+      kind: 'human-driving',
+      clientId: 'cli_a',
+    });
+    expect(auditRepo.getAll()).toEqual([]);
+    expect(tracker.getLastHeartbeatAt(sessionId)).toEqual(refreshedAt);
   });
 
   it('stale ai-driving session → no-op transition, no audit row emitted, tracker forgets the entry', async () => {

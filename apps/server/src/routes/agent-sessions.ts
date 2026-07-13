@@ -1668,6 +1668,45 @@ export function registerAgentSessionsRoutes(
     };
   }
 
+  /**
+   * Persist a pair-mode transition without overwriting a newer state or a
+   * concurrent `/mode` change. The repository compare-and-set includes the
+   * active+pair predicates in the same UPDATE as the expected JSON state.
+   *
+   * When a takeover lost specifically to another tab, preserve the existing
+   * typed winner response so the caller can identify the controller. Other
+   * state/mode/status races fail closed with a refresh-and-retry conflict.
+   */
+  async function commitPairModeTransition(args: {
+    sessionId: string;
+    expectedPersistedState: unknown;
+    nextState: PairModeState;
+    takeoverClientId?: string;
+  }): Promise<void> {
+    const updated = await sessions.compareAndSetPairModeState(
+      args.sessionId,
+      args.expectedPersistedState,
+      args.nextState,
+    );
+    if (updated !== null) return;
+
+    const latest = await sessions.get(args.sessionId);
+    if (latest === null) {
+      throw new NotFoundError(`AgentSession ${args.sessionId} not found.`);
+    }
+    const latestState = (latest.pairModeState as PairModeState | null) ?? initialPairModeState();
+    if (
+      args.takeoverClientId !== undefined &&
+      (latestState.kind === 'takeover-pending' || latestState.kind === 'takeover-queued') &&
+      latestState.requestedByClientId !== args.takeoverClientId
+    ) {
+      throw new PairModeConflictError(latestState.requestedByClientId);
+    }
+    throw new ConflictError(
+      `AgentSession ${args.sessionId} pair-mode state changed concurrently; refresh before retrying.`,
+    );
+  }
+
   app.post(
     '/v1/agent-sessions',
     { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
@@ -3212,7 +3251,12 @@ export function registerAgentSessionsRoutes(
               clientId: parsed.data.client_id,
               at: new Date().toISOString(),
             });
-            await sessions.setPairModeState(req.params.id, nextState);
+            await commitPairModeTransition({
+              sessionId: req.params.id,
+              expectedPersistedState: rec.pairModeState,
+              nextState,
+              takeoverClientId: parsed.data.client_id,
+            });
             sentry?.addBreadcrumb({
               category: 'agent-session.pair-mode',
               message: `input-event → takeover-request → ${nextState.kind}`,
@@ -3449,8 +3493,8 @@ export function registerAgentSessionsRoutes(
   // session; otherwise they 409. Takeover composes the lock (sub-
   // slice 8.8) + the state machine (sub-slice 8.7). The lock guards
   // the takeover-request transition specifically; subsequent
-  // transitions are serialised by the per-row UPDATE in
-  // setPairModeState.
+  // transitions use a conditional per-row UPDATE so a lock handoff or
+  // concurrent mode/state winner cannot be overwritten by a stale request.
   if (pairModeLock !== undefined) {
     // client_id is a customer-chosen opaque tag identifying which
     // browser tab / window initiated the takeover. UUID-shape is
@@ -3497,7 +3541,12 @@ export function registerAgentSessionsRoutes(
             clientId: parsed.data.client_id,
             at: new Date().toISOString(),
           });
-          await sessions.setPairModeState(req.params.id, nextState);
+          await commitPairModeTransition({
+            sessionId: req.params.id,
+            expectedPersistedState: rec.pairModeState,
+            nextState,
+            takeoverClientId: parsed.data.client_id,
+          });
           // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
           // Attaches state-machine context so any later exception in
           // this request carries the transition trail.
@@ -3622,7 +3671,11 @@ export function registerAgentSessionsRoutes(
             kind: 'handback-request',
             at: new Date().toISOString(),
           });
-          await sessions.setPairModeState(req.params.id, nextState);
+          await commitPairModeTransition({
+            sessionId: req.params.id,
+            expectedPersistedState: rec.pairModeState,
+            nextState,
+          });
           // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
           sentry?.addBreadcrumb({
             category: 'agent-session.pair-mode',

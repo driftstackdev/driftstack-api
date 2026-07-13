@@ -156,6 +156,63 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(stored?.transcript).toContain('driftstack.agent-transcript');
     });
 
+    it('pair-mode compare-and-set preserves the first state/mode winner (real Postgres)', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-pair-cas-${accountId}@test.local`})`;
+      const session = await repo.create({
+        accountId,
+        tokenBudgetTotal: 1000,
+        mode: 'pair',
+      });
+      expect(session.pairModeState).toBeNull();
+
+      const pending = {
+        kind: 'takeover-pending',
+        requestedByClientId: 'cli_a',
+        requestedAt: '2026-07-13T12:00:00.000Z',
+      };
+      const first = await repo.compareAndSetPairModeState(session.id, null, pending);
+      expect(first?.pairModeState).toEqual(pending);
+
+      // A delayed sibling carrying the original SQL-NULL snapshot cannot
+      // replace the first writer after its distributed lock has been released.
+      await expect(
+        repo.compareAndSetPairModeState(session.id, null, {
+          ...pending,
+          requestedByClientId: 'cli_b',
+        }),
+      ).resolves.toBeNull();
+
+      // JSONB comparison is structural rather than dependent on JS object key
+      // insertion order.
+      const reorderedExpected = {
+        requestedAt: pending.requestedAt,
+        kind: pending.kind,
+        requestedByClientId: pending.requestedByClientId,
+      };
+      const human = {
+        kind: 'human-driving',
+        clientId: 'cli_a',
+        sinceAt: '2026-07-13T12:00:01.000Z',
+      };
+      const second = await repo.compareAndSetPairModeState(session.id, reorderedExpected, human);
+      expect(second?.pairModeState).toEqual(human);
+
+      await repo.setMode(session.id, 'manual', null);
+      await expect(
+        repo.compareAndSetPairModeState(session.id, human, { kind: 'ai-driving' }),
+      ).resolves.toBeNull();
+      expect(await repo.get(session.id)).toMatchObject({ mode: 'manual', pairModeState: null });
+    });
+
     // Audit fix 2026-07-01 — closeWithReason TOCTOU race. Before the fix it was
     // a bare read-then-write (a get() for closedAt-preservation, then an
     // UNCONDITIONAL `UPDATE … WHERE id=$id`): two concurrent closeWithReason

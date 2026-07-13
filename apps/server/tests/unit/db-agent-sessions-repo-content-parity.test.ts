@@ -92,4 +92,17 @@ describe('db/agent-sessions-repo content parity', () => {
     );
     expect(body).toMatch(/\.\.\.\(args\.mode !== undefined \? \{ mode: args\.mode \} : \{\}\),/);
   });
+
+  it('pair-mode transitions use one structural compare-and-set UPDATE gated by active status and pair mode, including the legacy SQL-NULL state', () => {
+    expect(body).toMatch(/async compareAndSetPairModeState\(/);
+    expect(body).toMatch(/expectedState === null\s*\? isNull\(agentSessions\.pairModeState\)/);
+    expect(body).toMatch(
+      /sql`\$\{agentSessions\.pairModeState\} IS NOT DISTINCT FROM \$\{expectedJson\}::jsonb`/,
+    );
+    expect(body).toMatch(/eq\(agentSessions\.status, 'active'\)/);
+    expect(body).toMatch(/eq\(agentSessions\.mode, 'pair'\)/);
+    expect(body).toMatch(
+      /return row \? rowToRecord\(row, this\.transcriptEncryptionKeyBase64\) : null/,
+    );
+  });
 });

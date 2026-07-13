@@ -21,6 +21,7 @@
 //   - DrizzleAgentSessionsRepo backed by Postgres (AI-A.c).
 //   - Cross-account ACL on shared-team agent-sessions (V-326e* style).
 
+import { isDeepStrictEqual } from 'node:util';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
 import type { TranscriptEntry } from './agent-decomposer.js';
@@ -348,6 +349,20 @@ export interface AgentSessionsRepo {
   setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord>;
 
   /**
+   * Atomically replace pair-mode state only when the row is still active, still
+   * in pair mode, and its JSON state exactly matches `expectedState`. Returns
+   * null when any predicate lost a race. This is the transition primitive for
+   * takeover/handback/timeout paths; a plain read followed by
+   * {@link setPairModeState} can overwrite a newer controller or a concurrent
+   * mode change.
+   */
+  compareAndSetPairModeState(
+    id: string,
+    expectedState: unknown,
+    nextState: unknown,
+  ): Promise<AgentSessionRecord | null>;
+
+  /**
    * Slice 3 (Wave 29-NNN ARC 3) — top-level operational-mode setter.
    * Atomic write of `mode` + `pair_mode_state` so the row never
    * surfaces with `mode='pair'` + `pair_mode_state=NULL` (or
@@ -602,6 +617,29 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     const updated: AgentSessionRecord = {
       ...rec,
       pairModeState: state,
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  compareAndSetPairModeState(
+    id: string,
+    expectedState: unknown,
+    nextState: unknown,
+  ): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (
+      rec === undefined ||
+      rec.status !== 'active' ||
+      rec.mode !== 'pair' ||
+      !isDeepStrictEqual(rec.pairModeState, expectedState)
+    ) {
+      return Promise.resolve(null);
+    }
+    const updated: AgentSessionRecord = {
+      ...rec,
+      pairModeState: nextState,
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);

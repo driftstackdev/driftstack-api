@@ -238,6 +238,51 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     );
   });
 
+  it('compareAndSetPairModeState commits only the exact active pair state and never overwrites mode/state winners', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const rec = await repo.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100,
+      mode: 'pair',
+    });
+    const expected = rec.pairModeState;
+    const pending = {
+      kind: 'takeover-pending',
+      requestedByClientId: 'cli_a',
+      requestedAt: '2026-07-13T12:00:00.000Z',
+    };
+    const committed = await repo.compareAndSetPairModeState(rec.id, expected, pending);
+    expect(committed?.pairModeState).toEqual(pending);
+
+    // A delayed writer carrying the old snapshot cannot replace the winner.
+    await expect(
+      repo.compareAndSetPairModeState(rec.id, expected, {
+        ...pending,
+        requestedByClientId: 'cli_b',
+      }),
+    ).resolves.toBeNull();
+    expect((await repo.get(rec.id))?.pairModeState).toEqual(pending);
+
+    // A concurrent top-level mode change clears pair state and permanently
+    // disqualifies the stale pair transition in the same atomic predicate.
+    await repo.setMode(rec.id, 'manual', null);
+    await expect(
+      repo.compareAndSetPairModeState(rec.id, pending, { kind: 'ai-driving' }),
+    ).resolves.toBeNull();
+    expect(await repo.get(rec.id)).toMatchObject({ mode: 'manual', pairModeState: null });
+
+    const closed = await repo.create({
+      accountId: 'acc_2',
+      tokenBudgetTotal: 100,
+      mode: 'pair',
+    });
+    await repo.closeWithReason(closed.id, 'done');
+    await expect(
+      repo.compareAndSetPairModeState(closed.id, closed.pairModeState, pending),
+    ).resolves.toBeNull();
+    await expect(repo.compareAndSetPairModeState('agt_missing', null, pending)).resolves.toBeNull();
+  });
+
   it('Slice 3 (Wave 29-NNN ARC 3) setMode: ai → pair sets pair_mode_state to initial state; pair → manual clears it; idempotent same-target preserves state; bumps updatedAt; rejects on unknown id', async () => {
     let now = new Date('2026-05-19T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);

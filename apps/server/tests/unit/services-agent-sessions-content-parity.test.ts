@@ -91,7 +91,7 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(/updatedAt: Date;/);
   });
 
-  it("AgentSessionsRepo 13-method surface pinned: create + get + listByAccount + appendTranscript + debitTokens + closeWithReason + reapOrphanedActiveBefore + setNodeId + closeActiveByNode + closeActiveByNodeExcept + findByIdempotencyKey + setPairModeState + setGuiControlKey. Drift to dropping a method would break the contract that lets the executor + dashboard chat UI work against either InMemoryRepo or DrizzleRepo without knowing which backend they're talking to", () => {
+  it("AgentSessionsRepo 14-method surface pinned: create + get + listByAccount + appendTranscript + debitTokens + closeWithReason + reapOrphanedActiveBefore + setNodeId + closeActiveByNode + closeActiveByNodeExcept + findByIdempotencyKey + setPairModeState + compareAndSetPairModeState + setGuiControlKey. Drift to dropping a method would break the contract that lets the executor + dashboard chat UI work against either InMemoryRepo or DrizzleRepo without knowing which backend they're talking to", () => {
     expect(body).toMatch(/export interface AgentSessionsRepo \{/);
     expect(body).toMatch(/create\(args: CreateAgentSessionArgs\): Promise<AgentSessionRecord>;/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSessionRecord \| null>;/);
@@ -123,6 +123,10 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(
       /setPairModeState\(id: string, state: unknown\): Promise<AgentSessionRecord>;/,
     );
+    expect(body).toMatch(/compareAndSetPairModeState\(/);
+    expect(body).toMatch(/expectedState: unknown/);
+    expect(body).toMatch(/nextState: unknown/);
+    expect(body).toMatch(/Promise<AgentSessionRecord \| null>;/);
     expect(body).toMatch(
       /setGuiControlKey\(args: \{\s*\n?\s*id: string;\s*\n?\s*ciphertext: Buffer \| null;\s*\n?\s*expiresAt: Date \| null;\s*\n?\s*\}\): Promise<AgentSessionRecord>;/,
     );

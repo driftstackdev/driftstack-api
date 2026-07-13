@@ -8,7 +8,7 @@
 //      in-memory repo injected via the test helper): end-to-end
 //      decompose → execute → transcript flow exercised.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES, TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import type {
@@ -1617,6 +1617,43 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
+  it('input-event takeover CAS preserves an already-committed sibling winner', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    const id = create.json<{ id: string }>().id;
+    const repo = fx.agentSessionsRepo!;
+    const original = repo.compareAndSetPairModeState.bind(repo);
+    const winner = {
+      kind: 'takeover-pending',
+      requestedByClientId: 'cli_winner',
+      requestedAt: '2026-07-13T12:00:00.000Z',
+    };
+    vi.spyOn(repo, 'compareAndSetPairModeState').mockImplementationOnce(
+      async (sessionId, expected, next) => {
+        await repo.setPairModeState(sessionId, winner);
+        return original(sessionId, expected, next);
+      },
+    );
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        event: { type: 'touchStart', x: 100, y: 200, touchId: 0 },
+        client_id: 'cli_delayed',
+      },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json<{ winner_client_id: string }>().winner_client_id).toBe('cli_winner');
+    expect((await repo.get(id))?.pairModeState).toEqual(winner);
+  });
+
   it('pair human-driving input requires the exact controlling client_id', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
@@ -1942,6 +1979,33 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
       payload: { client_id: 'sim_client_1' },
     });
     expect(handback.statusCode).toBe(200);
+  });
+
+  it('handback CAS cannot resurrect pair state after a concurrent mode change', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('pair');
+    const repo = fx.agentSessionsRepo!;
+    await repo.setPairModeState(id, {
+      kind: 'human-driving',
+      clientId: 'cli_owner',
+      sinceAt: '2026-07-13T12:00:00.000Z',
+    });
+    const original = repo.compareAndSetPairModeState.bind(repo);
+    vi.spyOn(repo, 'compareAndSetPairModeState').mockImplementationOnce(
+      async (sessionId, expected, next) => {
+        await repo.setMode(sessionId, 'manual', null);
+        return original(sessionId, expected, next);
+      },
+    );
+
+    const handback = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/handback`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { client_id: 'cli_owner' },
+    });
+    expect(handback.statusCode).toBe(409);
+    expect(await repo.get(id)).toMatchObject({ mode: 'manual', pairModeState: null });
   });
 
   it('control key reaches the input-event route on its OWN session (auth passes; 503/409 is the harness/mode gate, NOT auth)', async () => {

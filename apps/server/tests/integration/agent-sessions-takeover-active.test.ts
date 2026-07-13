@@ -13,7 +13,7 @@
 // conflict needs genuinely concurrent in-flight requests rather than
 // the sequential injects an integration test issues.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 
@@ -50,6 +50,40 @@ describe('active POST /v1/agent-sessions/:id/takeover (agent runtime wired)', ()
     }>().pair_mode_state;
     expect(state.kind).toBe('takeover-pending');
     expect(state.requestedByClientId).toBe('cli_tab_a');
+  });
+
+  it('a delayed stale takeover cannot replace the controller that committed first', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession(fx, 'pair');
+    const repo = fx.agentSessionsRepo!;
+    const original = repo.compareAndSetPairModeState.bind(repo);
+    const winner = {
+      kind: 'takeover-pending',
+      requestedByClientId: 'cli_winner',
+      requestedAt: '2026-07-13T12:00:00.000Z',
+    };
+    vi.spyOn(repo, 'compareAndSetPairModeState').mockImplementationOnce(
+      async (sessionId, expected, next) => {
+        // Deterministically model the production TOCTOU: this request already
+        // read ai-driving, but another lock holder commits and releases before
+        // this request reaches its UPDATE.
+        await repo.setPairModeState(sessionId, winner);
+        return original(sessionId, expected, next);
+      },
+    );
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { client_id: 'cli_delayed' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json<{ type: string; winner_client_id: string }>()).toMatchObject({
+      type: PROBLEM_TYPES.PairModeConflict,
+      winner_client_id: 'cli_winner',
+    });
+    expect((await repo.get(id))?.pairModeState).toEqual(winner);
   });
 
   it("mode='ai' → 409 Conflict (takeover requires mode='pair')", async () => {

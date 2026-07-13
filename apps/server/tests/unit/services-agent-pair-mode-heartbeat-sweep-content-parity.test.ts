@@ -59,13 +59,15 @@ describe('services/agent-pair-mode-heartbeat-sweep content parity', () => {
     );
   });
 
-  it("tickOnce 5-step pipeline framing pinned: 'For each session whose lastHeartbeatAt is older than now - ttlMs: 1. Look up the session record (skip if it no longer exists) 2. Compute the heartbeat-timeout transition against the current pair_mode_state (silent no-op when already in ai-driving) 3. Persist the new state via sessions.setPairModeState 4. Emit an audit row via accountAudit.record (best-effort — failures don't break the sweep) 5. Forget the session in the tracker (so the next tick doesn't keep firing for an already-handled timeout)' — pinned so the 5-step pipeline + best-effort-audit + forget-after-handled contract all stay documented", () => {
+  it('tickOnce 5-step pipeline framing pins lookup, transition, atomic expected-state persistence, best-effort audit, and refresh-safe tracker cleanup', () => {
     expect(body).toMatch(
       /\* Walk one sweep cycle\. For each session whose lastHeartbeatAt is\s*\n?\s*\*\s+older than now - ttlMs:/,
     );
     expect(body).toMatch(
-      /\*\s+1\. Look up the session record \(skip if it no longer exists\)\s*\n?\s*\*\s+2\. Compute the heartbeat-timeout transition against the current\s*\n?\s*\*\s+pair_mode_state \(silent no-op when already in ai-driving\)\s*\n?\s*\*\s+3\. Persist the new state via sessions\.setPairModeState\s*\n?\s*\*\s+4\. Emit an audit row via accountAudit\.record \(best-effort —\s*\n?\s*\*\s+failures don't break the sweep\)\s*\n?\s*\*\s+5\. Forget the session in the tracker/,
+      /\*\s+1\. Look up the session record \(skip if it no longer exists\)\s*\n?\s*\*\s+2\. Compute the heartbeat-timeout transition against the current\s*\n?\s*\*\s+pair_mode_state \(silent no-op when already in ai-driving\)\s*\n?\s*\*\s+3\. Atomically persist only if the active pair-mode row still has the\s*\n?\s*\*\s+inspected state \(a concurrent input\/mode transition wins otherwise\)\s*\n?\s*\*\s+4\. Emit an audit row via accountAudit\.record \(best-effort —\s*\n?\s*\*\s+failures don't break the sweep\)\s*\n?\s*\*\s+5\. Forget only the stale heartbeat snapshot\. If a heartbeat refreshed\s*\n?\s*\*\s+while the database write was in flight, roll back this exact timeout/,
     );
+    expect(body).toMatch(/sessions\.compareAndSetPairModeState\(/);
+    expect(body).toMatch(/latestHeartbeatAt\?\.getTime\(\) !== observedHeartbeatAt\.getTime\(\)/);
   });
 
   it("Session-no-longer-exists short-circuit pinned: rec === null → tracker.forget(sessionId) + continue. + 'Session destroyed/gc'd — forget so the tracker doesn't keep flagging.' — pinned so the gc'd-session path + tracker-cleanup contract stay documented (drift to throwing on null would break the sweep on race-with-session-destroy)", () => {

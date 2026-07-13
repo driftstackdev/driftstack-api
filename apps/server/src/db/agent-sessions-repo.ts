@@ -30,7 +30,7 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
 import type { Database } from './client.js';
@@ -605,6 +605,41 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       throw new Error(`AgentSession ${id} not found`);
     }
     return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+  }
+
+  async compareAndSetPairModeState(
+    id: string,
+    expectedState: unknown,
+    nextState: unknown,
+  ): Promise<AgentSessionRecord | null> {
+    // JSONB equality is structural (object key order is irrelevant). Cast a
+    // bound JSON string instead of interpolating object text so the expected
+    // state remains a parameter and cannot alter the SQL expression. Legacy
+    // pair sessions can store SQL NULL, which is distinct from JSONB `null`,
+    // so preserve that raw persisted representation with an explicit branch.
+    const expectedJson = JSON.stringify(expectedState);
+    if (expectedJson === undefined) {
+      throw new Error('expected pair-mode state must be JSON-serializable');
+    }
+    const expectedStatePredicate =
+      expectedState === null
+        ? isNull(agentSessions.pairModeState)
+        : sql`${agentSessions.pairModeState} IS NOT DISTINCT FROM ${expectedJson}::jsonb`;
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ pairModeState: nextState, updatedAt: now })
+      .where(
+        and(
+          eq(agentSessions.id, id),
+          eq(agentSessions.status, 'active'),
+          eq(agentSessions.mode, 'pair'),
+          expectedStatePredicate,
+        ),
+      )
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
   async setMode(

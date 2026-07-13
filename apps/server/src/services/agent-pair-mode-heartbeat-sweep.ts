@@ -57,11 +57,14 @@ export class PairModeHeartbeatSweep {
    *   1. Look up the session record (skip if it no longer exists)
    *   2. Compute the heartbeat-timeout transition against the current
    *      pair_mode_state (silent no-op when already in ai-driving)
-   *   3. Persist the new state via sessions.setPairModeState
+   *   3. Atomically persist only if the active pair-mode row still has the
+   *      inspected state (a concurrent input/mode transition wins otherwise)
    *   4. Emit an audit row via accountAudit.record (best-effort —
    *      failures don't break the sweep)
-   *   5. Forget the session in the tracker (so the next tick doesn't
-   *      keep firing for an already-handled timeout)
+   *   5. Forget only the stale heartbeat snapshot. If a heartbeat refreshed
+   *      while the database write was in flight, roll back this exact timeout
+   *      transition instead of erasing the live heartbeat or auditing a false
+   *      timeout.
    */
   async tickOnce(now: Date): Promise<SweepTickResult> {
     // Re-entrancy guard. bootstrap wires this on a fixed 5s setInterval that does
@@ -104,6 +107,14 @@ export class PairModeHeartbeatSweep {
         this.deps.tracker.forget(sessionId);
         continue;
       }
+      // findStaleSessions returns a snapshot. A request can refresh its
+      // in-memory heartbeat while the session lookup above is awaiting the DB,
+      // so validate the exact observation again immediately before the CAS.
+      const observedHeartbeatAt = this.deps.tracker.getLastHeartbeatAt(sessionId);
+      const staleBefore = now.getTime() - this.ttlMs;
+      if (observedHeartbeatAt === null || observedHeartbeatAt.getTime() >= staleBefore) {
+        continue;
+      }
       const currentState = (rec.pairModeState as PairModeState | null) ?? initialPairModeState();
       // The heartbeat-timeout transition is idempotent on ai-driving
       // (silent no-op). The state machine accepts it from every state
@@ -118,7 +129,36 @@ export class PairModeHeartbeatSweep {
         this.deps.tracker.forget(sessionId);
         continue;
       }
-      await this.deps.sessions.setPairModeState(sessionId, nextState);
+      const updated = await this.deps.sessions.compareAndSetPairModeState(
+        sessionId,
+        rec.pairModeState,
+        nextState,
+      );
+      if (updated === null) {
+        // The customer or another transition changed mode/state/status after
+        // our read. Never overwrite that winner or emit a timeout audit for a
+        // transition we did not commit. Keep the tracker observation: it may
+        // already contain a heartbeat refreshed while the CAS was in flight.
+        continue;
+      }
+      const latestHeartbeatAt = this.deps.tracker.getLastHeartbeatAt(sessionId);
+      if (latestHeartbeatAt?.getTime() !== observedHeartbeatAt.getTime()) {
+        // A live request refreshed its heartbeat while our database CAS was in
+        // flight. Undo only the exact timeout state we just wrote. If another
+        // state/mode/status writer has already won, its CAS predicate wins and
+        // the rollback safely becomes a no-op. Either way, no false timeout
+        // audit is emitted and the fresh heartbeat remains tracked.
+        await this.deps.sessions.compareAndSetPairModeState(
+          sessionId,
+          nextState,
+          rec.pairModeState,
+        );
+        continue;
+      }
+      // Delete the validated stale observation before the first subsequent
+      // await. A heartbeat arriving after this point creates a fresh entry and
+      // cannot be erased by slow audit I/O.
+      this.deps.tracker.forget(sessionId);
       try {
         await this.deps.accountAudit?.record({
           accountId: rec.accountId,
@@ -130,7 +170,6 @@ export class PairModeHeartbeatSweep {
       } catch {
         /* swallow — sweep continues even when audit emit fails */
       }
-      this.deps.tracker.forget(sessionId);
       transitioned += 1;
     }
 
