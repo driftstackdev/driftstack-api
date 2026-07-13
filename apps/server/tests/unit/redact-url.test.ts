@@ -344,9 +344,9 @@ describe('auth-flows.ts call sites never log a raw customer email', () => {
   function makeService(logger: Logger): AuthFlowsService {
     const email = createEmailService({ config: null, logger });
     return new AuthFlowsService(new InMemoryAuthFlowsRepo(), email, logger, {
-      verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+      verifyEmailUrl: 'https://app.driftstack.local/verify-email',
       magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-      passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+      passwordResetUrl: 'https://app.driftstack.local/reset-password',
       exposeDebugToken: true,
     });
   }

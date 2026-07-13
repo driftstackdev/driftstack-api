@@ -52,9 +52,9 @@ function makeService(repo: AuthFlowsRepo, postmark: PostmarkSendApi): AuthFlowsS
     client: postmark,
   });
   return new AuthFlowsService(repo, email, logger, {
-    verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+    verifyEmailUrl: 'https://app.driftstack.local/verify-email',
     magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-    passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+    passwordResetUrl: 'https://app.driftstack.local/reset-password',
     exposeDebugToken: true,
   });
 }
@@ -82,7 +82,7 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.to).toBe('newuser@driftstack.local');
     expect(calls[0]?.subject).toBe('Verify your Driftstack account');
-    expect(calls[0]?.text).toContain('https://app.driftstack.local/auth/verify-email?token=');
+    expect(calls[0]?.text).toContain('https://app.driftstack.local/verify-email?token=');
     expect(calls[0]?.text).toContain(result.debugToken!);
   });
 
@@ -253,7 +253,7 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     expect(result.sent).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.subject).toBe('Reset your Driftstack password');
-    expect(calls[0]?.text).toContain('https://app.driftstack.local/auth/password-reset?token=');
+    expect(calls[0]?.text).toContain('https://app.driftstack.local/reset-password?token=');
   });
 
   it('password-reset silently no-ops when email is unknown', async () => {
@@ -419,9 +419,9 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
       email,
       logger,
       {
-        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        verifyEmailUrl: 'https://app.driftstack.local/verify-email',
         magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        passwordResetUrl: 'https://app.driftstack.local/reset-password',
         exposeDebugToken: true,
       },
       null, // authCache

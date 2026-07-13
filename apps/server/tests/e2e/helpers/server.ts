@@ -328,9 +328,9 @@ export async function startTestServer(): Promise<TestServer> {
     noopEmail,
     logger,
     {
-      verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
+      verifyEmailUrl: 'http://localhost:5173/verify-email',
       magicLinkUrl: 'http://localhost:5173/auth/magic-link',
-      passwordResetUrl: 'http://localhost:5173/auth/password-reset',
+      passwordResetUrl: 'http://localhost:5173/reset-password',
       exposeDebugToken: true,
     },
     authCache,

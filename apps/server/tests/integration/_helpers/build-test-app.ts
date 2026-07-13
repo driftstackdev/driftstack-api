@@ -1179,9 +1179,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     noopEmail,
     testLogger,
     {
-      verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
+      verifyEmailUrl: 'http://localhost:5173/verify-email',
       magicLinkUrl: 'http://localhost:5173/auth/magic-link',
-      passwordResetUrl: 'http://localhost:5173/auth/password-reset',
+      passwordResetUrl: 'http://localhost:5173/reset-password',
       exposeDebugToken: true,
     },
     authCache, // V-168 — cache invalidation on logout

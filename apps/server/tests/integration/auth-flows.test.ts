@@ -26,9 +26,9 @@ function makeDirectService(repo = new InMemoryAuthFlowsRepo()): {
   const logger = createTestLogger();
   const email = createEmailService({ config: null, logger });
   const service = new AuthFlowsService(repo, email, logger, {
-    verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+    verifyEmailUrl: 'https://app.driftstack.local/verify-email',
     magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-    passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+    passwordResetUrl: 'https://app.driftstack.local/reset-password',
     exposeDebugToken: true,
   });
   return { repo, service };
@@ -57,9 +57,9 @@ function makeMfaDirectService(): {
     email,
     logger,
     {
-      verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+      verifyEmailUrl: 'https://app.driftstack.local/verify-email',
       magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-      passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+      passwordResetUrl: 'https://app.driftstack.local/reset-password',
       exposeDebugToken: true,
     },
     null,
@@ -853,9 +853,9 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
       email,
       logger,
       {
-        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        verifyEmailUrl: 'https://app.driftstack.local/verify-email',
         magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        passwordResetUrl: 'https://app.driftstack.local/reset-password',
         exposeDebugToken: true,
       },
       null,
@@ -1575,9 +1575,9 @@ describe('AuthFlowsService.issueOAuthWebSession — active-account containment',
       email,
       logger,
       {
-        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        verifyEmailUrl: 'https://app.driftstack.local/verify-email',
         magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        passwordResetUrl: 'https://app.driftstack.local/reset-password',
         exposeDebugToken: true,
       },
       null,
@@ -1662,9 +1662,9 @@ describe('AuthFlowsService.stepUpReauth — per-account attempt lockout (securit
       email,
       logger,
       {
-        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        verifyEmailUrl: 'https://app.driftstack.local/verify-email',
         magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        passwordResetUrl: 'https://app.driftstack.local/reset-password',
         exposeDebugToken: true,
       },
       null,
