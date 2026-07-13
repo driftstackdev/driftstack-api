@@ -49,6 +49,8 @@ export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
 export const DEFAULT_TIMEOUT_MS = 10_000;
 /** Default max attempts before DLQ. */
 export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
+const RESPONSE_READ_MAX_BYTES = 64 * 1024;
+const RESPONSE_EXCERPT_MAX_CHARS = 200;
 /**
  * Default cap on `store.dlq`'s size (WD-4, LOW-severity audit finding,
  * 2026-07). Without a cap, an endpoint that fails forever accumulates one DLQ
@@ -494,19 +496,15 @@ class DeliveryWorker {
 
     try {
       const response = await this.fetchWithTimeout(endpoint, entry.record.payload, timeoutMs);
-      const text = await response.text().catch(() => '');
       const durationMs = this.now() - startedMs;
       attempt = {
         attempt: attemptNumber,
         completedAtMs: this.now(),
         responseStatus: response.status,
-        responseExcerpt: text.slice(0, 200),
+        responseExcerpt: response.excerpt,
         durationMs,
-        outcome: response.status >= 200 && response.status < 300 ? 'success' : 'http_error',
-        errorMessage:
-          response.status >= 200 && response.status < 300
-            ? null
-            : `HTTP ${response.status.toString()}`,
+        outcome: response.ok ? 'success' : 'http_error',
+        errorMessage: response.ok ? null : `HTTP ${response.status.toString()}`,
       };
     } catch (err) {
       const durationMs = this.now() - startedMs;
@@ -607,7 +605,7 @@ class DeliveryWorker {
     endpoint: DeliveryEndpoint,
     payload: DeliveryPayload,
     timeoutMs: number,
-  ): Promise<Response> {
+  ): Promise<{ status: number; ok: boolean; excerpt: string | null }> {
     // WD-2 (MEDIUM, audit 2026-07) — cheap defense-in-depth pre-connect check,
     // independent of whichever `fetchFn` was injected: reject outright if the
     // endpoint URL's host is ITSELF a literal private/loopback/link-local IP
@@ -634,7 +632,7 @@ class DeliveryWorker {
       // with Date.now() at delivery time).
       const sentAtSec = Math.floor(this.now() / 1000);
       const signature = signPayload(endpoint.signingSecret, payload, sentAtSec);
-      return await this.fetchFn(endpoint.url, {
+      const response = await this.fetchFn(endpoint.url, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -654,9 +652,45 @@ class DeliveryWorker {
         // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
         redirect: 'error',
       });
+      if (response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        return { status: response.status, ok: true, excerpt: null };
+      }
+      return {
+        status: response.status,
+        ok: false,
+        excerpt: await readResponseExcerpt(response),
+      };
     } finally {
       clearTimeout(timer);
     }
+  }
+}
+
+async function readResponseExcerpt(response: Response): Promise<string | null> {
+  if (response.body === null) return null;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let retainedBytes = 0;
+  try {
+    while (retainedBytes < RESPONSE_READ_MAX_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = RESPONSE_READ_MAX_BYTES - retainedBytes;
+      const bytesToKeep = Math.min(value.byteLength, remaining);
+      if (bytesToKeep > 0) {
+        parts.push(decoder.decode(value.subarray(0, bytesToKeep), { stream: true }));
+        retainedBytes += bytesToKeep;
+      }
+    }
+    parts.push(decoder.decode());
+    return parts.join('').slice(0, RESPONSE_EXCERPT_MAX_CHARS);
+  } catch {
+    return null;
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 

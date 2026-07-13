@@ -57,6 +57,8 @@ export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
+const RESPONSE_READ_MAX_BYTES = 64 * 1024;
+const RESPONSE_EXCERPT_MAX_CHARS = 200;
 
 // V-173.R — reclaim STALE in_flight rows. A worker that crashed / was deployed
 // mid-batch leaves a row stuck `in_flight` forever (it's never re-selected → the
@@ -531,19 +533,23 @@ export class DurableWebhookWorker {
           // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
           redirect: 'error',
         });
-        const text = await response.text().catch(() => '');
+        const successful = response.status >= 200 && response.status < 300;
+        const responseExcerpt = successful ? null : await readResponseExcerpt(response);
+        if (successful) {
+          // Delivery responses are status-only on success. Dispose the body
+          // while the attempt timer is still armed so success headers plus an
+          // endless stream cannot retain a connection after persistence.
+          await response.body?.cancel().catch(() => undefined);
+        }
         const durationMs = this.now() - startedMs;
         attempt = {
           attemptNumber,
           completedAtMs: this.now(),
           responseStatus: response.status,
-          responseExcerpt: text.slice(0, 200),
+          responseExcerpt,
           durationMs,
-          outcome: response.status >= 200 && response.status < 300 ? 'success' : 'http_error',
-          errorMessage:
-            response.status >= 200 && response.status < 300
-              ? null
-              : `HTTP ${response.status.toString()}`,
+          outcome: successful ? 'success' : 'http_error',
+          errorMessage: successful ? null : `HTTP ${response.status.toString()}`,
         };
       } finally {
         clearTimeout(timer);
@@ -659,6 +665,37 @@ export class DurableWebhookWorker {
       .where(and(eq(webhookDeliveries.id, delivery.id), eq(webhookDeliveries.status, 'in_flight')))
       .returning({ id: webhookDeliveries.id });
     return 'retried';
+  }
+}
+
+async function readResponseExcerpt(response: Response): Promise<string | null> {
+  if (response.body === null) return null;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let retainedBytes = 0;
+  try {
+    while (retainedBytes < RESPONSE_READ_MAX_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = RESPONSE_READ_MAX_BYTES - retainedBytes;
+      const bytesToKeep = Math.min(value.byteLength, remaining);
+      if (bytesToKeep > 0) {
+        // Decode only the bounded prefix. A subarray is safe here because it is
+        // consumed immediately and never retained after this iteration.
+        parts.push(decoder.decode(value.subarray(0, bytesToKeep), { stream: true }));
+        retainedBytes += bytesToKeep;
+      }
+    }
+    parts.push(decoder.decode());
+    return parts.join('').slice(0, RESPONSE_EXCERPT_MAX_CHARS);
+  } catch {
+    return null;
+  } finally {
+    // Stop downloading once the prefix is complete (or a read fails). The
+    // enclosing attempt timeout stays armed until cancellation settles.
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }
 

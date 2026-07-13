@@ -35,6 +35,7 @@ interface CapturedRequest {
 function makeMockDb(
   delivery: Record<string, unknown>,
   endpoint: Record<string, unknown>,
+  attemptRows: unknown[] = [],
 ): Database {
   const claimed = [{ delivery, endpoint }];
   const tx = {
@@ -51,7 +52,12 @@ function makeMockDb(
         }),
       }),
     }),
-    insert: () => ({ values: () => Promise.resolve(undefined) }),
+    insert: () => ({
+      values: (value: unknown) => {
+        attemptRows.push(value);
+        return Promise.resolve(undefined);
+      },
+    }),
     // Terminal/retry UPDATEs are now fenced on status=in_flight and call
     // .returning(...); a 1-row result means the fence matched (the no-op
     // early-return path is exercised by the integration suite). The claim-flip
@@ -216,5 +222,71 @@ describe('finding #12 — durable webhook header is SDK-verifiable', () => {
     const v1 = /v1=([0-9a-f]{64})/.exec(header)![1]!;
     const expected = createHmac('sha256', SECRET).update(`${EMITTED_AT_SEC}.${BODY}`).digest('hex');
     expect(v1).toBe(expected);
+  });
+});
+
+describe('durable webhook response lifecycle', () => {
+  it('cancels an unread success body before finalizing delivery', async () => {
+    let cancelled = false;
+    let signal: AbortSignal | undefined;
+    const fetchFn: typeof fetch = (_input, init) => {
+      signal = init?.signal ?? undefined;
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    };
+    const worker = new DurableWebhookWorker(
+      makeMockDb(baseDelivery(), baseEndpoint()),
+      fetchFn,
+      () => EMITTED_AT_SEC * 1000,
+    );
+
+    const result = await worker.processTick();
+
+    expect(result.delivered).toBe(1);
+    expect(cancelled).toBe(true);
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it('retains only a 200-character excerpt from one oversized failure chunk', async () => {
+    let cancelled = false;
+    const attemptRows: unknown[] = [];
+    const fetchFn: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(5 * 1024 * 1024).fill(122)); // 'z'
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { status: 500 },
+        ),
+      );
+    const worker = new DurableWebhookWorker(
+      makeMockDb(baseDelivery(), baseEndpoint(), attemptRows),
+      fetchFn,
+      () => EMITTED_AT_SEC * 1000,
+    );
+
+    const result = await worker.processTick();
+
+    expect(result.retried).toBe(1);
+    expect(cancelled).toBe(true);
+    expect(attemptRows).toHaveLength(1);
+    expect(attemptRows[0]).toMatchObject({
+      responseStatus: 500,
+      responseExcerpt: 'z'.repeat(200),
+      outcome: 'http_error',
+    });
   });
 });

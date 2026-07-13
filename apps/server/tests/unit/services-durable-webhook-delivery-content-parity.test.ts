@@ -174,15 +174,29 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).not.toMatch(/'x-driftstack-signature-prev':/);
   });
 
-  it('deliver outcome: 2xx → success; non-2xx → http_error; AbortError|TimeoutError → timeout; else → transport_error; 200-char responseExcerpt truncation', () => {
+  it('deliver outcome: 2xx → success with null excerpt; non-2xx → http_error with bounded excerpt; AbortError|TimeoutError → timeout; else → transport_error', () => {
+    expect(body).toMatch(/const successful = response\.status >= 200 && response\.status < 300;/);
     expect(body).toMatch(
-      /outcome: response\.status >= 200 && response\.status < 300 \? 'success' : 'http_error',/,
+      /const responseExcerpt = successful \? null : await readResponseExcerpt\(response\);/,
     );
-    expect(body).toMatch(/responseExcerpt: text\.slice\(0, 200\),/);
+    expect(body).toMatch(/outcome: successful \? 'success' : 'http_error',/);
     expect(body).toMatch(
       /const isTimeout = e\?\.name === 'AbortError' \|\| e\?\.name === 'TimeoutError';/,
     );
     expect(body).toMatch(/outcome: isTimeout \? 'timeout' : 'transport_error',/);
+  });
+
+  it('response lifecycle: success body cancelled; failure body capped at 64 KiB decoded bytes and 200 characters without retaining an oversized chunk', () => {
+    expect(body).toMatch(/const RESPONSE_READ_MAX_BYTES = 64 \* 1024;/);
+    expect(body).toMatch(/const RESPONSE_EXCERPT_MAX_CHARS = 200;/);
+    expect(body).toMatch(/await response\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);/);
+    expect(body).toMatch(/const reader = response\.body\.getReader\(\);/);
+    expect(body).toMatch(/const bytesToKeep = Math\.min\(value\.byteLength, remaining\);/);
+    expect(body).toMatch(
+      /decoder\.decode\(value\.subarray\(0, bytesToKeep\), \{ stream: true \}\)/,
+    );
+    expect(body).toMatch(/parts\.join\(''\)\.slice\(0, RESPONSE_EXCERPT_MAX_CHARS\)/);
+    expect(body).not.toMatch(/await response\.text\(\)/);
   });
 
   it('deliver branch: success → status=delivered + lastError=null; attempts>=MAX_ATTEMPTS → status=dlq; else → status=pending with backoff', () => {

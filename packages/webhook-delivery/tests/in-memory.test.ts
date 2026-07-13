@@ -377,6 +377,99 @@ describe('processTick — leasing + due-time gating', () => {
   });
 });
 
+describe('processTick — response lifecycle bounds', () => {
+  it('cancels an unread success body before recording delivery', async () => {
+    let cancelled = false;
+    let signal: AbortSignal | undefined;
+    const fn: typeof fetch = (_input, init) => {
+      signal = init?.signal ?? undefined;
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    };
+    const { handles } = build(fn);
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+
+    const result = await handles.processTick();
+    const updated = await handles.deliveries.get(record.id);
+
+    expect(result.delivered).toBe(1);
+    expect(cancelled).toBe(true);
+    expect(signal?.aborted).toBe(false);
+    expect(updated?.attempts[0]?.responseExcerpt).toBeNull();
+  });
+
+  it('retains only the first 200 characters from one oversized failure chunk', async () => {
+    let cancelled = false;
+    const fn: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(5 * 1024 * 1024).fill(121)); // 'y'
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { status: 500 },
+        ),
+      );
+    const { handles } = build(fn);
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+
+    const result = await handles.processTick();
+    const updated = await handles.deliveries.get(record.id);
+
+    expect(result.retried).toBe(1);
+    expect(cancelled).toBe(true);
+    expect(updated?.attempts[0]?.responseExcerpt).toBe('y'.repeat(200));
+  });
+
+  it('keeps the endpoint timeout armed while a failure body is stalled', async () => {
+    let aborted = false;
+    const endpoint: DeliveryEndpoint = { ...ENDPOINT, config: { timeoutMs: 25 } };
+    const fn: typeof fetch = (_input, init) => {
+      const signal = init?.signal;
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              const fail = (): void => {
+                aborted = true;
+                controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+              };
+              if (signal?.aborted) fail();
+              else signal?.addEventListener('abort', fail, { once: true });
+            },
+          }),
+          { status: 500 },
+        ),
+      );
+    };
+    const handles = createInMemoryWebhookDelivery({
+      fetch: fn,
+      getEndpoint: (id) => (id === endpoint.id ? endpoint : null),
+    });
+    const record = await handles.deliveries.enqueue({ endpoint, payload: PAYLOAD });
+
+    const result = await handles.processTick();
+    const updated = await handles.deliveries.get(record.id);
+
+    expect(result.retried).toBe(1);
+    expect(aborted).toBe(true);
+    expect(updated?.attempts[0]?.responseStatus).toBe(500);
+    expect(updated?.attempts[0]?.responseExcerpt).toBeNull();
+  });
+});
+
 describe('replay + DlqManager.requeue', () => {
   it('replay re-arms a delivered record', async () => {
     const { fn } = captureFetch(() => ({ status: 200 }));

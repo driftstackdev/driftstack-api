@@ -196,11 +196,9 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(
       /errorMessage: 'endpoint not found at delivery time',[\s\S]*?this\.recordAttempt\(entry, attempt, true\);\s*\n?\s*return 'dlqed';/,
     );
+    expect(body).toMatch(/outcome: response\.ok \? 'success' : 'http_error',/);
     expect(body).toMatch(
-      /outcome: response\.status >= 200 && response\.status < 300 \? 'success' : 'http_error',/,
-    );
-    expect(body).toMatch(
-      /errorMessage:\s*\n?\s*response\.status >= 200 && response\.status < 300\s*\n?\s*\? null\s*\n?\s*: `HTTP \$\{response\.status\.toString\(\)\}`,/,
+      /errorMessage: response\.ok \? null : `HTTP \$\{response\.status\.toString\(\)\}`,/,
     );
     expect(body).toMatch(
       /const isTimeout = e\?\.name === 'AbortError' \|\| e\?\.name === 'TimeoutError';/,
@@ -236,6 +234,20 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     // SSRF hardening — the outbound fetch must NOT follow redirects (a 3xx to
     // an internal target would bypass the create-time https-only check).
     expect(body).toMatch(/redirect: 'error',/);
+  });
+
+  it('response lifecycle: success body cancelled; failure body capped at 64 KiB decoded bytes and 200 characters, with timer clearing only after read/cancel', () => {
+    expect(body).toMatch(/const RESPONSE_READ_MAX_BYTES = 64 \* 1024;/);
+    expect(body).toMatch(/const RESPONSE_EXCERPT_MAX_CHARS = 200;/);
+    expect(body).toMatch(
+      /if \(response\.ok\) \{\s*\n?\s*await response\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);/,
+    );
+    expect(body).toMatch(/excerpt: await readResponseExcerpt\(response\),/);
+    expect(body).toMatch(/const reader = response\.body\.getReader\(\);/);
+    expect(body).toMatch(/const bytesToKeep = Math\.min\(value\.byteLength, remaining\);/);
+    expect(body).toMatch(/parts\.join\(''\)\.slice\(0, RESPONSE_EXCERPT_MAX_CHARS\)/);
+    expect(body).toMatch(/await reader\.cancel\(\)\.catch\(\(\) => undefined\);/);
+    expect(body).not.toMatch(/await response\.text\(\)/);
   });
 
   it('signPayload returns the canonical t=<sentAtSec>,v1=<hex> header (HMAC-SHA256 over `<sentAtSec>.<body>`), re-stamped per send (#7), matching the SDK verifier', () => {
