@@ -193,13 +193,34 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       if (intent.selector === undefined || intent.selector.length === 0) {
         return { ok: false, reason: 'wait:selector_visible requires a selector' };
       }
-      // Build a truthy JS predicate. JSON.stringify makes the selector a
-      // safe JS string literal (no predicate injection from the selector).
+      // Build a rendered-visibility predicate. DOM existence alone is not
+      // enough: display:none / visibility:hidden / opacity:0 / skipped
+      // content-visibility / zero-area targets are not yet human-actionable.
+      // JSON.stringify makes the selector a safe JS string literal (no
+      // predicate injection from the selector).
       // #139 — the box's waitFor runs the predicate as a WebDriver FUNCTION BODY
       // (execute/sync wraps it in `function(){ … }`), so it needs an explicit
       // `return` to yield a value — a bare expression returns undefined → the
       // condition is never met → a full 5s timeout. Emit a return-statement.
-      const predicate = `return !!document.querySelector(${JSON.stringify(intent.selector)});`;
+      const selector = JSON.stringify(intent.selector);
+      const predicate = [
+        `const element = document.querySelector(${selector});`,
+        'if (element === null) return false;',
+        'const rect = element.getBoundingClientRect();',
+        'if (!(rect.width > 0 && rect.height > 0)) return false;',
+        "if (typeof element.checkVisibility === 'function') {",
+        'try {',
+        'return element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, contentVisibilityAuto: true });',
+        '} catch {}',
+        '}',
+        'for (let current = element; current !== null; current = current.parentElement) {',
+        'const style = getComputedStyle(current);',
+        "if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || style.contentVisibility === 'hidden') return false;",
+        'const opacity = Number.parseFloat(style.opacity);',
+        'if (!Number.isNaN(opacity) && opacity <= 0) return false;',
+        '}',
+        'return true;',
+      ].join(' ');
       const params: Record<string, unknown> = { predicate };
       if (intent.timeoutMs !== undefined) {
         const seconds = Math.ceil(intent.timeoutMs / 1000);

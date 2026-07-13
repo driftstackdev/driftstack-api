@@ -4,7 +4,8 @@
 // field cases, the wait_for predicate construction (+ injection safety),
 // and that produced params pass the canonical harness param-schema.
 
-import { describe, expect, it } from 'vitest';
+import { runInNewContext } from 'node:vm';
+import { describe, expect, it, vi } from 'vitest';
 import type { AgentIntent } from '@driftstack/api-types';
 import { agentIntentToDispatch } from '../../src/services/agent-intent-to-dispatch.js';
 import { HARNESS_INTENT_PARAM_SCHEMAS } from '../../src/schemas/harness-control-protocol.js';
@@ -148,17 +149,113 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
 });
 
 describe('agentIntentToDispatch — wait:selector_visible → wait_for', () => {
-  it('builds a querySelector truthy predicate', () => {
+  function visiblePredicate(selector = '.ready'): string {
+    const result = agentIntentToDispatch({
+      kind: 'wait',
+      condition: 'selector_visible',
+      selector,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('narrow');
+    return result.params.predicate as string;
+  }
+
+  function evaluatePredicate(
+    predicate: string,
+    element: Record<string, unknown> | null,
+    getComputedStyle: (node: unknown) => Record<string, string> = () => ({
+      display: 'block',
+      visibility: 'visible',
+      contentVisibility: 'visible',
+      opacity: '1',
+    }),
+  ): boolean {
+    return runInNewContext(`(function () { ${predicate} })()`, {
+      document: { querySelector: () => element },
+      getComputedStyle,
+    }) as boolean;
+  }
+
+  it('builds a rendered-visibility predicate using the fork-native options', () => {
+    const checkVisibility = vi.fn(() => true);
+    const predicate = visiblePredicate();
+    expect(
+      evaluatePredicate(predicate, {
+        checkVisibility,
+        getBoundingClientRect: () => ({ width: 100, height: 40 }),
+      }),
+    ).toBe(true);
+    expect(checkVisibility).toHaveBeenCalledWith({
+      checkOpacity: true,
+      checkVisibilityCSS: true,
+      contentVisibilityAuto: true,
+    });
+  });
+
+  it('rejects missing, CSS-hidden, and zero-area elements', () => {
+    const predicate = visiblePredicate();
+    expect(evaluatePredicate(predicate, null)).toBe(false);
+    expect(
+      evaluatePredicate(predicate, {
+        checkVisibility: () => false,
+        getBoundingClientRect: () => ({ width: 100, height: 40 }),
+      }),
+    ).toBe(false);
+    expect(
+      evaluatePredicate(predicate, {
+        checkVisibility: () => true,
+        getBoundingClientRect: () => ({ width: 0, height: 40 }),
+      }),
+    ).toBe(false);
+  });
+
+  it('falls back to ancestor style checks when checkVisibility is unavailable', () => {
+    const predicate = visiblePredicate();
+    const hiddenParent = {
+      parentElement: null,
+      style: {
+        display: 'block',
+        visibility: 'visible',
+        contentVisibility: 'visible',
+        opacity: '0',
+      },
+    };
+    const element = {
+      parentElement: hiddenParent,
+      getBoundingClientRect: () => ({ width: 100, height: 40 }),
+      style: {
+        display: 'block',
+        visibility: 'visible',
+        contentVisibility: 'visible',
+        opacity: '1',
+      },
+    };
+    expect(
+      evaluatePredicate(
+        predicate,
+        element,
+        (node) => (node as { style: Record<string, string> }).style,
+      ),
+    ).toBe(false);
+    hiddenParent.style.opacity = '1';
+    expect(
+      evaluatePredicate(
+        predicate,
+        element,
+        (node) => (node as { style: Record<string, string> }).style,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps selector interpolation inside one JSON string literal', () => {
     const r = agentIntentToDispatch({
       kind: 'wait',
       condition: 'selector_visible',
       selector: '.ready',
     });
-    expect(r).toEqual({
-      ok: true,
-      intentName: 'wait_for',
-      params: { predicate: 'return !!document.querySelector(".ready");' },
-    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('narrow');
+    expect(r.params.predicate).toContain('document.querySelector(".ready")');
   });
 
   it('converts timeoutMs → ceil seconds when >= 1s', () => {
@@ -195,9 +292,16 @@ describe('agentIntentToDispatch — wait:selector_visible → wait_for', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     // The selector must appear ONLY as a JSON string literal argument.
-    expect(r.params.predicate).toBe(`return !!document.querySelector(${JSON.stringify(evil)});`);
+    expect(r.params.predicate).toContain(`document.querySelector(${JSON.stringify(evil)})`);
     // No raw break-out: the fetch payload is inside the quoted literal.
     expect(r.params.predicate).not.toMatch(/querySelector\(""\)\);/);
+    const querySelector = vi.fn(() => null);
+    expect(
+      runInNewContext(`(function () { ${String(r.params.predicate)} })()`, {
+        document: { querySelector },
+      }),
+    ).toBe(false);
+    expect(querySelector).toHaveBeenCalledWith(evil);
   });
 });
 
