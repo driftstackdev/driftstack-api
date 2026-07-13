@@ -150,7 +150,7 @@ describe('api-keys page — local integration', () => {
   });
 
   it('non-empty: active key gets Rotate + Revoke; revoked key shows the revoked badge instead', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       fetchPlan: [() => json({ data: [ACTIVE_KEY, REVOKED_KEY] })],
     });
@@ -223,7 +223,7 @@ describe('api-keys page — local integration', () => {
       name: 'Rotated key',
       expires_at: new Date(Date.now() + 23.5 * 60 * 60 * 1000).toISOString(),
     };
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       fetchPlan: [() => json({ data: [graceKey] })],
     });
@@ -241,7 +241,7 @@ describe('api-keys page — local integration', () => {
       name: 'Nearly-expired grace',
       expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     };
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       fetchPlan: [() => json({ data: [graceKey] })],
     });
@@ -292,7 +292,7 @@ describe('api-keys page — local integration', () => {
 
   it('create timeout reconciles the list and warns that a committed key plaintext is unrecoverable', async () => {
     const ambiguous = { ...ACTIVE_KEY, id: 'key_ambiguous', name: 'Ambiguous key' };
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       fetchPlan: [
         () => json({ data: [] }),
@@ -314,10 +314,84 @@ describe('api-keys page — local integration', () => {
     expect(warning).toMatch(/plaintext cannot be recovered/i);
     expect(warning).toMatch(/revoke it before creating another key/i);
     expect(isHidden(window, '[data-created-reveal]')).toBe(true);
+    const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(
+      fetchCalls.filter((c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url)),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
+      /likely created.*one-shot plaintext was lost.*revoke the matching key/i,
+    );
+  });
+
+  it('create timeout retries only after an authoritative exact-name non-match', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => Promise.reject(abortError()),
+        () => json({ data: [] }),
+        () => json({ id: 'key_retry', plaintext: 'ds_live_RETRY' }, 201),
+        () => json({ data: [{ ...ACTIVE_KEY, id: 'key_retry', name: 'Retry key' }] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Retry key';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
+      /authoritative list has no new.*retry key.*retry only if the key is still required/i,
+    );
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(
+      fetchCalls.filter((c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url)),
+    ).toHaveLength(2);
+    expect(window.document.querySelector('[data-created-plaintext]')?.textContent).toBe(
+      'ds_live_RETRY',
+    );
+  });
+
+  it('create timeout locks when the key list cannot be refreshed', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => Promise.reject(abortError()),
+        () => Promise.reject(new Error('list unavailable')),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Unverified key';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toMatch(/verify before retrying/i);
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(
+      fetchCalls.filter((c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url)),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
+      /creation is locked.*reload and review the key list/i,
+    );
   });
 
   it('create reveal dismiss WIPES the plaintext from the DOM (no post-dismiss recovery)', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       fetchPlan: [
         () => json({ data: [] }),
@@ -381,7 +455,7 @@ describe('api-keys page — local integration', () => {
 
   it('rotate timeout reconciles the list and warns against a blind second rotation', async () => {
     const ambiguous = { ...ACTIVE_KEY, id: 'key_rotated_unknown', name: 'CI key' };
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       confirmReturns: true,
       fetchPlan: [
@@ -401,6 +475,60 @@ describe('api-keys page — local integration', () => {
     expect(warning).toMatch(/plaintext cannot be recovered/i);
     expect(warning).toMatch(/before rotating again/i);
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(true);
+    const blockedRotate = window.document.querySelector(
+      '[data-rotate="key_active"]',
+    ) as HTMLButtonElement;
+    expect(blockedRotate.disabled).toBe(true);
+    blockedRotate.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(
+      fetchCalls.filter((c) => /\/v1\/api-keys\/key_active\/rotate$/.test(c.url)),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /rotation is locked.*reload and review the key list/i,
+    );
+  });
+
+  it('rotate timeout retries only after an authoritative successor non-match', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      fetchPlan: [
+        () => json({ data: [ACTIVE_KEY] }),
+        () => Promise.reject(abortError()),
+        () => json({ data: [ACTIVE_KEY] }),
+        () =>
+          json({
+            rotated_from: 'key_active',
+            plaintext: 'ds_live_RETRIED_ROTATION',
+            grace_period_ends_at: '2026-05-21T10:00:00.000Z',
+          }),
+        () =>
+          json({
+            data: [ACTIVE_KEY, { ...ACTIVE_KEY, id: 'key_retry_successor', name: 'CI key' }],
+          }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-rotate="key_active"]') as HTMLButtonElement).click();
+    await flush();
+
+    const retryRotate = window.document.querySelector(
+      '[data-rotate="key_active"]',
+    ) as HTMLButtonElement;
+    expect(retryRotate.disabled).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /authoritative list has no new.*ci key.*successor.*retry only if rotation is still required/i,
+    );
+    retryRotate.click();
+    await flush();
+    expect(
+      fetchCalls.filter((c) => /\/v1\/api-keys\/key_active\/rotate$/.test(c.url)),
+    ).toHaveLength(2);
+    expect(window.document.querySelector('[data-rotate-plaintext]')?.textContent).toBe(
+      'ds_live_RETRIED_ROTATION',
+    );
   });
 
   it('revoke: confirm-gated DELETE then refresh', async () => {

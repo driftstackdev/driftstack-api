@@ -446,7 +446,11 @@ npm i @driftstack/sdk</code></pre>
       const API_KEY_TIMEOUT_MS = 15_000;
       const mutationButtonsInFlight = new WeakSet();
       const ambiguousRevokeIds = new Set();
+      const ambiguousRotateIds = new Set();
+      let keySnapshot = [];
       let createInFlight = false;
+      let createOutcomeBlocked = false;
+      let createOutcomeReason = '';
       let refreshController = null;
       let refreshGeneration = 0;
 
@@ -512,10 +516,17 @@ npm i @driftstack/sdk</code></pre>
       function keyLi(k) {
         const isRevoked = k.revoked_at !== null && k.revoked_at !== undefined;
         const revokeOutcomeUnknown = ambiguousRevokeIds.has(String(k.id));
-        const mutationDisabledAttributes = revokeOutcomeUnknown
+        const rotateOutcomeUnknown = ambiguousRotateIds.has(String(k.id));
+        const rotateDisabledAttributes = revokeOutcomeUnknown || rotateOutcomeUnknown
           ? ' disabled aria-disabled="true"'
           : '';
-        const mutationDisabledClass = revokeOutcomeUnknown
+        const rotateDisabledClass = revokeOutcomeUnknown || rotateOutcomeUnknown
+          ? ' cursor-not-allowed opacity-60'
+          : '';
+        const revokeDisabledAttributes = revokeOutcomeUnknown
+          ? ' disabled aria-disabled="true"'
+          : '';
+        const revokeDisabledClass = revokeOutcomeUnknown
           ? ' cursor-not-allowed opacity-60'
           : '';
         const scopes = (k.scopes || [])
@@ -536,18 +547,20 @@ npm i @driftstack/sdk</code></pre>
             '" data-rotate-name="' +
             escapeHtml(k.name) +
             '"' +
-            mutationDisabledAttributes +
+            rotateDisabledAttributes +
             ' class="text-sm text-tk-accent-text hover:underline' +
-            mutationDisabledClass +
-            '">Rotate</button>' +
+            rotateDisabledClass +
+            '">' +
+            (rotateOutcomeUnknown ? 'Rotation outcome unknown' : 'Rotate') +
+            '</button>' +
             '<button type="button" data-revoke="' +
             escapeHtml(k.id) +
             '" data-revoke-name="' +
             escapeHtml(k.name) +
             '"' +
-            mutationDisabledAttributes +
+            revokeDisabledAttributes +
             ' class="text-sm text-tk-err-text hover:underline' +
-            mutationDisabledClass +
+            revokeDisabledClass +
             '">' +
             (revokeOutcomeUnknown ? 'Check status' : 'Revoke') +
             '</button>' +
@@ -599,6 +612,7 @@ npm i @driftstack/sdk</code></pre>
           .then((body) => {
             if (!isCurrent()) return;
             const keys = body.data || [];
+            keySnapshot = keys;
             if (keys.length === 0) {
               ul.classList.add('hidden');
               empty.classList.remove('hidden');
@@ -635,26 +649,63 @@ npm i @driftstack/sdk</code></pre>
           });
       }
 
-      async function reconcileAmbiguousMutation(kind, name) {
+      function lockRotateAction(id, completed) {
+        ambiguousRotateIds.add(String(id));
+        const button = Array.from(ul.querySelectorAll('[data-rotate]')).find(
+          (candidate) => candidate.getAttribute('data-rotate') === String(id),
+        );
+        if (!button) return;
+        button.disabled = true;
+        button.textContent = completed ? 'Rotation completed — key lost' : 'Verify before rotating';
+        button.setAttribute(
+          'title',
+          completed
+            ? 'Revoke the newly matched key before rotating this key again.'
+            : 'Reload and verify the key list before rotating again.',
+        );
+      }
+
+      async function reconcileAmbiguousMutation(kind, name, keyIdsBefore, sourceId = '') {
         const refreshed = Boolean(await refresh());
-        const listStatus = refreshed
-          ? 'The key list was refreshed.'
-          : 'The key list could not be refreshed; check it before retrying.';
+        const matchingKey =
+          refreshed &&
+          keySnapshot.find(
+            (key) =>
+              key.id && !keyIdsBefore.has(key.id) && String(key.name || '') === String(name),
+          );
         if (kind === 'create') {
+          if (matchingKey) {
+            createOutcomeBlocked = true;
+            createOutcomeReason = 'created';
+          } else if (!refreshed) {
+            createOutcomeBlocked = true;
+            createOutcomeReason = 'unverified';
+          }
           return (
             'Key creation timed out after the request was sent, so its outcome is unknown. ' +
-            listStatus +
-            ' If a new “' +
-            name +
-            '” key appears, its plaintext cannot be recovered; revoke it before creating another key.'
+            (matchingKey
+              ? 'The refreshed list contains a new “' +
+                name +
+                '” key, so creation likely completed but its plaintext cannot be recovered; revoke it before creating another key.'
+              : refreshed
+                ? 'The refreshed authoritative list has no new “' +
+                  name +
+                  '” key; retry only if the key is still required.'
+                : 'The key list could not be refreshed. Reload and verify it before retrying; another submission could create a second unrecoverable key.')
           );
         }
+        if (matchingKey || !refreshed) lockRotateAction(sourceId, Boolean(matchingKey));
         return (
           'Key rotation timed out after the request was sent, so its outcome is unknown. ' +
-          listStatus +
-          ' If a new “' +
-          name +
-          '” key appears, its plaintext cannot be recovered; revoke that new key before rotating again.'
+          (matchingKey
+            ? 'The refreshed list contains a new “' +
+              name +
+              '” successor, so rotation likely completed but its plaintext cannot be recovered; revoke that new key before rotating again.'
+            : refreshed
+              ? 'The refreshed authoritative list has no new “' +
+                name +
+                '” successor; retry only if rotation is still required.'
+              : 'The key list could not be refreshed. Reload and verify it before rotating again; another rotation could replace an unrecoverable key.')
         );
       }
 
@@ -819,6 +870,14 @@ npm i @driftstack/sdk</code></pre>
             mutationButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-rotate');
             const name = btn.getAttribute('data-rotate-name') || '(unnamed)';
+            if (ambiguousRotateIds.has(String(id || ''))) {
+              mutationButtonsInFlight.delete(btn);
+              showBanner(
+                'Rotation is locked because the previous outcome was confirmed or could not be verified. Reload and review the key list before rotating again.',
+              );
+              return;
+            }
+            const keyIdsBefore = new Set(keySnapshot.map((key) => key.id));
             const ok = await window.driftstackConfirm(
               'Rotate "' +
                 name +
@@ -866,7 +925,9 @@ npm i @driftstack/sdk</code></pre>
               })
               .catch(async (err) => {
                 if (err && err.name === 'AbortError') {
-                  showBanner(await reconcileAmbiguousMutation('rotate', name));
+                  showBanner(
+                    await reconcileAmbiguousMutation('rotate', name, keyIdsBefore, id),
+                  );
                   return;
                 }
                 showBanner(
@@ -876,9 +937,10 @@ npm i @driftstack/sdk</code></pre>
               .finally(() => {
                 window.clearTimeout(timeout);
                 mutationButtonsInFlight.delete(btn);
-                btn.disabled = false;
+                const outcomeUnknown = ambiguousRotateIds.has(String(id || ''));
+                btn.disabled = outcomeUnknown;
                 btn.setAttribute('aria-busy', 'false');
-                btn.textContent = 'Rotate';
+                btn.textContent = outcomeUnknown ? 'Verify before rotating' : 'Rotate';
               });
           });
         });
@@ -936,6 +998,14 @@ npm i @driftstack/sdk</code></pre>
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
         if (createInFlight) return;
+        if (createOutcomeBlocked) {
+          createError.textContent =
+            createOutcomeReason === 'created'
+              ? 'This key was likely created, but its one-shot plaintext was lost with the timed-out response. Revoke the matching key before creating another.'
+              : 'Key creation is locked because the prior outcome could not be verified. Reload and review the key list before retrying.';
+          createError.classList.remove('hidden');
+          return;
+        }
         createError.classList.add('hidden');
         createError.textContent = '';
         const fd = new FormData(form);
@@ -958,6 +1028,7 @@ npm i @driftstack/sdk</code></pre>
         }
 
         createInFlight = true;
+        const keyIdsBefore = new Set(keySnapshot.map((key) => key.id));
         createSubmit.disabled = true;
         createSubmit.setAttribute('aria-busy', 'true');
         createSubmit.textContent = 'Creating…';
@@ -992,7 +1063,7 @@ npm i @driftstack/sdk</code></pre>
           .catch(async (err) => {
             createError.textContent =
               err && err.name === 'AbortError'
-                ? await reconcileAmbiguousMutation('create', name)
+                ? await reconcileAmbiguousMutation('create', name, keyIdsBefore)
                 : err && err.message
                   ? err.message
                   : 'Create failed.';
@@ -1001,9 +1072,23 @@ npm i @driftstack/sdk</code></pre>
           .finally(() => {
             window.clearTimeout(timeout);
             createInFlight = false;
-            createSubmit.disabled = false;
+            createSubmit.disabled = createOutcomeBlocked;
             createSubmit.setAttribute('aria-busy', 'false');
-            createSubmit.textContent = 'Create key';
+            createSubmit.textContent = createOutcomeBlocked
+              ? createOutcomeReason === 'created'
+                ? 'Already created'
+                : 'Verify before retrying'
+              : 'Create key';
+            if (createOutcomeBlocked) {
+              createSubmit.setAttribute(
+                'title',
+                createOutcomeReason === 'created'
+                  ? 'Revoke the newly matched key before creating another.'
+                  : 'Reload and verify the key list before retrying.',
+              );
+            } else {
+              createSubmit.removeAttribute('title');
+            }
           });
       });
 

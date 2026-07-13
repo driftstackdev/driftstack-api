@@ -128,6 +128,15 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toContain('revoke it before creating another key');
     expect(body).toContain('revoke that new key before rotating again');
     expect(body).toContain('const ambiguousRevokeIds = new Set();');
+    expect(body).toContain('const ambiguousRotateIds = new Set();');
+    expect(body).toContain('let keySnapshot = [];');
+    expect(body).toMatch(/!keyIdsBefore\.has\(key\.id\)/);
+    expect(body).toMatch(/String\(key\.name \|\| ''\) === String\(name\)/);
+    expect(body).toMatch(/createSubmit\.disabled = createOutcomeBlocked/);
+    expect(body).toMatch(/if \(createOutcomeBlocked\)/);
+    expect(body).toMatch(/lockRotateAction\(sourceId, Boolean\(matchingKey\)\)/);
+    expect(body).toMatch(/if \(ambiguousRotateIds\.has\(String\(id \|\| ''\)\)\)/);
+    expect(body).toContain('refreshed authoritative list has no new “');
     expect(body).toContain('async function reconcileAmbiguousRevoke(id, name)');
     expect(body).toMatch(/if \(ambiguousRevokeIds\.has\(String\(id \|\| ''\)\)\) return/);
     expect(body).toContain('Key revocation timed out after the request was sent');
