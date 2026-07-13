@@ -29,9 +29,11 @@ export interface ConsequentialActionVerdict {
   matchedText?: string;
 }
 
-// Matched case-insensitively against a normalized `interact:tap` target
+// Matched case-insensitively against a token-normalized `interact:tap` target
 // (selector + value). Word-boundaried + specific so e.g. "buy" alone or
-// "payment history" don't trip.
+// "payment history" don't trip. Token normalization matters because the target
+// is commonly a CSS selector (`#buy-now`, `.confirm_payment`, deleteAccount),
+// not literal rendered prose.
 const PATTERNS: ReadonlyArray<readonly [ConsequentialActionCategory, RegExp]> = [
   ['purchase', /\bbuy now\b/i],
   ['purchase', /\bplace (your )?order\b/i],
@@ -75,7 +77,21 @@ const EVASION_CHARS =
   /[\u200B-\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u2069\p{Default_Ignorable_Code_Point}]/gu;
 
 function normalizeForMatch(text: string): string {
-  return text.normalize('NFKC').replace(EVASION_CHARS, '');
+  return (
+    text
+      .normalize('NFKC')
+      .replace(EVASION_CHARS, '')
+      // CSS/DOM identifiers frequently encode visible words as camelCase. Split
+      // only a lower-case letter/digit followed by upper-case so acronyms remain
+      // intact while buyNow/deleteAccount become two matchable tokens.
+      .replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2')
+      // Treat selector syntax and identifier separators as word boundaries:
+      // `#buy-now`, `.confirm_payment`, `[data-action="pay-now"]`, etc. Unicode
+      // punctuation/symbol coverage also prevents a non-ASCII dash from becoming
+      // an accidental safety bypass. Collapse runs for stable matchedText/signing.
+      .replace(/[\p{P}\p{S}\s]+/gu, ' ')
+      .trim()
+  );
 }
 
 /**

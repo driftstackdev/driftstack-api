@@ -61,6 +61,22 @@ describe('W443 classifyConsequentialAction', () => {
     expect(v.category).toBe('purchase');
   });
 
+  it('recognizes consequential phrases encoded as realistic CSS/DOM identifier tokens', () => {
+    const cases: ReadonlyArray<readonly [string, string, string]> = [
+      ['#buy-now', 'purchase', 'buy now'],
+      ['button.confirm_payment', 'payment', 'confirm payment'],
+      ['[data-action="deleteAccount"]', 'account_deletion', 'delete Account'],
+      ['#proceed_to_checkout', 'purchase', 'proceed to checkout'],
+      ['button[data-action="pay—now"]', 'payment', 'pay now'],
+    ];
+    for (const [selector, category, matchedText] of cases) {
+      const verdict = classifyConsequentialAction(tap(selector));
+      expect(verdict.requiresConfirmation, selector).toBe(true);
+      expect(verdict.category, selector).toBe(category);
+      expect(verdict.matchedText, selector).toBe(matchedText);
+    }
+  });
+
   it('does NOT flag benign taps (high precision — avoid spurious prompts)', () => {
     for (const s of [
       'Add to cart',
@@ -71,6 +87,8 @@ describe('W443 classifyConsequentialAction', () => {
       'View payment history',
       'Account settings',
       'Buy',
+      '#buying-now',
+      '.payment-history',
       'Apply coupon',
     ]) {
       expect(classifyConsequentialAction(tap(s)).requiresConfirmation, s).toBe(false);
