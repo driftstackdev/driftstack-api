@@ -20081,7 +20081,7 @@
     },
     "/v1/agent-sessions/{id}/downloads/content": {
       "get": {
-        "summary": "Fetch one downloaded file's bytes (base64) by basename",
+        "summary": "Fetch one downloaded file's bytes by basename",
         "tags": ["agent-chat"],
         "security": [
           {
@@ -20106,11 +20106,20 @@
             "required": true,
             "name": "name",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["json", "binary"]
+            },
+            "required": false,
+            "name": "format",
+            "in": "query"
           }
         ],
         "responses": {
           "200": {
-            "description": "Discriminated body: status 'ok' → `file` carries { name, mime, dataB64 } (base64 bytes, 64 MiB cap; mime falls back to application/octet-stream); 'unavailable' / 'timeout' / 'error' (including file not found or too large) → `file` is null and `reason`, when set, says why.",
+            "description": "With format=json (or omitted), status 'ok' returns the compatibility { file: { name, mime, dataB64 }, status } envelope. With format=binary, success returns raw application/octet-stream bytes (64 MiB cap); expected unavailable, timeout, and error outcomes remain the small discriminated JSON envelope with file:null.",
             "content": {
               "application/json": {
                 "schema": {
@@ -20140,6 +20149,12 @@
                     }
                   },
                   "required": ["file", "status"]
+                }
+              },
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }

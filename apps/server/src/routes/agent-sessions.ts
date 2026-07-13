@@ -2959,14 +2959,22 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // File-control download FETCH (A3 W2856). Pulls one jailed file's bytes (base64)
-  // by basename (`?name=`). Read-scope; discriminated 200. The harness re-sanitizes
-  // `name` to a basename + jail-confines it (defense in depth) and caps at 64 MiB.
-  const DownloadFetchQuerySchema = z.object({ name: z.string().min(1).max(255) });
-  app.get<{ Params: { id: string }; Querystring: { name?: string } }>(
+  // File-control download FETCH (A3 W2856). The compatibility default is the
+  // original discriminated JSON/base64 envelope. Desktop callers opt into
+  // `format=binary` so the 64 MiB contract does not expand into an ~85 MiB JSON
+  // string and then duplicate itself through JSON.parse + atob in the WebView.
+  // Expected relay failures remain small discriminated JSON in either mode.
+  const DownloadFetchQuerySchema = z.object({
+    name: z.string().min(1).max(255),
+    format: z.enum(['json', 'binary']).optional().default('json'),
+  });
+  app.get<{
+    Params: { id: string };
+    Querystring: { name?: string; format?: 'json' | 'binary' };
+  }>(
     '/v1/agent-sessions/:id/downloads/content',
     { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const q = DownloadFetchQuerySchema.safeParse(req.query ?? {});
       if (!q.success) throw new ValidationError(q.error.flatten());
       const rec = await sessions.get(req.params.id);
@@ -3015,6 +3023,16 @@ export function registerAgentSessionsRoutes(
       try {
         const outcome = await conn.requestDownloadFetch(randomUUID(), rec.id, q.data.name);
         if (outcome.status === 'data') {
+          if (q.data.format === 'binary') {
+            // The node frame schema already proves canonical base64 and the 64 MiB
+            // decoded ceiling. Keep the media type fixed: node-provided MIME text is
+            // metadata, not a trusted response-header value, and JSON files must not
+            // be confused with the small discriminated JSON error envelope.
+            return reply
+              .header('cache-control', 'private, no-store')
+              .type('application/octet-stream')
+              .send(Buffer.from(outcome.dataB64, 'base64'));
+          }
           return {
             file: {
               name: outcome.name,

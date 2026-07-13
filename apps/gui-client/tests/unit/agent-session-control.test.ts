@@ -18,6 +18,7 @@ import {
   endAgentSession,
   mintGuiControlKey,
   getAgentSessionCookies,
+  fetchAgentSessionDownload,
   reportTransport,
   AgentSessionControlError,
 } from '../../src/lib/agent-session-control';
@@ -437,6 +438,72 @@ describe('agent-session-control transport', () => {
     const headers = init.headers as Record<string, string>;
     expect(headers['x-driftstack-gui-control-key']).toBe('gck_cook');
     expect(headers.Authorization).toBeUndefined();
+  });
+
+  it('fetchAgentSessionDownload opts into binary and keeps the response body streaming', async () => {
+    const response = new Response(new Uint8Array([1, 2, 3]), {
+      headers: { 'content-type': 'application/octet-stream' },
+    });
+    mockFetch.mockResolvedValue(response);
+
+    const result = await fetchAgentSessionDownload('agt_1', 'report.pdf', {
+      controlKey: 'gck_download',
+      baseUrl: 'https://real.host',
+    });
+
+    expect(result).toEqual({ status: 'ok', file: { name: 'report.pdf', response } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      'https://real.host/v1/agent-sessions/agt_1/downloads/content?name=report.pdf&format=binary',
+    );
+    expect((init.headers as Record<string, string>).Accept).toBe(
+      'application/octet-stream, application/json',
+    );
+    expect((init.headers as Record<string, string>)['x-driftstack-gui-control-key']).toBe(
+      'gck_download',
+    );
+    expect(response.bodyUsed).toBe(false);
+  });
+
+  it('fetchAgentSessionDownload preserves a small JSON unavailable outcome', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'unavailable',
+          file: null,
+          reason: 'session node is not connected',
+        }),
+        { headers: { 'content-type': 'application/json; charset=utf-8' } },
+      ),
+    );
+
+    await expect(fetchAgentSessionDownload('agt_1', 'report.pdf')).resolves.toEqual({
+      status: 'unavailable',
+      file: null,
+      reason: 'session node is not connected',
+    });
+  });
+
+  it('keeps the download request alive through the server relay window, then aborts at 45 seconds', async () => {
+    vi.useFakeTimers();
+    const aborted = vi.fn();
+    mockFetch.mockImplementation(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            aborted();
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
+
+    const pending = fetchAgentSessionDownload('agt_1', 'large.bin');
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(aborted).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
+    expect(aborted).toHaveBeenCalledOnce();
   });
 
   // W2679 — the GUI-side page-state probe (getPageState) is GONE: the server now

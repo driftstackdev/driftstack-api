@@ -3876,7 +3876,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/agent-sessions/{id}/downloads/content',
-    summary: "Fetch one downloaded file's bytes (base64) by basename",
+    summary: "Fetch one downloaded file's bytes by basename",
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -3885,12 +3885,15 @@ function buildRegistry(): OpenAPIRegistry {
         // A basename from a prior downloads list; re-sanitized + confined
         // to the session's download area server-side (defense in depth).
         name: z.string().min(1).max(255),
+        // Compatibility default is JSON/base64. Desktop clients request raw
+        // bytes to avoid base64 expansion and WebView decoding copies.
+        format: z.enum(['json', 'binary']).optional(),
       }),
     },
     responses: {
       200: {
         description:
-          "Discriminated body: status 'ok' → `file` carries { name, mime, dataB64 } (base64 bytes, 64 MiB cap; mime falls back to application/octet-stream); 'unavailable' / 'timeout' / 'error' (including file not found or too large) → `file` is null and `reason`, when set, says why.",
+          "With format=json (or omitted), status 'ok' returns the compatibility { file: { name, mime, dataB64 }, status } envelope. With format=binary, success returns raw application/octet-stream bytes (64 MiB cap); expected unavailable, timeout, and error outcomes remain the small discriminated JSON envelope with file:null.",
         content: {
           'application/json': {
             schema: z.object({
@@ -3905,6 +3908,7 @@ function buildRegistry(): OpenAPIRegistry {
               reason: z.string().optional(),
             }),
           },
+          'application/octet-stream': { schema: { type: 'string', format: 'binary' } },
         },
       },
       404: { description: 'Agent session not found.', content: problemContent },

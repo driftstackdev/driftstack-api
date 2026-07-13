@@ -9,6 +9,13 @@ import { render, fireEvent, waitFor } from '@testing-library/react';
 
 const listMock = vi.fn();
 const fetchMock = vi.fn();
+const downloadResponseMock = vi.fn();
+
+vi.mock('../../src/lib/download', () => ({
+  downloadBlob: vi.fn(() => Promise.resolve(true)),
+  downloadJson: vi.fn(() => Promise.resolve(true)),
+  downloadResponse: (...a: unknown[]) => downloadResponseMock(...a) as unknown,
+}));
 
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
@@ -77,6 +84,8 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
   beforeEach(() => {
     listMock.mockReset();
     fetchMock.mockReset();
+    downloadResponseMock.mockReset();
+    downloadResponseMock.mockResolvedValue(true);
   });
 
   it('lists files the page wrote into the download jail', async () => {
@@ -199,23 +208,19 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
     });
   });
 
-  it('clicking Save fetches the file bytes by name', async () => {
+  it('clicking Save streams the raw response without base64/atob decoding', async () => {
     listMock.mockResolvedValue({
       status: 'ok',
       files: [{ name: 'report.pdf', size: 2048, mime: 'application/pdf' }],
     });
+    const response = new Response(new Uint8Array([1, 2, 3]));
     fetchMock.mockResolvedValue({
       status: 'ok',
-      file: { name: 'report.pdf', mime: 'application/pdf', dataB64: 'aGVsbG8=' },
+      file: { name: 'report.pdf', response },
     });
-    // jsdom lacks URL.createObjectURL/revokeObjectURL — define them for the save path
-    // (assign, don't read the originals — reading the unbound method trips eslint).
-    const u = URL as unknown as {
-      createObjectURL?: (blob: unknown) => string;
-      revokeObjectURL?: (url: string) => void;
-    };
-    u.createObjectURL = () => 'blob:mock';
-    u.revokeObjectURL = () => {};
+    const atobSpy = vi.spyOn(globalThis, 'atob').mockImplementation(() => {
+      throw new Error('base64 decoder must not run');
+    });
     try {
       const { container } = renderSim();
       openDrawer(container);
@@ -231,9 +236,12 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
         expect(fetchMock).toHaveBeenCalledTimes(1);
       });
       expect(fetchMock.mock.calls[0]?.slice(0, 2)).toEqual(['agt_x', 'report.pdf']);
+      await waitFor(() => {
+        expect(downloadResponseMock).toHaveBeenCalledWith('report.pdf', response);
+      });
+      expect(atobSpy).not.toHaveBeenCalled();
     } finally {
-      delete u.createObjectURL;
-      delete u.revokeObjectURL;
+      atobSpy.mockRestore();
     }
   });
 });

@@ -10,9 +10,13 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 const writeFile = vi.fn();
+const openFile = vi.fn();
+const removeFile = vi.fn();
 // Mocked so the Tauri branch can be exercised without a real plugin.
 vi.mock('@tauri-apps/plugin-fs', () => ({
   writeFile,
+  open: openFile,
+  remove: removeFile,
   BaseDirectory: { Download: 7 },
 }));
 
@@ -20,6 +24,7 @@ import {
   DownloadResponseTooLargeError,
   downloadBlob,
   downloadJson,
+  downloadResponse,
   readBoundedDownloadBlob,
   timestampedFilename,
 } from '../../src/lib/download';
@@ -190,5 +195,79 @@ describe('downloadBlob (Tauri context)', () => {
     writeFile.mockRejectedValue(new Error('fs scope denied'));
     (URL as unknown as { createObjectURL?: unknown }).createObjectURL = undefined;
     await expect(downloadBlob('x.json', new Blob(['x']))).resolves.toBe(false);
+  });
+});
+
+describe('downloadResponse (streamed Tauri write)', () => {
+  beforeEach(() => {
+    tauri(true);
+    openFile.mockReset();
+    removeFile.mockReset();
+  });
+  afterEach(() => {
+    tauri(false);
+    vi.restoreAllMocks();
+  });
+
+  it('writes each chunk completely, including partial file-handle writes', async () => {
+    const write = vi.fn((bytes: Uint8Array) => Promise.resolve(Math.min(2, bytes.byteLength)));
+    const close = vi.fn().mockResolvedValue(undefined);
+    openFile.mockResolvedValue({ write, close });
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3, 4, 5]));
+          controller.close();
+        },
+      }),
+      { headers: { 'content-length': '5' } },
+    );
+
+    await expect(downloadResponse('../../report.bin', response, 5)).resolves.toBe(true);
+    expect(openFile).toHaveBeenCalledWith('._._report.bin', {
+      write: true,
+      create: true,
+      truncate: true,
+      baseDir: 7,
+    });
+    expect(write.mock.calls.map((call) => Array.from(call[0]))).toEqual([
+      [1, 2, 3, 4, 5],
+      [3, 4, 5],
+      [5],
+    ]);
+    expect(close).toHaveBeenCalledOnce();
+    expect(removeFile).not.toHaveBeenCalled();
+  });
+
+  it('cancels an over-cap stream and removes the partial file', async () => {
+    const cancel = vi.fn();
+    const write = vi.fn().mockResolvedValue(3);
+    const close = vi.fn().mockResolvedValue(undefined);
+    openFile.mockResolvedValue({ write, close });
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.enqueue(new Uint8Array([4, 5]));
+        },
+        cancel,
+      }),
+    );
+
+    await expect(downloadResponse('large.bin', response, 4)).rejects.toBeInstanceOf(
+      DownloadResponseTooLargeError,
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(removeFile).toHaveBeenCalledWith('large.bin', { baseDir: 7 });
+  });
+
+  it('returns false and removes the partial file when a write makes no progress', async () => {
+    const close = vi.fn().mockResolvedValue(undefined);
+    openFile.mockResolvedValue({ write: vi.fn().mockResolvedValue(0), close });
+
+    await expect(downloadResponse('stalled.bin', new Response('abc'), 4)).resolves.toBe(false);
+    expect(close).toHaveBeenCalledOnce();
+    expect(removeFile).toHaveBeenCalledWith('stalled.bin', { baseDir: 7 });
   });
 });

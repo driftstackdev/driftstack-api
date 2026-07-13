@@ -170,7 +170,12 @@ function errorEventOf(body: ApiSession): AgentSessionErrorEvent | undefined {
   };
 }
 
-async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): Promise<unknown> {
+async function authedResponse(
+  path: string,
+  init: RequestInit,
+  auth: ControlAuth,
+  timeoutMs?: number,
+): Promise<Response> {
   const settings = await loadSettings();
   // Auth header selection: a per-session control key (separate app) is
   // preferred when present; otherwise the account API key (in-app
@@ -192,14 +197,18 @@ async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): 
       ? auth.baseUrl
       : settings.baseUrl;
   const baseUrl = rawBase.replace(/\/+$/, '');
-  const res = await fetchWithDeadline(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-      ...(init.headers ?? {}),
+  const res = await fetchWithDeadline(
+    `${baseUrl}${path}`,
+    {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+        ...(init.headers ?? {}),
+      },
     },
-  });
+    timeoutMs,
+  );
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     let kind = 'unknown';
@@ -216,6 +225,11 @@ async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): 
     }
     throw new AgentSessionControlError(detail, res.status, kind);
   }
+  return res;
+}
+
+async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): Promise<unknown> {
+  const res = await authedResponse(path, init, auth);
   if (res.status === 204) return {};
   try {
     return await readBoundedApiJson<unknown>(res);
@@ -531,11 +545,11 @@ export interface DownloadsListResult {
   reason?: string;
 }
 
-/** One fetched file's bytes (base64) + its metadata. */
+/** One fetched file's raw bounded response. Its body is consumed directly by
+ *  the filesystem download helper instead of materialized as base64/JSON. */
 export interface SessionDownloadData {
   name: string;
-  mime: string;
-  dataB64: string;
+  response: Response;
 }
 
 /** Discriminated result of GET /:id/downloads/content?name=. `ok` → `file`; else null. */
@@ -565,18 +579,24 @@ export async function listAgentSessionDownloads(
   };
 }
 
-/** Fetch one jailed file's bytes (base64) by basename (A3 W2856). Throws on a non-2xx;
- *  a 200 carries a discriminated body — `ok` → `file` (the GUI saves it to disk). */
+/** Fetch one jailed file as raw bytes by basename. Success keeps the response
+ *  body streaming; expected device outcomes remain small discriminated JSON. */
 export async function fetchAgentSessionDownload(
   id: string,
   name: string,
   auth: ControlAuth = null,
 ): Promise<FetchDownloadResult> {
-  const body = (await authedFetch(
-    `/v1/agent-sessions/${encodeURIComponent(id)}/downloads/content?name=${encodeURIComponent(name)}`,
-    { method: 'GET' },
+  const response = await authedResponse(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/downloads/content?name=${encodeURIComponent(name)}&format=binary`,
+    { method: 'GET', headers: { Accept: 'application/octet-stream, application/json' } },
     auth,
-  )) as Partial<FetchDownloadResult>;
+    45_000,
+  );
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  if (!contentType.includes('application/json')) {
+    return { status: 'ok', file: { name, response } };
+  }
+  const body = (await readBoundedApiJson<Partial<FetchDownloadResult>>(response)) ?? {};
   return {
     status: body.status ?? 'error',
     file: body.file ?? null,

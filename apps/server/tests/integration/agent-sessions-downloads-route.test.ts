@@ -172,6 +172,24 @@ describe('GET /v1/agent-sessions/:id/downloads (wired)', () => {
     expect(body.file).toEqual({ name: 'report.pdf', mime: 'application/pdf', dataB64: DATA_B64 });
   });
 
+  it('format=binary returns the exact raw bytes without a base64 JSON envelope', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const id = await createSession(fx);
+    const nodeId = 'node-dl-binary';
+    await fx.agentSessionsRepo!.setNodeId(id, nodeId);
+    registerEchoNode(fx, nodeId);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/downloads/content?name=report.pdf&format=binary`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^application\/octet-stream/);
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(res.rawPayload).toEqual(Buffer.from('hello'));
+    expect(res.body).not.toContain(DATA_B64);
+  });
+
   it('admits only one large download fetch per account and releases the slot on settle', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
     const id = await createSession(fx);
@@ -256,11 +274,12 @@ describe('GET /v1/agent-sessions/:id/downloads (wired)', () => {
     });
     const res = await fx.app.inject({
       method: 'GET',
-      url: `/v1/agent-sessions/${id}/downloads/content?name=gone.pdf`,
+      url: `/v1/agent-sessions/${id}/downloads/content?name=gone.pdf&format=binary`,
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<FetchBody>();
+    expect(res.headers['content-type']).toMatch(/^application\/json/);
     expect(body).toMatchObject({ status: 'error', file: null });
     expect(body.reason).toMatch(/not found/);
   });

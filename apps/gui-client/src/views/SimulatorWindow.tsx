@@ -73,7 +73,7 @@ import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
-import { downloadBlob, downloadJson } from '../lib/download';
+import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
 import { persistBaseUrl } from '../lib/settings';
 import {
   clearPersistedControlKey,
@@ -951,7 +951,8 @@ const MODE_OPTIONS: { value: SessionMode; label: string }[] = [
 ];
 
 export type SessionControlAction =
-  { kind: 'mode'; target: SessionMode } | { kind: 'takeover' | 'handback' | 'message' | 'end' };
+  | { kind: 'mode'; target: SessionMode }
+  | { kind: 'takeover' | 'handback' | 'message' | 'end' };
 
 type OwnedSessionControlAction = SessionControlAction & {
   sessionId: string;
@@ -5063,37 +5064,23 @@ export function SimulatorWindow(): JSX.Element {
       .then((res) => {
         if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale result + save
         if (res.status === 'ok' && res.file !== null) {
-          // base64 → bytes → Blob → the shared, Tauri-WKWebView-proven download helper.
           const f = res.file;
-          try {
-            const bin = atob(f.dataB64);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-            // Finding #9 — chain the async write + report BOTH outcomes (consistent with
-            // every other branch here). downloadBlob returns false when the Tauri fs
-            // write fails (e.g. no $DOWNLOAD scope); the old voided promise swallowed it,
-            // so the Save button gave no success confirmation AND no error on a silent
-            // write failure — it read as a dead button.
-            void downloadBlob(
-              f.name,
-              new Blob([bytes], { type: f.mime || 'application/octet-stream' }),
-            )
-              .then((ok) => {
-                if (reqSessionId !== sessionIdRef.current) return;
-                setDownloadsNote(
-                  ok
-                    ? `Saved ${f.name} to your Downloads folder.`
-                    : "Couldn't save the file — check the app's file-access permission.",
-                );
-              })
-              .catch(() => {
-                if (reqSessionId === sessionIdRef.current) {
-                  setDownloadsNote('Could not save the file.');
-                }
-              });
-          } catch {
-            setDownloadsNote('Could not save the file.');
-          }
+          // The authenticated response remains a stream all the way to the Tauri
+          // file handle, avoiding JSON/base64/atob/Blob copies in the WebView.
+          void downloadResponse(f.name, f.response)
+            .then((ok) => {
+              if (reqSessionId !== sessionIdRef.current) return;
+              setDownloadsNote(
+                ok
+                  ? `Saved ${f.name} to your Downloads folder.`
+                  : "Couldn't save the file — check the app's file-access permission.",
+              );
+            })
+            .catch(() => {
+              if (reqSessionId === sessionIdRef.current) {
+                setDownloadsNote('Could not save the file.');
+              }
+            });
         } else if (res.status === 'unavailable') {
           // Honest (#73): the download path is live; 'unavailable' = the session isn't
           // live on a node right now (ended / node offline / control plane off), NOT a

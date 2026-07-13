@@ -90,6 +90,95 @@ function safeFilename(name: string): string {
   return base.length > 0 ? base : 'download';
 }
 
+async function rejectDeclaredOversize(response: Response, maxBytes: number): Promise<void> {
+  const declared = response.headers.get('content-length');
+  if (declared !== null && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new DownloadResponseTooLargeError();
+  }
+}
+
+/** Save a raw response without materializing the full file in the desktop
+ *  renderer. Tauri receives one bounded network chunk at a time and writes it
+ *  completely before reading the next; browser callers retain the bounded Blob
+ *  fallback. A partial desktop file is removed on every failed/cancelled path. */
+export async function downloadResponse(
+  filename: string,
+  response: Response,
+  maxBytes = DOWNLOAD_MAX_BYTES,
+): Promise<boolean> {
+  await rejectDeclaredOversize(response, maxBytes);
+  if (!isTauri()) {
+    return downloadBlob(filename, await readBoundedDownloadBlob(response, maxBytes));
+  }
+
+  const boundedName = safeFilename(filename);
+  let file:
+    | {
+        write(data: Uint8Array): Promise<number>;
+        close(): Promise<void>;
+      }
+    | undefined;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let removePartial: (() => Promise<void>) | undefined;
+  let completed = false;
+  try {
+    const { open, remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+    file = await open(boundedName, {
+      write: true,
+      create: true,
+      truncate: true,
+      baseDir: BaseDirectory.Download,
+    });
+    removePartial = async (): Promise<void> => {
+      await remove(boundedName, { baseDir: BaseDirectory.Download });
+    };
+
+    const body = response.body;
+    if (body === null) {
+      // A successful empty file is valid.
+    } else {
+      reader = body.getReader();
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value === undefined || value.byteLength === 0) continue;
+        if (total + value.byteLength > maxBytes) {
+          throw new DownloadResponseTooLargeError();
+        }
+        total += value.byteLength;
+        let offset = 0;
+        while (offset < value.byteLength) {
+          const written = await file.write(value.subarray(offset));
+          if (
+            !Number.isSafeInteger(written) ||
+            written <= 0 ||
+            written > value.byteLength - offset
+          ) {
+            throw new Error('download file write made no valid progress');
+          }
+          offset += written;
+        }
+      }
+    }
+
+    await file.close();
+    file = undefined;
+    completed = true;
+    return true;
+  } catch (error) {
+    if (reader !== undefined) await reader.cancel().catch(() => undefined);
+    else await response.body?.cancel().catch(() => undefined);
+    if (error instanceof DownloadResponseTooLargeError) throw error;
+    return false;
+  } finally {
+    reader?.releaseLock();
+    if (file !== undefined) await file.close().catch(() => undefined);
+    if (!completed && removePartial !== undefined) await removePartial().catch(() => undefined);
+  }
+}
+
 /** Read a Blob's bytes as a Uint8Array (for the Tauri fs write). Prefers the
  *  standard Blob.arrayBuffer(); falls back to FileReader where that method is
  *  absent (e.g. some test/jsdom Blob polyfills). */
