@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'login', 'index.html');
@@ -92,6 +93,7 @@ function setUpDom(
     }) as typeof window.setTimeout;
   }
 
+  installDashboardDeadline(window);
   const pageScript = scriptBodies.find((s) => s.includes('data-page="login"'));
   if (!pageScript) throw new Error('login inline script not found');
   // @ts-expect-error — jsdom global has eval

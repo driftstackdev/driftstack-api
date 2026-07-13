@@ -230,6 +230,30 @@ describe('cli-authorize page — local integration', () => {
     ).toHaveLength(1);
   });
 
+  it('does not render an unknown bind exception', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    local.setFetchPlan([
+      () =>
+        Promise.reject(
+          new Error('socket failed private-api.internal /Users/customer token=secret'),
+        ),
+    ]);
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+
+    const message = local.window.document.querySelector('[data-error-message]')?.textContent ?? '';
+    expect(message).toBe(
+      'Authorization failed. Start a fresh browser sign-in from the desktop app.',
+    );
+    expect(message).not.toMatch(/private-api|\/Users|token=secret|socket/i);
+  });
+
   it('keeps an authoritative HTTP bind failure retryable', async () => {
     const html = loadBuiltPage();
     const local = setUpDom(html, (window) => {

@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'verify-email', 'index.html');
@@ -88,6 +89,7 @@ function setUpDom(
   }
   if (opts.signupEmail) window.sessionStorage.setItem('ds_signup_email', opts.signupEmail);
 
+  installDashboardDeadline(window);
   const pageScript = scriptBodies.find((s) => s.includes('data-page="verify-email"'));
   if (!pageScript) throw new Error('verify-email inline script not found');
   // @ts-expect-error — jsdom global has eval

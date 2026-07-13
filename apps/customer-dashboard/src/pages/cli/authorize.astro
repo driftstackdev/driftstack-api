@@ -391,7 +391,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 showLegalAccept(pending);
                 return Promise.reject(new Error('__legal_accept_required__'));
               }
-              return Promise.reject(new Error(b.detail || 'HTTP ' + r.status));
+              return Promise.reject(window.driftstackResponseError(r, b));
             });
           })
           .then(() => {
@@ -416,7 +416,12 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
               return;
             }
-            showError(err && err.message ? err.message : 'Authorization failed.');
+            showError(
+              window.driftstackRequestErrorMessage(
+                err,
+                'Authorization failed. Start a fresh browser sign-in from the desktop app.',
+              ),
+            );
           })
           .finally(() => {
             window.clearTimeout(timeout);
@@ -575,10 +580,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch(function (err) {
             // The only rejection outside allSettled is the initial
             // canonical GET, so no acceptance POST was sent and retry is safe.
-            acceptStatus.textContent =
-              'Could not load the current legal documents. No acceptance was sent; retry is safe. (' +
-              (err && err.message ? err.message : err) +
-              ')';
+            acceptStatus.textContent = window.driftstackRequestErrorMessage(
+              err,
+              'Could not load the current legal documents. No acceptance was sent; retry is safe.',
+            );
           })
           .finally(function () {
             legalAcceptInFlight = false;

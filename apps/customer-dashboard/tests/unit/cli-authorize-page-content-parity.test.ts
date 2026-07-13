@@ -100,6 +100,16 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/if \(authorizeOutcomeUnknown\) \{\s*returnToDesktop\(0\);\s*return;/);
   });
 
+  it('routes activation and legal-fetch failures through the shared safe copy boundary', () => {
+    expect(body).toContain('window.driftstackResponseError(r, b)');
+    expect(body).toMatch(/window\.driftstackRequestErrorMessage\([\s\S]*Authorization failed/);
+    expect(body).toMatch(
+      /window\.driftstackRequestErrorMessage\([\s\S]*Could not load the current legal documents/,
+    );
+    expect(body).not.toContain('err && err.message ? err.message');
+    expect(body).not.toContain("' + (err && err.message ? err.message : err) + '");
+  });
+
   it('serializes, independently bounds, and reconciles the legal-acceptance fan-out', () => {
     expect(body).toContain('const LEGAL_ACCEPT_TIMEOUT_MS = 15_000;');
     expect(body).toContain('let legalAcceptInFlight = false;');
