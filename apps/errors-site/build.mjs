@@ -22,6 +22,7 @@ const DIST = join(HERE, 'dist');
 // Keep security headers in this single rule: Cloudflare Pages merges all
 // matching _headers rules, so repeating them under `/` would emit duplicates.
 const SECURITY_HEADERS = `/*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; manifest-src 'self'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff

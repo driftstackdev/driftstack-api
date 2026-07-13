@@ -11,12 +11,9 @@
 // `X-Frame-Options: DENY` and reintroduce a clickjacking surface on the exact
 // pages where it matters most, with no test catching the regression.
 //
-// Scope: pin the per-path `/*` security-header block on BOTH files. CSP is
-// INTENTIONALLY DEFERRED on these two surfaces (docs/internal/2026-05-20-csp-header-audit.md
-// — needs an inline-script/Sentry/Stripe-domain enumeration first; adding it
-// blind risks breaking the dashboard), so this guard does NOT require a CSP
-// header — only the clickjacking + MIME + referrer + sensor-lockdown set that
-// is actually present.
+// Scope: pin the per-path `/*` security-header block on BOTH files. The
+// family-wide CSP origin audit completed 2026-07-13; the exact per-surface
+// directives are pinned in frontend-pages-csp-security-parity.test.ts.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -81,6 +78,10 @@ describe('authenticated-frontend _headers security parity (customer-dashboard + 
         expect(body).toMatch(/^ {2}Permissions-Policy:.*\bmicrophone=\(\)/m);
         expect(body).toMatch(/^ {2}Permissions-Policy:.*\bgeolocation=\(\)/m);
         expect(body).toMatch(/^ {2}Permissions-Policy:.*\bpayment=\(\)/m);
+      });
+
+      it('enforces one Content-Security-Policy header in the catch-all', () => {
+        expect(body.match(/^ {2}Content-Security-Policy:/gm)).toHaveLength(1);
       });
     });
   }

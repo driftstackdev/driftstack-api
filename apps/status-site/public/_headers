@@ -45,9 +45,10 @@
 #   Permissions-Policy: deny browser device/payment APIs the status page
 #     never uses (defense-in-depth, matches dashboard/admin).
 # No Cache-Control on /* (HTML stays default-fresh so incident updates
-# propagate fast); CSP is deliberately deferred, same as the dashboard
-# (Astro is:inline blocks need enumeration first — see the audit doc).
+# propagate fast). CSP permits only this origin plus the public API and
+# the R2 incident snapshot; remote scripts, frames, and objects are blocked.
 /*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.driftstack.dev https://r2-public.driftstack.dev; manifest-src 'self'; upgrade-insecure-requests
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

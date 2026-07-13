@@ -94,6 +94,7 @@
 # `/` block cache-only prevents Cloudflare's rule merge from emitting
 # duplicate security fields on the apex response.
 /*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.driftstack.dev https://*.ingest.de.sentry.io https://*.ingest.sentry.io; manifest-src 'self'; upgrade-insecure-requests
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

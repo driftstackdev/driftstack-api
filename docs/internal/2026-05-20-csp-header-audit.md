@@ -170,3 +170,33 @@ static/content sites that use none of these features (verified: no `getUserMedia
 inline `PaymentRequest`; Stripe checkout is a hosted redirect on the dashboard). Each app's
 own `*-public-headers-*` parity test now pins Permissions-Policy, so a future per-app drop is
 caught. CSP itself remains intentionally deferred family-wide (unchanged).
+
+## 2026-07-13 follow-up — CSP enforced family-wide
+
+The deferred runtime-origin audit is complete and the compatibility-safe baseline now ships on
+all six Cloudflare Pages projects: marketing, customer dashboard, admin, status, docs, and the
+generated error reference.
+
+The audit verified:
+
+- Astro emits hundreds of intentional inline application/JSON-LD blocks across the static pages.
+  Per-request nonces do not apply to these static builds and a catch-all list of per-page hashes
+  would be brittle, so `script-src 'self' 'unsafe-inline'` is an explicit compatibility tradeoff.
+  Remote scripts are still forbidden.
+- Customer/admin/status browser requests target `https://api.driftstack.dev`; status additionally
+  reads `https://r2-public.driftstack.dev`. Marketing's live badge targets the public API and its
+  `/cdn-cgi/trace` request is same-origin.
+- Optional marketing/dashboard Sentry telemetry is bundled as first-party script and may connect
+  only to the EU/global Sentry ingest host families. There are no third-party script tags.
+- Stripe checkout and billing portal actions are top-level navigations, not frames, forms, or
+  browser fetches. They require no CSP network source.
+- Customer/admin avatars can be provider-hosted HTTPS URLs; downloads use blob URLs. The other
+  sites use only first-party/data/blob imagery (docs preserves HTTPS images for authored guides).
+- Docs Pagefind search compiles its same-origin WebAssembly index on first use, so only that
+  surface adds `'wasm-unsafe-eval'`; JavaScript eval remains forbidden.
+
+Every policy now enforces `default-src 'self'`, `base-uri 'self'`, `object-src 'none'`,
+`frame-ancestors 'none'`, `frame-src 'none'`, `form-action 'self'`, bounded script/style/image/font/
+connect sources, `manifest-src 'self'`, and `upgrade-insecure-requests`. The errors site has no
+JavaScript and uses the stricter `script-src 'none'; connect-src 'none'`. A cross-app regression
+test pins the exact per-surface contracts and rejects remote script allowances.

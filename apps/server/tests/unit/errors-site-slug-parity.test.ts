@@ -70,7 +70,7 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
     expect(bad, `RELATED references non-existent slugs:\n${bad.join('\n')}`).toEqual([]);
   });
 
-  it('errors-site generator writes one catch-all five-header security baseline', () => {
+  it('errors-site generator writes one catch-all six-header security baseline', () => {
     const block = siteSrc.match(/const SECURITY_HEADERS = `([\s\S]+?)`;/)?.[1] ?? '';
     expect(block).toMatch(/^\/\*$/m);
     for (const header of [
@@ -79,6 +79,7 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
       'X-Content-Type-Options:',
       'Referrer-Policy:',
       'Permissions-Policy:',
+      'Content-Security-Policy:',
     ]) {
       expect(block.match(new RegExp(header, 'g')), header).toHaveLength(1);
     }

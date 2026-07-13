@@ -7,7 +7,9 @@
 # defense-in-depth still applies: even authenticated staff sessions
 # benefit from clickjacking + MIME-sniffing + Referrer defaults.
 #
-# CSP deferred — same reasoning as customer-dashboard/public/_headers.
+# CSP is enforced after the family-wide runtime-origin audit. Inline
+# application code remains allowed; remote scripts and unlisted network
+# destinations are blocked. See docs/internal/2026-05-20-csp-header-audit.md.
 
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
@@ -22,6 +24,7 @@
 #   edge served no STS header here (verified live). preload directive advisory;
 #   apex hstspreload.org submission is a separate founder/infra step.
 /*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.driftstack.dev; manifest-src 'self'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff

@@ -8,11 +8,11 @@
 # X-Frame-Options (clickjacking surface) or Content-Type-Options
 # (MIME sniffing surface). This file closes the basic-header gap.
 #
-# Content-Security-Policy is DEFERRED to a follow-up — requires
-# enumeration of inline scripts (Astro is:inline blocks on every
-# page) + Sentry CDN domains + Stripe payment-portal redirect URLs.
-# Adding CSP without that audit risks breaking the dashboard. Tracked
-# in the audit doc above.
+# Content-Security-Policy is enforced after the runtime-origin audit in
+# docs/internal/2026-05-20-csp-header-audit.md. Astro's intentionally
+# inline application code requires unsafe-inline until the static build
+# can emit stable hashes; remote scripts remain forbidden. API/Sentry
+# connections and HTTPS avatar/data/blob images are explicitly bounded.
 #
 # Format reference:
 #   https://developers.cloudflare.com/pages/configuration/headers/
@@ -60,6 +60,7 @@
 #   (The preload directive is advisory; hstspreload.org submission of the
 #   apex is a separate founder/infra step.)
 /*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; frame-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.driftstack.dev https://*.ingest.de.sentry.io https://*.ingest.sentry.io; manifest-src 'self'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff

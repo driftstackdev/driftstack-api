@@ -131,6 +131,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
         /^ {2}Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\), gyroscope=\(\), magnetometer=\(\), microphone=\(\), payment=\(\), usb=\(\)$/gm,
       ),
     ).toHaveLength(1);
+    expect(body.match(/^ {2}Content-Security-Policy:/gm)).toHaveLength(1);
   });
 
   it('HSTS on the /* catch-all block ONLY — single header (2026-06-03 de-dup: CF Pages MERGES /* onto every path incl. /, proven live by the previously-doubled header, so one STS on /* covers the apex; a single clean header is preload-submission-ready, unlike the prior comma-joined double)', () => {

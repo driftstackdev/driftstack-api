@@ -39,19 +39,23 @@ Stable-name media (logos, og-images uploaded with non-hashed names) is
 treated identically. If a stable-name image needs to change, deploy with
 a new filename or query string — don't try to bust the cache by waiting.
 
-### Tier 2 — Marketing pages (5min browser, 1d edge, 1d SWR)
+### Tier 2 — Homepage (5min browser, 1d edge, 1d SWR)
 
 ```
-/, /index.html, /*  →
+/, /index.html  →
   Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
+/*  → security headers only (no Cache-Control)
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: <audited browser-origin policy>
 ```
 
-HTML pages — `/`, `/pricing`, `/faq`, `/about`, `/security`, etc. The
-catch-all `/*` covers any HTML response not already matched (Cloudflare
-Pages serves `/pricing/index.html` at `/pricing`).
+The explicit cache policy applies only to `/` and `/index.html`. Other
+HTML routes use the Cloudflare zone default and every Pages deployment
+purges the project edge. The `/*` rule is deliberately security-only:
+Cloudflare merges every matching rule, so putting `Cache-Control` there
+would override/degrade the immutable asset and crawler tiers too.
 
 Numbers picked deliberately:
 
@@ -68,17 +72,13 @@ Numbers picked deliberately:
   revalidation. Customer never waits on a re-fetch; the next customer
   gets fresh.
 
-Tradeoff: a deploy at T+0 takes up to 24h to fully propagate to all edge
-POPs (longer at cold POPs). For a marketing site this is fine — we
-deploy a few times a week, content evolves slowly, and SWR means even
-"stale" responses are visually identical to fresh ones in 99% of cases.
-If we ever need a hard purge (e.g. legal copy correction) we hit the
-Cloudflare Pages purge API rather than waiting on TTL expiry.
+The Pages deploy invalidates the project edge, so a new release does not
+wait for the one-day homepage TTL. If a zone cache ever outlives a deploy
+(for example after a platform incident), use the Cloudflare purge API.
 
-The security headers ride on the same tier because Cloudflare Pages
-applies headers per-path and the HTML response is the only one that
-needs them — assets don't render frames or run scripts in a top-level
-context.
+The security headers live in the catch-all and merge onto every response.
+That keeps one auditable policy without repeating fields in each cache
+tier.
 
 ### Tier 3 — Crawler artefacts (1 hour)
 
@@ -105,8 +105,10 @@ happen pre-launch but the pattern is forward-compatible).
 
 ## Match-order semantics
 
-Cloudflare Pages applies the first matching rule per path. Ordering in
-`_headers` matters; more-specific patterns must come above broader ones.
+Cloudflare Pages applies and merges every matching rule. Ordering remains
+specific-to-broad for readability, but it is not first-match-wins. This
+is why the broad catch-all must never set `Cache-Control` or repeat a
+security field already present in another matching block.
 The current order:
 
 1. `/_astro/*` — most specific path prefix
@@ -115,8 +117,8 @@ The current order:
 4. `/` and `/index.html`
 5. `/*` catch-all (last)
 
-If a new pattern is added, place it above any pattern it would otherwise
-fall through. The `/*` catch-all MUST stay last.
+If a new pattern is added, place it above the catch-all and audit how its
+fields merge. The `/*` catch-all MUST stay last and security-only.
 
 ## Security headers — why these three
 
@@ -133,12 +135,13 @@ fall through. The `/*` catch-all MUST stay last.
   which marketing page a customer came from to third-party analytics
   or partner pages.
 
-We do NOT set `Strict-Transport-Security` here because it's owned at the
-Cloudflare zone level (HSTS preload list policy), not per-path. Same for
-`Content-Security-Policy` — CSP for the marketing site is a separate
-piece of work (V-TBD) since the CSP needs auditing against every
-inline-script and external-asset surface; setting it half-correctly is
-worse than not setting it at all.
+`Strict-Transport-Security` and an enforced `Content-Security-Policy`
+live on the `/*` catch-all so Cloudflare merges each field onto every
+response exactly once. The CSP audit completed 2026-07-13: marketing
+loads application code and assets only from itself, connects only to the
+public API and optional Sentry ingest, forbids frames/objects/remote
+scripts, and permits the intentionally inline Astro code until the static
+build can emit stable per-page hashes.
 
 ## What we don't do
 
