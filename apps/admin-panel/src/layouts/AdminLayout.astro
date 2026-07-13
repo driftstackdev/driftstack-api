@@ -41,6 +41,35 @@ const navItems = [
     <!-- Admin panel must NEVER be indexed; staff-only surface. -->
     <meta name="robots" content="noindex,nofollow" />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=4" />
+    <script is:inline data-admin-sso-preflight>
+      // Consume the cross-origin dashboard handoff before <body> and every
+      // slotted page script parse. AdminLayout previously ran this after
+      // <slot />, so pages that captured localStorage synchronously kept a
+      // false null token for the whole visit.
+      (function () {
+        try {
+        if (location.hash && location.hash.indexOf('#token=') === 0) {
+          var t = decodeURIComponent(location.hash.slice('#token='.length));
+          if (t.length > 0) localStorage.setItem('ds_web_session_token', t);
+          history.replaceState(null, '', location.pathname + location.search);
+        }
+        // Direct visits without a staff token bounce through the customer
+        // dashboard. bounced=1 prevents an auth-failure redirect loop.
+        if (
+          !localStorage.getItem('ds_web_session_token') &&
+          location.search.indexOf('bounced=1') === -1
+        ) {
+          location.replace(
+            'https://app.driftstack.dev/?next-admin=' +
+              encodeURIComponent(location.pathname + location.search),
+          );
+          return;
+        }
+        } catch (_) {
+          /* localStorage/history unavailable: page auth fetches fail closed */
+        }
+      })();
+    </script>
   </head>
   <body class="bg-tk-bg text-tk-ink">
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR operators skip the nav. */}
@@ -368,44 +397,6 @@ const navItems = [
          */
       }
       (function () {
-        // 2026-05-21 — token-hash SSO bridge from the customer dashboard.
-        // When the customer clicks "Open admin panel" on app.driftstack.dev,
-        // the dashboard appends `#token=<ds_web_session_token>` to the
-        // admin URL. The block below reads that hash, stores the token in
-        // admin.driftstack.dev's localStorage (separate origin = separate
-        // store), and strips the hash so it never ends up in browser
-        // history. Runs before the layout reveal script so subsequent
-        // page-load fetches already have the token.
-        try {
-          if (location.hash && location.hash.indexOf('#token=') === 0) {
-            var t = decodeURIComponent(location.hash.slice('#token='.length));
-            if (t.length > 0) {
-              localStorage.setItem('ds_web_session_token', t);
-            }
-            // Strip the hash from the URL bar + history without
-            // reloading the page.
-            history.replaceState(null, '', location.pathname + location.search);
-          }
-          // 2026-05-21 — direct-visit bounce. If a staff member lands
-          // on admin.driftstack.dev without a token (e.g. bookmarked
-          // the URL or typed it directly), redirect them through the
-          // dashboard's signed-in flow: app.driftstack.dev?next-admin=<path>
-          // → after sign-in the dashboard bounces them back with
-          // #token= set. The `bounced=1` guard prevents infinite loops
-          // if app-side auth itself fails.
-          if (
-            !localStorage.getItem('ds_web_session_token') &&
-            location.search.indexOf('bounced=1') === -1
-          ) {
-            location.replace(
-              'https://app.driftstack.dev/?next-admin=' +
-                encodeURIComponent(location.pathname + location.search),
-            );
-            return;
-          }
-        } catch (_) {
-          /* swallow — block missing localStorage etc */
-        }
         var main = document.querySelector('main[data-hydrate="pending"]');
         if (!main) return;
         var revealed = false;

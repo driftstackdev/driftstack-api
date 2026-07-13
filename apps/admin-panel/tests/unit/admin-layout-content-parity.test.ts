@@ -56,6 +56,19 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/description = 'Driftstack admin panel — Driftstack staff only\.',/);
   });
 
+  it('consumes the cross-origin SSO hash before every slotted page script', () => {
+    const preflight = body.indexOf('data-admin-sso-preflight');
+    const slot = body.indexOf('<slot />');
+    expect(preflight).toBeGreaterThan(-1);
+    expect(slot).toBeGreaterThan(preflight);
+    expect(body).toMatch(/location\.hash\.indexOf\('#token='\) === 0/);
+    expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', t\)/);
+    expect(body).toMatch(
+      /history\.replaceState\(null, '', location\.pathname \+ location\.search\)/,
+    );
+    expect(body.match(/location\.hash\.indexOf\('#token='\) === 0/g)).toHaveLength(1);
+  });
+
   it('13 navItems in canonical order pinned (Cost added 2026-05-16 for V-541.B; Atlas priority added with the internal atlas-priority queue; Fleet added W629 for the GET /v1/mac-nodes operator view)', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
