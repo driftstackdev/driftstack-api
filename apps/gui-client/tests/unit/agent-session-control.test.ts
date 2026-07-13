@@ -34,6 +34,7 @@ function fail(status: number, type: string, detail: string): unknown {
 
 afterEach(() => {
   mockFetch.mockReset();
+  vi.useRealTimers();
   (loadSettings as ReturnType<typeof vi.fn>).mockResolvedValue({
     apiKey: 'ds_test',
     baseUrl: 'https://api.test',
@@ -197,6 +198,22 @@ describe('agent-session-control transport', () => {
     await expect(setSessionMode('agt_1', 'ai')).rejects.toBeInstanceOf(AgentSessionControlError);
   });
 
+  it('aborts a stalled control request after 15 seconds', async () => {
+    vi.useFakeTimers();
+    mockFetch.mockImplementation(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
+    const pending = getAgentSession('agt_1');
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
+  });
+
   it('throws auth_missing WITHOUT fetching when no apiKey is configured', async () => {
     (loadSettings as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       apiKey: null,
@@ -286,6 +303,21 @@ describe('agent-session-control transport', () => {
   it('mintGuiControlKey returns null (never throws) on a non-2xx so the launch degrades gracefully', async () => {
     mockFetch.mockResolvedValue(fail(404, 'https://errors.driftstack.dev/not-found', 'gone'));
     expect(await mintGuiControlKey('https://api.test', 'ds_test', 'agt_7')).toBeNull();
+  });
+
+  it('mintGuiControlKey aborts after 15 seconds and still degrades to null', async () => {
+    vi.useFakeTimers();
+    mockFetch.mockImplementation(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
+    const pending = mintGuiControlKey('https://api.test', 'ds_test', 'agt_7');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect(pending).resolves.toBeNull();
   });
 
   // Founder #48 — live cookie-jar pull (the drawer's Cookies section data source).

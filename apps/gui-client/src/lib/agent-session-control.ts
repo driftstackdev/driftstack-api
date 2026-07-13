@@ -83,6 +83,16 @@ function isMode(v: unknown): v is SessionMode {
   return v === 'ai' || v === 'manual' || v === 'pair';
 }
 
+const CONTROL_REQUEST_TIMEOUT_MS = 15_000;
+
+function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), CONTROL_REQUEST_TIMEOUT_MS);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    globalThis.clearTimeout(timer);
+  });
+}
+
 function pairKindOf(body: ApiSession): string | null {
   return body.pair_mode_state?.kind ?? null;
 }
@@ -125,7 +135,7 @@ async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): 
       ? auth.baseUrl
       : settings.baseUrl;
   const baseUrl = rawBase.replace(/\/+$/, '');
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetchWithDeadline(`${baseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -171,7 +181,7 @@ export async function mintGuiControlKey(
     const url = `${baseUrl.replace(/\/+$/, '')}/v1/agent-sessions/${encodeURIComponent(
       sessionId,
     )}/gui-control-key`;
-    const res = await fetch(url, {
+    const res = await fetchWithDeadline(url, {
       method: 'GET',
       headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
     });
