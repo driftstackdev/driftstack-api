@@ -490,7 +490,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       // click turn an unknown outcome into duplicate customer traffic.
       const uncertainReplayIds = new Set();
       const uncertainTestEndpointIds = new Set();
+      const uncertainRotationIds = new Set();
+      let endpointSnapshot = [];
       let createInFlight = false;
+      let createOutcomeBlocked = false;
+      let createOutcomeReason = '';
       let editInFlight = false;
 
       function boundedFetch(url, init = {}) {
@@ -565,6 +569,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         createForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
           if (createInFlight) return;
+          if (createOutcomeBlocked) {
+            showCreateError(
+              createOutcomeReason === 'created'
+                ? 'This endpoint was likely created, but its one-shot signing secret was lost with the timed-out response. Delete the matching endpoint before creating another.'
+                : 'Endpoint creation is locked because the prior outcome could not be verified. Reload and review the endpoint list before retrying.',
+            );
+            return;
+          }
           if (createError) {
             createError.classList.add('hidden');
             createError.textContent = '';
@@ -582,6 +594,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return;
           }
           createInFlight = true;
+          const endpointIdsBefore = new Set(endpointSnapshot.map((endpoint) => endpoint.id));
           if (createSubmit) {
             createSubmit.disabled = true;
             createSubmit.setAttribute('aria-busy', 'true');
@@ -632,12 +645,28 @@ const apiBaseUrl = resolveApiBaseUrl();
             .catch(async (err) => {
               if (err && err.name === 'AbortError') {
                 const refreshed = await refreshEndpointList(false);
+                const matchingEndpoint =
+                  refreshed &&
+                  endpointSnapshot.find(
+                    (endpoint) =>
+                      endpoint.id &&
+                      !endpointIdsBefore.has(endpoint.id) &&
+                      String(endpoint.url || '') === url,
+                  );
+                if (matchingEndpoint) {
+                  createOutcomeBlocked = true;
+                  createOutcomeReason = 'created';
+                } else if (!refreshed) {
+                  createOutcomeBlocked = true;
+                  createOutcomeReason = 'unverified';
+                }
                 showCreateError(
                   'Create outcome is unknown after the request timed out. ' +
-                    (refreshed
-                      ? 'The endpoint list was refreshed. '
-                      : "We couldn't refresh the endpoint list. ") +
-                    'If a new endpoint for this URL appears, its signing secret cannot be recovered; delete that endpoint before creating another.',
+                    (matchingEndpoint
+                      ? 'The refreshed list contains a new endpoint for this exact URL, so creation likely completed but its signing secret cannot be recovered. Delete that endpoint before creating another.'
+                      : refreshed
+                        ? 'The refreshed authoritative list has no new endpoint for this URL; retry only if the endpoint is still required.'
+                        : "We couldn't refresh the endpoint list. Reload and verify it before retrying; another submission could create a duplicate endpoint with another one-shot secret."),
                 );
                 return;
               }
@@ -646,9 +675,23 @@ const apiBaseUrl = resolveApiBaseUrl();
             .finally(() => {
               createInFlight = false;
               if (createSubmit) {
-                createSubmit.disabled = false;
+                createSubmit.disabled = createOutcomeBlocked;
                 createSubmit.setAttribute('aria-busy', 'false');
-                createSubmit.textContent = 'Create endpoint';
+                createSubmit.textContent = createOutcomeBlocked
+                  ? createOutcomeReason === 'created'
+                    ? 'Already created'
+                    : 'Verify before retrying'
+                  : 'Create endpoint';
+                if (createOutcomeBlocked) {
+                  createSubmit.setAttribute(
+                    'title',
+                    createOutcomeReason === 'created'
+                      ? 'Delete the newly matched endpoint before creating another.'
+                      : 'Reload and verify the endpoint list before retrying.',
+                  );
+                } else {
+                  createSubmit.removeAttribute('title');
+                }
               }
             });
         });
@@ -719,6 +762,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           : '<button type="button" data-test="' +
             escapeHtml(e.id) +
             '" class="text-sm text-tk-accent-text hover:underline">Send test</button>';
+        const rotateButton = uncertainRotationIds.has(String(e.id))
+          ? '<button type="button" data-rotate="' +
+            escapeHtml(e.id) +
+            '" disabled title="The previous rotation outcome is unknown. Reload and verify before rotating again." class="text-sm text-amber-700">Rotation outcome unknown</button>'
+          : '<button type="button" data-rotate="' +
+            escapeHtml(e.id) +
+            '" class="text-sm text-tk-accent-text hover:underline">Rotate secret</button>';
         return (
           '<li class="dashboard-card">' +
           '<div class="flex items-start justify-between gap-6">' +
@@ -766,9 +816,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(e.id) +
           '" class="text-sm text-tk-accent-text hover:underline">Edit</button>' +
           testButton +
-          '<button type="button" data-rotate="' +
-          escapeHtml(e.id) +
-          '" class="text-sm text-tk-accent-text hover:underline">Rotate secret</button>' +
+          rotateButton +
           '<button type="button" data-delete="' +
           escapeHtml(e.id) +
           '" class="text-sm text-tk-err-text hover:underline">Delete</button>' +
@@ -1417,6 +1465,17 @@ const apiBaseUrl = resolveApiBaseUrl();
               actionButtonsInFlight.delete(btn);
               return;
             }
+            if (uncertainRotationIds.has(String(id))) {
+              actionButtonsInFlight.delete(btn);
+              showBanner(
+                'Rotation is locked because the previous outcome was confirmed or could not be verified. Reload and review the endpoint before rotating again.',
+              );
+              return;
+            }
+            const previousEndpoint = endpointSnapshot.find(
+              (endpoint) => String(endpoint.id) === String(id),
+            );
+            const previousGrace = previousEndpoint?.rotation_grace_expires_at || null;
             if (
               !(await window.driftstackConfirm(
                 'Rotate signing secret for ' +
@@ -1455,12 +1514,37 @@ const apiBaseUrl = resolveApiBaseUrl();
               .catch(async (err) => {
                 if (err && err.name === 'AbortError') {
                   const refreshed = await refreshEndpointList(false);
+                  const currentEndpoint = endpointSnapshot.find(
+                    (endpoint) => String(endpoint.id) === String(id),
+                  );
+                  const currentGrace = currentEndpoint?.rotation_grace_expires_at || null;
+                  const rotationAdvanced =
+                    refreshed && currentGrace && currentGrace !== previousGrace;
+                  if (rotationAdvanced || !refreshed) {
+                    uncertainRotationIds.add(String(id));
+                    const currentButton = Array.from(
+                      ul.querySelectorAll('[data-rotate]'),
+                    ).find((candidate) => candidate.getAttribute('data-rotate') === String(id));
+                    if (currentButton) {
+                      currentButton.disabled = true;
+                      currentButton.textContent = rotationAdvanced
+                        ? 'Rotation completed — secret lost'
+                        : 'Verify before rotating';
+                      currentButton.setAttribute(
+                        'title',
+                        rotationAdvanced
+                          ? 'Reload after updating or deleting this endpoint; rotating again would replace the lost secret.'
+                          : 'Reload and verify this endpoint before rotating again.',
+                      );
+                    }
+                  }
                   showBanner(
                     'Rotation outcome is unknown after the request timed out. ' +
-                      (refreshed
-                        ? 'The endpoint list was refreshed. '
-                        : "We couldn't refresh the endpoint list. ") +
-                      'If the endpoint now shows rotating, its new signing secret cannot be recovered. Rotate again only if you intentionally want to replace it with another new secret.',
+                      (rotationAdvanced
+                        ? 'The refreshed endpoint has a new rotation grace period, so rotation completed but its one-shot signing secret cannot be recovered. Do not rotate again; reload after deciding whether to delete or replace this endpoint.'
+                        : refreshed
+                          ? 'The refreshed authoritative endpoint has no new rotation grace period; retry only if rotation is still required.'
+                          : "We couldn't refresh the endpoint list. Reload and verify it before rotating again; another rotation could replace an unrecoverable secret."),
                   );
                   return;
                 }
@@ -1470,9 +1554,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               })
               .finally(() => {
                 actionButtonsInFlight.delete(btn);
-                btn.disabled = false;
+                const rotationBlocked = uncertainRotationIds.has(String(id));
+                btn.disabled = rotationBlocked;
                 btn.setAttribute('aria-busy', 'false');
-                btn.textContent = original;
+                btn.textContent = rotationBlocked ? 'Verify before rotating' : original;
               });
           });
         });
@@ -1569,6 +1654,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
             const endpoints = body.data || [];
+            endpointSnapshot = endpoints;
             if (endpoints.length === 0) {
               ul.classList.add('hidden');
               empty.classList.remove('hidden');

@@ -55,6 +55,17 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toContain('Create outcome is unknown after the request timed out.');
     expect(body).toContain('Rotation outcome is unknown after the request timed out.');
     expect(body).toContain('signing secret cannot be recovered');
+    expect(body).toContain('const uncertainRotationIds = new Set();');
+    expect(body).toContain('let endpointSnapshot = [];');
+    expect(body).toMatch(/!endpointIdsBefore\.has\(endpoint\.id\)/);
+    expect(body).toMatch(/String\(endpoint\.url \|\| ''\) === url/);
+    expect(body).toMatch(/createSubmit\.disabled = createOutcomeBlocked/);
+    expect(body).toMatch(/if \(createOutcomeBlocked\)/);
+    expect(body).toMatch(/currentGrace && currentGrace !== previousGrace/);
+    expect(body).toMatch(/uncertainRotationIds\.add\(String\(id\)\)/);
+    expect(body).toMatch(/if \(uncertainRotationIds\.has\(String\(id\)\)\)/);
+    expect(body).toContain('refreshed authoritative list has no new endpoint for this URL');
+    expect(body).toContain('refreshed authoritative endpoint has no new rotation grace period');
   });
 
   it('terminally guards ambiguous replay and test-enqueue outcomes', () => {

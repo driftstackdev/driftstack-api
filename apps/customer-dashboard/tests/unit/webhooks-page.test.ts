@@ -254,7 +254,78 @@ describe('webhooks page — local integration', () => {
     expect(isHidden(window, '[data-create-reveal]')).toBe(true);
     expect(window.document.querySelector('[data-reveal-secret]')?.textContent).toBe('');
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /outcome is unknown.*list was refreshed.*secret cannot be recovered.*delete.*before creating another/i,
+      /outcome is unknown.*refreshed list contains a new endpoint for this exact url.*secret cannot be recovered.*delete.*before creating another/i,
+    );
+    const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
+      /likely created.*one-shot signing secret was lost.*delete the matching endpoint/i,
+    );
+  });
+
+  it('create timeout permits retry only after an authoritative exact-URL non-match', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => Promise.reject(timeout),
+        () => json({ data: [] }),
+        () => json({ id: 'wh_retry', secret: 'whsec_RETRY' }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="url"]') as HTMLInputElement).value =
+      'https://hooks.test/retry';
+    (form.querySelector('input[name="event"]') as HTMLInputElement).checked = true;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
+      /authoritative list has no new endpoint.*retry only if the endpoint is still required/i,
+    );
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+    expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(2);
+    expect(window.document.querySelector('[data-reveal-secret]')?.textContent).toBe('whsec_RETRY');
+  });
+
+  it('create timeout locks when the authoritative list cannot be refreshed', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => Promise.reject(timeout),
+        () => Promise.reject(new Error('list unavailable')),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="url"]') as HTMLInputElement).value =
+      'https://hooks.test/unverified';
+    (form.querySelector('input[name="event"]') as HTMLInputElement).checked = true;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toMatch(/verify before retrying/i);
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
+      /creation is locked.*reload and review the endpoint list/i,
     );
   });
 
@@ -314,7 +385,56 @@ describe('webhooks page — local integration', () => {
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(true);
     expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe('');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*list was refreshed.*secret cannot be recovered.*intentionally want to replace/i,
+      /outcome is unknown.*new rotation grace period.*secret cannot be recovered.*do not rotate again/i,
+    );
+    const blockedRotate = window.document.querySelector(
+      '[data-rotate="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    expect(blockedRotate.disabled).toBe(true);
+    blockedRotate.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(
+      fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/rotate-secret$/.test(c.url)),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /rotation is locked.*reload and review the endpoint/i,
+    );
+  });
+
+  it('rotate timeout permits retry only when refreshed grace did not advance', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [ENDPOINT] }),
+        () => Promise.reject(timeout),
+        () => json({ data: [ENDPOINT] }),
+        () =>
+          json({
+            secret: 'whsec_RETRIED_ROTATION',
+            grace_expires_at: '2026-05-22T10:00:00.000Z',
+          }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-rotate="wh_endpoint"]') as HTMLButtonElement).click();
+    await flush(10);
+
+    const retryRotate = window.document.querySelector(
+      '[data-rotate="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    expect(retryRotate.disabled).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /authoritative endpoint has no new rotation grace period.*retry only if rotation is still required/i,
+    );
+    retryRotate.click();
+    await flush(10);
+    expect(
+      fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/rotate-secret$/.test(c.url)),
+    ).toHaveLength(2);
+    expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe(
+      'whsec_RETRIED_ROTATION',
     );
   });
 
