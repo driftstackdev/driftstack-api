@@ -108,6 +108,13 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toMatch(/hideBanner\(noticeGeneration\)/);
   });
 
+  it('reconciles ambiguous email preference saves without inventing a boolean state', () => {
+    expect(body).toMatch(/fetchEmailPrefs\(\)/);
+    expect(body).toMatch(/liveOptedIn === optedIn/);
+    expect(body).toMatch(/input\.indeterminate = true/);
+    expect(body).toMatch(/outcome is unknown\. Reload to verify it/);
+  });
+
   it('BYOK status consumes the metadata-only API contract and reconciles an ambiguous save by set_at version', () => {
     expect(body).toMatch(/body\.has_key !== true/);
     expect(body).toMatch(/typeof body\.set_at === 'string'/);

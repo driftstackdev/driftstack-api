@@ -39,6 +39,9 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
 
     expect(p).toMatch(/authedFetch\('\/v1\/account\/email-preferences', \{ method: 'GET' \}\)/);
     expect(p).toMatch(/authedFetch\('\/v1\/account\/email-preferences', \{\s*\n\s+method: 'PUT'/);
+    expect(p).toMatch(/liveOptedIn === optedIn/);
+    expect(p).toMatch(/input\.indeterminate = true/);
+    expect(p).toMatch(/input\.dataset\.outcomeUnknown = 'true'/);
   });
 
   it('CRITICAL V-204 OptOutableEmailEventSchema reference pinned. The "V-204 opt-outable email events. Mirrors OptOutableEmailEventSchema." comment is what threads the dashboard-server schema contract.', () => {

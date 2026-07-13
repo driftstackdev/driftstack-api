@@ -887,6 +887,8 @@ const EMAIL_EVENTS = [
         const inputs = emailPrefsList.querySelectorAll('input[type="checkbox"][data-event-type]');
         inputs.forEach((input) => {
           input.disabled = false;
+          input.indeterminate = false;
+          delete input.dataset.outcomeUnknown;
           const eventType = input.getAttribute('data-event-type');
           const pref = prefs.find((p) => p.event_type === eventType);
           input.checked = pref ? pref.opted_in : true;
@@ -897,11 +899,16 @@ const EMAIL_EVENTS = [
         }
       }
 
+      function fetchEmailPrefs() {
+        return authedFetch('/v1/account/email-preferences', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => body.data || []);
+      }
+
       function loadEmailPrefs() {
         if (!token || !emailPrefsList) return;
-        authedFetch('/v1/account/email-preferences', { method: 'GET' })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then((body) => setEmailPrefsState(body.data || []))
+        fetchEmailPrefs()
+          .then((prefs) => setEmailPrefsState(prefs))
           .catch((err) => {
             const msg = requestErrorMessage(err, 'network error');
             showBanner("Couldn't load email preferences (" + msg + ').');
@@ -914,6 +921,8 @@ const EMAIL_EVENTS = [
         if (input) {
           emailPrefsInFlight.add(input);
           input.disabled = true;
+          input.indeterminate = false;
+          delete input.dataset.outcomeUnknown;
           input.setAttribute('aria-busy', 'true');
         }
         authedFetch('/v1/account/email-preferences', {
@@ -929,6 +938,31 @@ const EMAIL_EVENTS = [
             setTimeout(() => hideBanner(noticeGeneration), 2000);
           })
           .catch((err) => {
+            if (err && err.name === 'AbortError' && input) {
+              return fetchEmailPrefs()
+                .then((prefs) => {
+                  const livePref = prefs.find((pref) => pref.event_type === eventType);
+                  const liveOptedIn = livePref ? livePref.opted_in : true;
+                  input.checked = liveOptedIn;
+                  if (liveOptedIn === optedIn) {
+                    const noticeGeneration = showBanner(
+                      'Email preference saved. The response was lost, but the live setting matches.',
+                    );
+                    setTimeout(() => hideBanner(noticeGeneration), 5000);
+                    return;
+                  }
+                  showBanner(
+                    'The save did not complete; the checkbox now shows the live preference. Review it before trying again.',
+                  );
+                })
+                .catch(() => {
+                  input.indeterminate = true;
+                  input.dataset.outcomeUnknown = 'true';
+                  showBanner(
+                    'The email preference outcome is unknown. Reload to verify it before changing this setting again.',
+                  );
+                });
+            }
             // The checkbox already flipped optimistically on 'change' —
             // revert it so the displayed state matches what the server
             // actually has, instead of silently lying about whether the
@@ -940,7 +974,7 @@ const EMAIL_EVENTS = [
           .finally(() => {
             if (input) {
               emailPrefsInFlight.delete(input);
-              input.disabled = false;
+              input.disabled = input.dataset.outcomeUnknown === 'true';
               input.removeAttribute('aria-busy');
             }
           });

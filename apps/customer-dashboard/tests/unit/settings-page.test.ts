@@ -28,7 +28,7 @@ interface MockFetchCall {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -53,7 +53,7 @@ function setUpDom(
   window.fetch = (input: string, init: RequestInit | undefined) => {
     const call: MockFetchCall = { url: String(input), init };
     fetchCalls.push(call);
-    return Promise.resolve(opts.route(call));
+    return Promise.resolve().then(() => opts.route(call));
   };
   window.localStorage.setItem('ds_web_session_token', 'tok');
   const cr = opts.confirmReturns ?? true;
@@ -149,6 +149,105 @@ describe('settings page — email notification preferences', () => {
     const banner = window.document.querySelector('[data-banner]');
     expect(banner?.classList.contains('hidden')).toBe(false);
     expect(banner?.textContent).toContain("Couldn't save email preference");
+  });
+
+  it('committed PUT timeout refreshes the live preference instead of reverting it', async () => {
+    let optedIn = true;
+    const base = routerWithEmailPref(204);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/email-preferences$/.test(call.url) && method === 'PUT') {
+          optedIn = false;
+          const error = new Error('response lost after commit');
+          error.name = 'AbortError';
+          return Promise.reject(error);
+        }
+        if (/\/v1\/account\/email-preferences$/.test(call.url) && method === 'GET') {
+          return json({ data: [{ event_type: 'billing-receipt', opted_in: optedIn }] });
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    const checkbox = window.document.querySelector(
+      'input[data-event-type="billing-receipt"]',
+    ) as HTMLInputElement;
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
+    expect(checkbox.checked).toBe(false);
+    expect(checkbox.indeterminate).toBe(false);
+    expect(checkbox.disabled).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'live setting matches',
+    );
+  });
+
+  it('uncommitted PUT timeout restores the authoritative live preference', async () => {
+    const base = routerWithEmailPref(204);
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'PUT' && /\/email-preferences$/.test(call.url)) {
+          const error = new Error('request timed out');
+          error.name = 'AbortError';
+          return Promise.reject(error);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    const checkbox = window.document.querySelector(
+      'input[data-event-type="billing-receipt"]',
+    ) as HTMLInputElement;
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush(12);
+
+    expect(checkbox.checked).toBe(true);
+    expect(checkbox.indeterminate).toBe(false);
+    expect(checkbox.disabled).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'checkbox now shows the live preference',
+    );
+  });
+
+  it('shows and locks an indeterminate checkbox when timeout reconciliation also fails', async () => {
+    const base = routerWithEmailPref(204);
+    let mutationStarted = false;
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/email-preferences$/.test(call.url) && method === 'PUT') {
+          mutationStarted = true;
+          const error = new Error('request timed out');
+          error.name = 'AbortError';
+          return Promise.reject(error);
+        }
+        if (/\/email-preferences$/.test(call.url) && method === 'GET' && mutationStarted) {
+          return Promise.reject(new Error('gateway unavailable'));
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    const checkbox = window.document.querySelector(
+      'input[data-event-type="billing-receipt"]',
+    ) as HTMLInputElement;
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush(12);
+
+    expect(checkbox.indeterminate).toBe(true);
+    expect(checkbox.disabled).toBe(true);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'outcome is unknown',
+    );
   });
 
   it('does not let an older saved timer hide a newer preference failure', async () => {
