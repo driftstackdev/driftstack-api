@@ -109,6 +109,18 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).toContain('ds_web_session_token');
   });
 
+  it('bounds reads/writes, makes hydration latest-wins, and defers fresh-SSO loading', () => {
+    expect(body).toMatch(/const INCIDENT_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/signal: activeController\.signal/);
+    expect(body).toMatch(/if \(loadController\) loadController\.abort\(\)/);
+    expect(body).toMatch(/const generation = \+\+loadGeneration;/);
+    expect(body).toMatch(/if \(generation !== loadGeneration\) return;/);
+    expect(body).toContain('Request timed out. Try again.');
+    expect(body).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
+  });
+
   it('V-344 replaces V-295a alert-stubs framing comment pinned', () => {
     // The previous slice used window.alert() stubs; V-344 wired
     // live endpoints. Pin so a future "let's reuse the alert

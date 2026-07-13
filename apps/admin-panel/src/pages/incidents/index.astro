@@ -260,6 +260,31 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
     // V-338b — also fetches /v1/admin/incidents on mount + replaces
     // the SSG MOCK list contents with live data.
     (function () {
+      const INCIDENT_TIMEOUT_MS = 15_000;
+      let listController = null;
+      let listGeneration = 0;
+
+      function boundedFetch(url, init, controller) {
+        const activeController = controller || new AbortController();
+        const timeout = window.setTimeout(function () {
+          activeController.abort();
+        }, INCIDENT_TIMEOUT_MS);
+        return fetch(
+          url,
+          Object.assign({}, init || {}, { signal: activeController.signal }),
+        ).finally(function () {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
+
       const SEVERITY_BADGE = {
         minor: 'bg-amber-50 text-amber-700',
         major: 'bg-orange-50 text-orange-700',
@@ -394,6 +419,8 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
       }
 
       function fetchAndRender() {
+        if (listController) listController.abort();
+        const generation = ++listGeneration;
         let token;
         try {
           token = localStorage.getItem('ds_web_session_token') || '';
@@ -409,20 +436,27 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
         if (!token) {
           rebuild([]);
           showBanner('Sign in with a staff admin account to see live data.');
-          return;
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return Promise.resolve();
         }
-        fetch(apiBaseUrl + '/v1/admin/incidents?scope=all&limit=100', {
-          headers: { authorization: 'Bearer ' + token },
-        })
+        const controller = new AbortController();
+        listController = controller;
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/incidents?scope=all&limit=100',
+          { headers: { authorization: 'Bearer ' + token } },
+          controller,
+        )
           .then(function (r) {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then(function (body) {
+            if (generation !== listGeneration) return;
             rebuild(body && Array.isArray(body.data) ? body.data : []);
             hideBanner();
           })
           .catch(function (err) {
+            if (generation !== listGeneration) return;
             // CRITICAL — a failed fetch (expired token, 403 scope mismatch,
             // transient 5xx, network blip) must NEVER render identically to
             // "No open incidents. All systems operational." on the one page
@@ -431,7 +465,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
             // data, but show a distinct, retry-capable error banner instead
             // of the calm empty-state message.
             rebuild([]);
-            var msg = err && err.message ? err.message : 'network error';
+            var msg = requestErrorMessage(err, 'network error');
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -442,13 +476,17 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
                 retry: true,
               });
             }
+          })
+          .finally(function () {
+            if (generation !== listGeneration) return;
+            listController = null;
+            if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           });
       }
 
       const retryBtn = document.querySelector('[data-banner-retry]');
       if (retryBtn) retryBtn.addEventListener('click', fetchAndRender);
 
-      fetchAndRender();
       const form = document.getElementById('new-incident-form');
       const submit = document.getElementById('submit-btn');
       const errEl = document.getElementById('form-error');
@@ -505,7 +543,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
         submit.disabled = true;
         submit.setAttribute('aria-busy', 'true');
         submit.textContent = 'Posting…';
-        fetch(apiBaseUrl + '/v1/admin/incidents', {
+        boundedFetch(apiBaseUrl + '/v1/admin/incidents', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
@@ -538,7 +576,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
             window.location.reload();
           })
           .catch(function (err) {
-            showErr(err && err.message ? err.message : 'Failed to post incident.');
+            showErr(requestErrorMessage(err, 'Failed to post incident.'));
           })
           .finally(function () {
             postingIncident = false;
@@ -547,6 +585,15 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
             submit.textContent = 'Post incident';
           });
       });
+
+      function start() {
+        fetchAndRender();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>

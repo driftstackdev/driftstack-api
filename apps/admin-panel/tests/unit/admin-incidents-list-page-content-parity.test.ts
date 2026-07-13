@@ -72,9 +72,25 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     expect(existsSync(ROUTE)).toBe(true);
     expect(route).toContain("'/v1/admin/incidents'");
     // V-338b — GET on mount with scope=all + limit=100.
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100'/);
+    expect(body).toMatch(
+      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100'/,
+    );
     // V-338 — POST handler.
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/admin\/incidents',\s*\{\s*method: 'POST'/s);
+    expect(body).toMatch(
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/admin\/incidents',\s*\{\s*method: 'POST'/s,
+    );
+  });
+
+  it('bounds reads/writes, aborts superseded retries, and defers SSO hydration', () => {
+    expect(body).toMatch(/const INCIDENT_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/signal: activeController\.signal/);
+    expect(body).toMatch(/if \(listController\) listController\.abort\(\)/);
+    expect(body).toMatch(/const generation = \+\+listGeneration;/);
+    expect(body).toMatch(/if \(generation !== listGeneration\) return;/);
+    expect(body).toContain('Request timed out. Try again.');
+    expect(body).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
   });
 
   it("audit-action 'incident.created' emitted by the route (page promises 'Every action audit-logged')", () => {

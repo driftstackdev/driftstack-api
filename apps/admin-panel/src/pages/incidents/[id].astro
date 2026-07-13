@@ -300,6 +300,30 @@ const isResolved = incident.status === 'resolved';
     // the V-295a alert-stubs.
     (function () {
       const banner = document.querySelector('[data-banner]');
+      const INCIDENT_TIMEOUT_MS = 15_000;
+      let loadController = null;
+      let loadGeneration = 0;
+
+      function boundedFetch(url, init, controller) {
+        const activeController = controller || new AbortController();
+        const timeout = window.setTimeout(function () {
+          activeController.abort();
+        }, INCIDENT_TIMEOUT_MS);
+        return fetch(
+          url,
+          Object.assign({}, init || {}, { signal: activeController.signal }),
+        ).finally(function () {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       // Branded inline banner — replaces native alert() (2026-05-29
       // "no alert boxes everywhere"). Matches the showBanner pattern used
@@ -435,25 +459,34 @@ const isResolved = incident.status === 'resolved';
       }
 
       function loadIncident() {
+        if (loadController) loadController.abort();
+        const generation = ++loadGeneration;
         const token = getToken();
         if (!token) {
           showBanner('Sign in with a staff admin account to see this incident.', true);
-          return;
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return Promise.resolve();
         }
-        fetch(apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId), {
-          headers: { authorization: 'Bearer ' + token },
-        })
+        const controller = new AbortController();
+        loadController = controller;
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId),
+          { headers: { authorization: 'Bearer ' + token } },
+          controller,
+        )
           .then(function (r) {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             if (r.status === 404) return Promise.reject(new Error('not-found'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then(function (body) {
+            if (generation !== loadGeneration) return;
             if (!body || !body.incident) return;
             applyIncident(body.incident, body.updates || []);
           })
           .catch(function (err) {
-            const msg = err && err.message ? err.message : 'network error';
+            if (generation !== loadGeneration) return;
+            const msg = requestErrorMessage(err, 'network error');
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -464,6 +497,11 @@ const isResolved = incident.status === 'resolved';
             } else {
               showBanner("Couldn't load incident (" + msg + ').', true);
             }
+          })
+          .finally(function () {
+            if (generation !== loadGeneration) return;
+            loadController = null;
+            if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           });
       }
 
@@ -494,7 +532,7 @@ const isResolved = incident.status === 'resolved';
             submit.dataset.origText = submit.textContent || '';
             submit.textContent = 'Posting…';
           }
-          fetch(apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId) + urlSuffix, {
+          boundedFetch(apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId) + urlSuffix, {
             method: 'POST',
             headers: {
               'content-type': 'application/json',
@@ -520,7 +558,7 @@ const isResolved = incident.status === 'resolved';
             })
             .catch(function (err) {
               showBanner(
-                'Post failed: ' + (err && err.message ? err.message : 'network error'),
+                'Post failed: ' + requestErrorMessage(err, 'network error'),
                 true,
               );
             })
@@ -545,9 +583,13 @@ const isResolved = incident.status === 'resolved';
       // Populate from the live incident at request time, then reveal the page
       // (AdminLayout opacity-gate). The forms are wired above regardless so
       // their submit handlers are ready by the time the data lands.
-      loadIncident();
-      if (typeof window.dashboardHydrated === 'function') {
-        window.dashboardHydrated();
+      function start() {
+        loadIncident();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+      } else {
+        start();
       }
     })();
   </script>
