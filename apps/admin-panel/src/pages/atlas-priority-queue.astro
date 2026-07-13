@@ -289,14 +289,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
         if (myReq !== inFlight) return; // superseded by a newer call
         if (!res.ok) {
+          const message = window.driftstackRequestErrorMessage(
+            new Error('HTTP ' + res.status),
+            'Could not load the queue. Try again.',
+          );
           // Clear the "Loading…" placeholder so a first-load failure (e.g. a
           // 401 with no token) doesn't leave a stuck loading row under the
           // error banner.
           tbody.innerHTML =
-            '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">Could not load the queue — ' +
-            escapeHtml(res.status + ' ' + res.statusText) +
+            '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">' +
+            escapeHtml(message) +
             '</td></tr>';
-          showError('Queue endpoint returned ' + res.status + ' ' + res.statusText);
+          showError(message);
           return;
         }
         const data = await res.json();

@@ -32,7 +32,11 @@ describe('admin Atlas priority queue manual refresh', () => {
   it('keeps thrown transport internals out of the visible error banner', () => {
     const body = readFileSync(SOURCE, 'utf8');
     expect(body).toContain('Could not load the queue. Check your connection and try again.');
+    expect(body).toContain('window.driftstackRequestErrorMessage(');
+    expect(body).toContain("new Error('HTTP ' + res.status)");
     expect(body).not.toMatch(/Fetch failed:\s*['"]?\s*\+/);
     expect(body).not.toContain('err.message || String(err)');
+    expect(body).not.toContain('res.statusText');
+    expect(body).not.toContain("'Queue endpoint returned ' + res.status");
   });
 });
