@@ -248,9 +248,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // break the pin (the long-chain regex backtracking hazard / feedback).
     expect(body).toContain('export const SessionStatusSchema = z.object({');
     expect(body).toContain("type: z.literal('sessionStatus'),");
-    expect(body).toContain('sessionId: z.string().min(1),');
-    expect(body).toContain('status: z.string().min(1),');
-    expect(body).toContain('timestamp: z.string(),');
+    expect(body).toContain('sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('status: z.string().min(1).max(64),');
+    expect(body).toContain('timestamp: z.string().min(1).max(64),');
     // Bounded like every sibling result field — a JWT-authed node must not inject
     // an unbounded string that persists into the customer-facing close reason.
     expect(body).toContain('detail: z.string().max(4096).optional(),');
@@ -391,8 +391,8 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // break the pin.
     expect(body).toContain('export const ChallengeDetectedSchema = z.object({');
     expect(body).toContain("type: z.literal('challengeDetected'),");
-    expect(body).toContain('sessionId: z.string().min(1),');
-    expect(body).toContain('challengeId: z.string().min(1),');
+    expect(body).toContain('sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('challengeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
     expect(body).toContain('challenge: z.object({');
     expect(body).toContain('type: z.string().max(256),');
     expect(body).toContain('detail: z.string().max(4096).optional(),');
@@ -1156,6 +1156,13 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(HarnessOutboundSchema.safeParse({ ...base, detail: 'x'.repeat(4097) }).success).toBe(
       false,
     );
+    for (const oversized of [
+      { sessionId: 's'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1) },
+      { status: 's'.repeat(65) },
+      { timestamp: 't'.repeat(65) },
+    ]) {
+      expect(HarnessOutboundSchema.safeParse({ ...base, ...oversized }).success).toBe(false);
+    }
   });
 
   it('profile-backed sessions (A3 W417): optional snake_case profile block; profile_id+dek required; blob fields optional; strict', () => {
@@ -1503,6 +1510,13 @@ describe('harness-control-protocol behavioral contract', () => {
         challenge: { type: 'x'.repeat(257), confidence: 0.9 },
       }).success,
     ).toBe(false);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...base,
+        challengeId: 'c'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1),
+        challenge: { type: 'datadome', confidence: 0.9 },
+      }).success,
+    ).toBe(false);
   });
 
   it('ProfileSaveFailedSchema.detail is bounded — an oversized value (webhook storage/bandwidth amplification via profile-save-failed-relay.ts) is rejected', () => {
@@ -1518,6 +1532,12 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(HarnessOutboundSchema.safeParse({ ...base, detail: 'x'.repeat(4097) }).success).toBe(
       false,
     );
+    for (const oversized of [
+      { sessionId: 's'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1) },
+      { profile_id: 'p'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1) },
+    ]) {
+      expect(HarnessOutboundSchema.safeParse({ ...base, ...oversized }).success).toBe(false);
+    }
   });
 
   it('CookieSchema domain/name/value/path are bounded (RFC 6265-realistic) — reused by both the customer write-path (SetCookiesRequestSchema) and the harness read-path (CookiesResultSchema); an ~oversized field on either is rejected', () => {

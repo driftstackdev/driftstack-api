@@ -570,9 +570,9 @@ export type IntentResultEnvelope = z.infer<typeof IntentResultEnvelopeSchema>;
 // keeps the close to genuine terminal frames.
 export const SessionStatusSchema = z.object({
   type: z.literal('sessionStatus'),
-  sessionId: z.string().min(1),
-  status: z.string().min(1),
-  timestamp: z.string(),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  status: z.string().min(1).max(64),
+  timestamp: z.string().min(1).max(64),
   // Bounded like every sibling `detail` in this file (.max(4096)) — a node
   // (already JWT-authed) must not be able to inject an unbounded string here.
   detail: z.string().max(4096).optional(),
@@ -796,7 +796,7 @@ export const ProfileSavedSchema = z
 export const ChallengeDetectedSchema = z.object({
   type: z.literal('challengeDetected'),
   sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
-  challengeId: z.string().min(1),
+  challengeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   challenge: z.object({
     // Security-audit hardening (2026-06-30) — bounded like the sibling
     // hardened fields in this file (bootId 256, ControlCommand.reason 512):
@@ -827,8 +827,8 @@ export type ChallengeDetected = z.infer<typeof ChallengeDetectedSchema>;
 // like the sibling frames.
 export const ProfileSaveFailedSchema = z.object({
   type: z.literal('profileSaveFailed'),
-  sessionId: z.string().min(1),
-  profile_id: z.string().min(1),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  profile_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   // `degenerate_dump` (A3 W2977/W2979, harness 2def1d39b2): the data-loss guard
   // DELIBERATELY skipped the save-back because a torn/empty fork dump would have
   // overwritten a known-good prior blob — the prior is PRESERVED (reassuring, NOT
