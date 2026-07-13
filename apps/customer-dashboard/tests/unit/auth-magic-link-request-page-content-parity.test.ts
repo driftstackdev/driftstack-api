@@ -29,10 +29,12 @@ describe('customer-dashboard magic-link request reliability', () => {
     );
   });
 
-  it('turns an abort into actionable recovery copy', () => {
-    expect(body).toContain("err && err.name === 'AbortError'");
-    expect(body).toContain(
-      'Sending the magic link took too long. Check your connection and try again.',
-    );
+  it('turns an abort into a terminal inbox-first recovery state', () => {
+    expect(body).toContain('let requestOutcomeUnknown = false;');
+    expect(body).toContain('if (requestOutcomeUnknown) return;');
+    expect(body).toContain('if (controller.signal.aborted)');
+    expect(body).toContain('Magic-link delivery is unknown after the request timed out.');
+    expect(body).toContain('Do not request another link on this page.');
+    expect(body).toContain('use the newest one');
   });
 });

@@ -176,7 +176,7 @@ describe('forgot-password page — local integration', () => {
     expect(isHidden(window, '[data-success]')).toBe(true);
   });
 
-  it('serializes duplicate submits and recovers when the bounded request times out', async () => {
+  it('serializes duplicate submits and makes an ambiguous request timeout terminal', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       requestTimeoutImmediately: true,
       fetchPlan: [
@@ -198,9 +198,18 @@ describe('forgot-password page — local integration', () => {
     const submitBtn = window.document.querySelector(
       '[data-form] button[type="submit"]',
     ) as HTMLButtonElement;
-    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.disabled).toBe(true);
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
-    expect(submitBtn.textContent).toBe('Send reset link');
-    expect(textOf(window, '[data-banner]')).toMatch(/took too long.*check your connection/i);
+    expect(submitBtn.textContent).toBe('Check inbox before retrying');
+    expect(textOf(window, '[data-banner]')).toMatch(
+      /delivery is unknown.*may already have sent.*do not request another link.*inbox and spam.*newest one/i,
+    );
+    expect(isHidden(window, '[data-form]')).toBe(true);
+    expect(isHidden(window, '[data-success]')).toBe(false);
+    expect(textOf(window, '[data-success-email]')).toBe('recover@example.com');
+
+    submit(window, 'recover@example.com');
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
   });
 });

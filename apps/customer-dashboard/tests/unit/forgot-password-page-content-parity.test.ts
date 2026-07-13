@@ -98,7 +98,7 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
     );
   });
 
-  it('reset-link request has a real single-flight lease and bounded network deadline', () => {
+  it('reset-link request has a real single-flight lease and terminal unknown-timeout recovery', () => {
     expect(body).toMatch(/const RESET_LINK_REQUEST_TIMEOUT_MS = 15_000/);
     expect(body).toMatch(/let resetLinkRequestInFlight = false/);
     expect(body).toMatch(/if \(resetLinkRequestInFlight\) return/);
@@ -110,7 +110,11 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
     expect(body).toMatch(/resetLinkRequestInFlight = false/);
-    expect(body).toMatch(/Sending the reset link took too long/);
+    expect(body).toMatch(/let resetLinkOutcomeUnknown = false/);
+    expect(body).toMatch(/if \(resetLinkOutcomeUnknown\) return/);
+    expect(body).toContain('Reset-link delivery is unknown after the request timed out.');
+    expect(body).toContain('Do not request another link on this page.');
+    expect(body).toContain('use the newest one');
   });
 
   it('downstream /reset-password page exists (debug_token deep-link target)', () => {

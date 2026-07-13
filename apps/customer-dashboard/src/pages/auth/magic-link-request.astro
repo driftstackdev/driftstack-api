@@ -121,12 +121,29 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       let requestInFlight = false;
+      let requestOutcomeUnknown = false;
+      function showUnknownOutcome(email) {
+        requestOutcomeUnknown = true;
+        successEmail.textContent = email;
+        form.classList.add('hidden');
+        success.classList.remove('hidden');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.setAttribute('aria-busy', 'false');
+          submitBtn.textContent = 'Check inbox before retrying';
+        }
+        showBanner(
+          'Magic-link delivery is unknown after the request timed out. The server may already have sent the one-shot sign-in email. Do not request another link on this page. Check your inbox and spam folder first; if multiple messages arrive, use the newest one.',
+        );
+      }
+
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
         // A double-click (or a fast double-Enter) fired this POST twice
         // before the first response swapped the form away — each request
         // mints a NEW valid magic-link token, so the customer's inbox got
         // two working sign-in links instead of one.
+        if (requestOutcomeUnknown) return;
         if (requestInFlight) return;
         requestInFlight = true;
         setSubmitting(true);
@@ -168,18 +185,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             success.classList.remove('hidden');
           })
           .catch((err) => {
+            if (controller.signal.aborted) {
+              showUnknownOutcome(email);
+              return;
+            }
             showBanner(
-              err && err.name === 'AbortError'
-                ? 'Sending the magic link took too long. Check your connection and try again.'
-                : err && err.message
-                  ? err.message
-                  : 'Request failed.',
+              err && err.message ? err.message : 'Request failed.',
             );
           })
           .finally(() => {
             window.clearTimeout(timeout);
             requestInFlight = false;
-            setSubmitting(false);
+            if (!requestOutcomeUnknown) setSubmitting(false);
           });
       });
     })();
