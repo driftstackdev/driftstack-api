@@ -83,6 +83,22 @@ export const HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS = 30;
 // reconnect/migration windows.
 export const HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES = 500;
 
+// The Swift producer folds excess rolling-outcome reasons into `other` at 32
+// distinct keys. Mirror that producer bound at the trust boundary so a
+// compromised authenticated node cannot turn the 96 MiB shared socket limit
+// into a multi-megabyte JSONB/WAL write every heartbeat interval.
+export const HARNESS_HEARTBEAT_MAX_OUTCOME_COUNTS = 32;
+export const HARNESS_HEARTBEAT_OUTCOME_REASON_MAX_LENGTH = 128;
+
+// A legitimate worst-case beat is small: 500 `agt_...` session ids plus the
+// fixed telemetry fields is well below this with real ids. This aggregate
+// budget is defense-in-depth for future additive fields and prevents many
+// individually valid maximum-length values from composing into an oversized
+// persisted/liveness payload. Unknown additive fields are stripped before this
+// check and therefore cannot reach either consumer.
+export const HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES = 64 * 1024;
+export const HARNESS_HEARTBEAT_MAX_CONCURRENT = 512;
+
 // Inbound fleet frames share a 96 MiB socket allowance, so every string that is
 // retained or persisted must have its own much smaller semantic bound.
 export const HARNESS_FRAME_ID_MAX_LENGTH = 256;
@@ -547,13 +563,23 @@ export const TERMINAL_SESSION_STATUSES = new Set<string>(['ended', 'errored']);
 // intentResult + sessionStatus (above) are the consumed variants; these three
 // are accepted + currently ignored by the router (liveness/egress/error
 // telemetry — wired when a consumer needs them).
-export const HeartbeatSchema = z.object({
+const HeartbeatPercentSchema = z.number().finite().min(0).max(100);
+const HeartbeatOutcomeCountsSchema = z
+  .record(
+    z.string().min(1).max(HARNESS_HEARTBEAT_OUTCOME_REASON_MAX_LENGTH),
+    z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  )
+  .refine((counts) => Object.keys(counts).length <= HARNESS_HEARTBEAT_MAX_OUTCOME_COUNTS, {
+    message: `sessionOutcomeCounts must not exceed ${HARNESS_HEARTBEAT_MAX_OUTCOME_COUNTS} entries`,
+  });
+
+const HeartbeatPayloadSchema = z.object({
   type: z.literal('heartbeat'),
-  macNodeId: z.string(),
-  timestamp: z.string(),
-  cpuPercent: z.number(),
-  memoryPercent: z.number(),
-  activeSessionCount: z.number().int().nonnegative(),
+  macNodeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  timestamp: z.string().min(1).max(64),
+  cpuPercent: HeartbeatPercentSchema,
+  memoryPercent: HeartbeatPercentSchema,
+  activeSessionCount: z.number().int().nonnegative().max(HARNESS_HEARTBEAT_MAX_CONCURRENT),
   // Fleet-admin-panel telemetry (file-48 §A5; A3 W2189/W2197/W2199*). All
   // OPTIONAL + omit-when-nil on the producer (ControlClient.swift Heartbeat),
   // so an older/quieter node's beat is byte-identical and these are simply
@@ -561,9 +587,9 @@ export const HeartbeatSchema = z.object({
   // decode for the panel's resource columns, scheduler placement, and
   // staleness/uptime/drain signals. Field names mirror the Swift Codable 1:1.
   /** Configured session capacity — the running/max denominator (A3-1). */
-  maxConcurrent: z.number().int().nonnegative().optional(),
+  maxConcurrent: z.number().int().nonnegative().max(HARNESS_HEARTBEAT_MAX_CONCURRENT).optional(),
   /** Daemon uptime (s, monotonic from process start) — uptime + silent-restart detection (A3-3). */
-  uptimeSeconds: z.number().nonnegative().optional(),
+  uptimeSeconds: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   /**
    * Per-PROCESS boot identity (A3 W2827 — `ProcessInfo.processInfo.globallyUniqueString`,
    * captured once per daemon process). A CHANGE for a node across beats = the daemon
@@ -573,11 +599,11 @@ export const HeartbeatSchema = z.object({
    * OPTIONAL + omit-when-nil on the producer; DECLARED here (was silently .strip()ped)
    * so the consumer can read it.
    */
-  bootId: z.string().min(1).max(256).optional(),
+  bootId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
   /** "draining" when shedding (SIGUSR1 / scheduled restart), else absent = serving (A3-2). */
-  drainState: z.string().optional(),
+  drainState: z.literal('draining').optional(),
   /** Rolling-1h session-outcome tally (reason→count); A2 owns success/crash categorization (A3-5). */
-  sessionOutcomeCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  sessionOutcomeCounts: HeartbeatOutcomeCountsSchema.optional(),
   /**
    * Per-session worker-liveness map (agentSessionId → lifecycle state) — the
    * re-base source for open-session liveness (A2 W2679, A3 driftstack f52699c37).
@@ -588,7 +614,10 @@ export const HeartbeatSchema = z.object({
    * Keyed by the sessionAssign.sessionId (== the agt_ agent-session id, A3 W1254).
    */
   activeSessionStates: z
-    .record(z.string(), z.enum(['active', 'provisioning', 'idle', 'terminating']))
+    .record(
+      z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+      z.enum(['active', 'provisioning', 'idle', 'terminating']),
+    )
     .optional()
     .refine(
       (states) =>
@@ -601,15 +630,27 @@ export const HeartbeatSchema = z.object({
   // Host-health (A3-4) — proactive-placement signals; gated on the worker via
   // DRIFTSTACK_HEARTBEAT_HOST_HEALTH (flipped on, W2197).
   /** nominal | fair | serious | critical. */
-  thermalState: z.string().optional(),
+  thermalState: z.enum(['nominal', 'fair', 'serious', 'critical']).optional(),
   /** normal | warn | critical. */
-  memoryPressureLevel: z.string().optional(),
+  memoryPressureLevel: z.enum(['normal', 'warn', 'critical']).optional(),
   /** Per-core max % (single-core saturation the box-wide cpuPercent hides). */
-  busiestCorePercent: z.number().optional(),
+  busiestCorePercent: HeartbeatPercentSchema.optional(),
   /** Session-storage volume free % (disk-full drift / data-dir write-failure tell). */
-  diskFreePercent: z.number().optional(),
+  diskFreePercent: HeartbeatPercentSchema.optional(),
   /** Harness build identity (e.g. git sha) — "Harness version" column (A3 W2189). */
-  harnessVersion: z.string().optional(),
+  harnessVersion: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+});
+
+export const HeartbeatSchema = HeartbeatPayloadSchema.transform((frame, ctx) => {
+  const serializedBytes = Buffer.byteLength(JSON.stringify(frame), 'utf8');
+  if (serializedBytes > HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `heartbeat must serialize to at most ${HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES} bytes`,
+    });
+    return z.NEVER;
+  }
+  return frame;
 });
 export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 

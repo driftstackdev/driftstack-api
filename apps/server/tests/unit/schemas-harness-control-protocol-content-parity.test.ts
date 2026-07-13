@@ -34,6 +34,10 @@ import {
   HARNESS_SCROLL_DEFAULT_DISTANCE_PX,
   HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS,
   HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES,
+  HARNESS_HEARTBEAT_MAX_OUTCOME_COUNTS,
+  HARNESS_HEARTBEAT_OUTCOME_REASON_MAX_LENGTH,
+  HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES,
+  HARNESS_HEARTBEAT_MAX_CONCURRENT,
   HARNESS_FRAME_ID_MAX_LENGTH,
   PAGE_STATE_URL_MAX_LENGTH,
   PAGE_STATE_TEXT_MAX_LENGTH,
@@ -612,32 +616,43 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // heartbeat — the A3 W124 base field-set (toContain fragments, not a
     // closed multi-line regex, so prettier reflow + the optional fleet
     // additions below don't break the pin).
-    expect(body).toContain('export const HeartbeatSchema = z.object({');
+    expect(body).toContain('const HeartbeatPayloadSchema = z.object({');
+    expect(body).toContain(
+      'export const HeartbeatSchema = HeartbeatPayloadSchema.transform((frame, ctx) => {',
+    );
     expect(body).toContain("type: z.literal('heartbeat'),");
-    expect(body).toContain('macNodeId: z.string(),');
-    expect(body).toContain('cpuPercent: z.number(),');
-    expect(body).toContain('memoryPercent: z.number(),');
-    expect(body).toContain('activeSessionCount: z.number().int().nonnegative(),');
+    expect(body).toContain('macNodeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('cpuPercent: HeartbeatPercentSchema,');
+    expect(body).toContain('memoryPercent: HeartbeatPercentSchema,');
+    expect(body).toMatch(
+      /activeSessionCount: z\.number\(\)\.int\(\)\.nonnegative\(\)\.max\(HARNESS_HEARTBEAT_MAX_CONCURRENT\),/,
+    );
     // …extended with the fleet-admin-panel telemetry (file-48 §A5; A3
     // W2189/W2197/W2199*), all OPTIONAL so an older node's beat still decodes;
     // field names mirror the Swift Codable Heartbeat 1:1 (else stripped).
-    expect(body).toContain('maxConcurrent: z.number().int().nonnegative().optional(),');
-    expect(body).toContain('uptimeSeconds: z.number().nonnegative().optional(),');
-    expect(body).toContain('drainState: z.string().optional(),');
-    expect(body).toContain(
-      'sessionOutcomeCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),',
+    expect(body).toMatch(
+      /maxConcurrent: z\.number\(\)\.int\(\)\.nonnegative\(\)\.max\(HARNESS_HEARTBEAT_MAX_CONCURRENT\)\.optional\(\),/,
     );
+    expect(body).toContain(
+      'uptimeSeconds: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),',
+    );
+    expect(body).toContain("drainState: z.literal('draining').optional(),");
+    expect(body).toContain('sessionOutcomeCounts: HeartbeatOutcomeCountsSchema.optional(),');
     // Per-session liveness re-base (A2 W2679 / A3 driftstack f52699c37) — the
     // {agentSessionId → state} map the SessionLivenessStore reads. OPTIONAL +
     // omit-when-nil so an older node's beat still decodes byte-identically.
+    expect(body).toContain("z.enum(['active', 'provisioning', 'idle', 'terminating']),");
     expect(body).toContain(
-      ".record(z.string(), z.enum(['active', 'provisioning', 'idle', 'terminating']))",
+      "thermalState: z.enum(['nominal', 'fair', 'serious', 'critical']).optional(),",
     );
-    expect(body).toContain('thermalState: z.string().optional(),');
-    expect(body).toContain('memoryPressureLevel: z.string().optional(),');
-    expect(body).toContain('busiestCorePercent: z.number().optional(),');
-    expect(body).toContain('diskFreePercent: z.number().optional(),');
-    expect(body).toContain('harnessVersion: z.string().optional(),');
+    expect(body).toContain(
+      "memoryPressureLevel: z.enum(['normal', 'warn', 'critical']).optional(),",
+    );
+    expect(body).toContain('busiestCorePercent: HeartbeatPercentSchema.optional(),');
+    expect(body).toContain('diskFreePercent: HeartbeatPercentSchema.optional(),');
+    expect(body).toContain(
+      'harnessVersion: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),',
+    );
     // errorEvent
     expect(body).toMatch(/export const ErrorEventSchema = z\.object\(\{/);
     expect(body).toMatch(/customerActionable: z\.boolean\(\),\s*\n?\s*retryable: z\.boolean\(\),/);
@@ -1358,6 +1373,83 @@ describe('harness-control-protocol behavioral contract', () => {
         activeSessionStates: overCap,
       }).success,
     ).toBe(false);
+  });
+
+  it('Heartbeat persisted/liveness telemetry is producer-bounded per field and in aggregate before consumers run', () => {
+    const base = {
+      type: 'heartbeat' as const,
+      macNodeId: 'mac-macstadium-us-001',
+      timestamp: '2026-07-13T09:20:00.000Z',
+      cpuPercent: 25,
+      memoryPercent: 50,
+      activeSessionCount: 1,
+    };
+    const outcomesAtCap = Object.fromEntries(
+      Array.from({ length: HARNESS_HEARTBEAT_MAX_OUTCOME_COUNTS }, (_, i) => [`reason_${i}`, i]),
+    );
+
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...base,
+        maxConcurrent: HARNESS_HEARTBEAT_MAX_CONCURRENT,
+        uptimeSeconds: Number.MAX_SAFE_INTEGER,
+        drainState: 'draining',
+        sessionOutcomeCounts: outcomesAtCap,
+        activeSessionStates: { agt_1: 'active' },
+        thermalState: 'nominal',
+        memoryPressureLevel: 'normal',
+        busiestCorePercent: 100,
+        diskFreePercent: 0,
+        harnessVersion: 'h'.repeat(HARNESS_FRAME_ID_MAX_LENGTH),
+      }).success,
+    ).toBe(true);
+
+    const oversizedOutcomes = {
+      ...outcomesAtCap,
+      reason_over: 1,
+    };
+    const invalidFields: Record<string, unknown>[] = [
+      { harnessVersion: 'h'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1) },
+      { sessionOutcomeCounts: oversizedOutcomes },
+      {
+        sessionOutcomeCounts: {
+          ['r'.repeat(HARNESS_HEARTBEAT_OUTCOME_REASON_MAX_LENGTH + 1)]: 1,
+        },
+      },
+      {
+        activeSessionStates: {
+          ['a'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1)]: 'active',
+        },
+      },
+      { activeSessionCount: HARNESS_HEARTBEAT_MAX_CONCURRENT + 1 },
+      { maxConcurrent: HARNESS_HEARTBEAT_MAX_CONCURRENT + 1 },
+      { cpuPercent: -1 },
+      { memoryPercent: 101 },
+      { busiestCorePercent: Number.NaN },
+      { diskFreePercent: 101 },
+      { drainState: 'serving' },
+      { thermalState: 'hot' },
+      { memoryPressureLevel: 'unknown' },
+    ];
+    for (const invalid of invalidFields) {
+      expect(HarnessOutboundSchema.safeParse({ ...base, ...invalid }).success).toBe(false);
+    }
+
+    // Every individual key and the entry count remain valid; only the composed
+    // canonical heartbeat exceeds the persistence/liveness payload budget.
+    const aggregateStates: Record<string, 'active'> = {};
+    for (let i = 0; i < 300; i++) {
+      aggregateStates[`agt_${i}_${'x'.repeat(220)}`] = 'active';
+    }
+    const aggregate = {
+      ...base,
+      activeSessionCount: 300,
+      activeSessionStates: aggregateStates,
+    };
+    expect(Buffer.byteLength(JSON.stringify(aggregate), 'utf8')).toBeGreaterThan(
+      HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES,
+    );
+    expect(HarnessOutboundSchema.safeParse(aggregate).success).toBe(false);
   });
 
   it('ChallengeDetectedSchema.challenge.type/.detail are bounded — an oversized value (webhook storage/bandwidth amplification via challenge-relay.ts) is rejected', () => {
