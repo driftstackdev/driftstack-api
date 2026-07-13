@@ -187,6 +187,7 @@ const apiBaseUrl = resolveApiBaseUrl();
   const accountForm = root.querySelector('[data-form="account-query"]');
   const accountResult = root.querySelector('[data-field="account-result"]');
   const accountSubmitBtn = accountForm?.querySelector('button[type="submit"]');
+  const COST_REQUEST_TIMEOUT_MS = 15_000;
 
   function showBanner(msg) {
     if (!banner) return;
@@ -206,10 +207,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       );
       throw new Error('no admin token');
     }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), COST_REQUEST_TIMEOUT_MS);
     return fetch(apiBaseUrl + path, {
       ...init,
       headers: { ...(init.headers ?? {}), authorization: 'Bearer ' + token },
-    });
+      signal: controller.signal,
+    }).finally(() => window.clearTimeout(timeout));
+  }
+
+  function requestErrorMessage(err, fallback = 'network error') {
+    return err && err.name === 'AbortError'
+      ? 'Request timed out. Try again.'
+      : err && err.message
+        ? err.message
+        : fallback;
   }
 
   function escapeHtml(s) {
@@ -348,7 +360,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       // softWarningCents → softCents fix.
       renderTierThresholds(body.tierThresholds ?? body.tiers ?? {});
     } catch (err) {
-      const msg = err && err.message ? err.message : 'network error';
+      const msg = requestErrorMessage(err);
       showBanner('Could not load cost config (' + msg + ').');
       showConfigError(msg);
     }
@@ -428,7 +440,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const overviewBody = await overviewRes.json();
       renderTopAccounts(overviewBody.summaries ?? []);
     } catch (err) {
-      const msg = err && err.message ? err.message : 'network error';
+      const msg = requestErrorMessage(err);
       topResult.innerHTML = `<p class="text-sm text-red-600">Could not load top accounts (${escapeHtml(msg)}).</p>`;
     } finally {
       topAccountsLoading = false;
@@ -543,7 +555,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         const body = await res.json();
         renderAccountSummary(body);
       } catch (err) {
-        const msg = err && err.message ? err.message : 'network error';
+        const msg = requestErrorMessage(err);
         showBanner('Could not load account cost (' + msg + ').');
       } finally {
         accountQueryLoading = false;
@@ -556,10 +568,17 @@ const apiBaseUrl = resolveApiBaseUrl();
     });
   }
 
-  void loadConfig().finally(() => {
-    // 2026-05-21 — AdminLayout opacity-gate signal.
-    if (typeof window.dashboardHydrated === 'function') {
-      window.dashboardHydrated();
-    }
-  });
+  function start() {
+    void loadConfig().finally(() => {
+      // 2026-05-21 — AdminLayout opacity-gate signal.
+      if (typeof window.dashboardHydrated === 'function') {
+        window.dashboardHydrated();
+      }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
 </script>

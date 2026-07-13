@@ -107,7 +107,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
   });
 
   it('config load: renders the rate card and per-tier thresholds at 2-decimal precision', async () => {
-    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
       route: (call) => {
         if (/\/v1\/admin\/cost\/config$/.test(call.url)) {
@@ -141,6 +141,20 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(thresholds).toContain('soft $15.50');
     expect(thresholds).toContain('hard $50.00');
     expect(thresholds).not.toContain('$15.5 ');
+    expect(
+      fetchCalls.find((call) => /\/v1\/admin\/cost\/config$/.test(call.url))?.init?.signal,
+    ).toBeTruthy();
+  });
+
+  it('uses one 15s timer-cleaned boundary and defers config hydration for fresh SSO', () => {
+    const built = readFileSync(BUILT_PAGE, 'utf8');
+    expect(built).toContain('COST_REQUEST_TIMEOUT_MS = 15_000');
+    expect(built).toContain('Request timed out. Try again.');
+    expect(built).toMatch(/signal: controller\.signal/);
+    expect(built).toMatch(/window\.clearTimeout\(timeout\)/);
+    expect(built).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
   });
 
   it('config endpoint error: surfaces the status in a banner', async () => {
