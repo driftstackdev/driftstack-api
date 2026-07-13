@@ -1215,35 +1215,44 @@ export class AuthFlowsService {
     // invalidates the token past MAX_MFA_CHALLENGE_ATTEMPTS, forcing a
     // fresh /login. stepUpReauth has no token to invalidate — the
     // caller already holds a persistent, valid web session — so this
-    // keys the same counter primitive on accountId instead: once an
-    // account hits MAX_MFA_CHALLENGE_ATTEMPTS attempts inside the
-    // MFA_CHALLENGE_TTL_SECONDS window, every further attempt — even a
-    // correct code — is refused (without even calling mfa.verifyCode)
-    // until the window lapses. Without this, loginGate's per-IP-only
-    // throttle (routes/auth.ts) could be bypassed by spreading guesses
-    // across source IPs against this already-authenticated endpoint.
+    // keys the same counter primitive on accountId instead. Each in-flight
+    // proof reserves a slot before verification (so a concurrent burst cannot
+    // pass a stale precheck); invalid proofs retain it, while valid proofs and
+    // verifier errors release only their own reservation. Once the account has
+    // MAX failed/in-flight proofs, further calls are refused until a slot is
+    // released or the window lapses. Without this, loginGate's per-IP-only
+    // throttle could be bypassed by spreading guesses across source IPs.
+    const attemptKey = stepUpAttemptsKey(args.accountId);
     if (this.mfaChallenges) {
-      const attempts = await this.mfaChallenges.incrAttempts(
-        stepUpAttemptsKey(args.accountId),
-        MFA_CHALLENGE_TTL_SECONDS,
-      );
+      const attempts = await this.mfaChallenges.incrAttempts(attemptKey, MFA_CHALLENGE_TTL_SECONDS);
       if (attempts > MAX_MFA_CHALLENGE_ATTEMPTS) {
+        await this.releaseStepUpAttemptBestEffort(attemptKey);
         throw new AuthFlowError(
           'invalid_auth_token',
           'Too many incorrect codes. Wait a few minutes and try again.',
         );
       }
     }
-    const result = await this.mfa.verifyCode({
-      accountId: args.accountId,
-      input: args.input,
-    });
+    let result: 'totp' | 'recovery' | null;
+    try {
+      result = await this.mfa.verifyCode({
+        accountId: args.accountId,
+        input: args.input,
+      });
+    } catch (err) {
+      if (this.mfaChallenges) await this.releaseStepUpAttemptBestEffort(attemptKey);
+      throw err;
+    }
     if (result === null) {
+      // Invalid proofs retain the reservation as one failed attempt.
       throw new AuthFlowError(
         'invalid_auth_token',
         'Code is invalid. Try again or use a recovery code.',
       );
     }
+    // A valid proof is not a failed attempt. Release only this request's
+    // reservation; concurrent invalid proofs keep their own slots.
+    if (this.mfaChallenges) await this.releaseStepUpAttemptBestEffort(attemptKey);
     const now = new Date();
     await this.repo.markWebSessionMfaSatisfied(args.sessionId, now);
     if (this.authCache) {
@@ -1356,6 +1365,19 @@ export class AuthFlowsService {
   }
 
   // ──────────────────── helpers ────────────────────
+
+  private async releaseStepUpAttemptBestEffort(key: string): Promise<void> {
+    try {
+      await this.mfaChallenges?.releaseAttempt(key);
+    } catch (err) {
+      // A transient Redis release failure must not discard a TOTP that was
+      // already consumed successfully. The counter expires after five minutes.
+      this.logger.warn(
+        { component: 'auth-flows', flow: 'mfa-step-up', err },
+        'failed to release successful MFA step-up attempt reservation',
+      );
+    }
+  }
 
   private async requireAccount(id: string): Promise<AuthFlowAccountRow> {
     // Same repo doesn't expose a getById; we read via email lookup as a

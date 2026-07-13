@@ -1268,6 +1268,36 @@ describe('AuthFlowsService.stepUpReauth — per-account attempt lockout (securit
     expect(callCount()).toBe(1);
   });
 
+  it('does not count repeated successful proofs toward the failed-attempt cap', async () => {
+    const { service, callCount } = makeStepUpService(() => Promise.resolve('totp'));
+    for (let i = 0; i < MAX_MFA_CHALLENGE_ATTEMPTS + 2; i++) {
+      await expect(
+        service.stepUpReauth({
+          accountId: 'acc_stepup_repeat_success',
+          sessionId: 'sess_1',
+          input: '123456',
+        }),
+      ).resolves.toMatchObject({ via: 'totp' });
+    }
+    expect(callCount()).toBe(MAX_MFA_CHALLENGE_ATTEMPTS + 2);
+  });
+
+  it('a valid proof after four failures releases its own slot but preserves the failures', async () => {
+    let nextResult: 'totp' | 'recovery' | null = null;
+    const { service, callCount } = makeStepUpService(() => Promise.resolve(nextResult));
+    const args = { accountId: 'acc_stepup_mixed', sessionId: 'sess_1', input: '000000' };
+
+    for (let i = 0; i < MAX_MFA_CHALLENGE_ATTEMPTS - 1; i++) {
+      await expect(service.stepUpReauth(args)).rejects.toThrow(/Code is invalid/);
+    }
+    nextResult = 'totp';
+    await expect(service.stepUpReauth(args)).resolves.toMatchObject({ via: 'totp' });
+    nextResult = null;
+    await expect(service.stepUpReauth(args)).rejects.toThrow(/Code is invalid/);
+    await expect(service.stepUpReauth(args)).rejects.toThrow(/Too many/);
+    expect(callCount()).toBe(MAX_MFA_CHALLENGE_ATTEMPTS + 1);
+  });
+
   it('a different account is unaffected by another account being locked out', async () => {
     let nextResult: 'totp' | 'recovery' | null = null;
     const { service } = makeStepUpService(() => Promise.resolve(nextResult));

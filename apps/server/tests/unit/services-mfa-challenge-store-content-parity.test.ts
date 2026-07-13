@@ -18,7 +18,8 @@
 //   • Issued user-agent framing: carried into web_session row so UA
 //     comes from login attempt, not challenge attempt (avoids "all
 //     sessions look like curl").
-//   • MfaChallengeStore: 3 methods (consume / set / peek).
+//   • MfaChallengeStore: challenge payload operations plus atomic attempt
+//     reservation/release.
 //   • RedisMfaChallengeStore: getdel via unknown-cast (Redis 6.2+
 //     atomic); peek = redis.get.
 //   • InMemoryMfaChallengeStore: TTL expiry check in BOTH consume
@@ -83,7 +84,7 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
     expect(body).toMatch(/issued_user_agent: string \| null;/);
   });
 
-  it('MfaChallengeStore: 3-method interface (consume atomic / set idempotent / peek read-only)', () => {
+  it('MfaChallengeStore: payload operations plus attempt reserve/release', () => {
     expect(body).toMatch(/export interface MfaChallengeStore \{/);
     expect(body).toMatch(
       /Atomically read \+ delete \(single-use\)\. Returns null when missing\s*\n?\s*\*\s*or already consumed\./,
@@ -95,6 +96,8 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
       /Read without consuming\. Used by IP-mismatch refusal so the legit\s*\n?\s*\*\s*customer can still retry\./,
     );
     expect(body).toMatch(/peek\(key: string\): Promise<string \| null>;/);
+    expect(body).toMatch(/incrAttempts\(key: string, ttlSeconds: number\): Promise<number>;/);
+    expect(body).toMatch(/releaseAttempt\(key: string\): Promise<void>;/);
   });
 
   it('RedisMfaChallengeStore: GETDEL atomic Redis 6.2+ (Upstash + modern Hetzner-managed both run 7.x)', () => {
@@ -131,15 +134,20 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
     );
   });
 
-  it('V-353d.A incrAttempts brute-force cap: interface + atomic Redis INCR + in-memory counter + attemptsKey + MAX const', () => {
+  it('V-353d.A attempt reservations use Redis INCR plus expiry-safe Lua release', () => {
     expect(body).toMatch(/incrAttempts\(key: string, ttlSeconds: number\): Promise<number>;/);
     // Redis: atomic INCR, set TTL on first.
     expect(body).toMatch(/const n = await this\.redis\.incr\(key\);/);
     expect(body).toMatch(/if \(n === 1\) await this\.redis\.expire\(key, ttlSeconds\);/);
+    expect(body).toMatch(/async releaseAttempt\(key: string\): Promise<void> \{/);
+    expect(body).toMatch(/await this\.redis\.eval\(/);
+    expect(body).toMatch(/redis\.call\('DEL', KEYS\[1\]\)/);
+    expect(body).toMatch(/redis\.call\('DECR', KEYS\[1\]\)/);
     // In-memory: separate attempts map.
     expect(body).toMatch(
       /private readonly attempts = new Map<string, \{ count: number; expiresAt: number \}>\(\);/,
     );
+    expect(body).toMatch(/existing\.count -= 1;/);
     // Distinct key namespace + the cap constant.
     expect(body).toMatch(/export function attemptsKey\(token: string\): string \{/);
     expect(body).toMatch(/export const MAX_MFA_CHALLENGE_ATTEMPTS = 5;/);

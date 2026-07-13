@@ -117,6 +117,20 @@ describe('V-353d.A InMemoryMfaChallengeStore — incrAttempts (brute-force cap c
     expect(await store.incrAttempts('a', 60)).toBe(2);
   });
 
+  it('release removes only the caller reservation and deletes a zero counter', async () => {
+    const store = new InMemoryMfaChallengeStore();
+    expect(await store.incrAttempts('a', 60)).toBe(1);
+    expect(await store.incrAttempts('a', 60)).toBe(2);
+    expect(await store.incrAttempts('a', 60)).toBe(3);
+    await store.releaseAttempt('a');
+    expect(await store.incrAttempts('a', 60)).toBe(3);
+
+    const single = new InMemoryMfaChallengeStore();
+    expect(await single.incrAttempts('a', 60)).toBe(1);
+    await single.releaseAttempt('a');
+    expect(await single.incrAttempts('a', 60)).toBe(1);
+  });
+
   it('resets to 1 after the TTL window elapses', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     vi.setSystemTime(new Date('2026-05-11T12:00:00Z'));
@@ -125,6 +139,20 @@ describe('V-353d.A InMemoryMfaChallengeStore — incrAttempts (brute-force cap c
       expect(await store.incrAttempts('a', 60)).toBe(1);
       expect(await store.incrAttempts('a', 60)).toBe(2);
       vi.setSystemTime(new Date('2026-05-11T12:01:01Z')); // past the 60s TTL
+      expect(await store.incrAttempts('a', 60)).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('release after expiry does not resurrect a negative counter', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(new Date('2026-05-11T12:00:00Z'));
+    try {
+      const store = new InMemoryMfaChallengeStore();
+      expect(await store.incrAttempts('a', 60)).toBe(1);
+      vi.setSystemTime(new Date('2026-05-11T12:01:01Z'));
+      await store.releaseAttempt('a');
       expect(await store.incrAttempts('a', 60)).toBe(1);
     } finally {
       vi.useRealTimers();

@@ -215,6 +215,23 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/await this\.repo\.markWebSessionMfaSatisfied\(args\.sessionId, now\);/);
   });
 
+  it('stepUpReauth reserves before verification, retains invalid failures, and releases valid/error slots', () => {
+    expect(body).toMatch(/const attemptKey = stepUpAttemptsKey\(args\.accountId\);/);
+    expect(body).toMatch(/const attempts = await this\.mfaChallenges\.incrAttempts\(/);
+    expect(body).toMatch(
+      /if \(attempts > MAX_MFA_CHALLENGE_ATTEMPTS\) \{\s*\n?\s*await this\.releaseStepUpAttemptBestEffort\(attemptKey\);/,
+    );
+    expect(body).toMatch(
+      /catch \(err\) \{\s*\n?\s*if \(this\.mfaChallenges\) await this\.releaseStepUpAttemptBestEffort\(attemptKey\);\s*\n?\s*throw err;/,
+    );
+    expect(body).toMatch(
+      /if \(result === null\) \{\s*\n?\s*\/\/ Invalid proofs retain the reservation as one failed attempt\./,
+    );
+    expect(body).toMatch(
+      /if \(this\.mfaChallenges\) await this\.releaseStepUpAttemptBestEffort\(attemptKey\);/,
+    );
+  });
+
   it('requestMagicLink + requestPasswordReset: silent no-op on unknown / non-active account (no enumeration via shape)', () => {
     expect(body).toMatch(
       /\/\/ Always return the same shape so the response doesn't leak account\s*\n?\s*\/\/ existence\. If no account, no token is issued and no email is sent\./,

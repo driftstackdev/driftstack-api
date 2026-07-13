@@ -49,6 +49,10 @@ export interface MfaChallengeStore {
    *  left alive on a wrong code; this bounds how many wrong codes one
    *  token accepts before it's invalidated). */
   incrAttempts(key: string, ttlSeconds: number): Promise<number>;
+  /** Release one previously-reserved attempt without letting the counter go
+   *  negative or resurrecting an expired key. Valid proofs and verifier
+   *  failures release; invalid proofs intentionally retain their slot. */
+  releaseAttempt(key: string): Promise<void>;
 }
 
 export class RedisMfaChallengeStore implements MfaChallengeStore {
@@ -80,6 +84,20 @@ export class RedisMfaChallengeStore implements MfaChallengeStore {
     const n = await this.redis.incr(key);
     if (n === 1) await this.redis.expire(key, ttlSeconds);
     return n;
+  }
+
+  async releaseAttempt(key: string): Promise<void> {
+    // One Lua step avoids two Redis races: GET→DECR could act on a newly
+    // replaced value, while bare DECR would resurrect an expired key as -1.
+    await this.redis.eval(
+      "local value = redis.call('GET', KEYS[1]); " +
+        'if not value then return 0 end; ' +
+        'local count = tonumber(value); ' +
+        "if not count or count <= 1 then return redis.call('DEL', KEYS[1]) end; " +
+        "return redis.call('DECR', KEYS[1])",
+      1,
+      key,
+    );
   }
 }
 
@@ -122,6 +140,21 @@ export class InMemoryMfaChallengeStore implements MfaChallengeStore {
     }
     existing.count += 1;
     return existing.count;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async releaseAttempt(key: string): Promise<void> {
+    const now = Date.now();
+    const existing = this.attempts.get(key);
+    if (!existing || existing.expiresAt <= now) {
+      this.attempts.delete(key);
+      return;
+    }
+    if (existing.count <= 1) {
+      this.attempts.delete(key);
+      return;
+    }
+    existing.count -= 1;
   }
 }
 

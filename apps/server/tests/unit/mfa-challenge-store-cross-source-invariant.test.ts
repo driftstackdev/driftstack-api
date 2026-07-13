@@ -27,12 +27,14 @@
 //     - issued_at   (audit reconstruction on success).
 //     - issued_user_agent (carried into web_session row).
 //
-//   MfaChallengeStore interface (3 methods):
+//   MfaChallengeStore challenge payload methods plus attempt reservations:
 //     - consume(key) — atomic GETDEL; returns null when missing or
 //       already consumed. One-shot.
 //     - set(key, value, ttlSeconds) — idempotent overwrite.
 //     - peek(key) — non-consuming read for IP-mismatch refusal path
 //       (legit customer can still retry).
+//     - incrAttempts/releaseAttempt — reserve before verification; release
+//       successful/error reservations without erasing concurrent failures.
 //
 //   Failed challenges DO NOT consume the token — caller retries up
 //   to maxAttempts + rate-limit then abandons.
@@ -138,14 +140,16 @@ describe('W917 V-353d MFA challenge store cross-source invariant', () => {
     expect(p).toMatch(/challenge attempt — avoids "all sessions look like curl"/);
   });
 
-  // ─── MfaChallengeStore interface (3 methods) ─────────────────
+  // ─── MfaChallengeStore interface ─────────────────────────────
 
-  it('CRITICAL MfaChallengeStore has 3 methods — consume (atomic GETDEL) + set (idempotent overwrite) + peek (non-consuming read for IP-mismatch path). The 3-method split distinguishes one-shot consume from peek-on-mismatch retry-friendly read.', () => {
+  it('CRITICAL MfaChallengeStore separates payload consume/peek from attempt reserve/release.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa-challenge-store.ts'));
     expect(p).toMatch(/export interface MfaChallengeStore \{/);
     expect(p).toMatch(/consume\(key: string\): Promise<string \| null>;/);
     expect(p).toMatch(/set\(key: string, value: string, ttlSeconds: number\): Promise<void>;/);
     expect(p).toMatch(/peek\(key: string\): Promise<string \| null>;/);
+    expect(p).toMatch(/incrAttempts\(key: string, ttlSeconds: number\): Promise<number>;/);
+    expect(p).toMatch(/releaseAttempt\(key: string\): Promise<void>;/);
   });
 
   it("CRITICAL consume() JSDoc pins 'Atomically read + delete (single-use). Returns null when missing or already consumed'. The atomic-GETDEL is what makes one-shot consumption safe under concurrent requests.", () => {
