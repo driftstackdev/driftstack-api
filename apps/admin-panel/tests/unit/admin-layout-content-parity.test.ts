@@ -126,8 +126,10 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
   });
 
   it('sidebar hidden on mobile (hidden + md:block) — opt-in mobile overlay via data-mobile-nav', () => {
+    expect(body).toMatch(/<aside\b[^>]*\bid="admin-mobile-navigation"/);
+    expect(body).toMatch(/<aside\b[^>]*\bdata-mobile-nav/);
     expect(body).toMatch(
-      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block">/,
+      /<aside\b[^>]*\bclass="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block"/,
     );
   });
 

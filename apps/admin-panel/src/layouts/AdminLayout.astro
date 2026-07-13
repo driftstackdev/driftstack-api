@@ -116,7 +116,8 @@ const navItems = [
       <button
         type="button"
         data-mobile-nav-toggle
-        aria-label="Toggle navigation"
+        aria-label="Open navigation"
+        aria-controls="admin-mobile-navigation"
         aria-expanded="false"
         class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
       >
@@ -150,7 +151,11 @@ const navItems = [
       </button>
     </header>
     <div class="flex min-h-screen">
-      <aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block">
+      <aside
+        id="admin-mobile-navigation"
+        data-mobile-nav
+        class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block"
+      >
         {/*
           V-219* / Fleet port — W2 wordmark (DRIFTSTACK black-italic two-tone)
           matches the marketing-site Header brand. The "admin" pill
@@ -455,11 +460,13 @@ const navItems = [
             if (isOpen) {
               root.setAttribute('data-mobile-nav-open', 'true');
               navToggle.setAttribute('aria-expanded', 'true');
+              navToggle.setAttribute('aria-label', 'Close navigation');
               if (closedIcon) closedIcon.classList.add('hidden');
               if (openIcon) openIcon.classList.remove('hidden');
             } else {
               root.removeAttribute('data-mobile-nav-open');
               navToggle.setAttribute('aria-expanded', 'false');
+              navToggle.setAttribute('aria-label', 'Open navigation');
               if (closedIcon) closedIcon.classList.remove('hidden');
               if (openIcon) openIcon.classList.add('hidden');
             }
@@ -475,6 +482,7 @@ const navItems = [
           document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && root.getAttribute('data-mobile-nav-open') === 'true') {
               setNavOpen(false);
+              navToggle.focus();
             }
           });
         }

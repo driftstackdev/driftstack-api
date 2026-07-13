@@ -90,7 +90,8 @@ const nextItem =
     <button
       type="button"
       data-doc-mobile-nav-toggle
-      aria-label="Toggle docs navigation"
+      aria-label="Open docs navigation"
+      aria-controls="docs-mobile-navigation"
       aria-expanded="false"
       class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
     >
@@ -129,7 +130,7 @@ const nextItem =
   <div
     class="mx-auto w-full max-w-[90rem] px-6 py-8 md:grid md:grid-cols-[16rem_minmax(0,1fr)] md:gap-10 xl:grid-cols-[16rem_minmax(0,1fr)_15rem]"
   >
-    <aside data-doc-mobile-nav class="hidden md:block">
+    <aside id="docs-mobile-navigation" data-doc-mobile-nav class="hidden md:block">
       {/* Sticky, independently-scrolling tree pane (desktop only — in
           the mobile overlay the aside itself is the scroll container,
           so the md: prefixes keep it a plain block there). Sections
@@ -340,11 +341,13 @@ const nextItem =
         if (isOpen) {
           root.setAttribute('data-mobile-nav-open', 'true');
           toggle.setAttribute('aria-expanded', 'true');
+          toggle.setAttribute('aria-label', 'Close docs navigation');
           if (closedIcon) closedIcon.classList.add('hidden');
           if (openIcon) openIcon.classList.remove('hidden');
         } else {
           root.removeAttribute('data-mobile-nav-open');
           toggle.setAttribute('aria-expanded', 'false');
+          toggle.setAttribute('aria-label', 'Open docs navigation');
           if (closedIcon) closedIcon.classList.remove('hidden');
           if (openIcon) openIcon.classList.add('hidden');
         }
@@ -360,6 +363,7 @@ const nextItem =
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && root.getAttribute('data-mobile-nav-open') === 'true') {
           setOpen(false);
+          toggle.focus();
         }
       });
       /* S48 2026-07-07 (founder UX report) — every docs navigation is a full page load,

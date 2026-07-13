@@ -360,7 +360,8 @@ const navSections: NavSection[] = [
           <button
             type="button"
             data-mobile-nav-toggle
-            aria-label="Toggle navigation"
+            aria-label="Open navigation"
+            aria-controls="customer-mobile-navigation"
             aria-expanded="false"
             class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
           >
@@ -397,7 +398,11 @@ const navSections: NavSection[] = [
       <div class="flex flex-1">
         {
           withSidebar && (
-            <aside data-mobile-nav class="hidden w-[212px] shrink-0 border-r border-tk-border bg-tk-surface md:block">
+            <aside
+              id="customer-mobile-navigation"
+              data-mobile-nav
+              class="hidden w-[212px] shrink-0 border-r border-tk-border bg-tk-surface md:block"
+            >
               <div class="flex h-16 items-center px-6 border-b border-tk-border">
                 <a
                   href="/"
@@ -1990,11 +1995,13 @@ const navSections: NavSection[] = [
           if (isOpen) {
             root.setAttribute('data-mobile-nav-open', 'true');
             toggle.setAttribute('aria-expanded', 'true');
+            toggle.setAttribute('aria-label', 'Close navigation');
             if (closedIcon) closedIcon.classList.add('hidden');
             if (openIcon) openIcon.classList.remove('hidden');
           } else {
             root.removeAttribute('data-mobile-nav-open');
             toggle.setAttribute('aria-expanded', 'false');
+            toggle.setAttribute('aria-label', 'Open navigation');
             if (closedIcon) closedIcon.classList.remove('hidden');
             if (openIcon) openIcon.classList.add('hidden');
           }
@@ -2013,6 +2020,7 @@ const navSections: NavSection[] = [
         document.addEventListener('keydown', function (e) {
           if (e.key === 'Escape' && root.getAttribute('data-mobile-nav-open') === 'true') {
             setOpen(false);
+            toggle.focus();
           }
         });
       })();
