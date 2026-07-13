@@ -6,7 +6,12 @@
 // debit + transcript-append side effects verified.
 
 import { describe, expect, it } from 'vitest';
-import { AgentRuntime, classifyDecomposerError } from '../../src/services/agent-runtime.js';
+import {
+  AGENT_TRANSCRIPT_MAX_ENTRIES,
+  AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES,
+  AgentRuntime,
+  classifyDecomposerError,
+} from '../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../src/services/agent-decomposer-deterministic.js';
 import {
   StubAgentExecutor,
@@ -121,6 +126,34 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(final?.transcript[2]?.role).toBe('agent');
     expect(final?.transcript[2]?.body).toBe('Your IP address is 203.0.113.7.');
     expect(final?.transcript[2]?.intents).toBeUndefined(); // answer turn is not a plan
+  });
+
+  it('accepts an AI read-back turn at the exact three-entry boundary, then closes before the next turn', async () => {
+    const { runtime, sessions, seedId } = await makeReadbackRuntime();
+    for (let index = 0; index < AGENT_TRANSCRIPT_MAX_ENTRIES - 3; index += 1) {
+      await sessions.appendTranscript(seedId, {
+        at: '2026-05-16T00:00:00.000Z',
+        role: 'operator',
+        body: 'seed',
+      });
+    }
+
+    const boundary = await runtime.runTurn({
+      agentSessionId: seedId,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+    expect(boundary.kind).toBe('plan-executed');
+    expect((await sessions.get(seedId))?.transcript).toHaveLength(AGENT_TRANSCRIPT_MAX_ENTRIES);
+
+    const over = await runtime.runTurn({
+      agentSessionId: seedId,
+      userMessage: 'another turn',
+    });
+    expect(over.kind).toBe('session-closed');
+    if (over.kind !== 'session-closed') throw new Error('narrow');
+    expect(over.reason).toBe('transcript-limit');
+    expect(over.session.transcript).toHaveLength(AGENT_TRANSCRIPT_MAX_ENTRIES);
   });
 
   it('#140 read-and-report: NO read-back without a BYOK key (feature-gated) — only user + plan turns', async () => {
@@ -506,6 +539,78 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       const final = await sessions.get(seed.id);
       expect(final?.transcript[0]?.intents).toBeUndefined();
     });
+
+    it('accepts the exact final manual entry, then closes before another append', async () => {
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({
+        accountId: 'acc_1',
+        mode: 'manual',
+        tokenBudgetTotal: 100_000,
+      });
+      for (let index = 0; index < AGENT_TRANSCRIPT_MAX_ENTRIES - 1; index += 1) {
+        await sessions.appendTranscript(seed.id, {
+          at: '2026-05-16T00:00:00.000Z',
+          role: 'operator',
+          body: 'seed',
+        });
+      }
+      const runtime = new AgentRuntime({
+        decomposer: new DeterministicAgentDecomposer(),
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+
+      expect(
+        (await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'final entry' })).kind,
+      ).toBe('logged-manual');
+      expect((await sessions.get(seed.id))?.transcript).toHaveLength(AGENT_TRANSCRIPT_MAX_ENTRIES);
+      const over = await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'too many' });
+      expect(over.kind).toBe('session-closed');
+      if (over.kind !== 'session-closed') throw new Error('narrow');
+      expect(over.reason).toBe('transcript-limit');
+    });
+  });
+
+  it('closes an oversized serialized transcript before decompose or browser work', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    await sessions.appendTranscript(seed.id, {
+      at: '2026-05-16T00:00:00.000Z',
+      role: 'user',
+      body: 'x'.repeat(AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES),
+    });
+    const calls = { decompose: 0, execute: 0 };
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () => {
+          calls.decompose += 1;
+          return Promise.resolve({
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'should not run',
+            tokensConsumed: 1,
+          });
+        },
+      },
+      executor: {
+        execute: () => {
+          calls.execute += 1;
+          return Promise.resolve({ results: [], ok: true });
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'must not append',
+    });
+    expect(result.kind).toBe('session-closed');
+    if (result.kind !== 'session-closed') throw new Error('narrow');
+    expect(result.reason).toBe('transcript-limit');
+    expect(calls).toEqual({ decompose: 0, execute: 0 });
+    expect(result.session.transcript).toHaveLength(1);
   });
 
   describe('Q.1.b hybrid error classification', () => {

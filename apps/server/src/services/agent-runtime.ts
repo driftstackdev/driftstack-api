@@ -214,6 +214,17 @@ const READ_INTENT_RE =
 // the read-back: the customer still gets the plan result, no overspend.
 const READBACK_MIN_BUDGET_TOKENS = 6_000;
 
+// Public message turns rewrite one application-encrypted JSONB transcript on
+// every append. Bound both axes before any browser work: entry count stops a
+// high-rate stream of tiny messages; serialized bytes stop fewer worst-case
+// 8KiB user messages or model-rich plan entries. 256 entries accommodates the
+// repository's documented ~100-message session expectation (AI turns normally
+// consume two entries). The byte ceiling is plaintext JSON; encrypted/base64
+// storage has constant-factor overhead but remains bounded by it.
+export const AGENT_TRANSCRIPT_MAX_ENTRIES = 256;
+export const AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES = 1024 * 1024;
+const AGENT_TURN_OUTPUT_RESERVE_BYTES = 128 * 1024;
+
 // #130 — reconstruct the plan the customer is APPROVING from the transcript so a
 // consequential-approval turn re-runs the reviewed plan instead of re-decomposing.
 // Re-decomposing on approval would (a) charge a SECOND flat $0.10 bundled row + burn
@@ -373,6 +384,33 @@ export class AgentRuntime {
         reason: session.closedReason ?? `session ${session.status}`,
         session,
       };
+    }
+
+    // Capacity is reserved BEFORE appending the user/operator message and,
+    // critically, before decomposition or browser execution. An AI turn can
+    // durably append user + plan/result + read-back answer (three entries); a
+    // manual turn appends one. The 128KiB AI output reserve comfortably bounds
+    // the 2,048-token plan response, capped executor summaries/intents, and the
+    // 512-token read-back answer. Same-session turn serialization above makes
+    // this preflight exact in the current singleton runtime.
+    const entryReserve = session.mode === 'manual' ? 1 : 3;
+    const messageEntryBytes = Buffer.byteLength(
+      JSON.stringify({
+        at,
+        role: session.mode === 'manual' ? 'operator' : 'user',
+        body: args.userMessage,
+      }),
+      'utf8',
+    );
+    const serializedBytes = Buffer.byteLength(JSON.stringify(session.transcript), 'utf8');
+    const byteReserve =
+      messageEntryBytes + (session.mode === 'manual' ? 0 : AGENT_TURN_OUTPUT_RESERVE_BYTES);
+    if (
+      session.transcript.length + entryReserve > AGENT_TRANSCRIPT_MAX_ENTRIES ||
+      serializedBytes + byteReserve > AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES
+    ) {
+      const closed = await this.deps.sessions.closeWithReason(session.id, 'transcript-limit');
+      return { kind: 'session-closed', reason: 'transcript-limit', session: closed };
     }
 
     // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through. Record
