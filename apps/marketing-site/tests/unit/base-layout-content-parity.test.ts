@@ -7,8 +7,8 @@
 //     ogImage + V-255 noindex (opt-in).
 //   • Default description: the fleet register ("Real iPhone Safari
 //     in the cloud — ... just people on phones.", S15 2026-07-03).
-//   • fullTitle: "Driftstack" verbatim if title === 'Driftstack',
-//     else "${title} · Driftstack".
+//   • fullTitle: preserve an already-branded title, otherwise append
+//     " · Driftstack" exactly once.
 //   • canonical = new URL(pathname, Astro.site).
 //   • V-255 noindex,nofollow conditional (default index,follow).
 //   • OG/Twitter card meta: 11 tags pinned (og:title/description/
@@ -63,9 +63,9 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     );
   });
 
-  it('fullTitle pattern: "Driftstack" verbatim if title === "Driftstack", else "${title} · Driftstack"', () => {
+  it('preserves any already-branded title and appends Driftstack exactly once otherwise', () => {
     expect(body).toMatch(
-      /const fullTitle = title === 'Driftstack' \? title : `\$\{title\} · Driftstack`;/,
+      /const fullTitle = title\.includes\('Driftstack'\) \? title : `\$\{title\} · Driftstack`;/,
     );
   });
 

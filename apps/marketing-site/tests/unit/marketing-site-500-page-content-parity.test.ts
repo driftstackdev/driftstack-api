@@ -31,7 +31,7 @@ describe('W379.C marketing-site /500.astro content parity', () => {
   it('uses BaseLayout + 500 title + description', () => {
     expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
     expect(body).toMatch(
-      /<BaseLayout title="500 · Driftstack" description="Something went wrong on our end\."/,
+      /<BaseLayout title="500 · Driftstack" description="Something went wrong on our end\." noindex/,
     );
   });
 

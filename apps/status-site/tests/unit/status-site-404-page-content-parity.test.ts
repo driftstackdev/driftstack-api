@@ -20,7 +20,7 @@ describe('W607 apps/status-site/src/pages/404.astro content parity', () => {
 
   it('wraps StatusLayout with "404 · Driftstack status" title + single-overview-plus-per-incident scope claim + back-to-overview cross-link pinned', () => {
     expect(body).toMatch(/^import StatusLayout from '\.\.\/layouts\/StatusLayout\.astro';$/m);
-    expect(body).toMatch(/<StatusLayout title="404 · Driftstack status">/);
+    expect(body).toMatch(/<StatusLayout title="404 · Driftstack status" noindex>/);
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">404<\/p>/,
     );

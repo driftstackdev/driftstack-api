@@ -4,8 +4,7 @@
 // surface simultaneously. Pins the load-bearing customer-trust
 // claims a status-page reader anchors on:
 //
-//   • <meta name="robots" content="index, follow"> (status site
-//     is public; opposite of admin's noindex).
+//   • Public pages index by default; error/token utility pages can opt out.
 //   • Header: "Driftstack · status" wordmark + driftstack.dev
 //     cross-link.
 //   • "Driftstack is a Dutch BV. Status data is operational only —
@@ -24,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LAYOUT = resolve(REPO_ROOT, 'apps/status-site/src/layouts/StatusLayout.astro');
+const DIST = resolve(REPO_ROOT, 'apps/status-site/dist');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -36,12 +36,31 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     expect(body).toMatch(/import '\.\.\/styles\/global\.css';/);
   });
 
-  it('Props interface: title (string, required) — no description prop on status-site layout', () => {
-    expect(body).toMatch(/interface Props \{\s*\n?\s*title: string;\s*\n?\s*\}/);
+  it('accepts an opt-in noindex prop while keeping public pages indexable by default', () => {
+    expect(body).toMatch(/title: string;/);
+    expect(body).toMatch(/noindex\?: boolean;/);
+    expect(body).toMatch(/const \{ title, noindex = false \} = Astro\.props;/);
   });
 
-  it('index,follow robots meta (status site is public — opposite of admin noindex)', () => {
-    expect(body).toMatch(/<meta name="robots" content="index, follow" \/>/);
+  it('emits noindex only for utility pages that explicitly request it', () => {
+    expect(body).toMatch(
+      /<meta name="robots" content=\{noindex \? 'noindex,nofollow' : 'index,follow'\} \/>/,
+    );
+  });
+
+  it('renders noindex on error/token utilities while keeping the public overview indexable', () => {
+    const publicPage = readFileSync(resolve(DIST, 'index.html'), 'utf8');
+    const utilities = [
+      resolve(DIST, '404.html'),
+      resolve(DIST, 'subscribe/confirm/index.html'),
+      resolve(DIST, 'subscribe/unsubscribe/index.html'),
+    ];
+    expect(publicPage).toContain('<meta name="robots" content="index,follow">');
+    for (const page of utilities) {
+      expect(readFileSync(page, 'utf8'), page).toContain(
+        '<meta name="robots" content="noindex,nofollow">',
+      );
+    }
   });
 
   it('generator + favicon.svg + charset/viewport meta pinned', () => {

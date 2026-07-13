@@ -27,6 +27,11 @@ describe('W336.B /404 + /500 error pages baseline', () => {
     expect(p404).toMatch(/description="Page not found\."/);
   });
 
+  it('keeps error-only routes out of search indexes', () => {
+    expect(p404).toMatch(/<BaseLayout[^>]*\bnoindex\b/);
+    expect(p500).toMatch(/<BaseLayout[^>]*\bnoindex\b/);
+  });
+
   it('/404 offers Back home + See pricing CTAs', () => {
     expect(p404).toContain('href="/"');
     expect(p404).toContain('href="/pricing"');

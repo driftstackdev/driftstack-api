@@ -50,6 +50,11 @@ describe('status-site /subscribe/confirm + /subscribe/unsubscribe parity', () =>
   const confirm = read(CONFIRM_PAGE);
   const unsub = read(UNSUB_PAGE);
 
+  it('keeps both one-time token landing pages out of search indexes', () => {
+    expect(confirm).toMatch(/<StatusLayout[^>]*\bnoindex\b/);
+    expect(unsub).toMatch(/<StatusLayout[^>]*\bnoindex\b/);
+  });
+
   it('confirm page calls GET /v1/status/subscribe/confirm with a ?token= query', () => {
     expect(confirm).toMatch(/\/v1\/status\/subscribe\/confirm\?token=/);
     expect(confirm).toMatch(/method:\s*['"]GET['"]/);

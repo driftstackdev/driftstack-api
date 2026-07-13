@@ -39,7 +39,9 @@ describe('W379.B cross-app 404 pages content parity', () => {
 
     it('uses BaseLayout + 404 title chip', () => {
       expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
-      expect(body).toMatch(/<BaseLayout title="404 · Driftstack" description="Page not found\."/);
+      expect(body).toMatch(
+        /<BaseLayout title="404 · Driftstack" description="Page not found\." noindex/,
+      );
       expect(body).toMatch(/<p class="section-label">404<\/p>/);
     });
 
@@ -98,7 +100,7 @@ describe('W379.B cross-app 404 pages content parity', () => {
 
     it('uses StatusLayout + status-specific title', () => {
       expect(body).toMatch(/import StatusLayout from '\.\.\/layouts\/StatusLayout\.astro';/);
-      expect(body).toMatch(/<StatusLayout title="404 · Driftstack status">/);
+      expect(body).toMatch(/<StatusLayout title="404 · Driftstack status" noindex>/);
     });
 
     it('status-site-specific copy: "only hosts a single overview page plus per-incident pages under /incident?id=<id>"', () => {

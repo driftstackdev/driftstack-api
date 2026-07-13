@@ -28,7 +28,11 @@ const {
   noindex = false,
 } = Astro.props;
 
-const fullTitle = title === 'Driftstack' ? title : `${title} · Driftstack`;
+// Page authors sometimes supply a deliberately branded title (for example
+// "Admin API — Driftstack" or "Error codes — Driftstack developer docs").
+// Appending the brand unconditionally turned those into visibly duplicated
+// browser/search titles. Preserve any already-branded title verbatim.
+const fullTitle = title.includes('Driftstack') ? title : `${title} · Driftstack`;
 const canonical = new URL(pathname, Astro.site).toString();
 // Resolve OG image to an absolute URL so social crawlers can fetch it
 // without the path-resolution headaches some platforms have with
