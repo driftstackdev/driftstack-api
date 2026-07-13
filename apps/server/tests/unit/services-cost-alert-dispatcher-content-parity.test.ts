@@ -134,6 +134,16 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     expect(body).toMatch(/return \{ alertsFired, alertsSkipped, alertsErrored, errors \};/);
   });
 
+  it('sink error detail is credential-redacted and pre/post bounded before alert_errors logging', () => {
+    expect(body).toMatch(/import \{ redactText \} from '\.\.\/lib\/redact-url\.js';/);
+    expect(body).toMatch(/const ALERT_SINK_ERROR_MAX_CHARS = 500;/);
+    expect(body).toMatch(/const ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS = 2_000;/);
+    expect(body).toMatch(/message: safeAlertSinkError\(err\),/);
+    expect(body).toMatch(
+      /return redactText\(raw\.slice\(0, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS\)\)\.slice\(/,
+    );
+  });
+
   it('reset(): test seam — production never resets (deploys do)', () => {
     expect(body).toMatch(
       /Test seam: reset the remembered prior-state map\. Production\s*\n?\s*\*\s*doesn't reset \(deploys do that implicitly\)\./,

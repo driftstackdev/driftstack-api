@@ -17,6 +17,23 @@
 
 import type { CostMonitoringAccountSummary, CostMonitoringService } from './cost-monitoring.js';
 import type { ThresholdState } from '../lib/cost-estimator.js';
+import { redactText } from '../lib/redact-url.js';
+
+const ALERT_SINK_ERROR_MAX_CHARS = 500;
+const ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS = 2_000;
+
+function safeAlertSinkError(err: unknown): string {
+  let raw: string;
+  try {
+    raw = err instanceof Error ? err.message : String(err);
+  } catch {
+    raw = 'alert sink failed';
+  }
+  return redactText(raw.slice(0, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS)).slice(
+    0,
+    ALERT_SINK_ERROR_MAX_CHARS,
+  );
+}
 
 export type AlertSeverity = 'warn' | 'critical' | 'resolved';
 
@@ -144,7 +161,7 @@ export class CostAlertDispatcher {
         alertsErrored += 1;
         errors.push({
           accountId: summary.account_id,
-          message: err instanceof Error ? err.message : String(err),
+          message: safeAlertSinkError(err),
         });
       }
     }

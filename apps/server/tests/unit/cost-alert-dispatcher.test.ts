@@ -229,6 +229,33 @@ describe('V-541.C dispatcher — payload shape', () => {
     expect(r.alertsErrored).toBe(1);
     expect(r.errors[0]?.accountId).toBe('a');
   });
+
+  it('returns bounded credential-safe sink diagnostics for nightly logging', async () => {
+    const rows = new Map([['a', { ...EMPTY, sessionMinutes: 1_000 }]]);
+    const aggregator: UsageAggregator = {
+      aggregateForAccount: ({ accountId }) => Promise.resolve(rows.get(accountId) ?? null),
+    };
+    const service = new CostMonitoringService({
+      aggregator,
+      rates: RATES,
+      tierThresholds: { solo_manual: { softCents: 100, hardCents: 200 } },
+      resolveTier: () => Promise.resolve('solo_manual'),
+    });
+    const sink: AlertSink = () =>
+      Promise.reject(
+        new Error(
+          `postmark failed https://mail.invalid/send?api_key=API_SECRET Authorization: Bearer BEARER_SECRET ${'x'.repeat(5_000)}`,
+        ),
+      );
+    const dispatcher = new CostAlertDispatcher({ service, sendAlert: sink });
+
+    const result = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    const message = result.errors[0]?.message ?? '';
+    expect(message.length).toBeLessThanOrEqual(500);
+    expect(message).toContain('[redacted]');
+    expect(message).not.toContain('API_SECRET');
+    expect(message).not.toContain('BEARER_SECRET');
+  });
 });
 
 describe('V-541.C dispatcher — billing-cycle rollover (threshold state is per-cycle)', () => {

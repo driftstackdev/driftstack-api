@@ -113,6 +113,13 @@ describe('W927 V-541.C cost-alert-dispatcher cross-source invariant', () => {
     expect(p).toMatch(/export type AlertSink = \(alert: CostAlertPayload\) => Promise<void>;/);
   });
 
+  it('CRITICAL per-account sink failures are sanitized before the nightly logger receives them', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cost-alert-dispatcher.ts'));
+    expect(p).toMatch(/const ALERT_SINK_ERROR_MAX_CHARS = 500;/);
+    expect(p).toMatch(/message: safeAlertSinkError\(err\),/);
+    expect(p).toMatch(/redactText\(raw\.slice\(0, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS\)\)/);
+  });
+
   // ─── DispatchResult 2-counter shape ──────────────────────────
 
   it('CRITICAL DispatchResult has 2 counters — alertsFired + alertsSkipped. The 2-counter ops-metric shape lets dashboards report dispatch-effectiveness without enumerating per-alert outcomes.', () => {
