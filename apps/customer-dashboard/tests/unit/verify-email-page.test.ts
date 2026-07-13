@@ -30,6 +30,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   url?: string;
+  requestTimeoutImmediately?: boolean;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
@@ -72,6 +73,18 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  if (opts.requestTimeoutImmediately) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 15_000) {
+        window.queueMicrotask(() => {
+          if (typeof handler === 'function') handler(...args);
+        });
+        return 42;
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+  }
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="verify-email"'));
   if (!pageScript) throw new Error('verify-email inline script not found');
@@ -138,6 +151,34 @@ describe('verify-email page — local integration', () => {
       /This verification link has expired\./,
     );
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+  });
+
+  it('bounds auto-verification and restores the manual fallback after timeout', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      requestTimeoutImmediately: true,
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(attrHidden(window, '[data-form="verify"]')).toBe(false);
+    expect(attrHidden(window, '[data-field="auto-verify-spinner"]')).toBe(true);
+    const form = window.document.querySelector('[data-form="verify"]') as HTMLFormElement;
+    expect(form.getAttribute('aria-busy')).toBe('false');
+    expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /verification took too long.*check your connection/i,
+    );
   });
 
   it('no token: shows the manual fallback form on load (spinner hidden, no fetch)', async () => {

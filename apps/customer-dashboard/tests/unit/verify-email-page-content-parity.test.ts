@@ -53,7 +53,18 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/verifyInFlight = true;/);
     expect(body).toMatch(/form\.setAttribute\('aria-busy', busy \? 'true' : 'false'\)/);
     expect(body).toMatch(/verifySubmit\.textContent = busy \? 'Verifying…' : verifySubmitText/);
-    expect(body).toMatch(/\.finally\(\(\) => \{\s*verifyInFlight = false;/);
+    expect(body).toMatch(
+      /\.finally\(\(\) => \{\s*(?:clearTimeout\(timeoutId\);\s*)?verifyInFlight = false;/,
+    );
+  });
+
+  it('one-time email verification has a bounded network deadline', () => {
+    expect(body).toMatch(/const VERIFY_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/const controller = new AbortController\(\)/);
+    expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), VERIFY_REQUEST_TIMEOUT_MS\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\)/);
+    expect(body).toMatch(/Verification took too long/);
   });
 
   it('POST /v1/auth/verify-email wired client + registered server-side (credentials:"include")', () => {

@@ -150,6 +150,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       const verifySubmit = form.querySelector('button[type="submit"]');
       const verifySubmitText = verifySubmit ? verifySubmit.textContent : '';
+      const VERIFY_REQUEST_TIMEOUT_MS = 15_000;
       let verifyInFlight = false;
       function setVerifyBusy(busy) {
         form.setAttribute('aria-busy', busy ? 'true' : 'false');
@@ -165,12 +166,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         verifyInFlight = true;
         setVerifyBusy(true);
         banner.classList.add('hidden');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), VERIFY_REQUEST_TIMEOUT_MS);
 
         return fetch(apiBaseUrl + '/v1/auth/verify-email', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ token }),
           credentials: 'include',
+          signal: controller.signal,
         })
           .then((r) =>
             r.ok
@@ -201,12 +205,19 @@ const apiBaseUrl = resolveApiBaseUrl();
             window.location.href = rawNext ? next : '/welcome';
           })
           .catch((err) => {
-            showBanner(err && err.message ? err.message : 'Verification failed.');
+            showBanner(
+              controller.signal.aborted
+                ? 'Verification took too long. Check your connection and try again.'
+                : err && err.message
+                  ? err.message
+                  : 'Verification failed.',
+            );
             // If auto-verify (link-click) failed, reveal the manual
             // fallback form so the user has a recovery path.
             showFallback();
           })
           .finally(() => {
+            clearTimeout(timeoutId);
             verifyInFlight = false;
             setVerifyBusy(false);
           });
