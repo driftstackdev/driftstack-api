@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'security', 'index.html');
@@ -38,7 +38,7 @@ interface WebSession {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -89,6 +89,10 @@ function listText(window: JSDOM['window']): string {
 }
 async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+async function flushMicrotasks(times = 20): Promise<void> {
+  for (let i = 0; i < times; i++) await Promise.resolve();
 }
 
 function mkSession(over: Partial<WebSession> = {}): WebSession {
@@ -145,6 +149,7 @@ describe('security page — web-session management (security)', () => {
   afterEach(() => {
     win?.close?.();
     win = null;
+    vi.useRealTimers();
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
@@ -203,6 +208,75 @@ describe('security page — web-session management (security)', () => {
     );
     expect(del).toBeTruthy();
     expect(window.document.querySelector('[data-revoke-id="sess_other"]')).toBeNull();
+  });
+
+  it('serializes destructive sign-in actions and restores controls after refresh', async () => {
+    const sessions = [
+      mkSession({ id: 'sess_current', current: true }),
+      mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
+    ];
+    const baseRouter = makeRouter(sessions);
+    let releaseDelete: (response: Response) => void = () => {};
+    const pendingDelete = new Promise<Response>((resolve) => {
+      releaseDelete = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'DELETE' && /\/web-sessions\/sess_other$/.test(call.url)) {
+          return pendingDelete;
+        }
+        return baseRouter(call);
+      },
+    });
+    win = window;
+    await flush();
+    const revokeBtn = window.document.querySelector(
+      '[data-revoke-id="sess_other"]',
+    ) as HTMLButtonElement;
+    const revokeAllBtn = window.document.querySelector(
+      '[data-button="web-sessions-revoke-all"]',
+    ) as HTMLButtonElement;
+    revokeBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    revokeAllBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    expect(revokeBtn.disabled).toBe(true);
+    expect(revokeBtn.getAttribute('aria-busy')).toBe('true');
+    expect(revokeAllBtn.disabled).toBe(true);
+    expect(fetchCalls.filter((c) => c.init?.method === 'DELETE')).toHaveLength(1);
+
+    releaseDelete(new Response(null, { status: 204 }));
+    await flush();
+    expect(revokeAllBtn.disabled).toBe(false);
+  });
+
+  it('does not let an older success timer hide a newer refresh failure', async () => {
+    vi.useFakeTimers();
+    const sessions = [
+      mkSession({ id: 'sess_current', current: true }),
+      mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
+    ];
+    let webSessionReads = 0;
+    const baseRouter = makeRouter(sessions);
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method !== 'DELETE' && /\/v1\/account\/web-sessions$/.test(call.url)) {
+          webSessionReads += 1;
+          if (webSessionReads > 1) return json({}, 500);
+        }
+        return baseRouter(call);
+      },
+    });
+    win = window;
+    await flushMicrotasks();
+    (window.document.querySelector('[data-revoke-id="sess_other"]') as HTMLButtonElement).click();
+    await flushMicrotasks(40);
+    const banner = window.document.querySelector('[data-banner]');
+    expect(banner?.textContent).toContain("Couldn't load active sign-ins");
+    expect(banner?.classList.contains('hidden')).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(banner?.textContent).toContain("Couldn't load active sign-ins");
+    expect(banner?.classList.contains('hidden')).toBe(false);
   });
 
   it('revoke cancelled: no DELETE fired, the session stays', async () => {

@@ -437,13 +437,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       // could mistype (a typo silently fails — the server returns
       // { sent: true } for ANY address as anti-enumeration).
       let accountEmail = null;
+      let bannerGeneration = 0;
 
       function showBanner(text) {
-        if (!banner) return;
+        const generation = ++bannerGeneration;
+        if (!banner) return generation;
         banner.textContent = text;
         banner.classList.remove('hidden');
+        return generation;
       }
-      function hideBanner() {
+      function hideBanner(expectedGeneration) {
+        if (expectedGeneration !== undefined && expectedGeneration !== bannerGeneration) return;
         if (!banner) return;
         banner.classList.add('hidden');
       }
@@ -670,6 +674,33 @@ const apiBaseUrl = resolveApiBaseUrl();
       const webSessionsRevokeAllBtn = root.querySelector(
         '[data-button="web-sessions-revoke-all"]',
       );
+      let webSessionMutationInFlight = false;
+
+      function beginWebSessionMutation(activeButton) {
+        if (webSessionMutationInFlight) return false;
+        webSessionMutationInFlight = true;
+        const controls = webSessionsList
+          ? webSessionsList.querySelectorAll('[data-revoke-id]')
+          : [];
+        controls.forEach((control) => {
+          control.disabled = true;
+        });
+        if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.disabled = true;
+        if (activeButton) activeButton.setAttribute('aria-busy', 'true');
+        return true;
+      }
+
+      function endWebSessionMutation(activeButton) {
+        webSessionMutationInFlight = false;
+        const controls = webSessionsList
+          ? webSessionsList.querySelectorAll('[data-revoke-id]')
+          : [];
+        controls.forEach((control) => {
+          control.disabled = false;
+        });
+        if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.disabled = false;
+        if (activeButton) activeButton.removeAttribute('aria-busy');
+      }
 
       function fmtRelative(iso) {
         if (!iso) return '—';
@@ -774,7 +805,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       function loadWebSessions() {
         if (!token || !webSessionsList) return;
         if (webSessionsEmpty) webSessionsEmpty.classList.add('hidden');
-        authedFetch('/v1/account/web-sessions', { method: 'GET' })
+        return authedFetch('/v1/account/web-sessions', { method: 'GET' })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => renderWebSessions(body.data || []))
           .catch((err) => {
@@ -784,7 +815,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function revokeWebSession(id) {
-        authedFetch('/v1/account/web-sessions/' + encodeURIComponent(id), {
+        return authedFetch('/v1/account/web-sessions/' + encodeURIComponent(id), {
           method: 'DELETE',
         })
           .then((r) => {
@@ -792,9 +823,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             return Promise.reject(new Error('HTTP ' + r.status));
           })
           .then(() => {
-            showBanner('Session revoked.');
-            setTimeout(hideBanner, 2000);
-            loadWebSessions();
+            const noticeGeneration = showBanner('Session revoked.');
+            setTimeout(() => hideBanner(noticeGeneration), 2000);
+            return loadWebSessions();
           })
           .catch((err) => {
             const msg = err && err.message ? err.message : 'network error';
@@ -810,39 +841,51 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (!btn) return;
           const id = btn.getAttribute('data-revoke-id');
           if (!id) return;
-          if (
-            !(await window.driftstackConfirm(
-              'Revoke this sign-in? It will need to sign in again.',
-              { confirmLabel: 'Revoke', destructive: true },
-            ))
-          )
-            return;
-          revokeWebSession(id);
+          if (!beginWebSessionMutation(btn)) return;
+          try {
+            if (
+              !(await window.driftstackConfirm(
+                'Revoke this sign-in? It will need to sign in again.',
+                { confirmLabel: 'Revoke', destructive: true },
+              ))
+            )
+              return;
+            await revokeWebSession(id);
+          } finally {
+            endWebSessionMutation(btn);
+          }
         });
       }
 
       if (webSessionsRevokeAllBtn) {
         webSessionsRevokeAllBtn.addEventListener('click', async () => {
-          if (
-            !(await window.driftstackConfirm(
-              'Sign out of every other browser? You will stay signed in here.',
-              { confirmLabel: 'Sign out others', destructive: true },
-            ))
-          )
-            return;
-          authedFetch('/v1/account/web-sessions?keep=current', { method: 'DELETE' })
-            .then((r) =>
-              r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)),
+          if (!beginWebSessionMutation(webSessionsRevokeAllBtn)) return;
+          try {
+            if (
+              !(await window.driftstackConfirm(
+                'Sign out of every other browser? You will stay signed in here.',
+                { confirmLabel: 'Sign out others', destructive: true },
+              ))
             )
-            .then((body) => {
-              showBanner('Signed out of ' + (body.revoked || 0) + ' other sessions.');
-              setTimeout(hideBanner, 3000);
-              loadWebSessions();
-            })
-            .catch((err) => {
-              const msg = err && err.message ? err.message : 'network error';
-              showBanner("Couldn't bulk-revoke (" + msg + ').');
-            });
+              return;
+            await authedFetch('/v1/account/web-sessions?keep=current', { method: 'DELETE' })
+              .then((r) =>
+                r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)),
+              )
+              .then((body) => {
+                const noticeGeneration = showBanner(
+                  'Signed out of ' + (body.revoked || 0) + ' other sessions.',
+                );
+                setTimeout(() => hideBanner(noticeGeneration), 3000);
+                return loadWebSessions();
+              })
+              .catch((err) => {
+                const msg = err && err.message ? err.message : 'network error';
+                showBanner("Couldn't bulk-revoke (" + msg + ').');
+              });
+          } finally {
+            endWebSessionMutation(webSessionsRevokeAllBtn);
+          }
         });
       }
 

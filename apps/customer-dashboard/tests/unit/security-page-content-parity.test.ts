@@ -76,6 +76,17 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\)/);
   });
 
+  it('serializes destructive sign-in actions and generation-binds transient banners', () => {
+    expect(body).toContain('let webSessionMutationInFlight = false;');
+    expect(body).toMatch(/if \(webSessionMutationInFlight\) return false;/);
+    expect(body).toMatch(/control\.disabled = true/);
+    expect(body).toMatch(/activeButton\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/endWebSessionMutation\(btn\)/);
+    expect(body).toMatch(/let bannerGeneration = 0/);
+    expect(body).toMatch(/expectedGeneration !== bannerGeneration/);
+    expect(body).toMatch(/hideBanner\(noticeGeneration\)/);
+  });
+
   it('V-353h TOTP enrollment: SHA-1 / 30s / 6-digit (RFC 6238 defaults) pinned', () => {
     expect(body).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults/);
   });
