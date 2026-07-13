@@ -453,6 +453,56 @@ describe('api-keys page — local integration', () => {
     expect(window.document.querySelector('[data-rotate-grace-expires]')?.textContent).not.toBe('');
   });
 
+  it('serializes rotate and revoke controls for the same key', async () => {
+    let releaseRotation: (response: Response) => void = () => {};
+    const pendingRotation = new Promise<Response>((resolve) => {
+      releaseRotation = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      fetchPlan: [
+        () => json({ data: [ACTIVE_KEY] }),
+        () => pendingRotation,
+        () => json({ data: [ACTIVE_KEY] }),
+      ],
+    });
+    win = window;
+    await flush();
+    const rotateBtn = window.document.querySelector(
+      '[data-rotate="key_active"]',
+    ) as HTMLButtonElement;
+    const revokeBtn = window.document.querySelector(
+      '[data-revoke="key_active"]',
+    ) as HTMLButtonElement;
+
+    rotateBtn.click();
+    await flushMicrotasks();
+    expect(rotateBtn.disabled).toBe(true);
+    expect(revokeBtn.disabled).toBe(true);
+    expect(revokeBtn.title).toBe('Wait for the active API key action to finish.');
+
+    revokeBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(0);
+    expect(
+      fetchCalls.filter((call) => /\/v1\/api-keys\/key_active\/rotate$/.test(call.url)),
+    ).toHaveLength(1);
+
+    releaseRotation(
+      json({
+        rotated_from: 'key_active',
+        plaintext: 'ds_live_SERIALIZED_ROTATION',
+        grace_period_ends_at: '2026-05-21T10:00:00.000Z',
+      }),
+    );
+    await flush();
+    const refreshedRevoke = window.document.querySelector(
+      '[data-revoke="key_active"]',
+    ) as HTMLButtonElement;
+    expect(refreshedRevoke.disabled).toBe(false);
+  });
+
   it('rotate timeout reconciles the list and warns against a blind second rotation', async () => {
     const ambiguous = { ...ACTIVE_KEY, id: 'key_rotated_unknown', name: 'CI key' };
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {

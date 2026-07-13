@@ -445,6 +445,7 @@ npm i @driftstack/sdk</code></pre>
       const token = localStorage.getItem('ds_web_session_token');
       const API_KEY_TIMEOUT_MS = 15_000;
       const mutationButtonsInFlight = new WeakSet();
+      const mutationKeyIdsInFlight = new Set();
       const ambiguousRevokeIds = new Set();
       const ambiguousRotateIds = new Set();
       let keySnapshot = [];
@@ -515,18 +516,21 @@ npm i @driftstack/sdk</code></pre>
 
       function keyLi(k) {
         const isRevoked = k.revoked_at !== null && k.revoked_at !== undefined;
+        const mutationInFlight = mutationKeyIdsInFlight.has(String(k.id));
         const revokeOutcomeUnknown = ambiguousRevokeIds.has(String(k.id));
         const rotateOutcomeUnknown = ambiguousRotateIds.has(String(k.id));
-        const rotateDisabledAttributes = revokeOutcomeUnknown || rotateOutcomeUnknown
+        const rotateDisabledAttributes =
+          mutationInFlight || revokeOutcomeUnknown || rotateOutcomeUnknown
+            ? ' disabled aria-disabled="true"'
+            : '';
+        const rotateDisabledClass =
+          mutationInFlight || revokeOutcomeUnknown || rotateOutcomeUnknown
+            ? ' cursor-not-allowed opacity-60'
+            : '';
+        const revokeDisabledAttributes = mutationInFlight || revokeOutcomeUnknown
           ? ' disabled aria-disabled="true"'
           : '';
-        const rotateDisabledClass = revokeOutcomeUnknown || rotateOutcomeUnknown
-          ? ' cursor-not-allowed opacity-60'
-          : '';
-        const revokeDisabledAttributes = revokeOutcomeUnknown
-          ? ' disabled aria-disabled="true"'
-          : '';
-        const revokeDisabledClass = revokeOutcomeUnknown
+        const revokeDisabledClass = mutationInFlight || revokeOutcomeUnknown
           ? ' cursor-not-allowed opacity-60'
           : '';
         const scopes = (k.scopes || [])
@@ -594,6 +598,42 @@ npm i @driftstack/sdk</code></pre>
           revokeAction +
           '</div></div></li>'
         );
+      }
+
+      function keyMutationButtons(keyId) {
+        if (!ul) return [];
+        return Array.from(ul.querySelectorAll('[data-rotate], [data-revoke]')).filter(
+          (button) =>
+            button.getAttribute('data-rotate') === keyId ||
+            button.getAttribute('data-revoke') === keyId,
+        );
+      }
+
+      function beginKeyMutation(keyId) {
+        if (!keyId || mutationKeyIdsInFlight.has(keyId)) return false;
+        mutationKeyIdsInFlight.add(keyId);
+        keyMutationButtons(keyId).forEach((button) => {
+          button.disabled = true;
+          button.setAttribute('aria-disabled', 'true');
+          button.setAttribute('title', 'Wait for the active API key action to finish.');
+        });
+        return true;
+      }
+
+      function endKeyMutation(keyId) {
+        mutationKeyIdsInFlight.delete(keyId);
+        keyMutationButtons(keyId).forEach((button) => {
+          const isRotate = button.hasAttribute('data-rotate');
+          const blocked =
+            ambiguousRevokeIds.has(keyId) || (isRotate && ambiguousRotateIds.has(keyId));
+          button.disabled = blocked;
+          if (blocked) {
+            button.setAttribute('aria-disabled', 'true');
+          } else {
+            button.removeAttribute('aria-disabled');
+          }
+          button.removeAttribute('title');
+        });
       }
 
       function refresh() {
@@ -754,6 +794,7 @@ npm i @driftstack/sdk</code></pre>
             const id = btn.getAttribute('data-revoke');
             if (ambiguousRevokeIds.has(String(id || ''))) return;
             if (mutationButtonsInFlight.has(btn)) return;
+            if (!id || !beginKeyMutation(id)) return;
             mutationButtonsInFlight.add(btn);
             const name = btn.getAttribute('data-revoke-name') || '(unnamed)';
             const ok = await window.driftstackConfirm(
@@ -764,6 +805,7 @@ npm i @driftstack/sdk</code></pre>
             );
             if (!ok) {
               mutationButtonsInFlight.delete(btn);
+              endKeyMutation(id);
               return;
             }
             btn.disabled = true;
@@ -803,6 +845,7 @@ npm i @driftstack/sdk</code></pre>
                 btn.disabled = outcomeUnknown;
                 btn.setAttribute('aria-busy', 'false');
                 btn.textContent = outcomeUnknown ? 'Check status' : 'Revoke';
+                endKeyMutation(id);
               });
           });
         });
@@ -866,12 +909,14 @@ npm i @driftstack/sdk</code></pre>
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
-            if (mutationButtonsInFlight.has(btn)) return;
-            mutationButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-rotate');
             const name = btn.getAttribute('data-rotate-name') || '(unnamed)';
+            if (mutationButtonsInFlight.has(btn)) return;
+            if (!id || !beginKeyMutation(id)) return;
+            mutationButtonsInFlight.add(btn);
             if (ambiguousRotateIds.has(String(id || ''))) {
               mutationButtonsInFlight.delete(btn);
+              endKeyMutation(id);
               showBanner(
                 'Rotation is locked because the previous outcome was confirmed or could not be verified. Reload and review the key list before rotating again.',
               );
@@ -886,6 +931,7 @@ npm i @driftstack/sdk</code></pre>
             );
             if (!ok) {
               mutationButtonsInFlight.delete(btn);
+              endKeyMutation(id);
               return;
             }
             btn.disabled = true;
@@ -941,6 +987,7 @@ npm i @driftstack/sdk</code></pre>
                 btn.disabled = outcomeUnknown;
                 btn.setAttribute('aria-busy', 'false');
                 btn.textContent = outcomeUnknown ? 'Verify before rotating' : 'Rotate';
+                endKeyMutation(id);
               });
           });
         });
