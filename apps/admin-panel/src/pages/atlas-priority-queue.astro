@@ -172,6 +172,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
   <script is:inline define:vars={{ STATUS_BADGE, apiBaseUrl }}>
     const POLL_INTERVAL_MS = 30000;
+    const QUEUE_REQUEST_TIMEOUT_MS = 15000;
     const tbody = document.getElementById('queue-tbody');
     const errorBanner = document.getElementById('error-banner');
     const statusLine = document.getElementById('status-line');
@@ -189,6 +190,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       failuresOnly: document.getElementById('filter-failures-only'),
     };
     let manualRefreshLoading = false;
+    let loadController = null;
     refreshBtn.addEventListener('click', () => fetchQueue(true));
     Object.values(filters).forEach((el) => el.addEventListener('change', () => fetchQueue()));
     filters.customer.addEventListener('input', debounce(() => fetchQueue(), 400));
@@ -241,6 +243,13 @@ const apiBaseUrl = resolveApiBaseUrl();
     // it only writes to the DOM if it's still the most-recently-started call.
     let inFlight = 0;
 
+    function boundedFetch(url, init, controller) {
+      const timeout = window.setTimeout(() => controller.abort(), QUEUE_REQUEST_TIMEOUT_MS);
+      return fetch(url, { ...(init || {}), signal: controller.signal }).finally(() => {
+        window.clearTimeout(timeout);
+      });
+    }
+
     async function fetchQueue(manual = false) {
       if (manual && manualRefreshLoading) return;
       if (manual) {
@@ -264,11 +273,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       // host — so a staging/local admin build queries its own env.
       const url = apiBaseUrl + '/v1/admin/atlas-priority/queue?' + params.toString();
       const token = localStorage.getItem('ds_web_session_token');
+      if (loadController) loadController.abort();
+      const controller = new AbortController();
+      loadController = controller;
       try {
-        const res = await fetch(url, {
-          headers: token ? { Authorization: 'Bearer ' + token } : {},
-          credentials: 'include',
-        });
+        const res = await boundedFetch(
+          url,
+          {
+            headers: token ? { Authorization: 'Bearer ' + token } : {},
+            credentials: 'include',
+          },
+          controller,
+        );
         if (myReq !== inFlight) return; // superseded by a newer call
         if (!res.ok) {
           // Clear the "Loading…" placeholder so a first-load failure (e.g. a
@@ -292,7 +308,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (myReq !== inFlight) return; // superseded by a newer call
         tbody.innerHTML =
           '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">Could not load the queue.</td></tr>';
-        showError('Fetch failed: ' + (err.message || String(err)));
+        showError(
+          err && err.name === 'AbortError'
+            ? 'Request timed out. Try again.'
+            : 'Fetch failed: ' + (err.message || String(err)),
+        );
       } finally {
         if (manual) {
           manualRefreshLoading = false;
@@ -300,9 +320,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           refreshBtn.setAttribute('aria-busy', 'false');
           refreshBtn.textContent = 'Refresh now';
         }
-        // 2026-05-21 — AdminLayout opacity-gate signal.
-        if (typeof window.dashboardHydrated === 'function') {
-          window.dashboardHydrated();
+        if (myReq === inFlight) {
+          loadController = null;
+          // 2026-05-21 — AdminLayout opacity-gate signal.
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         }
       }
     }
@@ -376,7 +399,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       errorBanner.classList.remove('hidden');
     }
 
-    fetchQueue();
+    function start() {
+      fetchQueue();
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+      start();
+    }
     setInterval(fetchQueue, POLL_INTERVAL_MS);
   </script>
 </AdminLayout>

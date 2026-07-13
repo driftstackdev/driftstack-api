@@ -15,4 +15,16 @@ describe('admin Atlas priority queue manual refresh', () => {
     expect(body).toContain("refreshBtn.setAttribute('aria-busy', 'false')");
     expect(body).toContain("refreshBtn.textContent = 'Refresh now'");
   });
+
+  it('bounds reads, aborts superseded filters/polls, and defers initial SSO hydration', () => {
+    const body = readFileSync(SOURCE, 'utf8');
+    expect(body).toContain('const QUEUE_REQUEST_TIMEOUT_MS = 15000');
+    expect(body).toContain('Request timed out. Try again.');
+    expect(body).toContain('if (loadController) loadController.abort()');
+    expect(body).toContain('signal: controller.signal');
+    expect(body).toContain('if (myReq === inFlight)');
+    expect(body).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
+  });
 });
