@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, waitFor, act } from '@testing-library/react';
 
 const cookiesMock = vi.fn();
 const setCookiesMock = vi.fn();
@@ -161,6 +161,66 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(pane.textContent).toContain('HttpOnly');
     expect(pane.textContent).toContain('SameSite=Lax');
     expect(pane.textContent).toContain('⏱ 1y');
+  });
+
+  it('labels a long poll as refreshing while retaining the last good cookie jar', async () => {
+    let resolveRefresh:
+      | ((value: { status: 'ok'; cookies: Array<Record<string, unknown>> }) => void)
+      | undefined;
+    cookiesMock
+      .mockResolvedValueOnce({
+        status: 'ok',
+        cookies: [
+          {
+            domain: 'example.com',
+            name: 'sid',
+            value: 'abc',
+            secure: true,
+            expires: null,
+          },
+        ],
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    const timerSpy = vi.spyOn(globalThis, 'setTimeout');
+    const { container, unmount } = renderSim();
+    openCookies(container);
+
+    try {
+      const liveBadge = await waitFor(() => {
+        const badge = container.querySelector('[data-component="simulator-cookies-live"]');
+        expect(badge?.textContent).toContain('live');
+        return badge as HTMLElement;
+      });
+      expect(liveBadge.getAttribute('data-refreshing')).toBe('false');
+
+      const scheduledPoll = [...timerSpy.mock.calls]
+        .reverse()
+        .find((call) => call[1] === 3000 && typeof call[0] === 'function');
+      expect(scheduledPoll).toBeDefined();
+      act(() => {
+        (scheduledPoll?.[0] as () => void)();
+      });
+
+      await waitFor(() => expect(cookiesMock).toHaveBeenCalledTimes(2));
+      expect(liveBadge.textContent).toContain('refreshing');
+      expect(liveBadge.getAttribute('data-refreshing')).toBe('true');
+      expect(container.textContent).toContain('sid');
+
+      await act(async () => {
+        resolveRefresh?.({ status: 'ok', cookies: [] });
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(liveBadge.textContent).toContain('live'));
+      expect(liveBadge.getAttribute('data-refreshing')).toBe('false');
+    } finally {
+      unmount();
+      timerSpy.mockRestore();
+    }
   });
 
   it('Export downloads the jar as JSON; Import is now ENABLED (the set-cookies wire is wired)', async () => {

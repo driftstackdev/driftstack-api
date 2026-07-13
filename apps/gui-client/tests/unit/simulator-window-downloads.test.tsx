@@ -5,7 +5,7 @@
 
 import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, waitFor, act } from '@testing-library/react';
 
 const listMock = vi.fn();
 const fetchMock = vi.fn();
@@ -100,6 +100,58 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
         container.querySelector('[data-component="simulator-downloads"]')?.textContent,
       ).toMatch(/report\.pdf/);
     });
+  });
+
+  it('labels a long poll as refreshing while retaining the last good download list', async () => {
+    let resolveRefresh:
+      | ((value: { status: 'ok'; files: Array<Record<string, unknown>> }) => void)
+      | undefined;
+    listMock
+      .mockResolvedValueOnce({
+        status: 'ok',
+        files: [{ name: 'report.pdf', size: 2048, mime: 'application/pdf' }],
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    const timerSpy = vi.spyOn(globalThis, 'setTimeout');
+    const { container, unmount } = renderSim();
+    openDrawer(container);
+
+    try {
+      const liveBadge = await waitFor(() => {
+        const badge = container.querySelector('[data-component="simulator-downloads-live"]');
+        expect(badge?.textContent).toContain('live');
+        return badge as HTMLElement;
+      });
+      expect(liveBadge.getAttribute('data-refreshing')).toBe('false');
+
+      const scheduledPoll = [...timerSpy.mock.calls]
+        .reverse()
+        .find((call) => call[1] === 3000 && typeof call[0] === 'function');
+      expect(scheduledPoll).toBeDefined();
+      act(() => {
+        (scheduledPoll?.[0] as () => void)();
+      });
+
+      await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2));
+      expect(liveBadge.textContent).toContain('refreshing');
+      expect(liveBadge.getAttribute('data-refreshing')).toBe('true');
+      expect(container.textContent).toContain('report.pdf');
+
+      await act(async () => {
+        resolveRefresh?.({ status: 'ok', files: [] });
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(liveBadge.textContent).toContain('live'));
+      expect(liveBadge.getAttribute('data-refreshing')).toBe('false');
+    } finally {
+      unmount();
+      timerSpy.mockRestore();
+    }
   });
 
   // Browser-bar download indicator (GUI chrome — like the address bar; never touches

@@ -2107,11 +2107,13 @@ function CookieFlag({
 function CookiesPane({
   cookies,
   cookiesNote,
+  refreshing,
   sessionId,
   controlAuth,
 }: {
   cookies: SessionCookie[] | null;
   cookiesNote: string | null;
+  refreshing: boolean;
   sessionId: string;
   controlAuth: ControlAuth;
 }): JSX.Element {
@@ -2292,10 +2294,12 @@ function CookiesPane({
         {cookies !== null && (
           <span
             data-component="simulator-cookies-live"
+            data-refreshing={refreshing ? 'true' : 'false'}
+            aria-live="polite"
             className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-ink-secondary"
           >
             <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-            live
+            {refreshing ? 'refreshing' : 'live'}
           </span>
         )}
         <span className="ml-auto flex items-center gap-1.5">
@@ -4749,6 +4753,7 @@ export function SimulatorWindow(): JSX.Element {
   if (cookiesStoreRef.current === null) cookiesStoreRef.current = createCookiesListStore();
   const cookiesStore = cookiesStoreRef.current;
   const [cookiesNote, setCookiesNote] = useState<string | null>(null);
+  const [cookiesRefreshing, setCookiesRefreshing] = useState(false);
   // Founder 2026-07-06 "cookies sometimes showing, sometimes not — should show all
   // this profile's cookies at all times". The poll used to setCookies(null) on EVERY
   // non-'ok' tick (timeout=device merely slow, transient 5xx, gated), blanking a
@@ -4768,6 +4773,7 @@ export function SimulatorWindow(): JSX.Element {
     // a page loads" — framed as if a future load can populate them, which can't happen on
     // an ended session. Show an honest terminal note instead.
     if (sessionEnded !== null) {
+      setCookiesRefreshing(false);
       cookiesStore.set(null);
       hasCookiesRef.current = false; // terminal clear — a new session starts fresh
       setCookiesNote('Session ended — cookies are no longer available.');
@@ -4785,6 +4791,7 @@ export function SimulatorWindow(): JSX.Element {
     let backoff = 3000;
     let handle: ReturnType<typeof setTimeout> | null = null;
     const tick = (): void => {
+      setCookiesRefreshing(true);
       void getAgentSessionCookies(sessionId, controlAuth)
         .then((res) => {
           if (cancelled) return;
@@ -4847,6 +4854,7 @@ export function SimulatorWindow(): JSX.Element {
         })
         .finally(() => {
           if (cancelled) return; // a torn-down effect never reschedules
+          setCookiesRefreshing(false);
           handle = setTimeout(tick, backoff);
         });
     };
@@ -4957,6 +4965,7 @@ export function SimulatorWindow(): JSX.Element {
   if (downloadsStoreRef.current === null) downloadsStoreRef.current = createDownloadsListStore();
   const downloadsStore = downloadsStoreRef.current;
   const [downloadsNote, setDownloadsNote] = useState<string | null>(null);
+  const [downloadsRefreshing, setDownloadsRefreshing] = useState(false);
   // Twin of hasCookiesRef (#134) — audit wb1w3015f found the downloads poll had the
   // IDENTICAL flicker (blanked the list + the browser-bar count badge on every
   // timeout/gated/transient tick) but never got the cookies retention fix. Retain
@@ -4978,7 +4987,10 @@ export function SimulatorWindow(): JSX.Element {
     // Finding #13 — stop polling once the session has terminally ended (consistency with
     // the cookies / page-state / terminal-end polls): the endpoint 404s forever on a dead
     // session. Keep the last fetched list frozen in view rather than churning the dead id.
-    if (sessionEnded !== null) return;
+    if (sessionEnded !== null) {
+      setDownloadsRefreshing(false);
+      return;
+    }
     // Finding #5 — self-scheduling poll with exponential backoff (twin of the cookies
     // poll). The next tick is scheduled ONLY in .finally, so requests never overlap/
     // stack — the server holds a downloads request up to ~30s, so a fixed 3s interval
@@ -4989,6 +5001,7 @@ export function SimulatorWindow(): JSX.Element {
     let backoff = 3000;
     let handle: ReturnType<typeof setTimeout> | null = null;
     const tick = (): void => {
+      setDownloadsRefreshing(true);
       void listAgentSessionDownloads(sessionId, controlAuth)
         .then((res) => {
           if (cancelled) return;
@@ -5043,6 +5056,7 @@ export function SimulatorWindow(): JSX.Element {
         })
         .finally(() => {
           if (cancelled) return; // a torn-down effect never reschedules
+          setDownloadsRefreshing(false);
           handle = setTimeout(tick, backoff);
         });
     };
@@ -7513,6 +7527,7 @@ export function SimulatorWindow(): JSX.Element {
                           <CookiesPane
                             cookies={cookies}
                             cookiesNote={cookiesNote}
+                            refreshing={cookiesRefreshing}
                             sessionId={sessionId}
                             controlAuth={controlAuth}
                           />
@@ -7690,12 +7705,17 @@ export function SimulatorWindow(): JSX.Element {
                                 <span className="text-white/40">· {downloads.length}</span>
                               )}
                               {downloads !== null && (
-                                <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-ink-secondary">
+                                <span
+                                  data-component="simulator-downloads-live"
+                                  data-refreshing={downloadsRefreshing ? 'true' : 'false'}
+                                  aria-live="polite"
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-ink-secondary"
+                                >
                                   <span
                                     aria-hidden="true"
                                     className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
                                   />
-                                  live
+                                  {downloadsRefreshing ? 'refreshing' : 'live'}
                                 </span>
                               )}
                             </div>
