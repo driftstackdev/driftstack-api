@@ -214,4 +214,15 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toMatch(/endAccountMutation\(submit\)/);
     expect(body.match(/return authedFetch\(/g)).toHaveLength(6);
   });
+
+  it('reconciles ambiguous suspend/unsuspend timeouts against authoritative account status', () => {
+    expect(body).toMatch(/async function reconcileAccountTransition\(action\)/);
+    expect(body).toMatch(/const refreshed = await load\(\)/);
+    expect(body).toMatch(/status === 'suspended'/);
+    expect(body).toMatch(/status === 'active'/);
+    expect(body).toContain('sessions and API keys were revoked; do not suspend it again');
+    expect(body).toContain('do not unsuspend it again');
+    expect(body).toContain('Verify its status before retrying');
+    expect(body).toMatch(/err && err\.name === 'AbortError'/);
+  });
 });

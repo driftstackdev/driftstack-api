@@ -532,7 +532,7 @@ const accountId = account.id;
       }
 
       function load() {
-        if (!token) return Promise.resolve();
+        if (!token) return Promise.resolve(false);
         if (hydrationController) hydrationController.abort();
         const controller = new AbortController();
         hydrationController = controller;
@@ -632,10 +632,12 @@ const accountId = account.id;
 
         return Promise.all([accountP, auditP, costP])
           .then(() => {
-            if (isCurrent()) hideBanner();
+            if (!isCurrent()) return false;
+            hideBanner();
+            return true;
           })
           .catch((err) => {
-            if (!isCurrent()) return;
+            if (!isCurrent()) return false;
             const msg = requestErrorMessage(err);
             if (msg === 'forbidden') {
               showBanner(
@@ -646,6 +648,7 @@ const accountId = account.id;
             } else {
               showBanner("Couldn't load account (" + msg + '). Showing preview data below.');
             }
+            return false;
           })
           .finally(() => {
             if (!isCurrent()) return;
@@ -653,6 +656,44 @@ const accountId = account.id;
             root.removeAttribute('aria-busy');
             if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           });
+      }
+
+      async function reconcileAccountTransition(action) {
+        const refreshed = await load();
+        const status = root.querySelector('[data-field="status"]')?.textContent?.trim();
+        if (action === 'suspend') {
+          if (refreshed && status === 'suspended') {
+            showBanner(
+              'Suspension outcome is unknown because the response timed out. The account was refreshed and is suspended, so sessions and API keys were revoked; do not suspend it again.',
+            );
+          } else if (refreshed) {
+            showBanner(
+              'Suspension outcome is unknown because the response timed out. The account was refreshed and is still ' +
+                (status || 'not suspended') +
+                '; retry suspension if containment is still required.',
+            );
+          } else {
+            showBanner(
+              'Suspension outcome is unknown because the response timed out, and the account could not be refreshed. Verify its status before retrying.',
+            );
+          }
+          return;
+        }
+        if (refreshed && status === 'active') {
+          showBanner(
+            'Unsuspension outcome is unknown because the response timed out. The account was refreshed and is active; do not unsuspend it again.',
+          );
+        } else if (refreshed) {
+          showBanner(
+            'Unsuspension outcome is unknown because the response timed out. The account was refreshed and is still ' +
+              (status || 'not active') +
+              '; retry unsuspension if access should be restored.',
+          );
+        } else {
+          showBanner(
+            'Unsuspension outcome is unknown because the response timed out, and the account could not be refreshed. Verify its status before retrying.',
+          );
+        }
       }
 
       const actionRow = root.querySelector('[data-field="action-row"]');
@@ -749,7 +790,11 @@ const accountId = account.id;
             showBanner('Account suspended.');
             load();
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              await reconcileAccountTransition('suspend');
+              return;
+            }
             const msg = requestErrorMessage(err);
             showBanner("Couldn't suspend (" + msg + ').');
           });
@@ -774,7 +819,11 @@ const accountId = account.id;
             showBanner('Account unsuspended.');
             load();
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              await reconcileAccountTransition('unsuspend');
+              return;
+            }
             const msg = requestErrorMessage(err);
             showBanner("Couldn't unsuspend (" + msg + ').');
           });
