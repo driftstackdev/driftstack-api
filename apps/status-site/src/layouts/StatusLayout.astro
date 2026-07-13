@@ -3,11 +3,17 @@ import '../styles/global.css';
 
 interface Props {
   title: string;
+  description?: string;
   /** Error and one-time token utility pages must not enter search indexes. */
   noindex?: boolean;
 }
 
-const { title, noindex = false } = Astro.props;
+const {
+  title,
+  description = 'Driftstack service status and incident updates.',
+  noindex = false,
+} = Astro.props;
+const canonicalUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site) : undefined;
 ---
 
 <!doctype html>
@@ -16,7 +22,9 @@ const { title, noindex = false } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
     <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow'} />
+    {!noindex && canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
     <title>{title}</title>
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=4" />
   </head>

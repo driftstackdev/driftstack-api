@@ -38,14 +38,48 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
 
   it('accepts an opt-in noindex prop while keeping public pages indexable by default', () => {
     expect(body).toMatch(/title: string;/);
+    expect(body).toMatch(/description\?: string;/);
     expect(body).toMatch(/noindex\?: boolean;/);
-    expect(body).toMatch(/const \{ title, noindex = false \} = Astro\.props;/);
+    expect(body).toMatch(/description = 'Driftstack service status and incident updates\.',/);
+    expect(body).toMatch(/noindex = false,/);
   });
 
   it('emits noindex only for utility pages that explicitly request it', () => {
     expect(body).toMatch(
       /<meta name="robots" content=\{noindex \? 'noindex,nofollow' : 'index,follow'\} \/>/,
     );
+  });
+
+  it('gives every page a description and canonicalizes only indexable public pages', () => {
+    expect(body).toMatch(/<meta name="description" content=\{description\} \/>/);
+    expect(body).toMatch(
+      /const canonicalUrl = Astro\.site \? new URL\(Astro\.url\.pathname, Astro\.site\) : undefined;/,
+    );
+    expect(body).toMatch(
+      /\{!noindex && canonicalUrl && <link rel="canonical" href=\{canonicalUrl\} \/>\}/,
+    );
+
+    const publicPages = [
+      ['index.html', 'https://status.driftstack.dev/'],
+      ['history/index.html', 'https://status.driftstack.dev/history/'],
+      ['incident/index.html', 'https://status.driftstack.dev/incident/'],
+      ['subscribe/index.html', 'https://status.driftstack.dev/subscribe/'],
+    ];
+    for (const [relativePath, canonical] of publicPages) {
+      const rendered = read(resolve(DIST, relativePath));
+      expect(rendered, relativePath).toMatch(/<meta name="description" content="[^"]+">/);
+      expect(rendered, relativePath).toContain(`<link rel="canonical" href="${canonical}">`);
+    }
+
+    for (const relativePath of [
+      '404.html',
+      'subscribe/confirm/index.html',
+      'subscribe/unsubscribe/index.html',
+    ]) {
+      const rendered = read(resolve(DIST, relativePath));
+      expect(rendered, relativePath).toMatch(/<meta name="description" content="[^"]+">/);
+      expect(rendered, relativePath).not.toContain('<link rel="canonical"');
+    }
   });
 
   it('renders noindex on error/token utilities while keeping the public overview indexable', () => {

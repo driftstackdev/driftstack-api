@@ -15,7 +15,10 @@ import StatusLayout from '../layouts/StatusLayout.astro';
 const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.dev';
 ---
 
-<StatusLayout title="Driftstack — Incident detail">
+<StatusLayout
+  title="Driftstack — Incident detail"
+  description="Read the latest timeline, impact, and resolution details for a Driftstack service incident."
+>
   <nav class="mb-6 text-sm">
     <a href="/" class="text-ink-muted hover:text-ink-primary">← Back to status</a>
   </nav>
