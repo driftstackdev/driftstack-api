@@ -445,6 +445,7 @@ npm i @driftstack/sdk</code></pre>
       const token = localStorage.getItem('ds_web_session_token');
       const API_KEY_TIMEOUT_MS = 15_000;
       const mutationButtonsInFlight = new WeakSet();
+      const ambiguousRevokeIds = new Set();
       let createInFlight = false;
       let refreshController = null;
       let refreshGeneration = 0;
@@ -510,6 +511,13 @@ npm i @driftstack/sdk</code></pre>
 
       function keyLi(k) {
         const isRevoked = k.revoked_at !== null && k.revoked_at !== undefined;
+        const revokeOutcomeUnknown = ambiguousRevokeIds.has(String(k.id));
+        const mutationDisabledAttributes = revokeOutcomeUnknown
+          ? ' disabled aria-disabled="true"'
+          : '';
+        const mutationDisabledClass = revokeOutcomeUnknown
+          ? ' cursor-not-allowed opacity-60'
+          : '';
         const scopes = (k.scopes || [])
           .map(
             (s) =>
@@ -527,12 +535,22 @@ npm i @driftstack/sdk</code></pre>
             escapeHtml(k.id) +
             '" data-rotate-name="' +
             escapeHtml(k.name) +
-            '" class="text-sm text-tk-accent-text hover:underline">Rotate</button>' +
+            '"' +
+            mutationDisabledAttributes +
+            ' class="text-sm text-tk-accent-text hover:underline' +
+            mutationDisabledClass +
+            '">Rotate</button>' +
             '<button type="button" data-revoke="' +
             escapeHtml(k.id) +
             '" data-revoke-name="' +
             escapeHtml(k.name) +
-            '" class="text-sm text-tk-err-text hover:underline">Revoke</button>' +
+            '"' +
+            mutationDisabledAttributes +
+            ' class="text-sm text-tk-err-text hover:underline' +
+            mutationDisabledClass +
+            '">' +
+            (revokeOutcomeUnknown ? 'Check status' : 'Revoke') +
+            '</button>' +
             '</div>';
         return (
           '<li class="px-6 py-4">' +
@@ -640,6 +658,38 @@ npm i @driftstack/sdk</code></pre>
         );
       }
 
+      async function reconcileAmbiguousRevoke(id, name) {
+        const keyId = String(id || '');
+        ambiguousRevokeIds.add(keyId);
+        const refreshed = Boolean(await refresh());
+        if (!refreshed) {
+          return (
+            'Key revocation timed out after the request was sent, so its outcome is unknown. ' +
+            'The key list could not be refreshed. Do not revoke “' +
+            name +
+            '” again on this page. Reload API Keys later to verify its status before retrying.'
+          );
+        }
+        const stillActive = Array.from(ul.querySelectorAll('[data-revoke]')).some(
+          (button) => button.getAttribute('data-revoke') === keyId,
+        );
+        if (stillActive) {
+          return (
+            'Key revocation timed out after the request was sent, so its outcome is unknown. ' +
+            'The refreshed list still shows “' +
+            name +
+            '” as active, but completion may be delayed. Do not revoke it again on this page. ' +
+            'Wait, then reload API Keys; retry only if it still appears active.'
+          );
+        }
+        return (
+          'Key revocation timed out after the request was sent, so its outcome is unknown. ' +
+          'The refreshed list no longer shows “' +
+          name +
+          '” as active. Revocation likely completed; do not revoke it again.'
+        );
+      }
+
       window.addEventListener('pagehide', () => {
         refreshGeneration += 1;
         if (refreshController) refreshController.abort();
@@ -650,9 +700,10 @@ npm i @driftstack/sdk</code></pre>
         const buttons = ul.querySelectorAll('[data-revoke]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-revoke');
+            if (ambiguousRevokeIds.has(String(id || ''))) return;
             if (mutationButtonsInFlight.has(btn)) return;
             mutationButtonsInFlight.add(btn);
-            const id = btn.getAttribute('data-revoke');
             const name = btn.getAttribute('data-revoke-name') || '(unnamed)';
             const ok = await window.driftstackConfirm(
               'Revoke "' +
@@ -685,19 +736,22 @@ npm i @driftstack/sdk</code></pre>
                 }
                 return refresh();
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                if (err && err.name === 'AbortError') {
+                  showBanner(await reconcileAmbiguousRevoke(id, name));
+                  return;
+                }
                 showBanner(
-                  err && err.name === 'AbortError'
-                    ? 'Revoking took too long. Check your connection and try again.'
-                    : 'Revoke failed: ' + (err && err.message ? err.message : 'network error'),
+                  'Revoke failed: ' + (err && err.message ? err.message : 'network error'),
                 );
               })
               .finally(() => {
                 window.clearTimeout(timeout);
                 mutationButtonsInFlight.delete(btn);
-                btn.disabled = false;
+                const outcomeUnknown = ambiguousRevokeIds.has(String(id || ''));
+                btn.disabled = outcomeUnknown;
                 btn.setAttribute('aria-busy', 'false');
-                btn.textContent = 'Revoke';
+                btn.textContent = outcomeUnknown ? 'Check status' : 'Revoke';
               });
           });
         });

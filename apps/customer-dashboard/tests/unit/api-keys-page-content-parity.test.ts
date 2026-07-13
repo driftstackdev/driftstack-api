@@ -127,7 +127,12 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toContain('its plaintext cannot be recovered');
     expect(body).toContain('revoke it before creating another key');
     expect(body).toContain('revoke that new key before rotating again');
-    expect(body).toContain('Revoking took too long. Check your connection and try again.');
+    expect(body).toContain('const ambiguousRevokeIds = new Set();');
+    expect(body).toContain('async function reconcileAmbiguousRevoke(id, name)');
+    expect(body).toMatch(/if \(ambiguousRevokeIds\.has\(String\(id \|\| ''\)\)\) return/);
+    expect(body).toContain('Key revocation timed out after the request was sent');
+    expect(body).toContain('Revocation likely completed; do not revoke it again.');
+    expect(body).toMatch(/btn\.disabled = outcomeUnknown/);
   });
 
   it('supersedes stale list reads and cancels hydration on page exit', () => {

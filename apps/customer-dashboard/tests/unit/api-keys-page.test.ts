@@ -430,6 +430,61 @@ describe('api-keys page — local integration', () => {
     expect(window.document.querySelector('[data-revoke="key_active"]')).toBeNull();
   });
 
+  it('revoke timeout refreshes status and blocks replay while the key still appears active', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      fetchPlan: [
+        () => json({ data: [ACTIVE_KEY] }),
+        () => Promise.reject(abortError()),
+        () => json({ data: [ACTIVE_KEY] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-revoke="key_active"]') as HTMLButtonElement).click();
+    await flush();
+
+    const uncertainRevoke = window.document.querySelector(
+      '[data-revoke="key_active"]',
+    ) as HTMLButtonElement;
+    const uncertainRotate = window.document.querySelector(
+      '[data-rotate="key_active"]',
+    ) as HTMLButtonElement;
+    expect(uncertainRevoke.disabled).toBe(true);
+    expect(uncertainRevoke.getAttribute('aria-busy')).toBeNull();
+    expect(uncertainRevoke.textContent).toBe('Check status');
+    expect(uncertainRotate.disabled).toBe(true);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*still shows.*active.*completion may be delayed.*do not revoke it again/i,
+    );
+
+    uncertainRevoke.dispatchEvent(new window.Event('click'));
+    await flush();
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+  });
+
+  it('revoke timeout reports likely completion when the refreshed list shows it revoked', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      fetchPlan: [
+        () => json({ data: [ACTIVE_KEY] }),
+        () => Promise.reject(abortError()),
+        () => json({ data: [{ ...ACTIVE_KEY, revoked_at: '2026-05-20T11:00:00.000Z' }] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-revoke="key_active"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(window.document.querySelector('[data-revoke="key_active"]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*no longer shows.*active.*revocation likely completed.*do not revoke it again/i,
+    );
+  });
+
   it('revoke cancelled at confirm: no DELETE fetch fired', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
