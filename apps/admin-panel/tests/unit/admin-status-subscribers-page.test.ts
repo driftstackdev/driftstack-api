@@ -119,7 +119,7 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
   it('renders: an active subscriber gets Force-unsubscribe; an already-unsubscribed one does not', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       route: makeRouter([
         mkSub({ id: 'sub_active', unsubscribed_at: null }),
         mkSub({ id: 'sub_gone', unsubscribed_at: '2026-05-01T10:00:00.000Z' }),
@@ -129,6 +129,8 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     await flush();
     expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeTruthy();
     expect(window.document.querySelector('[data-force-unsub="sub_gone"]')).toBeNull();
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
   });
 
   it('force-unsub: confirm-gated POST /:id/force-unsubscribe, then refresh drops the action', async () => {
@@ -138,14 +140,23 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     });
     win = window;
     await flush();
-    (window.document.querySelector('[data-force-unsub="sub_active"]') as HTMLButtonElement).click();
+    const button = window.document.querySelector(
+      '[data-force-unsub="sub_active"]',
+    ) as HTMLButtonElement;
+    button.click();
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
     await flush();
-    const post = fetchCalls.find(
+    const posts = fetchCalls.filter(
       (c) =>
         c.init?.method === 'POST' &&
         /\/v1\/admin\/status-subscribers\/sub_active\/force-unsubscribe$/.test(c.url),
     );
+    const post = posts[0];
     expect(post).toBeTruthy();
+    expect(posts).toHaveLength(1);
+    expect(post?.init?.signal).toBeInstanceOf(window.AbortSignal);
     // After refresh the sub is unsubscribed → its row shows "no action".
     expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeNull();
   });
@@ -161,5 +172,35 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     await flush();
     expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
     expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeTruthy();
+  });
+
+  it('force-subscribe form is single-flight, signaled, and restores its busy state', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/force-subscribe$/.test(call.url)) {
+          return json({
+            id: 'sub_new',
+            email: 'new@example.com',
+            unsubscribe_link: 'https://status.driftstack.dev/unsubscribe/token',
+          });
+        }
+        return json({ data: [] });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-add-form]') as HTMLFormElement;
+    const email = window.document.querySelector('#add-email') as HTMLInputElement;
+    email.value = 'new@example.com';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const posts = fetchCalls.filter(
+      (call) => call.init?.method === 'POST' && /\/force-subscribe$/.test(call.url),
+    );
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
+    expect(form.hasAttribute('aria-busy')).toBe(false);
+    expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
   });
 });

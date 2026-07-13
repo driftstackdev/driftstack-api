@@ -52,13 +52,15 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
   });
 
   it('GET /v1/admin/status-subscribers?limit=200 endpoint pinned. 2026-05-21 — fetch URL prefixed by apiBaseUrl (admin.driftstack.dev is a static Pages origin; relative paths 404).', () => {
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200'/);
+    expect(body).toMatch(
+      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200'/,
+    );
     expect(body).toMatch(/authorization: 'Bearer ' \+ token/);
   });
 
   it('POST /v1/admin/status-subscribers/{id}/force-unsubscribe endpoint pinned. 2026-05-21 — fetch URL prefixed by apiBaseUrl.', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe'/,
+      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe'/,
     );
     expect(body).toMatch(/method: 'POST'/);
   });
