@@ -1,19 +1,18 @@
-// W899 — V-386 AccountMeResponse 14-field cross-source invariant.
+// W899 — V-386 AccountMeResponse 16-field cross-source invariant.
 // Two-hundred-twenty-fifth in the drift-guard series. Pins the
 // V-386 /v1/account/me rich-response shape:
 //
-//   AccountMeResponse (14 fields):
+//   AccountMeResponse (16 fields):
 //     - 6 base: id + email + name + tier + status + (V-352 timezone).
 //     - 2 V-298: slug + region.
-//     - 1 V-352b: avatar_url (presigned R2 GET URL, 1h short-lived).
+//     - 2 V-352b: avatar_url + avatar_source (user|idp|none).
 //     - 1 V-353h: mfa_enrolled.
 //     - 4 derived: concurrent_session_cap + concurrent_session_active
 //       + profile_cap + profile_count.
 //     - 1 V-326c: teams array (member_id + role 'admin'|'member').
 //
-//   INTENTIONAL: declared SERVER-INTERNALLY (NOT api-types) per L-001
-//   server-internal-shape convention. SDKs read AccountSchema (lean
-//   shared type); the rich /me response is dashboard-only.
+//   INTENTIONAL: declared in the OpenAPI layer rather than api-types,
+//   then mirrored by the named SDK models and dashboard consumer.
 //
 //   V-326 effective-account header is INTENTIONALLY NOT honored on
 //   /v1/account/me — always operates on the caller's own account.
@@ -34,22 +33,22 @@ function read(p: string): string {
 }
 
 describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
-  // ─── V-386 anchor + 'declared here not api-types' framing ────
+  // ─── V-386 anchor + named public response framing ────────────
 
-  it("CRITICAL apps/server/src/lib/openapi.ts has V-386 anchor + 'full /v1/account/me response shape. Defined here rather than in api-types because the SDKs read AccountSchema (the lean shared type) and the rich /me response is only ever consumed by the dashboard via the route directly'. The framing pins the lean-vs-rich split.", () => {
+  it('CRITICAL apps/server/src/lib/openapi.ts frames the richer named response mirrored by SDKs and dashboard', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     expect(p).toMatch(/V-386 — full \/v1\/account\/me response shape/);
     expect(p).toMatch(
-      /Defined here rather than\s*\n\/\/ in api-types because the SDKs read AccountSchema \(the lean shared/,
+      /Defined here rather than\s*\n\/\/ in api-types because it is richer than the lean shared AccountSchema/,
     );
     expect(p).toMatch(
-      /type\) and the rich \/me response is only ever consumed by the\s*\n\/\/ dashboard via the route directly/,
+      /This named OpenAPI component is also mirrored by the public SDK\s*\n\/\/ AccountSelfProfile models and consumed directly by the dashboard/,
     );
   });
 
-  // ─── 14-field shape ──────────────────────────────────────────
+  // ─── 16-field shape ──────────────────────────────────────────
 
-  it('CRITICAL AccountMeResponseSchema has 14 fields. Includes 6 base + 2 V-298 + 1 V-352b + 1 V-353h + 4 derived + 1 V-326c teams.', () => {
+  it('CRITICAL AccountMeResponseSchema includes avatar URL and source alongside the full rich shape.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     const m = p.match(/AccountMeResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
@@ -64,6 +63,7 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
       'slug:',
       'region:',
       'avatar_url:',
+      'avatar_source:',
       'mfa_enrolled:',
       'concurrent_session_cap:',
       'concurrent_session_active:',
@@ -86,13 +86,14 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
 
   // ─── Route emits matching shape ──────────────────────────────
 
-  it("CRITICAL apps/server/src/routes/account-me.ts emits the 15-field response (V-326c teams included). The route's return value must match the openapi schema field-for-field.", () => {
+  it('CRITICAL apps/server/src/routes/account-me.ts emits the 16-field response (V-326c teams included).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-me.ts'));
     // Sample 5 key fields from the route emission.
     expect(p).toMatch(/concurrent_session_cap: TIER_CONCURRENT_SESSION_LIMITS\[tier\]/);
     expect(p).toMatch(/concurrent_session_active: activeSessions/);
     expect(p).toMatch(/profile_cap: profileCapFor\(tier\)/);
     expect(p).toMatch(/profile_count: profileCount/);
+    expect(p).toMatch(/avatar_source: avatarSource/);
     expect(p).toMatch(
       /teams: ctx\.teams\.map\(\(t\) => \(\{\s*\n\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*\n\s*owner_name: t\.ownerName \?\? null,\s*\n\s*role: t\.role,\s*\n\s*membership_id: `mem_\$\{t\.membershipId\}`,/,
     );
@@ -116,10 +117,10 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
 
   // ─── avatar_url short-lived 1h ───────────────────────────────
 
-  it("CRITICAL avatar_url framing — 'V-352b — presigned R2 GET URL for the customer's uploaded avatar; null when none uploaded or the public bucket isn't wired in this deploy. URL is short-lived (1h).' The 1h expiry is the security contract.", () => {
+  it('CRITICAL avatar_url framing distinguishes the short-lived uploaded URL from the linked-IDP fallback.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-me.ts'));
-    expect(p).toMatch(/V-352b — presigned R2 GET URL for the customer's uploaded/);
-    expect(p).toMatch(/URL is short-lived \(1h\)/);
+    expect(p).toMatch(/V-352b — selected avatar URL: a short-lived \(1h\) presigned R2/);
+    expect(p).toMatch(/customer upload, otherwise the linked-IDP fallback/);
   });
 
   // ─── V-298a + V-298b + V-353h field-level anchors ────────────
@@ -131,16 +132,16 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
     expect(p).toMatch(/V-353h — MFA enrollment flag for dashboard header/);
   });
 
-  // ─── 15-field cardinality ────────────────────────────────────
+  // ─── 16-field cardinality ────────────────────────────────────
 
-  it('CRITICAL AccountMeResponse has 15 top-level fields + 5 nested teams-object fields = 20 total matches (sweep-3 added owner_email + owner_name to the nested teams object). The 15-top-level rich shape distinguishes /v1/account/me (dashboard) from the lean AccountSchema (SDKs).', () => {
+  it('CRITICAL AccountMeResponse has 16 top-level fields + 5 nested teams-object fields = 21 total matches.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     const m = p.match(/AccountMeResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
     const body = m![1] ?? '';
-    // Count top-level + nested fields together (15 top + 5 nested = 20).
+    // Count top-level + nested fields together (16 top + 5 nested = 21).
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
-    expect(fieldCount).toBe(20);
+    expect(fieldCount).toBe(21);
   });
 
   it('test file metadata — file exists at canonical path', () => {

@@ -114,6 +114,10 @@
           "avatar_url": {
             "type": ["string", "null"]
           },
+          "avatar_source": {
+            "type": "string",
+            "enum": ["user", "idp", "none"]
+          },
           "mfa_enrolled": {
             "type": "boolean"
           },
@@ -169,6 +173,7 @@
           "slug",
           "region",
           "avatar_url",
+          "avatar_source",
           "mfa_enrolled",
           "concurrent_session_cap",
           "concurrent_session_active",
@@ -9293,6 +9298,10 @@
                     "avatar_url": {
                       "type": ["string", "null"]
                     },
+                    "avatar_source": {
+                      "type": "string",
+                      "enum": ["user", "idp", "none"]
+                    },
                     "mfa_enrolled": {
                       "type": "boolean"
                     },
@@ -9354,6 +9363,7 @@
                     "slug",
                     "region",
                     "avatar_url",
+                    "avatar_source",
                     "mfa_enrolled",
                     "concurrent_session_cap",
                     "concurrent_session_active",
@@ -9494,6 +9504,10 @@
                     "avatar_url": {
                       "type": ["string", "null"]
                     },
+                    "avatar_source": {
+                      "type": "string",
+                      "enum": ["user", "idp", "none"]
+                    },
                     "mfa_enrolled": {
                       "type": "boolean"
                     },
@@ -9555,6 +9569,7 @@
                     "slug",
                     "region",
                     "avatar_url",
+                    "avatar_source",
                     "mfa_enrolled",
                     "concurrent_session_cap",
                     "concurrent_session_active",

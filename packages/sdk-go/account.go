@@ -34,11 +34,12 @@ type AccountSelfProfile struct {
 	Name                    *string                 `json:"name"`
 	Tier                    AccountTier             `json:"tier"`
 	Status                  AccountStatus           `json:"status"`
-	Timezone                *string                 `json:"timezone"`     // V-352
-	Slug                    *string                 `json:"slug"`         // V-298a
-	Region                  *string                 `json:"region"`       // V-298b — "us"|"eu"|"apac"|null
-	AvatarURL               *string                 `json:"avatar_url"`   // V-352b — short-lived presigned URL
-	MfaEnrolled             bool                    `json:"mfa_enrolled"` // V-353h
+	Timezone                *string                 `json:"timezone"`      // V-352
+	Slug                    *string                 `json:"slug"`          // V-298a
+	Region                  *string                 `json:"region"`        // V-298b — "us"|"eu"|"apac"|null
+	AvatarURL               *string                 `json:"avatar_url"`    // V-352b — short-lived presigned URL
+	AvatarSource            string                  `json:"avatar_source"` // "user"|"idp"|"none"
+	MfaEnrolled             bool                    `json:"mfa_enrolled"`  // V-353h
 	ConcurrentSessionCap    int                     `json:"concurrent_session_cap"`
 	ConcurrentSessionActive int                     `json:"concurrent_session_active"`
 	ProfileCap              *int                    `json:"profile_cap"` // null = enterprise

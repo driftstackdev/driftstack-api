@@ -189,6 +189,8 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     expect(go).toMatch(/Slug\s+\*string\s+`json:"slug"`\s*\/\/ V-298a/);
     expect(go).toMatch(/Region\s+\*string\s+`json:"region"`\s*\/\/ V-298b/);
     expect(go).toMatch(/AvatarURL\s+\*string\s+`json:"avatar_url"`\s*\/\/ V-352b/);
+    expect(ts).toMatch(/avatar_source: 'user' \| 'idp' \| 'none'/);
+    expect(go).toMatch(/AvatarSource\s+string\s+`json:"avatar_source"`/);
     expect(go).toMatch(/MfaEnrolled[\s\S]{0,40}`json:"mfa_enrolled"`[\s\S]{0,40}V-353h/);
   });
 

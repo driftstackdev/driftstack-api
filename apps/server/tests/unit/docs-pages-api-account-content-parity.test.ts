@@ -47,7 +47,7 @@ describe('W770 docs /api/account content parity', () => {
     );
   });
 
-  it('CRITICAL self-state field table pinned with 15 fields. Drift to dropping any would silently break SDK consumer types.', () => {
+  it('CRITICAL self-state field table pinned with 16 fields. Drift to dropping any would silently break SDK consumer types.', () => {
     const p = read(PAGE);
 
     for (const field of [
@@ -60,6 +60,7 @@ describe('W770 docs /api/account content parity', () => {
       'slug',
       'region',
       'avatar_url',
+      'avatar_source',
       'mfa_enrolled',
       'concurrent_session_cap',
       'concurrent_session_active',
@@ -109,10 +110,13 @@ describe('W770 docs /api/account content parity', () => {
     );
   });
 
-  it("CRITICAL avatar_url short-lived (1h) presigned-R2-GET framing pinned. The 'short-lived (1h) presigned R2 GET URL' wording explains the presigned-accessiction R2 bucket TTL.", () => {
+  it('CRITICAL avatar URL/source framing distinguishes removable uploads from the linked-sign-in fallback.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/short-lived \(1h\) presigned R2 GET URL\./);
+    expect(p).toMatch(/short-lived \(1h\) presigned R2 upload/);
+    expect(p).toMatch(/`user` for a removable customer upload/);
+    expect(p).toMatch(/`idp` for the read-only linked-sign-in fallback/);
+    expect(p).toMatch(/Use this field—not the URL host—to decide whether to offer Remove\./);
   });
 
   it("CRITICAL profile_cap null-on-enterprise framing pinned. Matches W769 /api/usage profiles_limit may be null + W752 dashboard atLimit 'custom'-sentinel.", () => {

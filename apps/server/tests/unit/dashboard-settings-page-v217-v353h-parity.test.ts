@@ -71,6 +71,10 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
     expect(p).toMatch(/\/\/ V-352b — avatar upload handler\./);
     expect(p).toMatch(/\/\/ V-352b — avatar remove handler\./);
     expect(p).toMatch(/boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{/);
+    expect(p).toMatch(/avatarRemoveBtn\.hidden = source !== 'user'/);
+    expect(p).toMatch(/\['user', 'idp', 'none'\]\.includes\(me\.avatar_source\)/);
+    expect(p).toMatch(/snapshotKnownBeforeUpload &&/);
+    expect(p).toMatch(/The response was lost, but removal completed/);
   });
 
   it("CRITICAL V-331b act-as header passthrough pinned in settings authedFetch. Drift would let team-RBAC customers update the wrong owner's settings.", () => {

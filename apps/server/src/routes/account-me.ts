@@ -199,6 +199,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // R2-uploaded avatar wins; OAuth IDP avatar is the fallback
       // (matches account_avatar_source enum priority: user > idp).
       const avatarUrl = r2AvatarUrl ?? oauthFallback;
+      const avatarSource = ctx.account.avatarR2Key ? 'user' : oauthFallback ? 'idp' : 'none';
 
       return {
         id: `acc_${accountId}`,
@@ -212,10 +213,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         slug: ctx.account.slug,
         // V-298b — data-residency region preference (null when unset).
         region: ctx.account.region,
-        // V-352b — presigned R2 GET URL for the customer's uploaded
-        // avatar; null when none uploaded or the public bucket isn't
-        // wired in this deploy. URL is short-lived (1h).
+        // V-352b — selected avatar URL: a short-lived (1h) presigned R2
+        // customer upload, otherwise the linked-IDP fallback. Null only
+        // when neither source is available.
         avatar_url: avatarUrl,
+        // A URL alone cannot tell a removable customer upload from the
+        // read-only OAuth fallback. Keep that distinction public so clients
+        // never offer a destructive control that cannot affect the image.
+        avatar_source: avatarSource,
         // V-353h — MFA enrollment flag for dashboard header / settings.
         mfa_enrolled: mfaStatus !== null && mfaStatus.enrolled,
         concurrent_session_cap: TIER_CONCURRENT_SESSION_LIMITS[tier],
@@ -279,7 +284,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         }
       }
       // Return the same full-shape response as GET /me — the OpenAPI
-      // spec + every SDK type claim AccountMeResponse (15 fields).
+      // spec + every SDK type claim AccountMeResponse (16 fields).
       // Previously the route returned only the 8 written/persisted
       // fields, causing a type-vs-runtime mismatch on every SDK
       // consumer (avatar_url / mfa_enrolled / concurrent_session_*
@@ -295,6 +300,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           updated.avatarR2Key ? Promise.resolve(null) : oauthAvatarFallback(updated.id),
         ]);
       const avatarUrl = r2AvatarUrl ?? oauthFallback;
+      const avatarSource = updated.avatarR2Key ? 'user' : oauthFallback ? 'idp' : 'none';
       return {
         id: `acc_${updated.id}`,
         email: updated.email,
@@ -305,6 +311,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         slug: updated.slug,
         region: updated.region,
         avatar_url: avatarUrl,
+        avatar_source: avatarSource,
         mfa_enrolled: mfaStatus !== null && mfaStatus.enrolled,
         concurrent_session_cap: TIER_CONCURRENT_SESSION_LIMITS[tier],
         concurrent_session_active: activeSessions,

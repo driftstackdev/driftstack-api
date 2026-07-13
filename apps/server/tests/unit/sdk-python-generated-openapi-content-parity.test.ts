@@ -115,6 +115,8 @@ describe('W622 sdk-python generated + openapi content parity', () => {
     expect(body).toMatch(/role: Literal\["admin", "member"\]/);
     expect(body).toMatch(/^class AccountMeResponse\(BaseModel\):$/m);
     expect(body).toMatch(/region: Literal\["us", "eu", "apac"\] \| None/);
+    expect(body).toMatch(/avatar_source: Literal\["user", "idp", "none"\]/);
+    expect(body.match(/timeoutMs: conint\(ge=0\) \| None = None/g)).toHaveLength(5);
     expect(body).toMatch(/mfa_enrolled: bool/);
     expect(body).toMatch(/concurrent_session_cap: conint\(ge=0\)/);
     expect(body).toMatch(/profile_count: conint\(ge=0\)/);

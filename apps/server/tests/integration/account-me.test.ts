@@ -22,6 +22,8 @@ interface AccountMeResponse {
   tier: string;
   status: string;
   timezone: string | null;
+  avatar_url: string | null;
+  avatar_source: 'user' | 'idp' | 'none';
   /** V-353h — true when the calling account has MFA enrolled. */
   mfa_enrolled: boolean;
   concurrent_session_cap: number;
@@ -64,6 +66,8 @@ describe('GET /v1/account/me', () => {
     expect(body.concurrent_session_active).toBe(0);
     expect(typeof body.profile_cap).toBe('number');
     expect(body.profile_count).toBe(0);
+    expect(body.avatar_url).toBeNull();
+    expect(body.avatar_source).toBe('none');
     // V-353h — MFA flag present, false on a fresh account.
     expect(body.mfa_enrolled).toBe(false);
   });
@@ -214,12 +218,12 @@ describe('PATCH /v1/account/me (V-352)', () => {
   // ── End-to-end shape pin: PATCH 200 returns the FULL AccountMeResponse,
   // matching GET /me + the OpenAPI claim + every SDK type. Previously the
   // route returned only the 8 written/persisted fields, leaving the other
-  // 7 (avatar_url / mfa_enrolled / concurrent_session_* / profile_* /
+  // 8 (avatar_url / avatar_source / mfa_enrolled / concurrent_session_* / profile_* /
   // teams) undefined on the SDK consumer — a type-vs-runtime mismatch
   // that all three SDK type checkers happily compiled. Test pins the
   // full shape so a future "trim the PATCH response" optimisation can't
   // silently break SDK consumers again.
-  it('200 returns the full 15-field AccountMeResponse shape — matches GET /me', async () => {
+  it('200 returns the full 16-field AccountMeResponse shape — matches GET /me', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
       method: 'PATCH',
@@ -245,6 +249,7 @@ describe('PATCH /v1/account/me (V-352)', () => {
 
     // The 7 derived fields that were missing before the fix.
     expect(body).toHaveProperty('avatar_url'); // string | null
+    expect(body.avatar_source).toBe('none');
     expect(typeof body.mfa_enrolled).toBe('boolean');
     expect(typeof body.concurrent_session_cap).toBe('number');
     expect(body.concurrent_session_cap as number).toBeGreaterThan(0);
@@ -424,6 +429,7 @@ describe('POST /v1/account/me/avatar (V-352b)', () => {
     expect(me.statusCode).toBe(200);
     const meBody = me.json<AccountMeResponse & { avatar_url: string | null }>();
     expect(meBody.avatar_url).toMatch(/^https:\/\/r2-fake\.test\//);
+    expect(meBody.avatar_source).toBe('user');
   });
 
   it('400 when content_type is not in the allow-list', async () => {
@@ -538,6 +544,65 @@ describe('DELETE /v1/account/me/avatar (V-352b)', () => {
       headers: auth(fx),
     });
     expect(res.statusCode).toBe(204);
+  });
+
+  it('restores the OAuth fallback and exposes it as non-removable after clearing an upload', async () => {
+    fx = await buildTestApp({
+      oauthClient: {
+        signingSecret: '0123456789abcdef0123456789abcdef',
+        callbackUrlBase: 'https://api.test/oauth',
+        dashboardOrigin: 'https://app.test',
+        google: { clientId: 'google-client', clientSecret: 'google-secret' },
+      },
+    });
+    await fx.oauthLinksRepo.insertLink({
+      accountId: fx.accountId,
+      provider: 'google',
+      providerSub: 'google-avatar-user',
+      providerEmail: 'avatar@example.test',
+      providerName: 'Avatar User',
+      providerAvatarUrl: 'https://images.example.test/idp-avatar.png',
+    });
+
+    const beforeUpload = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: auth(fx),
+    });
+    expect(beforeUpload.json<AccountMeResponse>()).toMatchObject({
+      avatar_url: 'https://images.example.test/idp-avatar.png',
+      avatar_source: 'idp',
+    });
+
+    const upload = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { content_type: 'image/png', data_base64: ONE_BY_ONE_PNG_BASE64 },
+    });
+    expect(upload.statusCode).toBe(200);
+    const uploaded = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: auth(fx),
+    });
+    expect(uploaded.json<AccountMeResponse>().avatar_source).toBe('user');
+
+    const remove = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/account/me/avatar',
+      headers: auth(fx),
+    });
+    expect(remove.statusCode).toBe(204);
+    const restored = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: auth(fx),
+    });
+    expect(restored.json<AccountMeResponse>()).toMatchObject({
+      avatar_url: 'https://images.example.test/idp-avatar.png',
+      avatar_source: 'idp',
+    });
   });
 
   it('401 without an Authorization header', async () => {

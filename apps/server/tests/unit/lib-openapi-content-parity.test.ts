@@ -14,8 +14,8 @@
 //     call.
 //   • Bearer auth scheme component.
 //   • V-386 AccountMeResponse inline rationale: defined here NOT
-//     api-types because SDKs read AccountSchema (lean shared type)
-//     and rich /me consumed only by dashboard via route directly.
+//     api-types because it is richer than AccountSchema, then mirrored
+//     into named public SDK response models + the dashboard.
 //   • Component-promotion rationale: reusable schemas promoted to
 //     components.schemas so codegen produces named types (Pydantic
 //     / Go structs) instead of inline anonymous shapes.
@@ -65,15 +65,15 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     );
   });
 
-  it('V-386 AccountMeResponse inline rationale framing pinned: defined HERE rather than api-types because SDKs read AccountSchema (lean shared type) and rich /me response only consumed by dashboard via route directly', () => {
+  it('V-386 AccountMeResponse inline rationale frames the rich OpenAPI component and SDK/dashboard consumers', () => {
     expect(body).toMatch(
-      /\/\/ V-386 — full \/v1\/account\/me response shape\. Defined here rather than\s*\n?\s*\/\/ in api-types because the SDKs read AccountSchema \(the lean shared\s*\n?\s*\/\/ type\) and the rich \/me response is only ever consumed by the\s*\n?\s*\/\/ dashboard via the route directly\./,
+      /\/\/ V-386 — full \/v1\/account\/me response shape\. Defined here rather than\s*\n?\s*\/\/ in api-types because it is richer than the lean shared AccountSchema\.\s*\n?\s*\/\/ This named OpenAPI component is also mirrored by the public SDK\s*\n?\s*\/\/ AccountSelfProfile models and consumed directly by the dashboard\./,
     );
   });
 
-  it('AccountMeResponseSchema shape: id + email + name nullable + tier + status + timezone nullable + slug nullable + region nullable + avatar_url nullable + mfa_enrolled bool + 4 capacity ints + teams array of {owner_account_id + owner_email + owner_name nullable + role admin|member + membership_id}', () => {
+  it('AccountMeResponseSchema shape includes avatar_url plus avatar_source user/idp/none', () => {
     expect(body).toMatch(
-      /const AccountMeResponseSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*email: z\.string\(\)\.email\(\),\s*\n?\s*name: z\.string\(\)\.nullable\(\),\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*status: AccountStatusSchema,\s*\n?\s*timezone: z\.string\(\)\.nullable\(\),\s*\n?\s*slug: z\.string\(\)\.nullable\(\),\s*\n?\s*region: AccountRegionSchema\.nullable\(\),\s*\n?\s*avatar_url: z\.string\(\)\.nullable\(\),\s*\n?\s*mfa_enrolled: z\.boolean\(\),\s*\n?\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*\n?\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*teams: z\.array\(/,
+      /const AccountMeResponseSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*email: z\.string\(\)\.email\(\),\s*\n?\s*name: z\.string\(\)\.nullable\(\),\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*status: AccountStatusSchema,\s*\n?\s*timezone: z\.string\(\)\.nullable\(\),\s*\n?\s*slug: z\.string\(\)\.nullable\(\),\s*\n?\s*region: AccountRegionSchema\.nullable\(\),\s*\n?\s*avatar_url: z\.string\(\)\.nullable\(\),\s*\n?\s*avatar_source: z\.enum\(\['user', 'idp', 'none'\]\),\s*\n?\s*mfa_enrolled: z\.boolean\(\),\s*\n?\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*\n?\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*teams: z\.array\(/,
     );
   });
 

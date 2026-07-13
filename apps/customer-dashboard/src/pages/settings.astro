@@ -138,6 +138,12 @@ const EMAIL_EVENTS = [
             <p class="text-xs text-tk-ink-3">
               PNG, JPEG, or WebP. Max 2 MB. Stored privately on Cloudflare R2.
             </p>
+            <p data-field="avatar-source" class="text-xs text-tk-ink-3">No avatar set.</p>
+            <p
+              data-field="avatar-status"
+              role="status"
+              class="hidden rounded border border-tk-border bg-tk-surface-2 px-2 py-1 text-xs text-tk-ink-2"
+            ></p>
             <p
               data-field="avatar-error"
               class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err-text"
@@ -432,9 +438,13 @@ const EMAIL_EVENTS = [
       const avatarPreview = root.querySelector('[data-field="avatar-preview"]');
       const avatarInput = root.querySelector('[data-field="avatar-input"]');
       const avatarRemoveBtn = root.querySelector('[data-button="avatar-remove"]');
+      const avatarSourceLabel = root.querySelector('[data-field="avatar-source"]');
+      const avatarStatus = root.querySelector('[data-field="avatar-status"]');
       const avatarError = root.querySelector('[data-field="avatar-error"]');
       let avatarUploadInFlight = false;
       let avatarRemoveInFlight = false;
+      let currentAvatarSource = 'none';
+      let avatarSnapshotKnown = false;
 
       function showAvatarError(msg) {
         if (!avatarError) return;
@@ -447,18 +457,58 @@ const EMAIL_EVENTS = [
         avatarError.classList.add('hidden');
       }
 
-      function setAvatarPreview(url) {
+      function showAvatarStatus(msg) {
+        if (!avatarStatus) return;
+        avatarStatus.textContent = msg;
+        avatarStatus.classList.remove('hidden');
+      }
+      function clearAvatarStatus() {
+        if (!avatarStatus) return;
+        avatarStatus.textContent = '';
+        avatarStatus.classList.add('hidden');
+      }
+
+      function normalizedAvatarSource(me) {
+        if (me && ['user', 'idp', 'none'].includes(me.avatar_source)) {
+          return me.avatar_source;
+        }
+        // Backward-compatible during a staggered dashboard/API rollout.
+        return me && me.avatar_url ? 'user' : 'none';
+      }
+
+      function setAvatarPreview(url, source = 'none') {
+        currentAvatarSource = source;
         if (!avatarPreview) return;
         if (url) {
           avatarPreview.innerHTML =
             '<img src="' +
             escapeHtml(url) +
             '" alt="avatar" class="h-full w-full object-cover" />';
-          if (avatarRemoveBtn) avatarRemoveBtn.hidden = false;
         } else {
           avatarPreview.innerHTML = 'no avatar';
-          if (avatarRemoveBtn) avatarRemoveBtn.hidden = true;
         }
+        if (avatarRemoveBtn) avatarRemoveBtn.hidden = source !== 'user';
+        if (avatarSourceLabel) {
+          avatarSourceLabel.textContent =
+            source === 'user'
+              ? 'Uploaded by you. Remove restores your linked-account image when available.'
+              : source === 'idp'
+                ? 'From your linked sign-in. Upload an image to replace it.'
+                : 'No avatar set.';
+        }
+      }
+
+      function fetchCurrentAccount() {
+        return boundedFetch(apiBaseUrl + '/v1/account/me', {
+          headers: { authorization: 'Bearer ' + token },
+        }).then((r) =>
+          r.ok
+            ? r.json()
+            : r
+                .json()
+                .catch(() => ({}))
+                .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+        );
       }
 
       function fileToBase64(file) {
@@ -481,10 +531,7 @@ const EMAIL_EVENTS = [
 
       // Load current profile values (GET /v1/account/me).
       if (token && profileNameInput && profileTzInput) {
-        boundedFetch(apiBaseUrl + '/v1/account/me', {
-          headers: { authorization: 'Bearer ' + token },
-        })
-          .then((r) => (r.ok ? r.json() : null))
+        fetchCurrentAccount()
           .then((me) => {
             if (!me) return;
             if (me.name) profileNameInput.value = me.name;
@@ -500,7 +547,8 @@ const EMAIL_EVENTS = [
               if (headerAcct) headerAcct.textContent = 'Account · ' + me.id.slice(0, 16) + '…';
             }
             // V-352b — initial avatar preview.
-            setAvatarPreview(me.avatar_url || null);
+            avatarSnapshotKnown = true;
+            setAvatarPreview(me.avatar_url || null, normalizedAvatarSource(me));
           })
           .catch(() => {
             /* leave inputs blank */
@@ -512,6 +560,7 @@ const EMAIL_EVENTS = [
         avatarInput.addEventListener('change', (ev) => {
           if (avatarUploadInFlight) return;
           clearAvatarError();
+          clearAvatarStatus();
           const target = ev.target;
           if (!(target instanceof HTMLInputElement)) return;
           const file = target.files && target.files[0];
@@ -532,6 +581,8 @@ const EMAIL_EVENTS = [
             return;
           }
           avatarUploadInFlight = true;
+          const sourceBeforeUpload = currentAvatarSource;
+          const snapshotKnownBeforeUpload = avatarSnapshotKnown;
           target.disabled = true;
           target.setAttribute('aria-busy', 'true');
           fileToBase64(file)
@@ -557,10 +608,41 @@ const EMAIL_EVENTS = [
                     .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
             )
             .then((body) => {
-              setAvatarPreview(body.avatar_url || null);
+              avatarSnapshotKnown = true;
+              setAvatarPreview(body.avatar_url || null, 'user');
+              showAvatarStatus('Avatar uploaded.');
             })
             .catch((err) => {
-              showAvatarError(requestErrorMessage(err, 'Upload failed.'));
+              if (!err || err.name !== 'AbortError') {
+                showAvatarError(requestErrorMessage(err, 'Upload failed.'));
+                return;
+              }
+              return fetchCurrentAccount()
+                .then((me) => {
+                  const source = normalizedAvatarSource(me);
+                  avatarSnapshotKnown = true;
+                  setAvatarPreview(me.avatar_url || null, source);
+                  if (
+                    snapshotKnownBeforeUpload &&
+                    source === 'user' &&
+                    sourceBeforeUpload !== 'user'
+                  ) {
+                    showAvatarStatus(
+                      'The response was lost, but your uploaded avatar is now active. Do not upload it again.',
+                    );
+                    return;
+                  }
+                  showAvatarError(
+                    source === 'user'
+                      ? 'The response was lost. The current uploaded avatar was refreshed; check the image before trying again.'
+                      : 'Upload was not confirmed. The current avatar was refreshed; try again only if the new image is not shown.',
+                  );
+                })
+                .catch(() => {
+                  showAvatarError(
+                    'The upload outcome is unknown. Reload the page and check the avatar before trying again.',
+                  );
+                });
             })
             .finally(() => {
               avatarUploadInFlight = false;
@@ -576,6 +658,7 @@ const EMAIL_EVENTS = [
         avatarRemoveBtn.addEventListener('click', () => {
           if (avatarRemoveInFlight) return;
           clearAvatarError();
+          clearAvatarStatus();
           if (!token) {
             showAvatarError('Sign in to remove your avatar.');
             return;
@@ -595,10 +678,50 @@ const EMAIL_EVENTS = [
                 .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
             })
             .then(() => {
-              setAvatarPreview(null);
+              return fetchCurrentAccount()
+                .then((me) => {
+                  avatarSnapshotKnown = true;
+                  setAvatarPreview(me.avatar_url || null, normalizedAvatarSource(me));
+                  showAvatarStatus(
+                    me.avatar_source === 'idp'
+                      ? 'Uploaded avatar removed. Your linked-account image is now shown.'
+                      : 'Uploaded avatar removed.',
+                  );
+                })
+                .catch(() => {
+                  setAvatarPreview(null, 'none');
+                  showAvatarStatus(
+                    'Uploaded avatar removed. Reload to restore any linked-account image.',
+                  );
+                });
             })
             .catch((err) => {
-              showAvatarError(requestErrorMessage(err, 'Remove failed.'));
+              if (!err || err.name !== 'AbortError') {
+                showAvatarError(requestErrorMessage(err, 'Remove failed.'));
+                return;
+              }
+              return fetchCurrentAccount()
+                .then((me) => {
+                  const source = normalizedAvatarSource(me);
+                  avatarSnapshotKnown = true;
+                  setAvatarPreview(me.avatar_url || null, source);
+                  if (source !== 'user') {
+                    showAvatarStatus(
+                      source === 'idp'
+                        ? 'The response was lost, but removal completed. Your linked-account image is now shown.'
+                        : 'The response was lost, but removal completed. No uploaded avatar remains.',
+                    );
+                    return;
+                  }
+                  showAvatarError(
+                    'Removal did not complete; the uploaded avatar is still active. It is safe to try again.',
+                  );
+                })
+                .catch(() => {
+                  showAvatarError(
+                    'The removal outcome is unknown. Reload the page and check the avatar before trying again.',
+                  );
+                });
             })
             .finally(() => {
               avatarRemoveInFlight = false;

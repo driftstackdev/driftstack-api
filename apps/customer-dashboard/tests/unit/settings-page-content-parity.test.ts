@@ -72,6 +72,12 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
+  it('avatar controls distinguish removable uploads from linked-account fallbacks', () => {
+    expect(body).toMatch(/avatar_source/);
+    expect(body).toMatch(/avatarRemoveBtn\.hidden = source !== 'user'/);
+    expect(body).toMatch(/From your linked sign-in\. Upload an image to replace it\./);
+  });
+
   it('V-217 progressive-enhancement framing pinned (SSG mocks + inline-script live wiring; V-204 is the remaining live-wire after the /security split)', () => {
     expect(body).toMatch(
       /V-217 — progressive-enhancement live wiring against:[\s\S]*?\/v1\/account\/email-preferences \(V-204\)/,

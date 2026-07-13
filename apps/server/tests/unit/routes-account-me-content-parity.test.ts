@@ -97,7 +97,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     );
   });
 
-  it('GET /me reply: 14-field shape (acc_ id + email + name + tier + status + timezone + slug + region + avatar_url + mfa_enrolled + concurrent_session caps + profile caps + teams V-326c)', () => {
+  it('GET /me reply includes avatar URL plus its removable user / read-only IDP / none source', () => {
     expect(body).toMatch(/id: `acc_\$\{accountId\}`,/);
     expect(body).toMatch(/timezone: ctx\.account\.timezone,/);
     expect(body).toMatch(/\/\/ V-298a — readable account handle \(null when unset\)\./);
@@ -105,6 +105,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body).toMatch(/\/\/ V-298b — data-residency region preference \(null when unset\)\./);
     expect(body).toMatch(/region: ctx\.account\.region,/);
     expect(body).toMatch(/avatar_url: avatarUrl,/);
+    expect(body).toMatch(/avatar_source: avatarSource,/);
     expect(body).toMatch(/\/\/ V-353h — MFA enrollment flag for dashboard header \/ settings\./);
     expect(body).toMatch(/mfa_enrolled: mfaStatus !== null && mfaStatus\.enrolled,/);
     expect(body).toMatch(/concurrent_session_cap: TIER_CONCURRENT_SESSION_LIMITS\[tier\],/);

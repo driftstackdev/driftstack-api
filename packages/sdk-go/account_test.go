@@ -19,6 +19,7 @@ func TestAccount_Me(t *testing.T) {
 		"slug":                      "alice-co",
 		"region":                    "eu",
 		"avatar_url":                "https://r2.example/avatars/alice.png?sig=...",
+		"avatar_source":             "user",
 		"mfa_enrolled":              true,
 		"concurrent_session_cap":    8,
 		"concurrent_session_active": 2,
@@ -52,6 +53,9 @@ func TestAccount_Me(t *testing.T) {
 	if got.Region == nil || *got.Region != "eu" {
 		t.Errorf("region=%v", got.Region)
 	}
+	if got.AvatarSource != "user" {
+		t.Errorf("avatar_source=%q", got.AvatarSource)
+	}
 	if !got.MfaEnrolled {
 		t.Errorf("mfa_enrolled should be true")
 	}
@@ -75,6 +79,7 @@ func TestAccount_Me_NullableFields(t *testing.T) {
 		"slug":                      nil,
 		"region":                    nil,
 		"avatar_url":                nil,
+		"avatar_source":             "none",
 		"mfa_enrolled":              false,
 		"concurrent_session_cap":    1,
 		"concurrent_session_active": 0,

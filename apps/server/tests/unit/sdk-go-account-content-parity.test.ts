@@ -73,7 +73,10 @@ describe('W590.B packages/sdk-go/account.go content parity', () => {
     expect(body).toMatch(
       /AvatarURL\s+\*string\s+`json:"avatar_url"`\s+\/\/ V-352b — short-lived presigned URL/,
     );
-    expect(body).toMatch(/MfaEnrolled\s+bool\s+`json:"mfa_enrolled"` \/\/ V-353h/);
+    expect(body).toMatch(
+      /AvatarSource\s+string\s+`json:"avatar_source"`\s+\/\/ "user"\|"idp"\|"none"/,
+    );
+    expect(body).toMatch(/MfaEnrolled\s+bool\s+`json:"mfa_enrolled"`\s+\/\/ V-353h/);
     expect(body).toMatch(/Teams\s+\[\]AccountTeamMembership `json:"teams"` \/\/ V-326c/);
   });
 

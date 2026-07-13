@@ -160,9 +160,9 @@ const PaginatedApiKeysSchema = z.object({
 });
 
 // V-386 — full /v1/account/me response shape. Defined here rather than
-// in api-types because the SDKs read AccountSchema (the lean shared
-// type) and the rich /me response is only ever consumed by the
-// dashboard via the route directly.
+// in api-types because it is richer than the lean shared AccountSchema.
+// This named OpenAPI component is also mirrored by the public SDK
+// AccountSelfProfile models and consumed directly by the dashboard.
 const AccountMeResponseSchema = z.object({
   id: z.string(),
   email: z.string().email(),
@@ -173,6 +173,7 @@ const AccountMeResponseSchema = z.object({
   slug: z.string().nullable(),
   region: AccountRegionSchema.nullable(),
   avatar_url: z.string().nullable(),
+  avatar_source: z.enum(['user', 'idp', 'none']),
   mfa_enrolled: z.boolean(),
   concurrent_session_cap: z.number().int().nonnegative(),
   concurrent_session_active: z.number().int().nonnegative(),

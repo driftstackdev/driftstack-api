@@ -96,6 +96,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     expect(body).toMatch(
       /\/\*\* V-352b — short-lived \(~1h\) presigned R2 GET URL; null when no avatar\. \*\/\s*\n?\s*avatar_url: string \| null;/,
     );
+    expect(body).toMatch(/avatar_source: 'user' \| 'idp' \| 'none';/);
   });
 
   it('V-353h mfa_enrolled — boolean (true once TOTP enrollment verified). Drift to making nullable would let dashboards render an "MFA: unknown" state (vs the clear yes/no).', () => {

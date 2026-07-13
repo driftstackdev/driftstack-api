@@ -29,6 +29,8 @@ export interface AccountSelfProfile {
   region: 'us' | 'eu' | 'apac' | null;
   /** V-352b — short-lived (~1h) presigned R2 GET URL; null when no avatar. */
   avatar_url: string | null;
+  /** Whether avatar_url is a removable upload, read-only IDP fallback, or absent. */
+  avatar_source: 'user' | 'idp' | 'none';
   /** V-353h — true once TOTP enrollment is verified. */
   mfa_enrolled: boolean;
   /** Concurrent session cap for this account's tier. */
@@ -81,10 +83,7 @@ export interface UploadAvatarResponse {
 // previously omitted, leaving real buckets unhandled).
 export interface RateLimitBucket {
   bucket_key:
-    | 'global'
-    | 'sessions:create'
-    | 'agent_sessions:message'
-    | 'agent_sessions:input_event';
+    'global' | 'sessions:create' | 'agent_sessions:message' | 'agent_sessions:input_event';
   capacity: number;
   refill_per_second: number;
   source: 'tier_default' | 'override';

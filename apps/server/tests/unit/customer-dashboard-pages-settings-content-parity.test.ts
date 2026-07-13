@@ -90,6 +90,9 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(
       /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*\n?\s*method: 'DELETE',/,
     );
+    expect(body).toMatch(/data-field="avatar-source"/);
+    expect(body).toMatch(/avatarRemoveBtn\.hidden = source !== 'user'/);
+    expect(body).toMatch(/fetchCurrentAccount\(\)/);
   });
 
   it("V-331b act-as header in authedFetch — pinned so the team-scoped flow propagates to settings reads/writes (drift would let team managers accidentally modify their OWN email prefs when trying to manage a team-mate's account)", () => {
