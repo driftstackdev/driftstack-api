@@ -39,6 +39,12 @@ import {
   HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES,
   HARNESS_HEARTBEAT_MAX_CONCURRENT,
   HARNESS_FRAME_ID_MAX_LENGTH,
+  HARNESS_RESULT_ERROR_MAX_LENGTH,
+  HARNESS_RESULT_FILENAME_MAX_LENGTH,
+  HARNESS_RESULT_MIME_MAX_LENGTH,
+  HARNESS_DOWNLOAD_MAX_FILES,
+  HARNESS_INTENT_OUTPUT_MAX_BYTES,
+  HARNESS_DOWNLOAD_DATA_MAX_BYTES,
   PAGE_STATE_URL_MAX_LENGTH,
   PAGE_STATE_TEXT_MAX_LENGTH,
   PROFILE_SAVED_INLINE_MAX_BYTES,
@@ -64,6 +70,7 @@ import {
   HarnessOutboundSchema,
   CookieSchema,
   CookiesResultSchema,
+  base64DecodedByteLength,
 } from '../../src/schemas/harness-control-protocol.js';
 import { serializeTrimProfile } from '../../src/services/harness-control-codec.js';
 
@@ -217,8 +224,19 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   });
 
   it('IntentResult envelope pinned: type:intentResult discriminator + sessionId, intentId, success, durationMs, outputData? (base64 string), errorCode?, errorMessage?', () => {
+    expect(body).toContain('export const IntentResultEnvelopeSchema = z.object({');
+    expect(body).toContain("type: z.literal('intentResult'),");
+    expect(body).toContain('sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('intentId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain(
+      'durationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),',
+    );
     expect(body).toMatch(
-      /export const IntentResultEnvelopeSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('intentResult'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*success: z\.boolean\(\),\s*\n?\s*durationMs: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*outputData: z\.string\(\)\.optional\(\),\s*\n?\s*errorCode: HarnessErrorCodeSchema\.optional\(\),\s*\n?\s*errorMessage: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /outputData: boundedBase64Schema\(\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BYTES,\s*\n?\s*\)\.optional\(\),/,
+    );
+    expect(body).toContain('errorCode: HarnessErrorCodeSchema.optional(),');
+    expect(body).toContain(
+      'errorMessage: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),',
     );
   });
 
@@ -258,9 +276,10 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const SetCookiesRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('setCookies'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*cookies: z\.array\(CookieSchema\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
     // node→CP RESULT — ok?/error?, lenient forward-compat like cookiesResult.
-    expect(body).toMatch(
-      /export const SetCookiesResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('setCookiesResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
-    );
+    expect(body).toContain('export const SetCookiesResultSchema = z.object({');
+    expect(body).toContain("type: z.literal('setCookiesResult'),");
+    expect(body).toContain('requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),');
   });
 
   it('history-navigation frames pinned: navigateHistory (CP→node, strict, direction enum back|forward, optional tabId) + navigateHistoryResult (node→CP, in union)', () => {
@@ -276,9 +295,10 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain("direction: z.enum(['back', 'forward']),");
     expect(body).toContain('tabId: z.string().optional(),');
     // node→CP RESULT — ok?/error?, lenient forward-compat like setCookiesResult.
-    expect(body).toMatch(
-      /export const NavigateHistoryResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('navigateHistoryResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
-    );
+    expect(body).toContain('export const NavigateHistoryResultSchema = z.object({');
+    expect(body).toContain("type: z.literal('navigateHistoryResult'),");
+    expect(body).toContain('requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain('error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),');
   });
 
   it('profile-trim frames pinned: trimProfile (CP→node, strict, JIT crypto envelope) + trimResult (node→CP, in union)', () => {
@@ -292,9 +312,16 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const TrimProfileRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('trimProfile'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profile_id: z\.string\(\)\.min\(1\),\s*\n?\s*dek: z\.string\(\)\.min\(1\),\s*\n?\s*sealed_blob: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_url: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_put_url: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
     // node→CP RESULT — ok?/newSizeBytes?/bytesReclaimed?/error?, lenient like cookiesResult.
-    expect(body).toMatch(
-      /export const TrimProfileResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('trimResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profileId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*newSizeBytes: z\.number\(\)\.int\(\)\.nonnegative\(\)\.optional\(\),\s*\n?\s*bytesReclaimed: z\.number\(\)\.int\(\)\.nonnegative\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    expect(body).toContain('export const TrimProfileResultSchema = z.object({');
+    expect(body).toContain("type: z.literal('trimResult'),");
+    expect(body).toContain('profileId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    expect(body).toContain(
+      'newSizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),',
     );
+    expect(body).toContain(
+      'bytesReclaimed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),',
+    );
+    expect(body).toContain('error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),');
   });
 
   it('trimProfile WIRE keys are snake_case (A3-root-caused regression: camelCase broke the box Codable decode → trim never ran)', () => {
@@ -1539,5 +1566,110 @@ describe('harness-control-protocol behavioral contract', () => {
         cookies: jar2001,
       }).success,
     ).toBe(false);
+  });
+
+  it('correlated result frames enforce producer byte limits plus bounded ids, errors, arrays, and file metadata before settling API requests', () => {
+    expect(base64DecodedByteLength('')).toBe(0);
+    expect(base64DecodedByteLength('AA==')).toBe(1);
+    expect(base64DecodedByteLength('AAE=')).toBe(2);
+    expect(base64DecodedByteLength('AAEC')).toBe(3);
+    expect(base64DecodedByteLength('***')).toBeNull();
+
+    const validIntentOutput = Buffer.from(JSON.stringify({ ok: true }), 'utf8').toString('base64');
+    expect(
+      IntentResultEnvelopeSchema.safeParse({
+        type: 'intentResult',
+        sessionId: 'agt_1',
+        intentId: 'int_1',
+        success: true,
+        durationMs: 1,
+        outputData: validIntentOutput,
+      }).success,
+    ).toBe(true);
+    const oversizedIntentOutput = Buffer.alloc(HARNESS_INTENT_OUTPUT_MAX_BYTES + 1).toString(
+      'base64',
+    );
+    expect(
+      IntentResultEnvelopeSchema.safeParse({
+        type: 'intentResult',
+        sessionId: 'agt_1',
+        intentId: 'int_1',
+        success: true,
+        durationMs: 1,
+        outputData: oversizedIntentOutput,
+      }).success,
+    ).toBe(false);
+
+    const filesAtCap = Array.from({ length: HARNESS_DOWNLOAD_MAX_FILES }, (_, i) => ({
+      name: `file-${i}.txt`,
+      size: i,
+      mime: 'text/plain',
+    }));
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'downloadsList',
+        requestId: 'req_1',
+        sessionId: 'agt_1',
+        files: filesAtCap,
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'downloadsList',
+        requestId: 'req_1',
+        sessionId: 'agt_1',
+        files: [...filesAtCap, { name: 'over.txt', size: 1 }],
+      }).success,
+    ).toBe(false);
+
+    // Empty downloads are legitimate; malformed base64 and oversized returned
+    // metadata are not. The 64 MiB decoded ceiling is pinned without allocating
+    // an 85 MiB encoded fixture in every unit-test run.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'downloadData',
+        requestId: 'req_1',
+        sessionId: 'agt_1',
+        name: 'empty.txt',
+        mime: 'text/plain',
+        dataB64: '',
+      }).success,
+    ).toBe(true);
+    for (const invalid of [
+      { dataB64: '***' },
+      { name: 'n'.repeat(HARNESS_RESULT_FILENAME_MAX_LENGTH + 1) },
+      { mime: 'm'.repeat(HARNESS_RESULT_MIME_MAX_LENGTH + 1) },
+      { error: 'e'.repeat(HARNESS_RESULT_ERROR_MAX_LENGTH + 1) },
+    ]) {
+      expect(
+        HarnessOutboundSchema.safeParse({
+          type: 'downloadData',
+          requestId: 'req_1',
+          sessionId: 'agt_1',
+          name: 'file.txt',
+          ...invalid,
+        }).success,
+      ).toBe(false);
+    }
+    expect(HARNESS_DOWNLOAD_DATA_MAX_BYTES).toBe(64 * 1024 * 1024);
+
+    const oversizedId = 'i'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1);
+    const resultFrames = [
+      { type: 'cookiesResult', requestId: oversizedId, sessionId: 'agt_1', cookies: [] },
+      { type: 'setCookiesResult', requestId: oversizedId, sessionId: 'agt_1', ok: true },
+      { type: 'navigateHistoryResult', requestId: oversizedId, sessionId: 'agt_1', ok: true },
+      { type: 'uploadResult', requestId: oversizedId, sessionId: 'agt_1' },
+      { type: 'downloadsList', requestId: oversizedId, sessionId: 'agt_1', files: [] },
+      {
+        type: 'downloadData',
+        requestId: oversizedId,
+        sessionId: 'agt_1',
+        name: 'f',
+      },
+      { type: 'trimResult', requestId: oversizedId, profileId: 'prof_1', ok: true },
+    ];
+    for (const frame of resultFrames) {
+      expect(HarnessOutboundSchema.safeParse(frame).success).toBe(false);
+    }
   });
 });

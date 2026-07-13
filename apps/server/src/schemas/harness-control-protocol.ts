@@ -74,7 +74,7 @@ export const HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS = 30;
 // activeSessionStates' key count. This map feeds the process-wide
 // SessionLivenessStore (session-liveness-store.ts), a SINGLE Map shared by
 // every fleet node and hard-capped at maxEntries=5_000. Without a schema-level
-// bound, one node's oversized beat (still well within the 16 MiB frame cap)
+// bound, one node's oversized beat (still well within the 96 MiB frame cap)
 // could declare 5000+ fabricated session ids and, via the store's size-cap
 // eviction, threaten every OTHER node's real liveness entries. A node
 // legitimately drives at most a handful of concurrent sessions (maxConcurrent
@@ -102,6 +102,12 @@ export const HARNESS_HEARTBEAT_MAX_CONCURRENT = 512;
 // Inbound fleet frames share a 96 MiB socket allowance, so every string that is
 // retained or persisted must have its own much smaller semantic bound.
 export const HARNESS_FRAME_ID_MAX_LENGTH = 256;
+export const HARNESS_RESULT_ERROR_MAX_LENGTH = 4096;
+export const HARNESS_RESULT_FILENAME_MAX_LENGTH = 255;
+export const HARNESS_RESULT_MIME_MAX_LENGTH = 255;
+export const HARNESS_DOWNLOAD_MAX_FILES = 2000;
+export const HARNESS_INTENT_OUTPUT_MAX_BYTES = 8 * 1024 * 1024;
+export const HARNESS_DOWNLOAD_DATA_MAX_BYTES = 64 * 1024 * 1024;
 export const PAGE_STATE_URL_MAX_LENGTH = 8192;
 export const PAGE_STATE_TEXT_MAX_LENGTH = 4096;
 export const PROFILE_SAVED_INLINE_MAX_BYTES = 256 * 1024;
@@ -111,6 +117,43 @@ export const PROFILE_SAVED_INLINE_MAX_BYTES = 256 * 1024;
 export const PROFILE_SAVED_SIZE_MAX_BYTES = Number.MAX_SAFE_INTEGER;
 const PROFILE_SAVED_INLINE_MAX_BASE64_LENGTH = 4 * Math.ceil(PROFILE_SAVED_INLINE_MAX_BYTES / 3);
 const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH = 4 * Math.ceil(HARNESS_INTENT_OUTPUT_MAX_BYTES / 3);
+const HARNESS_DOWNLOAD_DATA_MAX_BASE64_LENGTH = 4 * Math.ceil(HARNESS_DOWNLOAD_DATA_MAX_BYTES / 3);
+
+/** Exact decoded length for canonical base64, or null when the
+ *  alphabet/padding is malformed. Arithmetic-only so large result validation
+ *  never allocates a second decoded Buffer merely to enforce the limit. */
+export function base64DecodedByteLength(value: string): number | null {
+  if (value.length === 0) return 0;
+  if (value.length % 4 !== 0) return null;
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  const dataLength = value.length - padding;
+  for (let i = 0; i < dataLength; i++) {
+    const code = value.charCodeAt(i);
+    const isAlphabet =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      code === 43 ||
+      code === 47;
+    if (!isAlphabet) return null;
+  }
+  for (let i = dataLength; i < value.length; i++) {
+    if (value.charCodeAt(i) !== 61) return null;
+  }
+  return (value.length / 4) * 3 - padding;
+}
+
+function boundedBase64Schema(maxEncodedLength: number, maxDecodedBytes: number) {
+  return z
+    .string()
+    .max(maxEncodedLength)
+    .refine((value) => {
+      if (value.length > maxEncodedLength) return false;
+      const decodedBytes = base64DecodedByteLength(value);
+      return decodedBytes !== null && decodedBytes <= maxDecodedBytes;
+    }, `base64 payload must decode to at most ${maxDecodedBytes} bytes`);
+}
 
 // ── Per-intent param schemas (the `inputParams` JSON object) ──────────
 // snake_case field names: these are the dict the Swift IntentExecutor case
@@ -497,13 +540,16 @@ export type HarnessErrorCode = z.infer<typeof HarnessErrorCodeSchema>;
 // with parseIntentResult() in harness-control-codec.ts.
 export const IntentResultEnvelopeSchema = z.object({
   type: z.literal('intentResult'),
-  sessionId: z.string().min(1),
-  intentId: z.string().min(1),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  intentId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   success: z.boolean(),
-  durationMs: z.number().int().nonnegative(),
-  outputData: z.string().optional(),
+  durationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  outputData: boundedBase64Schema(
+    HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,
+    HARNESS_INTENT_OUTPUT_MAX_BYTES,
+  ).optional(),
   errorCode: HarnessErrorCodeSchema.optional(),
-  errorMessage: z.string().optional(),
+  errorMessage: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type IntentResultEnvelope = z.infer<typeof IntentResultEnvelopeSchema>;
 
@@ -900,15 +946,15 @@ export type Cookie = z.infer<typeof CookieSchema>;
 // pending request. Plain object (lenient forward-compat), like the sibling frames.
 export const CookiesResultSchema = z.object({
   type: z.literal('cookiesResult'),
-  requestId: z.string().min(1),
-  sessionId: z.string().min(1),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   // Security-audit hardening (2026-06-30) — matches the customer-facing
   // write-path's explicit z.array(CookieSchema).min(1).max(2000)
   // (SetCookiesBodySchema, agent-sessions.ts). Without this a compromised/
   // malformed harness node could return tens of thousands of cookies (up to
-  // the 16 MiB frame cap), forwarded verbatim to any polling GUI/API client.
+  // the 96 MiB frame cap), forwarded verbatim to any polling GUI/API client.
   cookies: z.array(CookieSchema).max(2000).optional(),
-  error: z.string().optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type CookiesResult = z.infer<typeof CookiesResultSchema>;
 
@@ -936,10 +982,10 @@ export type SetCookiesRequest = z.infer<typeof SetCookiesRequestSchema>;
 // pending request. Plain object (lenient forward-compat), like the sibling frames.
 export const SetCookiesResultSchema = z.object({
   type: z.literal('setCookiesResult'),
-  requestId: z.string().min(1),
-  sessionId: z.string().min(1),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   ok: z.boolean().optional(),
-  error: z.string().optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type SetCookiesResult = z.infer<typeof SetCookiesResultSchema>;
 
@@ -974,10 +1020,10 @@ export type NavigateHistoryRequest = z.infer<typeof NavigateHistoryRequestSchema
 // like the sibling frames (setCookiesResult).
 export const NavigateHistoryResultSchema = z.object({
   type: z.literal('navigateHistoryResult'),
-  requestId: z.string().min(1),
-  sessionId: z.string().min(1),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   ok: z.boolean().optional(),
-  error: z.string().optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type NavigateHistoryResult = z.infer<typeof NavigateHistoryResultSchema>;
 
@@ -1004,10 +1050,10 @@ export type UploadFileRequest = z.infer<typeof UploadFileRequestSchema>;
 // jailed on-disk path; a worker filesystem path is NEVER on the wire or exposed
 // to the customer. The GUI drives a page's <input type=file> by `id`.
 const UploadHandleSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  mime: z.string(),
-  size: z.number(),
+  id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  name: z.string().max(HARNESS_RESULT_FILENAME_MAX_LENGTH),
+  mime: z.string().max(HARNESS_RESULT_MIME_MAX_LENGTH),
+  size: z.number().int().nonnegative().max(HARNESS_DOWNLOAD_DATA_MAX_BYTES),
 });
 export type UploadHandle = z.infer<typeof UploadHandleSchema>;
 
@@ -1016,10 +1062,10 @@ export type UploadHandle = z.infer<typeof UploadHandleSchema>;
 // upload write failed}. Plain object (lenient forward-compat), like cookiesResult.
 export const UploadResultSchema = z.object({
   type: z.literal('uploadResult'),
-  requestId: z.string().min(1),
-  sessionId: z.string().min(1),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   handle: UploadHandleSchema.optional(),
-  error: z.string().optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type UploadResult = z.infer<typeof UploadResultSchema>;
 
@@ -1052,9 +1098,9 @@ export type FetchDownloadRequest = z.infer<typeof FetchDownloadRequestSchema>;
 
 // One file in the session's download jail — `name` is a bare basename (never a path).
 const DownloadEntrySchema = z.object({
-  name: z.string(),
-  size: z.number(),
-  mime: z.string().optional(),
+  name: z.string().max(HARNESS_RESULT_FILENAME_MAX_LENGTH),
+  size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  mime: z.string().max(HARNESS_RESULT_MIME_MAX_LENGTH).optional(),
 });
 export type DownloadEntry = z.infer<typeof DownloadEntrySchema>;
 
@@ -1062,10 +1108,10 @@ export type DownloadEntry = z.infer<typeof DownloadEntrySchema>;
 // downloads yet"); FAILURE → `error`. Plain object (lenient), like cookiesResult.
 export const DownloadsListResultSchema = z.object({
   type: z.literal('downloadsList'),
-  requestId: z.string().min(1),
-  sessionId: z.string().min(1),
-  files: z.array(DownloadEntrySchema).optional(),
-  error: z.string().optional(),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  files: z.array(DownloadEntrySchema).max(HARNESS_DOWNLOAD_MAX_FILES).optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type DownloadsListResult = z.infer<typeof DownloadsListResultSchema>;
 
@@ -1073,12 +1119,15 @@ export type DownloadsListResult = z.infer<typeof DownloadsListResultSchema>;
 // 64 MiB cap, jail-confined); FAILURE → `error` (not found / too large / read failed).
 export const DownloadDataResultSchema = z.object({
   type: z.literal('downloadData'),
-  requestId: z.string().min(1),
-  sessionId: z.string().min(1),
-  name: z.string(),
-  mime: z.string().optional(),
-  dataB64: z.string().optional(),
-  error: z.string().optional(),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  name: z.string().max(HARNESS_RESULT_FILENAME_MAX_LENGTH),
+  mime: z.string().max(HARNESS_RESULT_MIME_MAX_LENGTH).optional(),
+  dataB64: boundedBase64Schema(
+    HARNESS_DOWNLOAD_DATA_MAX_BASE64_LENGTH,
+    HARNESS_DOWNLOAD_DATA_MAX_BYTES,
+  ).optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 
@@ -1127,12 +1176,12 @@ export type TrimProfileRequest = z.infer<typeof TrimProfileRequestSchema>;
 // forward-compat), like the sibling result frames.
 export const TrimProfileResultSchema = z.object({
   type: z.literal('trimResult'),
-  requestId: z.string().min(1),
-  profileId: z.string().min(1),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  profileId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   ok: z.boolean().optional(),
-  newSizeBytes: z.number().int().nonnegative().optional(),
-  bytesReclaimed: z.number().int().nonnegative().optional(),
-  error: z.string().optional(),
+  newSizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  bytesReclaimed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
 });
 export type TrimProfileResult = z.infer<typeof TrimProfileResultSchema>;
 
