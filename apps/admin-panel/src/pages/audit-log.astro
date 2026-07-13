@@ -169,7 +169,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       const actionEl = root.querySelector('[data-field="action"]');
       const adminIdEl = root.querySelector('[data-field="admin-id"]');
       const resultEl = root.querySelector('[data-field="result"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      let token = null;
+      const AUDIT_REQUEST_TIMEOUT_MS = 15_000;
+      let loadController = null;
+
+      function boundedFetch(url, init, controller) {
+        const timeout = window.setTimeout(() => controller.abort(), AUDIT_REQUEST_TIMEOUT_MS);
+        return fetch(url, { ...(init || {}), signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback = 'network error') {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       // Seed the filter from the URL so deep-links like
       // /audit-log?target_id=acc_<id> (from the per-account detail page) or
@@ -297,13 +314,20 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let inFlight = 0;
       function load() {
-        if (!token) return Promise.resolve();
+        if (!token) return Promise.resolve(false);
         const myReq = ++inFlight;
         const params = buildQuery();
-        return fetch(apiBaseUrl + '/v1/admin/audit-log?' + params.toString(), {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        })
+        if (loadController) loadController.abort();
+        const controller = new AbortController();
+        loadController = controller;
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/audit-log?' + params.toString(),
+          {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
@@ -351,10 +375,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                 '. Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006).';
             }
             hideBanner();
+            return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return;
-            const msg = err && err.message ? err.message : 'network error';
+            if (myReq !== inFlight) return false;
+            const msg = requestErrorMessage(err);
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -362,8 +387,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load audit log (" + msg + '). Showing preview data below.');
             }
+            return false;
           })
           .finally(() => {
+            if (myReq !== inFlight) return;
+            loadController = null;
             // 2026-05-21 — AdminLayout opacity-gate signal.
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
@@ -371,10 +399,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      if (!token) {
-        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
-        return;
-      }
+      function start() {
+        token = localStorage.getItem('ds_web_session_token');
+        if (!token) {
+          showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return;
+        }
 
       let debounce = 0;
       function scheduleLoad() {
@@ -420,15 +451,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
         const p = load();
         if (p && typeof p.then === 'function') {
-          p.then(
-            () => {
+          p.then((ok) => {
+            if (ok) {
               lastFetch = Date.now();
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
-            },
-            () => {
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
-            },
-          );
+              if (liveDot)
+                liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+            } else if (liveDot) {
+              liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+            }
+          });
         } else {
           lastFetch = Date.now();
         }
@@ -448,7 +479,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (ageEl) ageEl.textContent = fmtAge(lastFetch);
       }, 5_000);
 
-      load();
+        void load();
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>

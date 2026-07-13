@@ -117,7 +117,7 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
   });
 
   it('renders a row with actor, action, target, result badge, and UTC timestamp', async () => {
-    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: () => json({ data: [SUCCESS_ENTRY] }),
     });
@@ -130,6 +130,17 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
     expect(list).toContain('acc_t1');
     expect(list).toContain('prof_x9');
     expect(list).toContain('2026-05-20 10:00:00 UTC');
+    expect(fetchCalls[0]?.init?.signal).toBeTruthy();
+  });
+
+  it('bounds and aborts superseded reads, defers fresh-SSO start, and pins timeout recovery', () => {
+    const built = readFileSync(BUILT_PAGE, 'utf8');
+    expect(built).toContain('AUDIT_REQUEST_TIMEOUT_MS = 15_000');
+    expect(built).toContain('Request timed out. Try again.');
+    expect(built).toMatch(/if \(loadController\) loadController\.abort\(\)/);
+    expect(built).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
   });
 
   it('empty result: shows the no-entries message', async () => {
@@ -152,6 +163,18 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
     win = window;
     await flush();
     expect(text(window, '[data-banner]')).toContain('admin scope required');
+  });
+
+  it('manual live refresh stays red after a handled load failure', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: () => json({ detail: 'boom' }, 500),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+    expect(window.document.querySelector('[data-live-dot]')?.className).toContain('bg-red-500');
   });
 
   it('client-side result filter: selecting "error" hides the success rows', async () => {
