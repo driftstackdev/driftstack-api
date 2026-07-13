@@ -9,6 +9,7 @@
 // for a GUI-only feature. folders-store/tags-store remain the OFFLINE cache;
 // ProfilesView reconciles (server wins on a successful load, pushes on mutate).
 
+import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson } from './read-bounded-json';
 
@@ -54,7 +55,11 @@ export async function fetchOrganization(
     method: 'GET',
     headers: orgHeaders(apiKey, effectiveAccount, { accept: 'application/json' }),
   });
-  if (!res.ok) throw new Error(`organization fetch failed: ${res.status.toString()}`);
+  if (!res.ok) {
+    const status = res.status;
+    await disposeResponseBody(res);
+    throw new Error(`organization fetch failed: ${status.toString()}`);
+  }
   const body = await readBoundedApiJson<Partial<AccountOrganization>>(res);
   return {
     folders: Array.isArray(body.folders)
@@ -81,5 +86,8 @@ export async function saveOrganization(
     headers: orgHeaders(apiKey, effectiveAccount, { 'content-type': 'application/json' }),
     body: JSON.stringify(org),
   });
-  if (!res.ok) throw new Error(`organization save failed: ${res.status.toString()}`);
+  const status = res.status;
+  const ok = res.ok;
+  await disposeResponseBody(res);
+  if (!ok) throw new Error(`organization save failed: ${status.toString()}`);
 }

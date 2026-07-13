@@ -45,6 +45,20 @@ describe('listProxies', () => {
     await expect(listProxies('https://api.driftstack.dev', 'ds_key')).rejects.toThrow();
   });
 
+  it('cancels an unread non-2xx body before throwing', async () => {
+    const cancel = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response(new ReadableStream<Uint8Array>({ cancel }), { status: 503 })),
+      ),
+    );
+    await expect(listProxies('https://api.driftstack.dev', 'ds_key')).rejects.toThrow(
+      'proxies fetch failed: 503',
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('aborts a hung transport after 15 seconds', async () => {
     vi.useFakeTimers();
     vi.stubGlobal(

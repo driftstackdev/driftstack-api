@@ -21,6 +21,7 @@ import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { parseDeepLink } from './deep-link';
 import { diagnosticFetchError } from './diagnostic-fetch-error';
+import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
 
 const POLL_INTERVAL_MS = 2000;
@@ -266,7 +267,10 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       // The flow may have terminated (success / cancel / unmount /
       // timeout) while this exchange was in-flight — drop the late
       // response so it can't overwrite the settled state.
-      if (settledRef.current) return;
+      if (settledRef.current) {
+        await disposeResponseBody(res);
+        return;
+      }
       if (!res.ok) {
         if (res.status >= 400 && res.status < 500) {
           stop();
@@ -277,6 +281,8 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
             kind: 'error',
             message: body.detail ?? 'Authorization request rejected.',
           });
+        } else {
+          await disposeResponseBody(res);
         }
         return;
       }

@@ -124,4 +124,19 @@ describe('saveOrganization', () => {
     const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
     expect(headers['x-driftstack-account']).toBe('acc_team_owner');
   });
+
+  it('cancels an ignored successful response body', async () => {
+    const cancel = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response(new ReadableStream<Uint8Array>({ cancel }), { status: 200 })),
+      ),
+    );
+    await saveOrganization('https://api.driftstack.dev', 'ds_key', {
+      folders: [],
+      tags: [],
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });

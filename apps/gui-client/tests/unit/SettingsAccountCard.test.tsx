@@ -125,6 +125,21 @@ describe('V-534.L SettingsAccountCard — failure paths', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent(/HTTP 401/);
   });
 
+  it('cancels an unread HTTP error body before rendering status guidance', async () => {
+    const cancel = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response(new ReadableStream<Uint8Array>({ cancel }), { status: 401 })),
+      ),
+    );
+    render(<SettingsAccountCard />);
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/api key wasn't accepted/i),
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('humanizes a network error instead of exposing the raw exception', async () => {
     vi.stubGlobal(
       'fetch',

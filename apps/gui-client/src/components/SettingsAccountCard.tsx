@@ -12,6 +12,7 @@
 //   - ready: account id + tier rendered, billing link visible
 
 import { useCallback, useEffect, useState } from 'react';
+import { disposeResponseBody } from '../lib/dispose-response-body';
 import { fetchWithDeadline } from '../lib/fetch-with-deadline';
 import { readBoundedApiJson } from '../lib/read-bounded-json';
 import { useSettings } from '../lib/SettingsContext';
@@ -89,9 +90,14 @@ export function SettingsAccountCard(): JSX.Element | null {
           signal: controller.signal,
           headers: { authorization: `Bearer ${settings.apiKey ?? ''}`, accept: 'application/json' },
         });
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          await disposeResponseBody(res);
+          return;
+        }
         if (!res.ok) {
-          setState({ kind: 'error', message: errorMessageForStatus(res.status) });
+          const status = res.status;
+          await disposeResponseBody(res);
+          setState({ kind: 'error', message: errorMessageForStatus(status) });
           return;
         }
         const body = await readBoundedApiJson<AccountMeResponse>(res);

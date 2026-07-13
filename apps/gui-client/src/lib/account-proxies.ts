@@ -9,6 +9,7 @@
 // widening for a GUI feature. The local Tauri proxy store stays as the OFFLINE
 // cache; ProfilesView/ProxiesView reconcile (server wins on a successful load).
 
+import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson } from './read-bounded-json';
 
@@ -80,7 +81,11 @@ export async function listProxies(baseUrl: string, apiKey: string): Promise<Acco
     method: 'GET',
     headers: authHeaders(apiKey),
   });
-  if (!res.ok) throw new Error(`proxies fetch failed: ${res.status.toString()}`);
+  if (!res.ok) {
+    const status = res.status;
+    await disposeResponseBody(res);
+    throw new Error(`proxies fetch failed: ${status.toString()}`);
+  }
   const body = await readBoundedApiJson<{ data?: unknown }>(res);
   return Array.isArray(body.data) ? (body.data as AccountProxyMeta[]) : [];
 }
@@ -95,7 +100,11 @@ export async function createProxy(
     headers: { ...authHeaders(apiKey), 'content-type': 'application/json' },
     body: JSON.stringify(input),
   });
-  if (!res.ok) throw new Error(`proxy create failed: ${res.status.toString()}`);
+  if (!res.ok) {
+    const status = res.status;
+    await disposeResponseBody(res);
+    throw new Error(`proxy create failed: ${status.toString()}`);
+  }
   return readBoundedApiJson<AccountProxyMeta>(res);
 }
 
@@ -111,12 +120,14 @@ export async function updateProxy(
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
+    const status = res.status;
+    await disposeResponseBody(res);
     // Attach the status so callers can distinguish a stale-id 404 (the row was
     // deleted server-side) from other failures and self-heal by re-creating.
-    const err = new Error(`proxy update failed: ${res.status.toString()}`) as Error & {
+    const err = new Error(`proxy update failed: ${status.toString()}`) as Error & {
       status?: number;
     };
-    err.status = res.status;
+    err.status = status;
     throw err;
   }
   return readBoundedApiJson<AccountProxyMeta>(res);
@@ -128,8 +139,11 @@ export async function deleteProxy(baseUrl: string, apiKey: string, id: string): 
     headers: authHeaders(apiKey),
   });
   // 204 expected; 404 = already gone (idempotent from the caller's view).
-  if (!res.ok && res.status !== 404) {
-    throw new Error(`proxy delete failed: ${res.status.toString()}`);
+  const status = res.status;
+  const accepted = res.ok || status === 404;
+  await disposeResponseBody(res);
+  if (!accepted) {
+    throw new Error(`proxy delete failed: ${status.toString()}`);
   }
 }
 

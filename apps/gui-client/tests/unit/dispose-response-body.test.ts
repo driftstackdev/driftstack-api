@@ -36,4 +36,16 @@ describe('disposeResponseBody', () => {
       expect(source, relative).toContain('disposeResponseBody');
     }
   });
+
+  it('guards every shared-fetch status-only or stale exit', () => {
+    for (const [relative, expectedCalls] of [
+      ['../../src/lib/account-proxies.ts', 4],
+      ['../../src/lib/account-organization.ts', 2],
+      ['../../src/components/SettingsAccountCard.tsx', 2],
+      ['../../src/lib/browser-sign-in.ts', 2],
+    ] as const) {
+      const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
+      expect(source.match(/disposeResponseBody\(/g) ?? [], relative).toHaveLength(expectedCalls);
+    }
+  });
 });
