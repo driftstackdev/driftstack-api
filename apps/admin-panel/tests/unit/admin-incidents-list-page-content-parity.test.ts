@@ -128,16 +128,21 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
 
   it('incident creation is synchronous single-flight with accessible busy state', () => {
     expect(body).toMatch(/let postingIncident = false;/);
-    expect(body).toMatch(/if \(postingIncident\) return;/);
+    expect(body).toMatch(/if \(postingIncident \|\| incidentOutcomeUnknown\) return;/);
     expect(body).toMatch(/postingIncident = true;/);
     expect(body).toMatch(/submit\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/\.finally\(function \(\) \{\s*postingIncident = false;/);
   });
 
   it('reconciles ambiguous incident creation before the operator can repost', () => {
-    expect(body).toContain('Posting outcome is unknown after the request timed out.');
-    expect(body).toContain('The incident list was refreshed.');
-    expect(body).toContain('If this incident appears in the list, do not post it again.');
+    expect(body).toContain('let latestIncidentItems = [];');
+    expect(body).toContain('let incidentOutcomeUnknown = false;');
+    expect(body).toContain('let incidentOutcomeReason =');
+    expect(body).toContain('latestIncidentItems.some(function (incident)');
+    expect(body).toContain("incidentOutcomeReason = 'posted'");
+    expect(body).toContain("incidentOutcomeReason = 'unverified'");
+    expect(body).toContain('Already posted');
+    expect(body).toContain('Verify before retrying');
     expect(body).toMatch(/const refreshed = await fetchAndRender\(\)/);
   });
 

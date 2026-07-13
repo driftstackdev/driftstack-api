@@ -263,6 +263,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
       const INCIDENT_TIMEOUT_MS = 15_000;
       let listController = null;
       let listGeneration = 0;
+      let latestIncidentItems = [];
 
       function boundedFetch(url, init, controller) {
         const activeController = controller || new AbortController();
@@ -452,7 +453,8 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
           })
           .then(function (body) {
             if (generation !== listGeneration) return;
-            rebuild(body && Array.isArray(body.data) ? body.data : []);
+            latestIncidentItems = body && Array.isArray(body.data) ? body.data : [];
+            rebuild(latestIncidentItems);
             hideBanner();
             return true;
           })
@@ -512,9 +514,11 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
       }
 
       let postingIncident = false;
+      let incidentOutcomeUnknown = false;
+      let incidentOutcomeReason = '';
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        if (postingIncident) return;
+        if (postingIncident || incidentOutcomeUnknown) return;
         hideErr();
         const token = getToken();
         if (!token) {
@@ -580,22 +584,52 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
           .catch(async function (err) {
             if (err && err.name === 'AbortError') {
               const refreshed = await fetchAndRender();
-              showErr(
-                'Posting outcome is unknown after the request timed out. ' +
-                  (refreshed
-                    ? 'The incident list was refreshed. '
-                    : "We couldn't refresh the incident list. ") +
-                  'If this incident appears in the list, do not post it again. Open the existing incident to continue updates.',
-              );
+              const matchingIncident =
+                refreshed &&
+                latestIncidentItems.some(function (incident) {
+                  return (
+                    String(incident.title || '').trim() === title &&
+                    String(incident.description || '').trim() === description
+                  );
+                });
+              if (matchingIncident) {
+                incidentOutcomeUnknown = true;
+                incidentOutcomeReason = 'posted';
+                showErr(
+                  'The request timed out, but an incident with this exact title and initial update now appears in the refreshed list. It was not posted again. Open the existing incident to continue updates.',
+                );
+              } else if (refreshed) {
+                showErr(
+                  'The request timed out, but no incident with this exact title and initial update appears in the refreshed list. You can retry if the incident is still needed.',
+                );
+              } else {
+                incidentOutcomeUnknown = true;
+                incidentOutcomeReason = 'unverified';
+                showErr(
+                  "The posting request timed out and we couldn't refresh the incident list. Reload and verify incidents before retrying; reposting now could create a duplicate public incident.",
+                );
+              }
               return;
             }
             showErr(requestErrorMessage(err, 'Failed to post incident.'));
           })
           .finally(function () {
             postingIncident = false;
-            submit.disabled = false;
+            submit.disabled = incidentOutcomeUnknown;
             submit.removeAttribute('aria-busy');
-            submit.textContent = 'Post incident';
+            submit.textContent = incidentOutcomeUnknown
+              ? incidentOutcomeReason === 'posted'
+                ? 'Already posted'
+                : 'Verify before retrying'
+              : 'Post incident';
+            if (incidentOutcomeUnknown) {
+              submit.title =
+                incidentOutcomeReason === 'posted'
+                  ? 'Open the matching incident from the refreshed list instead of posting it again.'
+                  : 'Reload and verify the incident list before retrying.';
+            } else {
+              submit.removeAttribute('title');
+            }
           });
       });
 

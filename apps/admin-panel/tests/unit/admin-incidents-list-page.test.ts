@@ -255,7 +255,71 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     expect(fetchCalls.filter((call) => call.init?.method !== 'POST')).toHaveLength(2);
     expect(text(window, '[data-incidents-list]')).toContain(INCIDENT.title);
     expect(text(window, '#form-error')).toMatch(
-      /outcome is unknown.*list was refreshed.*do not post it again.*open the existing incident/i,
+      /exact title and initial update.*not posted again.*open the existing incident/i,
     );
+    const submit = window.document.getElementById('submit-btn') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Already posted');
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('blocks repost when both incident creation and authoritative reconciliation fail', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    let postStarted = false;
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: (call) => {
+        if (call.init?.method === 'POST') {
+          postStarted = true;
+          return Promise.reject(timeout);
+        }
+        return postStarted ? json({ detail: 'unavailable' }, 503) : json({ data: [] });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.getElementById('new-incident-form') as HTMLFormElement;
+    (form.querySelector('[name="title"]') as HTMLInputElement).value = 'API outage';
+    (form.querySelector('[name="description"]') as HTMLTextAreaElement).value =
+      'Investigating elevated failures.';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+
+    const submit = window.document.getElementById('submit-btn') as HTMLButtonElement;
+    expect(text(window, '#form-error')).toMatch(
+      /couldn't refresh the incident list.*reload and verify.*duplicate public incident/i,
+    );
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Verify before retrying');
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('allows a deliberate retry after a successful refresh proves the exact incident absent', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: (call) =>
+        call.init?.method === 'POST' ? Promise.reject(timeout) : json({ data: [] }),
+    });
+    win = window;
+    await flush();
+    const form = window.document.getElementById('new-incident-form') as HTMLFormElement;
+    (form.querySelector('[name="title"]') as HTMLInputElement).value = 'API outage';
+    (form.querySelector('[name="description"]') as HTMLTextAreaElement).value =
+      'Investigating elevated failures.';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+
+    const submit = window.document.getElementById('submit-btn') as HTMLButtonElement;
+    expect(text(window, '#form-error')).toMatch(
+      /no incident with this exact title and initial update.*you can retry/i,
+    );
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toBe('Post incident');
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
   });
 });
