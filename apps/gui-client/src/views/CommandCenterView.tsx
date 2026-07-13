@@ -193,10 +193,49 @@ type ActivityState =
 type RecentProfilesState =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'ready'; profiles: RecentProfile[] }
+  | {
+      kind: 'ready';
+      profiles: RecentProfile[];
+      freshness: 'fresh' | 'refreshing' | 'stale';
+    }
   | { kind: 'error' };
 
 const RECENT_PROFILES_LIMIT = 5;
+const RECENT_PROFILES_CACHE_TTL_MS = 5 * 60 * 1000;
+const RECENT_PROFILES_CACHE_MAX_SCOPES = 16;
+
+interface RecentProfilesCacheEntry {
+  cachedAt: number;
+  profiles: RecentProfile[];
+}
+
+// Process-local on purpose: returning to Command Center should not repaint a
+// skeleton for summaries loaded moments ago, but profile names do not need a
+// durable browser-storage footprint. Effective account ids keep personal/team
+// workspaces isolated; the small LRU-style cap bounds long-running app use.
+const recentProfilesCache = new Map<string, RecentProfilesCacheEntry>();
+
+function readRecentProfilesCache(scope: string, now = Date.now()): RecentProfile[] | null {
+  const entry = recentProfilesCache.get(scope);
+  if (entry === undefined) return null;
+  if (now - entry.cachedAt > RECENT_PROFILES_CACHE_TTL_MS) {
+    recentProfilesCache.delete(scope);
+    return null;
+  }
+  recentProfilesCache.delete(scope);
+  recentProfilesCache.set(scope, entry);
+  return entry.profiles;
+}
+
+function writeRecentProfilesCache(scope: string, profiles: RecentProfile[]): void {
+  recentProfilesCache.delete(scope);
+  recentProfilesCache.set(scope, { cachedAt: Date.now(), profiles });
+  while (recentProfilesCache.size > RECENT_PROFILES_CACHE_MAX_SCOPES) {
+    const oldestScope = recentProfilesCache.keys().next().value;
+    if (oldestScope === undefined) break;
+    recentProfilesCache.delete(oldestScope);
+  }
+}
 
 function greeting(hour: number): string {
   if (hour < 12) return 'Good morning';
@@ -317,14 +356,28 @@ export function CommandCenterView({
   // independent-load contract as the other strips (a slow/failed fetch never
   // blocks or breaks the landing). Placed high because launching a profile is
   // the core action; the cards navigate into Profiles (the real launch surface).
-  const [recentProfiles, setRecentProfiles] = useState<RecentProfilesState>({ kind: 'idle' });
+  const recentProfilesScope = activeWorkspace ?? accountMe?.id ?? null;
+  const [recentProfiles, setRecentProfiles] = useState<RecentProfilesState>(() => {
+    if (!client) return { kind: 'idle' };
+    const cached =
+      recentProfilesScope !== null ? readRecentProfilesCache(recentProfilesScope) : null;
+    return cached !== null
+      ? { kind: 'ready', profiles: cached, freshness: 'refreshing' }
+      : { kind: 'loading' };
+  });
   useEffect(() => {
     if (!client) {
       setRecentProfiles({ kind: 'idle' });
       return;
     }
     let cancelled = false;
-    setRecentProfiles({ kind: 'loading' });
+    const cached =
+      recentProfilesScope !== null ? readRecentProfilesCache(recentProfilesScope) : null;
+    setRecentProfiles(
+      cached !== null
+        ? { kind: 'ready', profiles: cached, freshness: 'refreshing' }
+        : { kind: 'loading' },
+    );
     client.profiles
       .list()
       .then((page) => {
@@ -333,15 +386,21 @@ export function CommandCenterView({
           page.data.map((p) => ({ id: p.id, name: p.name, last_used_at: p.last_used_at })),
           RECENT_PROFILES_LIMIT,
         );
-        setRecentProfiles({ kind: 'ready', profiles });
+        if (recentProfilesScope !== null) writeRecentProfilesCache(recentProfilesScope, profiles);
+        setRecentProfiles({ kind: 'ready', profiles, freshness: 'fresh' });
       })
       .catch(() => {
-        if (!cancelled) setRecentProfiles({ kind: 'error' });
+        if (cancelled) return;
+        setRecentProfiles(
+          cached !== null
+            ? { kind: 'ready', profiles: cached, freshness: 'stale' }
+            : { kind: 'error' },
+        );
       });
     return () => {
       cancelled = true;
     };
-  }, [client]);
+  }, [client, recentProfilesScope]);
 
   // Local proxy count (Tauri store) — for the fleet KPI moved here from
   // Profiles. Best-effort; absent → '—'.
@@ -810,44 +869,65 @@ function RecentProfilesStrip({
   }
   if (state.profiles.length === 0) {
     return (
-      <button
-        type="button"
-        onClick={onOpen}
-        className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-left text-xs text-ink-muted transition-colors hover:border-accent/50 hover:text-ink-secondary"
-      >
-        No profiles yet — create one to get started.
-      </button>
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-left text-xs text-ink-muted transition-colors hover:border-accent/50 hover:text-ink-secondary"
+        >
+          No profiles yet — create one to get started.
+        </button>
+        <RecentProfilesFreshness freshness={state.freshness} />
+      </div>
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-      {state.profiles.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          onClick={() => onOpenProfile(p.id)}
-          title={p.name}
-          className="group flex items-center gap-2.5 rounded-xl border border-surface-divider bg-surface-raised px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
-        >
-          <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-inset text-sm font-semibold text-ink-secondary transition-colors group-hover:text-accent"
-            aria-hidden="true"
+    <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+        {state.profiles.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onOpenProfile(p.id)}
+            title={p.name}
+            className="group flex items-center gap-2.5 rounded-xl border border-surface-divider bg-surface-raised px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
           >
-            {profileMonogram(p.name)}
-          </span>
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-medium text-ink-primary">{p.name}</span>
-            <span className="truncate text-2xs text-ink-muted">
-              {p.last_used_at !== null ? (
-                <RelativeTime iso={p.last_used_at} tooltipPrefix="Last used" />
-              ) : (
-                'Never used'
-              )}
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-inset text-sm font-semibold text-ink-secondary transition-colors group-hover:text-accent"
+              aria-hidden="true"
+            >
+              {profileMonogram(p.name)}
             </span>
-          </span>
-        </button>
-      ))}
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-medium text-ink-primary">{p.name}</span>
+              <span className="truncate text-2xs text-ink-muted">
+                {p.last_used_at !== null ? (
+                  <RelativeTime iso={p.last_used_at} tooltipPrefix="Last used" />
+                ) : (
+                  'Never used'
+                )}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <RecentProfilesFreshness freshness={state.freshness} />
     </div>
+  );
+}
+
+function RecentProfilesFreshness({
+  freshness,
+}: {
+  freshness: Extract<RecentProfilesState, { kind: 'ready' }>['freshness'];
+}): JSX.Element | null {
+  if (freshness === 'fresh') return null;
+  return (
+    <p role="status" className="px-1 text-2xs text-ink-muted">
+      {freshness === 'refreshing'
+        ? 'Refreshing recent profiles…'
+        : 'Couldn’t refresh — showing your recent profiles.'}
+    </p>
   );
 }
 

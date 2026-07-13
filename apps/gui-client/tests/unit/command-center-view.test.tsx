@@ -297,6 +297,67 @@ describe('CommandCenterView', () => {
     expect(onNavigate).toHaveBeenCalledWith('profiles');
   });
 
+  it('"Jump back in": paints the scoped last load immediately, then refreshes it authoritatively', async () => {
+    accountMe = { ...ACC, id: 'acct_recent_seed' };
+    client = makeClient({
+      profiles: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 'p_cached',
+              name: 'Cached Scout',
+              last_used_at: '2026-06-10T00:00:00Z',
+            },
+          ],
+          has_more: false,
+          next_cursor: null,
+        }),
+    });
+
+    const first = render(<CommandCenterView onNavigate={nav()} />);
+    await screen.findByText('Cached Scout');
+    first.unmount();
+
+    let resolveRefresh!: (value: unknown) => void;
+    client = makeClient({
+      profiles: () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    });
+    const second = render(<CommandCenterView onNavigate={nav()} />);
+
+    // The process-local, account-scoped seed is available on the FIRST render:
+    // no skeleton or disk-backed profile-name cache is needed while the live
+    // refresh is pending.
+    expect(screen.getByText('Cached Scout')).toBeTruthy();
+    expect(screen.queryByLabelText('Loading recent profiles')).toBeNull();
+    expect(screen.getByText('Refreshing recent profiles…')).toBeTruthy();
+
+    resolveRefresh({
+      data: [
+        {
+          id: 'p_live',
+          name: 'Live Scout',
+          last_used_at: '2026-07-13T00:00:00Z',
+        },
+      ],
+      has_more: false,
+      next_cursor: null,
+    });
+    await waitFor(() => expect(screen.getByText('Live Scout')).toBeTruthy());
+    expect(screen.queryByText('Cached Scout')).toBeNull();
+    expect(screen.queryByText('Refreshing recent profiles…')).toBeNull();
+    second.unmount();
+
+    // A different effective workspace must not see the personal-account seed.
+    activeWorkspace = 'acct_other_workspace';
+    client = makeClient({ profiles: () => new Promise(() => undefined) });
+    render(<CommandCenterView onNavigate={nav()} />);
+    expect(screen.queryByText('Live Scout')).toBeNull();
+    expect(screen.getByLabelText('Loading recent profiles')).toBeTruthy();
+  });
+
   it('"Jump back in": empty state when there are no profiles, and it navigates to profiles', async () => {
     const onNavigate = nav();
     client = makeClient(); // empty profiles
