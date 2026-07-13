@@ -86,7 +86,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             : r
                 .json()
                 .catch(() => ({}))
-                .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
         )
         .then(() => {
           window.location.href = '/';
@@ -100,9 +100,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             return;
           }
           showBanner(
-            err && err.message
-              ? err.message
-              : 'Merge confirmation failed.',
+            window.driftstackRequestErrorMessage(
+              err,
+              'Account linking could not be confirmed. Request a new link and try again.',
+            ),
           );
         })
         .finally(() => window.clearTimeout(timeout));

@@ -73,4 +73,20 @@ describe('Dashboard shared request error copy', () => {
       expect(body).not.toMatch(/new Error\((?:b|body)\.detail\s*\|\|/);
     }
   });
+
+  it('protects recovery, account-link, and invite failure copy', () => {
+    const pages = [
+      'forgot-password.astro',
+      'auth/magic-link-request.astro',
+      'auth/oauth-client/confirm-merge.astro',
+      'team/accept.astro',
+    ];
+    for (const page of pages) {
+      const body = readFileSync(resolve(HERE, '..', '..', 'src', 'pages', page), 'utf8');
+      expect(body).toContain('window.driftstackRequestErrorMessage(');
+      expect(body).toContain('window.driftstackResponseError(');
+      expect(body).not.toMatch(/err && err\.message\s*\?\s*err\.message/);
+      expect(body).not.toMatch(/new Error\((?:b|body)\.detail\s*\|\|/);
+    }
+  });
 });

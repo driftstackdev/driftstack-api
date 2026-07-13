@@ -163,7 +163,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               : r
                   .json()
                   .catch(() => ({}))
-                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                  .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
           )
           .then((body) => {
             successEmail.textContent = email;
@@ -190,7 +190,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               return;
             }
             showBanner(
-              err && err.message ? err.message : 'Request failed.',
+              window.driftstackRequestErrorMessage(
+                err,
+                'The sign-in link could not be requested. Try again.',
+              ),
             );
           })
           .finally(() => {

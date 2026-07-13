@@ -146,7 +146,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           return r
             .json()
             .catch(() => ({}))
-            .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+            .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
         })
         .then(() => {
           window.location.href = '/team';
@@ -160,11 +160,15 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             return;
           }
+          const needsSignin = !!(err && err.needsSignin);
           showBanner(
-            err && err.message
-              ? err.message
-              : 'Could not accept the invite.',
-            !!(err && err.needsSignin),
+            needsSignin
+              ? 'You need to be signed in to accept this invite.'
+              : window.driftstackRequestErrorMessage(
+                  err,
+                  'Could not accept the invite. Ask the team owner for a new link if it has expired.',
+                ),
+            needsSignin,
           );
         })
         .finally(() => window.clearTimeout(timeout));
