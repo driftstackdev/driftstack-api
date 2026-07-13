@@ -313,16 +313,29 @@ const EMAIL_EVENTS = [
           class="flex-1 min-w-[260px] rounded-md border border-tk-border bg-tk-bg px-3 py-2 font-mono text-sm text-tk-ink placeholder-ink-muted focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
         />
         <button type="submit" class="btn-primary">Save key</button>
-        <button type="button" data-byok-test class="btn-secondary">Test</button>
-        <button type="button" data-byok-clear class="text-sm text-tk-err-text hover:underline">
+        <button
+          type="button"
+          data-byok-test
+          class="btn-secondary"
+          disabled
+          aria-describedby="byok-test-help"
+          title="Save a key before testing"
+        >Test stored key</button>
+        <button
+          type="button"
+          data-byok-clear
+          class="text-sm text-tk-err-text hover:underline"
+          disabled
+          title="No stored key to clear"
+        >
           Clear
         </button>
       </form>
 
-      <p class="mt-3 text-xs text-tk-ink-3">
-        Test sends a 1-token completion to verify Anthropic accepts the key. Clear
-        removes the stored ciphertext; agent turns immediately fall back to the
-        bundled key (if available).
+      <p id="byok-test-help" class="mt-3 text-xs text-tk-ink-3">
+        After saving, Test stored key sends a 1-token completion using the encrypted key
+        on file. Clear removes the stored ciphertext; agent turns immediately fall back
+        to the bundled key (if available).
       </p>
     </section>
 
@@ -1015,11 +1028,69 @@ const EMAIL_EVENTS = [
       const byokRetryBtn = document.querySelector('[data-byok-retry]');
       const byokSetAt = document.querySelector('[data-byok-set-at]');
       const byokLastUsedAt = document.querySelector('[data-byok-last-used-at]');
-      let byokSaveInFlight = false;
-      let byokTestInFlight = false;
-      let byokClearInFlight = false;
+      let byokActionInFlight = null;
+      let byokTestFeedbackGeneration = 0;
+      let byokLoadGeneration = 0;
       let byokMetadata = { hasKey: false, setAt: null, lastUsedAt: null };
       let byokMetadataKnown = false;
+
+      function syncByokActionControls() {
+        const busy = byokActionInFlight !== null;
+        const hasStoredKey = byokMetadataKnown && byokMetadata.hasKey;
+        if (byokSaveBtn) {
+          byokSaveBtn.disabled = busy;
+          byokSaveBtn.toggleAttribute('aria-busy', byokActionInFlight === 'save');
+          byokSaveBtn.title = busy ? 'Wait for the current key action to finish' : '';
+        }
+        if (byokTestBtn) {
+          byokTestBtn.disabled = busy || !hasStoredKey;
+          byokTestBtn.toggleAttribute('aria-busy', byokActionInFlight === 'test');
+          byokTestBtn.title = busy
+            ? 'Wait for the current key action to finish'
+            : hasStoredKey
+              ? 'Test the encrypted key currently on file'
+              : byokMetadataKnown
+                ? 'Save a key before testing'
+                : 'Wait for stored-key status to load';
+        }
+        if (byokClearBtn) {
+          byokClearBtn.disabled = busy || !hasStoredKey;
+          byokClearBtn.toggleAttribute('aria-busy', byokActionInFlight === 'clear');
+          byokClearBtn.title = busy
+            ? 'Wait for the current key action to finish'
+            : hasStoredKey
+              ? 'Remove the encrypted key currently on file'
+              : byokMetadataKnown
+                ? 'No stored key to clear'
+                : 'Wait for stored-key status to load';
+        }
+      }
+
+      function beginByokAction(action) {
+        if (byokActionInFlight !== null) return false;
+        byokActionInFlight = action;
+        byokTestFeedbackGeneration += 1;
+        if (byokTestBtn) byokTestBtn.textContent = 'Test stored key';
+        syncByokActionControls();
+        return true;
+      }
+
+      function endByokAction(action) {
+        if (byokActionInFlight !== action) return;
+        byokActionInFlight = null;
+        syncByokActionControls();
+      }
+
+      function showByokTestFeedback(label) {
+        if (!byokTestBtn) return;
+        const generation = ++byokTestFeedbackGeneration;
+        byokTestBtn.textContent = label;
+        setTimeout(() => {
+          if (generation !== byokTestFeedbackGeneration) return;
+          byokTestBtn.textContent = 'Test stored key';
+          syncByokActionControls();
+        }, 2000);
+      }
 
       function byokShowState(name) {
         [byokStateLoading, byokStateEmpty, byokStateSet, byokStateError].forEach((el) => {
@@ -1039,6 +1110,9 @@ const EMAIL_EVENTS = [
 
       function loadByokAnthropic() {
         if (!token) return;
+        const loadGeneration = ++byokLoadGeneration;
+        byokMetadataKnown = false;
+        syncByokActionControls();
         byokShowState('loading');
         return boundedFetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
           headers: { authorization: 'Bearer ' + token },
@@ -1057,10 +1131,12 @@ const EMAIL_EVENTS = [
             return r.json();
           })
           .then((body) => {
+            if (loadGeneration !== byokLoadGeneration) return undefined;
             byokHideError();
             if (body === null || body.has_key !== true) {
               byokMetadata = { hasKey: false, setAt: null, lastUsedAt: null };
               byokMetadataKnown = true;
+              syncByokActionControls();
               byokShowState('empty');
               return byokMetadata;
             }
@@ -1068,6 +1144,7 @@ const EMAIL_EVENTS = [
             const lastUsedAt = typeof body.last_used_at === 'string' ? body.last_used_at : null;
             byokMetadata = { hasKey: true, setAt, lastUsedAt };
             byokMetadataKnown = true;
+            syncByokActionControls();
             if (byokSetAt) {
               const d = setAt ? new Date(setAt) : null;
               byokSetAt.dateTime = d && !Number.isNaN(d.getTime()) ? d.toISOString() : '';
@@ -1084,10 +1161,13 @@ const EMAIL_EVENTS = [
             return byokMetadata;
           })
           .catch((err) => {
+            if (loadGeneration !== byokLoadGeneration) return undefined;
             // S35 2026-07-07 (fable-frontend-audit) — a load FAILURE is
             // not an empty keyring: showing 'empty' here told a customer
             // with a stored key "No key on file" on any transient non-2xx.
             byokShowError(requestErrorMessage(err, 'network error'));
+            byokMetadataKnown = false;
+            syncByokActionControls();
             byokShowState('error');
             return undefined;
           });
@@ -1098,21 +1178,18 @@ const EMAIL_EVENTS = [
       if (byokForm) {
         byokForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
-          if (byokSaveInFlight) return;
           if (!byokInput || !token) return;
           const key = byokInput.value.trim();
           if (key.length === 0) {
             byokShowError('Paste an Anthropic API key first.');
             return;
           }
+          if (!beginByokAction('save')) return;
           byokHideError();
           const previousMetadataKnown = byokMetadataKnown;
           const previousHadKey = byokMetadata.hasKey;
           const previousSetAt = byokMetadata.setAt;
-          byokSaveInFlight = true;
           if (byokSaveBtn) {
-            byokSaveBtn.disabled = true;
-            byokSaveBtn.setAttribute('aria-busy', 'true');
             byokSaveBtn.textContent = 'Saving…';
           }
           boundedFetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
@@ -1167,36 +1244,27 @@ const EMAIL_EVENTS = [
               byokShowError(requestErrorMessage(err, 'network error'));
             })
             .finally(() => {
-              byokSaveInFlight = false;
               if (byokSaveBtn) {
-                byokSaveBtn.disabled = false;
-                byokSaveBtn.removeAttribute('aria-busy');
                 byokSaveBtn.textContent = 'Save key';
               }
+              endByokAction('save');
             });
         });
       }
 
       if (byokTestBtn) {
         byokTestBtn.addEventListener('click', () => {
-          if (byokTestInFlight) return;
-          if (!byokInput || !token) return;
-          const key = byokInput.value.trim();
-          // Test the field's content if present (e.g. before save);
-          // otherwise test the stored key (server reads ciphertext).
-          const payload = key.length > 0 ? { api_key: key } : {};
-          byokTestInFlight = true;
-          byokTestBtn.disabled = true;
-          byokTestBtn.setAttribute('aria-busy', 'true');
+          if (!token) return;
+          if (!byokMetadataKnown || !byokMetadata.hasKey) {
+            byokShowError('Save the key and wait for stored-key status before testing.');
+            return;
+          }
+          if (!beginByokAction('test')) return;
           byokTestBtn.textContent = 'Testing…';
           byokHideError();
           boundedFetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key/test', {
             method: 'POST',
-            headers: {
-              authorization: 'Bearer ' + token,
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify(payload),
+            headers: { authorization: 'Bearer ' + token },
           })
             .then((r) =>
               // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx.
@@ -1208,36 +1276,23 @@ const EMAIL_EVENTS = [
                     .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
             )
             .then((body) => {
-              byokTestBtn.textContent = body.ok === true ? 'Test ✓' : 'Test ⚠';
-              setTimeout(() => {
-                byokTestBtn.textContent = 'Test';
-                byokTestBtn.disabled = false;
-                byokTestBtn.removeAttribute('aria-busy');
-              }, 2000);
+              showByokTestFeedback(body.ok === true ? 'Test ✓' : 'Test ⚠');
               if (body.ok !== true) byokShowError(body.detail || 'Test call failed.');
             })
             .catch((err) => {
-              byokTestBtn.textContent = 'Test ⚠';
-              setTimeout(() => {
-                byokTestBtn.textContent = 'Test';
-                byokTestBtn.disabled = false;
-                byokTestBtn.removeAttribute('aria-busy');
-              }, 2000);
+              showByokTestFeedback('Test ⚠');
               byokShowError(requestErrorMessage(err, 'network error'));
             })
             .finally(() => {
-              byokTestInFlight = false;
+              endByokAction('test');
             });
         });
       }
 
       if (byokClearBtn) {
         byokClearBtn.addEventListener('click', async () => {
-          if (byokClearInFlight) return;
           if (!token) return;
-          byokClearInFlight = true;
-          byokClearBtn.disabled = true;
-          byokClearBtn.setAttribute('aria-busy', 'true');
+          if (!beginByokAction('clear')) return;
           try {
             if (!(await window.driftstackConfirm(
               'Clear your stored Anthropic key? Agent sessions will fall back to the bundled key (if available on your tier).',
@@ -1259,9 +1314,7 @@ const EMAIL_EVENTS = [
           } catch (err) {
             byokShowError(requestErrorMessage(err, 'network error'));
           } finally {
-            byokClearInFlight = false;
-            byokClearBtn.disabled = false;
-            byokClearBtn.removeAttribute('aria-busy');
+            endByokAction('clear');
           }
         });
       }

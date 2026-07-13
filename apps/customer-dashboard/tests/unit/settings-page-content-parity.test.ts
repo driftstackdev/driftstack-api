@@ -28,6 +28,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro');
 const EMAIL_PREFS_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/email-preferences.ts');
+const BYOK_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-byok-anthropic.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -125,5 +126,27 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toMatch(/const previousSetAt = byokMetadata\.setAt/);
     expect(body).toMatch(/nextMs > priorMs/);
     expect(body).toMatch(/The save likely completed before the response timed out/);
+  });
+
+  it('BYOK Test is stored-key-only and serialized with Save/Clear', () => {
+    expect(body).toMatch(/After saving, Test stored key/);
+    expect(body).toMatch(/let byokActionInFlight = null/);
+    expect(body).toMatch(/loadGeneration !== byokLoadGeneration/);
+    expect(body).toMatch(/if \(!beginByokAction\('test'\)\) return/);
+    const testRequest = body.match(
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/byok-anthropic-key\/test',[\s\S]*?\n\s*\}\)/,
+    );
+    expect(testRequest).not.toBeNull();
+    expect(testRequest![0]).not.toMatch(/body:/);
+    expect(testRequest![0]).not.toMatch(/content-type/);
+
+    const route = read(BYOK_ROUTE);
+    const testStart = route.indexOf("app.post(\n    '/v1/account/me/byok-anthropic-key/test'");
+    const testEnd = route.indexOf('\n  );', testStart);
+    expect(testStart).toBeGreaterThanOrEqual(0);
+    expect(testEnd).toBeGreaterThan(testStart);
+    const testHandler = route.slice(testStart, testEnd);
+    expect(testHandler).toMatch(/const plaintext = await service\.getPlaintext/);
+    expect(testHandler).not.toMatch(/request\.body/);
   });
 });

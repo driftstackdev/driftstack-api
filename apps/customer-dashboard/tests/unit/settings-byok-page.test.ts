@@ -2,7 +2,7 @@
 // (V-666): a customer stores / tests / clears their own Anthropic API
 // key, which powers agent sessions. The stored key is sensitive, so the
 // CLEAR action is confirm-gated. Covers the load empty/set states, the
-// save (PUT) with its empty-key guard, the test (POST), and the
+// save (PUT) with its empty-key guard, the stored-key-only test (POST), and the
 // confirm-gated clear (DELETE → back to empty). The settings page loads
 // ~7 account endpoints concurrently (each independent .catch), so this
 // uses a permissive stateful router with a mutable BYOK holder.
@@ -143,6 +143,12 @@ describe('settings page — BYOK Anthropic key', () => {
     await flush();
     expect(isHidden(window, '[data-byok-state="empty"]')).toBe(false);
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(true);
+    expect((window.document.querySelector('[data-byok-test]') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect((window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 
   it('load with a stored key: consumes the API has_key contract and shows set/last-used metadata without a key prefix', async () => {
@@ -158,6 +164,12 @@ describe('settings page — BYOK Anthropic key', () => {
       '2026-05-21',
     );
     expect(window.document.querySelector('[data-byok-prefix]')).toBeNull();
+    expect((window.document.querySelector('[data-byok-test]') as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    expect((window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 
   it('save empty input: shows the "paste a key first" error, fires no PUT', async () => {
@@ -188,6 +200,49 @@ describe('settings page — BYOK Anthropic key', () => {
     );
     expect(JSON.parse(String(put?.init?.body))).toEqual({ api_key: 'sk-ant-api03-SECRET' });
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
+  });
+
+  it('ignores a stale initial metadata response that arrives after the post-save refresh', async () => {
+    let resolveInitialGet: ((response: Response) => void) | undefined;
+    let byokGetCount = 0;
+    const byok = newByok({ set: false });
+    const base = makeRouter(byok);
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/me\/byok-anthropic-key$/.test(call.url) && method === 'GET') {
+          byokGetCount += 1;
+          if (byokGetCount === 1) {
+            return new Promise<Response>((resolve) => {
+              resolveInitialGet = resolve;
+            });
+          }
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-byok-form]') as HTMLFormElement;
+    const input = window.document.querySelector('#byok-key') as HTMLInputElement;
+    input.value = 'sk-ant-api03-SECRET';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
+    expect((window.document.querySelector('[data-byok-test]') as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+
+    resolveInitialGet?.(json({ has_key: false, set_at: null, last_used_at: null }));
+    await flush();
+
+    expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
+    expect(isHidden(window, '[data-byok-state="empty"]')).toBe(true);
+    expect((window.document.querySelector('[data-byok-test]') as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 
   it('committed save followed by AbortError refreshes authoritative metadata, reports likely completion, and clears the plaintext field', async () => {
@@ -336,10 +391,46 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
   });
 
-  it('serializes duplicate save, test, and pre-confirm clear actions with signaled requests', async () => {
+  it('tests only the confirmed stored key and never transmits plaintext from the input again', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: makeRouter(newByok({ set: true })),
+    });
+    win = window;
+    await flush();
+
+    const input = window.document.querySelector('#byok-key') as HTMLInputElement;
+    input.value = 'sk-ant-api03-UNSAVED-PLAINTEXT';
+    (window.document.querySelector('[data-byok-test]') as HTMLButtonElement).click();
+    await flush();
+
+    const testCall = fetchCalls.find(
+      (call) =>
+        call.init?.method === 'POST' &&
+        /\/v1\/account\/me\/byok-anthropic-key\/test$/.test(call.url),
+    );
+    expect(testCall).toBeTruthy();
+    expect(testCall?.init?.body).toBeUndefined();
+    expect(new Headers(testCall?.init?.headers).has('content-type')).toBe(false);
+    expect(JSON.stringify(testCall)).not.toContain('UNSAVED-PLAINTEXT');
+  });
+
+  it('uses one shared lease so save, test, and clear cannot race', async () => {
+    let resolvePut: ((response: Response) => void) | undefined;
+    const byok = newByok({ set: true });
+    const base = makeRouter(byok);
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       confirmReturns: true,
-      route: makeRouter(newByok({ set: true })),
+      route: (call) => {
+        if (
+          call.init?.method === 'PUT' &&
+          /\/v1\/account\/me\/byok-anthropic-key$/.test(call.url)
+        ) {
+          return new Promise<Response>((resolve) => {
+            resolvePut = resolve;
+          });
+        }
+        return base(call);
+      },
     });
     win = window;
     await flush();
@@ -351,28 +442,38 @@ describe('settings page — BYOK Anthropic key', () => {
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 
     const test = window.document.querySelector('[data-byok-test]') as HTMLButtonElement;
-    test.click();
     test.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 
     const clear = window.document.querySelector('[data-byok-clear]') as HTMLButtonElement;
-    clear.click();
     clear.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     await flush();
 
-    const byokMutations = fetchCalls.filter(
+    let byokMutations = fetchCalls.filter(
       (call) =>
         /\/v1\/account\/me\/byok-anthropic-key(?:\/test)?$/.test(call.url) &&
         ['PUT', 'POST', 'DELETE'].includes(call.init?.method || ''),
     );
-    expect(byokMutations.map((call) => call.init?.method).sort()).toEqual([
-      'DELETE',
-      'POST',
-      'PUT',
-    ]);
+    expect(byokMutations.map((call) => call.init?.method)).toEqual(['PUT']);
+    expect(test.disabled).toBe(true);
+    expect(clear.disabled).toBe(true);
+    expect(form.querySelector('button[type="submit"]')?.hasAttribute('aria-busy')).toBe(true);
+
+    byok.set_at = '2026-05-20T10:05:00.000Z';
+    resolvePut?.(json({ set_at: byok.set_at }));
+    await flush(10);
+
+    expect(test.disabled).toBe(false);
+    expect(clear.disabled).toBe(false);
+    test.click();
+    await flush();
+    byokMutations = fetchCalls.filter(
+      (call) =>
+        /\/v1\/account\/me\/byok-anthropic-key(?:\/test)?$/.test(call.url) &&
+        ['PUT', 'POST', 'DELETE'].includes(call.init?.method || ''),
+    );
+    expect(byokMutations.map((call) => call.init?.method)).toEqual(['PUT', 'POST']);
     expect(byokMutations.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(
       true,
     );
-    expect(clear.disabled).toBe(false);
-    expect(clear.hasAttribute('aria-busy')).toBe(false);
   });
 });
