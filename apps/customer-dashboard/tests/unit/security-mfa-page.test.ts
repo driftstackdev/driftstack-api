@@ -228,6 +228,97 @@ describe('security page — MFA (2FA) disable', () => {
     expect(isHidden(window, '[data-section="mfa-enrolled"]')).toBe(true);
   });
 
+  it('step-up proof is single-flight while a recovery-code request is pending', async () => {
+    const mfa = newMfa({ enrolled: true, requireStepUp: true });
+    const base = makeRouter(mfa);
+    let resolveStepUp!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveStepUp = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) =>
+        call.init?.method === 'POST' && /\/v1\/auth\/mfa\/step-up$/.test(call.url)
+          ? pending
+          : base(call),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-disable"]') as HTMLButtonElement).click();
+    await flush();
+    (window.document.querySelector('[data-field="mfa-step-up-code"]') as HTMLInputElement).value =
+      'unused-code';
+    const submit = window.document.querySelector(
+      '[data-button="mfa-step-up-submit"]',
+    ) as HTMLButtonElement;
+    const cancel = window.document.querySelector(
+      '[data-button="mfa-step-up-cancel"]',
+    ) as HTMLButtonElement;
+    submit.dispatchEvent(new window.Event('click'));
+    submit.dispatchEvent(new window.Event('click'));
+    await flush(2);
+
+    const stepUpCalls = fetchCalls.filter((call) => /\/v1\/auth\/mfa\/step-up$/.test(call.url));
+    expect(stepUpCalls).toHaveLength(1);
+    expect(JSON.parse(String(stepUpCalls[0]?.init?.body))).toEqual({
+      recovery_code: 'unused-code',
+    });
+    expect(submit.disabled).toBe(true);
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.textContent).toBe('Verifying…');
+    expect(cancel.disabled).toBe(true);
+
+    mfa.steppedUp = true;
+    resolveStepUp(json({ ok: true }));
+    await flush(12);
+    expect(submit.disabled).toBe(false);
+    expect(isHidden(window, '[data-section="mfa-enrolled"]')).toBe(true);
+  });
+
+  it('committed step-up timeout preserves the action and retries it without consuming another factor', async () => {
+    const mfa = newMfa({ enrolled: true, requireStepUp: true });
+    const base = makeRouter(mfa);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/v1\/auth\/mfa\/step-up$/.test(call.url)) {
+          mfa.steppedUp = true;
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-disable"]') as HTMLButtonElement).click();
+    await flush();
+    (window.document.querySelector('[data-field="mfa-step-up-code"]') as HTMLInputElement).value =
+      '123456';
+    (
+      window.document.querySelector('[data-button="mfa-step-up-submit"]') as HTMLButtonElement
+    ).click();
+    await flush(12);
+
+    expect(isHidden(window, '[data-section="mfa-step-up"]')).toBe(false);
+    expect(window.document.querySelector('[data-field="mfa-step-up-error"]')?.textContent).toMatch(
+      /proof outcome is unknown.*cancel this prompt and retry Disable two-factor first.*may already be MFA-fresh.*new current authenticator code or an unused recovery code/i,
+    );
+
+    (
+      window.document.querySelector('[data-button="mfa-step-up-cancel"]') as HTMLButtonElement
+    ).click();
+    (window.document.querySelector('[data-button="mfa-disable"]') as HTMLButtonElement).click();
+    await flush(12);
+    expect(fetchCalls.filter((call) => /\/v1\/auth\/mfa\/step-up$/.test(call.url))).toHaveLength(1);
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'DELETE' && /\/v1\/account\/mfa$/.test(call.url),
+      ),
+    ).toHaveLength(2);
+    expect(isHidden(window, '[data-section="mfa-enrolled"]')).toBe(true);
+  });
+
   it('disable cancelled at confirm: no DELETE fired, 2FA stays enrolled', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       confirmReturns: false,

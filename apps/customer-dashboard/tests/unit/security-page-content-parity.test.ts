@@ -128,6 +128,17 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toContain('Reload Security to verify before retrying disable');
   });
 
+  it('serializes MFA step-up proof and preserves safe timeout recovery', () => {
+    expect(body).toContain('let mfaStepUpInFlight = false;');
+    expect(body).toContain('if (mfaStepUpInFlight) return;');
+    expect(body).toContain("mfaStepUpSubmit.setAttribute('aria-busy', 'true')");
+    expect(body).toContain("mfaStepUpSubmit.textContent = 'Verifying…'");
+    expect(body).toContain('if (mfaStepUpCancel) mfaStepUpCancel.disabled = true;');
+    expect(body).toContain('MFA proof outcome is unknown after the request timed out.');
+    expect(body).toContain('the session may already be MFA-fresh');
+    expect(body).toContain('a new current authenticator code or an unused recovery code');
+  });
+
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     expect(body).toContain('ds_web_session_token');
   });

@@ -1002,6 +1002,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaStepUpError = root.querySelector('[data-field="mfa-step-up-error"]');
 
       let pendingStepUpAction = null; // 'disable' | 'regenerate' | null
+      let mfaStepUpInFlight = false;
       let mfaDisableInFlight = false;
       let mfaRegenerateInFlight = false;
 
@@ -1589,6 +1590,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function submitStepUp() {
+        if (mfaStepUpInFlight) return;
         clearStepUpError();
         const raw = (mfaStepUpInput && mfaStepUpInput.value || '').trim();
         if (!raw) {
@@ -1597,6 +1599,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         const isCode = /^\d{6}$/.test(raw);
         const body = isCode ? { code: raw } : { recovery_code: raw };
+        const action = pendingStepUpAction;
+        mfaStepUpInFlight = true;
+        if (mfaStepUpSubmit) {
+          mfaStepUpSubmit.disabled = true;
+          mfaStepUpSubmit.setAttribute('aria-busy', 'true');
+          mfaStepUpSubmit.textContent = 'Verifying…';
+        }
+        if (mfaStepUpCancel) mfaStepUpCancel.disabled = true;
         authedFetch('/v1/auth/mfa/step-up', {
           method: 'POST',
           body: JSON.stringify(body),
@@ -1610,12 +1620,31 @@ const apiBaseUrl = resolveApiBaseUrl();
                   .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
           )
           .then(() => {
-            const action = pendingStepUpAction;
             closeStepUp();
             if (action === 'disable') performDisable();
             else if (action === 'regenerate') performRegenerate();
           })
-          .catch((err) => showStepUpError(err.message || 'Step-up failed.'));
+          .catch((err) => {
+            if (err && err.name === 'AbortError') {
+              const actionLabel = action === 'disable' ? 'Disable two-factor' : 'Regenerate';
+              showStepUpError(
+                'MFA proof outcome is unknown after the request timed out. Cancel this prompt and retry ' +
+                  actionLabel +
+                  ' first: the session may already be MFA-fresh. If the step-up prompt returns, enter a new current authenticator code or an unused recovery code.',
+              );
+              return;
+            }
+            showStepUpError(err.message || 'Step-up failed.');
+          })
+          .finally(() => {
+            mfaStepUpInFlight = false;
+            if (mfaStepUpSubmit) {
+              mfaStepUpSubmit.disabled = false;
+              mfaStepUpSubmit.setAttribute('aria-busy', 'false');
+              mfaStepUpSubmit.textContent = 'Confirm';
+            }
+            if (mfaStepUpCancel) mfaStepUpCancel.disabled = false;
+          });
       }
 
       function performDisable() {
@@ -1787,7 +1816,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaStepUpSubmit = root.querySelector('[data-button="mfa-step-up-submit"]');
       if (mfaStepUpSubmit) mfaStepUpSubmit.addEventListener('click', submitStepUp);
       const mfaStepUpCancel = root.querySelector('[data-button="mfa-step-up-cancel"]');
-      if (mfaStepUpCancel) mfaStepUpCancel.addEventListener('click', closeStepUp);
+      if (mfaStepUpCancel)
+        mfaStepUpCancel.addEventListener('click', () => {
+          if (!mfaStepUpInFlight) closeStepUp();
+        });
 
       if (!token) {
         showBanner('Sign in to see live security status + recent activity.');
