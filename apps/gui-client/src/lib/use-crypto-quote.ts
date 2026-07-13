@@ -6,8 +6,9 @@
 // when product or currency changes; supports manual mode for views that
 // want to gate the request behind a button.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
 export interface CryptoQuoteData {
@@ -45,8 +46,13 @@ export function useCryptoQuote(opts: UseCryptoQuoteOpts): UseCryptoQuoteResult {
   const [state, setState] = useState<CryptoQuoteState>(
     opts.manual === true || opts.product === null ? { kind: 'idle' } : { kind: 'loading' },
   );
+  const requestRef = useRef<AbortController | null>(null);
+  const sequenceRef = useRef(0);
 
   const fetcher = useCallback(async (): Promise<void> => {
+    const sequence = ++sequenceRef.current;
+    requestRef.current?.abort();
+    requestRef.current = null;
     if (opts.product === null) {
       setState({ kind: 'idle' });
       return;
@@ -55,6 +61,8 @@ export function useCryptoQuote(opts: UseCryptoQuoteOpts): UseCryptoQuoteResult {
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
+    const controller = new AbortController();
+    requestRef.current = controller;
     setState({ kind: 'loading' });
     try {
       const baseUrl = settings.baseUrl.replace(/\/+$/, '');
@@ -62,8 +70,9 @@ export function useCryptoQuote(opts: UseCryptoQuoteOpts): UseCryptoQuoteResult {
       if (opts.priceCurrency !== undefined) {
         body.price_currency = opts.priceCurrency;
       }
-      const res = await fetch(`${baseUrl}/v1/billing/crypto-checkout/quote`, {
+      const res = await fetchWithDeadline(`${baseUrl}/v1/billing/crypto-checkout/quote`, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'application/json',
@@ -72,18 +81,37 @@ export function useCryptoQuote(opts: UseCryptoQuoteOpts): UseCryptoQuoteResult {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
       const parsed = (await res.json()) as CryptoQuoteData;
-      setState({ kind: 'ready', data: parsed });
+      if (sequence === sequenceRef.current) setState({ kind: 'ready', data: parsed });
     } catch (err) {
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'error',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Quote request timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null;
     }
   }, [opts.product, opts.priceCurrency, settings.apiKey, settings.baseUrl]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+    },
+    [opts.product, opts.priceCurrency, settings.apiKey, settings.baseUrl],
+  );
 
   useEffect(() => {
     if (opts.manual === true) return;

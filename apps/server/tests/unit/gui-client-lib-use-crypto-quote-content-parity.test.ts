@@ -84,7 +84,11 @@ describe('W473.A apps/gui-client/src/lib/use-crypto-quote.ts content parity', ()
 
   it('Fetch shape: POST `${baseUrl}/v1/billing/crypto-checkout/quote` exact + 3-header (authorization Bearer + accept application/json + content-type application/json) + body JSON.stringify(body); useCallback deps [opts.product, opts.priceCurrency, settings.apiKey, settings.baseUrl]', () => {
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/billing\/crypto-checkout\/quote`, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-checkout\/quote`, \{\s*\n?\s*method: 'POST',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(/requestRef\.current\?\.abort\(\);/);
+    expect(body).toMatch(
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: parsed \}\);/,
     );
     expect(body).toMatch(
       /\}, \[opts\.product, opts\.priceCurrency, settings\.apiKey, settings\.baseUrl\]\);/,
