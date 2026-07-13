@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { downloadBlob, readBoundedDownloadBlob } from './download';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { humanizeError } from './humanize-error';
 import { useSettings } from './SettingsContext';
 import type { AdminCryptoOrder } from './use-admin-crypto-orders-list';
 
@@ -110,9 +111,7 @@ export function useAdminCsvExport(opts: UseAdminCsvExportOpts = {}): UseAdminCsv
           message:
             err instanceof DOMException && err.name === 'AbortError'
               ? 'CSV export timed out. Check your connection and try again.'
-              : err instanceof Error
-                ? err.message
-                : String(err),
+              : humanizeError(err, "Couldn't export the CSV. Try again."),
         });
       }
     } finally {

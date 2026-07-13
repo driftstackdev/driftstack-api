@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import type { AgentMessageResponse, AgentSession } from '@driftstack/sdk';
+import { DriftstackError, type AgentMessageResponse, type AgentSession } from '@driftstack/sdk';
 import type { ChatTurn, UseAgentChatResult } from '../../src/lib/use-agent-chat';
 import { ConfirmProvider } from '../../src/components/ConfirmProvider';
 
@@ -225,7 +225,15 @@ describe('AgentChatView Save-as-recipe', () => {
   });
 
   it('surfaces an error and does not toast when the create fails', async () => {
-    createRecipe.mockRejectedValueOnce(new Error('quota exceeded'));
+    createRecipe.mockRejectedValueOnce(
+      new DriftstackError({
+        kind: 'conflict',
+        status: 409,
+        type: 'https://driftstack.dev/problems/conflict',
+        title: 'Conflict',
+        detail: 'quota exceeded',
+      }),
+    );
     const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
     chatState = baseChat({ session: SESSION, turns: [planTurn] });
     render(<AgentChatView />);

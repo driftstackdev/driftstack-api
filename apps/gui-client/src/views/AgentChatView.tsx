@@ -13,18 +13,20 @@
 // when the fleet path is wired (prod), 'simulated' only on a stub deployment.
 
 import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react';
-import type {
-  AgentIntent,
-  AgentIntentResult,
-  AgentMessageResponse,
-  AgentUsage,
-  LiveKitInfo,
+import {
+  DriftstackError,
+  type AgentIntent,
+  type AgentIntentResult,
+  type AgentMessageResponse,
+  type AgentUsage,
+  type LiveKitInfo,
 } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useFocusTrap } from '../lib/use-focus-trap';
+import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
@@ -415,7 +417,11 @@ export function AgentChatView({
         tone: 'success',
       });
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Could not save the task.');
+      setSaveError(
+        err instanceof DriftstackError
+          ? err.message
+          : humanizeError(err, "Couldn't save the task. Try again."),
+      );
     } finally {
       setSaving(false);
     }
@@ -458,7 +464,9 @@ export function AgentChatView({
       })
       .catch((err: unknown) => {
         setBundledLlmEnableError(
-          err instanceof Error ? err.message : 'Could not enable — try again.',
+          err instanceof DriftstackError
+            ? err.message
+            : humanizeError(err, "Couldn't enable AI features. Try again."),
         );
       })
       .finally(() => setBundledLlmEnabling(false));

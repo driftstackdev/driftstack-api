@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { humanizeError } from './humanize-error';
 import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 
@@ -95,9 +96,7 @@ export function useCryptoQuote(opts: UseCryptoQuoteOpts): UseCryptoQuoteResult {
           message:
             err instanceof DOMException && err.name === 'AbortError'
               ? 'Quote request timed out. Check your connection and try again.'
-              : err instanceof Error
-                ? err.message
-                : String(err),
+              : humanizeError(err, "Couldn't load a crypto quote. Try again."),
         });
       }
     } finally {

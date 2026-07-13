@@ -15,7 +15,7 @@ export function humanizeError(
     return 'The request took too long. Check your connection and try again.';
   }
   if (
-    /failed to fetch|network(?:error| request)?|load failed|offline|internet|connection (?:failed|lost|refused)|dns/.test(
+    /failed to fetch|fetch failed|network(?:error| request)?|load failed|offline|internet|connection (?:failed|lost|refused)|dns/.test(
       normalized,
     )
   ) {

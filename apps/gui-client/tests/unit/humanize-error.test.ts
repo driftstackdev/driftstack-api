@@ -6,6 +6,9 @@ describe('humanizeError', () => {
     expect(humanizeError(new TypeError('Failed to fetch'))).toBe(
       'Check your connection and try again.',
     );
+    expect(humanizeError(new TypeError('fetch failed'))).toBe(
+      'Check your connection and try again.',
+    );
     expect(humanizeError(new Error('offline'))).toBe('Check your connection and try again.');
   });
 

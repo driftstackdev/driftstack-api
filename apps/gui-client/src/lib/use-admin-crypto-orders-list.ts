@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { humanizeError } from './humanize-error';
 import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 import type { CryptoOrderData } from './use-crypto-order';
@@ -160,9 +161,7 @@ export function useAdminCryptoOrdersList(
           message:
             err instanceof DOMException && err.name === 'AbortError'
               ? 'Order list timed out. Check your connection and try again.'
-              : err instanceof Error
-                ? err.message
-                : String(err),
+              : humanizeError(err, "Couldn't load the order list. Try again."),
         });
       }
     } finally {
@@ -218,9 +217,7 @@ export function useAdminCryptoOrdersList(
           message:
             err instanceof DOMException && err.name === 'AbortError'
               ? 'More orders timed out. Check your connection and try again.'
-              : err instanceof Error
-                ? err.message
-                : String(err),
+              : humanizeError(err, "Couldn't load more orders. Try again."),
         });
       }
     } finally {

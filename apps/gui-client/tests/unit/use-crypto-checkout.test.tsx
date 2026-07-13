@@ -217,7 +217,7 @@ describe('V-534.J useCryptoCheckout.start — error paths', () => {
       });
     });
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('network down');
+      expect(result.current.state.message).toBe('Check your connection and try again.');
     } else {
       throw new Error('expected error state');
     }

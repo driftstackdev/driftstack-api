@@ -186,7 +186,10 @@ describe('V-534.AX useAdminCsvExport', () => {
     await act(async () => result.current.download());
     expect(document.querySelector('a[href="blob:cleanup"]')).toBeNull();
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:cleanup');
-    expect(result.current.state).toEqual({ kind: 'failed', message: 'click blocked' });
+    expect(result.current.state).toEqual({
+      kind: 'failed',
+      message: "Couldn't export the CSV. Try again.",
+    });
   });
 
   it('reset aborts and invalidates an active export', () => {
@@ -236,7 +239,7 @@ describe('V-534.AX useAdminCsvExport', () => {
     });
     expect(result.current.state.kind).toBe('failed');
     if (result.current.state.kind === 'failed') {
-      expect(result.current.state.message).toContain('boom');
+      expect(result.current.state.message).toBe("Couldn't export the CSV. Try again.");
     }
   });
 

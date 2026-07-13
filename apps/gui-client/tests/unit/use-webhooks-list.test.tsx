@@ -119,7 +119,7 @@ describe('V-534.S useWebhooksList — error paths', () => {
     const { result } = renderHook(() => useWebhooksList());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('offline');
+      expect(result.current.state.message).toBe('Check your connection and try again.');
     }
   });
 });

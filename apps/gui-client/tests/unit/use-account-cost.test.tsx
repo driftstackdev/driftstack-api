@@ -122,7 +122,7 @@ describe('V-534.H useAccountCost — error paths', () => {
     const { result } = renderHook(() => useAccountCost());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('network down');
+      expect(result.current.state.message).toBe('Check your connection and try again.');
     }
   });
 
