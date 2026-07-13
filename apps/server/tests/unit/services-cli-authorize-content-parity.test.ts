@@ -7,7 +7,7 @@
 //
 //   • V-266 framing: pure Redis backing, 5-min TTL, JSON-serialised
 //     state+status+plaintext+accountId payload, key prefix
-//     `cli-auth:code:`.
+//     `cli-auth:code:<sha256(code)>`.
 //   • One-shot exchange: deletes Redis key on bound retrieval; second
 //     call returns expired.
 //   • Pending-TTL-expiry naturally returns expired (Redis evicted).
@@ -26,7 +26,7 @@
 //     JSON.stringify failure downstream).
 //   • CliAuthorizeError 5-code union (invalid_code / state_mismatch /
 //     already_bound / not_found / expired).
-//   • constantTimeStringEqual: length-check + timingSafeEqual buffer
+//   • constantTimeStringEqual: byte-length check + timingSafeEqual buffer
 //     comparison (mitigates state-parameter timing attack).
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -45,10 +45,10 @@ function read(p: string): string {
 describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-266 framing pinned: browser-OAuth-style activation + pure-Redis storage + 5-min TTL + cli-auth:code: prefix', () => {
+  it('V-266 framing pins hashed Redis identifiers and encrypted bound values', () => {
     expect(body).toMatch(/V-266 — Browser-OAuth-style activation flow for the CLI \/ GUI client\./);
     expect(body).toMatch(
-      /State storage: pure Redis with a 5-minute TTL on every code\. Keys\s*\n?\s*\/\/\s*follow `cli-auth:code:\{codeId\}`\. JSON-serialised value carries the\s*\n?\s*\/\/\s*state, status, and \(post-bind\) the API key plaintext \+ accountId\s*\n?\s*\/\/\s*the GUI will pull on its next poll\./,
+      /State storage: pure Redis with a 5-minute TTL on every code\. Keys use\s*\n?\s*\/\/\s*`cli-auth:code:<sha256\(code\)>`, keeping the live wire credential out of\s*\n?\s*\/\/\s*Redis key scans\/slowlogs\. The JSON value carries state, status, and the\s*\n?\s*\/\/\s*\(post-bind\) encrypted API key \+ accountId the GUI pulls on its next poll\./,
     );
   });
 
@@ -69,6 +69,12 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     expect(body).toMatch(/const TTL_SECONDS = 5 \* 60;/);
     // D1 — shorter post-bind window while the (encrypted) key waits in Redis.
     expect(body).toMatch(/const BIND_TTL_SECONDS = 2 \* 60;/);
+  });
+
+  it('cliAuthorizeRedisKey derives a fixed-length SHA-256 identifier', () => {
+    expect(body).toMatch(/export function cliAuthorizeRedisKey\(code: string\): string \{/);
+    expect(body).toMatch(/createHash\('sha256'\)\.update\(code\)\.digest\('hex'\)/);
+    expect(body).toMatch(/return cliAuthorizeRedisKey\(code\);/);
   });
 
   it('CliAuthorizeStore: KV contract includes atomic compare-and-set bind and read-delete exchange', () => {
@@ -207,9 +213,9 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
   });
 
-  it('constantTimeStringEqual: length-check fast-path + timingSafeEqual buffer comparison', () => {
+  it('constantTimeStringEqual compares UTF-8 buffer lengths before timingSafeEqual', () => {
     expect(body).toMatch(
-      /function constantTimeStringEqual\(a: string, b: string\): boolean \{\s*\n?\s*if \(a\.length !== b\.length\) return false;\s*\n?\s*return timingSafeEqual\(Buffer\.from\(a\), Buffer\.from\(b\)\);\s*\n?\s*\}/,
+      /function constantTimeStringEqual\(a: string, b: string\): boolean \{\s*\n?\s*const aBytes = Buffer\.from\(a\);\s*\n?\s*const bBytes = Buffer\.from\(b\);\s*\n?\s*if \(aBytes\.length !== bBytes\.length\) return false;\s*\n?\s*return timingSafeEqual\(aBytes, bBytes\);\s*\n?\s*\}/,
     );
   });
 
@@ -219,8 +225,10 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
   });
 
-  it('imports: randomBytes+timingSafeEqual from node:crypto + Redis type + ApiKeyScope from api-types', () => {
-    expect(body).toMatch(/import \{ randomBytes, timingSafeEqual \} from 'node:crypto';/);
+  it('imports: createHash+randomBytes+timingSafeEqual from node:crypto + Redis type + ApiKeyScope from api-types', () => {
+    expect(body).toMatch(
+      /import \{ createHash, randomBytes, timingSafeEqual \} from 'node:crypto';/,
+    );
     expect(body).toMatch(/import type \{ Redis \} from 'ioredis';/);
     expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
     // D1 — at-rest encryption of the minted key uses the shared platform-secret envelope.

@@ -6,8 +6,8 @@
 //   / GUI client'.
 //
 //   State storage: pure Redis with 5-minute TTL on every code. Keys
-//   follow 'cli-auth:code:{codeId}'. JSON-serialised value carries
-//   state + status + (post-bind) API key plaintext + accountId.
+//   use a SHA-256 code identifier. JSON value carries state + status +
+//   (post-bind) encrypted API key + accountId.
 //
 //   REDIS_KEY_PREFIX = 'cli-auth:code:'.
 //   TTL_SECONDS = 5 * 60 (300 seconds).
@@ -49,7 +49,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { InMemoryCliAuthorizeStore } from '../../src/services/cli-authorize.js';
+import {
+  InMemoryCliAuthorizeStore,
+  cliAuthorizeRedisKey,
+} from '../../src/services/cli-authorize.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -68,18 +71,23 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
 
   // ─── Redis storage + 5-min TTL + key prefix ──────────────────
 
-  it("CRITICAL storage framing — 'State storage: pure Redis with a 5-minute TTL on every code. Keys follow cli-auth:code:{codeId}. JSON-serialised value carries the state, status, and (post-bind) the API key plaintext + accountId the GUI will pull on its next poll'. The Redis-only + 5-min TTL is the V-266 storage contract.", () => {
+  it('CRITICAL storage framing keeps the live wire code out of Redis keys and encrypts bound API-key values.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/State storage: pure Redis with a 5-minute TTL on every code\. Keys/);
-    expect(p).toMatch(/follow `cli-auth:code:\{codeId\}`\. JSON-serialised value carries the/);
-    expect(p).toMatch(/state, status, and \(post-bind\) the API key plaintext \+ accountId/);
-    expect(p).toMatch(/the GUI will pull on its next poll/);
+    expect(p).toMatch(/`cli-auth:code:<sha256\(code\)>`/);
+    expect(p).toMatch(/keeping the live wire credential out of/);
+    expect(p).toMatch(/\(post-bind\) encrypted API key \+ accountId/);
   });
 
   it("CRITICAL REDIS_KEY_PREFIX = 'cli-auth:code:' + TTL_SECONDS = 5 * 60. The 2 constants are the Redis-keyspace fingerprint.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/const REDIS_KEY_PREFIX = 'cli-auth:code:';/);
     expect(p).toMatch(/const TTL_SECONDS = 5 \* 60;/);
+    const key = cliAuthorizeRedisKey('live-cli-authorization-code');
+    expect(key).toMatch(/^cli-auth:code:[0-9a-f]{64}$/);
+    expect(key).not.toContain('live-cli-authorization-code');
+    expect(cliAuthorizeRedisKey('live-cli-authorization-code')).toBe(key);
+    expect(cliAuthorizeRedisKey('different-code')).not.toBe(key);
   });
 
   // ─── One-shot exchange framing ───────────────────────────────

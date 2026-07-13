@@ -17,6 +17,7 @@ import {
   CliAuthorizeError,
   CliAuthorizeService,
   InMemoryCliAuthorizeStore,
+  cliAuthorizeRedisKey,
 } from '../../src/services/cli-authorize.js';
 
 const STATE = 'st_' + 'a'.repeat(20);
@@ -37,13 +38,17 @@ function makeSvc(overrides: { dashboardOrigin?: string } = {}): {
 
 describe('V-553.B-22 CliAuthorizeService.initiate', () => {
   it('returns a url-safe code + browser_url + expires_at', async () => {
-    const { svc } = makeSvc();
+    const { svc, store } = makeSvc();
     const out = await svc.initiate({ state: 'st_xyz', client_label: 'CLI v1.0' });
     expect(out.code).toMatch(/^[A-Za-z0-9_-]{40,}$/);
     expect(out.browser_url).toContain('https://app.driftstack.dev/cli/authorize');
     expect(out.browser_url).toContain('state=st_xyz');
     expect(out.browser_url).toContain(`code=${encodeURIComponent(out.code)}`);
     expect(out.expires_at).toBeInstanceOf(Date);
+    const redisKey = cliAuthorizeRedisKey(out.code);
+    expect(redisKey).toMatch(/^cli-auth:code:[0-9a-f]{64}$/);
+    expect(redisKey).not.toContain(out.code);
+    expect(await store.get(redisKey)).not.toBeNull();
   });
 
   it('uses dashboardPath override when supplied', async () => {
@@ -170,6 +175,14 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
     await expect(svc.exchange({ code, state: 'wrong' })).rejects.toThrow(/state/i);
   });
 
+  it('returns state_mismatch for equal-character Unicode with unequal UTF-8 byte length', async () => {
+    const { svc } = makeSvc();
+    const { code } = await svc.initiate({ state: 'a'.repeat(16) });
+    await expect(svc.exchange({ code, state: 'é'.repeat(16) })).rejects.toMatchObject({
+      code: 'state_mismatch',
+    });
+  });
+
   it('returns bound + plaintext + account_id once, then expired (one-shot)', async () => {
     const { svc } = makeSvc();
     const { code } = await svc.initiate({ state: 's' });
@@ -209,7 +222,7 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
       scopes: ['read'],
     });
     // The blob that actually sits in Redis must not contain the plaintext.
-    const rawStored = await store.get(`cli-auth:code:${code}`);
+    const rawStored = await store.get(cliAuthorizeRedisKey(code));
     expect(rawStored).not.toBeNull();
     expect(rawStored ?? '').not.toContain('ds_live_secret_at_rest');
     expect(rawStored ?? '').toContain('"encrypted":true');
@@ -227,11 +240,11 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
       secretEncryptionKeyBase64: ENC_KEY,
     });
     const { code } = await svc.initiate({ state: STATE });
-    const raw = await store.get(`cli-auth:code:${code}`);
+    const raw = await store.get(cliAuthorizeRedisKey(code));
     expect(raw).not.toBeNull();
     const pending = JSON.parse(raw ?? '{}') as Record<string, unknown>;
     await store.setEx(
-      `cli-auth:code:${code}`,
+      cliAuthorizeRedisKey(code),
       JSON.stringify({
         ...pending,
         status: 'bound',

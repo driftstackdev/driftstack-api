@@ -1,9 +1,9 @@
 // V-266 — Browser-OAuth-style activation flow for the CLI / GUI client.
 //
-// State storage: pure Redis with a 5-minute TTL on every code. Keys
-// follow `cli-auth:code:{codeId}`. JSON-serialised value carries the
-// state, status, and (post-bind) the API key plaintext + accountId
-// the GUI will pull on its next poll.
+// State storage: pure Redis with a 5-minute TTL on every code. Keys use
+// `cli-auth:code:<sha256(code)>`, keeping the live wire credential out of
+// Redis key scans/slowlogs. The JSON value carries state, status, and the
+// (post-bind) encrypted API key + accountId the GUI pulls on its next poll.
 //
 // One-shot semantics: `exchange` deletes the key on successful
 // retrieval, so a second call returns `expired`. A code that's still
@@ -14,7 +14,7 @@
 // `dashboardOrigin` (e.g. `https://app.driftstack.dev`) so dev /
 // staging / production all wire correctly.
 
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import { decryptPlatformSecret, encryptPlatformSecret } from '../lib/platform-secret-encryption.js';
@@ -28,6 +28,10 @@ const TTL_SECONDS = 5 * 60;
 // ceiling caps how long the (encrypted) API key sits in Redis while
 // still comfortably covering a slow poll loop.
 const BIND_TTL_SECONDS = 2 * 60;
+
+export function cliAuthorizeRedisKey(code: string): string {
+  return `${REDIS_KEY_PREFIX}${createHash('sha256').update(code).digest('hex')}`;
+}
 
 /**
  * Minimal KV-store contract the service needs. Production wires the
@@ -416,11 +420,13 @@ export class CliAuthorizeService {
   }
 
   private key(code: string): string {
-    return `${REDIS_KEY_PREFIX}${code}`;
+    return cliAuthorizeRedisKey(code);
   }
 }
 
 function constantTimeStringEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const aBytes = Buffer.from(a);
+  const bBytes = Buffer.from(b);
+  if (aBytes.length !== bBytes.length) return false;
+  return timingSafeEqual(aBytes, bBytes);
 }
