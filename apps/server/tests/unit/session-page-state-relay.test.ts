@@ -62,7 +62,7 @@ describe('audit-M1 makeSessionPageStateRelay', () => {
     expect(store.size).toBe(0);
   });
 
-  it('preserves per-session ORDER even when the first frame lookup resolves SLOWER than the second (no stale clobber)', async () => {
+  it('preserves per-session order and coalesces pending state to the newest frame', async () => {
     const store = new SessionPageStateStore();
     // First lookup is deliberately slow, second is fast — without per-session
     // chaining the fast 'loaded' would land first and the slow 'loading' would
@@ -89,11 +89,19 @@ describe('audit-M1 makeSessionPageStateRelay', () => {
       state: 'loaded',
       url: 'https://example.com',
     };
+    const superseded: PageStateFrame = {
+      type: 'pageState',
+      sessionId: 'agt_1',
+      state: 'stalled',
+      url: 'https://example.com',
+    };
     relay(loading, 'node-1');
+    relay(superseded, 'node-1');
     relay(loaded, 'node-1');
     await new Promise((r) => setTimeout(r, 60));
     // The newer frame wins; the older slow one did NOT overwrite it.
     expect(store.get('agt_1')?.state).toBe('loaded');
+    expect(sessions.get).toHaveBeenCalledTimes(2);
   });
 
   it('never throws + does not store when the lookup rejects (fire-and-forget, error-logged)', async () => {

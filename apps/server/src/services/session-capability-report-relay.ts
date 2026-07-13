@@ -7,6 +7,7 @@
 
 import type { Logger } from '../lib/logger.js';
 import type { CapabilityReport } from '../schemas/harness-control-protocol.js';
+import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import type { SessionCapabilityReportStore } from './session-capability-report-store.js';
 
 interface CapabilityReportAgentSessions {
@@ -53,8 +54,6 @@ export function makeSessionCapabilityReportRelay(
   store: SessionCapabilityReportStore,
   logger: Logger,
 ): (frame: CapabilityReport, reportingNodeId: string) => void {
-  const chains = new Map<string, Promise<void>>();
-
   const process = async (frame: CapabilityReport, reportingNodeId: string): Promise<void> => {
     const session = await agentSessions.get(frame.sessionId);
     if (session === null || session.nodeId !== reportingNodeId || session.status === 'closed') {
@@ -90,20 +89,25 @@ export function makeSessionCapabilityReportRelay(
     });
   };
 
-  return (frame: CapabilityReport, reportingNodeId: string): void => {
-    const sessionId = frame.sessionId;
-    const previous = chains.get(sessionId) ?? Promise.resolve();
-    const chained = previous.then(() =>
-      process(frame, reportingNodeId).catch((err: unknown) => {
-        logger.error(
-          { component: 'session-capability-report-relay', sessionId, err },
-          'failed to consume capabilityReport',
-        );
-      }),
-    );
-    chains.set(sessionId, chained);
-    void chained.finally(() => {
-      if (chains.get(sessionId) === chained) chains.delete(sessionId);
-    });
-  };
+  return makeBoundedNodeLatestRelay({
+    getSessionId: (frame) => frame.sessionId,
+    process,
+    onError: ({ error, sessionId }) => {
+      logger.error(
+        { component: 'session-capability-report-relay', sessionId, err: error },
+        'failed to consume capabilityReport',
+      );
+    },
+    onOverflow: ({ reportingNodeId, sessionBudget, sessionId }) => {
+      logger.warn(
+        {
+          component: 'session-capability-report-relay',
+          reportingNodeId,
+          sessionBudget,
+          sessionId,
+        },
+        'dropped capabilityReport because the reporting node exceeded its relay session budget',
+      );
+    },
+  });
 }

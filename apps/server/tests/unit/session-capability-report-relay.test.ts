@@ -103,7 +103,7 @@ describe('makeSessionCapabilityReportRelay', () => {
     }
   });
 
-  it('keeps per-session processing ordered when the older ownership lookup resolves later', async () => {
+  it('keeps per-session processing ordered and coalesces pending state to the newest report', async () => {
     let releaseFirst!: () => void;
     const first = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -128,11 +128,13 @@ describe('makeSessionCapabilityReportRelay', () => {
       logger(),
     );
     relay(report('agt_1', { timestamp: 'old', streamingState: 'blank' }), 'node-1');
+    relay(report('agt_1', { timestamp: 'superseded', streamingState: 'failed' }), 'node-1');
     relay(report('agt_1', { timestamp: 'new', streamingState: 'live' }), 'node-1');
     await Promise.resolve();
     expect(calls).toBe(1);
     releaseFirst();
     await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(2));
+    expect(calls).toBe(2);
     expect(store.get('agt_1')).toMatchObject({ timestamp: 'new', streaming_state: 'live' });
   });
 
