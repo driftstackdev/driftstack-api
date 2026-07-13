@@ -148,23 +148,14 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         showSuccess();
         return;
       }
-      // RFC 7807 problem+json carries a user-friendly `detail`; fall
-      // back to a status-specific message.
-      let detail = '';
-      try {
-        const body = await res.json();
-        detail = (body && (body.detail || body.message)) || '';
-      } catch {
-        /* non-JSON body */
-      }
       if (res.status === 400) {
-        showError(detail || 'This confirmation link has expired or is malformed.');
+        showError('This confirmation link has expired or is malformed.');
       } else if (res.status === 404) {
-        showError(detail || 'This confirmation link is invalid or has already been used.');
+        showError('This confirmation link is invalid or has already been used.');
       } else if (res.status === 429) {
         showError('Too many attempts from this IP. Try again in a minute.');
       } else {
-        showError(detail || `Couldn't confirm your subscription (HTTP ${res.status}).`);
+        showError("Couldn't confirm your subscription right now. Try again in a moment.");
       }
     } catch (error) {
       if (error && error.name === 'AbortError') {

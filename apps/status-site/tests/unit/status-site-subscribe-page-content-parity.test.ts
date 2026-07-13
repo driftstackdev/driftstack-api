@@ -75,7 +75,8 @@ describe('W369.C status-site /subscribe page content parity', () => {
     expect(body).toMatch(/That doesn't look like a valid email address/);
     expect(body).toMatch(/res\.status === 429/);
     expect(body).toMatch(/Too many subscribe attempts from this IP/);
-    expect(body).toMatch(/Subscribe failed \(HTTP \$\{res\.status\}\)\./);
+    expect(body).toMatch(/Couldn't start the subscription right now/);
+    expect(body).not.toMatch(/HTTP \$\{res\.status\}/);
   });
 
   it('binds custom validation to the email control and focuses both invalid branches', () => {

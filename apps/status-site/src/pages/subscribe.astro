@@ -211,7 +211,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
           'error',
         );
       } else {
-        setStatus(`Subscribe failed (HTTP ${res.status}). Try again in a moment.`, 'error');
+        setStatus("Couldn't start the subscription right now. Try again in a moment.", 'error');
       }
     } catch (error) {
       if (error && error.name === 'AbortError') {

@@ -146,22 +146,14 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         showSuccess();
         return;
       }
-      // RFC 7807 problem+json carries a user-friendly `detail`.
-      let detail = '';
-      try {
-        const body = await res.json();
-        detail = (body && (body.detail || body.message)) || '';
-      } catch {
-        /* non-JSON body */
-      }
       if (res.status === 400) {
-        showError(detail || 'This unsubscribe link is malformed.');
+        showError('This unsubscribe link is malformed.');
       } else if (res.status === 404) {
-        showError(detail || 'This unsubscribe link is invalid.');
+        showError('This unsubscribe link is invalid.');
       } else if (res.status === 429) {
         showError('Too many attempts from this IP. Try again in a minute.');
       } else {
-        showError(detail || `Couldn't unsubscribe you (HTTP ${res.status}).`);
+        showError("Couldn't unsubscribe you right now. Try again in a moment.");
       }
     } catch (error) {
       if (error && error.name === 'AbortError') {

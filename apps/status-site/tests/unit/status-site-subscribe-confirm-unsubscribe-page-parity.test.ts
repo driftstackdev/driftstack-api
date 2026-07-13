@@ -106,6 +106,15 @@ describe('status-site /subscribe/confirm + /subscribe/unsubscribe parity', () =>
     expect(unsub).toMatch(/res\.status === 429/);
   });
 
+  it('uses fixed public copy instead of reflecting API diagnostics or bare statuses', () => {
+    for (const page of [confirm, unsub]) {
+      expect(page).not.toMatch(/body\.(?:detail|message)/);
+      expect(page).not.toMatch(/HTTP \$\{res\.status\}/);
+    }
+    expect(confirm).toMatch(/Couldn't confirm your subscription right now/);
+    expect(unsub).toMatch(/Couldn't unsubscribe you right now/);
+  });
+
   it('makes an ambiguous unsubscribe timeout terminal for that link load', () => {
     expect(unsub).toMatch(/id="unsub-unknown"/);
     expect(unsub).toMatch(/let unsubscribeOutcomeUnknown = false/);
