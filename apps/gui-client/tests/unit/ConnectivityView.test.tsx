@@ -54,6 +54,24 @@ afterEach(() => {
 });
 
 describe('ConnectivityView API-key row masking (audit)', () => {
+  it('bounds the background version probe and aborts it on unmount', () => {
+    let capturedSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedSignal = init?.signal ?? undefined;
+        return new Promise<Response>(() => {});
+      }),
+    );
+    useSettingsMock.mockReturnValue(baseSettings(null));
+
+    const { unmount } = render(<ConnectivityView embedded />);
+    expect(capturedSignal).toBeTruthy();
+    expect(capturedSignal?.aborted).toBe(false);
+    unmount();
+    expect(capturedSignal?.aborted).toBe(true);
+  });
+
   it('renders a ds_live_ key with the shared prefix-aware mask (ds_live_abcd…zzzz, NOT the old slice(0,8))', () => {
     // The /version effect calls fetch on mount — make it reject so the
     // server-info rows stay hidden and don't interfere.

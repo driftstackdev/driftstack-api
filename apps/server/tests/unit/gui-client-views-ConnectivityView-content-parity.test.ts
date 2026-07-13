@@ -71,10 +71,17 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
     );
   });
 
-  it("/version fetch effect: cancelled flag + trim trailing-slash + fetch (`${trimmed}/version`) + (r.ok ? r.json() : null) + setServerInfo only when !cancelled && info + catch → setServerInfo null (only when !cancelled) + cleanup returns cancelled=true — pinned so a fast unmount doesn't trigger React's 'setState on unmounted component' dev warning", () => {
+  it('/version fetch effect is bounded, cache-fresh, and aborts on URL change/unmount', () => {
+    expect(body).toMatch(/const controller = new AbortController\(\);/);
+    expect(body).toMatch(/window\.setTimeout\(\(\) => controller\.abort\(\), 8_000\)/);
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*let cancelled = false;\s*\n?\s*const trimmed = settings\.baseUrl\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*fetch\(`\$\{trimmed\}\/version`\)\s*\n?\s*\.then\(\(r\) => \(r\.ok \? \(r\.json\(\) as Promise<ServerVersion>\) : null\)\)\s*\n?\s*\.then\(\(info\) => \{\s*\n?\s*if \(!cancelled && info\) setServerInfo\(info\);\s*\n?\s*\}\)\s*\n?\s*\.catch\(\(\) => \{\s*\n?\s*if \(!cancelled\) setServerInfo\(null\);\s*\n?\s*\}\);\s*\n?\s*return \(\) => \{\s*\n?\s*cancelled = true;\s*\n?\s*\};\s*\n?\s*\}, \[settings\.baseUrl\]\);/,
+      /fetch\(`\$\{trimmed\}\/version`, \{ signal: controller\.signal, cache: 'no-store' \}\)/,
     );
+    expect(body).toMatch(/\.finally\(\(\) => \{\s*window\.clearTimeout\(timer\);/);
+    expect(body).toMatch(
+      /return \(\) => \{\s*cancelled = true;\s*window\.clearTimeout\(timer\);\s*controller\.abort\(\);/,
+    );
+    expect(body).toMatch(/if \(!cancelled && info\) setServerInfo\(info\)/);
   });
 
   it("runCheck: performance.now() ms timing (start → end → Math.round) + client.sessions.list({limit: 1}) delegation + 'API replied with N session(s) on the first page.' detail format + DriftstackError instanceof for errorKind extraction + 'unknown error' / 'unknown' kind fallbacks", () => {

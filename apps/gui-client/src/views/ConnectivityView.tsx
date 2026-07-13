@@ -38,16 +38,23 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
   useEffect(() => {
     let cancelled = false;
     const trimmed = settings.baseUrl.replace(/\/+$/, '');
-    fetch(`${trimmed}/version`)
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8_000);
+    fetch(`${trimmed}/version`, { signal: controller.signal, cache: 'no-store' })
       .then((r) => (r.ok ? (r.json() as Promise<ServerVersion>) : null))
       .then((info) => {
         if (!cancelled && info) setServerInfo(info);
       })
       .catch(() => {
         if (!cancelled) setServerInfo(null);
+      })
+      .finally(() => {
+        window.clearTimeout(timer);
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
+      controller.abort();
     };
   }, [settings.baseUrl]);
 
