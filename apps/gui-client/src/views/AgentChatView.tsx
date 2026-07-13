@@ -648,6 +648,35 @@ export function AgentChatView({
           )}
         </div>
 
+        {!aiReady && (
+          <div
+            role="status"
+            data-component="ai-api-key-gate"
+            className="border-b border-accent/35 bg-accent-subtle px-4 py-3"
+          >
+            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink-primary">
+                  Connect your API key to run automations
+                </p>
+                <p className="mt-0.5 text-xs text-ink-secondary">
+                  You can explore templates and draft a task now. Add your key in Settings before
+                  sending it to the browser.
+                </p>
+              </div>
+              {onGoToSettings !== undefined && (
+                <button
+                  type="button"
+                  onClick={onGoToSettings}
+                  className="btn-primary shrink-0 px-3 py-1.5 text-xs"
+                >
+                  Connect in Settings
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Transcript */}
         <div className="flex-1 overflow-auto px-4 py-4">
           {!started ? (

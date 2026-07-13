@@ -12,6 +12,7 @@ import { ConfirmProvider } from '../../src/components/ConfirmProvider';
 
 const createRecipe = vi.fn(() => Promise.resolve({ id: 'rec_1', label: 'My flow' }));
 const pushToast = vi.fn();
+const settingsState = vi.hoisted<{ apiKey: string | null }>(() => ({ apiKey: 'sk-test' }));
 // LiveAutomationPanel fetches the per-session LiveKit token via this method. The
 // live-view tests below swap its implementation per case (503, success, count).
 const livekitToken = vi.fn(() => Promise.resolve({ ws_url: '', room: '', token: '' }));
@@ -29,7 +30,7 @@ const client = {
 };
 
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ client, settings: { apiKey: 'sk-test' } }),
+  useSettings: () => ({ client, settings: { apiKey: settingsState.apiKey } }),
 }));
 // Stub the live-stream panel: the retry-success path renders it, and the real
 // one opens a LiveKit connection on mount (no transport in jsdom). A marker div
@@ -97,6 +98,22 @@ describe('AgentChatView Save-as-recipe', () => {
   beforeEach(() => {
     createRecipe.mockClear();
     pushToast.mockClear();
+    settingsState.apiKey = 'sk-test';
+  });
+
+  it('shows a persistent first-run API-key gate with a direct Settings action', () => {
+    settingsState.apiKey = null;
+    chatState = baseChat();
+    const onGoToSettings = vi.fn();
+    render(<AgentChatView onGoToSettings={onGoToSettings} />);
+
+    const gate = screen.getByRole('status');
+    expect(gate).toHaveAttribute('data-component', 'ai-api-key-gate');
+    expect(gate).toHaveTextContent('Connect your API key to run automations');
+    expect(gate).toHaveTextContent('explore templates and draft a task now');
+    fireEvent.click(within(gate).getByRole('button', { name: 'Connect in Settings' }));
+    expect(onGoToSettings).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 
   it('disables Save-as-recipe until a plan has actually executed', () => {
