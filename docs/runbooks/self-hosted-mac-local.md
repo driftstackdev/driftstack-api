@@ -59,11 +59,11 @@ when debugging one surface):
 | Surface            | Command                 | URL                     |
 | ------------------ | ----------------------- | ----------------------- |
 | API server         | `npm run dev:server`    | <http://localhost:3000> |
-| Customer dashboard | `npm run dev:dashboard` | <http://localhost:4321> |
-| Admin panel        | `npm run dev:admin`     | <http://localhost:4322> |
-| Marketing site     | `npm run dev:marketing` | <http://localhost:4323> |
-| Docs site          | `npm run dev:docs`      | <http://localhost:4324> |
-| Status site        | `npm run dev:status`    | <http://localhost:4325> |
+| Customer dashboard | `npm run dev:dashboard` | <http://localhost:5173> |
+| Admin panel        | `npm run dev:admin`     | <http://localhost:5174> |
+| Marketing site     | `npm run dev:marketing` | <http://localhost:4321> |
+| Docs site          | `npm run dev:docs`      | <http://localhost:4322> |
+| Status site        | `npm run dev:status`    | <http://localhost:4323> |
 
 `PUBLIC_API_BASE_URL` defaults to `http://localhost:3000` for all
 Astro apps in dev — they pick up the local API automatically.
@@ -84,7 +84,7 @@ To target the local API, the GUI's First-Run Wizard accepts
 
 ## Verify the full flow
 
-1. Open the customer dashboard at <http://localhost:4321>.
+1. Open the customer dashboard at <http://localhost:5173>.
 2. Sign up: `signup@example.test` / any password ≥ 12 chars.
 3. Verify email: dev mode logs the verify-email link to the API
    server's stdout. Click it to complete email verification.

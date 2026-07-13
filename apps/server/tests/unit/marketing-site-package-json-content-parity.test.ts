@@ -48,8 +48,8 @@ describe('W525.C apps/marketing-site/package.json content parity', () => {
     expect(pkg.type).toBe('module');
   });
 
-  it("4-script build pipeline framing pinned: 'dev: astro dev' + 'build: astro build' + 'preview: astro preview' + 'typecheck: astro check' — pinned so the 4-script pipeline (dev + build + preview + typecheck via astro check) commitment survives (drift to a different typecheck command would break CI's typecheck step)", () => {
-    expect(pkg.scripts.dev).toBe('astro dev');
+  it('4-script build pipeline pins deterministic marketing dev port 4321', () => {
+    expect(pkg.scripts.dev).toBe('astro dev --port 4321');
     expect(pkg.scripts.build).toBe('astro build');
     expect(pkg.scripts.preview).toBe('astro preview');
     expect(pkg.scripts.typecheck).toBe('astro check');

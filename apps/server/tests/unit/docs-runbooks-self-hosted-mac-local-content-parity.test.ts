@@ -59,21 +59,22 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     expect(body).toMatch(/npm run db:migrate --workspace @driftstack\/server/);
   });
 
-  it("V-336 dev:all + 6-surface port inventory framing pinned: 'V-336 — single command starts every surface concurrently' + 'npm run dev:all' + 'API server         | `npm run dev:server`    | <http://localhost:3000>' + 'Customer dashboard | `npm run dev:dashboard` | <http://localhost:4321>' + 'Admin panel        | `npm run dev:admin`     | <http://localhost:4322>' + 'Marketing site     | `npm run dev:marketing` | <http://localhost:4323>' + 'Docs site          | `npm run dev:docs`      | <http://localhost:4324>' + 'Status site        | `npm run dev:status`    | <http://localhost:4325>' + '`PUBLIC_API_BASE_URL` defaults to `http://localhost:3000` for all Astro apps in dev — they pick up the local API automatically.' — pinned so the V-336-dev:all + 6-surface-port-inventory (3000+4321+4322+4323+4324+4325) + PUBLIC_API_BASE_URL-default commitment survives", () => {
+  it('V-336 dev:all + six deterministic non-colliding surface ports + local API default pinned', () => {
     expect(body).toMatch(/V-336 — single command starts every surface concurrently:/);
     expect(body).toMatch(/npm run dev:all/);
     expect(body).toMatch(/API server\s+\|\s+`npm run dev:server`\s+\|\s+<http:\/\/localhost:3000>/);
     expect(body).toMatch(
-      /Customer dashboard \| `npm run dev:dashboard` \| <http:\/\/localhost:4321>/,
+      /Customer dashboard \| `npm run dev:dashboard` \| <http:\/\/localhost:5173>/,
     );
-    expect(body).toMatch(/Admin panel\s+\|\s+`npm run dev:admin`\s+\|\s+<http:\/\/localhost:4322>/);
+    expect(body).toMatch(/Admin panel\s+\|\s+`npm run dev:admin`\s+\|\s+<http:\/\/localhost:5174>/);
     expect(body).toMatch(
-      /Marketing site\s+\|\s+`npm run dev:marketing` \| <http:\/\/localhost:4323>/,
+      /Marketing site\s+\|\s+`npm run dev:marketing` \| <http:\/\/localhost:4321>/,
     );
-    expect(body).toMatch(/Docs site\s+\|\s+`npm run dev:docs`\s+\|\s+<http:\/\/localhost:4324>/);
+    expect(body).toMatch(/Docs site\s+\|\s+`npm run dev:docs`\s+\|\s+<http:\/\/localhost:4322>/);
     expect(body).toMatch(
-      /Status site\s+\|\s+`npm run dev:status`\s+\|\s+<http:\/\/localhost:4325>/,
+      /Status site\s+\|\s+`npm run dev:status`\s+\|\s+<http:\/\/localhost:4323>/,
     );
+    expect(body).toMatch(/Open the customer dashboard at <http:\/\/localhost:5173>/);
     expect(body).toMatch(/`PUBLIC_API_BASE_URL` defaults to `http:\/\/localhost:3000` for all/);
     expect(body).toMatch(/Astro apps in dev — they pick up the local API automatically\./);
   });

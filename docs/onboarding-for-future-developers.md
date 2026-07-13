@@ -43,7 +43,7 @@ npm run dev --workspace apps/marketing-site
 
 # Run the customer dashboard (separate terminal).
 npm run dev --workspace apps/customer-dashboard
-# → http://localhost:4322 (or next available port)
+# → http://localhost:5173
 
 # Run the GUI client (separate terminal; only if touching it).
 npm run dev --workspace apps/gui-client

@@ -44,8 +44,8 @@ describe('W526.C apps/customer-dashboard/package.json content parity', () => {
     expect(pkg.type).toBe('module');
   });
 
-  it("4-script build pipeline framing pinned: 'dev: astro dev' + 'build: astro build' + 'preview: astro preview' + 'typecheck: astro check' — pinned so the 4-script pipeline commitment survives (drift to a different typecheck command would break CI's dashboard-typecheck step)", () => {
-    expect(pkg.scripts.dev).toBe('astro dev');
+  it('4-script build pipeline framing pinned with customer dev port 5173 matching DASHBOARD_ORIGIN and the desktop activation capability', () => {
+    expect(pkg.scripts.dev).toBe('astro dev --port 5173');
     expect(pkg.scripts.build).toBe('astro build');
     expect(pkg.scripts.preview).toBe('astro preview');
     expect(pkg.scripts.typecheck).toBe('astro check');

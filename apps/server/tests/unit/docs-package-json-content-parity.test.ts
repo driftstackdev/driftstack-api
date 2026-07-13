@@ -47,7 +47,7 @@ describe('W537.B apps/docs/package.json content parity', () => {
     expect(pkg.name).toBe('@driftstack/docs');
     expect(pkg.private).toBe(true);
     expect(pkg.type).toBe('module');
-    expect(pkg.scripts.dev).toBe('astro dev');
+    expect(pkg.scripts.dev).toBe('astro dev --port 4322');
     expect(pkg.scripts.build).toBe('astro build && pagefind --site dist');
     expect(pkg.scripts.preview).toBe('astro preview');
     expect(pkg.scripts.typecheck).toBe('astro check');

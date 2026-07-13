@@ -80,14 +80,14 @@ describe('W547.A /docs/onboarding-for-future-developers.md content parity', () =
     );
   });
 
-  it("Daily dev loop + port allocation framing pinned: '## Daily dev loop' + 'npm run dev' + '# Run the marketing site (separate terminal).' + 'npm run dev --workspace apps/marketing-site' + '→ http://localhost:4321' + 'npm run dev --workspace apps/customer-dashboard' + '→ http://localhost:4322 (or next available port)' + 'npm run dev --workspace apps/gui-client' + 'The control plane defaults to `http://localhost:3000`. OpenAPI spec at `/openapi.json`, Swagger UI at `/docs`.' — pinned so the dev-port allocation (server :3000 + marketing :4321 + dashboard :4322) + /openapi.json + /docs Swagger UI commitment survives", () => {
+  it('Daily dev loop pins marketing 4321 and activation-compatible customer dashboard 5173', () => {
     expect(body).toMatch(/## Daily dev loop/);
     expect(body).toMatch(/npm run dev$/m);
     expect(body).toMatch(/# Run the marketing site \(separate terminal\)\./);
     expect(body).toMatch(/npm run dev --workspace apps\/marketing-site/);
     expect(body).toMatch(/# → http:\/\/localhost:4321/);
     expect(body).toMatch(/npm run dev --workspace apps\/customer-dashboard/);
-    expect(body).toMatch(/# → http:\/\/localhost:4322 \(or next available port\)/);
+    expect(body).toMatch(/# → http:\/\/localhost:5173/);
     expect(body).toMatch(/npm run dev --workspace apps\/gui-client/);
     expect(body).toMatch(/The control plane defaults to `http:\/\/localhost:3000`\./);
     expect(body).toMatch(/OpenAPI spec at `\/openapi\.json`, Swagger UI at `\/docs`\./);

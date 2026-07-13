@@ -44,8 +44,8 @@ describe('W527.C apps/admin-panel/package.json content parity', () => {
     expect(pkg.type).toBe('module');
   });
 
-  it("4-script build pipeline framing pinned: 'dev: astro dev' + 'build: astro build' + 'preview: astro preview' + 'typecheck: astro check' — pinned so the 4-script pipeline commitment survives", () => {
-    expect(pkg.scripts.dev).toBe('astro dev');
+  it('4-script build pipeline framing pins deterministic admin dev port 5174', () => {
+    expect(pkg.scripts.dev).toBe('astro dev --port 5174');
     expect(pkg.scripts.build).toBe('astro build');
     expect(pkg.scripts.preview).toBe('astro preview');
     expect(pkg.scripts.typecheck).toBe('astro check');
