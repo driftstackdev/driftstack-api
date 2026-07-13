@@ -70,10 +70,23 @@ function authHeaders(apiKey: string): Record<string, string> {
   return { authorization: `Bearer ${apiKey}`, accept: 'application/json' };
 }
 
+const ACCOUNT_PROXY_TIMEOUT_MS = 15_000;
+
+function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), ACCOUNT_PROXY_TIMEOUT_MS);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    globalThis.clearTimeout(timer);
+  });
+}
+
 /** GET the account's proxies. Throws on non-2xx / network error (caller falls
  *  back to the local cache when offline). */
 export async function listProxies(baseUrl: string, apiKey: string): Promise<AccountProxyMeta[]> {
-  const res = await fetch(base(baseUrl), { method: 'GET', headers: authHeaders(apiKey) });
+  const res = await fetchWithDeadline(base(baseUrl), {
+    method: 'GET',
+    headers: authHeaders(apiKey),
+  });
   if (!res.ok) throw new Error(`proxies fetch failed: ${res.status.toString()}`);
   const body = (await res.json()) as { data?: unknown };
   return Array.isArray(body.data) ? (body.data as AccountProxyMeta[]) : [];
@@ -84,7 +97,7 @@ export async function createProxy(
   apiKey: string,
   input: AccountProxyInput,
 ): Promise<AccountProxyMeta> {
-  const res = await fetch(base(baseUrl), {
+  const res = await fetchWithDeadline(base(baseUrl), {
     method: 'POST',
     headers: { ...authHeaders(apiKey), 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -99,7 +112,7 @@ export async function updateProxy(
   id: string,
   patch: AccountProxyUpdate,
 ): Promise<AccountProxyMeta> {
-  const res = await fetch(`${base(baseUrl)}/${encodeURIComponent(id)}`, {
+  const res = await fetchWithDeadline(`${base(baseUrl)}/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { ...authHeaders(apiKey), 'content-type': 'application/json' },
     body: JSON.stringify(patch),
@@ -117,7 +130,7 @@ export async function updateProxy(
 }
 
 export async function deleteProxy(baseUrl: string, apiKey: string, id: string): Promise<void> {
-  const res = await fetch(`${base(baseUrl)}/${encodeURIComponent(id)}`, {
+  const res = await fetchWithDeadline(`${base(baseUrl)}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: authHeaders(apiKey),
   });

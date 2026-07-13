@@ -5,6 +5,7 @@ import { createProxy, deleteProxy, listProxies, updateProxy } from '../../src/li
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const META = {
@@ -31,6 +32,7 @@ describe('listProxies', () => {
     );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe('GET');
+    expect(init.signal).toBeTruthy();
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer ds_key');
     expect(out).toEqual([META]);
   });
@@ -41,6 +43,25 @@ describe('listProxies', () => {
       vi.fn(() => Promise.resolve(new Response('nope', { status: 503 }))),
     );
     await expect(listProxies('https://api.driftstack.dev', 'ds_key')).rejects.toThrow();
+  });
+
+  it('aborts a hung transport after 15 seconds', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const pending = listProxies('https://api.driftstack.dev', 'ds_key');
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
   });
 });
 
