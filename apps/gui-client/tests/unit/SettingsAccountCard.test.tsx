@@ -125,6 +125,29 @@ describe('V-534.L SettingsAccountCard — failure paths', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent(/HTTP 401/);
   });
 
+  it.each([
+    [404, 'Account info is not available for this key.'],
+    [429, 'Too many requests. Wait a moment, then retry.'],
+    [503, 'The account service is temporarily unavailable. Try again shortly.'],
+    [418, "Couldn't load account info. Check the server URL, then retry."],
+  ])('maps HTTP %s to actionable copy without raw status/body text', async (status, expected) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status,
+          json: () => Promise.resolve({ detail: 'private host node.internal token=secret' }),
+        } as unknown as Response),
+      ),
+    );
+    render(<SettingsAccountCard />);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(expected));
+    expect(screen.getByRole('alert')).not.toHaveTextContent(
+      new RegExp(`HTTP|${status.toString()}|node\\.internal|token=secret`, 'i'),
+    );
+  });
+
   it('cancels an unread HTTP error body before rendering status guidance', async () => {
     const cancel = vi.fn();
     vi.stubGlobal(

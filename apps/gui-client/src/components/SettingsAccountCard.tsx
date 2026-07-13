@@ -66,7 +66,10 @@ function humanizeTier(tier: string): string {
 function errorMessageForStatus(status: number): string {
   if (status === 401) return "Your API key wasn't accepted. Check the key above, then retry.";
   if (status === 403) return "This API key doesn't have access to account info.";
-  return `Couldn't load account info (HTTP ${status.toString()}).`;
+  if (status === 404) return 'Account info is not available for this key.';
+  if (status === 429) return 'Too many requests. Wait a moment, then retry.';
+  if (status >= 500) return 'The account service is temporarily unavailable. Try again shortly.';
+  return "Couldn't load account info. Check the server URL, then retry.";
 }
 
 export function SettingsAccountCard(): JSX.Element | null {
