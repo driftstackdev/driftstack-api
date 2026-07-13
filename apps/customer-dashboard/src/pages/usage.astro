@@ -318,6 +318,14 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const token = localStorage.getItem('ds_web_session_token');
+      const USAGE_TIMEOUT_MS = 15_000;
+
+      function boundedFetch(url, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(() => controller.abort(), USAGE_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
 
       function showBanner(text) {
         if (!banner) return;
@@ -353,48 +361,102 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       const chartEl = root.querySelector('[data-daily-chart]');
       const chartLegend = root.querySelector('[data-daily-legend]');
       const chartEmpty = root.querySelector('[data-daily-empty]');
-      function renderDailyChart(days) {
+      const chartSection = root.querySelector('[data-section="daily-activity"]');
+      let chartRequestController = null;
+      let chartRequestVersion = 0;
+
+      function setChartBusy(btn) {
+        if (chartSection) chartSection.setAttribute('aria-busy', 'true');
+        root.querySelectorAll('[data-usage-days]').forEach(function (button) {
+          button.removeAttribute('aria-busy');
+        });
+        if (btn) btn.setAttribute('aria-busy', 'true');
+      }
+
+      function clearChartBusy(version) {
+        if (version !== chartRequestVersion) return;
+        if (chartSection) chartSection.removeAttribute('aria-busy');
+        root.querySelectorAll('[data-usage-days]').forEach(function (button) {
+          button.removeAttribute('aria-busy');
+        });
+      }
+
+      function showChartLoadFailure() {
+        if (chartEl) {
+          chartEl.classList.add('hidden');
+          chartEl.classList.remove('flex');
+        }
+        if (chartLegend) chartLegend.classList.add('hidden');
+        if (chartEmpty) chartEmpty.classList.add('hidden');
+        showBanner("Couldn't load daily activity. Try again.");
+      }
+
+      function renderDailyChart(series) {
         if (!chartEl) return;
-        fetch(apiBaseUrl + '/v1/usage/series?days=' + days, { headers, credentials: 'include' })
+        const buckets = (series && series.buckets) || [];
+        const values = buckets.map((b) => {
+          const t = (b && b.totals) || {};
+          let sum = 0;
+          for (const k in t) sum += Number(t[k]) || 0;
+          return sum;
+        });
+        const max = values.reduce((m, v) => (v > m ? v : m), 0);
+        if (!buckets.length || max <= 0) {
+          chartEl.classList.add('hidden');
+          chartEl.classList.remove('flex');
+          if (chartLegend) {
+            chartLegend.classList.add('hidden');
+            chartLegend.classList.remove('flex');
+            chartLegend.innerHTML = '';
+          }
+          if (chartEmpty) chartEmpty.classList.remove('hidden');
+          return;
+        }
+        if (chartEmpty) chartEmpty.classList.add('hidden');
+        chartEl.classList.remove('hidden');
+        chartEl.classList.add('flex');
+        chartEl.innerHTML = values
+          .map((v) => {
+            const pct = Math.max(2, Math.min(100, Math.round((v / max) * 100)));
+            return '<span class="flex-1 rounded-t bg-tk-accent/80" style="height: ' + pct + '%"></span>';
+          })
+          .join('');
+        if (chartLegend && buckets.length > 1) {
+          chartLegend.classList.remove('hidden');
+          chartLegend.classList.add('flex');
+          const first = buckets[0] && buckets[0].date;
+          const last = buckets[buckets.length - 1] && buckets[buckets.length - 1].date;
+          chartLegend.innerHTML =
+            '<span>' + (first || '—') + '</span><span>' + (last || '—') + '</span>';
+        } else if (chartLegend) {
+          chartLegend.classList.add('hidden');
+          chartLegend.classList.remove('flex');
+          chartLegend.innerHTML = '';
+        }
+      }
+
+      function requestDailyChart(days, btn) {
+        if (chartRequestController) chartRequestController.abort();
+        const controller = new AbortController();
+        chartRequestController = controller;
+        const version = ++chartRequestVersion;
+        setChartBusy(btn);
+        boundedFetch(
+          apiBaseUrl + '/v1/usage/series?days=' + days,
+          { headers, credentials: 'include' },
+          controller,
+        )
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('series HTTP ' + r.status))))
           .then((series) => {
-            const buckets = (series && series.buckets) || [];
-            const values = buckets.map((b) => {
-              const t = (b && b.totals) || {};
-              let sum = 0;
-              for (const k in t) sum += Number(t[k]) || 0;
-              return sum;
-            });
-            const max = values.reduce((m, v) => (v > m ? v : m), 0);
-            if (!buckets.length || max <= 0) {
-              chartEl.classList.add('hidden');
-              chartEl.classList.remove('flex');
-              if (chartLegend) chartLegend.classList.add('hidden');
-              if (chartEmpty) chartEmpty.classList.remove('hidden');
-              return;
-            }
-            if (chartEmpty) chartEmpty.classList.add('hidden');
-            chartEl.classList.remove('hidden');
-            chartEl.classList.add('flex');
-            chartEl.innerHTML = values
-              .map((v) => {
-                const pct = Math.max(2, Math.min(100, Math.round((v / max) * 100)));
-                return '<span class="flex-1 rounded-t bg-tk-accent/80" style="height: ' + pct + '%"></span>';
-              })
-              .join('');
-            if (chartLegend && buckets.length > 1) {
-              chartLegend.classList.remove('hidden');
-              chartLegend.classList.add('flex');
-              const first = buckets[0] && buckets[0].date;
-              const last = buckets[buckets.length - 1] && buckets[buckets.length - 1].date;
-              chartLegend.innerHTML =
-                '<span>' + (first || '—') + '</span><span>' + (last || '—') + '</span>';
+            if (version === chartRequestVersion) renderDailyChart(series);
+          })
+          .catch((err) => {
+            if (version === chartRequestVersion && (!err || err.name !== 'AbortError')) {
+              showChartLoadFailure();
             }
           })
-          .catch(() => {
-            chartEl.classList.add('hidden');
-            chartEl.classList.remove('flex');
-            if (chartEmpty) chartEmpty.classList.remove('hidden');
+          .finally(() => {
+            clearChartBusy(version);
           });
       }
       root.querySelectorAll('[data-usage-days]').forEach(function (btn) {
@@ -402,19 +464,37 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           root.querySelectorAll('[data-usage-days]').forEach(function (b) {
             b.setAttribute('aria-pressed', String(b === btn));
           });
-          renderDailyChart(btn.getAttribute('data-usage-days'));
+          requestDailyChart(btn.getAttribute('data-usage-days'), btn);
         });
       });
-      renderDailyChart(30);
 
-      Promise.all([
-        fetch(apiBaseUrl + '/v1/usage', { headers, credentials: 'include' }).then((r) =>
-          r.ok ? r.json() : Promise.reject(new Error('summary HTTP ' + r.status)),
-        ),
-        fetch(apiBaseUrl + '/v1/usage/series?days=30', { headers, credentials: 'include' }).then(
-          (r) => (r.ok ? r.json() : Promise.reject(new Error('series HTTP ' + r.status))),
-        ),
-      ])
+      const summaryPromise = boundedFetch(apiBaseUrl + '/v1/usage', {
+        headers,
+        credentials: 'include',
+      }).then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error('summary HTTP ' + r.status)),
+      );
+      const initialChartVersion = ++chartRequestVersion;
+      const initialChartButton = root.querySelector('[data-usage-days="30"]');
+      setChartBusy(initialChartButton);
+      const initialSeriesPromise = boundedFetch(apiBaseUrl + '/v1/usage/series?days=30', {
+        headers,
+        credentials: 'include',
+      }).then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error('series HTTP ' + r.status)),
+      );
+      initialSeriesPromise
+        .then((series) => {
+          if (initialChartVersion === chartRequestVersion) renderDailyChart(series);
+        })
+        .catch(() => {
+          if (initialChartVersion === chartRequestVersion) showChartLoadFailure();
+        })
+        .finally(() => {
+          clearChartBusy(initialChartVersion);
+        });
+
+      Promise.all([summaryPromise, initialSeriesPromise])
         .then(([summary, series]) => {
           // Update period + tier label.
           const tierName = tierLabel(summary.tier);
@@ -521,7 +601,10 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       }
       const rlBody = root.querySelector('[data-rate-limit-rows]');
       if (rlBody) {
-        fetch(apiBaseUrl + '/v1/account/rate-limits', { headers, credentials: 'include' })
+        boundedFetch(apiBaseUrl + '/v1/account/rate-limits', {
+          headers,
+          credentials: 'include',
+        })
           .then(function (r) {
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })

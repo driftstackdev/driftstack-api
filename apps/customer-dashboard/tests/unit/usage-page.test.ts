@@ -27,7 +27,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 interface SetUpResult {
@@ -143,7 +143,7 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
   });
 
   it('live data: replaces tiles with API totals, computes the combined captures sum, and updates period + tier', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter({
         summary: {
@@ -174,6 +174,10 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     expect(text(window, '[data-field="period"]')).toContain('2026-05-01');
     expect(text(window, '[data-field="period"]')).toContain('2026-05-31');
     expect(text(window, '[data-field="period"]')).toContain('API Builder tier');
+    expect(
+      fetchCalls.filter((call) => /\/v1\/usage\/series\?days=30$/.test(call.url)),
+    ).toHaveLength(1);
+    expect(fetchCalls.every((call) => call.init?.signal instanceof window.AbortSignal)).toBe(true);
   });
 
   it('sparkline: the navigate path is recomputed from the series buckets', async () => {
@@ -260,6 +264,25 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     expect(isHidden(window, '[data-daily-chart]')).toBe(true);
   });
 
+  it('daily chart: a series failure stays distinct from an honest zero-activity result', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        summary: {
+          period_start: '2026-06-01T00:00:00Z',
+          period_end: '2026-06-30T00:00:00Z',
+          tier: 'solo_manual',
+          totals: TOTALS,
+        },
+        seriesStatus: 503,
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-daily-empty]')).toBe(true);
+    expect(text(window, '[data-banner]')).toContain("Couldn't load live usage");
+  });
+
   it('daily chart: non-zero buckets sum every usage type into one bar per day + a first/last-day legend', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
@@ -317,5 +340,70 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     expect(
       window.document.querySelector('[data-usage-days="30"]')?.getAttribute('aria-pressed'),
     ).toBe('false');
+  });
+
+  it('daily chart: rapid window changes are latest-wins and expose busy state without stale redraws', async () => {
+    let resolve7: ((value: Response) => void) | undefined;
+    let resolve90: ((value: Response) => void) | undefined;
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/usage\/series\?days=7$/.test(call.url)) {
+          return new Promise<Response>((resolve) => {
+            resolve7 = resolve;
+          });
+        }
+        if (/\/v1\/usage\/series\?days=90$/.test(call.url)) {
+          return new Promise<Response>((resolve) => {
+            resolve90 = resolve;
+          });
+        }
+        if (/\/v1\/usage\/series/.test(call.url)) return json({ buckets: [] });
+        if (/\/v1\/usage$/.test(call.url)) {
+          return json({
+            period_start: '2026-06-01T00:00:00Z',
+            period_end: '2026-06-30T00:00:00Z',
+            tier: 'solo_manual',
+            totals: TOTALS,
+          });
+        }
+        return json({ buckets: [] });
+      },
+    });
+    win = window;
+    await flush();
+
+    const btn7 = window.document.querySelector('[data-usage-days="7"]') as HTMLButtonElement;
+    const btn90 = window.document.querySelector('[data-usage-days="90"]') as HTMLButtonElement;
+    btn7.click();
+    btn90.click();
+    expect(btn90.getAttribute('aria-busy')).toBe('true');
+    expect(
+      window.document.querySelector('[data-section="daily-activity"]')?.getAttribute('aria-busy'),
+    ).toBe('true');
+
+    resolve90?.(
+      json({
+        buckets: [
+          { date: '2026-09-01', totals: { navigate: 1 } },
+          { date: '2026-09-30', totals: { navigate: 2 } },
+        ],
+      }),
+    );
+    await flush();
+    expect(text(window, '[data-daily-legend]')).toContain('2026-09-30');
+    expect(btn90.hasAttribute('aria-busy')).toBe(false);
+
+    resolve7?.(
+      json({
+        buckets: [
+          { date: '2026-07-01', totals: { navigate: 9 } },
+          { date: '2026-07-07', totals: { navigate: 9 } },
+        ],
+      }),
+    );
+    await flush();
+    expect(text(window, '[data-daily-legend]')).toContain('2026-09-30');
+    expect(text(window, '[data-daily-legend]')).not.toContain('2026-07-07');
   });
 });
