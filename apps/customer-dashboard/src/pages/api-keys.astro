@@ -466,6 +466,19 @@ npm i @driftstack/sdk</code></pre>
         banner.classList.add('hidden');
       }
 
+      // V-331b — every API-key read and mutation honors the dashboard's
+      // selected owner. Keeping this in one builder prevents list/create/
+      // revoke/rotate from silently targeting different accounts.
+      function authedHeaders(extra = {}) {
+        return {
+          ...extra,
+          authorization: 'Bearer ' + token,
+          ...(typeof window.driftstackActAsHeaders === 'function'
+            ? window.driftstackActAsHeaders()
+            : {}),
+        };
+      }
+
       function escapeHtml(s) {
         return String(s).replace(
           /[&<>"']/g,
@@ -645,7 +658,7 @@ npm i @driftstack/sdk</code></pre>
         const isCurrent = () => generation === refreshGeneration;
         const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
         return fetch(apiBaseUrl + '/v1/api-keys', {
-          headers: { authorization: 'Bearer ' + token },
+          headers: authedHeaders(),
           signal: controller.signal,
         })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
@@ -818,7 +831,7 @@ npm i @driftstack/sdk</code></pre>
             const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
             fetch(apiBaseUrl + '/v1/api-keys/' + encodeURIComponent(id), {
               method: 'DELETE',
-              headers: { authorization: 'Bearer ' + token },
+              headers: authedHeaders(),
               signal: controller.signal,
             })
               .then((r) => {
@@ -948,10 +961,9 @@ npm i @driftstack/sdk</code></pre>
             const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
             fetch(apiBaseUrl + '/v1/api-keys/' + encodeURIComponent(id) + '/rotate', {
               method: 'POST',
-              headers: {
-                authorization: 'Bearer ' + token,
+              headers: authedHeaders({
                 'content-type': 'application/json',
-              },
+              }),
               body: '{}',
               signal: controller.signal,
             })
@@ -1094,10 +1106,9 @@ npm i @driftstack/sdk</code></pre>
         const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
         fetch(apiBaseUrl + '/v1/api-keys', {
           method: 'POST',
-          headers: {
+          headers: authedHeaders({
             'content-type': 'application/json',
-            authorization: 'Bearer ' + token,
-          },
+          }),
           body: JSON.stringify({ name: name, scopes: scopes }),
           signal: controller.signal,
         })

@@ -123,15 +123,20 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     );
   });
 
-  it("POST /v1/api-keys + DELETE /v1/api-keys/:id + POST /v1/api-keys/:id/rotate contracts: encodeURIComponent on id paths + body:{name, scopes} on create + body:'{}' on rotate + DELETE expects 204-or-r.ok — pinned so the 3-endpoint API-key lifecycle stays correct (drift to passing url-unsafe ids without encoding would break keys with special chars; drift to a non-empty rotate body would tell the server to do something other than just rotate)", () => {
+  it('all four API-key reads/mutations share authorization + selected-owner headers while preserving timeout signals and wire contracts', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ name: name, scopes: scopes \}\),\s*\n?\s*\}\)/,
+      /function authedHeaders\(extra = \{\}\) \{[\s\S]*?authorization: 'Bearer ' \+ token,[\s\S]*?window\.driftstackActAsHeaders\(\)/,
+    );
+    expect(body.match(/fetch\(apiBaseUrl \+ '\/v1\/api-keys/g)).toHaveLength(4);
+    expect(body.match(/headers: authedHeaders\(/g)).toHaveLength(4);
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: authedHeaders\(\{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\}\),\s*\n?\s*body: JSON\.stringify\(\{ name: name, scopes: scopes \}\),\s*\n?\s*signal: controller\.signal,/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*headers: authedHeaders\(\),\s*\n?\s*signal: controller\.signal,/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/rotate', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/rotate', \{\s*\n?\s*method: 'POST',[\s\S]*?headers: authedHeaders\(\{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\}\),\s*\n?\s*body: '\{\}',\s*\n?\s*signal: controller\.signal,/,
     );
   });
 
