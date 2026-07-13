@@ -189,6 +189,22 @@ describe('useAgentChat approve()', () => {
     // No approvals on a plain send.
     expect(message.mock.calls[0]?.[2]).toEqual({});
   });
+
+  it('does not expose an unknown agent-request exception', async () => {
+    message.mockRejectedValueOnce(
+      new Error('worker failed private-control.internal /Users/customer token=secret'),
+    );
+    const { result } = renderHook(() => useAgentChat());
+
+    await act(async () => {
+      await result.current.send('hello');
+    });
+
+    expect(result.current.error?.message).toBe('The agent request failed — try again.');
+    expect(result.current.error?.message).not.toMatch(
+      /private-control|\/Users|token=secret|worker/i,
+    );
+  });
 });
 
 // P2 #9 — Stop on a HUNG AI turn (the message call never resolves) must remove the

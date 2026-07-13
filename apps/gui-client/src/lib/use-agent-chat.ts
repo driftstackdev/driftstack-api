@@ -25,6 +25,7 @@ import {
 } from '@driftstack/sdk';
 import { useSettings } from './SettingsContext';
 import { clearSession as clearProfileSession, markLaunched } from './profile-bindings';
+import { humanizeError } from './humanize-error';
 
 /** Founder report (2026-07-01): the bundled-LLM error landed in the chat
  *  banner as the raw server detail string — a curl-command-shaped API
@@ -73,7 +74,9 @@ function friendlyChatError(err: unknown): ChatError {
   if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
     return { message: "Couldn't reach the server — check your connection and try again." };
   }
-  return { message: msg.length > 0 ? msg : 'The agent request failed — try again.' };
+  return {
+    message: humanizeError(err, 'The agent request failed — try again.'),
+  };
 }
 
 export type ChatModel =
