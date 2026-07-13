@@ -89,8 +89,9 @@ tier-default row again. The override doesn't disappear from the
 admin's audit trail — only from the calling account's effective
 config.
 
-Requires authentication; no specific API-key scope is needed beyond a
-valid key.
+Requires the broad `read` scope; `account_owner` also satisfies the
+gate. Resource-granular, write-only, and zero-scope keys cannot inspect
+account-wide limits or staff-applied override metadata.
 
 ## Bucket reference
 

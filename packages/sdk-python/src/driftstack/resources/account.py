@@ -90,7 +90,7 @@ class AccountResource:
 
     def get_byok_anthropic_key(self) -> dict[str, Any]:
         """AI-CHAT BYOK — metadata only (has_key/set_at/last_used_at); never
-        the plaintext key. Any auth context may read."""
+        the plaintext key. Broad read or account_owner scope required server-side."""
         return self._http.request("GET", "/v1/account/me/byok-anthropic-key")
 
     def set_byok_anthropic_key(self, api_key: str) -> dict[str, Any]:

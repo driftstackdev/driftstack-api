@@ -11,7 +11,8 @@
 //
 //   BUCKET_KEYS readonly tuple — ['global', 'sessions:create'].
 //
-//   preHandler chain — [app.requireAuth, app.rateLimit('global')]
+//   preHandler chain — [app.requireAuth, app.requireScope('read'),
+//   app.rateLimit('global')]
 //     (global bucket gates this endpoint).
 //
 //   Override-active check — and(override exists, override.expiresAt
@@ -64,9 +65,11 @@ describe('W1017 routes/account-rate-limits V-219 cross-source invariant', () => 
     expect(p).toMatch(/type BucketKey = \(typeof BUCKET_KEYS\)\[number\];/);
   });
 
-  it("CRITICAL preHandler chain — [app.requireAuth, app.rateLimit('global')]. The global bucket rate-limits the rate-limits endpoint (consistent with other auth-required endpoints).", () => {
+  it('CRITICAL preHandler chain — broad read plus the global bucket. Account-wide limit/override metadata rejects zero-scope and granular-resource keys while the endpoint remains rate-limited.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-rate-limits.ts'));
-    expect(p).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/);
+    expect(p).toMatch(
+      /\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
+    );
   });
 
   it('CRITICAL endpoint path — GET /v1/account/rate-limits.', () => {

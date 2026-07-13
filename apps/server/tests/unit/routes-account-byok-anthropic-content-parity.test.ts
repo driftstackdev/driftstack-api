@@ -64,9 +64,12 @@ describe('routes/account-byok-anthropic content parity', () => {
     expect(body).not.toContain('Connection tester not yet wired');
   });
 
-  it("GET metadata-only-no-plaintext framing pinned: 'metadata only; NEVER returns plaintext. Read scope is sufficient (any account holder can see whether their account has a BYOK key set).' + 3-field response { has_key + set_at + last_used_at } — pinned so the no-plaintext + read-scope-sufficient + 3-field-metadata contract stays documented (drift to surfacing any key prefix/suffix on GET would defeat the encrypted-at-rest envelope)", () => {
+  it('GET metadata-only-no-plaintext framing pinned: broad read is required because timestamps are account-wide credential metadata; 3-field response never returns plaintext', () => {
     expect(body).toMatch(
-      /\/\/ GET \/v1\/account\/me\/byok-anthropic-key — metadata only; NEVER\s*\n?\s*\/\/ returns plaintext\. Read scope is sufficient \(any account holder\s*\n?\s*\/\/ can see whether their account has a BYOK key set\)\./,
+      /\/\/ GET \/v1\/account\/me\/byok-anthropic-key — metadata only; NEVER\s*\n?\s*\/\/ returns plaintext\. Broad read is required because set\/use timestamps\s*\n?\s*\/\/ are account-wide credential metadata, not a resource-granular read\./,
+    );
+    expect(body).toMatch(
+      /'\/v1\/account\/me\/byok-anthropic-key',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
     );
     expect(body).toMatch(
       /return \{\s*\n?\s*has_key: meta\.hasKey,\s*\n?\s*set_at: meta\.setAt \? meta\.setAt\.toISOString\(\) : null,\s*\n?\s*last_used_at: meta\.lastUsedAt \? meta\.lastUsedAt\.toISOString\(\) : null,\s*\n?\s*\};/,

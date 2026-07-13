@@ -83,7 +83,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
 
   it('Status: GET /v1/account/mfa enrolled + enrolled_at/last_used_at nullable ISO + unused_recovery_codes count', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/account\/mfa',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.get\(\s*\n?\s*'\/v1\/account\/mfa',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(/const status = await service\.getStatus\(ctx\.account\.id\);/);
     expect(body).toMatch(/enrolled: status\.enrolled,/);

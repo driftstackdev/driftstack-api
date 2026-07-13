@@ -104,11 +104,11 @@ export function registerAccountByokAnthropicRoutes(
   }
 
   // GET /v1/account/me/byok-anthropic-key — metadata only; NEVER
-  // returns plaintext. Read scope is sufficient (any account holder
-  // can see whether their account has a BYOK key set).
+  // returns plaintext. Broad read is required because set/use timestamps
+  // are account-wide credential metadata, not a resource-granular read.
   app.get(
     '/v1/account/me/byok-anthropic-key',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

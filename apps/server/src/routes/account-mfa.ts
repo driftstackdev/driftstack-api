@@ -20,7 +20,7 @@ export function registerAccountMfaRoutes(
 
   app.get(
     '/v1/account/mfa',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

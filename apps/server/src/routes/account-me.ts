@@ -178,7 +178,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
 
   app.get(
     '/v1/account/me',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -330,13 +330,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
 
   // Per-account org-sync (2026-06-16) — the calling account's organization
   // TAXONOMY: the empty folders (+icons) and tags defined in the GUI rail
-  // before assignment. Read is open to any auth context (returns the caller's
-  // own taxonomy); the PUT is account_owner-scoped like PATCH /me. Stored as
+  // before assignment. Read requires the broad account read capability; the
+  // PUT is account_owner-scoped like PATCH /me. Stored as
   // accounts.organization jsonb (0079). Not part of the cached AccountContext,
   // so no auth-cache invalidation needed.
   app.get(
     '/v1/account/me/organization',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

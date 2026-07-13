@@ -17,7 +17,8 @@
 //
 // Per Q3 v2-#6 verdict (no explicit team-scope verdict yet for
 // bundled-LLM), this slice mirrors the byok-anthropic ownership model:
-// account_owner-only for the PATCH. Read is open to any auth context.
+// account_owner-only for the PATCH. Reads require broad `read` so a
+// resource-granular or zero-scope key cannot inspect billing consent/spend.
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -57,7 +58,7 @@ export function registerAccountBundledLlmRoutes(
 
   app.get(
     '/v1/account/me/bundled-llm-settings',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -80,7 +81,7 @@ export function registerAccountBundledLlmRoutes(
   // on `remaining_cents <= 0` for the same "you've hit the cap" UX.
   app.get(
     '/v1/account/me/bundled-llm-status',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

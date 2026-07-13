@@ -16,6 +16,11 @@ team owner's account.
 
 `GET /v1/account/me`
 
+Requires the broad `read` scope; `account_owner` also satisfies this
+gate. Zero-scope, write-only, and resource-granular keys cannot read
+the account's login identity, team memberships, MFA flag, or presigned
+avatar URL.
+
 ```ts
 const me = await client.account.me();
 ```
@@ -94,6 +99,9 @@ off the hot path).
 The dashboard's "active sign-ins" panel and SDK `client.account`
 resource expose the calling account's web-session list:
 
+Listing active sign-ins requires broad `read`. Revoking one or all
+sign-ins remains an `account_owner` operation.
+
 ```ts
 const { data } = await client.account.listWebSessions();
 for (const session of data) {
@@ -125,6 +133,9 @@ call with `revokeAllOtherWebSessions()` / equivalent.
 
 Read the calling account's effective per-bucket rate-limit config
 including any active overrides:
+
+This account-wide read requires broad `read`; `account_owner` also
+satisfies it.
 
 ```ts
 const cfg = await client.account.rateLimits();

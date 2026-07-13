@@ -278,7 +278,7 @@ type ByokAnthropicKeyMetadata struct {
 }
 
 // GetByokAnthropicKey — AI-CHAT BYOK read metadata only (has_key/set_at/last_used_at).
-// Any auth context may read.
+// Broad read or account_owner scope required server-side.
 func (r *AccountResource) GetByokAnthropicKey(ctx context.Context) (*ByokAnthropicKeyMetadata, error) {
 	var out ByokAnthropicKeyMetadata
 	if err := r.client.do(ctx, requestOptions{

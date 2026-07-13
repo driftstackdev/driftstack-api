@@ -44,13 +44,13 @@ describe('docs api/account-rate-limits content parity', () => {
   });
 
   it('cross-link to /reference/rate-limits pinned (broader explanation lives there; drift to dropping would orphan the per-tier defaults table from this endpoint doc)', () => {
-    expect(body).toMatch(/\[\/reference\/rate-limits\]\(\/reference\/rate-limits\)/);
+    expect(body).toMatch(/\[\/reference\/rate-limits\]\(\/reference\/rate-limits\/\)/);
   });
 
-  it('auth-only pinning: the GET /v1/account/rate-limits handler uses requireAuth only (no requireScope), so the doc states authentication is required with no specific API-key scope. Drift to claiming a read/account_owner scope would overstate the requirement.', () => {
+  it('broad-read pinning: account limits and staff override metadata reject resource-granular, write-only, and zero-scope keys', () => {
     expect(body).toMatch(
-      /Requires authentication; no specific API-key scope is needed beyond a\s*\n?valid key\./,
+      /Requires the broad `read` scope; `account_owner` also satisfies the\s*\n?gate\. Resource-granular, write-only, and zero-scope keys cannot inspect\s*\n?account-wide limits or staff-applied override metadata\./,
     );
-    expect(body).not.toMatch(/Required scope: `read` or `account_owner`\./);
+    expect(body).not.toMatch(/no specific API-key scope/);
   });
 });

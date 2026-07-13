@@ -1413,7 +1413,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: "Calling account's full state including tier caps + team memberships.",
+        description:
+          "Calling account's full state including tier caps + team memberships. Requires broad `read` or `account_owner`.",
         content: { 'application/json': { schema: AccountMeResponseSchema } },
       },
       ...errors4xx,
@@ -1505,7 +1506,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Links for the calling account (empty when none linked).',
+        description:
+          'Links for the calling account (empty when none linked). Requires broad `read` or `account_owner`.',
         content: {
           'application/json': {
             schema: z.object({ data: z.array(AccountOauthLinkOpenApi) }),
@@ -1554,7 +1556,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Metadata — has_key + set_at + last_used_at. Plaintext is never exposed.',
+        description:
+          'Metadata — has_key + set_at + last_used_at. Plaintext is never exposed. Requires broad `read` or `account_owner`.',
         content: { 'application/json': { schema: ByokAnthropicMetadataOpenApi } },
       },
       ...errors4xx,
@@ -1642,7 +1645,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Current bundled-LLM settings. Defaults to consent=false, cap=$20.',
+        description:
+          'Current bundled-LLM settings. Defaults to consent=false, cap=$20. Requires broad `read` or `account_owner`.',
         content: { 'application/json': { schema: BundledLlmSettingsOpenApi } },
       },
       ...errors4xx,
@@ -1689,7 +1693,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: "The caller's folder/tag taxonomy. Empty arrays by default.",
+        description:
+          "The caller's folder/tag taxonomy. Empty arrays by default. Requires broad `read` or `account_owner`.",
         content: { 'application/json': { schema: AccountOrganizationOpenApi } },
       },
       ...errors4xx,
@@ -1843,7 +1848,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Used / remaining / cap in cents, plus calendar-month-start.',
+        description:
+          'Used / remaining / cap in cents, plus calendar-month-start. Requires broad `read` or `account_owner`.',
         content: { 'application/json': { schema: BundledLlmStatusOpenApi } },
       },
       ...errors4xx,
@@ -2025,7 +2031,12 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   const RateLimitBucketOpenApi = z.object({
-    bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
+    bucket_key: z.enum([
+      'global',
+      'sessions:create',
+      'agent_sessions:message',
+      'agent_sessions:input_event',
+    ]),
     capacity: z.number().int().positive(),
     refill_per_second: z.number().positive(),
     source: z.enum(['tier_default', 'override']),
@@ -2043,7 +2054,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Per-bucket capacity + refill, with override-vs-default source.',
+        description:
+          'Per-bucket capacity + refill, with override-vs-default source. Requires broad `read` or `account_owner`.',
         content: {
           'application/json': { schema: GetAccountRateLimitsResponseOpenApi },
         },
@@ -2763,7 +2775,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'enrolled flag + timestamps + remaining recovery-code count.',
+        description:
+          'Enrolled flag + timestamps + remaining recovery-code count. Requires broad `read` or `account_owner`.',
         content: { 'application/json': { schema: MfaStatusResponseOpenApi } },
       },
       ...errors4xx,
@@ -4977,7 +4990,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Active web sessions; current session marked.',
+        description:
+          'Active web sessions; current session marked. Requires broad `read` or `account_owner`.',
         content: { 'application/json': { schema: ListWebSessionsResponseOpenApi } },
       },
       ...errors4xx,

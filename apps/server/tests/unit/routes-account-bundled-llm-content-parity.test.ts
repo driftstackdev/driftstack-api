@@ -47,10 +47,11 @@ describe('routes/account-bundled-llm content parity', () => {
     );
   });
 
-  it("Q3 account_owner-only ownership-model framing pinned: 'Per Q3 v2-#6 verdict (no explicit team-scope verdict yet for bundled-LLM), this slice mirrors the byok-anthropic ownership model: account_owner-only for the PATCH. Read is open to any auth context.' — pinned so the PATCH-owner-only + GET-any-auth + mirrors-byok-anthropic contract stays documented", () => {
+  it('Q3 account_owner-only ownership-model framing pinned: PATCH requires account_owner while reads require broad read so granular/zero-scope keys cannot inspect billing consent or spend', () => {
     expect(body).toMatch(
-      /\/\/ Per Q3 v2-#6 verdict \(no explicit team-scope verdict yet for\s*\n?\s*\/\/ bundled-LLM\), this slice mirrors the byok-anthropic ownership model:\s*\n?\s*\/\/ account_owner-only for the PATCH\. Read is open to any auth context\./,
+      /\/\/ Per Q3 v2-#6 verdict \(no explicit team-scope verdict yet for\s*\n?\s*\/\/ bundled-LLM\), this slice mirrors the byok-anthropic ownership model:\s*\n?\s*\/\/ account_owner-only for the PATCH\. Reads require broad `read` so a\s*\n?\s*\/\/ resource-granular or zero-scope key cannot inspect billing consent\/spend\./,
     );
+    expect((body.match(/app\.requireScope\('read'\)/g) ?? []).length).toBe(2);
   });
 
   it("PatchBodySchema 2-optional-field shape + at-least-one-required refine pinned: consent: z.boolean().optional() + monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000).optional() + .refine((b) => b.consent !== undefined || b.monthly_cap_usd_cents !== undefined, { message: 'Body must include at least one of: consent, monthly_cap_usd_cents.' }). Drift to dropping the at-least-one refine would let empty PATCH bodies succeed silently as no-ops", () => {

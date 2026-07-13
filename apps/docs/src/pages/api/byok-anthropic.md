@@ -37,10 +37,10 @@ Returns the metadata above. Defaults to
 `{ has_key: false, set_at: null, last_used_at: null }` for accounts
 that have never set a key.
 
-Auth: any authenticated bearer (the `read` scope is sufficient — the
-GET metadata route requires only authentication, not a write scope).
-Any account member can check whether the account has a BYOK key set;
-the plaintext stays inaccessible regardless.
+Required scope: broad `read` (also satisfied by `account_owner`). The
+set/use timestamps are account-wide credential metadata, so a
+resource-granular or zero-scope key cannot query them. The plaintext
+stays inaccessible regardless.
 
 ## Set or rotate
 

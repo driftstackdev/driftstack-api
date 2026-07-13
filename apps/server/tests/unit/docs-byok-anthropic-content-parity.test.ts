@@ -36,13 +36,13 @@ describe('Arc 6 docs.byok-anthropic content parity', () => {
     expect(body).toMatch(/POST \/v1\/account\/me\/byok-anthropic-key\/test\b/);
   });
 
-  it('scope distinction documented: read scope for the GET metadata route; account_owner for write + test', () => {
-    expect(body).toMatch(
-      /the `read` scope is sufficient — the\s*\n?GET metadata route requires only authentication, not a write scope/,
-    );
+  it('scope distinction documented: broad read for GET metadata; account_owner for write + test', () => {
+    expect(body).toMatch(/Required scope: broad `read` \(also satisfied by `account_owner`\)/);
+    expect(body).toMatch(/resource-granular or zero-scope key cannot query them/);
     expect(body).toMatch(/account_owner.*team members can USE/);
-    // The corrected doc dropped the old account_holder read-scope framing.
+    // Retired auth-only/account-holder framing must not return.
     expect(body).not.toMatch(/account_holder scope is sufficient/);
+    expect(body).not.toMatch(/any authenticated bearer/);
   });
 
   it('explicitly states plaintext is NEVER echoed in responses', () => {

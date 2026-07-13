@@ -48,6 +48,15 @@ function read(p: string): string {
 describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
   const body = read(LIB);
 
+  it('account-wide GET /me and /organization reads require broad read; account_owner satisfies it through the scope hierarchy', () => {
+    expect(body).toMatch(
+      /'\/v1\/account\/me',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
+    );
+    expect(body).toMatch(
+      /'\/v1\/account\/me\/organization',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
+    );
+  });
+
   it('V-237 framing pinned: GET /v1/account/me identity + tier + concurrent-session usage/cap + profile usage/cap; file 128 spec mirror', () => {
     expect(body).toMatch(/V-237 — customer self-profile endpoint\./);
     expect(body).toMatch(

@@ -44,7 +44,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /For the broader explanation of how rate limits work \+ the per-tier\s*\n?defaults table, see \[\/reference\/rate-limits\]\(\/reference\/rate-limits\)\./,
+      /For the broader explanation of how rate limits work \+ the per-tier\s*\n?defaults table, see \[\/reference\/rate-limits\]\(\/reference\/rate-limits\/\)\./,
     );
   });
 
@@ -196,14 +196,13 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     expect(p).toMatch(/Admin route: `apps\/server\/src\/routes\/admin-rate-limit-overrides\.ts`\./);
   });
 
-  it('CRITICAL auth-only (no specific scope) pinned. The handler (account-rate-limits.ts) uses requireAuth only — no requireScope — so the doc must NOT overstate a read/account_owner scope requirement.', () => {
+  it('CRITICAL broad-read floor pinned. Account limits and staff override metadata cannot be read by zero-scope, write-only, or resource-granular keys.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Requires authentication; no specific API-key scope is needed beyond a\s*\n?valid key\./,
+      /Requires the broad `read` scope; `account_owner` also satisfies the\s*\n?gate\. Resource-granular, write-only, and zero-scope keys cannot inspect\s*\n?account-wide limits or staff-applied override metadata\./,
     );
-    // Drift sentinel — the overstated scope claim MUST NOT come back.
-    expect(p).not.toMatch(/Required scope: `read` or `account_owner`\./);
+    expect(p).not.toMatch(/no specific API-key scope/);
   });
 
   it('CRITICAL GET /v1/account/rate-limits canonical endpoint pinned.', () => {

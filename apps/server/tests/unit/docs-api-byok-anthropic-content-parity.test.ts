@@ -49,7 +49,7 @@ describe('docs/api/byok-anthropic content parity', () => {
     expect(body).toMatch(/Q2=C/);
   });
 
-  it("Q3 account_owner-vs-members framing pinned: PUT 'Required scope: account_owner (team members can USE the resolved key but cannot manage it — Q3 verdict)' + DELETE 'Required scope: account_owner' + POST /test 'Required scope: account_owner (team members would otherwise burn the owner's quota)'. + 'Auth: account_holder scope is sufficient (any account member can check whether the account has a BYOK key set; the plaintext stays inaccessible regardless)' for GET — pinned so the GET-open-PUT/DELETE/POST-owner + quota-burn-protection + Q3-verdict contract all stay documented", () => {
+  it('Q3 account_owner-vs-members framing pinned for mutations; GET requires broad read because credential timestamps are account-wide metadata', () => {
     expect(body).toMatch(
       /Required scope: `account_owner` \(team members can USE the resolved\s*\n?\s*key but cannot manage it — Q3 verdict\)\./,
     );
@@ -57,7 +57,7 @@ describe('docs/api/byok-anthropic content parity', () => {
       /Required scope:\s*\n?\s*`account_owner` \(team members would otherwise consume the owner's provider\s*\n?\s*request budget\)\./,
     );
     expect(body).toMatch(
-      /Auth: any authenticated bearer \(the `read` scope is sufficient — the\s*\n?\s*GET metadata route requires only authentication, not a write scope\)\.\s*\n?\s*Any account member can check whether the account has a BYOK key set;\s*\n?\s*the plaintext stays inaccessible regardless\./,
+      /Required scope: broad `read` \(also satisfied by `account_owner`\)\. The\s*\n?\s*set\/use timestamps are account-wide credential metadata, so a\s*\n?\s*resource-granular or zero-scope key cannot query them\. The plaintext\s*\n?\s*stays inaccessible regardless\./,
     );
   });
 

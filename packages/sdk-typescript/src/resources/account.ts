@@ -83,7 +83,10 @@ export interface UploadAvatarResponse {
 // previously omitted, leaving real buckets unhandled).
 export interface RateLimitBucket {
   bucket_key:
-    'global' | 'sessions:create' | 'agent_sessions:message' | 'agent_sessions:input_event';
+    | 'global'
+    | 'sessions:create'
+    | 'agent_sessions:message'
+    | 'agent_sessions:input_event';
   capacity: number;
   refill_per_second: number;
   source: 'tier_default' | 'override';
@@ -230,7 +233,7 @@ export class AccountResource {
   }
 
   /** AI-CHAT BYOK — metadata only (has_key/set_at/last_used_at); never the
-   *  plaintext key. Any auth context may read. */
+   *  plaintext key. Broad read or account_owner scope required server-side. */
   getByokAnthropicKey(): Promise<ByokAnthropicKeyMetadata> {
     return this.http.request<ByokAnthropicKeyMetadata>({
       method: 'GET',

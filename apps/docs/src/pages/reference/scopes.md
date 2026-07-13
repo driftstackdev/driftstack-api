@@ -123,7 +123,10 @@ When you mint a key from the dashboard or via
 - **Backup automation:** `read` + `read:audit`.
 - **Webhook signing-only key:** mint a key with NO scopes.
   The key authenticates the webhook signature but cannot
-  call any `/v1/*` endpoint. (This is the recommended
+  call any protected `/v1/*` endpoint. Public health/status routes and
+  the explicitly authentication-only legal catalog remain available,
+  but account identity, security, billing, session, profile, and webhook
+  resources require a declared scope. (This is the recommended
   pattern — the webhook signing secret is separate from API
   keys; see [webhooks docs](/webhooks/endpoints/) for details.)
 - **Dashboard / customer self-service:** `account_owner`. The

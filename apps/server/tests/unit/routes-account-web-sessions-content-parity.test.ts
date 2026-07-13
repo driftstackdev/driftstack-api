@@ -141,9 +141,9 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
     expect(body).toMatch(/reply\.code\(200\);\s*\n?\s*return \{ revoked: n \};/);
   });
 
-  it('GET list: requireAuth + rateLimit; service.listActiveWebSessions(accountId); { data: rows.map(publicSession) }', () => {
+  it('GET list: requireAuth + broad read scope + rateLimit; service.listActiveWebSessions(accountId); { data: rows.map(publicSession) }', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/account\/web-sessions',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.get\(\s*\n?\s*'\/v1\/account\/web-sessions',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
       /const rows = await service\.listActiveWebSessions\(ctx\.account\.id\);\s*\n?\s*return \{ data: rows\.map\(\(r\) => publicSession\(r, currentId\)\) \};/,

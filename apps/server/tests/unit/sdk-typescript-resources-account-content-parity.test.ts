@@ -18,10 +18,10 @@
 //     marker + revoke-single (idempotent + encodeURIComponent) +
 //     revoke-all-other (CRITICAL: EXCLUDES calling session — drift
 //     to including would log customer OUT mid-revoke).
-//   • V-258 RateLimitBucket bucket_key 2-value union (global|
-//     sessions:create) + source 2-value union (tier_default|
-//     override). Drift to widening either would break dashboard
-//     rendering of effective limits.
+//   • V-258 RateLimitBucket bucket_key 4-value union (global|
+//     sessions:create|agent_sessions:message|agent_sessions:input_event)
+//     + source 2-value union (tier_default|override). Drift to narrowing
+//     the bucket set would make a real runtime response unrepresentable.
 //   • profile_cap NULL for enterprise (negotiated) — drift to a
 //     sentinel number would silently force enterprise customers
 //     into a cap they don\'t have.
@@ -146,9 +146,19 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     expect(body).toMatch(
       /\/\/ V-258 — effective rate-limit config \(per-bucket capacity \+ refill\)\./,
     );
-    expect(body).toMatch(
-      /export interface RateLimitBucket \{\s*\n?\s*bucket_key:\s*\n?\s*\| 'global'\s*\n?\s*\| 'sessions:create'\s*\n?\s*\| 'agent_sessions:message'\s*\n?\s*\| 'agent_sessions:input_event';\s*\n?\s*capacity: number;\s*\n?\s*refill_per_second: number;\s*\n?\s*source: 'tier_default' \| 'override';\s*\n?\s*override_expires_at: string \| null;\s*\n?\s*\}/,
-    );
+    const bucket = body.match(/export interface RateLimitBucket \{[\s\S]*?\n\}/)?.[0] ?? '';
+    for (const key of [
+      'global',
+      'sessions:create',
+      'agent_sessions:message',
+      'agent_sessions:input_event',
+    ]) {
+      expect(bucket).toContain(`'${key}'`);
+    }
+    expect(bucket).toMatch(/capacity: number;/);
+    expect(bucket).toMatch(/refill_per_second: number;/);
+    expect(bucket).toMatch(/source: 'tier_default' \| 'override';/);
+    expect(bucket).toMatch(/override_expires_at: string \| null;/);
     expect(body).toMatch(
       /export interface GetAccountRateLimitsResponse \{\s*\n?\s*tier: string;\s*\n?\s*buckets: RateLimitBucket\[\];\s*\n?\s*\}/,
     );

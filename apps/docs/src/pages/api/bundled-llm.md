@@ -75,6 +75,9 @@ Returns the settings record. Defaults to
 `{ consent: false, monthly_cap_usd_cents: 2000 }` for accounts
 that have never PATCHed.
 
+Requires broad `read` (or `account_owner`). Resource-granular,
+write-only, and zero-scope keys cannot inspect billing consent or cap.
+
 ## Get current status (settings + spend)
 
 `GET /v1/account/me/bundled-llm-status`
@@ -83,6 +86,9 @@ Returns the status record above. The dashboard's
 `BundledLlmStatusPanel` reads this on page-load to render consent
 
 - cap + used.
+
+Requires the same broad `read` scope because the response includes
+account-wide month-to-date spend and remaining budget.
 
 ## Update settings (PATCH)
 

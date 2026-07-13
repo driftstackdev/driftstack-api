@@ -25,6 +25,38 @@ describe('OpenAPI spec generation', () => {
     expect(spec.servers).toBeDefined();
   });
 
+  it('publishes broad-read requirements for sensitive account reads and the complete four-bucket rate-limit enum', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const accountReadPaths = [
+      '/v1/account/me',
+      '/v1/account/me/organization',
+      '/v1/account/mfa',
+      '/v1/account/me/oauth-links',
+      '/v1/account/web-sessions',
+      '/v1/account/me/bundled-llm-settings',
+      '/v1/account/me/bundled-llm-status',
+      '/v1/account/me/byok-anthropic-key',
+      '/v1/account/rate-limits',
+    ] as const;
+
+    for (const path of accountReadPaths) {
+      expect(JSON.stringify(spec.paths?.[path]?.get), path).toContain(
+        'Requires broad `read` or `account_owner`',
+      );
+    }
+
+    const rateLimitOperation = JSON.stringify(spec.paths?.['/v1/account/rate-limits']?.get);
+    for (const bucket of [
+      'global',
+      'sessions:create',
+      'agent_sessions:message',
+      'agent_sessions:input_event',
+    ]) {
+      expect(rateLimitOperation).toContain(bucket);
+    }
+  });
+
   // Drift guard: the committed packages/sdk-python/openapi.json is the codegen
   // input for the Python + Go SDKs. It must stay in sync with the live
   // generator. Compares PARSED content (not text) so the committed file's

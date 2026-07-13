@@ -41,7 +41,7 @@ export function registerAccountOauthLinksRoutes(
 ): void {
   app.get<{ Querystring: { active_only?: string } }>(
     '/v1/account/me/oauth-links',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

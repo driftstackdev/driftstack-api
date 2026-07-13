@@ -89,6 +89,10 @@ response is also 400.
 
 `GET /v1/account/mfa`
 
+Requires the broad `read` scope; `account_owner` also satisfies the
+gate. Resource-granular and zero-scope keys cannot inspect enrollment,
+last-use, or remaining recovery-code metadata.
+
 Response (200):
 
 ```json

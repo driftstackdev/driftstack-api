@@ -20,7 +20,7 @@ type BucketKey = (typeof BUCKET_KEYS)[number];
 export function registerAccountRateLimitsRoutes(app: FastifyInstance): void {
   app.get(
     '/v1/account/rate-limits',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

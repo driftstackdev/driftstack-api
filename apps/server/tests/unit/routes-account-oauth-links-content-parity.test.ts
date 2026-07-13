@@ -71,8 +71,10 @@ describe('routes/account-oauth-links content parity', () => {
     );
   });
 
-  it("Auth posture pinned: requireAuth + rateLimit('global') preHandler + ctx.account.id used as listForAccount key. Drift to dropping requireAuth would expose all OAuth-link rows publicly; drift to dropping the rate-limit would invite enumeration", () => {
-    expect(body).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \}/);
+  it("Auth posture pinned: requireAuth + broad read scope + rateLimit('global') preHandler + ctx.account.id used as listForAccount key. Drift to a granular/zero-scope read would expose linked identity metadata outside the account-wide read boundary", () => {
+    expect(body).toMatch(
+      /\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
+    );
     expect(body).toMatch(
       /const ctx = request\.account;\s*\n?\s*if \(!ctx\) throw new Error\('account context missing after requireAuth'\);\s*\n?\s*const rows = await opts\.links\.listForAccount\(ctx\.account\.id\);/,
     );
