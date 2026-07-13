@@ -12,7 +12,14 @@
 // the "configure under Settings" nudge.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { DriftstackError } from '../../src/lib/client';
+
+interface MockClient {
+  sessions: {
+    list: (input: { limit: number }) => Promise<{ data: unknown[] }>;
+  };
+}
 
 interface MockSettings {
   settings: {
@@ -22,7 +29,7 @@ interface MockSettings {
     startUrl?: string;
   };
   loading: boolean;
-  client: null;
+  client: MockClient | null;
   accountMe: null;
   refreshAccountMe: () => Promise<void>;
   update: (next: Record<string, unknown>) => Promise<void>;
@@ -44,6 +51,10 @@ function baseSettings(apiKey: string | null): MockSettings {
     refreshAccountMe: vi.fn(() => Promise.resolve()),
     update: vi.fn(() => Promise.resolve()),
   };
+}
+
+function settingsWithClient(client: MockClient): MockSettings {
+  return { ...baseSettings('ds_live_test'), client };
 }
 
 afterEach(() => {
@@ -70,6 +81,68 @@ describe('ConnectivityView API-key row masking (audit)', () => {
     expect(capturedSignal?.aborted).toBe(false);
     unmount();
     expect(capturedSignal?.aborted).toBe(true);
+  });
+
+  it('hides untyped transport internals from a failed connectivity result', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('background version probe unavailable'))),
+    );
+    useSettingsMock.mockReturnValue(
+      settingsWithClient({
+        sessions: {
+          list: () =>
+            Promise.reject(
+              new Error(
+                'getaddrinfo ENOTFOUND private-api.internal /Users/customer/.config token=secret',
+              ),
+            ),
+        },
+      }),
+    );
+
+    render(<ConnectivityView embedded />);
+    fireEvent.click(screen.getByRole('button', { name: 'Run check' }));
+
+    expect(
+      await screen.findByText(
+        'Connectivity check failed. Verify the API URL and key in Settings, then try again.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/private-api\.internal|\/Users\/customer|token=secret/i)).toBeNull();
+  });
+
+  it('preserves typed API problem guidance and kind', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('background version probe unavailable'))),
+    );
+    useSettingsMock.mockReturnValue(
+      settingsWithClient({
+        sessions: {
+          list: () =>
+            Promise.reject(
+              new DriftstackError({
+                kind: 'invalid_key',
+                status: 401,
+                type: 'https://errors.driftstack.dev/invalid-key',
+                title: 'Invalid API key',
+                detail: 'Create a new key in the dashboard, then update Settings.',
+              }),
+            ),
+        },
+      }),
+    );
+
+    render(<ConnectivityView embedded />);
+    fireEvent.click(screen.getByRole('button', { name: 'Run check' }));
+
+    expect(
+      await screen.findByText(
+        'Invalid API key: Create a new key in the dashboard, then update Settings.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('· invalid_key')).toBeInTheDocument();
   });
 
   it('renders a ds_live_ key with the shared prefix-aware mask (ds_live_abcd…zzzz, NOT the old slice(0,8))', () => {

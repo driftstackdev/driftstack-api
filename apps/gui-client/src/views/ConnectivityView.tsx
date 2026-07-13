@@ -12,6 +12,7 @@ import { DriftstackError } from '../lib/client';
 import { disposeResponseBody } from '../lib/dispose-response-body';
 import { readBoundedDiagnosticJson } from '../lib/read-bounded-json';
 import { maskApiKey } from '../components/ApiKeyMaskedSpan';
+import { humanizeError } from '../lib/humanize-error';
 
 interface CheckResult {
   ok: boolean;
@@ -78,7 +79,13 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
       });
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
-      const detail = err instanceof Error ? err.message : 'unknown error';
+      const detail =
+        err instanceof DriftstackError
+          ? `${err.title}: ${err.detail ?? err.message}`
+          : humanizeError(
+              err,
+              'Connectivity check failed. Verify the API URL and key in Settings, then try again.',
+            );
       const errorKind = err instanceof DriftstackError ? err.kind : 'unknown';
       setResult({ ok: false, durationMs, detail, errorKind });
     } finally {
