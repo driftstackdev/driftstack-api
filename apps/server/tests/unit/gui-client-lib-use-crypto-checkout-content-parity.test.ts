@@ -105,14 +105,18 @@ describe('W471.B apps/gui-client/src/lib/use-crypto-checkout.ts content parity',
       /'idempotency-key': idempotencyKeyRef\.current,\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(args\),/,
     );
     expect(body).toMatch(
-      /const order = \(await res\.json\(\)\) as CryptoCheckoutResponse;\s*\n?\s*const replayed = res\.headers\.get\('idempotent-replayed'\) === '1';\s*\n?\s*setState\(\{ kind: 'ready', order, replayed \}\);/,
+      /const order = \(await res\.json\(\)\) as CryptoCheckoutResponse;\s*\n?\s*const replayed = res\.headers\.get\('idempotent-replayed'\) === '1';\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', order, replayed \}\);/,
     );
+    expect(body).toMatch(/fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-checkout`, \{/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
   });
 
   it("reset: rotates idempotencyKeyRef.current = newIdempotencyKey() + setState({kind:'idle'}) + empty useCallback deps (idempotencyKeyRef is ref, no dep needed)", () => {
     expect(body).toMatch(
-      /const reset = useCallback\(\(\) => \{\s*\n?\s*idempotencyKeyRef\.current = newIdempotencyKey\(\);\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*\}, \[\]\);/,
+      /const reset = useCallback\(\(\) => \{[\s\S]*?requestRef\.current\?\.abort\(\);[\s\S]*?idempotencyKeyRef\.current = newIdempotencyKey\(\);\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*\}, \[\]\);/,
     );
+    expect(body).toMatch(/useEffect\([\s\S]*?requestRef\.current\?\.abort\(\);/);
   });
 
   it('file exists at canonical path', () => {

@@ -37,6 +37,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('V-534.J useCryptoCheckout — initial state', () => {
@@ -96,6 +97,7 @@ describe('V-534.J useCryptoCheckout.start — happy path', () => {
     });
     const callArgs = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(callArgs?.method).toBe('POST');
+    expect(callArgs?.signal).toBeTruthy();
     const rawBody = typeof callArgs?.body === 'string' ? callArgs.body : '';
     const body = JSON.parse(rawBody) as Record<string, unknown>;
     expect(body).toEqual({
@@ -107,6 +109,55 @@ describe('V-534.J useCryptoCheckout.start — happy path', () => {
 });
 
 describe('V-534.J useCryptoCheckout.start — error paths', () => {
+  it('single-flights duplicate checkout dispatch while the first request is pending', () => {
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>(() => {
+          // Intentionally pending until reset aborts the caller signal.
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCryptoCheckout());
+    const args = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    act(() => {
+      void result.current.start(args);
+      void result.current.start(args);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    act(() => result.current.reset());
+    expect(result.current.state.kind).toBe('idle');
+  });
+
+  it('bounds a stalled checkout and restores an actionable error', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useCryptoCheckout());
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await act(async () => pending);
+    expect(result.current.state).toEqual({
+      kind: 'error',
+      message: 'Checkout timed out. Check your connection and try again.',
+    });
+  });
+
   it('error when no API key is configured', async () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: null, baseUrl: 'https://api.driftstack.local' },
