@@ -7,7 +7,11 @@ import {
 } from '../../src/schemas/harness-control-protocol.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import { NotificationEventBus } from '../../src/services/notification-event-bus.js';
-import { makeSessionErrorEventRelay } from '../../src/services/session-error-event-relay.js';
+import {
+  ERROR_EVENT_RELAY_MAX_CONCURRENT_PER_NODE,
+  ERROR_EVENT_RELAY_MAX_SESSIONS_PER_NODE,
+  makeSessionErrorEventRelay,
+} from '../../src/services/session-error-event-relay.js';
 
 function frame(overrides: Partial<HarnessErrorEvent> = {}): HarnessErrorEvent {
   return {
@@ -121,5 +125,74 @@ describe('makeSessionErrorEventRelay', () => {
     expect(calls).toBe(1);
     releaseFirst();
     await vi.waitFor(() => expect(writes).toEqual(['older_error', 'newer_error']));
+  });
+
+  it('coalesces repeated pending diagnostics to the latest event while one session write is in flight', async () => {
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const writes: string[] = [];
+    const repo = {
+      recordErrorEvent: vi.fn(async (_id: string, _node: string, event: { code: string }) => {
+        writes.push(event.code);
+        if (writes.length === 1) await first;
+        return { id: 'agt_1', accountId: 'acc_1' } as never;
+      }),
+    };
+    const relay = makeSessionErrorEventRelay(repo, new NotificationEventBus(), logger());
+    relay(frame({ sessionId: 'agt_1', code: 'first_error' }), 'node-1');
+    relay(frame({ sessionId: 'agt_1', code: 'superseded_error' }), 'node-1');
+    relay(frame({ sessionId: 'agt_1', code: 'latest_error' }), 'node-1');
+
+    expect(writes).toEqual(['first_error']);
+    releaseFirst();
+    await vi.waitFor(() => expect(writes).toEqual(['first_error', 'latest_error']));
+  });
+
+  it('caps concurrent ownership/persistence work per reporting node', async () => {
+    const releases: Array<() => void> = [];
+    const repo = {
+      recordErrorEvent: vi.fn(
+        () =>
+          new Promise<never>((resolve) => {
+            releases.push(resolve as () => void);
+          }),
+      ),
+    };
+    const relay = makeSessionErrorEventRelay(repo, new NotificationEventBus(), logger());
+    for (let i = 0; i < ERROR_EVENT_RELAY_MAX_CONCURRENT_PER_NODE * 3; i += 1) {
+      relay(frame({ sessionId: `agt_${i}` }), 'node-1');
+    }
+
+    expect(repo.recordErrorEvent).toHaveBeenCalledTimes(ERROR_EVENT_RELAY_MAX_CONCURRENT_PER_NODE);
+    for (const release of releases.splice(0)) release();
+    await vi.waitFor(() =>
+      expect(repo.recordErrorEvent).toHaveBeenCalledTimes(
+        ERROR_EVENT_RELAY_MAX_CONCURRENT_PER_NODE * 2,
+      ),
+    );
+  });
+
+  it('sheds unique-session overflow at the worker capacity budget without starting more DB work', () => {
+    const repo = {
+      recordErrorEvent: vi.fn(() => new Promise<never>(() => undefined)),
+    };
+    const log = logger();
+    const relay = makeSessionErrorEventRelay(repo, new NotificationEventBus(), log);
+    for (let i = 0; i < ERROR_EVENT_RELAY_MAX_SESSIONS_PER_NODE; i += 1) {
+      relay(frame({ sessionId: `agt_budget_${i}` }), 'node-1');
+    }
+    relay(frame({ sessionId: 'agt_overflow' }), 'node-1');
+
+    expect(repo.recordErrorEvent).toHaveBeenCalledTimes(ERROR_EVENT_RELAY_MAX_CONCURRENT_PER_NODE);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'agt_overflow',
+        reportingNodeId: 'node-1',
+        sessionBudget: ERROR_EVENT_RELAY_MAX_SESSIONS_PER_NODE,
+      }),
+      expect.stringContaining('exceeded its relay session budget'),
+    );
   });
 });
