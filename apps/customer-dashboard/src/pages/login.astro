@@ -289,6 +289,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const resendStatus = root.querySelector('[data-resend-status]');
       const RESEND_REQUEST_TIMEOUT_MS = 15_000;
       let resendInFlight = false;
+      let resendOutcomeUnknown = false;
 
       // Problem-type URI the server returns when login is refused because
       // the account's email isn't verified (403). Matched on the body
@@ -433,7 +434,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       if (resendBtn) {
         resendBtn.addEventListener('click', () => {
-          if (resendInFlight) return;
+          if (resendInFlight || resendOutcomeUnknown) return;
           const email = (form.querySelector('#login-email') || {}).value || '';
           if (!email.trim()) {
             if (resendStatus) resendStatus.textContent = 'Enter your email above first.';
@@ -458,15 +459,20 @@ const apiBaseUrl = resolveApiBaseUrl();
                   'Verification email sent. Check your inbox, then enter the code.';
             })
             .catch(() => {
+              if (controller.signal.aborted) {
+                resendOutcomeUnknown = true;
+                if (resendStatus)
+                  resendStatus.textContent =
+                    'Delivery is unknown after the request timed out. The server may already have sent a verification email. Do not resend again on this page. Check your inbox and spam folder; if multiple messages arrive, use the newest one. Reload only if nothing arrives.';
+                return;
+              }
               if (resendStatus)
-                resendStatus.textContent = controller.signal.aborted
-                  ? 'Resending took too long. Check your connection and try again.'
-                  : "Couldn't resend right now — try again shortly.";
+                resendStatus.textContent = "Couldn't resend right now — try again shortly.";
             })
             .finally(() => {
               clearTimeout(timeoutId);
               resendInFlight = false;
-              resendBtn.disabled = false;
+              resendBtn.disabled = resendOutcomeUnknown;
               resendBtn.setAttribute('aria-busy', 'false');
             });
         });

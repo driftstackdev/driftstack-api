@@ -108,13 +108,16 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
   it('resend acquires its lease before the async prompt and has a bounded request', () => {
     expect(body).toMatch(/const RESEND_REQUEST_TIMEOUT_MS = 15_000/);
     expect(body).toMatch(/let resendInFlight = false/);
+    expect(body).toMatch(/let resendOutcomeUnknown = false/);
     expect(body).toMatch(
-      /addEventListener\('click', async \(\) => \{\s*if \(resendInFlight\) return;\s*resendInFlight = true/,
+      /addEventListener\('click', async \(\) => \{\s*if \(resendInFlight \|\| resendOutcomeUnknown\) return;\s*resendInFlight = true/,
     );
     expect(body).toMatch(/resendBtn\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/\.finally\(\(\) => clearTimeout\(timeoutId\)\)/);
-    expect(body).toMatch(/Resending took too long/);
+    expect(body).toMatch(/resendOutcomeUnknown = true/);
+    expect(body).toMatch(/Verification-email delivery is unknown/);
+    expect(body).toMatch(/Check inbox before retrying/);
   });
 
   it('resend anti-double-click: 60s disable post-success (per-IP 3/min cap protection)', () => {

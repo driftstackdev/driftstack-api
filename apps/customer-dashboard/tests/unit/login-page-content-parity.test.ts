@@ -91,14 +91,17 @@ describe('W369.B customer-dashboard /login page content parity', () => {
   it('verification resend has a real single-flight lease and bounded network deadline', () => {
     expect(body).toMatch(/const RESEND_REQUEST_TIMEOUT_MS = 15_000/);
     expect(body).toMatch(/let resendInFlight = false/);
-    expect(body).toMatch(/if \(resendInFlight\) return/);
+    expect(body).toMatch(/let resendOutcomeUnknown = false/);
+    expect(body).toMatch(/if \(resendInFlight \|\| resendOutcomeUnknown\) return/);
     expect(body).toMatch(/resendInFlight = true/);
     expect(body).toMatch(/resendBtn\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), RESEND_REQUEST_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
     expect(body).toMatch(/resendInFlight = false/);
-    expect(body).toMatch(/Resending took too long/);
+    expect(body).toMatch(/resendOutcomeUnknown = true/);
+    expect(body).toMatch(/Delivery is unknown after the request timed out/);
+    expect(body).toMatch(/resendBtn\.disabled = resendOutcomeUnknown/);
   });
 
   it('OAuth start is group-serialized, visibly busy, and bounded', () => {

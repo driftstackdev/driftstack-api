@@ -286,9 +286,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       const resendStatus = root.querySelector('[data-field="resend-status"]');
       const RESEND_REQUEST_TIMEOUT_MS = 15_000;
       let resendInFlight = false;
+      let resendOutcomeUnknown = false;
       if (resendBtn) {
         resendBtn.addEventListener('click', async () => {
-          if (resendInFlight) return;
+          if (resendInFlight || resendOutcomeUnknown) return;
           resendInFlight = true;
           resendBtn.disabled = true;
           resendBtn.setAttribute('aria-busy', 'true');
@@ -341,14 +342,24 @@ const apiBaseUrl = resolveApiBaseUrl();
             })
             .catch((err) => {
               resendInFlight = false;
-              resendBtn.disabled = false;
               resendBtn.setAttribute('aria-busy', 'false');
+              if (controller.signal.aborted) {
+                resendOutcomeUnknown = true;
+                resendBtn.disabled = true;
+                if (resendStatus) {
+                  resendStatus.textContent = 'Check inbox before retrying';
+                  resendStatus.classList.remove('hidden');
+                }
+                showBanner(
+                  'Verification-email delivery is unknown after the request timed out. The server may already have sent it. Do not resend again on this page. Check your inbox and spam folder first; if multiple messages arrive, use the newest one. Reload this page only if nothing arrives.',
+                );
+                return;
+              }
+              resendBtn.disabled = false;
               showBanner(
-                controller.signal.aborted
-                  ? 'Resending took too long. Check your connection and try again.'
-                  : err && err.message
-                    ? err.message
-                    : 'Resend failed.',
+                err && err.message
+                  ? err.message
+                  : 'Resend failed.',
               );
             })
             .finally(() => clearTimeout(timeoutId));

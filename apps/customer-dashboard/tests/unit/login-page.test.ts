@@ -233,7 +233,7 @@ describe('login page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
   });
 
-  it('serializes duplicate verification resends and recovers after the bounded request times out', async () => {
+  it('makes an ambiguous verification resend timeout terminal for the page load', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       requestTimeoutImmediately: true,
       requestTimeoutOnCall: 2,
@@ -263,14 +263,17 @@ describe('login page — local integration', () => {
     resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
     resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
     await flush();
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
 
     const resendCalls = fetchCalls.filter((c) => /\/v1\/auth\/resend-verification$/.test(c.url));
     expect(resendCalls).toHaveLength(1);
     expect(resendCalls[0]?.init?.signal?.aborted).toBe(true);
-    expect(resendBtn.disabled).toBe(false);
+    expect(resendBtn.disabled).toBe(true);
     expect(resendBtn.getAttribute('aria-busy')).toBe('false');
     const status = window.document.querySelector('[data-resend-status]')?.textContent ?? '';
-    expect(status).toMatch(/resending took too long.*check your connection/i);
+    expect(status).toMatch(/delivery is unknown.*may already have sent/i);
+    expect(status).toMatch(/do not resend again.*inbox and spam.*newest one/i);
   });
 
   it('serializes duplicate password submits and recovers after the bounded request times out', async () => {
