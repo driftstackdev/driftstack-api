@@ -97,14 +97,14 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
     );
   });
 
-  it("CRITICAL S35 2026-07-07 (fable-frontend-audit) — enroll start has an in-flight + shown-QR guard. Every unguarded click minted a NEW pending TOTP secret server-side (last write wins), so a double-click could leave the customer scanning a stale QR. Disabled on click ('Generating secret…'), inert after the QR renders ('Secret generated — scan the QR below'), re-enabled only on error.", () => {
+  it("CRITICAL S35 2026-07-07 (fable-frontend-audit) — enroll start has an in-flight + shown-QR guard. Every unguarded click minted a NEW pending TOTP secret server-side (last write wins), so a double-click could leave the customer scanning a stale QR. Disabled on click ('Generating secret…'), inert after the QR renders ('Secret generated — scan the QR below'), fixed-copy failure, re-enabled only on error.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/if \(mfaStart && mfaStart\.disabled\) return;/);
     expect(p).toMatch(/mfaStart\.textContent = 'Generating secret…';/);
     expect(p).toMatch(/mfaStart\.textContent = 'Secret generated — scan the QR below';/);
     expect(p).toMatch(
-      /showMfaError\(err\.message \|\| 'Enroll failed\.'\);\s*\n\s+if \(mfaStart\) \{\s*\n\s+mfaStart\.disabled = false;\s*\n\s+mfaStart\.textContent = 'Set up two-factor authentication';/,
+      /showMfaError\(securityErrorMessage\(err, 'Could not start MFA enrollment\. Try again\.'\)\);\s*\n\s+if \(mfaStart\) \{\s*\n\s+mfaStart\.disabled = false;\s*\n\s+mfaStart\.textContent = 'Set up two-factor authentication';/,
     );
   });
 
