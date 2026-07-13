@@ -38,6 +38,14 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
+      <div
+        data-accept-unknown
+        class="mb-5 hidden rounded-lg border border-tk-border bg-tk-surface px-4 py-4 text-sm text-tk-ink-2"
+      >
+        <a href="/team" class="btn-primary flex w-full items-center justify-center"
+          >Open Team to check access</a
+        >
+      </div>
       <p class="mt-6 hidden text-xs text-tk-ink-3" data-field="signin-hint">
         Not signed in? <a
           href="/login"
@@ -60,6 +68,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const intro = root.querySelector('[data-field="intro"]');
       const signinHint = root.querySelector('[data-field="signin-hint"]');
+      const unknownRecovery = root.querySelector('[data-accept-unknown]');
       const ACCEPT_TIMEOUT_MS = 15_000;
 
       // Carry the current invite URL (/team/accept?token=…) through
@@ -143,12 +152,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           window.location.href = '/team';
         })
         .catch((err) => {
+          if (err && err.name === 'AbortError') {
+            if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+            showBanner(
+              'Invite-acceptance outcome is unknown after the request timed out. The server may already have joined you to the team and consumed this single-use invite. Do not reload or submit this link again. Open Team to check access; if access is absent, ask the team owner for a new invite.',
+              false,
+            );
+            return;
+          }
           showBanner(
-            err && err.name === 'AbortError'
-              ? 'Accepting the invite took too long. Check your connection, then reload this page to try again.'
-              : err && err.message
-                ? err.message
-                : 'Could not accept the invite.',
+            err && err.message
+              ? err.message
+              : 'Could not accept the invite.',
             !!(err && err.needsSignin),
           );
         })

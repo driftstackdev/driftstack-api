@@ -18,9 +18,11 @@ describe('team invitation acceptance reliability', () => {
     expect(PAGE).toContain('signal: controller.signal');
     expect(PAGE).toContain('.finally(() => window.clearTimeout(timeout))');
     expect(PAGE).toContain("err && err.name === 'AbortError'");
-    expect(PAGE).toContain(
-      'Accepting the invite took too long. Check your connection, then reload this page to try again.',
-    );
+    expect(PAGE).toContain('Invite-acceptance outcome is unknown after the request timed out.');
+    expect(PAGE).toContain('consumed this single-use invite');
+    expect(PAGE).toContain('Do not reload or submit this link again.');
+    expect(PAGE).toContain('Open Team to check access');
+    expect(PAGE).toContain('ask the team owner for a new invite');
   });
 
   it('preserves the authenticated token contract and recovery routing', () => {
