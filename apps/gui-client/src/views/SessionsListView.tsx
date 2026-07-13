@@ -24,6 +24,7 @@ function fmtTime(iso: string): string {
 export function SessionsListView(props: SessionsListViewProps): JSX.Element {
   const limit = props.limit ?? 25;
   const { state, refetch } = useSessionsList({ limit });
+  const loading = state.kind === 'loading';
 
   return (
     <section className="space-y-4 p-4" aria-labelledby="sessions-list-heading">
@@ -37,13 +38,15 @@ export function SessionsListView(props: SessionsListViewProps): JSX.Element {
         <button
           type="button"
           onClick={() => void refetch()}
-          className="rounded border border-surface-divider px-2 py-1 text-sm text-ink-primary hover:bg-surface-elevated"
+          disabled={loading}
+          aria-busy={loading}
+          className="rounded border border-surface-divider px-2 py-1 text-sm text-ink-primary hover:bg-surface-elevated disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Refresh
+          {loading ? 'Refreshing…' : 'Refresh'}
         </button>
       </header>
 
-      {state.kind === 'loading' && <SkeletonRows rows={5} label="Loading sessions" />}
+      {loading && <SkeletonRows rows={5} label="Loading sessions" />}
       {state.kind === 'error' && (
         <div
           role="alert"

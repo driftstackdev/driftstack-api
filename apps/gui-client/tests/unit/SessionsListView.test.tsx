@@ -74,10 +74,23 @@ describe('V-534.P SessionsListView — ready', () => {
 });
 
 describe('V-534.P SessionsListView — refresh button', () => {
-  it('invokes the hook refetch when Refresh is clicked', () => {
+  it('disables the control and exposes honest progress while loading', () => {
     setState({ kind: 'loading' });
     render(<SessionsListView />);
-    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    const button = screen.getByRole('button', { name: /refreshing/i });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(button);
+    expect(refetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('invokes the hook refetch when the idle Refresh control is clicked', () => {
+    setState({ kind: 'ready', data: { sessions: [], nextCursor: null } });
+    render(<SessionsListView />);
+    const button = screen.getByRole('button', { name: /^refresh$/i });
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'false');
+    fireEvent.click(button);
     expect(refetchSpy).toHaveBeenCalledTimes(1);
   });
 });
