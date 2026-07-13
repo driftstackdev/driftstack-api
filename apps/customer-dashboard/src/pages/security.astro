@@ -465,6 +465,38 @@ const apiBaseUrl = resolveApiBaseUrl();
             })[c],
         );
       }
+      function securityErrorMessage(err, fallback) {
+        const message = err && typeof err.message === 'string' ? err.message.trim() : '';
+        const normalized = ((err && err.name) || '') + ' ' + message;
+        if (/abort|timed? out|timeout/i.test(normalized)) {
+          return 'The request took too long. Check your connection and try again.';
+        }
+        if (
+          /failed to fetch|fetch failed|network(?:error| request)?|load failed|offline|internet|connection (?:failed|lost|refused)|dns|econn|getaddrinfo/i.test(
+            normalized,
+          )
+        ) {
+          return 'Check your connection and try again.';
+        }
+        const statusMatch = message.match(/^HTTP\s+(\d{3})$/i);
+        if (statusMatch) {
+          const status = Number(statusMatch[1]);
+          if (status === 401 || status === 403) {
+            return 'Your sign-in has expired. Sign in again and retry.';
+          }
+          if (status === 429) return 'Too many attempts. Wait a moment and try again.';
+          if (status >= 500) return 'The service is temporarily unavailable. Try again shortly.';
+          return fallback;
+        }
+        if (err && err.userSafe === true && message) return message;
+        return fallback;
+      }
+      function responseError(response, body) {
+        const detail = body && typeof body.detail === 'string' ? body.detail.trim() : '';
+        const error = new Error(detail || 'HTTP ' + response.status);
+        if (detail) error.userSafe = true;
+        return error;
+      }
       function fmtIso(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
@@ -576,8 +608,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => renderAudit(body.data || []))
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't load audit log (" + msg + ').');
+            showBanner(securityErrorMessage(err, "Couldn't load the audit log. Try again."));
           });
       }
 
@@ -669,8 +700,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (body) renderOauthLinks(body.data || []);
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't load connected accounts (" + msg + ').');
+            showBanner(
+              securityErrorMessage(err, "Couldn't load connected accounts. Try again."),
+            );
           });
       }
 
@@ -834,8 +866,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return true;
           })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't load active sign-ins (" + msg + ').');
+            showBanner(securityErrorMessage(err, "Couldn't load active sign-ins. Try again."));
             return false;
           });
       }
@@ -865,8 +896,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
               return;
             }
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't revoke session (" + msg + ').');
+            showBanner(securityErrorMessage(err, "Couldn't revoke this sign-in. Try again."));
           });
       }
 
@@ -930,8 +960,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                   );
                   return;
                 }
-                const msg = err && err.message ? err.message : 'network error';
-                showBanner("Couldn't bulk-revoke (" + msg + ').');
+                showBanner(
+                  securityErrorMessage(err, "Couldn't sign out the other sessions. Try again."),
+                );
               });
           } finally {
             endWebSessionMutation(webSessionsRevokeAllBtn);
@@ -993,8 +1024,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             return;
           }
-          const msg = err && err.message ? err.message : 'network error';
-          showBanner("Couldn't send password-reset (" + msg + ').');
+          showBanner(
+            securityErrorMessage(err, "Couldn't send the password-reset email. Try again."),
+          );
         } finally {
           passwordResetInFlight = false;
           if (btn) {
@@ -1463,8 +1495,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (generation !== mfaRefreshGeneration) return false;
             if (showLoadError) {
-              const msg = err && err.message ? err.message : 'network error';
-              showBanner("Couldn't load MFA status (" + msg + ').');
+              showBanner(securityErrorMessage(err, "Couldn't load MFA status. Try again."));
             }
             return false;
           })
@@ -1495,7 +1526,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               : r
                   .json()
                   .catch(() => ({}))
-                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                  .then((b) => Promise.reject(responseError(r, b))),
           )
           .then((body) => {
             renderQrFor(body.otpauth_uri);
@@ -1507,7 +1538,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (mfaStart) mfaStart.textContent = 'Secret generated — scan the QR below';
           })
           .catch((err) => {
-            showMfaError(err.message || 'Enroll failed.');
+            showMfaError(securityErrorMessage(err, 'Could not start MFA enrollment. Try again.'));
             if (mfaStart) {
               mfaStart.disabled = false;
               mfaStart.textContent = 'Set up two-factor authentication';
@@ -1542,7 +1573,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               : r
                   .json()
                   .catch(() => ({}))
-                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                  .then((b) => Promise.reject(responseError(r, b))),
           )
           .then((body) => {
             // Render recovery codes once.
@@ -1569,7 +1600,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
               return;
             }
-            showMfaError(err.message || 'Verify failed.');
+            showMfaError(securityErrorMessage(err, 'Could not verify that code. Try again.'));
           })
           .finally(() => {
             if (mfaVerifyBtn) {
@@ -1659,7 +1690,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               : r
                   .json()
                   .catch(() => ({}))
-                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                  .then((b) => Promise.reject(responseError(r, b))),
           )
           .then(() => {
             closeStepUp();
@@ -1676,7 +1707,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
               return;
             }
-            showStepUpError(err.message || 'Step-up failed.');
+            showStepUpError(securityErrorMessage(err, 'Could not verify that code. Try again.'));
           })
           .finally(() => {
             mfaStepUpInFlight = false;
@@ -1711,7 +1742,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                   openStepUp('disable');
                   throw new Error('__step_up__');
                 }
-                throw new Error(b.detail || 'HTTP ' + r.status);
+                throw responseError(r, b);
               });
           })
           .then(() => {
@@ -1739,7 +1770,9 @@ const apiBaseUrl = resolveApiBaseUrl();
               }
               return;
             }
-            showBanner('Disable failed: ' + (err && err.message ? err.message : 'network'));
+            showBanner(
+              securityErrorMessage(err, 'Could not disable two-factor authentication. Try again.'),
+            );
           })
           .finally(() => {
             mfaDisableInFlight = false;
@@ -1771,7 +1804,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                       openStepUp('regenerate');
                       throw new Error('__step_up__');
                     }
-                    throw new Error(b.detail || 'HTTP ' + r.status);
+                    throw responseError(r, b);
                   }),
           )
           .then((body) => {
@@ -1808,7 +1841,9 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
               return;
             }
-            showBanner('Regenerate failed: ' + (err && err.message ? err.message : 'network'));
+            showBanner(
+              securityErrorMessage(err, 'Could not regenerate recovery codes. Try again.'),
+            );
           })
           .finally(() => {
             mfaRegenerateInFlight = false;
