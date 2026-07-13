@@ -225,4 +225,12 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toContain('Verify its status before retrying');
     expect(body).toMatch(/err && err\.name === 'AbortError'/);
   });
+
+  it('reconciles ambiguous tier changes against the refreshed target tier', () => {
+    expect(body).toMatch(/async function reconcileAccountTier\(targetTier\)/);
+    expect(body).toMatch(/tier === targetTier/);
+    expect(body).toContain('the change completed, so do not submit it again');
+    expect(body).toContain('Verify its tier before retrying');
+    expect(body).toMatch(/await reconcileAccountTier\(body\.tier\)/);
+  });
 });

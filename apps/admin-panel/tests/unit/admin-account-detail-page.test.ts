@@ -41,7 +41,7 @@ describe('admin account detail mutation reconciliation', () => {
     windowRef = null;
   });
 
-  it('refreshes committed suspend and unsuspend timeouts before advising another transition', async () => {
+  it('refreshes committed tier/suspend transitions before advising another mutation', async () => {
     const virtualConsole = new VirtualConsole();
     virtualConsole.on('jsdomError', () => {});
     const dom = new JSDOM(
@@ -53,6 +53,7 @@ describe('admin account detail mutation reconciliation', () => {
          <span data-field="created"></span><span data-field="updated"></span>
          <span data-field="status-badge"></span>
          <div data-field="action-row">
+           <button data-action="change-tier">Change tier</button>
            <button data-action="suspend">Suspend account</button>
            <button data-action="unsuspend" class="hidden">Unsuspend account</button>
          </div>
@@ -69,6 +70,7 @@ describe('admin account detail mutation reconciliation', () => {
     windowRef = dom.window;
     const calls: FetchCall[] = [];
     let status = 'active';
+    let tier = 'api_builder';
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
     // @ts-expect-error -- jsdom's fetch global is intentionally injected.
     dom.window.fetch = (input: string, init: RequestInit | undefined) => {
@@ -82,12 +84,16 @@ describe('admin account detail mutation reconciliation', () => {
         status = 'active';
         return Promise.reject(timeout);
       }
+      if (call.init?.method === 'POST' && /\/tier$/.test(call.url)) {
+        tier = JSON.parse(String(call.init.body)).tier;
+        return Promise.reject(timeout);
+      }
       if (/\/v1\/admin\/accounts\/acc_1234$/.test(call.url)) {
         return Promise.resolve(
           response({
             name: 'Test Account',
             email: 'owner@example.test',
-            tier: 'api_builder',
+            tier,
             status,
             created_at: '2026-07-01T00:00:00.000Z',
             updated_at: '2026-07-13T00:00:00.000Z',
@@ -102,7 +108,8 @@ describe('admin account detail mutation reconciliation', () => {
     // @ts-expect-error -- branded modal helpers are injected by AdminLayout.
     dom.window.driftstackConfirm = () => Promise.resolve(true);
     // @ts-expect-error -- branded modal helpers are injected by AdminLayout.
-    dom.window.driftstackPrompt = () => Promise.resolve('incident response');
+    dom.window.driftstackPrompt = (message: string) =>
+      Promise.resolve(message.startsWith('New tier') ? 'api_scale' : 'incident response');
     dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
     dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
@@ -137,5 +144,18 @@ describe('admin account detail mutation reconciliation', () => {
     );
     expect(suspendButton.disabled).toBe(false);
     expect(unsuspendButton.disabled).toBe(false);
+
+    const tierButton = dom.window.document.querySelector(
+      '[data-action="change-tier"]',
+    ) as HTMLButtonElement;
+    tierButton.click();
+    await flush(80);
+
+    expect(calls.filter((call) => /\/tier$/.test(call.url))).toHaveLength(1);
+    expect(dom.window.document.querySelector('[data-field="tier"]')?.textContent).toBe('api_scale');
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /tier-change outcome is unknown.*account was refreshed and now uses api_scale.*change completed.*do not submit it again/i,
+    );
+    expect(tierButton.disabled).toBe(false);
   });
 });

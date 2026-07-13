@@ -696,6 +696,30 @@ const accountId = account.id;
         }
       }
 
+      async function reconcileAccountTier(targetTier) {
+        const refreshed = await load();
+        const tier = root.querySelector('[data-field="tier"]')?.textContent?.trim();
+        if (refreshed && tier === targetTier) {
+          showBanner(
+            'Tier-change outcome is unknown because the response timed out. The account was refreshed and now uses ' +
+              targetTier +
+              '; the change completed, so do not submit it again.',
+          );
+        } else if (refreshed) {
+          showBanner(
+            'Tier-change outcome is unknown because the response timed out. The account was refreshed and still uses ' +
+              (tier || 'an unknown tier') +
+              '; retry the change to ' +
+              targetTier +
+              ' if it is still required.',
+          );
+        } else {
+          showBanner(
+            'Tier-change outcome is unknown because the response timed out, and the account could not be refreshed. Verify its tier before retrying.',
+          );
+        }
+      }
+
       const actionRow = root.querySelector('[data-field="action-row"]');
       const accountActionButtons = actionRow
         ? Array.from(actionRow.querySelectorAll('[data-action]'))
@@ -752,7 +776,11 @@ const accountId = account.id;
             // Refresh audit slice to surface the just-recorded entry.
             load();
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              await reconcileAccountTier(body.tier);
+              return;
+            }
             const msg = requestErrorMessage(err);
             showBanner("Couldn't change tier (" + msg + ').');
           });
