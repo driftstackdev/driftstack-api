@@ -145,12 +145,13 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).not.toMatch(/(?:^|[;{}]|\)\s)\s*alert\(/m);
   });
 
-  it('update, resolve, and reopen forms share the per-form single-flight binder', () => {
-    expect(body).toMatch(/let posting = false;/);
-    expect(body).toMatch(/if \(posting\) return;/);
-    expect(body).toMatch(/posting = true;/);
-    expect(body).toMatch(/submit\.setAttribute\('aria-busy', 'true'\)/);
-    expect(body).toMatch(/\.finally\(function \(\) \{\s*posting = false;/);
-    expect(body).toMatch(/submit\.removeAttribute\('aria-busy'\)/);
+  it('update, resolve, and reopen forms share one incident-wide mutation lease', () => {
+    expect(body).toMatch(/let incidentMutationInFlight = false;/);
+    expect(body).toMatch(/if \(incidentMutationInFlight\) return false;/);
+    expect(body).toMatch(/if \(incidentMutationInFlight\) return;/);
+    expect(body).toMatch(/beginIncidentMutation\(submit\)/);
+    expect(body).toMatch(/activeSubmit\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/state\.control\.disabled = state\.disabled/);
+    expect(body).toMatch(/endIncidentMutation\(submit\)/);
   });
 });

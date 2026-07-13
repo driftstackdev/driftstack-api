@@ -505,13 +505,49 @@ const isResolved = incident.status === 'resolved';
           });
       }
 
+      let incidentMutationInFlight = false;
+      let incidentMutationControls = [];
+      function beginIncidentMutation(activeSubmit) {
+        if (incidentMutationInFlight) return false;
+        incidentMutationInFlight = true;
+        incidentMutationControls = Array.from(
+          document.querySelectorAll(
+            '#add-update-form input, #add-update-form select, #add-update-form textarea, #add-update-form button, ' +
+              '#resolve-form input, #resolve-form select, #resolve-form textarea, #resolve-form button, ' +
+              '#reopen-form input, #reopen-form select, #reopen-form textarea, #reopen-form button',
+          ),
+        ).map(function (control) {
+          const state = { control: control, disabled: control.disabled };
+          control.disabled = true;
+          return state;
+        });
+        if (activeSubmit) {
+          activeSubmit.setAttribute('aria-busy', 'true');
+          activeSubmit.dataset.origText = activeSubmit.textContent || '';
+          activeSubmit.textContent = 'Posting…';
+        }
+        return true;
+      }
+
+      function endIncidentMutation(activeSubmit) {
+        incidentMutationControls.forEach(function (state) {
+          state.control.disabled = state.disabled;
+        });
+        incidentMutationControls = [];
+        incidentMutationInFlight = false;
+        if (activeSubmit) {
+          activeSubmit.removeAttribute('aria-busy');
+          activeSubmit.textContent = activeSubmit.dataset.origText || 'Submit';
+          delete activeSubmit.dataset.origText;
+        }
+      }
+
       function bind(formId, urlSuffix, includeStatus) {
         const form = document.getElementById(formId);
         if (!form) return;
-        let posting = false;
         form.addEventListener('submit', function (ev) {
           ev.preventDefault();
-          if (posting) return;
+          if (incidentMutationInFlight) return;
           const token = getToken();
           if (!token) {
             showBanner('Sign in with a staff admin account before posting.', true);
@@ -525,13 +561,7 @@ const isResolved = incident.status === 'resolved';
             body.status = (fd.get('status') || 'monitoring').toString();
           }
           const submit = form.querySelector('button[type="submit"]');
-          posting = true;
-          if (submit) {
-            submit.disabled = true;
-            submit.setAttribute('aria-busy', 'true');
-            submit.dataset.origText = submit.textContent || '';
-            submit.textContent = 'Posting…';
-          }
+          if (!beginIncidentMutation(submit)) return;
           boundedFetch(apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId) + urlSuffix, {
             method: 'POST',
             headers: {
@@ -563,12 +593,7 @@ const isResolved = incident.status === 'resolved';
               );
             })
             .finally(function () {
-              posting = false;
-              if (submit) {
-                submit.disabled = false;
-                submit.removeAttribute('aria-busy');
-                submit.textContent = submit.dataset.origText || 'Submit';
-              }
+              endIncidentMutation(submit);
             });
         });
       }
