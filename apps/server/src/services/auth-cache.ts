@@ -84,11 +84,10 @@ interface SerializedApiKey {
   lastUsedAt: string | null;
   revokedAt: string | null;
   expiresAt: string | null;
-  /** C1 — optional. Pre-C1 cache entries lack this field; deserialize
-   *  defaults it to null (ordinary key) so a missing value fails OPEN —
-   *  a serialization miss degrades to unrestricted rather than wrongly
-   *  bricking the live client with a device-key restriction. */
-  provenance?: string | null;
+  /** C1 — explicit even for ordinary keys. A missing field is security-
+   *  ambiguous (ordinary key vs restricted CLI device key), so the cache
+   *  envelope validator rejects legacy entries that omit it. */
+  provenance: string | null;
   createdAt: string;
 }
 
@@ -119,14 +118,19 @@ interface SerializedContext {
   apiKey: SerializedApiKey;
   rateLimitOverrides: Record<string, SerializedRateLimitOverride>;
   teams?: SerializedTeamMembership[];
-  /** V-353e — populated when the request authed via web session.
-   *  Pre-V-353e cache entries lack this; deserialize defaults to null
-   *  (treated as "not web-session" → step-up gate refuses, but the
-   *  TTL is 30s so fresh entries land within the rollout window). */
-  webSession?: { id: string; mfaSatisfiedAt: string | null } | null;
+  /** V-353e — populated when the request authed via web session. Explicit
+   *  null means API-key auth. Missing is ambiguous and makes the versioned
+   *  cache envelope invalid rather than silently bypassing MFA step-up. */
+  webSession: { id: string; mfaSatisfiedAt: string | null } | null;
 }
 
+const AUTH_CACHE_SCHEMA_VERSION = 1;
+
 interface CachedEntry {
+  /** Security-sensitive serialized-context contract. Entries from an older
+   *  deploy are cache misses so newly added auth fields cannot inherit a
+   *  permissive compatibility default. */
+  schemaVersion: typeof AUTH_CACHE_SCHEMA_VERSION;
   context: SerializedContext;
   accountVersion: number;
   /**
@@ -134,13 +138,10 @@ interface CachedEntry {
    * revocation so an in-flight slow-path `set()` that captured the
    * pre-revoke version produces an entry that the next `get()`
    * detects as stale (currentKeyVersion !== entry.keyVersion). Closes
-   * the API-key revocation cache window. Optional during the
-   * migration: pre-V-247 entries lack this field; absent treated as
-   * 0 + current treated as 0 → degrades to V-246-pre behavior on the
-   * old entry, fresh entries get the gate. After 30s TTL the old
-   * entries naturally expire.
+   * the API-key revocation cache window. The envelope schema version makes
+   * this required: pre-V-247 entries miss and rebuild from the database.
    */
-  keyVersion?: number;
+  keyVersion: number;
 }
 
 function serialize(ctx: AccountContext): SerializedContext {
@@ -177,7 +178,8 @@ function serialize(ctx: AccountContext): SerializedContext {
       lastUsedAt: ctx.apiKey.lastUsedAt ? ctx.apiKey.lastUsedAt.toISOString() : null,
       revokedAt: ctx.apiKey.revokedAt ? ctx.apiKey.revokedAt.toISOString() : null,
       expiresAt: ctx.apiKey.expiresAt ? ctx.apiKey.expiresAt.toISOString() : null,
-      provenance: ctx.apiKey.provenance,
+      // Always write the field, including an explicit null for ordinary keys.
+      provenance: ctx.apiKey.provenance ?? null,
       createdAt: ctx.apiKey.createdAt.toISOString(),
     },
     rateLimitOverrides: overrides,
@@ -237,9 +239,7 @@ function deserialize(s: SerializedContext): AccountContext {
       lastUsedAt: s.apiKey.lastUsedAt ? new Date(s.apiKey.lastUsedAt) : null,
       revokedAt: s.apiKey.revokedAt ? new Date(s.apiKey.revokedAt) : null,
       expiresAt: s.apiKey.expiresAt ? new Date(s.apiKey.expiresAt) : null,
-      // C1 — fail OPEN: a missing provenance (pre-C1 entry or a
-      // serialization miss) is treated as an ordinary, unrestricted key.
-      provenance: s.apiKey.provenance ?? null,
+      provenance: s.apiKey.provenance,
       createdAt: new Date(s.apiKey.createdAt),
     },
     rateLimitOverrides: overrides,
@@ -264,6 +264,46 @@ function deserialize(s: SerializedContext): AccountContext {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+/**
+ * Validate only the envelope fields needed before Redis version lookups and
+ * deserialization. The cache is an optimization, so any ambiguity is a miss:
+ * the ordinary authentication slow path reconstructs a fresh, fully typed
+ * context from Postgres and repopulates the cache.
+ */
+function isCurrentCachedEntry(value: unknown): value is CachedEntry {
+  if (!isRecord(value) || value.schemaVersion !== AUTH_CACHE_SCHEMA_VERSION) return false;
+  if (!isNonNegativeInteger(value.accountVersion) || !isNonNegativeInteger(value.keyVersion)) {
+    return false;
+  }
+
+  const context = value.context;
+  if (!isRecord(context) || !isRecord(context.account) || !isRecord(context.apiKey)) return false;
+  if (typeof context.account.id !== 'string' || typeof context.apiKey.id !== 'string') return false;
+
+  // `undefined` is not equivalent to null for these two fields. Their absence
+  // is precisely the legacy ambiguity this schema gate is designed to reject.
+  const provenance = context.apiKey.provenance;
+  if (provenance !== null && typeof provenance !== 'string') return false;
+  if (!Object.hasOwn(context, 'webSession')) return false;
+  const webSession = context.webSession;
+  if (webSession !== null) {
+    if (!isRecord(webSession) || typeof webSession.id !== 'string') return false;
+    if (webSession.mfaSatisfiedAt !== null && typeof webSession.mfaSatisfiedAt !== 'string') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 // Redis-backed implementation (production)
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -286,7 +326,13 @@ export class RedisAuthCache implements AuthCache {
     try {
       const raw = await this.redis.get(KEY_ENTRY(plaintextSha256));
       if (!raw) return null;
-      const entry = JSON.parse(raw) as CachedEntry;
+      const parsed: unknown = JSON.parse(raw);
+      // Cache compatibility must fail closed to the authoritative slow path.
+      // In particular, a legacy entry without provenance could otherwise turn
+      // a restricted CLI device key into an ordinary key, while one without
+      // webSession could turn a dashboard session into an MFA-exempt API key.
+      if (!isCurrentCachedEntry(parsed)) return null;
+      const entry = parsed;
       // One round-trip for both independent version counters (they depend only on
       // `entry`): collapse the two serial reads into a single MGET — 3 Redis RTTs
       // → 2 on the hottest path (every authed request; prod Redis is Upstash over
@@ -300,13 +346,10 @@ export class RedisAuthCache implements AuthCache {
       );
       const currentAccountVersion = accountVersionRaw ? Number(accountVersionRaw) : 0;
       if (currentAccountVersion !== entry.accountVersion) return null;
-      // V-247 — key-version gate. Pre-V-247 entries (`keyVersion` absent)
-      // treat as version 0; post-V-247 entries always have it. Either way
-      // a revocation INCR makes the current value diverge from the cached
-      // value → null → falls through to scrypt + DB check → RevokedKeyError.
+      // V-247 — key-version gate. A revocation INCR makes the current value
+      // diverge from the cached value → null → authoritative DB check.
       const currentKeyVersion = keyVersionRaw ? Number(keyVersionRaw) : 0;
-      const cachedKeyVersion = entry.keyVersion ?? 0;
-      if (currentKeyVersion !== cachedKeyVersion) return null;
+      if (currentKeyVersion !== entry.keyVersion) return null;
       return deserialize(entry.context);
     } catch (err) {
       this.logger.warn({ err: errSummary(err) }, 'auth cache get failed; degrading to scrypt path');
@@ -331,7 +374,12 @@ export class RedisAuthCache implements AuthCache {
       ]);
       const accountVersion = accountVersionRaw ? Number(accountVersionRaw) : 0;
       const keyVersion = keyVersionRaw ? Number(keyVersionRaw) : 0;
-      const entry: CachedEntry = { context: serialize(context), accountVersion, keyVersion };
+      const entry: CachedEntry = {
+        schemaVersion: AUTH_CACHE_SCHEMA_VERSION,
+        context: serialize(context),
+        accountVersion,
+        keyVersion,
+      };
       const ttlMs = ttlSec * 1000;
       await Promise.all([
         this.redis.set(KEY_ENTRY(plaintextSha256), JSON.stringify(entry), 'PX', ttlMs),

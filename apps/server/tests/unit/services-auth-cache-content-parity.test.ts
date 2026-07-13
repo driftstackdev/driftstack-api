@@ -120,10 +120,14 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     expect(body).toMatch(/role: 'member' \| 'admin';/);
   });
 
-  it('V-353e webSession: pre-V-353e cache entries lack → step-up gate refuses + 30s TTL covers rollout window', () => {
+  it('security-sensitive provenance + webSession are explicit and version-gated', () => {
+    expect(body).toMatch(/provenance: string \| null;/);
     expect(body).toMatch(
-      /\/\*\* V-353e — populated when the request authed via web session\.\s*\n?\s*\*\s*Pre-V-353e cache entries lack this; deserialize defaults to null\s*\n?\s*\*\s*\(treated as "not web-session" → step-up gate refuses, but the\s*\n?\s*\*\s*TTL is 30s so fresh entries land within the rollout window\)\. \*\/\s*\n?\s*webSession\?: \{ id: string; mfaSatisfiedAt: string \| null \} \| null;/,
+      /\/\*\* V-353e — populated when the request authed via web session\. Explicit\s*\n?\s*\*\s*null means API-key auth\. Missing is ambiguous and makes the versioned\s*\n?\s*\*\s*cache envelope invalid rather than silently bypassing MFA step-up\. \*\/\s*\n?\s*webSession: \{ id: string; mfaSatisfiedAt: string \| null \} \| null;/,
     );
+    expect(body).toMatch(/const AUTH_CACHE_SCHEMA_VERSION = 1;/);
+    expect(body).toMatch(/schemaVersion: typeof AUTH_CACHE_SCHEMA_VERSION;/);
+    expect(body).toMatch(/provenance: ctx\.apiKey\.provenance \?\? null,/);
   });
 
   it('V-247 CachedEntry.keyVersion framing pinned (revocation race resolution + 30s TTL drain)', () => {
@@ -145,15 +149,19 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     );
   });
 
-  it('RedisAuthCache.get: 3 gates pinned (entry present + accountVersion match + V-247 keyVersion match); err → warn + null', () => {
+  it('RedisAuthCache.get: entry + security schema + accountVersion + keyVersion gates; err → warn + null', () => {
     expect(body).toMatch(
       /const raw = await this\.redis\.get\(KEY_ENTRY\(plaintextSha256\)\);\s*\n?\s*if \(!raw\) return null;/,
     );
     expect(body).toMatch(
+      /const parsed: unknown = JSON\.parse\(raw\);[\s\S]*?if \(!isCurrentCachedEntry\(parsed\)\) return null;/,
+    );
+    expect(body).toMatch(/if \(!Object\.hasOwn\(context, 'webSession'\)\) return false;/);
+    expect(body).toMatch(
       /const currentAccountVersion = accountVersionRaw \? Number\(accountVersionRaw\) : 0;\s*\n?\s*if \(currentAccountVersion !== entry\.accountVersion\) return null;/,
     );
     expect(body).toMatch(
-      /\/\/ V-247 — key-version gate\. Pre-V-247 entries \(`keyVersion` absent\)\s*\n?\s*\/\/ treat as version 0; post-V-247 entries always have it\. Either way\s*\n?\s*\/\/ a revocation INCR makes the current value diverge from the cached\s*\n?\s*\/\/ value → null → falls through to scrypt \+ DB check → RevokedKeyError\./,
+      /const currentKeyVersion = keyVersionRaw \? Number\(keyVersionRaw\) : 0;\s*\n?\s*if \(currentKeyVersion !== entry\.keyVersion\) return null;/,
     );
     expect(body).toMatch(
       /this\.logger\.warn\(\{ err: errSummary\(err\) \}, 'auth cache get failed; degrading to scrypt path'\);/,
@@ -188,7 +196,7 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     );
   });
 
-  it('deserialize: rateLimitOverrides absent OK; teams absent → []; webSession absent → null', () => {
+  it('deserialize: display-only legacy fields keep safe defaults; security fields are direct', () => {
     expect(body).toMatch(
       /\/\/ Older serialised entries \(pre-OT7\) may not carry the rateLimitOverrides\s*\n?\s*\/\/ field — treat absence as empty rather than throwing\.\s*\n?\s*if \(s\.rateLimitOverrides\) \{/,
     );
@@ -197,6 +205,7 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     expect(body).toMatch(/slug: s\.account\.slug \?\? null,/);
     expect(body).toMatch(/region: s\.account\.region \?\? null,/);
     expect(body).toMatch(/teams: \(s\.teams \?\? \[\]\)\.map\(\(t\) => \(\{/);
+    expect(body).toMatch(/provenance: s\.apiKey\.provenance,/);
     expect(body).toMatch(/webSession: s\.webSession\s*\n?\s*\?\s*\{/);
   });
 
