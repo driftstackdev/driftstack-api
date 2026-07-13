@@ -604,6 +604,64 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(seenSignals.length).toBe(2);
       expect(seenSignals.every(Boolean)).toBe(true);
     });
+
+    it('hung response BODY → timeout error propagates into the one retry (not swallowed as malformed JSON)', async () => {
+      const seenSignals: boolean[] = [];
+      const hangingBodyFetch = ((_url: string | URL, init?: RequestInit) => {
+        const signal = init?.signal;
+        seenSignals.push(signal instanceof AbortSignal);
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            signal?.addEventListener('abort', () => {
+              controller.error(
+                Object.assign(new Error('The response body was aborted'), { name: 'AbortError' }),
+              );
+            });
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200 }));
+      }) as unknown as typeof globalThis.fetch;
+      const dec = new ClaudeAgentDecomposer({
+        fetch: hangingBodyFetch,
+        retryBackoffMs: 0,
+        requestTimeoutMs: 5,
+      });
+
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/body was aborted/i);
+      expect(seenSignals).toEqual([true, true]);
+    });
+
+    it('rejects oversized Content-Length before reading and without retry', async () => {
+      const response = new Response('tiny', {
+        status: 200,
+        headers: {
+          'content-length': String(__TEST_ONLY__.MAX_ANTHROPIC_RESPONSE_BYTES + 1),
+        },
+      });
+      const { fetch, calls } = sequenceFetch([response]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/response body exceeded/i);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('cancels a chunked body on the first over-cap chunk and does not retry', async () => {
+      let cancellations = 0;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(__TEST_ONLY__.MAX_ANTHROPIC_RESPONSE_BYTES + 1));
+        },
+        cancel() {
+          cancellations += 1;
+        },
+      });
+      const { fetch, calls } = sequenceFetch([new Response(body, { status: 200 })]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/response body exceeded/i);
+      expect(calls).toHaveLength(1);
+      expect(cancellations).toBe(1);
+    });
   });
 
   describe('malformed responses', () => {

@@ -53,6 +53,17 @@ const DEFAULT_RETRY_BACKOFF_MS = 1000;
 // timeout every other outbound caller already uses (stripe-api, nowpayments,
 // webhook-delivery, health-probe, incident-broadcast).
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+// Anthropic's legitimate 2,048-token planning response is only a few KiB.
+// Keep a generous ceiling while preventing a broken/compromised upstream from
+// making Response.text() allocate an arbitrary body before JSON parsing.
+const MAX_ANTHROPIC_RESPONSE_BYTES = 256 * 1024;
+
+class AnthropicResponseTooLargeError extends Error {
+  constructor() {
+    super(`Anthropic response body exceeded ${MAX_ANTHROPIC_RESPONSE_BYTES} bytes`);
+    this.name = 'AnthropicResponseTooLargeError';
+  }
+}
 
 // #140 read-and-report — the READ-BACK pass (answerFromObservation). A short
 // factual answer needs far fewer output tokens than a plan; cap tight.
@@ -300,8 +311,11 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
           body,
           signal: ac.signal,
         });
-        bodyText = await safeReadBody(res);
+        bodyText = await readBoundedBody(res);
       } catch (networkErr) {
+        // Size is a deterministic protocol violation, not a transient network
+        // failure. Do not spend a second request on the same oversized body.
+        if (networkErr instanceof AnthropicResponseTooLargeError) throw networkErr;
         if (attempt < MAX_RETRIES_5XX) {
           attempt++;
           await sleep(this.retryBackoffMs);
@@ -707,11 +721,38 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function safeReadBody(res: Response): Promise<string> {
+async function readBoundedBody(res: Response): Promise<string> {
+  const declaredLength = res.headers.get('content-length');
+  if (declaredLength !== null) {
+    const bytes = Number(declaredLength);
+    if (Number.isFinite(bytes) && bytes > MAX_ANTHROPIC_RESPONSE_BYTES) {
+      // Best-effort connection/resource release; never await cancellation on
+      // the error path because a hostile stream must not delay rejection.
+      void res.body?.cancel().catch(() => undefined);
+      throw new AnthropicResponseTooLargeError();
+    }
+  }
+  if (res.body === null) return '';
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = '';
   try {
-    return await res.text();
-  } catch {
-    return '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_ANTHROPIC_RESPONSE_BYTES) {
+        void reader.cancel().catch(() => undefined);
+        throw new AnthropicResponseTooLargeError();
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -722,5 +763,6 @@ export const __TEST_ONLY__ = {
   AUP_REFUSAL_PATTERNS,
   ANTHROPIC_API_URL,
   ANTHROPIC_VERSION_HEADER,
+  MAX_ANTHROPIC_RESPONSE_BYTES,
   makeClaudeUsage,
 };

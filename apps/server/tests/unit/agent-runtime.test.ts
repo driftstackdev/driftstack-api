@@ -760,6 +760,12 @@ describe('Q.1.b classifyDecomposerError', () => {
     );
   });
 
+  it('oversized Anthropic response body → fatal protocol violation', () => {
+    expect(
+      classifyDecomposerError(new Error('Anthropic response body exceeded 262144 bytes')),
+    ).toBe('fatal');
+  });
+
   it('missing api key → fatal (configuration error)', () => {
     expect(
       classifyDecomposerError(new Error('ClaudeAgentDecomposer: no Anthropic API key provided')),

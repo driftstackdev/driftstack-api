@@ -189,9 +189,14 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/setTimeout\(\(\) => ac\.abort\(\), this\.requestTimeoutMs\)/);
     expect(body).toMatch(/clearTimeout\(timer\);/);
     // Body read INSIDE the try (bug-class fix bc72ff48 — reading after the
-    // clearTimeout left res.json() unbounded); parse OUTSIDE so a malformed
+    // clearTimeout left res.json() unbounded); the reader itself is byte-bounded
+    // and its errors propagate into retry. Parse stays OUTSIDE so a malformed
     // success body still throws (not retried).
-    expect(body).toMatch(/bodyText = await safeReadBody\(res\);/);
+    expect(body).toMatch(/bodyText = await readBoundedBody\(res\);/);
+    expect(body).toMatch(/const MAX_ANTHROPIC_RESPONSE_BYTES = 256 \* 1024;/);
+    expect(body).toMatch(/const reader = res\.body\.getReader\(\);/);
+    expect(body).toMatch(/bytesRead \+= value\.byteLength;/);
+    expect(body).toMatch(/if \(bytesRead > MAX_ANTHROPIC_RESPONSE_BYTES\) \{/);
     expect(body).toMatch(/return JSON\.parse\(bodyText\) as AnthropicResponseJson;/);
   });
 });
