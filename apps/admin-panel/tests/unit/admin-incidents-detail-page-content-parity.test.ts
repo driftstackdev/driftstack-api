@@ -147,20 +147,31 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
 
   it('update, resolve, and reopen forms share one incident-wide mutation lease', () => {
     expect(body).toMatch(/let incidentMutationInFlight = false;/);
-    expect(body).toMatch(/if \(incidentMutationInFlight\) return false;/);
-    expect(body).toMatch(/if \(incidentMutationInFlight\) return;/);
+    expect(body).toMatch(/let incidentMutationBlocked = false;/);
+    expect(body).toMatch(
+      /if \(incidentMutationInFlight \|\| incidentMutationBlocked\) return false;/,
+    );
+    expect(body).toMatch(/if \(incidentMutationInFlight \|\| incidentMutationBlocked\) return;/);
     expect(body).toMatch(/beginIncidentMutation\(submit\)/);
     expect(body).toMatch(/activeSubmit\.setAttribute\('aria-busy', 'true'\)/);
-    expect(body).toMatch(/state\.control\.disabled = state\.disabled/);
+    expect(body).toMatch(
+      /state\.control\.disabled = incidentMutationBlocked \? true : state\.disabled/,
+    );
     expect(body).toMatch(/endIncidentMutation\(submit\)/);
   });
 
-  it('reconciles ambiguous mutations with operation-specific no-repeat guidance', () => {
-    expect(body).toContain('Mutation outcome is unknown after the request timed out.');
-    expect(body).toContain('The incident was refreshed.');
-    expect(body).toContain('If this message appears in the timeline, do not post it again.');
-    expect(body).toContain('If the incident now shows resolved, do not resolve it again.');
-    expect(body).toContain('If the incident now shows active, do not reopen it again.');
+  it('reconciles ambiguous mutations against new exact updates and state transitions', () => {
+    expect(body).toContain('let latestIncident = null;');
+    expect(body).toContain('let latestUpdates = [];');
+    expect(body).toContain(
+      'const updateIdentitiesBefore = new Set(latestUpdates.map(updateIdentity));',
+    );
+    expect(body).toContain("urlSuffix === '/updates'");
+    expect(body).toContain("urlSuffix === '/resolve'");
+    expect(body).toContain("incidentMutationBlockReason = 'completed'");
+    expect(body).toContain("incidentMutationBlockReason = 'unverified'");
+    expect(body).toContain('Already applied');
+    expect(body).toContain('Verify before retrying');
     expect(body).toMatch(/const refreshed = await loadIncident\(\)/);
   });
 });

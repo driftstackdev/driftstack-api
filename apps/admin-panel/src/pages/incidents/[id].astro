@@ -303,6 +303,8 @@ const isResolved = incident.status === 'resolved';
       const INCIDENT_TIMEOUT_MS = 15_000;
       let loadController = null;
       let loadGeneration = 0;
+      let latestIncident = null;
+      let latestUpdates = [];
 
       function boundedFetch(url, init, controller) {
         const activeController = controller || new AbortController();
@@ -482,7 +484,9 @@ const isResolved = incident.status === 'resolved';
           .then(function (body) {
             if (generation !== loadGeneration) return false;
             if (!body || !body.incident) return false;
-            applyIncident(body.incident, body.updates || []);
+            latestIncident = body.incident;
+            latestUpdates = Array.isArray(body.updates) ? body.updates : [];
+            applyIncident(latestIncident, latestUpdates);
             return true;
           })
           .catch(function (err) {
@@ -508,9 +512,11 @@ const isResolved = incident.status === 'resolved';
       }
 
       let incidentMutationInFlight = false;
+      let incidentMutationBlocked = false;
+      let incidentMutationBlockReason = '';
       let incidentMutationControls = [];
       function beginIncidentMutation(activeSubmit) {
-        if (incidentMutationInFlight) return false;
+        if (incidentMutationInFlight || incidentMutationBlocked) return false;
         incidentMutationInFlight = true;
         incidentMutationControls = Array.from(
           document.querySelectorAll(
@@ -533,15 +539,37 @@ const isResolved = incident.status === 'resolved';
 
       function endIncidentMutation(activeSubmit) {
         incidentMutationControls.forEach(function (state) {
-          state.control.disabled = state.disabled;
+          state.control.disabled = incidentMutationBlocked ? true : state.disabled;
         });
         incidentMutationControls = [];
         incidentMutationInFlight = false;
         if (activeSubmit) {
           activeSubmit.removeAttribute('aria-busy');
-          activeSubmit.textContent = activeSubmit.dataset.origText || 'Submit';
+          activeSubmit.textContent = incidentMutationBlocked
+            ? incidentMutationBlockReason === 'completed'
+              ? 'Already applied'
+              : 'Verify before retrying'
+            : activeSubmit.dataset.origText || 'Submit';
+          if (incidentMutationBlocked) {
+            activeSubmit.title =
+              incidentMutationBlockReason === 'completed'
+                ? 'The refreshed incident already contains this change. Reload before another mutation.'
+                : 'Reload and verify the incident before retrying.';
+          } else {
+            activeSubmit.removeAttribute('title');
+          }
           delete activeSubmit.dataset.origText;
         }
+      }
+
+      function updateIdentity(update) {
+        return update && update.id
+          ? String(update.id)
+          : [update && update.status, update && update.message, update && update.posted_at]
+              .map(function (value) {
+                return String(value || '');
+              })
+              .join('\u0000');
       }
 
       function bind(formId, urlSuffix, includeStatus) {
@@ -549,7 +577,7 @@ const isResolved = incident.status === 'resolved';
         if (!form) return;
         form.addEventListener('submit', function (ev) {
           ev.preventDefault();
-          if (incidentMutationInFlight) return;
+          if (incidentMutationInFlight || incidentMutationBlocked) return;
           const token = getToken();
           if (!token) {
             showBanner('Sign in with a staff admin account before posting.', true);
@@ -562,6 +590,8 @@ const isResolved = incident.status === 'resolved';
           if (includeStatus) {
             body.status = (fd.get('status') || 'monitoring').toString();
           }
+          const incidentStatusBefore = latestIncident && latestIncident.status;
+          const updateIdentitiesBefore = new Set(latestUpdates.map(updateIdentity));
           const submit = form.querySelector('button[type="submit"]');
           if (!beginIncidentMutation(submit)) return;
           boundedFetch(apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId) + urlSuffix, {
@@ -591,20 +621,47 @@ const isResolved = incident.status === 'resolved';
             .catch(async function (err) {
               if (err && err.name === 'AbortError') {
                 const refreshed = await loadIncident();
-                const recovery =
-                  urlSuffix === '/updates'
-                    ? 'If this message appears in the timeline, do not post it again.'
+                const completed =
+                  refreshed &&
+                  (urlSuffix === '/updates'
+                    ? latestUpdates.some(function (update) {
+                        return (
+                          !updateIdentitiesBefore.has(updateIdentity(update)) &&
+                          String(update.message || '').trim() === message &&
+                          (!includeStatus || String(update.status || '') === body.status)
+                        );
+                      })
                     : urlSuffix === '/resolve'
-                      ? 'If the incident now shows resolved, do not resolve it again.'
-                      : 'If the incident now shows active, do not reopen it again.';
-                showBanner(
-                  'Mutation outcome is unknown after the request timed out. ' +
-                    (refreshed
-                      ? 'The incident was refreshed. '
-                      : "We couldn't refresh the incident. ") +
-                    recovery,
-                  true,
-                );
+                      ? incidentStatusBefore !== 'resolved' &&
+                        latestIncident &&
+                        latestIncident.status === 'resolved'
+                      : incidentStatusBefore === 'resolved' &&
+                        latestIncident &&
+                        latestIncident.status !== 'resolved');
+                if (completed) {
+                  incidentMutationBlocked = true;
+                  incidentMutationBlockReason = 'completed';
+                  showBanner(
+                    urlSuffix === '/updates'
+                      ? 'The request timed out, but the refreshed timeline contains a new exact message and status. It was not posted again.'
+                      : urlSuffix === '/resolve'
+                        ? 'The request timed out, but the refreshed incident is resolved. Resolve was not submitted again.'
+                        : 'The request timed out, but the refreshed incident is active again. Reopen was not submitted again.',
+                    true,
+                  );
+                } else if (refreshed) {
+                  showBanner(
+                    'The request timed out, but the refreshed incident does not contain the submitted change. You can retry if it is still needed.',
+                    true,
+                  );
+                } else {
+                  incidentMutationBlocked = true;
+                  incidentMutationBlockReason = 'unverified';
+                  showBanner(
+                    "The mutation request timed out and we couldn't refresh the incident. Reload and verify it before retrying; another submission could duplicate a timeline entry or repeat a state transition.",
+                    true,
+                  );
+                }
                 return;
               }
               showBanner(

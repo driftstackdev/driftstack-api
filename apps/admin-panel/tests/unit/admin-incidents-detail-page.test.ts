@@ -194,7 +194,179 @@ describe('admin incident detail mutation lifecycle', () => {
       'Post update message',
     );
     expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*incident was refreshed.*message appears in the timeline.*do not post it again/i,
+      /refreshed timeline contains a new exact message and status.*not posted again/i,
     );
+    const updateButton = updateForm.querySelector('button') as HTMLButtonElement;
+    const resolveButton = dom.window.document.querySelector(
+      '#resolve-form button',
+    ) as HTMLButtonElement;
+    const reopenButton = dom.window.document.querySelector(
+      '#reopen-form button',
+    ) as HTMLButtonElement;
+    expect(updateButton.disabled).toBe(true);
+    expect(updateButton.textContent).toBe('Already applied');
+    expect(resolveButton.disabled).toBe(true);
+    expect(reopenButton.disabled).toBe(true);
+    updateForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(calls.filter((call) => /\/updates$/.test(call.url))).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      formId: 'resolve-form',
+      suffix: '/resolve',
+      initialStatus: 'investigating',
+      finalStatus: 'resolved',
+      banner: /refreshed incident is resolved.*not submitted again/i,
+    },
+    {
+      formId: 'reopen-form',
+      suffix: '/reopen',
+      initialStatus: 'resolved',
+      finalStatus: 'investigating',
+      banner: /refreshed incident is active again.*not submitted again/i,
+    },
+  ])(
+    'reconciles a committed $suffix state transition and blocks every mutation',
+    async (testCase) => {
+      const virtualConsole = new VirtualConsole();
+      virtualConsole.on('jsdomError', () => {});
+      const dom = new JSDOM(
+        `<!doctype html><title>Incident</title>
+       <div data-banner class="hidden"></div>
+       <span data-field="status-badge"></span>
+       <ul data-list="timeline"></ul>
+       <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
+       <div data-form-group="resolved">${form('reopen-form', 'Reopen')}</div>`,
+        {
+          url: 'https://admin.driftstack.dev/incidents/inc_test',
+          runScripts: 'dangerously',
+          virtualConsole,
+        },
+      );
+      windowRef = dom.window;
+      const calls: FetchCall[] = [];
+      let committed = false;
+      const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+      // @ts-expect-error — jsdom's fetch global is intentionally injected.
+      dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+        const call = { url: String(input), init };
+        calls.push(call);
+        if (call.url.endsWith(testCase.suffix)) {
+          committed = true;
+          return Promise.reject(timeout);
+        }
+        return Promise.resolve(
+          response({
+            incident: {
+              id: 'inc_test',
+              title: 'Test incident',
+              severity: 'major',
+              status: committed ? testCase.finalStatus : testCase.initialStatus,
+              public: true,
+              affected_components: [],
+              started_at: '2026-07-12T00:00:00.000Z',
+              resolved_at:
+                committed && testCase.finalStatus === 'resolved'
+                  ? '2026-07-12T00:05:00.000Z'
+                  : null,
+            },
+            updates: [],
+          }),
+        );
+      };
+      dom.window.localStorage.setItem('ds_web_session_token', 'tok');
+      dom.window.eval(
+        `const apiBaseUrl = 'https://api.driftstack.dev'; const incidentId = 'inc_test';${scriptBody()}`,
+      );
+      dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+      await flush();
+
+      const activeForm = dom.window.document.getElementById(testCase.formId) as HTMLFormElement;
+      activeForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+      await flush(50);
+
+      expect(calls.filter((call) => call.url.endsWith(testCase.suffix))).toHaveLength(1);
+      expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+        testCase.banner,
+      );
+      const buttons = Array.from(
+        dom.window.document.querySelectorAll('form button'),
+      ) as HTMLButtonElement[];
+      expect(buttons.every((button) => button.disabled)).toBe(true);
+      expect(activeForm.querySelector('button')?.textContent).toBe('Already applied');
+      activeForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+      await flush();
+      expect(calls.filter((call) => call.url.endsWith(testCase.suffix))).toHaveLength(1);
+    },
+  );
+
+  it('blocks every mutation when a timed-out update cannot be authoritatively refreshed', async () => {
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', () => {});
+    const dom = new JSDOM(
+      `<!doctype html><title>Incident</title>
+       <div data-banner class="hidden"></div>
+       <ul data-list="timeline"></ul>
+       <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
+       <div data-form-group="resolved">${form('reopen-form', 'Reopen')}</div>`,
+      {
+        url: 'https://admin.driftstack.dev/incidents/inc_test',
+        runScripts: 'dangerously',
+        virtualConsole,
+      },
+    );
+    windowRef = dom.window;
+    const calls: FetchCall[] = [];
+    let postStarted = false;
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    // @ts-expect-error — jsdom's fetch global is intentionally injected.
+    dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+      const call = { url: String(input), init };
+      calls.push(call);
+      if (/\/updates$/.test(call.url)) {
+        postStarted = true;
+        return Promise.reject(timeout);
+      }
+      if (postStarted) return Promise.resolve(response({ detail: 'unavailable' }, 503));
+      return Promise.resolve(
+        response({
+          incident: {
+            id: 'inc_test',
+            title: 'Test incident',
+            severity: 'major',
+            status: 'investigating',
+            public: true,
+            affected_components: [],
+            started_at: '2026-07-12T00:00:00.000Z',
+            resolved_at: null,
+          },
+          updates: [],
+        }),
+      );
+    };
+    dom.window.localStorage.setItem('ds_web_session_token', 'tok');
+    dom.window.eval(
+      `const apiBaseUrl = 'https://api.driftstack.dev'; const incidentId = 'inc_test';${scriptBody()}`,
+    );
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    await flush();
+
+    const updateForm = dom.window.document.getElementById('add-update-form') as HTMLFormElement;
+    updateForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(50);
+
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /couldn't refresh the incident.*reload and verify.*duplicate a timeline entry/i,
+    );
+    const buttons = Array.from(
+      dom.window.document.querySelectorAll('form button'),
+    ) as HTMLButtonElement[];
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+    expect(updateForm.querySelector('button')?.textContent).toBe('Verify before retrying');
+    updateForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(calls.filter((call) => /\/updates$/.test(call.url))).toHaveLength(1);
   });
 });
