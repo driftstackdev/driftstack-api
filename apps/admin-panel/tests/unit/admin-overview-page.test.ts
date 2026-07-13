@@ -828,4 +828,48 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     resolveDelete?.(new Response(null, { status: 204 }));
     await flush();
   });
+
+  it('owner-secret delete timeout refreshes metadata before advising another irreversible delete', async () => {
+    let secretPresent = true;
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({
+            enabled: true,
+            secrets: secretPresent
+              ? [{ name: 'stripe_key', description: 'billing', updated_at: null }]
+              : [],
+          });
+        }
+        if (/\/v1\/admin\/owner\/secrets\/stripe_key$/.test(call.url) && method === 'DELETE') {
+          secretPresent = false;
+          return Promise.reject(timeout);
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    (
+      window.document.querySelector('[data-delete-secret="stripe_key"]') as HTMLButtonElement
+    ).click();
+    await flush(15);
+
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'DELETE' && /\/owner\/secrets\/stripe_key$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-secret-row="stripe_key"]')).toBeNull();
+    expect(text(window, '[data-field="secret-set-status"]')).toMatch(
+      /secret-deletion outcome is unknown.*metadata was refreshed.*stripe_key.*is absent.*deletion completed.*do not submit it again/i,
+    );
+  });
 });

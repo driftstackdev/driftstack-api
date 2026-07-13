@@ -94,6 +94,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).not.toMatch(/if \(!window\.confirm\('Delete secret/);
   });
 
+  it('reconciles ambiguous owner-secret deletion against refreshed metadata', () => {
+    expect(body).toContain("timeoutError.name = 'AbortError'");
+    expect(body).toMatch(/const refreshed = await fetchSecrets\(\)\.catch\(\(\) => null\)/);
+    expect(body).toMatch(
+      /refreshed\.secrets\.some\(\(secret\) => secret && secret\.name === name\)/,
+    );
+    expect(body).toContain('deletion completed, so do not submit it again');
+    expect(body).toContain('Verify the secret before retrying');
+  });
+
   it('owner-secret writes are confirm-gated and single-flight without logging the value', () => {
     expect(body).toMatch(/let secretSetInFlight = false;/);
     expect(body).toMatch(/if \(secretSetInFlight\) return;/);

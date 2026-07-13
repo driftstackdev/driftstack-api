@@ -524,7 +524,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         )
           .catch((err) => {
             if (err && err.name === 'AbortError') {
-              throw new Error('Request timed out. Try again.');
+              const timeoutError = new Error('Request timed out. Try again.');
+              timeoutError.name = 'AbortError';
+              throw timeoutError;
             }
             throw err;
           })
@@ -961,7 +963,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       function fetchSecrets() {
         return authedFetch('/v1/admin/owner/secrets')
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then((body) => renderSecrets(body));
+          .then((body) => {
+            renderSecrets(body);
+            return body;
+          });
       }
       const secretDeletesInFlight = new Set();
       async function deleteSecret(name, button) {
@@ -992,8 +997,30 @@ const apiBaseUrl = resolveApiBaseUrl();
           await fetchSecrets();
         } catch (err) {
           const dstatus = root.querySelector('[data-field="secret-set-status"]');
-          const msg = err && err.message ? err.message : 'network error';
-          if (dstatus) dstatus.textContent = 'Delete failed (' + msg + ').';
+          if (err && err.name === 'AbortError') {
+            const refreshed = await fetchSecrets().catch(() => null);
+            const stillPresent =
+              refreshed && Array.isArray(refreshed.secrets)
+                ? refreshed.secrets.some((secret) => secret && secret.name === name)
+                : null;
+            if (dstatus && stillPresent === false) {
+              dstatus.textContent =
+                'Secret-deletion outcome is unknown because the response timed out. Secret metadata was refreshed and "' +
+                name +
+                '" is absent; deletion completed, so do not submit it again.';
+            } else if (dstatus && stillPresent === true) {
+              dstatus.textContent =
+                'Secret-deletion outcome is unknown because the response timed out. Secret metadata was refreshed and "' +
+                name +
+                '" is still present; retry deletion if it must be removed.';
+            } else if (dstatus) {
+              dstatus.textContent =
+                'Secret-deletion outcome is unknown because the response timed out, and secret metadata could not be refreshed. Verify the secret before retrying.';
+            }
+          } else {
+            const msg = err && err.message ? err.message : 'network error';
+            if (dstatus) dstatus.textContent = 'Delete failed (' + msg + ').';
+          }
         } finally {
           secretDeletesInFlight.delete(name);
           if (button && button.isConnected) {
