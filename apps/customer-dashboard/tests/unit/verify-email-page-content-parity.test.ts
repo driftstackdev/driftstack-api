@@ -98,12 +98,24 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/await window\.driftstackPrompt\('Email address used at signup:', \{/);
   });
 
+  it('resend acquires its lease before the async prompt and has a bounded request', () => {
+    expect(body).toMatch(/const RESEND_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/let resendInFlight = false/);
+    expect(body).toMatch(
+      /addEventListener\('click', async \(\) => \{\s*if \(resendInFlight\) return;\s*resendInFlight = true/,
+    );
+    expect(body).toMatch(/resendBtn\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/\.finally\(\(\) => clearTimeout\(timeoutId\)\)/);
+    expect(body).toMatch(/Resending took too long/);
+  });
+
   it('resend anti-double-click: 60s disable post-success (per-IP 3/min cap protection)', () => {
     expect(body).toMatch(
       /Re-enable after 60s so accidental double-clicks don't\s*\n?\s*\/\/\s*burn through the per-IP 3\/min cap on the server side/,
     );
     expect(body).toMatch(
-      /window\.setTimeout\(\(\) => \{\s*\n?\s*resendBtn\.disabled = false;\s*\n?\s*\}, 60_000\);/,
+      /window\.setTimeout\(\(\) => \{\s*\n?\s*resendInFlight = false;\s*\n?\s*resendBtn\.disabled = false;\s*\n?\s*\}, 60_000\);/,
     );
   });
 

@@ -31,6 +31,7 @@ interface MockFetchCall {
 interface SetUpOpts {
   url?: string;
   requestTimeoutImmediately?: boolean;
+  signupEmail?: string;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
@@ -85,6 +86,7 @@ function setUpDom(
       return nativeSetTimeout(handler, timeout, ...args);
     }) as typeof window.setTimeout;
   }
+  if (opts.signupEmail) window.sessionStorage.setItem('ds_signup_email', opts.signupEmail);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="verify-email"'));
   if (!pageScript) throw new Error('verify-email inline script not found');
@@ -233,5 +235,35 @@ describe('verify-email page — local integration', () => {
     await flush();
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_ONCE');
     expect(form.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('serializes resend events and recovers the control after a bounded timeout', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: NO_TOKEN_URL,
+      requestTimeoutImmediately: true,
+      signupEmail: 'pending@example.com',
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    const resendBtn = window.document.querySelector('[data-action="resend"]') as HTMLButtonElement;
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const calls = fetchCalls.filter((call) => /\/v1\/auth\/resend-verification$/.test(call.url));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.init?.signal?.aborted).toBe(true);
+    expect(resendBtn.disabled).toBe(false);
+    expect(resendBtn.getAttribute('aria-busy')).toBe('false');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /resending took too long.*check your connection/i,
+    );
   });
 });

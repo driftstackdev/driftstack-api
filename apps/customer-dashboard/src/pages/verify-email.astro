@@ -244,8 +244,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       // is identical regardless of whether the email matched.
       const resendBtn = root.querySelector('[data-action="resend"]');
       const resendStatus = root.querySelector('[data-field="resend-status"]');
+      const RESEND_REQUEST_TIMEOUT_MS = 15_000;
+      let resendInFlight = false;
       if (resendBtn) {
         resendBtn.addEventListener('click', async () => {
+          if (resendInFlight) return;
+          resendInFlight = true;
+          resendBtn.disabled = true;
+          resendBtn.setAttribute('aria-busy', 'true');
           banner.classList.add('hidden');
           let resendEmail = sessionStorage.getItem('ds_signup_email');
           if (!resendEmail) {
@@ -254,13 +260,24 @@ const apiBaseUrl = resolveApiBaseUrl();
                 placeholder: 'you@example.com',
               })) || '';
             resendEmail = resendEmail.trim();
-            if (!resendEmail) return;
+            if (!resendEmail) {
+              resendInFlight = false;
+              resendBtn.disabled = false;
+              resendBtn.setAttribute('aria-busy', 'false');
+              return;
+            }
           }
-          resendBtn.disabled = true;
+          if (resendStatus) {
+            resendStatus.textContent = 'Sending…';
+            resendStatus.classList.remove('hidden');
+          }
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), RESEND_REQUEST_TIMEOUT_MS);
           fetch(apiBaseUrl + '/v1/auth/resend-verification', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ email: resendEmail }),
+            signal: controller.signal,
           })
             .then((r) =>
               r.ok
@@ -276,14 +293,25 @@ const apiBaseUrl = resolveApiBaseUrl();
               }
               // Re-enable after 60s so accidental double-clicks don't
               // burn through the per-IP 3/min cap on the server side.
+              resendBtn.setAttribute('aria-busy', 'false');
               window.setTimeout(() => {
+                resendInFlight = false;
                 resendBtn.disabled = false;
               }, 60_000);
             })
             .catch((err) => {
+              resendInFlight = false;
               resendBtn.disabled = false;
-              showBanner(err && err.message ? err.message : 'Resend failed.');
-            });
+              resendBtn.setAttribute('aria-busy', 'false');
+              showBanner(
+                controller.signal.aborted
+                  ? 'Resending took too long. Check your connection and try again.'
+                  : err && err.message
+                    ? err.message
+                    : 'Resend failed.',
+              );
+            })
+            .finally(() => clearTimeout(timeoutId));
         });
       }
     })();
