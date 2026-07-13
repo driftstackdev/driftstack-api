@@ -1,6 +1,6 @@
 // W381.B — drift guard for admin-panel AdminLayout.astro. This
 // layout wraps every admin page (overview / accounts / audit-log /
-// incidents list+detail / leads / status-subscribers / sessions /
+// incidents list+detail / status-subscribers / sessions /
 // api-keys / webhook-dlq / rate-limit-overrides). Drift here
 // affects every admin surface simultaneously. Existing admin-
 // layout-nav-baseline covers nav-href shape; this guard pins the
@@ -8,8 +8,8 @@
 //
 //   • <meta name="robots" content="noindex,nofollow"> — admin
 //     panel must NEVER be indexed (load-bearing security claim).
-//   • 13 navItems in canonical order (Overview / Accounts / Cost /
-//     Audit log / Incidents / Status subs / Leads / Sessions / Fleet /
+//   • 12 live navItems in canonical order (Overview / Accounts / Cost /
+//     Audit log / Incidents / Status subs / Sessions / Fleet /
 //     API keys / Webhook DLQ / Rate limits / Atlas priority). Cost
 //     added 2026-05-16 for V-541.B; Fleet added W629.
 //   • Active-route highlighting: pathname === href OR pathname
@@ -69,7 +69,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body.match(/location\.hash\.indexOf\('#token='\) === 0/g)).toHaveLength(1);
   });
 
-  it('13 navItems in canonical order pinned (Cost added 2026-05-16 for V-541.B; Atlas priority added with the internal atlas-priority queue; Fleet added W629 for the GET /v1/mac-nodes operator view)', () => {
+  it('12 live navItems in canonical order; the backend-less Leads placeholder stays out', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
@@ -82,7 +82,6 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
       { href: '/audit-log', label: 'Audit log' },
       { href: '/incidents', label: 'Incidents' },
       { href: '/status-subscribers', label: 'Status subs' },
-      { href: '/leads', label: 'Leads' },
       { href: '/sessions', label: 'Sessions' },
       { href: '/fleet', label: 'Fleet' },
       { href: '/api-keys', label: 'API keys' },
@@ -90,6 +89,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
       { href: '/rate-limit-overrides', label: 'Rate limits' },
       { href: '/atlas-priority-queue', label: 'Atlas priority' },
     ]);
+    expect(block![1]).not.toContain("href: '/leads'");
   });
 
   it('active-route highlighting: exact match OR startsWith href+"/" → oxblood-50 + oxblood-700. 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced layout shift; same fix as DashboardLayout 50b0dd7a).', () => {

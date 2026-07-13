@@ -62,5 +62,6 @@ describe('W336.C AdminLayout sidebar nav baseline', () => {
     ]) {
       expect(navHrefs).toContain(expected);
     }
+    expect(navHrefs).not.toContain('/leads');
   });
 });
