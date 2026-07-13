@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'settings', 'index.html');
@@ -78,11 +78,16 @@ async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
+async function flushMicrotasks(times = 20): Promise<void> {
+  for (let i = 0; i < times; i++) await Promise.resolve();
+}
+
 describe('settings page — email notification preferences', () => {
   let win: JSDOM['window'] | null = null;
   afterEach(() => {
     win?.close?.();
     win = null;
+    vi.useRealTimers();
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
@@ -144,6 +149,42 @@ describe('settings page — email notification preferences', () => {
     const banner = window.document.querySelector('[data-banner]');
     expect(banner?.classList.contains('hidden')).toBe(false);
     expect(banner?.textContent).toContain("Couldn't save email preference");
+  });
+
+  it('does not let an older saved timer hide a newer preference failure', async () => {
+    vi.useFakeTimers();
+    let writes = 0;
+    const baseRouter = routerWithEmailPref(204);
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'PUT' && /\/email-preferences$/.test(call.url)) {
+          writes += 1;
+          return writes === 1 ? new Response(null, { status: 204 }) : json({}, 500);
+        }
+        return baseRouter(call);
+      },
+    });
+    win = window;
+    await flushMicrotasks(40);
+    const checkbox = window.document.querySelector(
+      'input[data-event-type="billing-receipt"]',
+    ) as HTMLInputElement;
+
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flushMicrotasks(30);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'Email preference saved',
+    );
+
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flushMicrotasks(30);
+    const banner = window.document.querySelector('[data-banner]');
+    expect(banner?.textContent).toContain("Couldn't save email preference");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(banner?.textContent).toContain("Couldn't save email preference");
+    expect(banner?.classList.contains('hidden')).toBe(false);
   });
 
   it('serializes duplicate preference and profile mutations and gives every request an abort signal', async () => {

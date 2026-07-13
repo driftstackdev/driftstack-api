@@ -94,4 +94,11 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     // future receipt-system change can't soften the distinction.
     expect(body).toMatch(/Per-invoice receipt emails\. Stripe receipts continue regardless/);
   });
+
+  it('generation-binds transient preference success dismissal', () => {
+    expect(body).toMatch(/let bannerGeneration = 0/);
+    expect(body).toMatch(/expectedGeneration !== bannerGeneration/);
+    expect(body).toMatch(/const noticeGeneration = showBanner\('Email preference saved\.'\)/);
+    expect(body).toMatch(/hideBanner\(noticeGeneration\)/);
+  });
 });

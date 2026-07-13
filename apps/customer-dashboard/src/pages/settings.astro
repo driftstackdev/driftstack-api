@@ -369,6 +369,7 @@ const EMAIL_EVENTS = [
       const banner = root.querySelector('[data-banner]');
       const token = localStorage.getItem('ds_web_session_token');
       const SETTINGS_TIMEOUT_MS = 15_000;
+      let bannerGeneration = 0;
 
       function boundedFetch(url, init = {}) {
         const controller = new AbortController();
@@ -387,11 +388,14 @@ const EMAIL_EVENTS = [
       }
 
       function showBanner(text) {
-        if (!banner) return;
+        const generation = ++bannerGeneration;
+        if (!banner) return generation;
         banner.textContent = text;
         banner.classList.remove('hidden');
+        return generation;
       }
-      function hideBanner() {
+      function hideBanner(expectedGeneration) {
+        if (expectedGeneration !== undefined && expectedGeneration !== bannerGeneration) return;
         if (!banner) return;
         banner.classList.add('hidden');
       }
@@ -742,8 +746,8 @@ const EMAIL_EVENTS = [
             return Promise.reject(new Error('HTTP ' + r.status));
           })
           .then(() => {
-            showBanner('Email preference saved.');
-            setTimeout(hideBanner, 2000);
+            const noticeGeneration = showBanner('Email preference saved.');
+            setTimeout(() => hideBanner(noticeGeneration), 2000);
           })
           .catch((err) => {
             // The checkbox already flipped optimistically on 'change' —
