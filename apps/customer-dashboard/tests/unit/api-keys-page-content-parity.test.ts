@@ -122,8 +122,11 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/if \(createInFlight\) return;/);
     expect(body.match(/signal: controller\.signal/g)?.length).toBeGreaterThanOrEqual(4);
     expect(body).toContain('Loading API keys took too long. Check your connection and retry.');
-    expect(body).toContain('Creating the key took too long. Check your connection and try again.');
-    expect(body).toContain('Rotating took too long. Check your connection and try again.');
+    expect(body).toContain('Key creation timed out after the request was sent');
+    expect(body).toContain('Key rotation timed out after the request was sent');
+    expect(body).toContain('its plaintext cannot be recovered');
+    expect(body).toContain('revoke it before creating another key');
+    expect(body).toContain('revoke that new key before rotating again');
     expect(body).toContain('Revoking took too long. Check your connection and try again.');
   });
 

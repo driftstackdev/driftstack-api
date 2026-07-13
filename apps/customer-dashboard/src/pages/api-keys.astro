@@ -592,6 +592,7 @@ npm i @driftstack/sdk</code></pre>
               wireRotateButtons();
             }
             hideBanner();
+            return true;
           })
           .catch((err) => {
             if (!isCurrent()) return;
@@ -602,6 +603,7 @@ npm i @driftstack/sdk</code></pre>
                   (err && err.message ? err.message : 'network error') +
                   ').',
             );
+            return false;
           })
           .finally(function () {
             window.clearTimeout(timeout);
@@ -613,6 +615,29 @@ npm i @driftstack/sdk</code></pre>
               window.dashboardHydrated();
             }
           });
+      }
+
+      async function reconcileAmbiguousMutation(kind, name) {
+        const refreshed = Boolean(await refresh());
+        const listStatus = refreshed
+          ? 'The key list was refreshed.'
+          : 'The key list could not be refreshed; check it before retrying.';
+        if (kind === 'create') {
+          return (
+            'Key creation timed out after the request was sent, so its outcome is unknown. ' +
+            listStatus +
+            ' If a new “' +
+            name +
+            '” key appears, its plaintext cannot be recovered; revoke it before creating another key.'
+          );
+        }
+        return (
+          'Key rotation timed out after the request was sent, so its outcome is unknown. ' +
+          listStatus +
+          ' If a new “' +
+          name +
+          '” key appears, its plaintext cannot be recovered; revoke that new key before rotating again.'
+        );
       }
 
       window.addEventListener('pagehide', () => {
@@ -785,11 +810,13 @@ npm i @driftstack/sdk</code></pre>
                 );
                 return refresh();
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                if (err && err.name === 'AbortError') {
+                  showBanner(await reconcileAmbiguousMutation('rotate', name));
+                  return;
+                }
                 showBanner(
-                  err && err.name === 'AbortError'
-                    ? 'Rotating took too long. Check your connection and try again.'
-                    : 'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
+                  'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
                 );
               })
               .finally(() => {
@@ -908,10 +935,10 @@ npm i @driftstack/sdk</code></pre>
             hideCreate();
             return refresh();
           })
-          .catch((err) => {
+          .catch(async (err) => {
             createError.textContent =
               err && err.name === 'AbortError'
-                ? 'Creating the key took too long. Check your connection and try again.'
+                ? await reconcileAmbiguousMutation('create', name)
                 : err && err.message
                   ? err.message
                   : 'Create failed.';

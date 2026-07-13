@@ -94,6 +94,12 @@ function json(obj: unknown, status = 200): Response {
   });
 }
 
+function abortError(): Error {
+  const error = new Error('request aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
 async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
@@ -284,6 +290,32 @@ describe('api-keys page — local integration', () => {
     );
   });
 
+  it('create timeout reconciles the list and warns that a committed key plaintext is unrecoverable', async () => {
+    const ambiguous = { ...ACTIVE_KEY, id: 'key_ambiguous', name: 'Ambiguous key' };
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => Promise.reject(abortError()),
+        () => json({ data: [ambiguous] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Ambiguous key';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(window.document.querySelector('[data-list]')?.textContent).toContain('Ambiguous key');
+    const warning = window.document.querySelector('[data-create-error]')?.textContent ?? '';
+    expect(warning).toMatch(/outcome is unknown/i);
+    expect(warning).toMatch(/plaintext cannot be recovered/i);
+    expect(warning).toMatch(/revoke it before creating another key/i);
+    expect(isHidden(window, '[data-created-reveal]')).toBe(true);
+  });
+
   it('create reveal dismiss WIPES the plaintext from the DOM (no post-dismiss recovery)', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
@@ -345,6 +377,30 @@ describe('api-keys page — local integration', () => {
       'ds_live_ROTATED_SECRET',
     );
     expect(window.document.querySelector('[data-rotate-grace-expires]')?.textContent).not.toBe('');
+  });
+
+  it('rotate timeout reconciles the list and warns against a blind second rotation', async () => {
+    const ambiguous = { ...ACTIVE_KEY, id: 'key_rotated_unknown', name: 'CI key' };
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      fetchPlan: [
+        () => json({ data: [ACTIVE_KEY] }),
+        () => Promise.reject(abortError()),
+        () => json({ data: [ambiguous, ACTIVE_KEY] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-rotate="key_active"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(rowCount(window)).toBe(2);
+    const warning = window.document.querySelector('[data-banner]')?.textContent ?? '';
+    expect(warning).toMatch(/rotation timed out.*outcome is unknown/i);
+    expect(warning).toMatch(/plaintext cannot be recovered/i);
+    expect(warning).toMatch(/before rotating again/i);
+    expect(isHidden(window, '[data-rotate-reveal]')).toBe(true);
   });
 
   it('revoke: confirm-gated DELETE then refresh', async () => {
