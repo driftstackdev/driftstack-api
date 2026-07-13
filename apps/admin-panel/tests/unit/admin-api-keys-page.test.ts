@@ -128,7 +128,7 @@ describe('admin api-keys page — force-revoke (operator security)', () => {
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
   it('renders keys: active key gets a Revoke action; a revoked key does not', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       route: makeRouter([
         mkKey({ id: 'key_active', revoked_at: null }),
         mkKey({ id: 'key_dead', revoked_at: '2026-05-01T10:00:00.000Z' }),
@@ -140,6 +140,8 @@ describe('admin api-keys page — force-revoke (operator security)', () => {
       window.document.querySelector('[data-action="revoke"][data-id="key_active"]'),
     ).toBeTruthy();
     expect(window.document.querySelector('[data-action="revoke"][data-id="key_dead"]')).toBeNull();
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
   });
 
   it('revoke with reason: prompts, POSTs /:id/revoke {reason}, then refresh marks it revoked', async () => {
@@ -160,6 +162,7 @@ describe('admin api-keys page — force-revoke (operator security)', () => {
       (c) => c.init?.method === 'POST' && /\/v1\/admin\/api-keys\/key_active\/revoke$/.test(c.url),
     );
     expect(post).toBeTruthy();
+    expect(post?.init?.signal).toBeInstanceOf(window.AbortSignal);
     expect(JSON.parse(String(post?.init?.body))).toEqual({ reason: 'customer reported leak' });
     // After the post-revoke refresh the key is revoked → no Revoke action.
     expect(

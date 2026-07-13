@@ -200,6 +200,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       const accountIdEl = root.querySelector('[data-field="account-id"]');
       const hideRevokedEl = root.querySelector('[data-field="hide-revoked"]');
       const token = localStorage.getItem('ds_web_session_token');
+      const API_KEY_TIMEOUT_MS = 15_000;
+      let loadController = null;
+
+      function boundedFetch(url, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       const SCOPE_LABEL = {
         read: 'read',
@@ -314,10 +331,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!token) return Promise.resolve();
         const myReq = ++inFlight;
         const params = buildQuery();
-        return fetch(apiBaseUrl + '/v1/admin/api-keys?' + params.toString(), {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        })
+        if (loadController) loadController.abort();
+        const controller = new AbortController();
+        loadController = controller;
+        root.setAttribute('aria-busy', 'true');
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/api-keys?' + params.toString(),
+          {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
@@ -345,7 +370,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
             // W604 — clear the SSG mock table on ANY load failure. Leaving the
             // mock row on screen is dangerous here: it renders a live Revoke
             // button wired to a FAKE key id, so an admin could fire
@@ -366,6 +391,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           })
           .finally(() => {
+            if (myReq === inFlight) {
+              loadController = null;
+              root.removeAttribute('aria-busy');
+            }
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
@@ -396,7 +425,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           if (btn) btn.textContent = 'Revoking…';
           showBanner('Revoking ' + id + '…');
-          const response = await fetch(
+          const response = await boundedFetch(
             apiBaseUrl + '/v1/admin/api-keys/' + encodeURIComponent(id) + '/revoke',
             {
               method: 'POST',
@@ -414,7 +443,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Revoked ' + id + '. Refreshing…');
           await load();
         } catch (err) {
-          const msg = err && err.message ? err.message : 'network error';
+          const msg = requestErrorMessage(err, 'network error');
           showBanner("Couldn't revoke (" + msg + ').');
         } finally {
           revokesInFlight.delete(id);
