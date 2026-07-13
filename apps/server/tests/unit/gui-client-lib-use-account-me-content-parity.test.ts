@@ -54,6 +54,7 @@ describe('W465.A apps/gui-client/src/lib/use-account-me.ts content parity', () =
   it("Imports: useCallback + useEffect + useRef + useState from 'react' + readApiErrorMessage from './api-errors' + useSettings from './SettingsContext' (useRef added by the abort-in-flight audit fix)", () => {
     expect(body).toMatch(/import \{ useCallback, useEffect, useRef, useState \} from 'react';/);
     expect(body).toMatch(/import \{ readApiErrorMessage \} from '\.\/api-errors';/);
+    expect(body).toMatch(/import \{ fetchWithDeadline \} from '\.\/fetch-with-deadline';/);
     expect(body).toMatch(/import \{ useSettings \} from '\.\/SettingsContext';/);
   });
 
@@ -81,32 +82,28 @@ describe('W465.A apps/gui-client/src/lib/use-account-me.ts content parity', () =
     );
   });
 
-  it("Fetcher: takes (signal?, isActive?); apply() gates setState on isActive (effect-driven calls drop their result after cleanup, manual refetch always applies); no-apiKey → error 'No API key configured.' early return; trailing-slash strip baseUrl; Bearer auth + accept JSON + spread-in signal; !res.ok → readApiErrorMessage; ready spread; catch swallows AbortError; instance-of-Error catch narrowing (abort-in-flight audit fix)", () => {
+  it('Fetcher is single-flight and deadline-bounded; no-apiKey → error; trailing-slash strip; Bearer auth + JSON Accept; live-sequence HTTP/ready state', () => {
     expect(body).toMatch(
-      /const fetcher = useCallback\(\s*\n?\s*async \(signal\?: AbortSignal, isActive\?: \(\) => boolean\): Promise<void> => \{\s*\n?\s*const apply = \(next: AccountMeState\): void => \{\s*\n?\s*if \(isActive === undefined \|\| isActive\(\)\) setState\(next\);\s*\n?\s*\};/,
+      /const fetcher = useCallback\(async \(\): Promise<void> => \{\s*\n?\s*if \(inFlightRef\.current\) return;/,
     );
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*apply\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*apply\(\{ kind: 'loading' \}\);/,
+      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;/,
     );
     expect(body).toMatch(/const baseUrl = settings\.baseUrl\.replace\(\/\\\/\+\$\/, ''\);/);
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\.\.\.\(signal !== undefined \? \{ signal \} : \{\}\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
     );
     expect(body).toMatch(
-      /if \(!res\.ok\) \{\s*\n?\s*apply\(\{ kind: 'error', message: await readApiErrorMessage\(res\) \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*const body = \(await res\.json\(\)\) as AccountMeData;\s*\n?\s*apply\(\{ kind: 'ready', data: body \}\);/,
-    );
-    expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*\/\/ An abort \(key\/baseUrl change \/ unmount\) is expected — don't surface it\.\s*\n?\s*if \(err instanceof Error && err\.name === 'AbortError'\) return;\s*\n?\s*apply\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: err instanceof Error \? err\.message : String\(err\),\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /const message = await readApiErrorMessage\(res\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'error', message \}\);[\s\S]*?if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
   });
 
-  it('useEffect: opts.manual === true early return (no auto-fetch); else sets up an AbortController (stored in abortRef), runs void fetcher(controller.signal, () => active), and the cleanup flips active=false + controller.abort(); deps [fetcher, opts.manual]; refetch is its own no-arg useCallback (fetcher()) and return {state, refetch} (abort-in-flight audit fix)', () => {
-    expect(body).toMatch(/const abortRef = useRef<AbortController \| null>\(null\);/);
+  it('dependency/unmount cleanup aborts and invalidates active work; manual opt-out and no-arg refetch contract remain', () => {
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*let active = true;\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*abortRef\.current = controller;\s*\n?\s*void fetcher\(controller\.signal, \(\) => active\);\s*\n?\s*return \(\) => \{\s*\n?\s*active = false;\s*\n?\s*controller\.abort\(\);\s*\n?\s*\};\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
     );
     expect(body).toMatch(
-      /const refetch = useCallback\(\(\): Promise<void> => fetcher\(\), \[fetcher\]\);\s*\n?\s*return \{ state, refetch \};/,
+      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);\s*\n?\s*return \{ state, refetch: fetcher \};/,
     );
   });
 

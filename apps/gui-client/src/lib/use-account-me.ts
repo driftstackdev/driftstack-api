@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
 export interface AccountMeData {
@@ -41,65 +42,72 @@ export function useAccountMe(opts: UseAccountMeOpts = {}): UseAccountMeResult {
     opts.manual === true ? { kind: 'idle' } : { kind: 'loading' },
   );
 
-  // Track the latest in-flight request so a key/baseUrl change (or unmount) can
-  // abort the previous one and discard its late resolution — otherwise a slow
-  // response after a key change could setState with data fetched under the OLD
-  // key (+ "setState on unmounted" churn). Mirrors use-connection-status. (audit)
-  const abortRef = useRef<AbortController | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
-  // `isActive` lets the effect-driven call drop its result after cleanup; a
-  // manual refetch (no isActive) always applies.
-  const fetcher = useCallback(
-    async (signal?: AbortSignal, isActive?: () => boolean): Promise<void> => {
-      const apply = (next: AccountMeState): void => {
-        if (isActive === undefined || isActive()) setState(next);
-      };
-      if (!settings.apiKey) {
-        apply({ kind: 'error', message: 'No API key configured.' });
+  const fetcher = useCallback(async (): Promise<void> => {
+    if (inFlightRef.current) return;
+    if (!settings.apiKey) {
+      setState({ kind: 'error', message: 'No API key configured.' });
+      return;
+    }
+    inFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setState({ kind: 'loading' });
+    try {
+      const baseUrl = settings.baseUrl.replace(/\/+$/, '');
+      const res = await fetchWithDeadline(`${baseUrl}/v1/account/me`, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          authorization: `Bearer ${settings.apiKey}`,
+          accept: 'application/json',
+        },
+      });
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
-      apply({ kind: 'loading' });
-      try {
-        const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-        const res = await fetch(`${baseUrl}/v1/account/me`, {
-          method: 'GET',
-          headers: {
-            authorization: `Bearer ${settings.apiKey}`,
-            accept: 'application/json',
-          },
-          ...(signal !== undefined ? { signal } : {}),
-        });
-        if (!res.ok) {
-          apply({ kind: 'error', message: await readApiErrorMessage(res) });
-          return;
-        }
-        const body = (await res.json()) as AccountMeData;
-        apply({ kind: 'ready', data: body });
-      } catch (err) {
-        // An abort (key/baseUrl change / unmount) is expected — don't surface it.
-        if (err instanceof Error && err.name === 'AbortError') return;
-        apply({
+      const body = (await res.json()) as AccountMeData;
+      if (sequence === sequenceRef.current) setState({ kind: 'ready', data: body });
+    } catch (err) {
+      if (sequence === sequenceRef.current) {
+        setState({
           kind: 'error',
-          message: err instanceof Error ? err.message : String(err),
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Account request timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
         });
       }
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        inFlightRef.current = false;
+      }
+    }
+  }, [settings.apiKey, settings.baseUrl]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      inFlightRef.current = false;
     },
     [settings.apiKey, settings.baseUrl],
   );
 
   useEffect(() => {
     if (opts.manual === true) return;
-    let active = true;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    void fetcher(controller.signal, () => active);
-    return () => {
-      active = false;
-      controller.abort();
-    };
+    void fetcher();
   }, [fetcher, opts.manual]);
 
-  // The public refetch keeps its no-arg signature (user-triggered → always apply).
-  const refetch = useCallback((): Promise<void> => fetcher(), [fetcher]);
-  return { state, refetch };
+  return { state, refetch: fetcher };
 }
