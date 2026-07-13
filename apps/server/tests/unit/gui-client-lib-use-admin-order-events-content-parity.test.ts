@@ -77,19 +77,30 @@ describe('W466.C apps/gui-client/src/lib/use-admin-order-events.ts content parit
     );
   });
 
-  it('URL with encodeURIComponent(orderId): trailing-slash strip baseUrl + `${baseUrl}/v1/admin/crypto-orders/${encodeURIComponent(orderId)}/events` + Bearer + accept JSON', () => {
+  it('URL with encodeURIComponent(orderId): deadline-bounded GET + signal + Bearer + accept JSON', () => {
     expect(body).toMatch(
-      /const res = await fetch\(\s*\n?\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/events`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\},\s*\n?\s*\);/,
+      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/events`,/,
     );
+    expect(body).toContain("method: 'GET',");
+    expect(body).toContain('signal: controller.signal,');
+    expect(body).toContain('authorization: `Bearer ${settings.apiKey}`');
+    expect(body).toContain("accept: 'application/json',");
   });
 
   it('Defensive parsing: body typed as {events?: AdminOrderEvent[]} + Array.isArray(body.events) ? body.events : [] fallback (handles server returning {} or {events: null})', () => {
     expect(body).toMatch(
-      /const body = \(await res\.json\(\)\) as \{ events\?: AdminOrderEvent\[\] \};\s*\n?\s*setState\(\{ kind: 'ready', events: Array\.isArray\(body\.events\) \? body\.events : \[\] \}\);/,
+      /const body = \(await res\.json\(\)\) as \{ events\?: AdminOrderEvent\[\] \};/,
+    );
+    expect(body).toContain(
+      "setState({ kind: 'ready', events: Array.isArray(body.events) ? body.events : [] });",
     );
   });
 
-  it('useEffect deps just [fetcher] (no manual? gate, unconditional auto-fetch — orderId change triggers via fetcher closure); useCallback deps [settings.apiKey, settings.baseUrl, orderId]', () => {
+  it('keeps unconditional auto-fetch while reads are single-flight, sequence-gated, and dependency-aborted', () => {
+    expect(body).toContain('if (inFlightRef.current) return;');
+    expect(body).toContain('if (sequence === sequenceRef.current) {');
+    expect(body).toContain('requestRef.current?.abort();');
+    expect(body).toContain('[settings.apiKey, settings.baseUrl, orderId],');
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher\]\);/,
     );
