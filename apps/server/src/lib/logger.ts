@@ -21,6 +21,48 @@ import { redactUrlQueryTokens, redactText } from './redact-url.js';
  */
 const MAX_ERR_REDACT_DEPTH = 6;
 const REDACTED_ERR_STRUCTURE = '[redacted: structure limit]';
+// Static Pino redact paths only match known locations on the outer log object.
+// Upstream SDK errors commonly bury headers/config several levels below `err`,
+// so inspect each nested PROPERTY KEY too. Canonicalising case + separators
+// covers Authorization / api_key / x-api-key without substring-matching benign
+// diagnostics such as `tokenBudget` or `secretPrefix`. `code` is deliberately
+// absent: Error.code carries essential values like ECONNRESET/EAI_AGAIN.
+const SENSITIVE_ERR_KEYS = new Set([
+  'authorization',
+  'cookie',
+  'setcookie',
+  'stripesignature',
+  'password',
+  'newpassword',
+  'currentpassword',
+  'recoverycode',
+  'recoverycodes',
+  'apikey',
+  'xapikey',
+  'apisecret',
+  'plaintext',
+  'secret',
+  'signingsecret',
+  'webhooksecret',
+  'totpsecret',
+  'mfasecret',
+  'clientsecret',
+  'configblob',
+  'privatekey',
+  'byokanthropicapikey',
+  'xbyokanthropicapikey',
+  'guicontrolkey',
+  'xdriftstackguicontrolkey',
+  'token',
+  'accesstoken',
+  'refreshtoken',
+  'idtoken',
+  'credential',
+  'credentials',
+]);
+function isSensitiveErrKey(key: string): boolean {
+  return SENSITIVE_ERR_KEYS.has(key.toLowerCase().replaceAll(/[^a-z0-9]/g, ''));
+}
 function redactErrValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (typeof value === 'string') return redactText(value);
   if (value === null || typeof value !== 'object') return value;
@@ -33,7 +75,7 @@ function redactErrValue(value: unknown, depth: number, seen: WeakSet<object>): u
   }
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = redactErrValue(v, depth + 1, seen);
+    out[k] = isSensitiveErrKey(k) ? '[redacted]' : redactErrValue(v, depth + 1, seen);
   }
   seen.delete(value);
   return out;

@@ -137,6 +137,10 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
       /if \(depth >= MAX_ERR_REDACT_DEPTH \|\| seen\.has\(value\)\) return REDACTED_ERR_STRUCTURE/,
     );
     expect(body).toMatch(/new WeakSet<object>\(\)/);
+    expect(body).toMatch(/const SENSITIVE_ERR_KEYS = new Set\(\[/);
+    expect(body).toMatch(
+      /out\[k\] = isSensitiveErrKey\(k\) \? '\[redacted\]' : redactErrValue\(v, depth \+ 1, seen\)/,
+    );
     // ...AND is actually wired into the pino serializers (else the leak returns
     // even though the function exists — the behavioral test wouldn't catch an
     // un-wiring since it calls the function directly).

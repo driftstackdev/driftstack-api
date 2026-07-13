@@ -54,6 +54,41 @@ describe('redactErrSerializer', () => {
     expect(cause.auth as string).toContain('Bearer [redacted]');
   });
 
+  it('redacts nested sensitive keys even when the raw value has no URL or Bearer marker', () => {
+    const e = new Error('dispatch failed') as Error & { cause?: unknown };
+    e.cause = {
+      config: {
+        headers: {
+          Authorization: 'raw-auth-secret',
+          'x-api-key': 'raw-api-secret',
+          Cookie: 'session=raw-cookie-secret',
+        },
+        credentials: { username: 'alice', password: 'raw-password-secret' },
+      },
+    };
+
+    const serialized = JSON.stringify(redactErrSerializer(e));
+    for (const secret of [
+      'raw-auth-secret',
+      'raw-api-secret',
+      'raw-cookie-secret',
+      'raw-password-secret',
+      'alice',
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(serialized).toContain('[redacted]');
+  });
+
+  it('preserves benign diagnostic keys including Error.code', () => {
+    const e = new Error('socket failed') as Error & { code?: string; tokenBudget?: number };
+    e.code = 'ECONNRESET';
+    e.tokenBudget = 4096;
+    const out = redactErrSerializer(e);
+    expect(out.code).toBe('ECONNRESET');
+    expect(out.tokenBudget).toBe(4096);
+  });
+
   it('fails closed on an over-depth credential subtree instead of returning it untouched', () => {
     const e = new Error('dispatch failed') as Error & { upstream?: unknown };
     let nested: Record<string, unknown> = {
