@@ -15,7 +15,7 @@ const account = {
   email: '—',
   name: null as string | null,
   tier: '—',
-  status: 'active' as 'active' | 'suspended' | 'deleted',
+  status: 'unavailable' as 'active' | 'suspended' | 'deleted' | 'unavailable',
   createdAt: null as string | null,
   lastSeenAt: null as string | null,
 };
@@ -38,6 +38,7 @@ const STATUS_BADGE: Record<string, string> = {
   active: 'bg-emerald-50 text-emerald-700',
   suspended: 'bg-amber-50 text-amber-700',
   deleted: 'bg-tk-hover text-tk-ink-2',
+  unavailable: 'bg-tk-hover text-tk-ink-2',
 };
 
 import { resolveApiBaseUrl } from '../../lib/api-base-url';
@@ -144,12 +145,22 @@ const accountId = account.id;
       </p>
 
       <div class="mt-6 flex flex-wrap gap-3" data-field="action-row">
-        <button type="button" data-action="change-tier" class="btn-secondary text-sm">
+        <button
+          type="button"
+          data-action="change-tier"
+          disabled
+          aria-disabled="true"
+          title="Load an authoritative account record before performing actions."
+          class="btn-secondary text-sm"
+        >
           Change tier
         </button>
         <button
           type="button"
           data-action="suspend"
+          disabled
+          aria-disabled="true"
+          title="Load an authoritative account record before performing actions."
           class:list={[
             'btn-secondary text-sm border-amber-300 text-amber-800 hover:bg-amber-50',
             account.status === 'active' ? '' : 'hidden',
@@ -160,6 +171,9 @@ const accountId = account.id;
         <button
           type="button"
           data-action="unsuspend"
+          disabled
+          aria-disabled="true"
+          title="Load an authoritative account record before performing actions."
           class:list={[
             'btn-secondary text-sm border-emerald-300 text-emerald-800 hover:bg-emerald-50',
             account.status === 'suspended' ? '' : 'hidden',
@@ -167,15 +181,32 @@ const accountId = account.id;
         >
           Unsuspend account
         </button>
-        <button type="button" data-action="set-override" class="btn-secondary text-sm">
+        <button
+          type="button"
+          data-action="set-override"
+          disabled
+          aria-disabled="true"
+          title="Load an authoritative account record before performing actions."
+          class="btn-secondary text-sm"
+        >
           Set rate-limit override
         </button>
-        <button type="button" data-action="add-note" class="btn-secondary text-sm">
+        <button
+          type="button"
+          data-action="add-note"
+          disabled
+          aria-disabled="true"
+          title="Load an authoritative account record before performing actions."
+          class="btn-secondary text-sm"
+        >
           Add support note
         </button>
         <button
           type="button"
           data-action="record-refund"
+          disabled
+          aria-disabled="true"
+          title="Load an authoritative account record before performing actions."
           class="btn-secondary text-sm border-amber-300 text-amber-800 hover:bg-amber-50"
         >
           Record refund (audit-only)
@@ -295,21 +326,9 @@ const accountId = account.id;
         </div>
       </div>
       <div data-account-cost-body class="mt-4">
-        {/* 2026-05-24 — skeleton rows for hydrate-state polish. */}
-        <div class="space-y-3">
-          <div class="flex items-center justify-between gap-4">
-            <div class="h-3 w-32 animate-pulse rounded bg-slate-200"></div>
-            <div class="h-3 w-20 animate-pulse rounded bg-slate-200"></div>
-          </div>
-          <div class="flex items-center justify-between gap-4">
-            <div class="h-3 w-28 animate-pulse rounded bg-slate-200"></div>
-            <div class="h-3 w-16 animate-pulse rounded bg-slate-200"></div>
-          </div>
-          <div class="flex items-center justify-between gap-4">
-            <div class="h-3 w-36 animate-pulse rounded bg-slate-200"></div>
-            <div class="h-3 w-12 animate-pulse rounded bg-slate-200"></div>
-          </div>
-        </div>
+        <p class="text-sm text-tk-ink-3">
+          Cost data is unavailable until account details load.
+        </p>
       </div>
     </section>
 
@@ -331,7 +350,9 @@ const accountId = account.id;
       <ul class="mt-4 divide-y divide-slate-100" data-list="account-audit">
         {
           auditSlice.length === 0 ? (
-            <li class="py-3 text-sm text-tk-ink-3">No admin actions on record.</li>
+            <li class="py-3 text-sm text-tk-ink-3">
+              Audit entries are unavailable until account details load.
+            </li>
           ) : (
             auditSlice.map((entry) => (
               <li class="flex items-start justify-between gap-4 py-3">
@@ -362,9 +383,10 @@ const accountId = account.id;
           view scoped to this account. The server strips the acc_ prefix via
           maybeUuidFromInput, so the prefixed id works once the param matches. */}
       <a
-        href="/audit-log/"
         data-field="full-audit-link"
-        class="mt-4 inline-flex text-sm text-tk-accent hover:underline"
+        aria-disabled="true"
+        tabindex="-1"
+        class="pointer-events-none mt-4 inline-flex text-sm text-tk-accent opacity-60 hover:underline"
       >
         Full audit log for this account →
       </a>
@@ -377,11 +399,20 @@ const accountId = account.id;
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const list = root.querySelector('[data-list="account-audit"]');
+      const costBody = root.querySelector('[data-account-cost-body]');
+      const fullAuditLink = root.querySelector('[data-field="full-audit-link"]');
       let token = null;
       const ACCOUNT_DETAIL_TIMEOUT_MS = 15_000;
       let hydrationController = null;
       let hydrationGeneration = 0;
       let auditEntries = [];
+      let accountDataAvailable = false;
+      const blockedAuditActions = new Set();
+      const actionRow = root.querySelector('[data-field="action-row"]');
+      const accountActionButtons = actionRow
+        ? Array.from(actionRow.querySelectorAll('[data-action]'))
+        : [];
+      let accountMutationInFlight = false;
 
       // The Pages rewrite preserves the requested URL, so the live UUID is
       // available here even though every detail request shares one shell.
@@ -408,6 +439,60 @@ const accountId = account.id;
       function setText(field, text) {
         const el = root.querySelector('[data-field="' + field + '"]');
         if (el) el.textContent = text;
+      }
+
+      function renderUnavailable(message) {
+        accountDataAvailable = false;
+        setText('title-name', 'Account unavailable');
+        setText('title-email', message);
+        setText('account-id', '—');
+        setText('tier', '—');
+        setText('status', '—');
+        setText('created', '—');
+        setText('updated', '—');
+        const badge = root.querySelector('[data-field="status-badge"]');
+        if (badge) {
+          badge.textContent = 'unavailable';
+          badge.className =
+            'inline-flex shrink-0 rounded-full bg-tk-hover px-3 py-1 text-xs font-medium uppercase tracking-wide text-tk-ink-2';
+        }
+        const suspendBtn = root.querySelector('[data-action="suspend"]');
+        const unsuspendBtn = root.querySelector('[data-action="unsuspend"]');
+        if (suspendBtn) suspendBtn.classList.add('hidden');
+        if (unsuspendBtn) unsuspendBtn.classList.add('hidden');
+        const override = root.querySelector('[data-field="override-form"]');
+        if (override) override.classList.add('hidden');
+        if (costBody) {
+          costBody.innerHTML =
+            '<p class="text-sm text-tk-ink-3">Cost data is unavailable until account details load.</p>';
+        }
+        auditEntries = [];
+        if (list) {
+          list.innerHTML =
+            '<li class="py-3 text-sm text-tk-ink-3">Audit entries are unavailable until account details load.</li>';
+        }
+        if (fullAuditLink) {
+          fullAuditLink.removeAttribute('href');
+          fullAuditLink.setAttribute('aria-disabled', 'true');
+          fullAuditLink.setAttribute('tabindex', '-1');
+          fullAuditLink.classList.add('pointer-events-none', 'opacity-60');
+        }
+        syncAccountActionAvailability();
+      }
+
+      function markAccountAvailable() {
+        accountDataAvailable = true;
+        setText('account-id', prefixedId);
+        if (fullAuditLink) {
+          fullAuditLink.setAttribute(
+            'href',
+            '/audit-log?target_id=' + encodeURIComponent(prefixedId),
+          );
+          fullAuditLink.removeAttribute('aria-disabled');
+          fullAuditLink.removeAttribute('tabindex');
+          fullAuditLink.classList.remove('pointer-events-none', 'opacity-60');
+        }
+        syncAccountActionAvailability();
       }
       function escapeHtml(s) {
         return String(s).replace(
@@ -466,6 +551,7 @@ const accountId = account.id;
         const titleName = a.name || a.email;
         setText('title-name', titleName);
         setText('title-email', a.email);
+        setText('account-id', prefixedId);
         setText('tier', a.tier);
         setText('status', a.status);
         setText('created', fmtIso(a.created_at));
@@ -489,14 +575,9 @@ const accountId = account.id;
         }
       }
 
-      setText('account-id', accountUuid ? prefixedId : '—');
-      const fullAuditLink = root.querySelector('[data-field="full-audit-link"]');
-      if (fullAuditLink && accountUuid) {
-        fullAuditLink.setAttribute(
-          'href',
-          '/audit-log?target_id=' + encodeURIComponent(prefixedId),
-        );
-      }
+      // The path identifies what to request, not an authoritative account.
+      // Keep the static shell inert until every required live read succeeds.
+      renderUnavailable('Account details are loading…');
 
       function renderAudit(entries) {
         auditEntries = Array.isArray(entries) ? entries : [];
@@ -537,6 +618,7 @@ const accountId = account.id;
 
       function load() {
         if (!accountUuid) {
+          renderUnavailable('This account link is invalid.');
           showBanner('Invalid account link.');
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return Promise.resolve(false);
@@ -579,7 +661,6 @@ const accountId = account.id;
         // Promise.all error path) so an unwired cost surface
         // doesn't show "Couldn't load account" to operators just
         // inspecting tier/status.
-        const costBody = root.querySelector('[data-account-cost-body]');
         // The cost route matches accounts.id (a bare uuid) directly — unlike
         // /v1/admin/accounts/:id which uuidFromPrefixedId-strips the acc_ prefix.
         // So it needs the RAW uuid, not prefixedId: sending the prefixed id 404s,
@@ -642,6 +723,7 @@ const accountId = account.id;
         return Promise.all([accountP, auditP, costP])
           .then(() => {
             if (!isCurrent()) return false;
+            markAccountAvailable();
             hideBanner();
             return true;
           })
@@ -649,13 +731,18 @@ const accountId = account.id;
             if (!isCurrent()) return false;
             const msg = requestErrorMessage(err);
             if (msg === 'forbidden') {
+              renderUnavailable('This account is unavailable with the current admin access.');
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
               );
             } else if (msg === 'not-found') {
-              showBanner('Account not found. Showing preview shell.');
+              renderUnavailable('No account was found for this link.');
+              showBanner('Account not found.');
             } else {
-              showBanner("Couldn't load account (" + msg + '). Showing preview data below.');
+              renderUnavailable(
+                'Account data could not be loaded. Resolve the error above and retry.',
+              );
+              showBanner("Couldn't load account (" + msg + ').');
             }
             return false;
           })
@@ -807,7 +894,6 @@ const accountId = account.id;
         }
       }
 
-      const blockedAuditActions = new Set();
       function auditActionForKind(kind) {
         return kind === 'note' ? 'add-note' : 'record-refund';
       }
@@ -867,13 +953,27 @@ const accountId = account.id;
         }
       }
 
-      const actionRow = root.querySelector('[data-field="action-row"]');
-      const accountActionButtons = actionRow
-        ? Array.from(actionRow.querySelectorAll('[data-action]'))
-        : [];
-      let accountMutationInFlight = false;
+      function syncAccountActionAvailability() {
+        accountActionButtons.forEach((button) => {
+          const unavailable = !accountDataAvailable;
+          const auditBlocked = blockedAuditActions.has(button.getAttribute('data-action'));
+          button.disabled =
+            unavailable || accountMutationInFlight || auditBlocked;
+          if (unavailable) {
+            button.setAttribute('aria-disabled', 'true');
+            button.title = 'Load an authoritative account record before performing actions.';
+          } else if (auditBlocked) {
+            button.setAttribute('aria-disabled', 'true');
+            button.title =
+              'Outcome unknown — reload and verify the audit log before recording another.';
+          } else {
+            button.removeAttribute('aria-disabled');
+            button.removeAttribute('title');
+          }
+        });
+      }
       function beginAccountMutation(activeButton) {
-        if (accountMutationInFlight) return false;
+        if (!accountDataAvailable || accountMutationInFlight) return false;
         const activeAction = activeButton?.getAttribute?.('data-action');
         if (activeAction && blockedAuditActions.has(activeAction)) return false;
         accountMutationInFlight = true;
@@ -887,9 +987,7 @@ const accountId = account.id;
       function endAccountMutation(activeButton) {
         accountMutationInFlight = false;
         if (actionRow) actionRow.removeAttribute('aria-busy');
-        accountActionButtons.forEach((button) => {
-          button.disabled = blockedAuditActions.has(button.getAttribute('data-action'));
-        });
+        syncAccountActionAvailability();
         if (activeButton) activeButton.removeAttribute('aria-busy');
       }
 
@@ -1009,6 +1107,7 @@ const accountId = account.id;
       const overrideForm = root.querySelector('[data-field="override-form"]');
       let overrideSubmitting = false;
       function showOverrideForm() {
+        if (!accountDataAvailable) return;
         if (overrideForm) overrideForm.classList.remove('hidden');
       }
       function hideOverrideForm(force) {
@@ -1020,7 +1119,7 @@ const accountId = account.id;
       }
 
       function submitOverride(form) {
-        if (!token || overrideSubmitting || accountMutationInFlight) {
+        if (!token || !accountDataAvailable || overrideSubmitting || accountMutationInFlight) {
           if (!token) showBanner('Sign in with a staff admin account to perform this action.');
           return;
         }
@@ -1237,7 +1336,8 @@ const accountId = account.id;
         // not permanently capture null in this page's earlier slotted script.
         token = localStorage.getItem('ds_web_session_token');
         if (!token) {
-          showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+          renderUnavailable('Sign in with a staff admin account to load this account.');
+          showBanner('Sign in with a staff admin account to see live data.');
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return;
         }

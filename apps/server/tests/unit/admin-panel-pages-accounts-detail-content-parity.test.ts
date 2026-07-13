@@ -125,9 +125,71 @@ describe('W490.C admin account-detail static shell content parity', () => {
     );
   });
 
-  it("Banner state taxonomy: 'forbidden' (admin scope required) / 'not-found' ('Account not found. Showing preview shell.') / generic ('Couldn't load account (msg). Showing preview data below.') — pinned so the 3-state error vocabulary distinguishes 403-forbidden from 404-not-found (drift to merging them would obscure whether the operator lacks scope vs the account just doesn't exist)", () => {
+  it('Banner state taxonomy distinguishes forbidden / not-found / generic failures while every branch neutralizes the account shell instead of presenting preview data as authoritative', () => {
     expect(body).toMatch(
-      /if \(msg === 'forbidden'\) \{\s*\n?\s*showBanner\(\s*\n?\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\n?\s*\);\s*\n?\s*\} else if \(msg === 'not-found'\) \{\s*\n?\s*showBanner\('Account not found\. Showing preview shell\.'\);\s*\n?\s*\} else \{\s*\n?\s*showBanner\("Couldn't load account \(" \+ msg \+ '\)\. Showing preview data below\.'\);\s*\n?\s*\}/,
+      /if \(msg === 'forbidden'\) \{\s*renderUnavailable\('This account is unavailable with the current admin access\.'\);\s*showBanner\(\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\);\s*\} else if \(msg === 'not-found'\) \{\s*renderUnavailable\('No account was found for this link\.'\);\s*showBanner\('Account not found\.'\);\s*\} else \{\s*renderUnavailable\(\s*'Account data could not be loaded\. Resolve the error above and retry\.',\s*\);\s*showBanner\("Couldn't load account \(" \+ msg \+ '\)\.'\);\s*\}/,
+    );
+    expect(body).not.toMatch(/Showing preview(?: data)? below|Showing preview shell/);
+  });
+
+  it('The static shell starts inert and unavailable states neutralize identity, facts, status, cost, audit, account link, transition controls, and the override form', () => {
+    expect(body).toMatch(
+      /status: 'unavailable' as 'active' \| 'suspended' \| 'deleted' \| 'unavailable'/,
+    );
+    for (const action of [
+      'change-tier',
+      'suspend',
+      'unsuspend',
+      'set-override',
+      'add-note',
+      'record-refund',
+    ]) {
+      expect(body).toMatch(
+        new RegExp(
+          `<button[^>]*data-action="${action}"[^>]*disabled[^>]*aria-disabled="true"[^>]*>`,
+        ),
+      );
+    }
+    expect(body).toMatch(
+      /<a\s*data-field="full-audit-link"\s*aria-disabled="true"\s*tabindex="-1"/,
+    );
+    expect(body).toMatch(/let accountDataAvailable = false;/);
+    expect(body).toMatch(/renderUnavailable\('Account details are loading…'\);/);
+    expect(body).toMatch(
+      /function renderUnavailable\(message\) \{\s*accountDataAvailable = false;[\s\S]*?setText\('title-name', 'Account unavailable'\);[\s\S]*?setText\('title-email', message\);[\s\S]*?setText\('account-id', '—'\);[\s\S]*?setText\('tier', '—'\);[\s\S]*?setText\('status', '—'\);/,
+    );
+    expect(body).toMatch(/badge\.textContent = 'unavailable';/);
+    expect(body).toMatch(/if \(suspendBtn\) suspendBtn\.classList\.add\('hidden'\);/);
+    expect(body).toMatch(/if \(unsuspendBtn\) unsuspendBtn\.classList\.add\('hidden'\);/);
+    expect(body).toMatch(/if \(override\) override\.classList\.add\('hidden'\);/);
+    expect(body).toMatch(/Cost data is unavailable until account details load\./);
+    expect(body).toMatch(/Audit entries are unavailable until account details load\./);
+    expect(body).toMatch(
+      /fullAuditLink\.removeAttribute\('href'\);\s*fullAuditLink\.setAttribute\('aria-disabled', 'true'\);\s*fullAuditLink\.setAttribute\('tabindex', '-1'\);/,
+    );
+  });
+
+  it('Only a complete live read restores the scoped audit link and mutation controls; mutation cleanup cannot re-enable an unavailable account', () => {
+    expect(body).toMatch(
+      /Promise\.all\(\[accountP, auditP, costP\]\)[\s\S]*?markAccountAvailable\(\);\s*hideBanner\(\);\s*return true;/,
+    );
+    expect(body).toMatch(
+      /function markAccountAvailable\(\) \{\s*accountDataAvailable = true;[\s\S]*?'\/audit-log\?target_id=' \+ encodeURIComponent\(prefixedId\)[\s\S]*?syncAccountActionAvailability\(\);\s*\}/,
+    );
+    expect(body).toMatch(
+      /button\.disabled =\s*unavailable \|\| accountMutationInFlight \|\| auditBlocked;/,
+    );
+    expect(body).toMatch(
+      /button\.title = 'Load an authoritative account record before performing actions\.';/,
+    );
+    expect(body).toMatch(
+      /function beginAccountMutation\(activeButton\) \{\s*if \(!accountDataAvailable \|\| accountMutationInFlight\) return false;/,
+    );
+    expect(body).toMatch(
+      /function endAccountMutation\(activeButton\) \{\s*accountMutationInFlight = false;[\s\S]*?syncAccountActionAvailability\(\);/,
+    );
+    expect(body).toMatch(
+      /if \(!token\) \{\s*renderUnavailable\('Sign in with a staff admin account to load this account\.'\);\s*showBanner\('Sign in with a staff admin account to see live data\.'\);/,
     );
   });
 
