@@ -43,7 +43,7 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
 
   it('static Pages shell preserves arbitrary incident deep links', () => {
     expect(body).not.toMatch(/export const prerender = false/);
-    expect(read(REDIRECTS)).toMatch(/^\/incidents\/:id \/shells\/incident-detail 200$/m);
+    expect(read(REDIRECTS)).toMatch(/^\/incidents\/:id \/shells\/incident-detail\/ 200$/m);
     expect(body).toMatch(/window\.location\.pathname/);
   });
 

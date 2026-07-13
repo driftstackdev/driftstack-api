@@ -50,7 +50,7 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
 
   it('static Pages shell preserves arbitrary account deep links', () => {
     expect(body).not.toMatch(/export const prerender = false/);
-    expect(read(REDIRECTS)).toMatch(/^\/accounts\/:id \/shells\/account-detail 200$/m);
+    expect(read(REDIRECTS)).toMatch(/^\/accounts\/:id \/shells\/account-detail\/ 200$/m);
     expect(body).toMatch(/window\.location\.pathname/);
   });
 

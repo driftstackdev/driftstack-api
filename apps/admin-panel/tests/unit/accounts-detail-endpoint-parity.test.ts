@@ -78,7 +78,7 @@ describe('W341.C admin /accounts/[id] detail endpoint parity', () => {
 
   it('static shell rewrite keeps arbitrary UUID deep links without SSR', () => {
     expect(page).not.toMatch(/export const prerender\s*=\s*false/);
-    expect(read(REDIRECTS)).toMatch(/^\/accounts\/:id \/shells\/account-detail 200$/m);
+    expect(read(REDIRECTS)).toMatch(/^\/accounts\/:id \/shells\/account-detail\/ 200$/m);
     expect(page).toMatch(/window\.location\.pathname\.split\('\/'\)/);
   });
 
