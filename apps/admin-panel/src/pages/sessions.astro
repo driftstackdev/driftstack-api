@@ -215,11 +215,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       }
 
       function requestErrorMessage(err, fallback) {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       const STATUS_BADGE = {

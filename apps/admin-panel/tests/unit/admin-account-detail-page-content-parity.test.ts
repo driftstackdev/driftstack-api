@@ -161,7 +161,7 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toMatch(/Promise\.all\(\[accountP, auditP, costP\]\)/);
     expect(body).toMatch(/if \(!isCurrent\(\)\) return;/);
     expect(body).toMatch(/root\.removeAttribute\('aria-busy'\)/);
-    expect(body).toContain('Request timed out. Try again.');
+    expect(body).toContain('window.driftstackRequestErrorMessage(err, fallback)');
   });
 
   it('CRITICAL suspend confirm is destructive:true — without it the OK button auto-focuses and a stray Enter fires the suspend (revokes ALL sessions + API keys) with no click required (audit waefer6wu)', () => {
@@ -181,7 +181,7 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     // charge" instead of a bare "HTTP 400". Pin the helper + that the six
     // mutations use it (not the old inline bare-HTTP reject).
     expect(body).toMatch(/function mutationJson\(r\)/);
-    expect(body).toMatch(/b\.detail \|\| 'HTTP ' \+ r\.status/);
+    expect(body).toMatch(/window\.driftstackResponseError\(r, b\)/);
     const usages = body.match(/\.then\(mutationJson\)/g) ?? [];
     expect(usages.length).toBe(6);
   });

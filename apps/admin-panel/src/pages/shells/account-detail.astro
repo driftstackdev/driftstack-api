@@ -445,11 +445,7 @@ const accountId = account.id;
       }
 
       function requestErrorMessage(err, fallback = 'network error') {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       // On a failed mutation (tier change / suspend / refund / override /
@@ -463,7 +459,7 @@ const accountId = account.id;
         return r
           .json()
           .catch(() => ({}))
-          .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+          .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
       }
 
       function applyAccount(a) {

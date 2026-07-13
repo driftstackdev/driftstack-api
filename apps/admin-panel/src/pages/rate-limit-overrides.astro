@@ -200,11 +200,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function requestErrorMessage(err, fallback) {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       const BUCKET_LABEL = {

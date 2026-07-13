@@ -110,7 +110,7 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
     // both mutations routing through it (the load fetch keeps its own
     // graceful fallback and is unaffected).
     expect(body).toMatch(/function mutationError\(r\)/);
-    expect(body).toMatch(/b\.detail \|\| 'HTTP ' \+ r\.status/);
+    expect(body).toMatch(/window\.driftstackResponseError\(r, b\)/);
     const usages = body.match(/r\.ok \? r\.json\(\) : mutationError\(r\)/g) ?? [];
     expect(usages.length).toBe(2);
   });

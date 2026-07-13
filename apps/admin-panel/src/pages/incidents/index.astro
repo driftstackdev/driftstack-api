@@ -276,11 +276,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
       }
 
       function requestErrorMessage(err, fallback) {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       const SEVERITY_BADGE = {
@@ -569,7 +565,7 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
                   return {};
                 })
                 .then(function (b) {
-                  return Promise.reject(new Error(b.detail || 'HTTP ' + r.status));
+                  return Promise.reject(window.driftstackResponseError(r, b));
                 });
             }
             return r.json();

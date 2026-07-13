@@ -209,7 +209,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
   it('uses one 15s timer-cleaned boundary and defers config hydration for fresh SSO', () => {
     const built = readFileSync(BUILT_PAGE, 'utf8');
     expect(built).toContain('COST_REQUEST_TIMEOUT_MS = 15_000');
-    expect(built).toContain('Request timed out. Try again.');
+    expect(built).toContain('Request timed out. Check the connection and try again.');
     expect(built).toMatch(/signal: controller\.signal/);
     expect(built).toContain('window.driftstackFetchWithDeadline(');
     expect(built).toMatch(/window\.clearTimeout\(timeout\)/);

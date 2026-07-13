@@ -305,11 +305,7 @@ const isResolved = incident.status === 'resolved';
       }
 
       function requestErrorMessage(err, fallback) {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       // Branded inline banner — replaces native alert() (2026-05-29
@@ -599,7 +595,7 @@ const isResolved = incident.status === 'resolved';
                     return {};
                   })
                   .then(function (b) {
-                    return Promise.reject(new Error(b.detail || 'HTTP ' + r.status));
+                    return Promise.reject(window.driftstackResponseError(r, b));
                   });
               }
               return r.json();

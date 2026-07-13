@@ -122,7 +122,7 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).toMatch(/if \(loadController\) loadController\.abort\(\)/);
     expect(body).toMatch(/const generation = \+\+loadGeneration;/);
     expect(body).toMatch(/if \(generation !== loadGeneration\) return;/);
-    expect(body).toContain('Request timed out. Try again.');
+    expect(body).toContain('window.driftstackRequestErrorMessage(err, fallback)');
     expect(body).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
     );

@@ -87,7 +87,7 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     expect(body).toMatch(/if \(listController\) listController\.abort\(\)/);
     expect(body).toMatch(/const generation = \+\+listGeneration;/);
     expect(body).toMatch(/if \(generation !== listGeneration\) return;/);
-    expect(body).toContain('Request timed out. Try again.');
+    expect(body).toContain('window.driftstackRequestErrorMessage(err, fallback)');
     expect(body).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
     );

@@ -138,7 +138,7 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
   it('bounds and aborts superseded reads, defers fresh-SSO start, and pins timeout recovery', () => {
     const built = readFileSync(BUILT_PAGE, 'utf8');
     expect(built).toContain('AUDIT_REQUEST_TIMEOUT_MS = 15_000');
-    expect(built).toContain('Request timed out. Try again.');
+    expect(built).toContain('Request timed out. Check the connection and try again.');
     expect(built).toMatch(/if \(loadController\) loadController\.abort\(\)/);
     expect(built).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,

@@ -1154,7 +1154,10 @@ const apiBaseUrl = resolveApiBaseUrl();
                 'Secret-deletion outcome is unknown because the response timed out, and secret metadata could not be refreshed. Verify the secret before retrying.';
             }
           } else {
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = window.driftstackRequestErrorMessage(
+              err,
+              'The secret could not be deleted. Try again.',
+            );
             if (dstatus) dstatus.textContent = 'Delete failed (' + msg + ').';
           }
         } finally {
@@ -1308,7 +1311,12 @@ const apiBaseUrl = resolveApiBaseUrl();
               }
             } else {
               status.textContent =
-                'failed (' + (err && err.message ? err.message : 'error') + ')';
+                'failed (' +
+                window.driftstackRequestErrorMessage(
+                  err,
+                  'The secret could not be saved. Try again.',
+                ) +
+                ')';
               status.className = 'text-[11px] text-red-600';
             }
           }
@@ -1357,7 +1365,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       Promise.all([overviewP, auditP, sessionsP, incidentsP])
         .then(() => hideBanner())
         .catch((err) => {
-          const msg = err && err.message ? err.message : 'network error';
+          const msg = window.driftstackRequestErrorMessage(
+            err,
+            'The admin overview could not be loaded. Try again.',
+          );
           // W604 — clear the SSR mock account counts/tier bars so a transient
           // overview-fetch failure never leaves fabricated platform metrics up.
           resetMockTiles();

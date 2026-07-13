@@ -153,7 +153,7 @@ describe('admin fleet page — operator visibility', () => {
   it('bounds fleet reads/controls, rejects stale polls, and defers fresh-SSO loading', () => {
     const html = loadBuiltPage();
     expect(html).toContain('FLEET_REQUEST_TIMEOUT_MS = 15_000');
-    expect(html).toContain('Request timed out. Try again.');
+    expect(html).toContain('Request timed out. Check the connection and try again.');
     expect(html).toMatch(/if \(loadController\) loadController\.abort\(\)/);
     expect(html).toMatch(/const generation = \+\+loadGeneration/);
     expect(html).toMatch(/if \(generation !== loadGeneration\) return/);

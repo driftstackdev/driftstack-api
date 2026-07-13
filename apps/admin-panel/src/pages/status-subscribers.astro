@@ -108,11 +108,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function requestErrorMessage(err, fallback) {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       function getToken() {
@@ -429,7 +425,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 : r
                     .json()
                     .catch(() => ({}))
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then((body) => {
               if (addResult) {

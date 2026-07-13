@@ -183,11 +183,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function requestErrorMessage(err, fallback) {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       function showBanner(text) {
@@ -208,7 +204,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         return r
           .json()
           .catch(() => ({}))
-          .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+          .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
       }
       // Keep the action + phase, not only membership. Auto/manual refreshes
       // rebuild the row DOM while a slow mutation may still be pending; the

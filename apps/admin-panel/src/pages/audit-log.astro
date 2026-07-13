@@ -186,11 +186,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function requestErrorMessage(err, fallback = 'network error') {
-        return err && err.name === 'AbortError'
-          ? 'Request timed out. Try again.'
-          : err && err.message
-            ? err.message
-            : fallback;
+        return window.driftstackRequestErrorMessage(err, fallback);
       }
 
       // Seed the filter from the URL so deep-links like
