@@ -15,6 +15,25 @@
 // handler.
 
 import type { Logger } from '../lib/logger.js';
+import { redactText } from '../lib/redact-url.js';
+
+const SCHEDULED_JOB_ERROR_MAX_CHARS = 500;
+const SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS = 2_000;
+
+/** Durable scheduler diagnostics must be useful to operators without turning
+ * provider-controlled exception text into an unbounded credential archive. */
+function safeScheduledJobError(err: unknown): string {
+  let raw: string;
+  try {
+    raw = err instanceof Error ? err.message : String(err);
+  } catch {
+    raw = 'scheduled job failed';
+  }
+  return redactText(raw.slice(0, SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS)).slice(
+    0,
+    SCHEDULED_JOB_ERROR_MAX_CHARS,
+  );
+}
 
 export interface ScheduledJobRow {
   id: string;
@@ -148,7 +167,7 @@ export class ScheduledJobsService {
       await handler(job);
       await this.repo.markComplete(job.id, now);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = safeScheduledJobError(err);
       const exhausted = job.attempts >= job.maxAttempts;
       if (exhausted) {
         this.logger.error(

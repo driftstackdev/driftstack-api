@@ -165,6 +165,14 @@ describe('W915 V-202d ScheduledJobs dispatcher cross-source invariant', () => {
     expect(p).toMatch(/job failed permanently — attempts exhausted/);
   });
 
+  it('CRITICAL retry and terminal last_error share a bounded credential-safe diagnostic', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/scheduled-jobs.ts'));
+    expect(p).toMatch(/const SCHEDULED_JOB_ERROR_MAX_CHARS = 500;/);
+    expect(p).toMatch(/const message = safeScheduledJobError\(err\);/);
+    expect(p).toMatch(/markFailed\(job\.id, \{ lastError: message, at: now \}\)/);
+    expect(p).toMatch(/markRetry\(job\.id, \{ lastError: message, nextRunAt \}\)/);
+  });
+
   // ─── register() last-write-wins ──────────────────────────────
 
   it("CRITICAL register(jobType, handler) is 'Last-write-wins if called twice'. The last-write-wins lets tests + hot-reload override handlers without explicit teardown.", () => {

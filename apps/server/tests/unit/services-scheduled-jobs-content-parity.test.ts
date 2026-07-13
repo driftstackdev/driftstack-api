@@ -152,6 +152,16 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
     );
   });
 
+  it('durable handler diagnostics use shared credential redaction with pre/post bounds', () => {
+    expect(body).toMatch(/import \{ redactText \} from '\.\.\/lib\/redact-url\.js';/);
+    expect(body).toMatch(/const SCHEDULED_JOB_ERROR_MAX_CHARS = 500;/);
+    expect(body).toMatch(/const SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS = 2_000;/);
+    expect(body).toMatch(/const message = safeScheduledJobError\(err\);/);
+    expect(body).toMatch(
+      /return redactText\(raw\.slice\(0, SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS\)\)\.slice\(/,
+    );
+  });
+
   it('imports: Logger from lib/logger', () => {
     expect(body).toMatch(/import type \{ Logger \} from '\.\.\/lib\/logger\.js';/);
   });

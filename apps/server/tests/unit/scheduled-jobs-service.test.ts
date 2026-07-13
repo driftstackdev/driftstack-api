@@ -199,4 +199,38 @@ describe('V-553.B-29 ScheduledJobsService.processTick', () => {
     await svc.processTick(NOW);
     expect(state.retried[0]?.lastError).toBe('not-an-error-object');
   });
+
+  it('bounds and redacts credential-bearing handler failures before persistence', async () => {
+    const { repo, state } = makeRepo([row({ id: 'j_secret_err', attempts: 1, maxAttempts: 3 })]);
+    const svc = new ScheduledJobsService(repo, makeLogger(), { workerId: 'w' });
+    svc.register('trial.expire', () =>
+      Promise.reject(
+        new Error(
+          `provider failed https://api.invalid/x?access_token=ACCESS_SECRET Authorization: Bearer BEARER_SECRET ${'x'.repeat(5_000)}`,
+        ),
+      ),
+    );
+    await svc.processTick(NOW);
+
+    const persisted = state.retried[0]?.lastError ?? '';
+    expect(persisted.length).toBeLessThanOrEqual(500);
+    expect(persisted).toContain('[redacted]');
+    expect(persisted).not.toContain('ACCESS_SECRET');
+    expect(persisted).not.toContain('BEARER_SECRET');
+  });
+
+  it('fails safely when a thrown non-Error cannot be stringified', async () => {
+    const { repo, state } = makeRepo([row({ id: 'j_hostile_err', attempts: 1, maxAttempts: 3 })]);
+    const svc = new ScheduledJobsService(repo, makeLogger(), { workerId: 'w' });
+    const hostile = {
+      toString(): string {
+        throw new Error('stringification failed');
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    svc.register('trial.expire', () => Promise.reject(hostile));
+    await svc.processTick(NOW);
+
+    expect(state.retried[0]?.lastError).toBe('scheduled job failed');
+  });
 });
