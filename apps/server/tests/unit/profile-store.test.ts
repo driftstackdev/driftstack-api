@@ -16,6 +16,10 @@ import {
   SessionAssignSchema,
   type ProfileSaved,
 } from '../../src/schemas/harness-control-protocol.js';
+import {
+  BOUNDED_NODE_LATEST_RELAY_MAX_CONCURRENT,
+  BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
+} from '../../src/services/bounded-node-latest-relay.js';
 
 function fakeR2(putObject: R2['putObject']): R2 {
   return {
@@ -134,7 +138,9 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     const putObject = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' }),
       },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
@@ -145,6 +151,53 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
   });
 
+  it('REFUSES a same-account alternate profile that is not bound to the session', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const findById = vi.fn().mockResolvedValue({ id: 'p_victim', accountId: 'acc_owner' });
+    const recordSave = vi.fn().mockResolvedValue(undefined);
+    const logger = fakeLogger();
+    const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
+      agentSessions: {
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' }),
+      },
+      profiles: { findById, recordSave },
+    });
+
+    persist({ ...frame, profile_id: 'p_victim' }, ownerNodeId);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(putObject).not.toHaveBeenCalled();
+    expect(recordSave).not.toHaveBeenCalled();
+    expect((logger as unknown as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalledWith(
+      expect.objectContaining({ assignedProfileId: 'p1', reportedProfileId: 'p_victim' }),
+      expect.stringContaining('does not match the session binding'),
+    );
+  });
+
+  it('REFUSES an ephemeral session from writing any same-account profile', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const findById = vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' });
+    const recordSave = vi.fn().mockResolvedValue(undefined);
+    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
+      agentSessions: {
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: null }),
+      },
+      profiles: { findById, recordSave },
+    });
+
+    persist(frame, ownerNodeId);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(putObject).not.toHaveBeenCalled();
+    expect(recordSave).not.toHaveBeenCalled();
+  });
+
   it('REFUSES the write when the profile is not owned by the session account (cross-account block)', async () => {
     const putObject = vi.fn().mockResolvedValue(undefined);
     const logger = fakeLogger();
@@ -152,7 +205,9 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_attacker', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_attacker', nodeId: ownerNodeId, profileId: 'p1' }),
       },
       profiles: { findById, recordSave },
     });
@@ -217,7 +272,9 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     const findById = vi.fn().mockRejectedValue(new Error('db connection reset'));
     const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' }),
       },
       profiles: { findById, recordSave: vi.fn().mockResolvedValue(undefined) },
     });
@@ -234,7 +291,9 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' }),
       },
       profiles: { findById, recordSave },
     });
@@ -252,7 +311,7 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: null }),
+        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: null, profileId: 'p1' }),
       },
       profiles: { findById: vi.fn(), recordSave },
     });
@@ -263,6 +322,66 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
 
     expect(putObject).not.toHaveBeenCalled();
     expect(recordSave).not.toHaveBeenCalled();
+  });
+
+  it('bounds unique-session DB/R2 work for one authenticated node', () => {
+    const get = vi.fn(() => new Promise<never>(() => undefined));
+    const logger = fakeLogger();
+    const persist = makeProfileSavedPersister(fakeR2(vi.fn()), logger, {
+      agentSessions: { get },
+      profiles: { findById: vi.fn(), recordSave: vi.fn() },
+    });
+
+    for (let i = 0; i < BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS; i += 1) {
+      persist({ ...frame, sessionId: `agt_${i}` }, ownerNodeId);
+    }
+    persist({ ...frame, sessionId: 'agt_overflow' }, ownerNodeId);
+    persist({ ...frame, sessionId: 'agt_overflow_2' }, ownerNodeId);
+
+    expect(get).toHaveBeenCalledTimes(BOUNDED_NODE_LATEST_RELAY_MAX_CONCURRENT);
+    expect((logger as unknown as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalledTimes(1);
+    expect((logger as unknown as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reportingNodeId: ownerNodeId,
+        sessionBudget: BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
+        sessionId: 'agt_overflow',
+      }),
+      expect.stringContaining('exceeded its persistence session budget'),
+    );
+  });
+
+  it('serializes a session save and coalesces pending blobs to the newest frame', async () => {
+    let releaseFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let lookups = 0;
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const get = vi.fn(async () => {
+      lookups += 1;
+      if (lookups === 1) await first;
+      return { accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' };
+    });
+    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
+      agentSessions: { get },
+      profiles: {
+        findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
+        recordSave: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    persist({ ...frame, sealed_blob: Buffer.from('first').toString('base64') }, ownerNodeId);
+    persist({ ...frame, sealed_blob: Buffer.from('superseded').toString('base64') }, ownerNodeId);
+    persist({ ...frame, sealed_blob: Buffer.from('latest').toString('base64') }, ownerNodeId);
+    expect(get).toHaveBeenCalledTimes(1);
+
+    releaseFirst();
+    await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(2));
+    expect(get).toHaveBeenCalledTimes(2);
+    const firstBody = (putObject.mock.calls[0]?.[0] as { body: Buffer } | undefined)?.body;
+    const latestBody = (putObject.mock.calls[1]?.[0] as { body: Buffer } | undefined)?.body;
+    expect(firstBody?.toString('utf8')).toBe('first');
+    expect(latestBody?.toString('utf8')).toBe('latest');
   });
 });
 
@@ -278,7 +397,9 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' }),
       },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
@@ -314,7 +435,9 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p2' }),
       },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p2', accountId: 'acc_owner' }),
@@ -345,7 +468,9 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const recordSave = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p3' }),
       },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p3', accountId: 'acc_owner' }),
@@ -387,7 +512,9 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const recordSave = vi.fn().mockRejectedValue(new Error('db down'));
     const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' }),
       },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),
@@ -417,7 +544,9 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const logger = fakeLogger();
     const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
       agentSessions: {
-        get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId }),
+        get: vi
+          .fn()
+          .mockResolvedValue({ accountId: 'acc_owner', nodeId: ownerNodeId, profileId: 'p1' }),
       },
       profiles: {
         findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }),

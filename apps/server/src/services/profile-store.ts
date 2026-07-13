@@ -20,19 +20,23 @@
 import type { ProfileSaved } from '../schemas/harness-control-protocol.js';
 import { profileSealedBlobKey, type R2 } from '../lib/r2.js';
 import type { Logger } from '../lib/logger.js';
+import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 
 /**
  * Cross-account ownership guard for the profileSaved persist (defense-in-depth).
  * A `profileSaved` frame carries a NODE-supplied `profile_id`; without this guard
  * an authenticated fleet node could emit `{ sessionId: <own session>, profile_id:
  * <ANY profile> }` and overwrite another account's sealed blob. These two
- * structural lookups bind the write to the session's owner: the session's account
- * (by `frame.sessionId`) must own `frame.profile_id`. Satisfied by the real
- * AgentSessionsRepo (`get`) + ProfilesRepo (`findById`).
+ * structural lookups bind the write to the exact session assignment: the session
+ * (by `frame.sessionId`) must carry this `profile_id`, and its account must still
+ * own that profile. Satisfied by the real AgentSessionsRepo (`get`) + ProfilesRepo
+ * (`findById`).
  */
 export interface ProfileSavedOwnershipDeps {
   agentSessions: {
-    get(id: string): Promise<{ accountId: string; nodeId: string | null } | null>;
+    get(
+      id: string,
+    ): Promise<{ accountId: string; nodeId: string | null; profileId: string | null } | null>;
   };
   profiles: {
     findById(args: { id: string; accountId: string }): Promise<unknown>;
@@ -54,16 +58,16 @@ export interface ProfileSavedOwnershipDeps {
  * only called when an R2 client exists.
  *
  * When `ownership` is provided, the write is REFUSED (fail-closed, logged) unless
- * the account owning `frame.sessionId` also owns `frame.profile_id` — blocking a
- * compromised node from overwriting another account's profile blob. When omitted
- * (legacy wiring), behavior is unchanged.
+ * `frame.sessionId` is assigned to `frame.profile_id` and that account still owns
+ * the profile — blocking both cross-account and same-account redirected writes.
+ * When omitted (legacy wiring), behavior is unchanged.
  */
 export function makeProfileSavedPersister(
   r2: R2,
   logger: Logger,
   ownership?: ProfileSavedOwnershipDeps,
 ): (frame: ProfileSaved, reportingNodeId?: string) => void {
-  return (frame: ProfileSaved, reportingNodeId?: string): void => {
+  const process = async (frame: ProfileSaved, reportingNodeId?: string): Promise<void> => {
     const sealedBlob = frame.sealed_blob;
     // doc-150 item 5 — the size + save-back metadata rides BOTH shapes (inline
     // `sealed_blob` and the presigned `stored:true` ack), while only the inline
@@ -80,7 +84,7 @@ export function makeProfileSavedPersister(
     // inner try/catch; this outer guard backstops the bare awaits + anything
     // else. The trailing `.catch()` is a second backstop in case the async
     // function ever throws synchronously before entering this try.
-    void (async () => {
+    await (async () => {
       try {
         let ownerAccountId: string | undefined;
         if (ownership !== undefined) {
@@ -110,6 +114,24 @@ export function makeProfileSavedPersister(
                 reportingNodeId,
               },
               'profileSaved refused: reporting node does not own the session',
+            );
+            return;
+          }
+          // Account ownership alone is insufficient: a compromised node that
+          // owns one session for an account could otherwise redirect that save
+          // into any other profile in the same account. Migration 0089 persists
+          // the exact create-time session binding, so require it before a victim
+          // profile lookup or R2 key construction. Ephemeral sessions fail closed.
+          if (session.profileId !== frame.profile_id) {
+            logger.warn(
+              {
+                component: 'profile-store',
+                sessionId: frame.sessionId,
+                assignedProfileId: session.profileId,
+                reportedProfileId: frame.profile_id,
+                reportingNodeId,
+              },
+              'profileSaved refused: reported profile does not match the session binding',
             );
             return;
           }
@@ -218,6 +240,53 @@ export function makeProfileSavedPersister(
         'profileSaved persist promise rejected (outer backstop)',
       );
     });
+  };
+
+  // Retain the ownership-free legacy/test shape. Production bootstrap always
+  // supplies ownership and therefore always uses the bounded authenticated path.
+  if (ownership === undefined) {
+    return (frame: ProfileSaved, reportingNodeId?: string): void => {
+      void process(frame, reportingNodeId);
+    };
+  }
+
+  const bounded = makeBoundedNodeLatestRelay({
+    getSessionId: (frame: ProfileSaved) => frame.sessionId,
+    process: (frame, reportingNodeId) => process(frame, reportingNodeId),
+    onError: ({ error, frame }) => {
+      logger.error(
+        {
+          component: 'profile-store',
+          profileId: frame.profile_id,
+          sessionId: frame.sessionId,
+          err: error,
+        },
+        'profileSaved persist promise rejected (bounded-queue backstop)',
+      );
+    },
+    onOverflow: ({ reportingNodeId, sessionBudget, sessionId }) => {
+      logger.warn(
+        { component: 'profile-store', reportingNodeId, sessionBudget, sessionId },
+        'dropped profileSaved because the reporting node exceeded its persistence session budget',
+      );
+    },
+  });
+
+  return (frame: ProfileSaved, reportingNodeId?: string): void => {
+    // Fail before DB/R2 work when a non-registry caller omits the authenticated
+    // node identity. The registry path always supplies it.
+    if (reportingNodeId === undefined) {
+      logger.warn(
+        {
+          component: 'profile-store',
+          sessionId: frame.sessionId,
+          profileId: frame.profile_id,
+        },
+        'profileSaved refused: missing authenticated reporting-node identity',
+      );
+      return;
+    }
+    bounded(frame, reportingNodeId);
   };
 }
 
