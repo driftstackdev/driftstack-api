@@ -88,4 +88,11 @@ describe('W368.C status-site /history page content parity', () => {
     expect(body).toMatch(/V-657 — incident history view/);
     expect(body).toMatch(/historical record for trust-evaluation use/);
   });
+
+  it('fetch failure offers an in-place retry with immediate busy feedback', () => {
+    expect(body).toMatch(/data-history-retry/);
+    expect(body).toMatch(/retry\.disabled = true/);
+    expect(body).toMatch(/retry\.textContent = 'Retrying…'/);
+    expect(body).toMatch(/render\(\);/);
+  });
 });

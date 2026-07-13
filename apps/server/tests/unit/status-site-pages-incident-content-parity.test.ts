@@ -54,4 +54,16 @@ describe('status-site pages/incident content parity', () => {
   it("Admin-only-may-not-be-public hint pinned: explains why 'incident not found' might mean the incident is admin-only rather than deleted. Drift to dropping would let customers think every 'not found' is a bad-id, missing the V-545.A admin-only-incidents semantic", () => {
     expect(body).toMatch(/it may be\s+admin-only \(not yet public\)/);
   });
+
+  it('recoverable fetch failures use friendly copy plus a one-click retry; malformed/not-found links remain distinct and non-retryable', () => {
+    expect(body).toMatch(/data-incident-retry/);
+    expect(body).toMatch(/showError\('Incident details are temporarily unavailable\.', true\)/);
+    expect(body).toMatch(
+      /showError\('Could not reach the status service\. Check your connection and try again\.', true\)/,
+    );
+    expect(body).toMatch(/showError\('This incident link is incomplete or invalid\.'\)/);
+    expect(body).toMatch(/showError\('Incident not found\.'\)/);
+    expect(body).toMatch(/retry\.textContent = 'Retrying…'/);
+    expect(body).not.toMatch(/Could not reach the status API: \$\{msg\}/);
+  });
 });

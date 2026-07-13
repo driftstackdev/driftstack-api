@@ -123,10 +123,13 @@ describe('W371.C status-site /index page content parity', () => {
     expect(body).toMatch(/No incidents in the last 30 days\./);
   });
 
-  it('error-state copy pinned: "Service may still be running normally — try again in a moment"', () => {
+  it('error state is honest, hides transport internals, and offers an in-place retry', () => {
     // The defensive-honesty claim — when the feed is unreachable
     // we don't assert outage, we assert uncertainty.
-    expect(body).toMatch(/Could not load incident feed/);
-    expect(body).toMatch(/The Service may still be running normally — try again in a moment/);
+    expect(body).toMatch(/Could not load the incident feed/);
+    expect(body).toMatch(/The Service may still be running normally/);
+    expect(body).toMatch(/data-status-retry/);
+    expect(body).toMatch(/retry\.textContent = 'Retrying…'/);
+    expect(body).not.toMatch(/API \$\{apiMsg\}; R2 fallback \$\{r2Msg\}/);
   });
 });

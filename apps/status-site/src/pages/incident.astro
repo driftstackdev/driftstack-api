@@ -32,10 +32,15 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       role="alert"
     >
       <p id="error-message">Incident not found.</p>
-      <p class="mt-2 text-xs text-ink-muted">
+      <p id="error-hint" class="mt-2 text-xs text-ink-muted">
         The id may be wrong, the incident may have been deleted, or it may be
         admin-only (not yet public).
       </p>
+      <button
+        type="button"
+        data-incident-retry
+        class="mt-3 hidden rounded-md border border-red-400/60 px-3 py-1.5 text-xs font-medium hover:bg-red-500/10 disabled:cursor-wait disabled:opacity-60"
+      >Retry</button>
     </div>
   </section>
 
@@ -120,12 +125,30 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     if (el) el.classList.add('hidden');
   }
 
-  function showError(msg) {
+  function showError(msg, retryable = false) {
     hide('loading');
     hide('incident');
     show('error');
     const m = document.getElementById('error-message');
     if (m && msg) m.textContent = msg;
+    const hint = document.getElementById('error-hint');
+    if (hint) {
+      hint.textContent = retryable
+        ? 'Fresh incident data could not be retrieved. Retry now or return to the live status page.'
+        : 'The id may be wrong, the incident may have been deleted, or it may be admin-only (not yet public).';
+    }
+    const retry = document.querySelector('[data-incident-retry]');
+    if (retry) {
+      retry.classList.toggle('hidden', !retryable);
+      retry.disabled = false;
+      retry.textContent = 'Retry';
+    }
+  }
+
+  function showLoading() {
+    hide('error');
+    hide('incident');
+    show('loading');
   }
 
   function render(inc, updates) {
@@ -170,11 +193,12 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     document.title = `${inc.title} — Driftstack status`;
   }
 
-  async function main() {
+  async function main(showLoadingState = true) {
+    if (showLoadingState) showLoading();
     const params = new URLSearchParams(globalThis.location.search);
     const id = params.get('id') ?? '';
     if (!/^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
-      showError('Missing or malformed incident id. Expected ?id=inc_<uuid>.');
+      showError('This incident link is incomplete or invalid.');
       return;
     }
     try {
@@ -187,15 +211,22 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         return;
       }
       if (!res.ok) {
-        showError(`Unexpected response (HTTP ${res.status}).`);
+        showError('Incident details are temporarily unavailable.', true);
         return;
       }
       const body = await res.json();
       render(body.incident, Array.isArray(body.updates) ? body.updates : []);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      showError(`Could not reach the status API: ${msg}`);
+    } catch {
+      showError('Could not reach the status service. Check your connection and try again.', true);
     }
+  }
+  const retry = document.querySelector('[data-incident-retry]');
+  if (retry) {
+    retry.addEventListener('click', function () {
+      retry.disabled = true;
+      retry.textContent = 'Retrying…';
+      main(false);
+    });
   }
   main();
 </script>

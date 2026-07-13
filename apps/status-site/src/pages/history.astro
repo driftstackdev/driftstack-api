@@ -234,12 +234,25 @@ const R2_FALLBACK_URL =
           `,
         )
         .join('');
-    } catch (err) {
+    } catch {
       list.innerHTML = `
         <div class="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-          Could not load incident history. Try again in a moment.
+          <p>Could not load incident history. The live status page may still be available.</p>
+          <button
+            type="button"
+            data-history-retry
+            class="mt-3 rounded-md border border-amber-400/60 px-3 py-1.5 text-xs font-medium hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60"
+          >Retry</button>
         </div>
       `;
+      const retry = list.querySelector('[data-history-retry]');
+      if (retry) {
+        retry.addEventListener('click', function () {
+          retry.disabled = true;
+          retry.textContent = 'Retrying…';
+          render();
+        });
+      }
     }
   }
 
