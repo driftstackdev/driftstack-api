@@ -1,7 +1,7 @@
 // V-534.S — unit tests for useWebhooksList.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { WebhooksListResponse } from '../../src/lib/use-webhooks-list';
 
 interface MockSettings {
@@ -38,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('V-534.S useWebhooksList — auto-fetch', () => {
@@ -76,6 +77,7 @@ describe('V-534.S useWebhooksList — auto-fetch', () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     const headers = init?.headers as Record<string, string> | undefined;
     expect(headers?.authorization).toBe('Bearer sk_test');
+    expect(init?.signal).toBeTruthy();
   });
 });
 
@@ -123,6 +125,32 @@ describe('V-534.S useWebhooksList — error paths', () => {
 });
 
 describe('V-534.S useWebhooksList — manual mode', () => {
+  it('aborts a stalled refetch after 15 seconds and restores an actionable error state', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useWebhooksList({ manual: true }));
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.refetch();
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await act(async () => pending);
+    expect(result.current.state).toEqual({
+      kind: 'error',
+      message: 'Webhook request timed out. Check your connection and try again.',
+    });
+  });
+
   it('starts idle when manual=true', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

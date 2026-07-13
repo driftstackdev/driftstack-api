@@ -5,8 +5,9 @@
 // counts; this hook surfaces it through the same state-machine
 // pattern as useSessionsList (V-534.O) and useAccountCost (V-534.H).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
 export interface WebhookCounts {
@@ -51,33 +52,51 @@ export function useWebhooksList(opts: UseWebhooksListOpts = {}): UseWebhooksList
   const [state, setState] = useState<WebhooksListState>(
     opts.manual === true ? { kind: 'idle' } : { kind: 'loading' },
   );
+  const requestRef = useRef<AbortController | null>(null);
+  const sequenceRef = useRef(0);
 
   const fetcher = useCallback(async (): Promise<void> => {
+    const sequence = ++sequenceRef.current;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     if (!settings.apiKey) {
+      requestRef.current = null;
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
     setState({ kind: 'loading' });
     try {
       const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-      const res = await fetch(`${baseUrl}/v1/webhooks`, {
+      const res = await fetchWithDeadline(`${baseUrl}/v1/webhooks`, {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'application/json',
         },
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
       const body = (await res.json()) as WebhooksListResponse;
-      setState({ kind: 'ready', data: body });
+      if (sequence === sequenceRef.current) setState({ kind: 'ready', data: body });
     } catch (err) {
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'error',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Webhook request timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null;
     }
   }, [settings.apiKey, settings.baseUrl]);
 
@@ -85,6 +104,15 @@ export function useWebhooksList(opts: UseWebhooksListOpts = {}): UseWebhooksList
     if (opts.manual === true) return;
     void fetcher();
   }, [fetcher, opts.manual]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+    },
+    [],
+  );
 
   return { state, refetch: fetcher };
 }

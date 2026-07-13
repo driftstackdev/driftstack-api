@@ -1,7 +1,7 @@
 // V-534.H — unit tests for useAccountCost.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { AccountCostResponse } from '../../src/lib/use-account-cost';
 
 interface MockSettings {
@@ -38,6 +38,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('V-534.H useAccountCost — auto-fetch on mount', () => {
@@ -90,6 +91,7 @@ describe('V-534.H useAccountCost — auto-fetch on mount', () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const headers = init.headers as Record<string, string>;
     expect(headers.authorization).toBe('Bearer sk_test');
+    expect(init.signal).toBeTruthy();
   });
 });
 
@@ -137,6 +139,47 @@ describe('V-534.H useAccountCost — error paths', () => {
 });
 
 describe('V-534.H useAccountCost — manual + refetch', () => {
+  it('keeps the newest refetch result when an older response arrives late', async () => {
+    let resolveFirst!: (value: Response) => void;
+    let resolveSecond!: (value: Response) => void;
+    const first = new Promise<Response>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<Response>((resolve) => {
+      resolveSecond = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second));
+    const { result } = renderHook(() => useAccountCost({ manual: true }));
+
+    const older = result.current.refetch();
+    const newer = result.current.refetch();
+    resolveSecond(
+      new Response(
+        JSON.stringify({
+          ...SAMPLE,
+          breakdown: { ...SAMPLE.breakdown, totalCents: 999 },
+        }),
+        { status: 200 },
+      ),
+    );
+    await act(async () => newer);
+    resolveFirst(
+      new Response(
+        JSON.stringify({
+          ...SAMPLE,
+          breakdown: { ...SAMPLE.breakdown, totalCents: 111 },
+        }),
+        { status: 200 },
+      ),
+    );
+    await act(async () => older);
+
+    expect(result.current.state.kind).toBe('ready');
+    if (result.current.state.kind === 'ready') {
+      expect(result.current.state.data.breakdown.totalCents).toBe(999);
+    }
+  });
+
   it('manual=true skips auto-fetch; refetch() fires the request', async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve({

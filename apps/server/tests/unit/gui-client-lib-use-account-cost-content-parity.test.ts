@@ -55,8 +55,9 @@ describe('W465.B apps/gui-client/src/lib/use-account-cost.ts content parity', ()
   });
 
   it("Imports + type-only import of CostBreakdownInput from './cost-panel'", () => {
-    expect(body).toMatch(/import \{ useCallback, useEffect, useState \} from 'react';/);
+    expect(body).toMatch(/import \{ useCallback, useEffect, useRef, useState \} from 'react';/);
     expect(body).toMatch(/import \{ readApiErrorMessage \} from '\.\/api-errors';/);
+    expect(body).toMatch(/import \{ fetchWithDeadline \} from '\.\/fetch-with-deadline';/);
     expect(body).toMatch(/import \{ useSettings \} from '\.\/SettingsContext';/);
     expect(body).toMatch(/import type \{ CostBreakdownInput \} from '\.\/cost-panel';/);
   });
@@ -81,14 +82,18 @@ describe('W465.B apps/gui-client/src/lib/use-account-cost.ts content parity', ()
       /const qs = opts\.billingCycle \? `\?billing_cycle=\$\{encodeURIComponent\(opts\.billingCycle\)\}` : '';/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/account\/cost\$\{qs\}`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/cost\$\{qs\}`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
     );
   });
 
   it('Same state-machine pattern as V-534.Q: no-apiKey error + manual?-aware initial state + !res.ok readApiErrorMessage + instance-of-Error catch + useEffect manual gate; useCallback deps [settings.apiKey, settings.baseUrl, opts.billingCycle]', () => {
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!settings\.apiKey\) \{\s*\n?\s*requestRef\.current = null;\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
+    expect(body).toMatch(
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
+    );
+    expect(body).toMatch(/requestRef\.current\?\.abort\(\);/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl, opts\.billingCycle\]\);/);
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
