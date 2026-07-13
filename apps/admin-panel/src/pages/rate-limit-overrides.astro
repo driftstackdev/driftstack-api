@@ -218,6 +218,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!banner) return;
         banner.classList.add('hidden');
       }
+      function renderUnavailable(message) {
+        if (list) {
+          list.classList.remove('hidden');
+          list.innerHTML =
+            '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">' +
+            message +
+            '</li>';
+        }
+        if (emptyRegion) emptyRegion.classList.add('hidden');
+      }
       function escapeHtml(s) {
         return String(s).replace(
           /[&<>"']/g,
@@ -373,12 +383,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (myReq !== inFlight) return false;
             const msg = requestErrorMessage(err, 'network error');
-            if (list) {
-              list.classList.remove('hidden');
-              list.innerHTML =
-                '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">Could not load live overrides — nothing to act on. Resolve the error above and retry.</li>';
-            }
-            if (emptyRegion) emptyRegion.classList.add('hidden');
+            renderUnavailable(
+              'Could not load live overrides — nothing to act on. Resolve the error above and retry.',
+            );
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -492,7 +499,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (includeExpiredEl) includeExpiredEl.addEventListener('change', scheduleLoad);
 
       if (!token) {
-        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        renderUnavailable(
+          'Sign in with a staff admin account to see rate-limit overrides.',
+        );
+        showBanner('Sign in with a staff admin account to see live data.');
         return;
       }
 

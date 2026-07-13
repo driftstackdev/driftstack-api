@@ -102,7 +102,7 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
       /data-action="clear"\s*\n?\s*data-account-id=\{override\.accountId\}\s*\n?\s*data-bucket-key=\{override\.bucketKey\}/,
     );
     expect(body).toMatch(
-      /const btn = target\.closest\('\[data-action="clear"\]'\);\s*\n?\s*if \(!btn\) return;\s*\n?\s*ev\.preventDefault\(\);\s*\n?\s*const accountId = btn\.getAttribute\('data-account-id'\);\s*\n?\s*const bucketKey = btn\.getAttribute\('data-bucket-key'\);\s*\n?\s*if \(accountId && bucketKey\) clear\(accountId, bucketKey\);/,
+      /const btn = target\.closest\('\[data-action="clear"\]'\);\s*\n?\s*if \(!btn\) return;\s*\n?\s*ev\.preventDefault\(\);\s*\n?\s*const accountId = btn\.getAttribute\('data-account-id'\);\s*\n?\s*const bucketKey = btn\.getAttribute\('data-bucket-key'\);\s*\n?\s*if \(accountId && bucketKey\) clear\(accountId, bucketKey, btn\);/,
     );
   });
 
@@ -110,11 +110,48 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
     expect(body).toMatch(/\{override\.capacity\.toLocaleString\('en-US'\)\}/);
   });
 
-  it("Banner state taxonomy: no-token / 403 forbidden / fetch-error on load + 'Clearing override…' / 'Override cleared. Refreshing…' / 'Couldn't clear (msg).' on action — pinned so the 6-state banner vocabulary matches the rest of the admin pages + the 204-No-Content success path on DELETE is handled correctly (status === 204 || r.ok)", () => {
+  it("Banner state taxonomy: no-token / 403 forbidden / fetch-error on load + 'Clearing override…' / 'Override cleared. Refreshing…' / 'Couldn't clear (mapped error).' on action — pinned so the 6-state banner vocabulary matches the rest of the admin pages + the 204-No-Content success path on DELETE is handled correctly", () => {
     expect(body).toMatch(/showBanner\('Clearing override…'\);/);
     expect(body).toMatch(/showBanner\('Override cleared\. Refreshing…'\);/);
-    expect(body).toMatch(/showBanner\("Couldn't clear \(" \+ msg \+ '\)\.'\);/);
-    expect(body).toMatch(/if \(r\.status === 204 \|\| r\.ok\) return null;/);
+    expect(body).toMatch(
+      /const msg = requestErrorMessage\(err, 'network error'\);\s*showBanner\("Couldn't clear \(" \+ msg \+ '\)\.'\);/,
+    );
+    expect(body).toMatch(
+      /if \(response\.status !== 204 && !response\.ok\) \{\s*throw new Error\('HTTP ' \+ response\.status\);\s*\}/,
+    );
+  });
+
+  it('Clear operations are deadline-bounded, serialized per account/bucket, accessible while pending, and reconcile an unknown timeout outcome before suggesting a retry', () => {
+    expect(body).toMatch(/const OVERRIDE_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(
+      /window\.driftstackFetchWithDeadline\(url, init, OVERRIDE_TIMEOUT_MS, controller\)/,
+    );
+    expect(body).toMatch(/const clearsInFlight = new Set\(\);/);
+    expect(body).toMatch(
+      /if \(clearsInFlight\.has\(operationKey\)\) return;\s*clearsInFlight\.add\(operationKey\);/,
+    );
+    expect(body).toMatch(
+      /btn\.disabled = true;\s*btn\.setAttribute\('aria-busy', 'true'\);\s*btn\.textContent = 'Confirming…';/,
+    );
+    expect(body).toMatch(
+      /if \(err && err\.name === 'AbortError'\) \{\s*const refreshed = await load\(\);[\s\S]*?const stillActionable = Array\.from\(/,
+    );
+    expect(body).toMatch(
+      /clearsInFlight\.delete\(operationKey\);\s*syncClearControls\(prefixedAccountId, bucketKey\);/,
+    );
+  });
+
+  it('Signed-out and failed loads replace SSG overrides with a non-actionable row and never present the empty-live state as authoritative', () => {
+    expect(body).toMatch(
+      /function renderUnavailable\(message\) \{[\s\S]*?list\.classList\.remove\('hidden'\);[\s\S]*?list\.innerHTML =[\s\S]*?message \+[\s\S]*?'[^']*<\/li>';[\s\S]*?if \(emptyRegion\) emptyRegion\.classList\.add\('hidden'\);[\s\S]*?\}/,
+    );
+    expect(body).toMatch(
+      /\.catch\(\(err\) => \{[\s\S]*?renderUnavailable\(\s*'Could not load live overrides — nothing to act on\. Resolve the error above and retry\.',\s*\);/,
+    );
+    expect(body).toMatch(
+      /if \(!token\) \{\s*renderUnavailable\(\s*'Sign in with a staff admin account to see rate-limit overrides\.',\s*\);\s*showBanner\('Sign in with a staff admin account to see live data\.'\);\s*return;/,
+    );
+    expect(body).not.toMatch(/Showing preview below\./);
   });
 
   it('file exists at canonical path', () => {

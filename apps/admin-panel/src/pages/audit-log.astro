@@ -224,6 +224,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.add('hidden');
       }
 
+      function renderUnavailable(message) {
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+            message +
+            '</td></tr>';
+        }
+        // Do not retain the SSG mock's count/retention copy when the rows are
+        // unavailable. It makes fabricated events look like a live result set.
+        if (footnote) footnote.textContent = '';
+      }
+
       function escapeHtml(s) {
         return String(s).replace(
           /[&<>"']/g,
@@ -381,12 +393,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (myReq !== inFlight) return false;
             const msg = requestErrorMessage(err);
+            renderUnavailable(
+              'Could not load live audit entries — nothing is shown as authoritative. Resolve the error above and retry.',
+            );
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
               );
             } else {
-              showBanner("Couldn't load audit log (" + msg + '). Showing preview data below.');
+              showBanner("Couldn't load audit log (" + msg + ').');
             }
             return false;
           })
@@ -403,7 +418,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       function start() {
         token = localStorage.getItem('ds_web_session_token');
         if (!token) {
-          showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+          renderUnavailable('Sign in with a staff admin account to see audit entries.');
+          showBanner('Sign in with a staff admin account to see live data.');
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return;
         }

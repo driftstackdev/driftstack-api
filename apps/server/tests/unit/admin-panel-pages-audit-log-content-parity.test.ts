@@ -54,9 +54,11 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
 
   it("Filter bar 3-field: data-field='action' (substring placeholder 'e.g. account.tier_changed') + data-field='admin-id' (placeholder 'acc_<uuid>') + data-field='result' 3-option select (Any result / Success only / Errors only) — pinned so the filter taxonomy stays in sync with the server endpoint's accepted params + the result-only client-side filter has all 3 states", () => {
     expect(body).toMatch(
-      /data-field="action"\s*\n?\s*placeholder="Filter by action \(e\.g\. account\.tier_changed\)…"/,
+      /data-field="action"[\s\S]*?aria-label="Filter audit log by action"[\s\S]*?placeholder="Filter by action \(e\.g\. account\.tier_changed\)…"/,
     );
-    expect(body).toMatch(/data-field="admin-id"\s*\n?\s*placeholder="Admin id \(acc_<uuid>\)"/);
+    expect(body).toMatch(
+      /data-field="admin-id"[\s\S]*?aria-label="Filter audit log by admin id"[\s\S]*?placeholder="Admin id \(acc_<uuid>\)"/,
+    );
     expect(body).toMatch(/<option value="">Any result<\/option>/);
     expect(body).toMatch(/<option value="success">Success only<\/option>/);
     expect(body).toMatch(/<option value="error">Errors only<\/option>/);
@@ -111,6 +113,19 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     expect(body).toMatch(
       /if \(adminIdEl && adminIdEl\.value\.trim\(\)\) params\.set\('admin_id', adminIdEl\.value\.trim\(\)\);/,
     );
+  });
+
+  it('Signed-out and failed loads replace SSG audit mocks with an explicit non-authoritative row and clear the fabricated footnote', () => {
+    expect(body).toMatch(
+      /function renderUnavailable\(message\) \{[\s\S]*?tbody\.innerHTML =[\s\S]*?'<tr><td colspan="5"[\s\S]*?message \+[\s\S]*?'[^']*<\/td><\/tr>';[\s\S]*?if \(footnote\) footnote\.textContent = '';[\s\S]*?\}/,
+    );
+    expect(body).toMatch(
+      /\.catch\(\(err\) => \{[\s\S]*?renderUnavailable\(\s*'Could not load live audit entries — nothing is shown as authoritative\. Resolve the error above and retry\.',\s*\);[\s\S]*?showBanner\("Couldn't load audit log \(" \+ msg \+ '\)\.'\);/,
+    );
+    expect(body).toMatch(
+      /if \(!token\) \{\s*renderUnavailable\('Sign in with a staff admin account to see audit entries\.'\);\s*showBanner\('Sign in with a staff admin account to see live data\.'\);/,
+    );
+    expect(body).not.toMatch(/Showing preview(?: data)? below\./);
   });
 
   it('file exists at canonical path', () => {
