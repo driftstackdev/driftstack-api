@@ -50,10 +50,10 @@ describe('W846 workspace .npmrc + .prettierrc parity', () => {
   );
 
   it.skipIf(!NPMRC_EXISTS)(
-    "CRITICAL .npmrc declares 'always-auth=true'. This forces auth on every registry request — drift to false would let CI silently use anonymous auth and hit rate limits (npm-published-but-cached-stale).",
+    "CRITICAL .npmrc omits the removed 'always-auth' project setting. npm 11 warns for either value and the next major will stop accepting it; registry-scoped _authToken already limits credential use to registry.npmjs.org.",
     () => {
       const p = read(resolve(REPO_ROOT, '.npmrc'));
-      expect(p).toMatch(/^always-auth=true$/m);
+      expect(p).not.toMatch(/^always-auth\s*=/m);
     },
   );
 
