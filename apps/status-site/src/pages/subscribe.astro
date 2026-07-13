@@ -45,6 +45,8 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         name="email"
         required
         autocomplete="email"
+        aria-describedby="subscribe-status"
+        aria-invalid="false"
         placeholder="you@example.com"
         class="mt-2 block w-full rounded-md border border-surface-divider px-3 py-2 text-sm focus:border-oxblood-700 focus:outline-hidden focus:ring-1 focus:ring-oxblood-700"
       />
@@ -136,6 +138,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const form = document.getElementById('subscribe-form');
   const status = document.getElementById('subscribe-status');
   const submitBtn = document.getElementById('submit-btn');
+  const emailInput = document.getElementById('email-input');
   // Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane elements.
   const confirmPane = document.getElementById('subscribe-confirm');
   const confirmEmail = document.getElementById('confirm-email');
@@ -144,6 +147,12 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const unknownEmail = document.getElementById('unknown-email');
   let subscribeInFlight = false;
   let subscribeOutcomeUnknown = false;
+
+  function setEmailValid(isValid) {
+    if (!emailInput) return;
+    emailInput.setAttribute('aria-invalid', isValid ? 'false' : 'true');
+    if (!isValid) emailInput.focus();
+  }
 
   function setStatus(message, kind) {
     if (!status) return;
@@ -170,8 +179,10 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     const email = (fd.get('email') || '').toString().trim();
     if (!email || !/^.+@.+\..+$/.test(email)) {
       setStatus('Please enter a valid email address.', 'error');
+      setEmailValid(false);
       return;
     }
+    setEmailValid(true);
     subscribeInFlight = true;
     submitBtn.setAttribute('disabled', 'true');
     submitBtn.setAttribute('aria-busy', 'true');
@@ -193,6 +204,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         form.reset();
       } else if (res.status === 400) {
         setStatus("That doesn't look like a valid email address.", 'error');
+        setEmailValid(false);
       } else if (res.status === 429) {
         setStatus(
           'Too many subscribe attempts from this IP. Try again in a minute.',
@@ -229,8 +241,8 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     if (confirmPane) confirmPane.classList.add('hidden');
     if (form) form.classList.remove('hidden');
     subscribeOutcomeUnknown = false;
+    setEmailValid(true);
     submitBtn.removeAttribute('disabled');
-    const input = document.getElementById('email-input');
-    if (input) input.focus();
+    if (emailInput) emailInput.focus();
   });
 </script>

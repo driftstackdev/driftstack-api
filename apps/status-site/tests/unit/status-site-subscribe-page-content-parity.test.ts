@@ -78,6 +78,21 @@ describe('W369.C status-site /subscribe page content parity', () => {
     expect(body).toMatch(/Subscribe failed \(HTTP \$\{res\.status\}\)\./);
   });
 
+  it('binds custom validation to the email control and focuses both invalid branches', () => {
+    expect(body).toMatch(/aria-describedby="subscribe-status"/);
+    expect(body).toMatch(/aria-invalid="false"/);
+    expect(body).toMatch(/function setEmailValid\(isValid\)/);
+    expect(body).toMatch(/emailInput\.setAttribute\('aria-invalid', isValid \? 'false' : 'true'\)/);
+    expect(body).toMatch(/if \(!isValid\) emailInput\.focus\(\)/);
+    expect(body).toMatch(
+      /Please enter a valid email address\.', 'error'\);\s*setEmailValid\(false\)/,
+    );
+    expect(body).toMatch(
+      /That doesn't look like a valid email address\.", 'error'\);\s*setEmailValid\(false\)/,
+    );
+    expect(body).toMatch(/setEmailValid\(true\);\s*subscribeInFlight = true/);
+  });
+
   it('Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane replaces form on 202 (states the address, the sender to look for status@driftstack.dev, the spam-folder hint, the volume-promise reminder + a "Subscribe another address" affordance)', () => {
     // The pane is hidden initially + revealed on 202.
     expect(body).toMatch(

@@ -98,6 +98,57 @@ describe('status-site subscription timeout recovery', () => {
     win = null;
   });
 
+  it('rejects malformed email without a POST and focuses the invalid input', async () => {
+    const setup = setUpPage(
+      'subscribe/index.html',
+      'https://status.driftstack.dev/subscribe/',
+      () => new Response(null, { status: 202 }),
+      false,
+    );
+    const { window, fetchCalls } = setup;
+    win = window;
+    const form = window.document.querySelector('#subscribe-form') as HTMLFormElement;
+    const input = window.document.querySelector('#email-input') as HTMLInputElement;
+    input.value = 'not-an-email';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(input.getAttribute('aria-describedby')).toBe('subscribe-status');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(window.document.activeElement).toBe(input);
+    expect(window.document.querySelector('#subscribe-status')?.textContent).toMatch(/valid email/i);
+  });
+
+  it('marks and focuses an email rejected by the server, then clears state for a valid retry', async () => {
+    let attempts = 0;
+    const setup = setUpPage(
+      'subscribe/index.html',
+      'https://status.driftstack.dev/subscribe/',
+      () => {
+        attempts += 1;
+        return new Response(null, { status: attempts === 1 ? 400 : 202 });
+      },
+      false,
+    );
+    const { window, fetchCalls } = setup;
+    win = window;
+    const form = window.document.querySelector('#subscribe-form') as HTMLFormElement;
+    const input = window.document.querySelector('#email-input') as HTMLInputElement;
+    input.value = 'alerts@example.com';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(window.document.activeElement).toBe(input);
+
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
+    expect(input.getAttribute('aria-invalid')).toBe('false');
+  });
+
   it('blocks subscription replay after delivery becomes ambiguous', async () => {
     const setup = setUpPage(
       'subscribe/index.html',
