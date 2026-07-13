@@ -103,6 +103,16 @@ describe('W362.C admin-panel /api-keys page content parity', () => {
     );
   });
 
+  it('reconciles ambiguous force-revocation before suggesting a retry', () => {
+    expect(body).toContain('Revocation outcome is unknown after the request timed out.');
+    expect(body).toContain('The key list was refreshed.');
+    expect(body).toContain(
+      'is gone or shows revoked, revocation completed; do not submit it again.',
+    );
+    expect(body).toContain('If it still shows active, retry the revocation.');
+    expect(body).toMatch(/const refreshed = await load\(\)/);
+  });
+
   it('page-side fetch uses limit=50 (standard admin paging default)', () => {
     expect(body).toMatch(/params\.set\('limit', '50'\)/);
   });

@@ -219,4 +219,36 @@ describe('admin api-keys page — force-revoke (operator security)', () => {
       window.document.querySelector('[data-action="revoke"][data-id="key_active"]'),
     ).toBeNull();
   });
+
+  it('revoke timeout refreshes committed security state before suggesting any retry', async () => {
+    const keys = [mkKey({ id: 'key_active', revoked_at: null })];
+    const fallback = makeRouter(keys);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      promptReturns: 'confirmed leak',
+      route: (call) => {
+        if (call.init?.method === 'POST') {
+          keys[0]!.revoked_at = '2026-05-29T12:00:00.000Z';
+          return Promise.reject(timeout);
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector(
+        '[data-action="revoke"][data-id="key_active"]',
+      ) as HTMLButtonElement
+    ).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(
+      window.document.querySelector('[data-action="revoke"][data-id="key_active"]'),
+    ).toBeNull();
+    expect(bannerText(window)).toMatch(
+      /outcome is unknown.*key list was refreshed.*gone or shows revoked.*completed.*do not submit it again.*still shows active.*retry/i,
+    );
+  });
 });

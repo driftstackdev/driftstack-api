@@ -328,7 +328,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let inFlight = 0;
       function load() {
-        if (!token) return Promise.resolve();
+        if (!token) return Promise.resolve(false);
         const myReq = ++inFlight;
         const params = buildQuery();
         if (loadController) loadController.abort();
@@ -348,7 +348,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const rows = body.data || [];
             if (tbody) {
               if (rows.length === 0) {
@@ -367,6 +367,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 '. Revoke fires POST /v1/admin/api-keys/:id/revoke with a required reason.';
             }
             hideBanner();
+            return true;
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
@@ -389,6 +390,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load API keys (" + msg + ').');
             }
+            return false;
           })
           .finally(() => {
             if (myReq === inFlight) {
@@ -443,6 +445,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Revoked ' + id + '. Refreshing…');
           await load();
         } catch (err) {
+          if (err && err.name === 'AbortError') {
+            const refreshed = await load();
+            showBanner(
+              'Revocation outcome is unknown after the request timed out. ' +
+                (refreshed ? 'The key list was refreshed. ' : "We couldn't refresh the key list. ") +
+                'If ' +
+                id +
+                ' is gone or shows revoked, revocation completed; do not submit it again. If it still shows active, retry the revocation.',
+            );
+            return;
+          }
           const msg = requestErrorMessage(err, 'network error');
           showBanner("Couldn't revoke (" + msg + ').');
         } finally {
