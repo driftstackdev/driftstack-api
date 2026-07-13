@@ -70,6 +70,7 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
     ...(createdBefore.length > 0 ? { createdBefore: `${createdBefore}T00:00:00Z` } : {}),
   });
   const cancel = useCancelOrder();
+  const cancellationInFlight = cancel.state.kind === 'submitting';
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [cancelConfirmFor, setCancelConfirmFor] = useState<string | null>(null);
   const cancelDialogRef = useRef<HTMLDivElement>(null);
@@ -292,9 +293,15 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (cancellationInFlight) return;
                                 setCancelConfirmFor(o.order_id);
                               }}
-                              disabled={isCancellingThis}
+                              disabled={cancellationInFlight}
+                              title={
+                                cancellationInFlight && !isCancellingThis
+                                  ? 'Wait for the active order cancellation to finish.'
+                                  : undefined
+                              }
                               className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-inset disabled:opacity-50"
                               aria-label={`Cancel order ${o.order_id}`}
                             >

@@ -335,6 +335,59 @@ describe('V-534.Z CryptoOrdersHistoryView — cancel button', () => {
     );
     expect(cancelCalls.length).toBe(1);
   });
+
+  it('disables every cancel affordance while one order cancellation is pending', async () => {
+    let releaseCancel: (response: Response) => void = () => {};
+    const pendingCancel = new Promise<Response>((resolve) => {
+      releaseCancel = resolve;
+    });
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url.endsWith('/cancel') && init?.method === 'POST') {
+        return pendingCancel;
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [
+              sample({ order_id: 'ord_first', status: 'pending' }),
+              sample({ order_id: 'ord_second', status: 'pending' }),
+            ],
+          }),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView />);
+    const first = await waitFor(() =>
+      screen.getByRole('button', { name: /Cancel order ord_first/i }),
+    );
+    const second = screen.getByRole('button', { name: /Cancel order ord_second/i });
+
+    fireEvent.click(first);
+    fireEvent.click(await screen.findByRole('button', { name: /Confirm cancel/i }));
+    await waitFor(() => expect(first).toBeDisabled());
+    expect(first).toHaveTextContent('Cancelling…');
+    expect(second).toBeDisabled();
+    expect(second).toHaveTextContent('Cancel');
+    expect(second).toHaveAttribute('title', 'Wait for the active order cancellation to finish.');
+
+    fireEvent.click(second);
+    expect(screen.queryByRole('dialog', { name: /Confirm order cancellation/i })).toBeNull();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          typeof url === 'string' && url.endsWith('/cancel') && init?.method === 'POST',
+      ),
+    ).toHaveLength(1);
+
+    releaseCancel({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(sample({ order_id: 'ord_first', status: 'cancelled' })),
+    } as unknown as Response);
+    await waitFor(() => expect(second).not.toBeDisabled());
+  });
 });
 
 describe('V-534.AE CryptoOrdersHistoryView — row selection opens detail', () => {
