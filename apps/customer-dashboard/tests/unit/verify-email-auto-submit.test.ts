@@ -32,4 +32,11 @@ describe('V-184a.B verify-email page — URL-token auto-submit', () => {
     // The form's submit handler must still exist as a fallback.
     expect(PAGE).toContain("form.addEventListener('submit'");
   });
+
+  it('does not auto-replay a one-shot token after an ambiguous timeout', () => {
+    expect(PAGE).toContain('let verifyOutcomeUnknown = false;');
+    expect(PAGE).toContain('verifyInFlight || verifyOutcomeUnknown');
+    expect(PAGE).toContain('Do not submit this token again.');
+    expect(PAGE).toContain('data-link="verify-timeout-login"');
+  });
 });

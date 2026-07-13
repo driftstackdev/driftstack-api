@@ -26,6 +26,22 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
 
+      <div
+        data-verify-unknown
+        class="mb-5 rounded-lg border border-tk-border bg-tk-surface px-4 py-4 text-sm text-tk-ink-2"
+        hidden
+      >
+        <a
+          data-link="verify-timeout-login"
+          href="/login"
+          class="btn-primary flex w-full items-center justify-center"
+          >Continue to sign in</a
+        >
+        <p class="mt-3 text-xs text-tk-ink-3">
+          If sign-in says the account is still unverified, use “Resend verification email” below.
+        </p>
+      </div>
+
       <!-- Issue 3 wave 1085+ — when ?token= is present in the URL
            (the link in the verification email), the form below is
            HIDDEN and the page shows "Verifying… one moment" while
@@ -106,6 +122,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const emailEl = root.querySelector('[data-field="email"]');
       const tokenInput = root.querySelector('#verify-token');
+      const unknownRecovery = root.querySelector('[data-verify-unknown]');
+      const unknownLoginLink = root.querySelector('[data-link="verify-timeout-login"]');
 
       const email = sessionStorage.getItem('ds_signup_email');
       if (email && emailEl) emailEl.textContent = email;
@@ -152,17 +170,22 @@ const apiBaseUrl = resolveApiBaseUrl();
       const verifySubmitText = verifySubmit ? verifySubmit.textContent : '';
       const VERIFY_REQUEST_TIMEOUT_MS = 15_000;
       let verifyInFlight = false;
+      let verifyOutcomeUnknown = false;
       function setVerifyBusy(busy) {
         form.setAttribute('aria-busy', busy ? 'true' : 'false');
-        if (tokenInput) tokenInput.disabled = busy;
+        if (tokenInput) tokenInput.disabled = busy || verifyOutcomeUnknown;
         if (verifySubmit) {
-          verifySubmit.disabled = busy;
-          verifySubmit.textContent = busy ? 'Verifying…' : verifySubmitText;
+          verifySubmit.disabled = busy || verifyOutcomeUnknown;
+          verifySubmit.textContent = busy
+            ? 'Verifying…'
+            : verifyOutcomeUnknown
+              ? 'Verification outcome unknown'
+              : verifySubmitText;
         }
       }
 
       function submitToken(token) {
-        if (verifyInFlight) return Promise.resolve(false);
+        if (verifyInFlight || verifyOutcomeUnknown) return Promise.resolve(false);
         verifyInFlight = true;
         setVerifyBusy(true);
         banner.classList.add('hidden');
@@ -205,12 +228,29 @@ const apiBaseUrl = resolveApiBaseUrl();
             window.location.href = rawNext ? next : '/welcome';
           })
           .catch((err) => {
+            if (controller.signal.aborted) {
+              verifyOutcomeUnknown = true;
+              if (formEl) formEl.hidden = true;
+              if (spinnerEl) spinnerEl.hidden = true;
+              if (unknownRecovery) unknownRecovery.hidden = false;
+              if (introEl) introEl.textContent = 'Email-verification outcome unknown';
+              const rawNext = params.get('next');
+              const next = safeNextPath(rawNext, window.location.origin);
+              if (unknownLoginLink) {
+                unknownLoginLink.setAttribute(
+                  'href',
+                  rawNext ? '/login?next=' + encodeURIComponent(next) : '/login',
+                );
+              }
+              showBanner(
+                'Email-verification outcome is unknown after the request timed out. The server may already have verified your account, consumed this one-time token, and created a session whose credential did not reach this browser. Do not submit this token again. Continue to sign in; if the account is still unverified, resend the verification email below.',
+              );
+              return;
+            }
             showBanner(
-              controller.signal.aborted
-                ? 'Verification took too long. Check your connection and try again.'
-                : err && err.message
-                  ? err.message
-                  : 'Verification failed.',
+              err && err.message
+                ? err.message
+                : 'Verification failed.',
             );
             // If auto-verify (link-click) failed, reveal the manual
             // fallback form so the user has a recovery path.

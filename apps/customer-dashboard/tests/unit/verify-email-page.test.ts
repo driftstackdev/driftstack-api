@@ -155,7 +155,7 @@ describe('verify-email page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
   });
 
-  it('bounds auto-verification and restores the manual fallback after timeout', async () => {
+  it('makes an ambiguous auto-verification timeout terminal for the one-shot token', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       url: TOKEN_URL,
       requestTimeoutImmediately: true,
@@ -173,14 +173,22 @@ describe('verify-email page — local integration', () => {
 
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
-    expect(attrHidden(window, '[data-form="verify"]')).toBe(false);
+    expect(attrHidden(window, '[data-form="verify"]')).toBe(true);
     expect(attrHidden(window, '[data-field="auto-verify-spinner"]')).toBe(true);
+    expect(attrHidden(window, '[data-verify-unknown]')).toBe(false);
     const form = window.document.querySelector('[data-form="verify"]') as HTMLFormElement;
     expect(form.getAttribute('aria-busy')).toBe('false');
-    expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+    expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /verification took too long.*check your connection/i,
+      /outcome is unknown.*verified your account.*consumed this one-time token.*credential did not reach this browser.*do not submit this token again.*continue to sign in.*still unverified.*resend/i,
     );
+    expect(
+      window.document.querySelector('[data-link="verify-timeout-login"]')?.getAttribute('href'),
+    ).toBe('/login');
+
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
   });
 
   it('no token: shows the manual fallback form on load (spinner hidden, no fetch)', async () => {

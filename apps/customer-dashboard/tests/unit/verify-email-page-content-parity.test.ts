@@ -49,10 +49,13 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
 
   it('auto and manual verification share one accessible request lease', () => {
     expect(body).toMatch(/let verifyInFlight = false;/);
-    expect(body).toMatch(/if \(verifyInFlight\) return Promise\.resolve\(false\);/);
+    expect(body).toMatch(/let verifyOutcomeUnknown = false;/);
+    expect(body).toMatch(
+      /if \(verifyInFlight \|\| verifyOutcomeUnknown\) return Promise\.resolve\(false\);/,
+    );
     expect(body).toMatch(/verifyInFlight = true;/);
     expect(body).toMatch(/form\.setAttribute\('aria-busy', busy \? 'true' : 'false'\)/);
-    expect(body).toMatch(/verifySubmit\.textContent = busy \? 'Verifying…' : verifySubmitText/);
+    expect(body).toMatch(/verifySubmit\.disabled = busy \|\| verifyOutcomeUnknown/);
     expect(body).toMatch(
       /\.finally\(\(\) => \{\s*(?:clearTimeout\(timeoutId\);\s*)?verifyInFlight = false;/,
     );
@@ -64,7 +67,11 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), VERIFY_REQUEST_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
-    expect(body).toMatch(/Verification took too long/);
+    expect(body).toContain('Email-verification outcome is unknown after the request timed out.');
+    expect(body).toContain('consumed this one-time token');
+    expect(body).toContain('Do not submit this token again.');
+    expect(body).toContain('Continue to sign in');
+    expect(body).toContain('Resend verification email');
   });
 
   it('POST /v1/auth/verify-email wired client + registered server-side (credentials:"include")', () => {
