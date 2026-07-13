@@ -235,9 +235,8 @@ const EMAIL_EVENTS = [
       ciphertext is AES-256-GCM encrypted with MFA_ENCRYPTION_KEY
       server-side; plaintext leaves the browser exactly once on PUT.
       Three actions surface here: Save (PUT), Test (POST /test), Clear
-      (DELETE). The GET /byok-anthropic-key endpoint returns metadata
-      only (set_at + masked prefix) — never the plaintext, even to
-      the owner.
+      (DELETE). The GET /byok-anthropic-key endpoint returns status and
+      timestamps only — never the plaintext or a prefix, even to the owner.
     */}
     <section class="dashboard-card mt-6" data-region="byok-anthropic">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
@@ -274,8 +273,8 @@ const EMAIL_EVENTS = [
             Active
           </span>
           <span class="text-sm text-tk-ink-2">
-            Key set <time data-byok-set-at>—</time>; prefix
-            <code class="font-mono text-xs text-tk-ink" data-byok-prefix>—</code>
+            Key set <time data-byok-set-at>—</time>; last used
+            <time data-byok-last-used-at>never</time>
           </span>
         </div>
       </div>
@@ -785,8 +784,8 @@ const EMAIL_EVENTS = [
       //   Save → PUT /v1/account/me/byok-anthropic-key
       //   Test → POST /v1/account/me/byok-anthropic-key/test
       //   Clear → DELETE /v1/account/me/byok-anthropic-key
-      // Status fetch on load: GET returns metadata only (set_at +
-      // masked prefix); never plaintext. Plaintext goes over the
+      // Status fetch on load: GET returns metadata only (has_key +
+      // set_at + last_used_at); never plaintext or a prefix. Plaintext goes over the
       // wire exactly once (Save), never re-displayed.
       const byokForm = document.querySelector('[data-byok-form]');
       const byokInput = document.querySelector('#byok-key');
@@ -801,10 +800,12 @@ const EMAIL_EVENTS = [
       const byokStateError = document.querySelector('[data-byok-state="error"]');
       const byokRetryBtn = document.querySelector('[data-byok-retry]');
       const byokSetAt = document.querySelector('[data-byok-set-at]');
-      const byokPrefix = document.querySelector('[data-byok-prefix]');
+      const byokLastUsedAt = document.querySelector('[data-byok-last-used-at]');
       let byokSaveInFlight = false;
       let byokTestInFlight = false;
       let byokClearInFlight = false;
+      let byokMetadata = { hasKey: false, setAt: null, lastUsedAt: null };
+      let byokMetadataKnown = false;
 
       function byokShowState(name) {
         [byokStateLoading, byokStateEmpty, byokStateSet, byokStateError].forEach((el) => {
@@ -843,17 +844,30 @@ const EMAIL_EVENTS = [
           })
           .then((body) => {
             byokHideError();
-            if (body === null || !body.key_set) {
+            if (body === null || body.has_key !== true) {
+              byokMetadata = { hasKey: false, setAt: null, lastUsedAt: null };
+              byokMetadataKnown = true;
               byokShowState('empty');
-              return;
+              return byokMetadata;
             }
-            if (byokSetAt && body.set_at) {
-              const d = new Date(body.set_at);
-              byokSetAt.dateTime = d.toISOString();
-              byokSetAt.textContent = d.toISOString().slice(0, 10);
+            const setAt = typeof body.set_at === 'string' ? body.set_at : null;
+            const lastUsedAt = typeof body.last_used_at === 'string' ? body.last_used_at : null;
+            byokMetadata = { hasKey: true, setAt, lastUsedAt };
+            byokMetadataKnown = true;
+            if (byokSetAt) {
+              const d = setAt ? new Date(setAt) : null;
+              byokSetAt.dateTime = d && !Number.isNaN(d.getTime()) ? d.toISOString() : '';
+              byokSetAt.textContent =
+                d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : 'unknown';
             }
-            if (byokPrefix && body.key_prefix) byokPrefix.textContent = body.key_prefix;
+            if (byokLastUsedAt) {
+              const d = lastUsedAt ? new Date(lastUsedAt) : null;
+              byokLastUsedAt.dateTime = d && !Number.isNaN(d.getTime()) ? d.toISOString() : '';
+              byokLastUsedAt.textContent =
+                d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : 'never';
+            }
             byokShowState('set');
+            return byokMetadata;
           })
           .catch((err) => {
             // S35 2026-07-07 (fable-frontend-audit) — a load FAILURE is
@@ -861,6 +875,7 @@ const EMAIL_EVENTS = [
             // with a stored key "No key on file" on any transient non-2xx.
             byokShowError(requestErrorMessage(err, 'network error'));
             byokShowState('error');
+            return undefined;
           });
       }
 
@@ -877,6 +892,9 @@ const EMAIL_EVENTS = [
             return;
           }
           byokHideError();
+          const previousMetadataKnown = byokMetadataKnown;
+          const previousHadKey = byokMetadata.hasKey;
+          const previousSetAt = byokMetadata.setAt;
           byokSaveInFlight = true;
           if (byokSaveBtn) {
             byokSaveBtn.disabled = true;
@@ -905,7 +923,35 @@ const EMAIL_EVENTS = [
               if (byokInput) byokInput.value = '';
               return loadByokAnthropic();
             })
-            .catch((err) => byokShowError(requestErrorMessage(err, 'network error')))
+            .catch(async (err) => {
+              if (err && err.name === 'AbortError') {
+                const refreshed = await loadByokAnthropic();
+                const priorMs = previousSetAt === null ? null : Date.parse(previousSetAt);
+                const nextMs = refreshed?.setAt ? Date.parse(refreshed.setAt) : Number.NaN;
+                const advanced =
+                  previousMetadataKnown &&
+                  refreshed?.hasKey === true &&
+                  Number.isFinite(nextMs) &&
+                  (!previousHadKey ||
+                    (priorMs !== null && Number.isFinite(priorMs) && nextMs > priorMs));
+                if (advanced) {
+                  byokInput.value = '';
+                  byokShowError(
+                    'The save likely completed before the response timed out: the stored-key timestamp advanced. Test the stored key before relying on it; do not save again unless that test fails.',
+                  );
+                } else if (refreshed !== undefined) {
+                  byokShowError(
+                    'The save outcome is still unknown after the timeout; stored-key metadata did not advance. Your input is retained. Wait a moment, check the stored status, and retry only if it remains unchanged.',
+                  );
+                } else {
+                  byokShowError(
+                    'The save outcome is unknown after the timeout, and stored-key status could not be refreshed. Your input is retained. Check the status before retrying.',
+                  );
+                }
+                return;
+              }
+              byokShowError(requestErrorMessage(err, 'network error'));
+            })
             .finally(() => {
               byokSaveInFlight = false;
               if (byokSaveBtn) {

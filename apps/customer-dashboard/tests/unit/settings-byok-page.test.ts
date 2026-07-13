@@ -26,11 +26,11 @@ interface MockFetchCall {
 interface ByokState {
   set: boolean;
   set_at: string;
-  key_prefix: string;
+  last_used_at: string | null;
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -84,12 +84,12 @@ async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-// Permissive router with a mutable BYOK holder. byok GET → 404 when
-// empty, else the metadata; PUT sets it; DELETE clears it; /test → ok.
+// Permissive router with a mutable BYOK holder. BYOK GET mirrors the
+// metadata-only API contract; PUT sets it; DELETE clears it; /test → ok.
 function makeRouter(
   byok: ByokState,
   opts: { testOk?: boolean } = {},
-): (c: MockFetchCall) => Response {
+): (c: MockFetchCall) => Response | Promise<Response> {
   return (call: MockFetchCall): Response => {
     const method = (call.init?.method || 'GET').toUpperCase();
     const u = call.url.replace(/^https?:\/\/[^/]+/, '');
@@ -99,7 +99,7 @@ function makeRouter(
     if (/\/v1\/account\/me\/byok-anthropic-key$/.test(u)) {
       if (method === 'PUT') {
         byok.set = true;
-        return json({ key_set: true, set_at: byok.set_at, key_prefix: byok.key_prefix });
+        return json({ set_at: byok.set_at });
       }
       if (method === 'DELETE') {
         byok.set = false;
@@ -107,8 +107,8 @@ function makeRouter(
       }
       // GET
       return byok.set
-        ? json({ key_set: true, set_at: byok.set_at, key_prefix: byok.key_prefix })
-        : json({}, 404);
+        ? json({ has_key: true, set_at: byok.set_at, last_used_at: byok.last_used_at })
+        : json({ has_key: false, set_at: null, last_used_at: null });
     }
     if (/\/v1\/account\/me$/.test(u) && method === 'GET') {
       return json({ email: 'me@example.com', name: 'Me', slug: 'me', region: 'eu' });
@@ -124,7 +124,7 @@ function newByok(over: Partial<ByokState> = {}): ByokState {
   return {
     set: false,
     set_at: '2026-05-20T10:00:00.000Z',
-    key_prefix: 'sk-ant-api03-abcd',
+    last_used_at: null,
     ...over,
   };
 }
@@ -137,7 +137,7 @@ describe('settings page — BYOK Anthropic key', () => {
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
-  it('load with no key (404): shows the empty state', async () => {
+  it('load with has_key=false: shows the empty state', async () => {
     const { window } = setUpDom(loadBuiltPage(), { route: makeRouter(newByok({ set: false })) });
     win = window;
     await flush();
@@ -145,17 +145,19 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(true);
   });
 
-  it('load with a stored key: shows the set state + the key prefix', async () => {
+  it('load with a stored key: consumes the API has_key contract and shows set/last-used metadata without a key prefix', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
-      route: makeRouter(newByok({ set: true, key_prefix: 'sk-ant-api03-XYZ' })),
+      route: makeRouter(newByok({ set: true, last_used_at: '2026-05-21T11:30:00.000Z' })),
     });
     win = window;
     await flush();
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
     expect(isHidden(window, '[data-byok-state="empty"]')).toBe(true);
-    expect(window.document.querySelector('[data-byok-prefix]')?.textContent).toBe(
-      'sk-ant-api03-XYZ',
+    expect(window.document.querySelector('[data-byok-set-at]')?.textContent).toBe('2026-05-20');
+    expect(window.document.querySelector('[data-byok-last-used-at]')?.textContent).toBe(
+      '2026-05-21',
     );
+    expect(window.document.querySelector('[data-byok-prefix]')).toBeNull();
   });
 
   it('save empty input: shows the "paste a key first" error, fires no PUT', async () => {
@@ -188,6 +190,73 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
   });
 
+  it('committed save followed by AbortError refreshes authoritative metadata, reports likely completion, and clears the plaintext field', async () => {
+    const byok = newByok({ set: false });
+    const base = makeRouter(byok);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/me\/byok-anthropic-key$/.test(call.url) && method === 'PUT') {
+          byok.set = true;
+          byok.set_at = '2026-05-20T10:05:00.000Z';
+          const error = new Error('response lost after commit');
+          error.name = 'AbortError';
+          return Promise.reject(error);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-byok-form]') as HTMLFormElement;
+    const input = window.document.querySelector('#byok-key') as HTMLInputElement;
+    input.value = 'sk-ant-api03-SECRET';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
+    expect(input.value).toBe('');
+    expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
+    expect(window.document.querySelector('[data-byok-set-at]')?.textContent).toBe('2026-05-20');
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
+      /save likely completed.*timestamp advanced.*Test the stored key.*do not save again/i,
+    );
+  });
+
+  it('uncommitted save timeout with unchanged metadata retains the plaintext and refuses to claim success', async () => {
+    const byok = newByok({ set: true });
+    const base = makeRouter(byok);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/me\/byok-anthropic-key$/.test(call.url) && method === 'PUT') {
+          const error = new Error('request timed out before commit');
+          error.name = 'AbortError';
+          return Promise.reject(error);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-byok-form]') as HTMLFormElement;
+    const input = window.document.querySelector('#byok-key') as HTMLInputElement;
+    input.value = 'sk-ant-api03-RETRY';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
+    expect(input.value).toBe('sk-ant-api03-RETRY');
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
+      /outcome is still unknown.*did not advance.*input is retained/i,
+    );
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).not.toMatch(
+      /likely completed/i,
+    );
+  });
+
   it('clear: confirm-gated DELETE then reload flips back to the empty state', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       confirmReturns: true,
@@ -212,7 +281,7 @@ describe('settings page — BYOK Anthropic key', () => {
   // JSON-parse error instead of the HTTP status.
   it('load failure (502 with an HTML body): shows the ERROR state — never "No key on file" — with the parse-safe HTTP status, and Try again recovers', async () => {
     let gatewayDown = true;
-    const base = makeRouter(newByok({ set: true, key_prefix: 'sk-ant-api03-XYZ' }));
+    const base = makeRouter(newByok({ set: true }));
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       route: (call) => {
         const method = (call.init?.method || 'GET').toUpperCase();
@@ -249,9 +318,7 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(getsAfter).toBe(getsBefore + 1);
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
     expect(isHidden(window, '[data-byok-state="error"]')).toBe(true);
-    expect(window.document.querySelector('[data-byok-prefix]')?.textContent).toBe(
-      'sk-ant-api03-XYZ',
-    );
+    expect(window.document.querySelector('[data-byok-set-at]')?.textContent).toBe('2026-05-20');
   });
 
   it('clear cancelled: no DELETE fired, the key stays set', async () => {

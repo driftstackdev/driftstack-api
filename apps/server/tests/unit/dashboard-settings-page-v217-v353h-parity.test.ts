@@ -70,7 +70,7 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
 
     expect(p).toMatch(/\/\/ V-352b — avatar upload handler\./);
     expect(p).toMatch(/\/\/ V-352b — avatar remove handler\./);
-    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{/);
+    expect(p).toMatch(/boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{/);
   });
 
   it("CRITICAL V-331b act-as header passthrough pinned in settings authedFetch. Drift would let team-RBAC customers update the wrong owner's settings.", () => {
@@ -102,7 +102,7 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
   it('CRITICAL POST /v1/account/me profile-update endpoint pinned. Drift to a different endpoint would break the V-352c profile form.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me', \{/);
+    expect(p).toMatch(/boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me', \{/);
   });
 
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used.', () => {

@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro');
+const BYOK_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-byok-anthropic.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -56,7 +57,9 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
   });
 
   it("V-352 + V-298a + V-298b profile form contract: PATCH /v1/account/me { name, timezone, slug?, region? } with null-on-empty + IANA timezone hint — pinned so the 4-field profile mutation contract stays consistent (drift to dropping null-on-empty would force customers to keep filling fields they've cleared; drift to dropping region would orphan the V-298b data-residency preference UI)", () => {
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*\n?\s*method: 'PATCH',/);
+    expect(body).toMatch(
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*\n?\s*method: 'PATCH',/,
+    );
     expect(body).toMatch(
       /name: name\.length > 0 \? name : null,\s*\n?\s*timezone: tz\.length > 0 \? tz : null,/,
     );
@@ -82,10 +85,10 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(/if \(file\.size > 2 \* 1024 \* 1024\) \{/);
     expect(body).toMatch(/if \(!\/\^image\\\/\(png\|jpeg\|webp\)\$\/\.test\(file\.type\)\) \{/);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*\n?\s*method: 'POST',/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*\n?\s*method: 'DELETE',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/account\/me\/avatar', \{\s*\n?\s*method: 'DELETE',/,
     );
   });
 
@@ -104,5 +107,16 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
+  });
+
+  it('BYOK card and API share the metadata-only has_key/set_at/last_used_at response contract', () => {
+    const route = read(BYOK_ROUTE);
+    expect(route).toMatch(
+      /return \{\s*\n?\s*has_key: meta\.hasKey,\s*\n?\s*set_at: meta\.setAt \? meta\.setAt\.toISOString\(\) : null,\s*\n?\s*last_used_at: meta\.lastUsedAt \? meta\.lastUsedAt\.toISOString\(\) : null,\s*\n?\s*\};/,
+    );
+    expect(body).toMatch(/body\.has_key !== true/);
+    expect(body).toMatch(/body\.set_at/);
+    expect(body).toMatch(/body\.last_used_at/);
+    expect(body).not.toMatch(/body\.key_set|body\.key_prefix|data-byok-prefix/);
   });
 });

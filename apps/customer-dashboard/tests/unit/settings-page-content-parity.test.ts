@@ -101,4 +101,16 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toMatch(/const noticeGeneration = showBanner\('Email preference saved\.'\)/);
     expect(body).toMatch(/hideBanner\(noticeGeneration\)/);
   });
+
+  it('BYOK status consumes the metadata-only API contract and reconciles an ambiguous save by set_at version', () => {
+    expect(body).toMatch(/body\.has_key !== true/);
+    expect(body).toMatch(/typeof body\.set_at === 'string'/);
+    expect(body).toMatch(/typeof body\.last_used_at === 'string'/);
+    expect(body).not.toMatch(/body\.key_set/);
+    expect(body).not.toMatch(/body\.key_prefix/);
+    expect(body).not.toMatch(/data-byok-prefix/);
+    expect(body).toMatch(/const previousSetAt = byokMetadata\.setAt/);
+    expect(body).toMatch(/nextMs > priorMs/);
+    expect(body).toMatch(/The save likely completed before the response timed out/);
+  });
 });
