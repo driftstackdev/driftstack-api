@@ -65,6 +65,28 @@ export interface ConsumeResult {
   retryAfterMs: number;
 }
 
+/** Exact rolling-window input for low-frequency absolute ceilings. Unlike a
+ * token bucket, this primitive never replenishes capacity before the oldest
+ * accepted event leaves the full window. */
+export interface SlidingWindowConsumeOpts {
+  key: string;
+  limit: number;
+  windowMs: number;
+  now: number;
+}
+
+export interface SlidingWindowConsumeResult extends ConsumeResult {
+  /** Epoch milliseconds when every currently retained event has expired. */
+  resetAtMs: number;
+}
+
+/** Optional exact-window capability implemented by the distributed Redis
+ * store and its deterministic memory test counterpart. Callers that require
+ * an absolute ceiling must detect its absence and fail closed. */
+export interface SlidingWindowRateLimitStore {
+  consumeSlidingWindow(opts: SlidingWindowConsumeOpts): Promise<SlidingWindowConsumeResult>;
+}
+
 // W199 — capacity + reset hints surfaced to the middleware so customer
 // rate-limit headers (`x-ratelimit-limit`, `x-ratelimit-reset`,
 // `x-ratelimit-bucket`) match the contract documented at

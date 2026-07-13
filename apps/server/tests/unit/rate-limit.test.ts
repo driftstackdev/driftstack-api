@@ -134,6 +134,43 @@ describe('MemoryRateLimitStore.consume', () => {
   });
 });
 
+describe('MemoryRateLimitStore.consumeSlidingWindow', () => {
+  it('does not replenish an absolute ceiling before the oldest event leaves the window', async () => {
+    const store = new MemoryRateLimitStore();
+    const base = { key: 'daily', limit: 25, windowMs: 86_400_000 };
+    for (let i = 0; i < 25; i++) {
+      await expect(store.consumeSlidingWindow({ ...base, now: i * 60_000 })).resolves.toMatchObject(
+        { allowed: true, remaining: 24 - i },
+      );
+    }
+
+    await expect(
+      store.consumeSlidingWindow({ ...base, now: 23 * 60 * 60 * 1000 }),
+    ).resolves.toMatchObject({ allowed: false, remaining: 0 });
+    await expect(
+      store.consumeSlidingWindow({ ...base, now: 24 * 60 * 60 * 1000 }),
+    ).resolves.toMatchObject({ allowed: true, remaining: 0 });
+  });
+
+  it('keeps keys independent and reset clears exact-window history', async () => {
+    const store = new MemoryRateLimitStore();
+    const opts = { limit: 1, windowMs: 1000, now: 0 };
+    await expect(store.consumeSlidingWindow({ ...opts, key: 'a' })).resolves.toMatchObject({
+      allowed: true,
+    });
+    await expect(store.consumeSlidingWindow({ ...opts, key: 'a' })).resolves.toMatchObject({
+      allowed: false,
+    });
+    await expect(store.consumeSlidingWindow({ ...opts, key: 'b' })).resolves.toMatchObject({
+      allowed: true,
+    });
+    store.reset();
+    await expect(store.consumeSlidingWindow({ ...opts, key: 'a' })).resolves.toMatchObject({
+      allowed: true,
+    });
+  });
+});
+
 describe('bucketConfigFor', () => {
   it('returns tier-specific bucket when defined', () => {
     const cfg = bucketConfigFor('api_scale', 'sessions:create');

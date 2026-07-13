@@ -119,6 +119,58 @@ describe('V-251 — IP rate limit on auth endpoints', () => {
     }
   });
 
+  it('signup: the absolute ceiling does not replenish early inside its rolling 24-hour window', async () => {
+    fx = await buildTestApp();
+    const ip = '203.0.113.73';
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const start = Date.now();
+      for (let i = 0; i < 25; i++) {
+        vi.setSystemTime(start + i * 60_000);
+        const res = await fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/signup',
+          headers,
+          remoteAddress: ip,
+          payload: {
+            email: `rolling-ceiling-${i.toString()}@example.test`,
+            password: 'correct horse battery staple',
+          },
+        });
+        expect(res.statusCode).not.toBe(429);
+      }
+
+      vi.setSystemTime(start + 23 * 60 * 60 * 1000);
+      const beforeExpiry = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/signup',
+        headers,
+        remoteAddress: ip,
+        payload: {
+          email: 'rolling-ceiling-before-expiry@example.test',
+          password: 'correct horse battery staple',
+        },
+      });
+      expect(beforeExpiry.statusCode).toBe(429);
+
+      vi.setSystemTime(start + 24 * 60 * 60 * 1000);
+      const atExpiry = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/signup',
+        headers,
+        remoteAddress: ip,
+        payload: {
+          email: 'rolling-ceiling-at-expiry@example.test',
+          password: 'correct horse battery staple',
+        },
+      });
+      expect(atExpiry.statusCode).not.toBe(429);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('signup: daily-ceiling headers surface remaining/reset independently of the burst-bucket headers, decrementing across 25 requests (security audit 2026-07-01 fix #2)', async () => {
     fx = await buildTestApp();
     const ip = '203.0.113.71';
@@ -165,13 +217,13 @@ describe('V-251 — IP rate limit on auth endpoints', () => {
   it('signup: daily-ceiling store error fails CLOSED (denies the request) instead of silently granting a fresh fallback allotment (security audit 2026-07-01 fix #1)', async () => {
     fx = await buildTestApp();
     const ip = '203.0.113.72';
-    const originalConsume = fx.rateLimitStore.consume.bind(fx.rateLimitStore);
+    const originalConsume = fx.rateLimitStore.consumeSlidingWindow.bind(fx.rateLimitStore);
     // Simulate a Redis-store error, but ONLY for the daily-ceiling bucket
     // key — the burst bucket (a distinct key, `auth-ip:signup:<ip>`) keeps
     // working normally, isolating exactly the behavior under test: what
     // happens when the DAILY check's own store call throws.
-    fx.rateLimitStore.consume = (opts) => {
-      if (opts.key.includes('-daily:')) {
+    fx.rateLimitStore.consumeSlidingWindow = (opts) => {
+      if (opts.key.includes('-daily-window:')) {
         return Promise.reject(new Error('simulated redis outage'));
       }
       return originalConsume(opts);

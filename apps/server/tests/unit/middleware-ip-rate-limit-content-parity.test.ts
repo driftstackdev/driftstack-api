@@ -171,8 +171,25 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('imports: RateLimitedError + RateLimitStore type', () => {
     expect(body).toMatch(/import \{ RateLimitedError \} from '\.\.\/lib\/errors\.js';/);
+    expect(body).toMatch(/ConsumeResult,/);
+    expect(body).toMatch(/RateLimitStore,/);
+    expect(body).toMatch(/SlidingWindowConsumeResult,/);
+    expect(body).toMatch(/SlidingWindowRateLimitStore,/);
+  });
+
+  it('signup daily ceiling uses an exact sliding window and fails closed without the capability', () => {
+    expect(body).toMatch(/const MILLISECONDS_PER_DAY = SECONDS_PER_DAY \* 1000;/);
+    expect(body).toMatch(/interface DailyCeilingConfig \{/);
+    expect(body).toMatch(/bucketPrefix: `\$\{bucketPrefix\}-daily-window`,/);
+    expect(body).toMatch(/Reusing that key would make the ZSET script fail WRONGTYPE/);
+    expect(body).toMatch(/windowMs: MILLISECONDS_PER_DAY,/);
+    expect(body).toMatch(/function hasSlidingWindowCapability\(/);
     expect(body).toMatch(
-      /import type \{ ConsumeResult, RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
+      /throw new Error\('rate-limit store lacks exact sliding-window support'\);/,
+    );
+    expect(body).toMatch(/result = await store\.consumeSlidingWindow\(consumeArgs\);/);
+    expect(body).toMatch(
+      /reply\.header\('x-ratelimit-daily-reset', Math\.ceil\(result\.resetAtMs \/ 1000\)\.toString\(\)\);/,
     );
   });
 

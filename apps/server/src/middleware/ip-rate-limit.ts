@@ -18,7 +18,12 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { RateLimitedError } from '../lib/errors.js';
-import type { ConsumeResult, RateLimitStore } from '../services/rate-limit.js';
+import type {
+  ConsumeResult,
+  RateLimitStore,
+  SlidingWindowConsumeResult,
+  SlidingWindowRateLimitStore,
+} from '../services/rate-limit.js';
 import { BoundedMemoryRateLimitStore } from '../lib/bounded-memory-rate-limit-store.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
@@ -256,17 +261,14 @@ export const AUTH_IP_LIMITS = {
 // 12s indefinitely — ~7,200 signups/day from one IP, unattended, since
 // nothing anywhere tracks "total signups from this IP today".
 //
-// DAILY_IP_CEILINGS closes that gap with a SECOND, independent consume
-// against its own bucket key (`${prefix}-daily:${ip}`) — additional to,
-// never a replacement for, the burst bucket above. It's sized so the
-// bucket can only regain its full capacity over a rolling 24h window
-// (capacity == the daily cap; refillPerSecond == capacity / 86400). A
-// rolling window is used instead of a fixed calendar-day counter so
-// there's no reset-boundary doubling gap (N requests at 23:59 + N more
-// at 00:01 would double a fixed-window cap in under 2 minutes; a rolling
-// bucket has no such seam). Reuses the exact same RateLimitStore/token-
-// bucket primitive as the burst bucket above — no new store type, no
-// INCR/TTL bookkeeping needed.
+// DAILY_IP_CEILINGS closes that gap with a SECOND, independent exact
+// sliding-window consume against its own key (`${prefix}-daily-window:${ip}`) —
+// additional to, never a replacement for, the burst bucket above. The store
+// retains accepted event timestamps for 24 hours and atomically refuses event
+// 26 until the oldest accepted event expires. A fixed calendar-day counter
+// would have a reset-boundary doubling gap (N requests at 23:59 + N more at
+// 00:01); a continuously-refilling capacity-25 token bucket is also incorrect
+// because it can accept nearly 49 events in its first 24 hours.
 //
 // Only `signup` is gated for now — the highest-value farming target
 // (mints a usable account + DB row per call). 25/day/IP comfortably
@@ -285,22 +287,38 @@ const DAILY_IP_CEILINGS: Partial<Record<string, number>> = {
 };
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
+const MILLISECONDS_PER_DAY = SECONDS_PER_DAY * 1000;
 
-function dailyCeilingConfigFor(bucketPrefix: string): IpRateLimitConfig | null {
-  const capacity = DAILY_IP_CEILINGS[bucketPrefix];
-  if (capacity === undefined) {
+interface DailyCeilingConfig {
+  bucketPrefix: string;
+  limit: number;
+  windowMs: number;
+}
+
+function dailyCeilingConfigFor(bucketPrefix: string): DailyCeilingConfig | null {
+  const limit = DAILY_IP_CEILINGS[bucketPrefix];
+  if (limit === undefined) {
     return null;
   }
   return {
-    bucketPrefix: `${bucketPrefix}-daily`,
-    capacity,
-    refillPerSecond: capacity / SECONDS_PER_DAY,
+    // Versioned away from the former `${bucketPrefix}-daily` token-bucket HASH.
+    // Reusing that key would make the ZSET script fail WRONGTYPE for every IP
+    // until the legacy key's ~24h TTL elapsed.
+    bucketPrefix: `${bucketPrefix}-daily-window`,
+    limit,
+    windowMs: MILLISECONDS_PER_DAY,
   };
+}
+
+function hasSlidingWindowCapability(
+  store: RateLimitStore,
+): store is RateLimitStore & SlidingWindowRateLimitStore {
+  return 'consumeSlidingWindow' in store && typeof store.consumeSlidingWindow === 'function';
 }
 
 async function enforceDailyIpCeiling(
   store: RateLimitStore,
-  dailyCfg: IpRateLimitConfig,
+  dailyCfg: DailyCeilingConfig,
   ip: string,
   req: FastifyRequest,
   reply: FastifyReply,
@@ -308,14 +326,16 @@ async function enforceDailyIpCeiling(
 ): Promise<void> {
   const consumeArgs = {
     key: `${dailyCfg.bucketPrefix}:${ip}`,
-    capacity: dailyCfg.capacity,
-    refillPerSecond: dailyCfg.refillPerSecond,
-    cost: 1,
+    limit: dailyCfg.limit,
+    windowMs: dailyCfg.windowMs,
     now: Date.now(),
   };
-  let result: ConsumeResult;
+  let result: SlidingWindowConsumeResult;
   try {
-    result = await store.consume(consumeArgs);
+    if (!hasSlidingWindowCapability(store)) {
+      throw new Error('rate-limit store lacks exact sliding-window support');
+    }
+    result = await store.consumeSlidingWindow(consumeArgs);
   } catch (err) {
     // Security audit 2026-07-01 fix — deliberately DIVERGES from the burst
     // bucket's posture above. The burst bucket degrades to the bounded
@@ -325,8 +345,8 @@ async function enforceDailyIpCeiling(
     // SECOND gate layered on top of an already-enforced burst bucket (which
     // ran first, allowed this request, and keeps its own fallback
     // protection independent of this code path) — so failing CLOSED here
-    // doesn't remove rate-limiting during an outage, it only makes the
-    // 24h-scale daily cap temporarily unenforced-but-safe.
+    // doesn't remove rate-limiting during an outage; it makes signup
+    // temporarily unavailable rather than silently bypassing the absolute cap.
     //
     // Falling back to `ipFallbackStore` here (as W384 originally did,
     // uniformly, for every ip-rate-limit gate) would be actively wrong for
@@ -360,14 +380,8 @@ async function enforceDailyIpCeiling(
   // per-minute gate). Without this, a high-volume-IP customer got zero
   // advance warning before the abrupt 429 on request #(capacity + 1) —
   // only the terminal denial set `retry-after`.
-  const dailyNowSec = Math.floor(Date.now() / 1000);
-  const dailyTokensNeededForFull = dailyCfg.capacity - result.remaining;
-  const dailySecondsToFull =
-    dailyTokensNeededForFull > 0 && dailyCfg.refillPerSecond > 0
-      ? Math.ceil(dailyTokensNeededForFull / dailyCfg.refillPerSecond)
-      : 0;
-  reply.header('x-ratelimit-daily-remaining', Math.floor(result.remaining).toString());
-  reply.header('x-ratelimit-daily-reset', (dailyNowSec + dailySecondsToFull).toString());
+  reply.header('x-ratelimit-daily-remaining', result.remaining.toString());
+  reply.header('x-ratelimit-daily-reset', Math.ceil(result.resetAtMs / 1000).toString());
 
   if (!result.allowed) {
     const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));

@@ -24,6 +24,8 @@
 //   • Lua return: [allowedFlag (1|0), remaining, retryAfterMs].
 //   • reset() method on memory store (clear Map) — tests call this
 //     between scenarios.
+//   • exact sliding-window parity: memory timestamp arrays + one-key Redis
+//     sorted-set Lua; no capacity replenishes before an event leaves the window.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -57,6 +59,7 @@ describe('W393.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
   it('MemoryRateLimitStore: implements RateLimitStore + private buckets Map', () => {
     expect(body).toMatch(/export class MemoryRateLimitStore implements RateLimitStore \{/);
     expect(body).toMatch(/private readonly buckets = new Map<string, BucketState>\(\);/);
+    expect(body).toMatch(/private readonly slidingWindows = new Map<string, number\[]>\(\);/);
   });
 
   it('consume: existing-or-default {tokens=capacity, lastRefillMs=now} for first hit', () => {
@@ -89,14 +92,29 @@ describe('W393.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
     );
   });
 
-  it('reset(): clears the bucket Map (tests call between scenarios)', () => {
-    expect(body).toMatch(/reset\(\): void \{\s*\n?\s*this\.buckets\.clear\(\);\s*\n?\s*\}/);
+  it('consumeSlidingWindow retains only in-window timestamps, refuses at limit, and reports exact reset', () => {
+    expect(body).toMatch(
+      /async consumeSlidingWindow\(opts: SlidingWindowConsumeOpts\): Promise<SlidingWindowConsumeResult>/,
+    );
+    expect(body).toMatch(/\(acceptedAt\) => acceptedAt > cutoff/);
+    expect(body).toMatch(/if \(retained\.length >= opts\.limit\) \{/);
+    expect(body).toMatch(/retryAfterMs: Math\.max\(1, oldest \+ opts\.windowMs - opts\.now\)/);
+    expect(body).toMatch(/remaining: opts\.limit - retained\.length/);
   });
 
-  it('imports: ConsumeOpts + ConsumeResult + RateLimitStore from services/rate-limit.js', () => {
+  it('reset(): clears token buckets and exact-window history', () => {
     expect(body).toMatch(
-      /import type \{ ConsumeOpts, ConsumeResult, RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
+      /reset\(\): void \{\s*\n?\s*this\.buckets\.clear\(\);\s*\n?\s*this\.slidingWindows\.clear\(\);\s*\n?\s*\}/,
     );
+  });
+
+  it('imports token-bucket and sliding-window contracts from services/rate-limit.js', () => {
+    expect(body).toMatch(/ConsumeOpts,/);
+    expect(body).toMatch(/ConsumeResult,/);
+    expect(body).toMatch(/RateLimitStore,/);
+    expect(body).toMatch(/SlidingWindowConsumeOpts,/);
+    expect(body).toMatch(/SlidingWindowConsumeResult,/);
+    expect(body).toMatch(/from '\.\.\/services\/rate-limit\.js';/);
   });
 
   it('file exists at canonical path', () => {
@@ -166,6 +184,18 @@ describe('W393.A apps/server/src/lib/redis-rate-limit-store.ts content parity', 
     expect(body).toMatch(/constructor\(private readonly redis: Redis\) \{\}/);
   });
 
+  it('exact sliding-window Lua atomically prunes/counts/adds one-key ZSET members and preserves same-ms uniqueness', () => {
+    expect(body).toMatch(/import \{ randomUUID \} from 'node:crypto';/);
+    expect(body).toMatch(/const SLIDING_WINDOW_LUA = `/);
+    expect(body).toMatch(/redis\.call\('ZREMRANGEBYSCORE', key, '-inf', cutoff\)/);
+    expect(body).toMatch(/local count = redis\.call\('ZCARD', key\)/);
+    expect(body).toMatch(/if count >= limit then/);
+    expect(body).toMatch(/redis\.call\('ZADD', key, now_ms, member\)/);
+    expect(body).toMatch(/redis\.call\('PEXPIRE', key, ttl_ms\)/);
+    expect(body).toMatch(/randomUUID\(\),/);
+    expect(body).toMatch(/\)\) as \[number, number, number, number\];/);
+  });
+
   it('consume: redis.eval(LUA, 1, key, capacity, refillPerSecond, cost, now) — 1 KEY + 4 ARGV', () => {
     expect(body).toMatch(
       /const result = \(await this\.redis\.eval\(\s*\n?\s*LUA,\s*\n?\s*1,\s*\n?\s*opts\.key,\s*\n?\s*opts\.capacity\.toString\(\),\s*\n?\s*opts\.refillPerSecond\.toString\(\),\s*\n?\s*opts\.cost\.toString\(\),\s*\n?\s*opts\.now\.toString\(\),\s*\n?\s*\)\) as \[number, number, number\];/,
@@ -178,11 +208,10 @@ describe('W393.A apps/server/src/lib/redis-rate-limit-store.ts content parity', 
     );
   });
 
-  it('imports: Redis type from ioredis + ConsumeOpts/ConsumeResult/RateLimitStore from services/rate-limit.js', () => {
+  it('imports Redis plus token-bucket and sliding-window contracts', () => {
     expect(body).toMatch(/import type \{ Redis \} from 'ioredis';/);
-    expect(body).toMatch(
-      /import type \{ ConsumeOpts, ConsumeResult, RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
-    );
+    expect(body).toMatch(/SlidingWindowConsumeOpts,/);
+    expect(body).toMatch(/SlidingWindowConsumeResult,/);
   });
 
   it('file exists at canonical path', () => {

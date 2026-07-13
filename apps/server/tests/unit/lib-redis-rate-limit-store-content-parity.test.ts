@@ -39,11 +39,11 @@ describe('W440.B apps/server/src/lib/redis-rate-limit-store.ts content parity', 
     );
   });
 
-  it('imports: Redis type from ioredis + ConsumeOpts/ConsumeResult/RateLimitStore from services/rate-limit.js', () => {
+  it('imports: UUID members + Redis + token-bucket/exact-window contracts', () => {
+    expect(body).toMatch(/import \{ randomUUID \} from 'node:crypto';/);
     expect(body).toMatch(/import type \{ Redis \} from 'ioredis';/);
-    expect(body).toMatch(
-      /import type \{ ConsumeOpts, ConsumeResult, RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
-    );
+    expect(body).toMatch(/SlidingWindowConsumeOpts,/);
+    expect(body).toMatch(/SlidingWindowConsumeResult,/);
   });
 
   it('Lua KEYS[1] + ARGV[1..4] decode (capacity / refill_per_sec / cost / now_ms via tonumber)', () => {
@@ -86,6 +86,16 @@ describe('W440.B apps/server/src/lib/redis-rate-limit-store.ts content parity', 
     expect(body).toMatch(
       /const \[allowedFlag, remaining, retryAfterMs\] = result;\s*\n?\s*return \{\s*\n?\s*allowed: allowedFlag === 1,\s*\n?\s*remaining,\s*\n?\s*retryAfterMs,\s*\n?\s*\};/,
     );
+  });
+
+  it('consumeSlidingWindow is one atomic, one-key ZSET EVAL with a unique same-ms member', () => {
+    expect(body).toMatch(/const SLIDING_WINDOW_LUA = `/);
+    expect(body).toMatch(/redis\.call\('ZREMRANGEBYSCORE', key, '-inf', cutoff\)/);
+    expect(body).toMatch(/local count = redis\.call\('ZCARD', key\)/);
+    expect(body).toMatch(/if count >= limit then/);
+    expect(body).toMatch(/redis\.call\('ZADD', key, now_ms, member\)/);
+    expect(body).toMatch(/randomUUID\(\),/);
+    expect(body).toMatch(/const \[allowedFlag, remaining, retryAfterMs, resetAtMs\] = result;/);
   });
 
   it('file exists at canonical path', () => {

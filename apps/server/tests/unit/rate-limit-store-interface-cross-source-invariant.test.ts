@@ -108,6 +108,19 @@ describe('W913 RateLimit store interface cross-source invariant', () => {
     );
   });
 
+  it('CRITICAL exact ceilings use a separate optional SlidingWindowRateLimitStore capability with resetAtMs; ordinary token-bucket callers keep the one-method interface', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/rate-limit.ts'));
+    expect(p).toMatch(/export interface SlidingWindowConsumeOpts \{/);
+    expect(p).toMatch(/limit: number;/);
+    expect(p).toMatch(/windowMs: number;/);
+    expect(p).toMatch(
+      /export interface SlidingWindowConsumeResult extends ConsumeResult \{[\s\S]+?resetAtMs: number;/,
+    );
+    expect(p).toMatch(
+      /export interface SlidingWindowRateLimitStore \{\s*\n?\s*consumeSlidingWindow\(opts: SlidingWindowConsumeOpts\): Promise<SlidingWindowConsumeResult>;/,
+    );
+  });
+
   // ─── bucketConfigFor reads TIER_RATE_LIMIT_DEFAULTS ──────────
 
   it('CRITICAL bucketConfigFor reads TIER_RATE_LIMIT_DEFAULTS[tier] + bucketKey-specific entry OR fallback to global. The V-219 source-of-truth pinned via the api-types canonical record.', () => {

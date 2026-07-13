@@ -37,10 +37,12 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
     );
   });
 
-  it('imports ConsumeOpts/ConsumeResult/RateLimitStore types from services/rate-limit.js', () => {
-    expect(body).toMatch(
-      /import type \{ ConsumeOpts, ConsumeResult, RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
-    );
+  it('imports token-bucket and exact-window contracts from services/rate-limit.js', () => {
+    expect(body).toMatch(/ConsumeOpts,/);
+    expect(body).toMatch(/ConsumeResult,/);
+    expect(body).toMatch(/RateLimitStore,/);
+    expect(body).toMatch(/SlidingWindowConsumeOpts,/);
+    expect(body).toMatch(/SlidingWindowConsumeResult,/);
   });
 
   it('BucketState interface: tokens + lastRefillMs', () => {
@@ -53,6 +55,7 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
     expect(body).toMatch(
       /export class MemoryRateLimitStore implements RateLimitStore \{\s*\n?\s*private readonly buckets = new Map<string, BucketState>\(\);/,
     );
+    expect(body).toMatch(/private readonly slidingWindows = new Map<string, number\[]>\(\);/);
   });
 
   it('consume(): first-touch bucket initialized to capacity (not zero) on Map miss; lastRefillMs = now on initialization', () => {
@@ -83,8 +86,17 @@ describe('W440.A apps/server/src/lib/memory-rate-limit-store.ts content parity',
     );
   });
 
-  it('reset(): clears bucket Map (for tests)', () => {
-    expect(body).toMatch(/reset\(\): void \{\s*\n?\s*this\.buckets\.clear\(\);\s*\n?\s*\}/);
+  it('exact sliding window refuses at the limit until the oldest retained timestamp expires', () => {
+    expect(body).toMatch(/async consumeSlidingWindow\(/);
+    expect(body).toMatch(/\(acceptedAt\) => acceptedAt > cutoff/);
+    expect(body).toMatch(/if \(retained\.length >= opts\.limit\) \{/);
+    expect(body).toMatch(/remaining: opts\.limit - retained\.length/);
+  });
+
+  it('reset(): clears bucket Map and sliding-window history (for tests)', () => {
+    expect(body).toMatch(
+      /reset\(\): void \{\s*\n?\s*this\.buckets\.clear\(\);\s*\n?\s*this\.slidingWindows\.clear\(\);\s*\n?\s*\}/,
+    );
   });
 
   it('file exists at canonical path', () => {

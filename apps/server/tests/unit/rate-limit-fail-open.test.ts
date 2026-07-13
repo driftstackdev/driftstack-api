@@ -73,4 +73,25 @@ describe('W384 ip-rate-limit degrades to a bounded fallback on a primary-store e
       limiter: 'ip',
     });
   });
+
+  it('fails closed when an absolute daily ceiling is configured but the store lacks exact-window support', async () => {
+    const burstOnlyStore: RateLimitStore = {
+      consume: () =>
+        Promise.resolve({
+          allowed: true,
+          remaining: 4,
+          retryAfterMs: 0,
+        }),
+    };
+    const { req, warn } = makeReq('203.0.113.201');
+    const reply = { header: vi.fn() } as unknown as FastifyReply;
+    const handler = ipRateLimit(burstOnlyStore, {
+      bucketPrefix: 'auth-ip:signup',
+      capacity: 5,
+      refillPerSecond: 5 / 60,
+    });
+
+    await expect(handler(req, reply)).rejects.toMatchObject({ status: 429 });
+    expect(warn.mock.calls.at(-1)?.[1]).toMatch(/failing CLOSED/);
+  });
 });

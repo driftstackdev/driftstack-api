@@ -8,8 +8,15 @@
 // The whole script runs as a single Redis command (EVAL), so concurrent
 // callers cannot race.
 
+import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
-import type { ConsumeOpts, ConsumeResult, RateLimitStore } from '../services/rate-limit.js';
+import type {
+  ConsumeOpts,
+  ConsumeResult,
+  RateLimitStore,
+  SlidingWindowConsumeOpts,
+  SlidingWindowConsumeResult,
+} from '../services/rate-limit.js';
 
 const LUA = `
 local key = KEYS[1]
@@ -54,6 +61,38 @@ redis.call('EXPIRE', key, ttl)
 return {0, refilled, retry_after_ms}
 `;
 
+// Exact rolling-window ceiling. The sorted set contains only accepted event
+// timestamps from the current window. Prune/count/conditional-add happens in
+// one Lua invocation, so concurrent instances cannot both claim the final slot.
+// A caller-generated UUID keeps same-millisecond members distinct without a
+// second Redis key (and therefore without a Redis Cluster cross-slot hazard).
+const SLIDING_WINDOW_LUA = `
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local now_ms = tonumber(ARGV[3])
+local member = ARGV[4]
+local cutoff = now_ms - window_ms
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', cutoff)
+local count = redis.call('ZCARD', key)
+local ttl_ms = window_ms + 60000
+
+if count >= limit then
+  local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+  local newest = redis.call('ZREVRANGE', key, 0, 0, 'WITHSCORES')
+  local retry_after_ms = math.max(1, math.ceil(tonumber(oldest[2]) + window_ms - now_ms))
+  local reset_at_ms = math.ceil(tonumber(newest[2]) + window_ms)
+  redis.call('PEXPIRE', key, ttl_ms)
+  return {0, 0, retry_after_ms, reset_at_ms}
+end
+
+redis.call('ZADD', key, now_ms, member)
+redis.call('PEXPIRE', key, ttl_ms)
+local newest = redis.call('ZREVRANGE', key, 0, 0, 'WITHSCORES')
+return {1, limit - count - 1, 0, math.ceil(tonumber(newest[2]) + window_ms)}
+`;
+
 export class RedisRateLimitStore implements RateLimitStore {
   constructor(private readonly redis: Redis) {}
 
@@ -73,6 +112,26 @@ export class RedisRateLimitStore implements RateLimitStore {
       allowed: allowedFlag === 1,
       remaining,
       retryAfterMs,
+    };
+  }
+
+  async consumeSlidingWindow(opts: SlidingWindowConsumeOpts): Promise<SlidingWindowConsumeResult> {
+    const result = (await this.redis.eval(
+      SLIDING_WINDOW_LUA,
+      1,
+      opts.key,
+      opts.limit.toString(),
+      opts.windowMs.toString(),
+      opts.now.toString(),
+      randomUUID(),
+    )) as [number, number, number, number];
+
+    const [allowedFlag, remaining, retryAfterMs, resetAtMs] = result;
+    return {
+      allowed: allowedFlag === 1,
+      remaining,
+      retryAfterMs,
+      resetAtMs,
     };
   }
 }
