@@ -141,7 +141,9 @@ describe('V-534.T useCryptoOrder — error paths', () => {
     const { result } = renderHook(() => useCryptoOrder('ord_abc', { pollIntervalMs: 0 }));
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('HTTP 404');
+      expect(result.current.state.message).toBe(
+        'The requested item was not found. Refresh and try again.',
+      );
     }
   });
 });

@@ -165,15 +165,25 @@ describe('forgot-password page — local integration', () => {
     expect(isHidden(window, '[data-success]')).toBe(false);
   });
 
-  it('error (e.g. rate-limited): surfaces the server detail in the banner, form stays visible', async () => {
+  it('rate-limited error uses fixed retry guidance and keeps the form visible', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
-      fetchPlan: [() => json({ detail: 'Too many reset requests — try again later.' }, 429)],
+      fetchPlan: [
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/rate-limited',
+              detail: 'Too many reset requests — internal retry bucket=secret.',
+            },
+            429,
+          ),
+      ],
     });
     win = window;
     submit(window, 'spammy@example.com');
     await flush();
     expect(isHidden(window, '[data-banner]')).toBe(false);
-    expect(textOf(window, '[data-banner]')).toMatch(/Too many reset requests/);
+    expect(textOf(window, '[data-banner]')).toMatch(/usage limit was reached/i);
+    expect(textOf(window, '[data-banner]')).not.toMatch(/internal|secret/i);
     expect(isHidden(window, '[data-form]')).toBe(false);
     expect(isHidden(window, '[data-success]')).toBe(true);
   });

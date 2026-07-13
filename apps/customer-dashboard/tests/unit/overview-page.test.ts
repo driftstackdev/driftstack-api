@@ -329,7 +329,7 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(isHidden(window, '[data-subscription-card]')).toBe(true);
   });
 
-  it('account/me failure: surfaces the server detail in the banner', async () => {
+  it('account/me failure uses fixed sign-in guidance in the banner', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter({ meError: 'Your session has expired.', meStatus: 401 }),
@@ -337,7 +337,10 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     win = window;
     await flush();
     expect(isHidden(window, '[data-banner]')).toBe(false);
-    expect(text(window, '[data-banner]')).toContain('Your session has expired.');
+    expect(text(window, '[data-banner]')).toContain(
+      'Your sign-in could not be verified. Check your details and try again.',
+    );
+    expect(text(window, '[data-banner]')).not.toContain('Your session has expired.');
   });
 
   it('opacity-gate: dashboardHydrated() fires once account/me settles', async () => {

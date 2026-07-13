@@ -150,7 +150,7 @@ describe('V-534.Y useCancelOrder — error paths', () => {
     }
   });
 
-  it('surfaces the server detail on 409 (already past cancellable window)', async () => {
+  it('maps a 409 to fixed conflict guidance without reflecting server detail', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -170,11 +170,13 @@ describe('V-534.Y useCancelOrder — error paths', () => {
     });
     if (result.current.state.kind === 'failed') {
       expect(result.current.state.status).toBe(409);
-      expect(result.current.state.message).toMatch(/confirming/);
+      expect(result.current.state.message).toBe(
+        'The item changed or is busy. Refresh and try again.',
+      );
     }
   });
 
-  it('falls back to "HTTP <status>" when no detail body is parseable', async () => {
+  it('maps a non-JSON server failure to fixed service guidance', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -191,7 +193,9 @@ describe('V-534.Y useCancelOrder — error paths', () => {
     });
     if (result.current.state.kind === 'failed') {
       expect(result.current.state.status).toBe(500);
-      expect(result.current.state.message).toBe('HTTP 500');
+      expect(result.current.state.message).toBe(
+        'The service is temporarily unavailable. Try again shortly.',
+      );
     }
   });
 });

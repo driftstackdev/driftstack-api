@@ -124,7 +124,9 @@ describe('V-534.O useSessionsList — error paths', () => {
     const { result } = renderHook(() => useSessionsList());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('HTTP 500');
+      expect(result.current.state.message).toBe(
+        'The service is temporarily unavailable. Try again shortly.',
+      );
     }
   });
 

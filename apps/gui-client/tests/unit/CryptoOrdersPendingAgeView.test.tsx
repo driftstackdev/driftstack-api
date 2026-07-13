@@ -101,7 +101,7 @@ describe('V-534.AO CryptoOrdersPendingAgeView', () => {
     stubPendingAge({}, false, 403);
     render(<CryptoOrdersPendingAgeView />);
     await waitFor(() => {
-      expect(screen.getByText(/HTTP 403/)).toBeTruthy();
+      expect(screen.getByText(/do not have permission/i)).toBeTruthy();
     });
   });
 

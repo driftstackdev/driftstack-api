@@ -19,6 +19,16 @@ const messageFor = scope.window.driftstackRequestErrorMessage as (
   fallback: string,
 ) => string;
 
+const responseHelperBody = layout.match(
+  /window\.driftstackResponseError = function \(response, body\) \{[\s\S]*?\n        \};(?=\n        window\.driftstackFetchWithDeadline)/,
+)?.[0];
+if (!responseHelperBody) throw new Error('admin response-error helper not found');
+new Function('window', responseHelperBody)(scope.window);
+const responseError = scope.window.driftstackResponseError as (
+  response: { status: number },
+  body: unknown,
+) => Error & { staffSafe?: boolean; problemType?: string };
+
 describe('Admin shared request error copy', () => {
   it('maps native network, timeout, auth, conflict, rate, and service failures', () => {
     expect(
@@ -58,13 +68,42 @@ describe('Admin shared request error copy', () => {
     );
   });
 
+  it('maps stable response types to fixed staff copy without reflecting diagnostics', () => {
+    const error = responseError(
+      { status: 409 },
+      {
+        type: 'https://errors.driftstack.dev/profile-in-use',
+        detail: 'session=agt_secret node=mac-private path=/Users/operator',
+      },
+    );
+    expect(error.message).toBe('The profile already has a live session. End it before retrying.');
+    expect(error.staffSafe).toBe(true);
+    expect(error.problemType).toBe('https://errors.driftstack.dev/profile-in-use');
+    expect(error.message).not.toMatch(/agt_secret|mac-private|Users/i);
+  });
+
+  it('maps unknown and untyped responses by status without reflecting prose', () => {
+    const unknown = responseError(
+      { status: 500 },
+      { type: 'https://attacker.invalid/internal', detail: 'postgres://secret@internal' },
+    );
+    expect(unknown.message).toBe(
+      'The admin service is temporarily unavailable. Try again shortly.',
+    );
+    expect(unknown.problemType).toBeUndefined();
+
+    const untyped = responseError({ status: 418 }, { title: 'raw upstream response' });
+    expect(untyped.message).toBe('The request could not be completed. Check the input and retry.');
+  });
+
   it('is installed before slotted page scripts and marks response detail explicitly', () => {
     const helper = layout.indexOf('window.driftstackRequestErrorMessage');
     const slot = layout.lastIndexOf('<slot />');
     expect(helper).toBeGreaterThan(-1);
     expect(slot).toBeGreaterThan(helper);
     expect(layout).toContain('window.driftstackResponseError = function');
-    expect(layout).toContain('if (detail) error.staffSafe = true');
+    expect(layout).toContain('error.staffSafe = true');
+    expect(layout).toContain('if (kind) error.problemType = type');
   });
 
   it('is consumed by every audited AdminLayout page without raw exception fallbacks', () => {

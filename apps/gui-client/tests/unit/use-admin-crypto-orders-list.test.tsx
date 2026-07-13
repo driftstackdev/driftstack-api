@@ -137,7 +137,9 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
       expect(result.current.state.kind).toBe('error');
     });
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('HTTP 403');
+      expect(result.current.state.message).toBe(
+        'You do not have permission to perform this action.',
+      );
     }
   });
 

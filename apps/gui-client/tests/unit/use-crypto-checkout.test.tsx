@@ -197,7 +197,9 @@ describe('V-534.J useCryptoCheckout.start — error paths', () => {
       });
     });
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toMatch(/422/);
+      expect(result.current.state.message).toBe(
+        'The request could not be completed. Check your input and try again.',
+      );
     } else {
       throw new Error('expected error state');
     }

@@ -282,7 +282,7 @@ describe('V-534.AD CryptoOrderDetailView', () => {
     );
     render(<CryptoOrderDetailView orderId="ord_missing" />);
     await waitFor(() => {
-      expect(screen.getByText(/HTTP 404/)).toBeTruthy();
+      expect(screen.getByText(/requested item was not found/i)).toBeTruthy();
     });
   });
 });

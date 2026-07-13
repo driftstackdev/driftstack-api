@@ -125,7 +125,7 @@ describe('V-534.AG CryptoOrdersAdminView', () => {
     );
     render(<CryptoOrdersAdminView />);
     await waitFor(() => {
-      expect(screen.getByText(/HTTP 403/)).toBeTruthy();
+      expect(screen.getByText(/do not have permission/i)).toBeTruthy();
     });
   });
 

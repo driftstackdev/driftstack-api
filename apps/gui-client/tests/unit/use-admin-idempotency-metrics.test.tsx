@@ -60,7 +60,9 @@ describe('V-534.BA useAdminIdempotencyMetrics', () => {
     const { result } = renderHook(() => useAdminIdempotencyMetrics());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toContain('403');
+      expect(result.current.state.message).toBe(
+        'You do not have permission to perform this action.',
+      );
     }
   });
 

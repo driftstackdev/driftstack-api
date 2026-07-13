@@ -78,7 +78,7 @@ describe('useAdminInternalNote', () => {
     expect(result.current.state.kind).toBe('succeeded');
   });
 
-  it('preserves HTTP status and API error copy', async () => {
+  it('preserves HTTP status with fixed API error copy', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -95,7 +95,7 @@ describe('useAdminInternalNote', () => {
       kind: 'failed',
       orderId: 'ord_1',
       status: 403,
-      message: 'HTTP 403',
+      message: 'You do not have permission to perform this action.',
     });
   });
 

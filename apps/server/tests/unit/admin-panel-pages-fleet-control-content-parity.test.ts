@@ -38,4 +38,10 @@ describe('admin fleet control single-flight feedback', () => {
     expect(body).toContain('do not send the command again blindly.');
     expect(body).toContain('Outcome unknown — verify, then reload');
   });
+
+  it('humanizes unknown control failures instead of rendering a raw HTTP status', () => {
+    expect(body).toContain("requestErrorMessage(\n                  new Error('HTTP ' + r.status)");
+    expect(body).toContain('the control request was not accepted');
+    expect(body).not.toContain("showBanner('Cannot ' + cmd + ' — HTTP '");
+  });
 });

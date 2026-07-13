@@ -108,9 +108,44 @@ const navItems = [
           return fallback;
         };
         window.driftstackResponseError = function (response, body) {
-          var detail = body && typeof body.detail === 'string' ? body.detail.trim() : '';
-          var error = new Error(detail || 'HTTP ' + response.status);
-          if (detail) error.staffSafe = true;
+          var prefix = 'https://errors.driftstack.dev/';
+          var type = body && typeof body.type === 'string' ? body.type : '';
+          var kind = type.indexOf(prefix) === 0 ? type.slice(prefix.length) : '';
+          var exact = {
+            'legal-acceptance-required': 'Required legal acceptance is missing for this operation.',
+            'mfa-step-up-required': 'Complete a fresh staff MFA challenge, then retry.',
+            'profile-in-use': 'The profile already has a live session. End it before retrying.',
+            'proxy-validation-failed': 'The proxy failed validation. Check its configuration and retry.',
+            'storage-quota-exceeded': 'The account has reached its profile-storage limit.',
+          };
+          var message = Object.prototype.hasOwnProperty.call(exact, kind) ? exact[kind] : '';
+          if (!message && ['unauthorized', 'invalid-key', 'revoked-key', 'expired-key'].indexOf(kind) !== -1) {
+            message = 'Staff sign-in has expired. Sign in again and retry.';
+          }
+          if (!message && ['rate-limited', 'concurrency-limit', 'tier-limit'].indexOf(kind) !== -1) {
+            message = 'A service limit was reached. Wait, review the account limits, and retry.';
+          }
+          if (!message && ['bad-request', 'validation-failed'].indexOf(kind) !== -1) {
+            message = 'Some information was not accepted. Check the form and retry.';
+          }
+          if (!message && ['conflict', 'pair-mode-conflict', 'pair-mode-invalid-transition'].indexOf(kind) !== -1) {
+            message = 'The resource changed or is busy. Refresh and retry.';
+          }
+          if (!message && kind === 'not-found') message = 'The requested admin resource was not found.';
+          if (!message && kind === 'forbidden') message = 'Staff admin scope is required for this action.';
+          if (!message && ['driver-error', 'driver-not-integrated', 'feature-unavailable', 'internal'].indexOf(kind) !== -1) {
+            message = 'The admin service is temporarily unavailable. Try again shortly.';
+          }
+          if (!message && response.status === 401) message = 'Staff sign-in has expired. Sign in again and retry.';
+          if (!message && response.status === 403) message = 'Staff admin scope is required for this action.';
+          if (!message && response.status === 404) message = 'The requested admin resource was not found.';
+          if (!message && response.status === 409) message = 'The resource changed or is busy. Refresh and retry.';
+          if (!message && response.status === 429) message = 'Too many requests. Wait a moment and retry.';
+          if (!message && response.status >= 500) message = 'The admin service is temporarily unavailable. Try again shortly.';
+          if (!message) message = 'The request could not be completed. Check the input and retry.';
+          var error = new Error(message);
+          error.staffSafe = true;
+          if (kind) error.problemType = type;
           return error;
         };
         window.driftstackFetchWithDeadline = function (url, init, timeoutMs, suppliedController) {

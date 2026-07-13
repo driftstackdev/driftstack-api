@@ -140,10 +140,19 @@ describe('verify-email page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_VERIFIED');
   });
 
-  it('auto-verify failure: reveals the manual fallback form + banner, stores no token', async () => {
+  it('auto-verify failure uses stable fixed copy and reveals the manual fallback', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       url: TOKEN_URL,
-      fetchPlan: [() => json({ detail: 'This verification link has expired.' }, 400)],
+      fetchPlan: [
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/invalid-auth-token',
+              detail: 'verification token lookup failed at auth.internal',
+            },
+            400,
+          ),
+      ],
     });
     win = window;
     await flush();
@@ -152,7 +161,10 @@ describe('verify-email page — local integration', () => {
     expect(attrHidden(window, '[data-field="auto-verify-spinner"]')).toBe(true);
     expect(bannerHidden(window)).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /This verification link has expired\./,
+      /link is invalid, expired, or already used/i,
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toMatch(
+      /auth\.internal/i,
     );
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
   });

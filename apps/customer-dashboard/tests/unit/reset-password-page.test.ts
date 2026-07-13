@@ -173,15 +173,25 @@ describe('reset-password page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_AFTER_RESET');
   });
 
-  it('expired / invalid token: surfaces the server detail in the banner, stores no token', async () => {
+  it('expired token uses stable fixed copy and stores no token', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       url: TOKEN_URL,
-      fetchPlan: [() => json({ detail: 'This reset link has expired.' }, 400)],
+      fetchPlan: [
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/invalid-auth-token',
+              detail: 'reset token hash missing at /private/auth.ts',
+            },
+            400,
+          ),
+      ],
     });
     win = window;
     submit(window, 'a-brand-new-password', 'a-brand-new-password');
     await flush();
-    expect(bannerText(window)).toMatch(/This reset link has expired\./);
+    expect(bannerText(window)).toMatch(/link is invalid, expired, or already used/i);
+    expect(bannerText(window)).not.toMatch(/private|auth\.ts/i);
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
   });
 

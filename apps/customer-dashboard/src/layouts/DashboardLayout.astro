@@ -280,9 +280,56 @@ const navSections: NavSection[] = [
           return fallback;
         };
         window.driftstackResponseError = function (response, body) {
-          var detail = body && typeof body.detail === 'string' ? body.detail.trim() : '';
-          var error = new Error(detail || 'HTTP ' + response.status);
-          if (detail) error.customerSafe = true;
+          var prefix = 'https://errors.driftstack.dev/';
+          var type = body && typeof body.type === 'string' ? body.type : '';
+          var kind = type.indexOf(prefix) === 0 ? type.slice(prefix.length) : '';
+          var exact = {
+            'email-already-registered': 'An account with this email already exists. Sign in instead.',
+            'email-not-verified': 'Verify your email address before signing in.',
+            'invalid-credentials': 'The email or password was not accepted.',
+            'invalid-auth-token': 'This link is invalid, expired, or already used.',
+            'legal-acceptance-required': 'Review and accept the required terms before continuing.',
+            'mfa-step-up-required': 'Confirm this action with a fresh authenticator code.',
+            'profile-in-use': 'End the profile’s other live session before launching it again.',
+            'proxy-validation-failed': 'The proxy could not be verified. Check its details and try again.',
+            'storage-quota-exceeded': 'Profile storage is full. Trim or delete a profile, then try again.',
+            'byok-anthropic-required': 'Connect your AI provider key in Settings, then try again.',
+            'bundled-llm-consent-required': 'Enable bundled AI in Settings or connect your own provider key.',
+            'bundled-llm-budget-exhausted': 'Your monthly AI budget has been reached. Review it in Settings.',
+          };
+          var message = Object.prototype.hasOwnProperty.call(exact, kind) ? exact[kind] : '';
+          if (!message && kind === 'unauthorized') {
+            message = 'Your sign-in could not be verified. Check your details and try again.';
+          }
+          if (!message && ['invalid-key', 'revoked-key', 'expired-key'].indexOf(kind) !== -1) {
+            message = 'Your sign-in has expired. Sign in again and retry.';
+          }
+          if (!message && ['rate-limited', 'concurrency-limit', 'tier-limit'].indexOf(kind) !== -1) {
+            message = 'A usage limit was reached. Wait a moment or review your plan, then try again.';
+          }
+          if (!message && ['bad-request', 'validation-failed'].indexOf(kind) !== -1) {
+            message = 'Some information was not accepted. Check your input and try again.';
+          }
+          if (!message && ['conflict', 'pair-mode-conflict', 'pair-mode-invalid-transition'].indexOf(kind) !== -1) {
+            message = 'The item changed or is busy. Refresh and try again.';
+          }
+          if (!message && kind === 'not-found') message = 'The requested item was not found. Refresh and try again.';
+          if (!message && kind === 'forbidden') message = 'You do not have permission to perform this action.';
+          if (!message && kind === 'session-destroyed') message = 'This session has ended and can no longer be used.';
+          if (!message && kind === 'session-timeout') message = 'The session took too long to respond. Try again.';
+          if (!message && ['driver-error', 'driver-not-integrated', 'feature-unavailable', 'internal'].indexOf(kind) !== -1) {
+            message = 'The service is temporarily unavailable. Try again shortly.';
+          }
+          if (!message && response.status === 401) message = 'Your sign-in could not be verified. Check your details and try again.';
+          if (!message && response.status === 403) message = 'You do not have permission to perform this action.';
+          if (!message && response.status === 404) message = 'The requested item was not found. Refresh and try again.';
+          if (!message && response.status === 409) message = 'The item changed or is busy. Refresh and try again.';
+          if (!message && response.status === 429) message = 'Too many attempts. Wait a moment and try again.';
+          if (!message && response.status >= 500) message = 'The service is temporarily unavailable. Try again shortly.';
+          if (!message) message = 'The request could not be completed. Check your input and try again.';
+          var error = new Error(message);
+          error.customerSafe = true;
+          if (kind) error.problemType = type;
           return error;
         };
         window.driftstackFetchWithDeadline = function (url, init, timeoutMs, suppliedController) {

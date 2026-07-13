@@ -216,7 +216,7 @@ describe('V-534.AI CryptoOrdersStatsCard', () => {
     );
     render(<CryptoOrdersStatsCard />);
     await waitFor(() => {
-      expect(screen.getByText(/HTTP 403/)).toBeTruthy();
+      expect(screen.getByText(/do not have permission/i)).toBeTruthy();
     });
   });
 });

@@ -303,15 +303,23 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(billingRead?.init?.signal?.aborted).toBe(true);
   });
 
-  it('Stripe buy-tier 503 (billing unwired): shows the "setup in progress" soft message', async () => {
+  it('Stripe buy-tier 503 uses fixed temporary-unavailable guidance', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
-      route: () => json({ detail: 'unwired' }, 503),
+      route: () =>
+        json(
+          {
+            type: 'https://errors.driftstack.dev/feature-unavailable',
+            detail: 'billing provider unwired at billing.internal',
+          },
+          503,
+        ),
     });
     win = window;
     clickFirst(window, '[data-action="buy-tier"]');
     await flush();
-    expect(text(window, '[data-banner]')).toContain('Billing setup is still in progress');
+    expect(text(window, '[data-banner]')).toContain('service is temporarily unavailable');
+    expect(text(window, '[data-banner]')).not.toContain('billing.internal');
   });
 
   it('crypto checkout without a token: prompts to sign in', async () => {

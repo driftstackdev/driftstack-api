@@ -128,7 +128,9 @@ describe('V-534.W useCryptoOrdersList — error paths', () => {
     const { result } = renderHook(() => useCryptoOrdersList());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('HTTP 500');
+      expect(result.current.state.message).toBe(
+        'The service is temporarily unavailable. Try again shortly.',
+      );
     }
   });
 });
@@ -157,7 +159,7 @@ describe('V-534.W useCryptoOrdersList — manual mode', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('V-534.BV surfaces problem+json detail on 400', async () => {
+  it('maps problem+json diagnostics to fixed input guidance on 400', async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve({
         ok: false,
@@ -173,7 +175,10 @@ describe('V-534.W useCryptoOrdersList — manual mode', () => {
     const { result } = renderHook(() => useCryptoOrdersList());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toContain('created_before must be strictly greater');
+      expect(result.current.state.message).toBe(
+        'The request could not be completed. Check your input and try again.',
+      );
+      expect(result.current.state.message).not.toContain('created_before');
     }
   });
 

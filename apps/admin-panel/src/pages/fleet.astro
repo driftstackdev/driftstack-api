@@ -453,7 +453,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           } else if (r.status === 503) {
             showBanner('Cannot ' + cmd + ': fleet control is not available on this server.');
           } else {
-            showBanner('Cannot ' + cmd + ' — HTTP ' + r.status + '.');
+            showBanner(
+              'Cannot ' +
+                cmd +
+                ': ' +
+                requestErrorMessage(
+                  new Error('HTTP ' + r.status),
+                  'the control request was not accepted',
+                ) +
+                '.',
+            );
           }
         } catch (err) {
           if (err && err.name === 'AbortError') {

@@ -176,15 +176,27 @@ describe('signup page — local integration', () => {
     expect(bannerText(window)).not.toMatch(/One or more fields failed validation/);
   });
 
-  it('generic error (no issues): falls back to the server detail string', async () => {
+  it('registered-email conflict uses stable fixed copy', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
-      fetchPlan: [() => json({ detail: 'Email already registered.' }, 409)],
+      fetchPlan: [
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/email-already-registered',
+              detail: 'duplicate row account_id=acct_secret',
+            },
+            409,
+          ),
+      ],
     });
     win = window;
     submitSignup(window, 'dupe@example.com', 'a-very-long-password');
     await flush();
     expect(bannerHidden(window)).toBe(false);
-    expect(bannerText(window)).toMatch(/Email already registered\./);
+    expect(bannerText(window)).toMatch(
+      /account with this email already exists.*sign in or reset your password/i,
+    );
+    expect(bannerText(window)).not.toMatch(/acct_secret/i);
     expect(window.sessionStorage.getItem('ds_signup_email')).toBeNull();
   });
 

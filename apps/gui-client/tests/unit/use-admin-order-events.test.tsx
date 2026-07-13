@@ -92,7 +92,9 @@ describe('V-534.BD useAdminOrderEvents', () => {
     const { result } = renderHook(() => useAdminOrderEvents('ord_a'));
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toContain('404');
+      expect(result.current.state.message).toBe(
+        'The requested item was not found. Refresh and try again.',
+      );
     }
   });
 

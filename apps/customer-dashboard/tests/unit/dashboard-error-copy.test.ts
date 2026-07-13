@@ -19,6 +19,16 @@ const messageFor = scope.window.driftstackRequestErrorMessage as (
   fallback: string,
 ) => string;
 
+const responseHelperBody = layout.match(
+  /window\.driftstackResponseError = function \(response, body\) \{[\s\S]*?\n        \};(?=\n        window\.driftstackFetchWithDeadline)/,
+)?.[0];
+if (!responseHelperBody) throw new Error('dashboard response-error helper not found');
+new Function('window', responseHelperBody)(scope.window);
+const responseError = scope.window.driftstackResponseError as (
+  response: { status: number },
+  body: unknown,
+) => Error & { customerSafe?: boolean; problemType?: string };
+
 describe('Dashboard shared request error copy', () => {
   it('maps network, timeout, auth, rate, and service failures', () => {
     expect(
@@ -45,6 +55,35 @@ describe('Dashboard shared request error copy', () => {
     expect(messageFor(safe, 'Fallback')).toBe('That provider key was rejected.');
     expect(messageFor(new Error('Unexpected token at /private/secret.json'), 'Fallback')).toBe(
       'Fallback',
+    );
+  });
+
+  it('maps stable response types to fixed copy and retains the branchable type', () => {
+    const error = responseError(
+      { status: 403 },
+      {
+        type: 'https://errors.driftstack.dev/email-not-verified',
+        detail: 'internal host=api.private token=secret',
+        title: 'DO NOT SHOW',
+      },
+    );
+    expect(error.message).toBe('Verify your email address before signing in.');
+    expect(error.customerSafe).toBe(true);
+    expect(error.problemType).toBe('https://errors.driftstack.dev/email-not-verified');
+    expect(error.message).not.toMatch(/internal|private|secret|DO NOT SHOW/i);
+  });
+
+  it('maps unknown and untyped responses by status without reflecting prose', () => {
+    const unknown = responseError(
+      { status: 500 },
+      { type: 'https://attacker.invalid/internal', detail: '/private/db password=secret' },
+    );
+    expect(unknown.message).toBe('The service is temporarily unavailable. Try again shortly.');
+    expect(unknown.problemType).toBeUndefined();
+
+    const untyped = responseError({ status: 400 }, { detail: 'SQLSTATE 23505' });
+    expect(untyped.message).toBe(
+      'The request could not be completed. Check your input and try again.',
     );
   });
 

@@ -103,7 +103,7 @@ describe('magic-link consume page', () => {
 
   it('keeps an authoritative HTTP failure retryable through the paste form', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), [
-      () => json({ detail: 'Temporary sign-in failure.' }, 503),
+      () => json({ detail: 'Temporary sign-in failure at auth.internal.' }, 503),
       () => json({ session: { token: 'web_after_retry' } }),
     ]);
     win = window;
@@ -113,7 +113,10 @@ describe('magic-link consume page', () => {
     expect(form.classList.contains('hidden')).toBe(false);
     expect(tokenInput.value).toBe('magic_tok_123');
     expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
-      'Temporary sign-in failure.',
+      'The service is temporarily unavailable. Try again shortly.',
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toContain(
+      'auth.internal',
     );
 
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));

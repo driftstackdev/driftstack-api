@@ -111,7 +111,9 @@ describe('V-534.Q useAccountMe — error paths', () => {
     const { result } = renderHook(() => useAccountMe());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('HTTP 401');
+      expect(result.current.state.message).toBe(
+        'Your sign-in or API key was not accepted. Check Settings and try again.',
+      );
     }
   });
 

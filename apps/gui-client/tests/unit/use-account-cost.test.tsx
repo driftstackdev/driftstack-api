@@ -110,7 +110,9 @@ describe('V-534.H useAccountCost — error paths', () => {
     const { result } = renderHook(() => useAccountCost());
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toContain('500');
+      expect(result.current.state.message).toBe(
+        'The service is temporarily unavailable. Try again shortly.',
+      );
     }
   });
 

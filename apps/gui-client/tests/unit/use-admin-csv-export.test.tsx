@@ -226,7 +226,9 @@ describe('V-534.AX useAdminCsvExport', () => {
     });
     expect(result.current.state.kind).toBe('failed');
     if (result.current.state.kind === 'failed') {
-      expect(result.current.state.message).toContain('403');
+      expect(result.current.state.message).toBe(
+        'You do not have permission to perform this action.',
+      );
     }
   });
 

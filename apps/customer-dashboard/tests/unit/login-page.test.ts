@@ -236,7 +236,14 @@ describe('login page — local integration', () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       fetchPlan: [
         () => json({ mfa_required: true, challenge_token: 'chal_retry' }),
-        () => json({ detail: 'Code is invalid. Try again or use a recovery code.' }, 401),
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/unauthorized',
+              detail: 'Code is invalid at auth.internal. Try again or use a recovery code.',
+            },
+            401,
+          ),
         () => json({ session: { token: 'ds_web_MFA_RETRY' } }),
       ],
     });
@@ -250,7 +257,8 @@ describe('login page — local integration', () => {
     await flush();
 
     expect(mfaForm.classList.contains('hidden')).toBe(false);
-    expect(bannerText(window)).toMatch(/code is invalid.*try again/i);
+    expect(bannerText(window)).toMatch(/sign-in could not be verified.*try again/i);
+    expect(bannerText(window)).not.toMatch(/auth\.internal/i);
     codeInput.value = '123456';
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
@@ -264,15 +272,25 @@ describe('login page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MFA_RETRY');
   });
 
-  it('invalid credentials: surfaces the server detail in the banner, stores no token', async () => {
+  it('invalid credentials use stable fixed copy and store no token', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
-      fetchPlan: [() => json({ detail: 'Invalid email or password.' }, 401)],
+      fetchPlan: [
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/invalid-credentials',
+              detail: 'credential lookup failed at auth.internal',
+            },
+            401,
+          ),
+      ],
     });
     win = window;
     submitLogin(window, 'bad@example.com', 'wrong');
     await flush();
     expect(bannerHidden(window)).toBe(false);
-    expect(bannerText(window)).toMatch(/Invalid email or password\./);
+    expect(bannerText(window)).toMatch(/email or password was not accepted/i);
+    expect(bannerText(window)).not.toMatch(/auth\.internal/i);
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
   });
 

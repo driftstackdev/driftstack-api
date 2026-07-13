@@ -158,7 +158,7 @@ describe('V-534.AH CryptoOrdersDailyBreakdownView', () => {
     );
     render(<CryptoOrdersDailyBreakdownView />);
     await waitFor(() => {
-      expect(screen.getByText(/HTTP 403/)).toBeTruthy();
+      expect(screen.getByText(/do not have permission/i)).toBeTruthy();
     });
   });
 });

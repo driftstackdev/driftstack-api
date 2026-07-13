@@ -177,7 +177,9 @@ describe('V-534.AA useCryptoReceipt — fetch', () => {
     const { result } = renderHook(() => useCryptoReceipt('ord_404'));
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('HTTP 404');
+      expect(result.current.state.message).toBe(
+        'The requested item was not found. Refresh and try again.',
+      );
     }
   });
 });

@@ -242,7 +242,7 @@ describe('V-534.X CryptoOrdersHistoryView', () => {
     render(<CryptoOrdersHistoryView />);
     await waitFor(() => {
       // ErrorBanner renders the message text somewhere visible.
-      expect(screen.getByText(/HTTP 500/)).toBeTruthy();
+      expect(screen.getByText(/service is temporarily unavailable/i)).toBeTruthy();
     });
   });
 

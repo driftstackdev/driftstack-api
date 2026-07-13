@@ -142,7 +142,9 @@ describe('V-534.V useCryptoQuote — error paths', () => {
     const { result } = renderHook(() => useCryptoQuote({ product: 'solo_manual' }));
     await waitFor(() => expect(result.current.state.kind).toBe('error'));
     if (result.current.state.kind === 'error') {
-      expect(result.current.state.message).toBe('HTTP 400');
+      expect(result.current.state.message).toBe(
+        'The request could not be completed. Check your input and try again.',
+      );
     }
   });
 });
