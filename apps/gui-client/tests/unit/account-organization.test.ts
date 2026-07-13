@@ -5,6 +5,7 @@ import { fetchOrganization, saveOrganization } from '../../src/lib/account-organ
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('fetchOrganization', () => {
@@ -23,6 +24,7 @@ describe('fetchOrganization', () => {
     );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe('GET');
+    expect(init.signal).toBeTruthy();
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer ds_key');
     expect(org).toEqual({ folders: [{ name: 'Sales', icon: '🛒' }], tags: ['aged'] });
   });
@@ -52,6 +54,25 @@ describe('fetchOrganization', () => {
       vi.fn(() => Promise.resolve(new Response('nope', { status: 503 }))),
     );
     await expect(fetchOrganization('https://api.driftstack.dev', 'ds_key')).rejects.toThrow();
+  });
+
+  it('aborts a hung organization read after 15 seconds', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const pending = fetchOrganization('https://api.driftstack.dev', 'ds_key');
+    const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejection;
   });
 
   it('sends X-Driftstack-Account when an active workspace is passed (matches profile scope)', async () => {

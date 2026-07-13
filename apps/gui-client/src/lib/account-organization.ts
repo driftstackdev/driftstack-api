@@ -22,6 +22,16 @@ function orgUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, '')}/v1/account/me/organization`;
 }
 
+const ORGANIZATION_SYNC_TIMEOUT_MS = 15_000;
+
+function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => controller.abort(), ORGANIZATION_SYNC_TIMEOUT_MS);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    globalThis.clearTimeout(timer);
+  });
+}
+
 /** Builds the auth headers, adding the workspace scope header when a team
  *  workspace is active so the taxonomy resolves against the SAME account the
  *  profiles do (the SDK client sends this on every profile request). Without it
@@ -47,7 +57,7 @@ export async function fetchOrganization(
   apiKey: string,
   effectiveAccount: string | null = null,
 ): Promise<AccountOrganization> {
-  const res = await fetch(orgUrl(baseUrl), {
+  const res = await fetchWithDeadline(orgUrl(baseUrl), {
     method: 'GET',
     headers: orgHeaders(apiKey, effectiveAccount, { accept: 'application/json' }),
   });
@@ -73,7 +83,7 @@ export async function saveOrganization(
   org: AccountOrganization,
   effectiveAccount: string | null = null,
 ): Promise<void> {
-  const res = await fetch(orgUrl(baseUrl), {
+  const res = await fetchWithDeadline(orgUrl(baseUrl), {
     method: 'PUT',
     headers: orgHeaders(apiKey, effectiveAccount, { 'content-type': 'application/json' }),
     body: JSON.stringify(org),
