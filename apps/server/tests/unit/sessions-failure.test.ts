@@ -26,6 +26,13 @@ interface RecordedEvent {
   data: Record<string, unknown>;
 }
 
+interface RecordedLifecycleEvent {
+  accountId: string;
+  event:
+    | { kind: 'session.failed.first'; sessionId: string; errorMessage: string }
+    | { kind: 'session.success.first'; sessionId: string };
+}
+
 function buildCtx(): AccountContext {
   return {
     account: {
@@ -340,11 +347,13 @@ function buildService(): {
   repo: StubRepo;
   driver: ThrowingDriver;
   webhookEvents: RecordedEvent[];
+  lifecycleEvents: RecordedLifecycleEvent[];
   loggedErrors: LoggedError[];
 } {
   const repo = new StubRepo();
   const driver = new ThrowingDriver();
   const webhookEvents: RecordedEvent[] = [];
+  const lifecycleEvents: RecordedLifecycleEvent[] = [];
   const loggedErrors: LoggedError[] = [];
   const service = new SessionsService({
     repo,
@@ -355,13 +364,19 @@ function buildService(): {
         return Promise.resolve(1);
       },
     },
+    accountLifecycle: {
+      emit: (accountId, event) => {
+        lifecycleEvents.push({ accountId, event });
+        return Promise.resolve();
+      },
+    },
     logger: {
       error: (obj, msg) => {
         loggedErrors.push({ obj, msg });
       },
     },
   });
-  return { service, repo, driver, webhookEvents, loggedErrors };
+  return { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors };
 }
 
 describe('SessionsService — V-090 driver-failure capture', () => {
@@ -393,6 +408,59 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect(webhookEvents[0]?.eventType).toBe('session.failed');
     expect((webhookEvents[0]?.data as { operation: string }).operation).toBe('navigate');
     expect(webhookEvents[0]?.data.session_id).toBe(`ses_${session.id}`);
+  });
+
+  it('redacts and bounds every durable/customer failure diagnostic while rethrowing unchanged', async () => {
+    const { service, repo, driver, webhookEvents, lifecycleEvents } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const rawMessage =
+      'fetch https://user:pass@customer.example/hook?token=tok_live_secret ' +
+      'https://customer.example/cb#access_token=fragment_secret ' +
+      'Bearer bearer.secret+/== Basic dXNlcjpwYXNz ' +
+      'x'.repeat(2_000);
+    const rawName = 'DriverError Bearer bmFtZS1zZWNyZXQ=';
+    driver.primeNextThrow({ name: rawName, message: rawMessage });
+
+    let caught: unknown;
+    try {
+      await service.navigate(ctx, session.id, { url: 'https://example.com', wait_until: 'load' });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(rawMessage);
+    expect((caught as Error).name).toBe(rawName);
+
+    const stored = repo.events.find((event) => event.type === 'errored')?.payload as {
+      error_name: string;
+      error_message: string;
+    };
+    expect(stored.error_message.length).toBeLessThanOrEqual(500);
+    expect(stored.error_name.length).toBeLessThanOrEqual(100);
+    expect(stored.error_message).toContain('[redacted]');
+    expect(stored.error_name).toContain('[redacted]');
+    for (const secret of [
+      'user:pass',
+      'tok_live_secret',
+      'fragment_secret',
+      'bearer.secret',
+      'dXNlcjpwYXNz',
+      'bmFtZS1zZWNyZXQ',
+    ]) {
+      expect(stored.error_message).not.toContain(secret);
+      expect(stored.error_name).not.toContain(secret);
+    }
+
+    expect(webhookEvents[0]?.data).toMatchObject({
+      error_name: stored.error_name,
+      error_message: stored.error_message,
+    });
+    expect(lifecycleEvents[0]?.event).toMatchObject({
+      kind: 'session.failed.first',
+      errorMessage: stored.error_message,
+    });
   });
 
   it('subsequent op on errored session 410s without re-firing webhook', async () => {

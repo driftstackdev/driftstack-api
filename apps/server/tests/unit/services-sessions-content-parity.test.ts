@@ -272,6 +272,21 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
+  it('runWithFailureCapture: durable/customer diagnostics are centrally redacted and pre/post bounded while the original error is rethrown', () => {
+    expect(body).toMatch(/import \{ redactText \} from '\.\.\/lib\/redact-url\.js';/);
+    expect(body).toMatch(/const SESSION_FAILURE_MESSAGE_MAX_CHARS = 500;/);
+    expect(body).toMatch(/const SESSION_FAILURE_NAME_MAX_CHARS = 100;/);
+    expect(body).toMatch(/const bounded = value\.slice\(0, maxChars\);/);
+    expect(body).toMatch(/\(redactText\(bounded\) \|\| fallback\)\.slice\(0, maxChars\)/);
+    expect(body).toMatch(
+      /const errorMessage = safeSessionFailureDiagnostic\([\s\S]+?SESSION_FAILURE_MESSAGE_MAX_CHARS,[\s\S]+?'unknown driver failure',[\s\S]+?\);/,
+    );
+    expect(body).toMatch(
+      /const errorName = safeSessionFailureDiagnostic\([\s\S]+?SESSION_FAILURE_NAME_MAX_CHARS,[\s\S]+?'UnknownError',[\s\S]+?\);/,
+    );
+    expect(body).toMatch(/throw err;/);
+  });
+
   it("runWithFailureCapture: updateSessionStatus 'errored' + recordEvent 'errored' + re-throw original err (DB writes best-effort)", () => {
     expect(body).toMatch(
       /\/\/ Persist the failure state\. Errors here are swallowed so the\s*\n?\s*\/\/ original driver error still propagates to the caller — the DB\s*\n?\s*\/\/ write is best-effort, the user-facing error wins\./,

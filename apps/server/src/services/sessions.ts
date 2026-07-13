@@ -37,6 +37,27 @@ import {
   SessionDestroyedError,
 } from '../lib/errors.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
+import { redactText } from '../lib/redact-url.js';
+
+const SESSION_FAILURE_MESSAGE_MAX_CHARS = 500;
+const SESSION_FAILURE_NAME_MAX_CHARS = 100;
+
+function safeSessionFailureDiagnostic(value: string, maxChars: number, fallback: string): string {
+  // Driver errors cross durable + customer-visible boundaries below. Bound
+  // before redaction to avoid processing attacker-sized diagnostics, then
+  // bound again because replacement markers can expand short credentials.
+  const bounded = value.slice(0, maxChars);
+  return (redactText(bounded) || fallback).slice(0, maxChars);
+}
+
+function unknownFailureMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  try {
+    return String(err);
+  } catch {
+    return 'unknown driver failure';
+  }
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Concurrent session limits + profile count limits per tier
@@ -1108,11 +1129,16 @@ export class SessionsService {
       return await fn();
     } catch (err) {
       const erroredAt = new Date();
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : ((err as { toString?: () => string }).toString?.() ?? 'unknown driver failure');
-      const errorName = err instanceof Error ? err.name : 'UnknownError';
+      const errorMessage = safeSessionFailureDiagnostic(
+        unknownFailureMessage(err),
+        SESSION_FAILURE_MESSAGE_MAX_CHARS,
+        'unknown driver failure',
+      );
+      const errorName = safeSessionFailureDiagnostic(
+        err instanceof Error ? err.name : 'UnknownError',
+        SESSION_FAILURE_NAME_MAX_CHARS,
+        'UnknownError',
+      );
 
       // Persist the failure state. Errors here are swallowed so the
       // original driver error still propagates to the caller — the DB
