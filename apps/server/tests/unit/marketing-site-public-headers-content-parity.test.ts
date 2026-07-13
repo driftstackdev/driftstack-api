@@ -114,21 +114,23 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(catchAll).not.toMatch(/Cache-Control/);
   });
 
-  it("Catch-all /* — SECURITY HEADERS ONLY (S17 2026-07-04, matches the customer-dashboard pattern; the prior 'Catch-all for HTML pages' Cache-Control was the bug that defeated every immutable tier): X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy (sensor/payment deny) — pinned so the 4-security-header commitment survives (drift to dropping any security header would weaken the marketing-site security posture)", () => {
+  it('Catch-all /* — SECURITY HEADERS ONLY and each field is defined exactly once (S17 2026-07-04, matches the customer-dashboard pattern; Cloudflare merges matching rules, so repeating a field in / would duplicate it on the apex response): X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy (sensor/payment deny) — pinned so the 4-security-header commitment survives without ambiguous duplicate fields', () => {
     expect(body).toMatch(
       /# Catch-all — SECURITY HEADERS ONLY \(matches the customer-dashboard\s*\n?\s*# pattern\)\./,
     );
-    expect(body).toMatch(/^ {2}X-Frame-Options: DENY$/m);
-    expect(body).toMatch(/^ {2}X-Content-Type-Options: nosniff$/m);
-    expect(body).toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
+    expect(body.match(/^ {2}X-Frame-Options: DENY$/gm)).toHaveLength(1);
+    expect(body.match(/^ {2}X-Content-Type-Options: nosniff$/gm)).toHaveLength(1);
+    expect(body.match(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/gm)).toHaveLength(1);
     // 2026-06-05 — closed the 2026-05-20-csp-header-audit Permissions-Policy
     // gap (it shipped on dashboard/admin/status but not marketing/docs). The
     // marketing site uses none of these features (no getUserMedia / geolocation
     // / inline PaymentRequest — Stripe checkout is a hosted redirect on the
     // dashboard), so a deny-all is safe + matches the other 4 Pages apps.
-    expect(body).toMatch(
-      /^ {2}Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\), gyroscope=\(\), magnetometer=\(\), microphone=\(\), payment=\(\), usb=\(\)$/m,
-    );
+    expect(
+      body.match(
+        /^ {2}Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\), gyroscope=\(\), magnetometer=\(\), microphone=\(\), payment=\(\), usb=\(\)$/gm,
+      ),
+    ).toHaveLength(1);
   });
 
   it('HSTS on the /* catch-all block ONLY — single header (2026-06-03 de-dup: CF Pages MERGES /* onto every path incl. /, proven live by the previously-doubled header, so one STS on /* covers the apex; a single clean header is preload-submission-ready, unlike the prior comma-joined double)', () => {

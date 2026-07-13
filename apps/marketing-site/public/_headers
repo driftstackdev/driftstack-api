@@ -77,9 +77,6 @@
 # times a week and want fast page loads in between."
 /
   Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: strict-origin-when-cross-origin
 /index.html
   Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
 
@@ -92,7 +89,10 @@
 # flagged the ~180 KiB font re-download). HTML pages other than `/` now
 # take the zone-default browser TTL (~4h) — acceptable for a static
 # marketing site whose edge cache is purged on every deploy; the
-# homepage keeps its explicit 5-min rule above.
+# homepage keeps its explicit 5-min rule above and inherits every
+# security header from this single catch-all definition. Keeping the
+# `/` block cache-only prevents Cloudflare's rule merge from emitting
+# duplicate security fields on the apex response.
 /*
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
