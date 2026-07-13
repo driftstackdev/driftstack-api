@@ -238,5 +238,46 @@ const structuredData = {
         });
       })();
     </script>
+    <script is:inline>
+      {
+        /*
+         * WCAG 2.1.1 — a code block that overflows horizontally must be
+         * reachable without a pointing device. Only add a tab stop while the
+         * <pre> is genuinely scrollable at the current responsive width; the
+         * marker makes the enhancement reversible and preserves any tabindex
+         * a page author supplied deliberately.
+         */
+      }
+      (function () {
+        var blocks = Array.prototype.slice.call(document.querySelectorAll('pre'));
+        if (blocks.length === 0) return;
+
+        function sync(block) {
+          var overflows = block.scrollWidth > block.clientWidth + 1;
+          if (overflows && !block.hasAttribute('tabindex')) {
+            block.setAttribute('tabindex', '0');
+            block.setAttribute('data-scroll-focus', 'true');
+          } else if (!overflows && block.getAttribute('data-scroll-focus') === 'true') {
+            block.removeAttribute('tabindex');
+            block.removeAttribute('data-scroll-focus');
+          }
+        }
+
+        blocks.forEach(sync);
+        window.addEventListener('load', function () {
+          blocks.forEach(sync);
+        });
+        if ('ResizeObserver' in window) {
+          var observer = new ResizeObserver(function (entries) {
+            entries.forEach(function (entry) {
+              sync(entry.target);
+            });
+          });
+          blocks.forEach(function (block) {
+            observer.observe(block);
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

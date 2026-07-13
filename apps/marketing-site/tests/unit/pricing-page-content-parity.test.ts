@@ -125,6 +125,12 @@ describe('W372.A marketing-site /pricing page content parity', () => {
 
   it('monthly/annual toggle wired (id=billing-toggle + data-period-target=monthly/annual)', () => {
     expect(body).toMatch(/id="billing-toggle"/);
+    expect(body).toMatch(/role="group"\s*\n?\s*aria-label="Billing period"/);
+    expect(body).toContain('aria-pressed="true"');
+    expect(body).toContain('aria-pressed="false"');
+    expect(body).toMatch(/btn\.setAttribute\(\s*'aria-pressed'/);
+    expect(body).not.toContain('role="tablist"');
+    expect(body).not.toContain('aria-selected');
     expect(body).toMatch(/data-period="annual"/);
     expect(body).toMatch(/data-period-target="monthly"/);
     expect(body).toMatch(/data-period-target="annual"/);

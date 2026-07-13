@@ -34,6 +34,15 @@ function read(p: string): string {
 }
 
 describe('W382.B marketing-site BaseLayout.astro content parity', () => {
+  it('makes only genuinely overflowing code blocks keyboard-scrollable and reverses the generated tab stop responsively', () => {
+    expect(body).toContain("document.querySelectorAll('pre')");
+    expect(body).toMatch(/block\.scrollWidth > block\.clientWidth \+ 1/);
+    expect(body).toContain("block.setAttribute('tabindex', '0')");
+    expect(body).toContain("block.setAttribute('data-scroll-focus', 'true')");
+    expect(body).toContain("block.removeAttribute('tabindex')");
+    expect(body).toContain("block.removeAttribute('data-scroll-focus')");
+    expect(body).toContain("'ResizeObserver' in window");
+  });
   const body = read(LAYOUT);
 
   it('imports Header + Footer + base.css', () => {

@@ -461,13 +461,14 @@ const pricingStructuredData = {
         <div
           id="billing-toggle"
           class="inline-flex shrink-0 self-start rounded-md border border-tk-border bg-tk-surface p-1 text-sm font-medium md:self-auto"
-          role="tablist"
+          role="group"
+          aria-label="Billing period"
         >
           <button
             type="button"
             data-period="monthly"
             class="billing-toggle-btn rounded-sm px-3 py-1.5 text-tk-ink-2"
-            aria-selected="true"
+            aria-pressed="true"
           >
             Monthly
           </button>
@@ -475,7 +476,7 @@ const pricingStructuredData = {
             type="button"
             data-period="annual"
             class="billing-toggle-btn rounded-sm px-3 py-1.5 text-tk-ink-2"
-            aria-selected="false"
+            aria-pressed="false"
           >
             Annual
             {/* S34 2026-07-07 (fable-frontend-audit) — the chip's idle colors (accent-text on
@@ -929,7 +930,7 @@ const pricingStructuredData = {
       function setPeriod(period) {
         buttons.forEach((btn) => {
           btn.setAttribute(
-            'aria-selected',
+            'aria-pressed',
             btn.getAttribute('data-period') === period ? 'true' : 'false',
           );
           var chip = btn.querySelector('[data-annual-chip]');
