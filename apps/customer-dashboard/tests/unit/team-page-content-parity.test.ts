@@ -97,6 +97,14 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     expect(body).toMatch(/const refreshed = await refresh\(false\)/);
   });
 
+  it('reconciles ambiguous member removals against refreshed membership', () => {
+    expect(body).toContain('Member-removal outcome is unknown because the request timed out.');
+    expect(body).toContain('The team list was refreshed');
+    expect(body).toContain('removal likely completed, so do not submit it again');
+    expect(body).toContain('Verify membership before retrying');
+    expect(body).toMatch(/membersList\.querySelectorAll\('\[data-remove\]'\)/);
+  });
+
   it('per-member-uses-own-login + per-member-dashboard-sessions framing pinned', () => {
     // Load-bearing privacy claim — members never share login
     // credentials. The team page is the only customer surface

@@ -431,10 +431,38 @@ const apiBaseUrl = resolveApiBaseUrl();
                 if (!r.ok && r.status !== 204) throw new Error('HTTP ' + r.status);
                 return refresh();
               })
-              .catch(function (err) {
-                showBanner(
-                  'Remove failed: ' + (err && err.message ? err.message : 'network error'),
-                );
+              .catch(async function (err) {
+                if (err && err.name === 'AbortError') {
+                  const refreshed = await refresh(false);
+                  const stillPresent = membersList
+                    ? Array.from(membersList.querySelectorAll('[data-remove]')).some(function (
+                        button,
+                      ) {
+                        return button.getAttribute('data-remove') === id;
+                      })
+                    : false;
+                  if (refreshed && !stillPresent) {
+                    showBanner(
+                      'Member-removal outcome is unknown because the request timed out. The team list was refreshed and ' +
+                        email +
+                        ' is no longer present; removal likely completed, so do not submit it again.',
+                    );
+                  } else if (refreshed) {
+                    showBanner(
+                      'Member-removal outcome is unknown because the request timed out. The team list was refreshed and ' +
+                        email +
+                        ' is still present; retry removal if their access must be revoked.',
+                    );
+                  } else {
+                    showBanner(
+                      'Member-removal outcome is unknown because the request timed out, and the team list could not be refreshed. Verify membership before retrying.',
+                    );
+                  }
+                } else {
+                  showBanner(
+                    'Remove failed: ' + (err && err.message ? err.message : 'network error'),
+                  );
+                }
               })
               .finally(function () {
                 removalButtonsInFlight.delete(btn);

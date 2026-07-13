@@ -305,6 +305,33 @@ describe('team page — local integration', () => {
     expect(text(window, '[data-members-list]')).toMatch(/No team members yet/);
   });
 
+  it('remove timeout reconciles a committed membership deletion before another attempt', async () => {
+    const members = [{ ...MEMBER }];
+    const base = makeRouter(members, []);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      route: (call) => {
+        if (call.init?.method === 'DELETE' && /\/v1\/team\/members\/mem_a$/.test(call.url)) {
+          members.splice(0, 1);
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-remove="mem_a"]') as HTMLButtonElement).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(window.document.querySelector('[data-remove="mem_a"]')).toBeNull();
+    expect(text(window, '[data-banner]')).toMatch(
+      /member-removal outcome is unknown.*team list was refreshed.*alice@example.com is no longer present.*removal likely completed.*do not submit it again/i,
+    );
+  });
+
   it('remove cancelled at confirm: no DELETE fired, member stays', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
