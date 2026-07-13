@@ -3,8 +3,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  API_JSON_MAX_BYTES,
+  ApiResponseTooLargeError,
   DIAGNOSTIC_JSON_MAX_BYTES,
   DiagnosticResponseTooLargeError,
+  readBoundedApiJson,
   readBoundedDiagnosticJson,
 } from '../../src/lib/read-bounded-json';
 
@@ -19,6 +22,18 @@ describe('readBoundedDiagnosticJson', () => {
       const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
       expect(source, relative).toContain('/version`');
       expect(source, relative).toContain('readBoundedDiagnosticJson');
+    }
+  });
+
+  it('guards auth, GUI input, and agent-session control API JSON', () => {
+    for (const relative of [
+      '../../src/lib/browser-sign-in.ts',
+      '../../src/lib/gui-input.ts',
+      '../../src/lib/agent-session-control.ts',
+    ]) {
+      const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
+      expect(source, relative).toContain('readBoundedApiJson');
+      expect(source, relative).not.toMatch(/\b(?:res|initiateRes)\.json\(/);
     }
   });
 
@@ -89,5 +104,40 @@ describe('readBoundedDiagnosticJson', () => {
 
     await expect(readBoundedDiagnosticJson(fake)).resolves.toEqual({ driver: 'mock' });
     expect(json).toHaveBeenCalledOnce();
+  });
+
+  it('decodes normal API JSON within the SDK-parity ceiling', async () => {
+    const response = new Response(JSON.stringify({ ok: true }));
+    await expect(readBoundedApiJson<{ ok: boolean }>(response)).resolves.toEqual({ ok: true });
+  });
+
+  it('rejects a declared oversized API body before pulling and cancels it', async () => {
+    const pull = vi.fn();
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream<Uint8Array>({ pull, cancel }), {
+      headers: { 'content-length': String(API_JSON_MAX_BYTES + 1) },
+    });
+
+    await expect(readBoundedApiJson(response)).rejects.toBeInstanceOf(ApiResponseTooLargeError);
+    expect(pull).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('cancels a chunked API response on the first over-cap chunk', async () => {
+    const cancel = vi.fn();
+    let sent = false;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent) return;
+          sent = true;
+          controller.enqueue(new Uint8Array(API_JSON_MAX_BYTES + 1));
+        },
+        cancel,
+      }),
+    );
+
+    await expect(readBoundedApiJson(response)).rejects.toBeInstanceOf(ApiResponseTooLargeError);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });

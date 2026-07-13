@@ -19,7 +19,9 @@
 // fallback window (same process, can read the keychain) passes no control key
 // and keeps using the API key.
 
+import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
 import { loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
@@ -202,7 +204,11 @@ async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): 
     let detail = `HTTP ${res.status}`;
     let kind = 'unknown';
     try {
-      const body = (await res.json()) as { detail?: string; title?: string; type?: string };
+      const body = await readBoundedDiagnosticJson<{
+        detail?: string;
+        title?: string;
+        type?: string;
+      }>(res);
       detail = body.detail ?? body.title ?? detail;
       if (typeof body.type === 'string') kind = body.type.split('/').pop() ?? 'unknown';
     } catch {
@@ -212,7 +218,7 @@ async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): 
   }
   if (res.status === 204) return {};
   try {
-    return await res.json();
+    return await readBoundedApiJson<unknown>(res);
   } catch {
     return {};
   }
@@ -240,8 +246,11 @@ export async function mintGuiControlKey(
       method: 'GET',
       headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
     });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { gui_control_key?: unknown };
+    if (!res.ok) {
+      await disposeResponseBody(res);
+      return null;
+    }
+    const body = await readBoundedApiJson<{ gui_control_key?: unknown }>(res);
     return typeof body.gui_control_key === 'string' && body.gui_control_key.length > 0
       ? body.gui_control_key
       : null;

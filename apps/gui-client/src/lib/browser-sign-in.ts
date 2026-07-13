@@ -21,6 +21,7 @@ import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { parseDeepLink } from './deep-link';
 import { diagnosticFetchError } from './diagnostic-fetch-error';
+import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -172,10 +173,12 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         }),
       });
       if (!initiateRes.ok) {
-        const body = (await initiateRes.json().catch(() => ({}))) as { detail?: string };
+        const body = await readBoundedDiagnosticJson<{ detail?: string }>(initiateRes).catch(
+          (): { detail?: string } => ({}),
+        );
         throw new Error(body.detail ?? `HTTP ${initiateRes.status.toString()}`);
       }
-      const initiate = (await initiateRes.json()) as InitiateResponse;
+      const initiate = await readBoundedApiJson<InitiateResponse>(initiateRes);
       await openInBrowser(initiate.browser_url);
 
       // If the user cancelled (Cancel / "paste a key instead") during the
@@ -267,7 +270,9 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       if (!res.ok) {
         if (res.status >= 400 && res.status < 500) {
           stop();
-          const body = (await res.json().catch(() => ({}))) as { detail?: string };
+          const body = await readBoundedDiagnosticJson<{ detail?: string }>(res).catch(
+            (): { detail?: string } => ({}),
+          );
           setState({
             kind: 'error',
             message: body.detail ?? 'Authorization request rejected.',
@@ -275,7 +280,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         }
         return;
       }
-      const body = (await res.json()) as ExchangeResponse;
+      const body = await readBoundedApiJson<ExchangeResponse>(res);
       if (body.status === 'pending') return;
       if (body.status === 'expired') {
         stop();

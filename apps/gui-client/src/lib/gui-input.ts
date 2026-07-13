@@ -11,6 +11,7 @@
 // just on the gui-control branch.
 
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
 import type { DriftstackSettings } from './settings';
 
 export type GUIInputAction =
@@ -57,7 +58,11 @@ export async function sendGUIInput(
     let detail = `HTTP ${res.status}`;
     let kind = 'unknown';
     try {
-      const body = (await res.json()) as { detail?: string; type?: string; title?: string };
+      const body = await readBoundedDiagnosticJson<{
+        detail?: string;
+        type?: string;
+        title?: string;
+      }>(res);
       detail = body.detail ?? body.title ?? detail;
       // Server emits RFC 7807 `type` URIs like "https://errors.driftstack.dev/forbidden".
       if (typeof body.type === 'string') kind = body.type.split('/').pop() ?? 'unknown';
@@ -66,5 +71,5 @@ export async function sendGUIInput(
     }
     throw new GUIInputError(detail, res.status, kind);
   }
-  return (await res.json()) as GUIInputResponse;
+  return readBoundedApiJson<GUIInputResponse>(res);
 }
