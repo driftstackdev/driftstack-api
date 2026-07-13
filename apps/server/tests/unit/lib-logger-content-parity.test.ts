@@ -78,20 +78,24 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
     expect(body).toMatch(/'webhookSecret',/);
   });
 
-  it('redact paths: request-body auth + MFA + password — body.password / new_password / current_password / code / recovery_code(s) / signing_secret / secret', () => {
+  it('redact paths: request-body auth + MFA + password — includes challenge bearer spellings', () => {
     expect(body).toMatch(/'body\.password',/);
     expect(body).toMatch(/'body\.new_password',/);
     expect(body).toMatch(/'body\.current_password',/);
     expect(body).toMatch(/'body\.code',/);
     expect(body).toMatch(/'body\.recovery_code',/);
     expect(body).toMatch(/'body\.recovery_codes',/);
+    expect(body).toMatch(/'body\.challenge_token',/);
+    expect(body).toMatch(/'body\.challengeToken',/);
     expect(body).toMatch(/'body\.signing_secret',/);
     expect(body).toMatch(/'body\.secret',/);
   });
 
-  it('redact paths: response-body enrolment/mint surfaces — recovery_codes / recoveryCodes / totpSecret / totp_secret / mfaSecret / client_secret', () => {
+  it('redact paths: response-body enrolment/mint surfaces — includes challenge bearer spellings', () => {
     expect(body).toMatch(/'recovery_codes',/);
     expect(body).toMatch(/'recoveryCodes',/);
+    expect(body).toMatch(/'challenge_token',/);
+    expect(body).toMatch(/'challengeToken',/);
     expect(body).toMatch(/'totpSecret',/);
     expect(body).toMatch(/'totp_secret',/);
     expect(body).toMatch(/'mfaSecret',/);

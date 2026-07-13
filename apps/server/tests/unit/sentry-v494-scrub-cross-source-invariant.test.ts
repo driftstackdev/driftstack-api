@@ -138,15 +138,17 @@ describe('W969 V-494 sentry scrub mirror cross-source invariant', () => {
     expect(p).toMatch(/'currentpassword',/);
   });
 
-  // ─── 5-entry MFA/recovery denylist ───────────────────────────
+  // ─── MFA/recovery denylist ───────────────────────────────────
 
-  it("CRITICAL 5-entry MFA/recovery denylist — 'code' + 'recovery_code' + 'recovery_codes' + 'recoverycode' + 'recoverycodes'. The 5-key set covers TOTP + recovery + MFA-challenge flows.", () => {
+  it('CRITICAL MFA/recovery denylist covers codes and challenge bearer spellings', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/sentry.ts'));
     expect(p).toMatch(/'code',/);
     expect(p).toMatch(/'recovery_code',/);
     expect(p).toMatch(/'recovery_codes',/);
     expect(p).toMatch(/'recoverycode',/);
     expect(p).toMatch(/'recoverycodes',/);
+    expect(p).toMatch(/'challenge_token',/);
+    expect(p).toMatch(/'challengetoken',/);
   });
 
   // ─── 3-entry API/inline denylist ─────────────────────────────
@@ -326,12 +328,12 @@ describe('W969 V-494 sentry scrub mirror cross-source invariant', () => {
 
   // ─── Total denylist count ────────────────────────────────────
 
-  it('CRITICAL SENTRY_SENSITIVE_KEYS Set has 27 entries — 4 header + 5 password + 5 MFA/recovery + 3 API/inline + 7 webhook/client_secret + 3 TOTP = 27 keys. Mechanically counted via comma-separated quoted entries within the Set<string>([...]) block.', () => {
+  it('CRITICAL SENTRY_SENSITIVE_KEYS retains a broad credential denylist', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/sentry.ts'));
     const setBlock =
       p.match(/SENTRY_SENSITIVE_KEYS = new Set<string>\(\[([\s\S]+?)\]\);/)?.[1] ?? '';
     const entries = setBlock.match(/'[^']+'/g) ?? [];
-    expect(entries.length).toBeGreaterThanOrEqual(26);
+    expect(entries.length).toBeGreaterThanOrEqual(28);
   });
 
   it('test file metadata — file exists at canonical path', () => {

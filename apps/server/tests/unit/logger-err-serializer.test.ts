@@ -80,6 +80,21 @@ describe('redactErrSerializer', () => {
     expect(serialized).toContain('[redacted]');
   });
 
+  it('redacts MFA challenge bearer keys in nested error metadata', () => {
+    const e = new Error('MFA exchange failed') as Error & { cause?: unknown };
+    e.cause = {
+      challenge_token: 'ds_mfa_snake_secret',
+      challengeToken: 'ds_mfa_camel_secret',
+      status: 401,
+    };
+
+    const out = redactErrSerializer(e);
+    const serialized = JSON.stringify(out);
+    expect(serialized).not.toContain('ds_mfa_snake_secret');
+    expect(serialized).not.toContain('ds_mfa_camel_secret');
+    expect((out.cause as Record<string, unknown>).status).toBe(401);
+  });
+
   it('preserves benign diagnostic keys including Error.code', () => {
     const e = new Error('socket failed') as Error & { code?: string; tokenBudget?: number };
     e.code = 'ECONNRESET';

@@ -37,6 +37,9 @@ const SENSITIVE_ERR_KEYS = new Set([
   'currentpassword',
   'recoverycode',
   'recoverycodes',
+  // Five-minute, single-use MFA challenge bearer returned by password auth
+  // and presented on the TOTP/recovery exchange.
+  'challengetoken',
   'apikey',
   'xapikey',
   'apisecret',
@@ -171,6 +174,8 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'body.code',
         'body.recovery_code',
         'body.recovery_codes',
+        'body.challenge_token',
+        'body.challengeToken',
         'body.signing_secret',
         'body.secret',
         // Account-proxy VPN secrets (ARC A). The POST/PUT
@@ -202,6 +207,8 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         // Response-body fields surfaced on enrolment / mint paths
         'recovery_codes',
         'recoveryCodes',
+        'challenge_token',
+        'challengeToken',
         'totpSecret',
         'totp_secret',
         'mfaSecret',

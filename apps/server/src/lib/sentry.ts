@@ -45,6 +45,10 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'recovery_codes',
   'recoverycode',
   'recoverycodes',
+  // Five-minute, single-use MFA challenge bearer. Keep both spellings because
+  // isSensitiveKey lowercases but intentionally does not strip separators.
+  'challenge_token',
+  'challengetoken',
   'apikey',
   'api_key',
   'plaintext',

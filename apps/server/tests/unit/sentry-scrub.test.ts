@@ -41,6 +41,25 @@ describe('V-494 — Sentry scrub: top-level keys', () => {
     expect(e.recovery_codes).toBe('[redacted]');
   });
 
+  it('redacts MFA challenge bearer keys in snake_case and camelCase', () => {
+    const e = {
+      request: {
+        data: {
+          challenge_token: 'ds_mfa_snake_secret',
+          challengeToken: 'ds_mfa_camel_secret',
+          code: '123456',
+        },
+      },
+      extra: { challengeToken: 'ds_mfa_extra_secret', outcome: 'invalid' },
+    };
+    scrubInPlace(e);
+    expect(e.request.data.challenge_token).toBe('[redacted]');
+    expect(e.request.data.challengeToken).toBe('[redacted]');
+    expect(e.request.data.code).toBe('[redacted]');
+    expect(e.extra.challengeToken).toBe('[redacted]');
+    expect(e.extra.outcome).toBe('invalid');
+  });
+
   it('redacts secret + signing_secret + webhook_secret', () => {
     const e = { secret: 's', signing_secret: 'ss', webhook_secret: 'ws' };
     scrubInPlace(e);

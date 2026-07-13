@@ -147,6 +147,15 @@ describe('W968 V-494 logger redaction cross-source invariant', () => {
     expect(p).toMatch(/'refresh_token',/);
   });
 
+  it('CRITICAL MFA challenge bearer is redacted in request, response, and nested-error spellings', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
+    expect(p).toMatch(/'body\.challenge_token',/);
+    expect(p).toMatch(/'body\.challengeToken',/);
+    expect(p).toMatch(/'challenge_token',/);
+    expect(p).toMatch(/'challengeToken',/);
+    expect(p).toMatch(/'challengetoken',/);
+  });
+
   // ─── '[redacted]' censor token ───────────────────────────────
 
   it("CRITICAL censor token = '[redacted]'. The bracket-redacted convention matches the Sentry sanitizer + customer-facing log expectations.", () => {

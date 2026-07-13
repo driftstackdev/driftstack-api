@@ -72,6 +72,8 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
     expect(body).toMatch(/'code',/);
     expect(body).toMatch(/'recovery_code',/);
     expect(body).toMatch(/'recovery_codes',/);
+    expect(body).toMatch(/'challenge_token',/);
+    expect(body).toMatch(/'challengetoken',/);
     expect(body).toMatch(/'apikey',/);
     expect(body).toMatch(/'api_key',/);
     expect(body).toMatch(/'plaintext',/);
