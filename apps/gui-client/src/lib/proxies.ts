@@ -1,4 +1,4 @@
-// SOCKS5 proxy registry — CRUD over tauri-plugin-store.
+// Proxy registry — metadata in tauri-plugin-store, credentials in Keychain.
 //
 // Stored under the same store file as settings (settings.json) but
 // keyed separately so a settings reset doesn't blow away proxies and
@@ -6,14 +6,11 @@
 // time; they're stable across edits so any future "session created
 // with this proxy" reference can stay valid.
 //
-// SOCKS5-only for now. The GUI accepts auth (username + password)
-// per RFC 1929. We never log the password — it's stored on disk in
-// the OS config dir, same posture as the API key.
-//
-// This module is local-only — proxies aren't sent to the server until
-// `CreateSessionRequest` grows a `proxy` field (Tier-3 contract change,
-// surfaced to founder for coordination with the WebKit fork's SOCKS5
-// support).
+// The settings file contains only non-secret display/routing metadata. SOCKS
+// passwords, OpenVPN profiles, and WireGuard private keys live in one versioned
+// OS-credential-store entry per proxy. listProxies hydrates those fields only in
+// memory. Legacy all-in-one rows are migrated on first read and purged from disk
+// even when the credential store is temporarily unavailable.
 
 import { invoke } from '@tauri-apps/api/core';
 import { LazyStore } from '@tauri-apps/plugin-store';
@@ -40,9 +37,8 @@ export interface ProxyConfig {
   /** OVPN/WG — proxy type. Absent/undefined = socks5 (back-compat). host/port
    *  are the (display) endpoint for VPN schemes too. */
   scheme?: AccountProxyScheme;
-  /** OVPN/WG config blocks — present only for the matching scheme. The
-   *  secret-bearing parts ride here in the LOCAL cache (same on-disk posture as
-   *  the socks5 password); the server wraps them under the account TMK. */
+  /** OVPN/WG config blocks — present only for the matching scheme. These are
+   *  hydrated from protected storage and never serialized to settings.json. */
   openvpn?: OpenVpnConfigInput;
   wireguard?: WireGuardConfigInput;
 }
@@ -60,8 +56,34 @@ export interface ProxyDraft {
 
 const STORE_FILE = 'settings.json';
 const PROXIES_KEY = 'proxies';
+const SECRET_PREFIX = 'proxy_secret:';
+
+interface PersistedProxyConfig {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string | null;
+  createdAt: string;
+  serverId?: string;
+  scheme?: AccountProxyScheme;
+}
+
+interface ProxySecretPayload {
+  version: 1;
+  binding: {
+    host: string;
+    port: number;
+    username: string | null;
+    scheme: AccountProxyScheme | null;
+  };
+  password: string | null;
+  openvpn?: OpenVpnConfigInput;
+  wireguard?: WireGuardConfigInput;
+}
 
 let store: LazyStore | null = null;
+const volatileSecrets = new Map<string, ProxySecretPayload>();
 function getStore(): LazyStore {
   if (store === null) {
     store = new LazyStore(STORE_FILE);
@@ -69,22 +91,18 @@ function getStore(): LazyStore {
   return store;
 }
 
-// Serialize the read-modify-write mutations (adversarial review w410wv3eq #6 —
-// every other shared store already locks). Without this, two concurrent mutations
-// (e.g. rapid add/edit) both read the old list and the second persist clobbers the
-// first's change. PUBLIC mutations lock around their full list→modify→persist; the
-// private persist() + the listProxies() read stay lock-free.
+// Serialize migration and all read-modify-write operations. In particular, a
+// first-load plaintext purge must not race a concurrent add/edit and persist its
+// stale snapshot over the newer metadata.
 const writeLock = makeWriteLock();
 
 export async function listProxies(): Promise<ProxyConfig[]> {
-  const value = await getStore().get<ProxyConfig[]>(PROXIES_KEY);
-  if (!Array.isArray(value)) return [];
-  return value.filter(isProxyConfig);
+  return writeLock(listProxiesUnlocked);
 }
 
 export async function addProxy(draft: ProxyDraft): Promise<ProxyConfig> {
   return writeLock(async () => {
-    const all = await listProxies();
+    const all = await listProxiesUnlocked();
     const next: ProxyConfig = {
       id: mintId(),
       label: draft.label,
@@ -97,39 +115,63 @@ export async function addProxy(draft: ProxyDraft): Promise<ProxyConfig> {
       ...(draft.openvpn !== undefined ? { openvpn: draft.openvpn } : {}),
       ...(draft.wireguard !== undefined ? { wireguard: draft.wireguard } : {}),
     };
-    await persist([...all, next]);
+    await saveSecret(next);
+    try {
+      await persist([...all, next]);
+    } catch (error) {
+      await deleteSecret(next.id).catch(() => undefined);
+      throw error;
+    }
     return next;
   });
 }
 
 export async function updateProxy(id: string, patch: ProxyDraft): Promise<ProxyConfig | null> {
   return writeLock(async () => {
-    const all = await listProxies();
+    const all = await listProxiesUnlocked();
     const idx = all.findIndex((p) => p.id === id);
     if (idx < 0) return null;
+    const prior = all[idx] as ProxyConfig;
+    const scheme = patch.scheme ?? prior.scheme;
     const updated: ProxyConfig = {
-      ...(all[idx] as ProxyConfig),
+      ...prior,
       label: patch.label,
       host: patch.host,
       port: patch.port,
       username: patch.username,
       password: patch.password,
       ...(patch.scheme !== undefined ? { scheme: patch.scheme } : {}),
-      // VPN blocks: a patch carrying one replaces it; absent leaves the stored one.
-      ...(patch.openvpn !== undefined ? { openvpn: patch.openvpn } : {}),
-      ...(patch.wireguard !== undefined ? { wireguard: patch.wireguard } : {}),
+      // Retain an omitted block only while editing the same VPN scheme. Switching
+      // schemes must delete the old private configuration from protected storage.
+      ...(scheme === 'openvpn'
+        ? { openvpn: patch.openvpn ?? prior.openvpn, wireguard: undefined }
+        : {}),
+      ...(scheme === 'wireguard'
+        ? { wireguard: patch.wireguard ?? prior.wireguard, openvpn: undefined }
+        : {}),
+      ...(scheme !== 'openvpn' && scheme !== 'wireguard'
+        ? { openvpn: undefined, wireguard: undefined }
+        : {}),
     };
     const next = [...all];
     next[idx] = updated;
-    await persist(next);
+    const previousSecret = secretPayload(all[idx] as ProxyConfig);
+    await saveSecret(updated);
+    try {
+      await persist(next);
+    } catch (error) {
+      await saveSecretPayload(id, previousSecret).catch(() => undefined);
+      throw error;
+    }
     return updated;
   });
 }
 
 export async function removeProxy(id: string): Promise<void> {
   return writeLock(async () => {
-    const all = await listProxies();
+    const all = await listProxiesUnlocked();
     await persist(all.filter((p) => p.id !== id));
+    await deleteSecret(id).catch(() => undefined);
   });
 }
 
@@ -137,7 +179,7 @@ export async function removeProxy(id: string): Promise<void> {
  *  launch-sync). No-op if the local proxy is gone. Returns the updated row. */
 export async function setProxyServerId(id: string, serverId: string): Promise<ProxyConfig | null> {
   return writeLock(async () => {
-    const all = await listProxies();
+    const all = await listProxiesUnlocked();
     const idx = all.findIndex((p) => p.id === id);
     if (idx < 0) return null;
     const updated: ProxyConfig = { ...(all[idx] as ProxyConfig), serverId };
@@ -149,22 +191,267 @@ export async function setProxyServerId(id: string, serverId: string): Promise<Pr
 }
 
 async function persist(proxies: ProxyConfig[]): Promise<void> {
-  await getStore().set(PROXIES_KEY, proxies);
+  await getStore().set(PROXIES_KEY, proxies.map(toPersistedProxy));
   await getStore().save();
 }
 
-function isProxyConfig(v: unknown): v is ProxyConfig {
+async function listProxiesUnlocked(): Promise<ProxyConfig[]> {
+  const value = await getStore().get<unknown>(PROXIES_KEY);
+  if (!Array.isArray(value)) {
+    // A corrupt legacy value may itself be an object containing credentials.
+    // Normalize any present non-array value so unknown plaintext is not retained.
+    if (value !== undefined) {
+      await getStore().set(PROXIES_KEY, []);
+      await getStore().save();
+    }
+    return [];
+  }
+
+  const hydrated: ProxyConfig[] = [];
+  const seenIds = new Set<string>();
+  let rewriteDisk = false;
+  for (const raw of value) {
+    if (!isPersistedProxyConfig(raw)) {
+      // Drop malformed rows on rewrite rather than retaining unknown fields that
+      // may themselves contain credentials.
+      rewriteDisk = true;
+      continue;
+    }
+    if (seenIds.has(raw.id)) {
+      // Duplicate ids alias the same protected entry and can silently attach one
+      // proxy's credentials to another endpoint. Keep the first stable row only.
+      rewriteDisk = true;
+      continue;
+    }
+    seenIds.add(raw.id);
+
+    const metadata = toPersistedProxy(raw);
+    const legacy = legacySecretPayload(raw);
+    let protectedValue: ProxySecretPayload | null = null;
+    let protectedLoadError: unknown = null;
+    try {
+      protectedValue = await loadSecret(metadata.id);
+    } catch (error) {
+      // Invalid data is never a recoverable "credential store unavailable"
+      // condition. Do not let a stale plaintext row override corrupted protected
+      // credentials.
+      if (isProtectedPayloadError(error)) throw error;
+      protectedLoadError = error;
+    }
+    let secret: ProxySecretPayload;
+    if (protectedValue !== null) {
+      secret = protectedValue;
+    } else if (legacy !== null) {
+      // A locked Keychain must never become an excuse to retain plaintext. Keep
+      // the migrated value in memory for this launch, but purge the disk row.
+      try {
+        await saveSecretPayload(metadata.id, legacy);
+      } catch {
+        volatileSecrets.set(metadata.id, legacy);
+      }
+      secret = legacy;
+    } else if (volatileSecrets.has(metadata.id)) {
+      secret = volatileSecrets.get(metadata.id) as ProxySecretPayload;
+    } else if (protectedLoadError !== null) {
+      throw protectedLoadError instanceof Error
+        ? protectedLoadError
+        : new Error('Protected proxy credentials are unavailable.');
+    } else {
+      throw new Error('Protected proxy credentials are missing.');
+    }
+
+    if (hasLegacySecretFields(raw) || !samePersistedShape(raw, metadata)) {
+      rewriteDisk = true;
+    }
+    hydrated.push(hydrateProxy(metadata, secret));
+  }
+
+  if (rewriteDisk) await persist(hydrated);
+  return hydrated;
+}
+
+function isPersistedProxyConfig(v: unknown): v is PersistedProxyConfig {
   if (typeof v !== 'object' || v === null) return false;
   const r = v as Record<string, unknown>;
   return (
     typeof r.id === 'string' &&
     typeof r.label === 'string' &&
     typeof r.host === 'string' &&
-    typeof r.port === 'number' &&
+    Number.isInteger(r.port) &&
+    (r.port as number) >= 1 &&
+    (r.port as number) <= 65535 &&
     (r.username === null || typeof r.username === 'string') &&
-    (r.password === null || typeof r.password === 'string') &&
     typeof r.createdAt === 'string' &&
-    (r.serverId === undefined || typeof r.serverId === 'string')
+    (r.serverId === undefined || typeof r.serverId === 'string') &&
+    (r.scheme === undefined || isProxyScheme(r.scheme))
+  );
+}
+
+function isProxyScheme(value: unknown): value is AccountProxyScheme {
+  return value === 'socks5' || value === 'http' || value === 'openvpn' || value === 'wireguard';
+}
+
+function toPersistedProxy(proxy: PersistedProxyConfig): PersistedProxyConfig {
+  return {
+    id: proxy.id,
+    label: proxy.label,
+    host: proxy.host,
+    port: proxy.port,
+    username: proxy.username,
+    createdAt: proxy.createdAt,
+    ...(proxy.serverId !== undefined ? { serverId: proxy.serverId } : {}),
+    ...(proxy.scheme !== undefined ? { scheme: proxy.scheme } : {}),
+  };
+}
+
+function samePersistedShape(raw: PersistedProxyConfig, clean: PersistedProxyConfig): boolean {
+  return JSON.stringify(raw) === JSON.stringify(clean);
+}
+
+function secretName(id: string): string {
+  return `${SECRET_PREFIX}${id}`;
+}
+
+function secretPayload(proxy: ProxyConfig): ProxySecretPayload {
+  return {
+    version: 1,
+    binding: secretBinding(proxy),
+    password: proxy.password,
+    ...(proxy.openvpn !== undefined ? { openvpn: proxy.openvpn } : {}),
+    ...(proxy.wireguard !== undefined ? { wireguard: proxy.wireguard } : {}),
+  };
+}
+
+async function saveSecret(proxy: ProxyConfig): Promise<void> {
+  await saveSecretPayload(proxy.id, secretPayload(proxy));
+}
+
+async function saveSecretPayload(id: string, secret: ProxySecretPayload): Promise<void> {
+  await invoke('secret_save', { key: secretName(id), value: JSON.stringify(secret) });
+  volatileSecrets.delete(id);
+}
+
+async function loadSecret(id: string): Promise<ProxySecretPayload | null> {
+  const value = await invoke<string | null>('secret_load', { key: secretName(id) });
+  if (value === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('Protected proxy credentials are corrupted.');
+  }
+  if (!isProxySecretPayload(parsed)) {
+    throw new Error('Protected proxy credentials have an unsupported format.');
+  }
+  return parsed;
+}
+
+async function deleteSecret(id: string): Promise<void> {
+  volatileSecrets.delete(id);
+  await invoke('secret_delete', { key: secretName(id) });
+}
+
+function isProtectedPayloadError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('Protected proxy credentials');
+}
+
+function hasLegacySecretFields(value: PersistedProxyConfig): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(value, 'password') ||
+    Object.prototype.hasOwnProperty.call(value, 'openvpn') ||
+    Object.prototype.hasOwnProperty.call(value, 'wireguard')
+  );
+}
+
+function legacySecretPayload(value: PersistedProxyConfig): ProxySecretPayload | null {
+  if (!hasLegacySecretFields(value)) return null;
+  const row = value as PersistedProxyConfig & Record<string, unknown>;
+  return {
+    version: 1,
+    binding: secretBinding(value),
+    password: row.password === null || typeof row.password === 'string' ? row.password : null,
+    ...(isOpenVpnConfig(row.openvpn) ? { openvpn: row.openvpn } : {}),
+    ...(isWireGuardConfig(row.wireguard) ? { wireguard: row.wireguard } : {}),
+  };
+}
+
+function hydrateProxy(metadata: PersistedProxyConfig, secret: ProxySecretPayload): ProxyConfig {
+  if (!secretBindingMatches(secret.binding, metadata)) {
+    throw new Error('Protected proxy credentials do not match proxy metadata.');
+  }
+  return {
+    ...metadata,
+    password: secret.password,
+    ...(secret.openvpn !== undefined ? { openvpn: secret.openvpn } : {}),
+    ...(secret.wireguard !== undefined ? { wireguard: secret.wireguard } : {}),
+  };
+}
+
+function secretBindingMatches(
+  binding: ProxySecretPayload['binding'],
+  metadata: PersistedProxyConfig,
+): boolean {
+  const expected = secretBinding(metadata);
+  return (
+    binding.host === expected.host &&
+    binding.port === expected.port &&
+    binding.username === expected.username &&
+    binding.scheme === expected.scheme
+  );
+}
+
+function isProxySecretPayload(value: unknown): value is ProxySecretPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    row.version === 1 &&
+    isProxySecretBinding(row.binding) &&
+    (row.password === null || typeof row.password === 'string') &&
+    (row.openvpn === undefined || isOpenVpnConfig(row.openvpn)) &&
+    (row.wireguard === undefined || isWireGuardConfig(row.wireguard))
+  );
+}
+
+function secretBinding(proxy: PersistedProxyConfig): ProxySecretPayload['binding'] {
+  return {
+    host: proxy.host,
+    port: proxy.port,
+    username: proxy.username,
+    scheme: proxy.scheme ?? null,
+  };
+}
+
+function isProxySecretBinding(value: unknown): value is ProxySecretPayload['binding'] {
+  if (typeof value !== 'object' || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.host === 'string' &&
+    Number.isInteger(row.port) &&
+    (row.username === null || typeof row.username === 'string') &&
+    (row.scheme === null || isProxyScheme(row.scheme))
+  );
+}
+
+function isOpenVpnConfig(value: unknown): value is OpenVpnConfigInput {
+  if (typeof value !== 'object' || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.config_blob === 'string' &&
+    (row.username === undefined || typeof row.username === 'string') &&
+    (row.password === undefined || typeof row.password === 'string')
+  );
+}
+
+function isWireGuardConfig(value: unknown): value is WireGuardConfigInput {
+  if (typeof value !== 'object' || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.private_key === 'string' &&
+    typeof row.peer_public_key === 'string' &&
+    typeof row.endpoint === 'string' &&
+    typeof row.allowed_ips === 'string' &&
+    typeof row.address === 'string' &&
+    (row.dns === undefined || typeof row.dns === 'string')
   );
 }
 
