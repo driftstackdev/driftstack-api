@@ -140,6 +140,49 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(new Headers(call?.init?.headers).get('idempotency-key')).toBeTruthy();
   });
 
+  it('serializes checkout across different tier buttons', async () => {
+    let releaseCheckout: (response: Response) => void = () => {};
+    const pendingCheckout = new Promise<Response>((resolve) => {
+      releaseCheckout = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/checkout-session$/.test(call.url)) return pendingCheckout;
+        return json({});
+      },
+    });
+    win = window;
+    await flush();
+    const buttons = Array.from(
+      window.document.querySelectorAll('[data-action="buy-tier"]'),
+    ) as HTMLButtonElement[];
+    const first = buttons[0];
+    const second = buttons[1];
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+
+    first?.click();
+    await flush(1);
+    expect(first?.disabled).toBe(true);
+    expect(second?.disabled).toBe(true);
+    expect(second?.title).toBe('Wait for the active checkout request to finish.');
+
+    second?.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush(1);
+    expect(
+      fetchCalls.filter(
+        (call) => /\/v1\/billing\/checkout-session$/.test(call.url) && call.init?.method === 'POST',
+      ),
+    ).toHaveLength(1);
+
+    releaseCheckout(json({ detail: 'temporary refusal' }, 503));
+    await flush();
+    expect(first?.disabled).toBe(false);
+    expect(second?.disabled).toBe(false);
+  });
+
   it('reuses the checkout idempotency key only after an ambiguous transport failure', async () => {
     const attempts: MockFetchCall[] = [];
     const abort = Object.assign(new Error('aborted'), { name: 'AbortError' });
