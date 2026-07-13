@@ -25,8 +25,14 @@ import sentry from '@sentry/astro';
 // posture for SENTRY_DSN. Source-map upload is a no-op when
 // SENTRY_AUTH_TOKEN is unset.
 const SENTRY_DSN = process.env.PUBLIC_SENTRY_DSN_DASHBOARD ?? '';
-const SENTRY_RELEASE = process.env.SENTRY_RELEASE ?? process.env.GIT_SHA ?? 'unknown';
 const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN ?? '';
+
+// Dedicated Sentry init files run in separate client/server Vite contexts.
+// Keep the non-secret environment label identical in both, and let the
+// Sentry build plugin inject the release so events and uploaded source maps
+// cannot drift onto different release names.
+process.env.PUBLIC_SENTRY_ENVIRONMENT ??= process.env.SENTRY_ENVIRONMENT ?? 'production';
+process.env.SENTRY_RELEASE ??= process.env.GIT_SHA ?? 'unknown';
 
 export default defineConfig({
   site: 'https://app.driftstack.dev',
@@ -38,15 +44,9 @@ export default defineConfig({
     tailwind({ applyBaseStyles: false }),
     sentry({
       enabled: SENTRY_DSN.length > 0,
-      dsn: SENTRY_DSN,
-      environment: process.env.SENTRY_ENVIRONMENT ?? 'production',
-      release: SENTRY_RELEASE,
-      tracesSampleRate: 0.05,
-      sourceMapsUploadOptions: {
-        project: 'driftstack-dashboard',
-        org: process.env.SENTRY_ORG ?? 'driftstack',
-        authToken: SENTRY_AUTH_TOKEN,
-      },
+      project: 'driftstack-dashboard',
+      org: process.env.SENTRY_ORG ?? 'driftstack',
+      authToken: SENTRY_AUTH_TOKEN || undefined,
     }),
   ],
   build: {

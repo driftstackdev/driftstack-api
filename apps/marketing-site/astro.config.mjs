@@ -18,8 +18,14 @@ import sentry from '@sentry/astro';
 // PUBLIC_SENTRY_DSN_MARKETING is set at build time; skips entirely
 // when unset.
 const SENTRY_DSN = process.env.PUBLIC_SENTRY_DSN_MARKETING ?? '';
-const SENTRY_RELEASE = process.env.SENTRY_RELEASE ?? process.env.GIT_SHA ?? 'unknown';
 const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN ?? '';
+
+// Dedicated Sentry init files run in separate client/server Vite contexts.
+// Keep the non-secret environment label identical in both, and let the
+// Sentry build plugin inject the release so events and uploaded source maps
+// cannot drift onto different release names.
+process.env.PUBLIC_SENTRY_ENVIRONMENT ??= process.env.SENTRY_ENVIRONMENT ?? 'production';
+process.env.SENTRY_RELEASE ??= process.env.GIT_SHA ?? 'unknown';
 
 export default defineConfig({
   site: 'https://driftstack.dev',
@@ -33,15 +39,9 @@ export default defineConfig({
     }),
     sentry({
       enabled: SENTRY_DSN.length > 0,
-      dsn: SENTRY_DSN,
-      environment: process.env.SENTRY_ENVIRONMENT ?? 'production',
-      release: SENTRY_RELEASE,
-      tracesSampleRate: 0.05,
-      sourceMapsUploadOptions: {
-        project: 'driftstack-marketing',
-        org: process.env.SENTRY_ORG ?? 'driftstack',
-        authToken: SENTRY_AUTH_TOKEN,
-      },
+      project: 'driftstack-marketing',
+      org: process.env.SENTRY_ORG ?? 'driftstack',
+      authToken: SENTRY_AUTH_TOKEN || undefined,
     }),
   ],
   build: {
