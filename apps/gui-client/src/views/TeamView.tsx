@@ -12,6 +12,8 @@ import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
+import { DriftstackError } from '../lib/client';
+import { humanizeError } from '../lib/humanize-error';
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -29,7 +31,8 @@ function friendlyTeamError(err: unknown, fallback: string): string {
   if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
     return "Couldn't reach the server — check your connection and try again.";
   }
-  return msg.length > 0 ? msg : fallback;
+  if (err instanceof DriftstackError) return err.message;
+  return humanizeError(err, fallback);
 }
 
 export interface TeamViewProps {

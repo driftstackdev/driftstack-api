@@ -112,6 +112,24 @@ describe('TeamView', () => {
     expect(alert.className).toContain('text-status-error');
   });
 
+  it('does not expose native transport diagnostics when an invite fails', async () => {
+    invite.mockRejectedValueOnce(
+      new TypeError('fetch failed: getaddrinfo ENOTFOUND internal-team.private'),
+    );
+    render(<TeamView onGoToSettings={vi.fn()} />);
+    await screen.findByText('alice@co.com');
+    fireEvent.change(screen.getByLabelText('Invitee email'), {
+      target: { value: 'carol@co.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      "Couldn't reach the server — check your connection and try again.",
+    );
+    expect(alert).not.toHaveTextContent('internal-team.private');
+  });
+
   it('offers a direct Settings recovery action when signed out', () => {
     currentClient = null;
     const onGoToSettings = vi.fn();
