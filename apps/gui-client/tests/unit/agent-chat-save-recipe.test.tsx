@@ -319,6 +319,47 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
+  it.each([
+    [401, 'Your sign-in or API key was not accepted. Check Settings, then retry.'],
+    [
+      403,
+      "This live view isn't available for the current session or API key. Start a new session or check Settings, then retry.",
+    ],
+    [404, 'This live session is no longer available. Start a new session and try again.'],
+    [429, 'The server is receiving too many requests. Wait a moment, then retry.'],
+    [502, 'The live-stream service is temporarily unavailable. Try again shortly.'],
+  ] as const)('maps typed HTTP %s failures to bounded recovery copy', async (status, copy) => {
+    livekitToken.mockRejectedValueOnce(
+      new DriftstackError({
+        kind: status === 401 ? 'invalid_key' : 'transport',
+        status,
+        type: 'https://errors.driftstack.dev/live-view',
+        title: 'Live view failure',
+        detail: 'private-api.internal /Users/customer token=secret',
+      }),
+    );
+    chatState = baseChat({ session: SESSION, turns: [] });
+    render(<AgentChatView />);
+
+    expect(await screen.findByText(copy)).toBeTruthy();
+    expect(screen.queryByText(/private-api\.internal|\/Users\/customer|token=secret/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  it('maps an unclassified native failure to fixed copy without exposing diagnostics', async () => {
+    livekitToken.mockRejectedValueOnce(
+      new Error(
+        'spawn failed at /Users/customer/Library against https://10.0.0.8/?token=secret Bearer live-token',
+      ),
+    );
+    chatState = baseChat({ session: SESSION, turns: [] });
+    render(<AgentChatView />);
+
+    expect(await screen.findByText('Could not start the live view. Try again.')).toBeTruthy();
+    expect(screen.queryByText(/\/Users\/customer|10\.0\.0\.8|token=secret|live-token/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
   it('Retry re-runs the token fetch on a transient network failure — recovering in place', async () => {
     // First attempt is a TRANSIENT network failure (Retry-able); the retry resolves.
     livekitToken.mockRejectedValueOnce(new Error('fetch failed'));

@@ -1263,16 +1263,50 @@ const LiveAutomationPanel = memo(function LiveAutomationPanel({
  *  STATE, not just copy. The dominant failure here is the 503/DriverNotIntegrated a
  *  chat session returns when the deployment runs simulated (no live device driver):
  *  that NEVER recovers, so a Retry button loops 503 forever. Map it to the calm
- *  `simulated` steady-state (mirrors the chat banner, no Retry). A genuine network/
- *  transport failure stays a Retry-able `error` with reassuring copy (the raw
- *  err.message — "HTTP 503", "fetch failed" — is never surfaced). */
+ *  `simulated` steady-state (mirrors the chat banner, no Retry). Genuine auth,
+ *  session, rate, service, and transport failures stay Retry-able with bounded,
+ *  actionable copy. Raw exception text never reaches WatchPlaceholder. */
 function classifyLiveViewError(
   err: unknown,
 ): { kind: 'simulated' } | { kind: 'error'; message: string } {
   const status = (err as { status?: number } | null)?.status;
   const msg = err instanceof Error ? err.message : '';
-  if (status === 503 || /503|not ready|unavailable|no worker|no session|driver/i.test(msg)) {
+  if (
+    status === 503 ||
+    /driver\s*not\s*integrated|live driver (?:is )?(?:disabled|not enabled)/i.test(msg)
+  ) {
     return { kind: 'simulated' };
+  }
+  if (status === 401) {
+    return {
+      kind: 'error',
+      message: 'Your sign-in or API key was not accepted. Check Settings, then retry.',
+    };
+  }
+  if (status === 403) {
+    return {
+      kind: 'error',
+      message:
+        "This live view isn't available for the current session or API key. Start a new session or check Settings, then retry.",
+    };
+  }
+  if (status === 404) {
+    return {
+      kind: 'error',
+      message: 'This live session is no longer available. Start a new session and try again.',
+    };
+  }
+  if (status === 429) {
+    return {
+      kind: 'error',
+      message: 'The server is receiving too many requests. Wait a moment, then retry.',
+    };
+  }
+  if (status !== undefined && status >= 500) {
+    return {
+      kind: 'error',
+      message: 'The live-stream service is temporarily unavailable. Try again shortly.',
+    };
   }
   if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
     return {
@@ -1280,7 +1314,10 @@ function classifyLiveViewError(
       message: "Couldn't reach the live-stream server — check your connection, then retry.",
     };
   }
-  return { kind: 'error', message: msg.length > 0 ? msg : 'Could not start the live view.' };
+  return {
+    kind: 'error',
+    message: humanizeError(err, 'Could not start the live view. Try again.'),
+  };
 }
 
 function WatchPlaceholder({
