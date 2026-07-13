@@ -14,6 +14,7 @@
 // (already in DrizzleWebhooksRepo.claim).
 
 import type { Logger } from '../lib/logger.js';
+import { redactText } from '../lib/redact-url.js';
 import { signWebhookPayload } from '../lib/webhook-signing.js';
 import { ssrfGuardedFetch } from '../lib/ssrf-guarded-fetch.js';
 import type { WebhookDeliveryRow, WebhookEndpointRow, WebhooksRepo } from './webhooks.js';
@@ -71,6 +72,7 @@ const DEFAULT_BATCH_SIZE = 25;
 // so this is a required defense for the wired worker.
 const MAX_RESPONSE_READ_BYTES = 64 * 1024;
 const EXCERPT_MAX_CHARS = 4096;
+const TRANSPORT_ERROR_MAX_CHARS = 500;
 
 export class WebhookDeliveryWorker {
   private running = false;
@@ -255,11 +257,7 @@ export class WebhookDeliveryWorker {
     }
 
     const responseStatus = response?.status ?? null;
-    const lastError = networkError
-      ? networkError.name === 'AbortError'
-        ? 'timeout'
-        : networkError.message
-      : null;
+    const lastError = networkError ? safeTransportError(networkError) : null;
 
     const nextAttemptIndex = delivery.attempts + 1;
 
@@ -385,6 +383,16 @@ async function readExcerpt(response: Response): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+function safeTransportError(error: Error): string {
+  if (error.name === 'AbortError') return 'timeout';
+  // This value is persisted and later logged as a normal field, so it cannot
+  // rely on Pino's `err` serializer. Bound before redaction to avoid processing
+  // an attacker-sized exception, then bound again because replacement markers
+  // can be longer than the credential they replace.
+  const bounded = error.message.slice(0, TRANSPORT_ERROR_MAX_CHARS);
+  return (redactText(bounded) || 'transport failure').slice(0, TRANSPORT_ERROR_MAX_CHARS);
 }
 
 function defaultSleep(ms: number): Promise<void> {

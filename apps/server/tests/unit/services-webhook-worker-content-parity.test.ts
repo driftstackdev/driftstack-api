@@ -103,13 +103,23 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/const durationMs = Date\.now\(\) - fetchStartMs;/);
   });
 
-  it("handleOutcome: 2xx → recordDelivered + 'webhook delivered' info; AbortError.name → lastError='timeout'", () => {
+  it("handleOutcome: 2xx → recordDelivered; network failures use the bounded credential-safe sanitizer; AbortError.name → lastError='timeout'", () => {
     expect(body).toMatch(
       /if \(response && response\.ok\) \{\s*\n?\s*await this\.config\.repo\.recordDelivered\(delivery\.id, \{\s*\n?\s*responseStatus: response\.status,\s*\n?\s*at,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/'webhook delivered',/);
     expect(body).toMatch(
-      /const lastError = networkError\s*\n?\s*\?\s*networkError\.name === 'AbortError'\s*\n?\s*\?\s*'timeout'\s*\n?\s*:\s*networkError\.message\s*\n?\s*:\s*null;/,
+      /const lastError = networkError \? safeTransportError\(networkError\) : null;/,
+    );
+  });
+
+  it('persisted transport failures are capped at 500 chars and pass through redactText before retry/DLQ logging', () => {
+    expect(body).toMatch(/import \{ redactText \} from '\.\.\/lib\/redact-url\.js';/);
+    expect(body).toMatch(/const TRANSPORT_ERROR_MAX_CHARS = 500;/);
+    expect(body).toMatch(/if \(error\.name === 'AbortError'\) return 'timeout';/);
+    expect(body).toMatch(/error\.message\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/);
+    expect(body).toMatch(
+      /\(redactText\(bounded\) \|\| 'transport failure'\)\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/,
     );
   });
 

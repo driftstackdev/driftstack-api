@@ -134,6 +134,30 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(repo.getAllDeliveries()[0]?.lastError).toBe('ECONNREFUSED');
   });
 
+  it('redacts and bounds credentials embedded in a persisted transport error', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    const secretMessage =
+      'fetch https://alice:password123@customer.test/hook?token=query-secret ' +
+      'Bearer bearer-secret-value Basic YWxhZGRpbjpvcGVuc2VzYW1l ' +
+      'x'.repeat(2_000);
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ throwError: new Error(secretMessage) }),
+      now: constNow,
+    });
+
+    await worker.tickOnce();
+
+    const lastError = repo.getAllDeliveries()[0]?.lastError ?? '';
+    expect(lastError.length).toBeLessThanOrEqual(500);
+    expect(lastError).toContain('[redacted]');
+    expect(lastError).not.toContain('password123');
+    expect(lastError).not.toContain('query-secret');
+    expect(lastError).not.toContain('bearer-secret-value');
+    expect(lastError).not.toContain('YWxhZGRpbjpvcGVuc2VzYW1l');
+  });
+
   it('AbortError → retry with lastError "timeout"', async () => {
     const { repo } = await setupRepoWithEndpoint();
     const abortErr = new Error('aborted');
