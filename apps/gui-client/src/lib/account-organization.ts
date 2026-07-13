@@ -9,6 +9,8 @@
 // for a GUI-only feature. folders-store/tags-store remain the OFFLINE cache;
 // ProfilesView reconciles (server wins on a successful load, pushes on mutate).
 
+import { fetchWithDeadline } from './fetch-with-deadline';
+
 export interface OrgFolder {
   name: string;
   icon?: string;
@@ -20,16 +22,6 @@ export interface AccountOrganization {
 
 function orgUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, '')}/v1/account/me/organization`;
-}
-
-const ORGANIZATION_SYNC_TIMEOUT_MS = 15_000;
-
-function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), ORGANIZATION_SYNC_TIMEOUT_MS);
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
-    globalThis.clearTimeout(timer);
-  });
 }
 
 /** Builds the auth headers, adding the workspace scope header when a team

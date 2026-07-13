@@ -9,6 +9,8 @@
 // widening for a GUI feature. The local Tauri proxy store stays as the OFFLINE
 // cache; ProfilesView/ProxiesView reconcile (server wins on a successful load).
 
+import { fetchWithDeadline } from './fetch-with-deadline';
+
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
 /** OVPN/WG — VPN config blocks on the create/update body. The secret-bearing
@@ -68,16 +70,6 @@ function base(baseUrl: string): string {
 
 function authHeaders(apiKey: string): Record<string, string> {
   return { authorization: `Bearer ${apiKey}`, accept: 'application/json' };
-}
-
-const ACCOUNT_PROXY_TIMEOUT_MS = 15_000;
-
-function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), ACCOUNT_PROXY_TIMEOUT_MS);
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
-    globalThis.clearTimeout(timer);
-  });
 }
 
 /** GET the account's proxies. Throws on non-2xx / network error (caller falls

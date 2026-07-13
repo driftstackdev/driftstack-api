@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithDeadline } from '../../src/lib/fetch-with-deadline';
@@ -15,6 +17,19 @@ function responseThatStallsUntilAbort(signal: AbortSignal): Response {
 }
 
 describe('fetchWithDeadline', () => {
+  it('is the single deadline implementation for GUI API transports', () => {
+    for (const relative of [
+      '../../src/lib/account-organization.ts',
+      '../../src/lib/account-proxies.ts',
+      '../../src/lib/gui-input.ts',
+      '../../src/lib/agent-session-control.ts',
+    ]) {
+      const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
+      expect(source, relative).toContain("from './fetch-with-deadline'");
+      expect(source, relative).not.toContain('function fetchWithDeadline(');
+    }
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });

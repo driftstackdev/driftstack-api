@@ -19,6 +19,7 @@
 // fallback window (same process, can read the keychain) passes no control key
 // and keeps using the API key.
 
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
@@ -102,16 +103,6 @@ interface ApiSession {
 
 function isMode(v: unknown): v is SessionMode {
   return v === 'ai' || v === 'manual' || v === 'pair';
-}
-
-const CONTROL_REQUEST_TIMEOUT_MS = 15_000;
-
-function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), CONTROL_REQUEST_TIMEOUT_MS);
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
-    globalThis.clearTimeout(timer);
-  });
 }
 
 function pairKindOf(body: ApiSession): string | null {

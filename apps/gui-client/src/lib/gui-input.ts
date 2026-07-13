@@ -10,6 +10,7 @@
 // Mutates the session via the same WebKit driver as `/interact` does,
 // just on the gui-control branch.
 
+import { fetchWithDeadline } from './fetch-with-deadline';
 import type { DriftstackSettings } from './settings';
 
 export type GUIInputAction =
@@ -30,16 +31,6 @@ export class GUIInputError extends Error {
     super(message);
     this.name = 'GUIInputError';
   }
-}
-
-const GUI_INPUT_TIMEOUT_MS = 15_000;
-
-function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), GUI_INPUT_TIMEOUT_MS);
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
-    globalThis.clearTimeout(timer);
-  });
 }
 
 export async function sendGUIInput(
