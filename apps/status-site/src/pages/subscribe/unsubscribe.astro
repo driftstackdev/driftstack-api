@@ -53,6 +53,21 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       </p>
     </div>
 
+    <!-- Unknown pane: the request was sent but its response timed out. -->
+    <div
+      id="unsub-unknown"
+      class="hidden rounded-lg border border-amber-500/30 bg-amber-500/5 p-6 shadow-xs"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="text-sm font-medium text-amber-200">Your unsubscribe may already be complete.</p>
+      <p class="mt-3 text-sm text-ink-secondary">
+        The request timed out after it was sent, so the server may already have stopped future
+        status emails. Do not reload or open this unsubscribe link again. No action is needed now;
+        if another status email arrives, use the unsubscribe link in that newest email.
+      </p>
+    </div>
+
     <!-- Error pane (400 / 404 / 429 / network). -->
     <div
       id="unsub-error"
@@ -86,12 +101,16 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   }
   const pending = document.getElementById('unsub-pending');
   const success = document.getElementById('unsub-success');
+  const unknown = document.getElementById('unsub-unknown');
   const errorPane = document.getElementById('unsub-error');
   const errorMessage = document.getElementById('unsub-error-message');
+  let unsubscribeInFlight = false;
+  let unsubscribeOutcomeUnknown = false;
 
   function showError(message) {
     if (pending) pending.classList.add('hidden');
     if (success) success.classList.add('hidden');
+    if (unknown) unknown.classList.add('hidden');
     if (errorMessage) errorMessage.textContent = message;
     if (errorPane) errorPane.classList.remove('hidden');
   }
@@ -99,15 +118,25 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   function showSuccess() {
     if (pending) pending.classList.add('hidden');
     if (errorPane) errorPane.classList.add('hidden');
+    if (unknown) unknown.classList.add('hidden');
     if (success) success.classList.remove('hidden');
   }
 
+  function showUnknown() {
+    if (pending) pending.classList.add('hidden');
+    if (success) success.classList.add('hidden');
+    if (errorPane) errorPane.classList.add('hidden');
+    if (unknown) unknown.classList.remove('hidden');
+  }
+
   async function unsubscribe() {
+    if (unsubscribeInFlight || unsubscribeOutcomeUnknown) return;
     const token = new URLSearchParams(window.location.search).get('token');
     if (!token) {
       showError('This unsubscribe link is missing its token. Use the link directly from your email.');
       return;
     }
+    unsubscribeInFlight = true;
     try {
       const res = await fetchWithDeadline(
         `${API_BASE}/v1/status/subscribe/unsubscribe?token=${encodeURIComponent(token)}`,
@@ -134,8 +163,15 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       } else {
         showError(detail || `Couldn't unsubscribe you (HTTP ${res.status}).`);
       }
-    } catch {
-      showError("Couldn't reach the status API. Your network may be blocking the request.");
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        unsubscribeOutcomeUnknown = true;
+        showUnknown();
+      } else {
+        showError("Couldn't reach the status API. Your network may be blocking the request.");
+      }
+    } finally {
+      unsubscribeInFlight = false;
     }
   }
 

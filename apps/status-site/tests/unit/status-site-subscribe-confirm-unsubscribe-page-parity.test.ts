@@ -101,6 +101,16 @@ describe('status-site /subscribe/confirm + /subscribe/unsubscribe parity', () =>
     expect(unsub).toMatch(/res\.status === 429/);
   });
 
+  it('makes an ambiguous unsubscribe timeout terminal for that link load', () => {
+    expect(unsub).toMatch(/id="unsub-unknown"/);
+    expect(unsub).toMatch(/let unsubscribeOutcomeUnknown = false/);
+    expect(unsub).toMatch(/if \(unsubscribeInFlight \|\| unsubscribeOutcomeUnknown\) return/);
+    expect(unsub).toMatch(/error && error\.name === 'AbortError'/);
+    expect(unsub).toMatch(/unsubscribeOutcomeUnknown = true/);
+    expect(unsub).toMatch(/Do not reload or open this unsubscribe link again/);
+    expect(unsub).toMatch(/another status email arrives[\s\S]*newest email/);
+  });
+
   it('both pages default PUBLIC_API_BASE_URL to api.driftstack.dev', () => {
     const fallback = /PUBLIC_API_BASE_URL\s*\?\?\s*['"]https:\/\/api\.driftstack\.dev['"]/;
     expect(confirm).toMatch(fallback);

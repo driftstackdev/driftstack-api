@@ -53,16 +53,25 @@ function setUpPage(
       return nativeSetTimeout(handler, timeout, ...args);
     }) as typeof window.setTimeout;
   }
-  const marker = relativePath === 'subscribe/index.html' ? 'subscribe-form' : 'confirm-pending';
+  const marker = relativePath.endsWith('unsubscribe/index.html')
+    ? 'unsub-pending'
+    : relativePath === 'subscribe/index.html'
+      ? 'subscribe-form'
+      : 'confirm-pending';
   const script = scripts.find((body) => body.includes(marker));
   if (!script) throw new Error(`status-site inline script not found for ${relativePath}`);
-  const instrumentedScript =
-    marker === 'confirm-pending'
-      ? script.replace(
-          'confirmSubscription();',
-          'confirmSubscription(); window.__testConfirmSubscription = confirmSubscription;',
-        )
-      : script;
+  let instrumentedScript = script;
+  if (marker === 'confirm-pending') {
+    instrumentedScript = script.replace(
+      'confirmSubscription();',
+      'confirmSubscription(); window.__testConfirmSubscription = confirmSubscription;',
+    );
+  } else if (marker === 'unsub-pending') {
+    instrumentedScript = script.replace(
+      'unsubscribe();',
+      'unsubscribe(); window.__testUnsubscribe = unsubscribe;',
+    );
+  }
   window.eval(instrumentedScript);
   return { window: window as JSDOM['window'], fetchCalls };
 }
@@ -169,6 +178,52 @@ describe('status-site subscription timeout recovery', () => {
     );
     expect(window.document.querySelector('#confirm-unknown')?.textContent).toMatch(
       /may already have confirmed[\s\S]*welcome[\s\S]*unsubscribe link[\s\S]*do not reload/i,
+    );
+  });
+
+  it('blocks one-click unsubscribe replay after its outcome becomes ambiguous', async () => {
+    const setup = setUpPage(
+      'subscribe/unsubscribe/index.html',
+      'https://status.driftstack.dev/subscribe/unsubscribe/?token=unsub_token_1234567890',
+      abortOnSignal,
+    );
+    const { window, fetchCalls } = setup;
+    win = window;
+    await flush();
+    // Exercise a queued/synthetic replay independently of browser navigation.
+    window.__testUnsubscribe();
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(window.document.querySelector('#unsub-pending')?.classList.contains('hidden')).toBe(
+      true,
+    );
+    expect(window.document.querySelector('#unsub-unknown')?.classList.contains('hidden')).toBe(
+      false,
+    );
+    expect(window.document.querySelector('#unsub-unknown')?.textContent).toMatch(
+      /may already be complete[\s\S]*stopped future\s+status emails[\s\S]*do not reload[\s\S]*newest email/i,
+    );
+  });
+
+  it('keeps an authoritative unsubscribe network failure retryable', async () => {
+    const setup = setUpPage(
+      'subscribe/unsubscribe/index.html',
+      'https://status.driftstack.dev/subscribe/unsubscribe/?token=unsub_token_1234567890',
+      () => Promise.reject(new Error('offline')),
+      false,
+    );
+    const { window, fetchCalls } = setup;
+    win = window;
+    await flush();
+    window.__testUnsubscribe();
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(window.document.querySelector('#unsub-error')?.classList.contains('hidden')).toBe(false);
+    expect(window.document.querySelector('#unsub-error-message')?.textContent).toMatch(
+      /couldn't reach the status api/i,
     );
   });
 });
