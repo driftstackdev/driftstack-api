@@ -61,14 +61,12 @@ describe('W553.B /docs/operations/production-env-schema.md content parity', () =
     expect(body).toMatch(/### 9\. Driver \(production WebKit fork integration\)/);
   });
 
-  it("Auth-flow URLs + DASHBOARD_ORIGIN + AUTH_EXPOSE_DEBUG_TOKEN framing pinned: 'AUTH_VERIFY_EMAIL_URL=https://app.driftstack.dev/auth/verify-email' + 'AUTH_MAGIC_LINK_URL=https://app.driftstack.dev/auth/magic-link' + 'AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/auth/password-reset' + 'DASHBOARD_ORIGIN=https://app.driftstack.dev' + '`DASHBOARD_ORIGIN` is the V-266 browser-OAuth flow's launch surface — the GUI client opens `${DASHBOARD_ORIGIN}/cli/authorize?code=…`.' + '`AUTH_EXPOSE_DEBUG_TOKEN` MUST stay unset / false in production. Local dev only.' — pinned so the 3-auth-URL-inventory + V-266-DASHBOARD_ORIGIN-OAuth-launch + AUTH_EXPOSE_DEBUG_TOKEN-never-production commitment survives", () => {
-    expect(body).toMatch(
-      /AUTH_VERIFY_EMAIL_URL=https:\/\/app\.driftstack\.dev\/auth\/verify-email/,
-    );
+  it('Auth-flow URLs + DASHBOARD_ORIGIN + AUTH_EXPOSE_DEBUG_TOKEN framing pins the actual dashboard routes and rejects the legacy verify/reset paths', () => {
+    expect(body).toMatch(/AUTH_VERIFY_EMAIL_URL=https:\/\/app\.driftstack\.dev\/verify-email/);
     expect(body).toMatch(/AUTH_MAGIC_LINK_URL=https:\/\/app\.driftstack\.dev\/auth\/magic-link/);
-    expect(body).toMatch(
-      /AUTH_PASSWORD_RESET_URL=https:\/\/app\.driftstack\.dev\/auth\/password-reset/,
-    );
+    expect(body).toMatch(/AUTH_PASSWORD_RESET_URL=https:\/\/app\.driftstack\.dev\/reset-password/);
+    expect(body).not.toMatch(/^AUTH_VERIFY_EMAIL_URL=.*\/auth\/verify-email$/m);
+    expect(body).not.toMatch(/^AUTH_PASSWORD_RESET_URL=.*\/auth\/password-reset$/m);
     expect(body).toMatch(/DASHBOARD_ORIGIN=https:\/\/app\.driftstack\.dev/);
     expect(body).toMatch(
       /DASHBOARD_ORIGIN=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev/,

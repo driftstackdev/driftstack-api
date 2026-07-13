@@ -38,9 +38,9 @@ REDIS_URL=rediss://default:<pwd>@<host>.upstash.io:<port>
 The deep-links emailed to users land on the customer-dashboard origin. For production:
 
 ```
-AUTH_VERIFY_EMAIL_URL=https://app.driftstack.dev/auth/verify-email
+AUTH_VERIFY_EMAIL_URL=https://app.driftstack.dev/verify-email
 AUTH_MAGIC_LINK_URL=https://app.driftstack.dev/auth/magic-link
-AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/auth/password-reset
+AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/reset-password
 DASHBOARD_ORIGIN=https://app.driftstack.dev
 ```
 
