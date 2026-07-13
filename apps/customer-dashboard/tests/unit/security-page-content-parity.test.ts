@@ -87,6 +87,16 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toMatch(/hideBanner\(noticeGeneration\)/);
   });
 
+  it('reconciles ambiguous single and bulk session revocation', () => {
+    expect(body).toContain('Session-revocation outcome is unknown after the request timed out.');
+    expect(body).toContain(
+      'Bulk session-revocation outcome is unknown after the request timed out.',
+    );
+    expect(body).toContain('If this sign-in is gone, revocation completed.');
+    expect(body).toContain('If only the current sign-in remains, every other session was revoked.');
+    expect(body).toMatch(/const refreshed = await loadWebSessions\(\)/);
+  });
+
   it('V-353h TOTP enrollment: SHA-1 / 30s / 6-digit (RFC 6238 defaults) pinned', () => {
     expect(body).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults/);
   });

@@ -807,14 +807,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function loadWebSessions() {
-        if (!token || !webSessionsList) return;
+        if (!token || !webSessionsList) return Promise.resolve(false);
         if (webSessionsEmpty) webSessionsEmpty.classList.add('hidden');
         return authedFetch('/v1/account/web-sessions', { method: 'GET' })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then((body) => renderWebSessions(body.data || []))
+          .then((body) => {
+            renderWebSessions(body.data || []);
+            return true;
+          })
           .catch((err) => {
             const msg = err && err.message ? err.message : 'network error';
             showBanner("Couldn't load active sign-ins (" + msg + ').');
+            return false;
           });
       }
 
@@ -831,7 +835,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             setTimeout(() => hideBanner(noticeGeneration), 2000);
             return loadWebSessions();
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              const refreshed = await loadWebSessions();
+              showBanner(
+                'Session-revocation outcome is unknown after the request timed out. ' +
+                  (refreshed
+                    ? 'Active sign-ins were refreshed. '
+                    : "We couldn't refresh active sign-ins. ") +
+                  'If this sign-in is gone, revocation completed. If it still appears, retry the revocation.',
+              );
+              return;
+            }
             const msg = err && err.message ? err.message : 'network error';
             showBanner("Couldn't revoke session (" + msg + ').');
           });
@@ -883,7 +898,18 @@ const apiBaseUrl = resolveApiBaseUrl();
                 setTimeout(() => hideBanner(noticeGeneration), 3000);
                 return loadWebSessions();
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                if (err && err.name === 'AbortError') {
+                  const refreshed = await loadWebSessions();
+                  showBanner(
+                    'Bulk session-revocation outcome is unknown after the request timed out. ' +
+                      (refreshed
+                        ? 'Active sign-ins were refreshed. '
+                        : "We couldn't refresh active sign-ins. ") +
+                      'If only the current sign-in remains, every other session was revoked. If others still appear, retry sign-out.',
+                  );
+                  return;
+                }
                 const msg = err && err.message ? err.message : 'network error';
                 showBanner("Couldn't bulk-revoke (" + msg + ').');
               });

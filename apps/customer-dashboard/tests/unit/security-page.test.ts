@@ -249,6 +249,64 @@ describe('security page — web-session management (security)', () => {
     expect(revokeAllBtn.disabled).toBe(false);
   });
 
+  it('single revoke timeout refreshes a committed removal before suggesting retry', async () => {
+    const sessions = [
+      mkSession({ id: 'sess_current', current: true }),
+      mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
+    ];
+    const base = makeRouter(sessions);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'DELETE' && /\/web-sessions\/sess_other$/.test(call.url)) {
+          sessions.splice(1, 1);
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-revoke-id="sess_other"]') as HTMLButtonElement).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(window.document.querySelector('[data-revoke-id="sess_other"]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*active sign-ins were refreshed.*sign-in is gone.*revocation completed.*still appears.*retry/i,
+    );
+  });
+
+  it('bulk revoke timeout refreshes committed state and confirms only current remains', async () => {
+    const sessions = [
+      mkSession({ id: 'sess_current', current: true }),
+      mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
+    ];
+    const base = makeRouter(sessions);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'DELETE' && /\/web-sessions\?keep=current$/.test(call.url)) {
+          sessions.splice(1, 1);
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector('[data-button="web-sessions-revoke-all"]') as HTMLButtonElement
+    ).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(window.document.querySelector('[data-revoke-id]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*active sign-ins were refreshed.*only the current sign-in remains.*every other session was revoked.*others still appear.*retry/i,
+    );
+  });
+
   it('does not let an older success timer hide a newer refresh failure', async () => {
     vi.useFakeTimers();
     const sessions = [
