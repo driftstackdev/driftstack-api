@@ -85,6 +85,7 @@ import { normalizeNavigateUrl } from '../lib/address-bar';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { humanizeError } from '../lib/humanize-error';
+import { friendlySimulatorOpenReason } from '../lib/simulator-open-error';
 import {
   clearSession as clearProfileSession,
   deleteBinding,
@@ -1347,7 +1348,7 @@ export function ProfilesView({
         // scaled). The simulator is ONLY the separate window now.
         setState((s) => ({
           ...s,
-          error: `Couldn't reopen the simulator window: ${sim.reason ?? 'unknown'}. If one is already open for this session, close it and relaunch.`,
+          error: `${friendlySimulatorOpenReason(sim.reason)} If one is already open for this session, close it and relaunch.`,
         }));
       }
     } catch (err) {
@@ -2084,7 +2085,7 @@ export function ProfilesView({
           await clearProfileSession(profile.id).catch(() => undefined);
           setState((s) => ({
             ...s,
-            error: `Couldn't open the simulator window: ${sim.reason ?? 'unknown'}. The session was stopped — try launching again.`,
+            error: `${friendlySimulatorOpenReason(sim.reason)} The session was stopped — try launching again.`,
           }));
         } else {
           // Concrete success confirmation — the separate window appears, but a note

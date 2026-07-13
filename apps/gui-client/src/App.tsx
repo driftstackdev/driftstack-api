@@ -28,6 +28,7 @@ import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 import { buildClient } from './lib/client';
 import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
+import { friendlySimulatorOpenReason } from './lib/simulator-open-error';
 
 // The default Command Center and boot/first-run surfaces stay eager. Every other
 // destination is loaded only when selected, keeping crypto/billing, profile tooling,
@@ -795,25 +796,10 @@ function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
  *  The known reasons come from open-simulator.ts: 'not signed in', the
  *  Simulator-app-not-installed message, the browser-preview guard, plus the
  *  raw error message from a livekitToken mint (a closed/expired session 403s/
- *  404s). Anything unrecognised falls back to the raw reason so the customer
- *  still gets a clue instead of nothing. */
+ *  404s). Unknown support diagnostics cross the shared safe fallback rather
+ *  than entering the toast. */
 export function friendlyDeepLinkReason(reason: string | undefined): string {
-  const raw = reason ?? '';
-  const r = raw.toLowerCase();
-  if (r.includes('not signed in')) {
-    return 'Sign in to the desktop app first, then open the session from the dashboard.';
-  }
-  if (r.includes('not installed')) {
-    return 'Install the Driftstack Simulator app to open sessions in a separate window.';
-  }
-  if (r.includes('browser preview') || r.includes('not running under tauri')) {
-    return 'Open sessions from the desktop app — this view can’t launch the Simulator window.';
-  }
-  if (r.includes('403') || r.includes('404') || r.includes('not found') || r.includes('expired')) {
-    return 'That session has ended — launch the profile again to start a new one.';
-  }
-  // Unknown failure: surface the raw reason (trimmed) so it isn't a dead end.
-  return raw.length > 0 ? raw : 'Something went wrong opening the session. Please try again.';
+  return friendlySimulatorOpenReason(reason);
 }
 
 /**
