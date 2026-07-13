@@ -28,10 +28,28 @@ describe('marketing rendered title and error-page metadata', () => {
     }
   });
 
-  it('renders both error-only routes as noindex,nofollow', () => {
-    for (const name of ['404.html', '500.html']) {
+  it('keeps every noindex route out of canonical, share-preview, and structured metadata', () => {
+    const noindexPages = htmlFiles(DIST).filter((page) =>
+      /<meta name="robots" content="noindex,\s*nofollow"/.test(readFileSync(page, 'utf8')),
+    );
+    expect(noindexPages.length).toBeGreaterThanOrEqual(5);
+
+    for (const page of noindexPages) {
+      const html = readFileSync(page, 'utf8');
+      expect(html, page).not.toContain('<link rel="canonical"');
+      expect(html, page).not.toMatch(/(?:property="og:|name="twitter:)/);
+      expect(html, page).not.toContain('type="application/ld+json"');
+    }
+  });
+
+  it('keeps canonical, share-preview, and structured metadata on indexable pages', () => {
+    for (const name of ['index.html', 'pricing/index.html']) {
       const html = readFileSync(join(DIST, name), 'utf8');
-      expect(html, name).toContain('<meta name="robots" content="noindex,nofollow">');
+      expect(html, name).toContain('<meta name="robots" content="index,follow">');
+      expect(html, name).toContain('<link rel="canonical"');
+      expect(html, name).toContain('property="og:url"');
+      expect(html, name).toContain('name="twitter:card" content="summary_large_image"');
+      expect(html, name).toContain('type="application/ld+json"');
     }
   });
 });

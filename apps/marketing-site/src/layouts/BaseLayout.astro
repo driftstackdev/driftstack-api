@@ -147,25 +147,31 @@ const structuredData = {
       })();
     </script>
     <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow'} />
-    <link rel="canonical" href={canonical} />
+    {!noindex && <link rel="canonical" href={canonical} />}
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
-    <!-- OpenGraph (LinkedIn, Slack, iMessage, generic OG-aware crawlers) -->
-    <meta property="og:title" content={fullTitle} />
-    <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Driftstack" />
-    <meta property="og:image" content={ogImageUrl} />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <!-- Twitter / X -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content={fullTitle} />
-    <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={ogImageUrl} />
-    {/* W464 — schema.org structured data (Organization + WebSite + SoftwareApplication). */}
-    <script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+    {
+      !noindex && (
+        <>
+          {/* OpenGraph (LinkedIn, Slack, iMessage, generic OG-aware crawlers) */}
+          <meta property="og:title" content={fullTitle} />
+          <meta property="og:description" content={description} />
+          <meta property="og:url" content={canonical} />
+          <meta property="og:type" content="website" />
+          <meta property="og:site_name" content="Driftstack" />
+          <meta property="og:image" content={ogImageUrl} />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          {/* Twitter / X */}
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content={fullTitle} />
+          <meta name="twitter:description" content={description} />
+          <meta name="twitter:image" content={ogImageUrl} />
+          {/* W464 — schema.org structured data (Organization + WebSite + SoftwareApplication). */}
+          <script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+        </>
+      )
+    }
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=4" />
     {/* Self-hosted fonts (Fleet v2 port 2026-07-03) — preload the two
         above-the-fold faces so first paint doesn't flash the system

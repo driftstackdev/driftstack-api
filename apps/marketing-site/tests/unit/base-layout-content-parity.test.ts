@@ -69,9 +69,9 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     );
   });
 
-  it('canonical link uses Astro.site + pathname', () => {
+  it('canonical link uses Astro.site + pathname only on indexable pages', () => {
     expect(body).toMatch(/const canonical = new URL\(pathname, Astro\.site\)\.toString\(\);/);
-    expect(body).toMatch(/<link rel="canonical" href=\{canonical\} \/>/);
+    expect(body).toMatch(/\{!noindex && <link rel="canonical" href=\{canonical\} \/>\}/);
   });
 
   it('OG image fallback: /og-default.png at the site root', () => {
@@ -86,6 +86,7 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(
       /<meta name="robots" content=\{noindex \? 'noindex,nofollow' : 'index,follow'\} \/>/,
     );
+    expect(body).toMatch(/!noindex && \(\s*<>/);
   });
 
   it('7 OG meta tags pinned (title / description / url / type / site_name / image / image dimensions)', () => {
