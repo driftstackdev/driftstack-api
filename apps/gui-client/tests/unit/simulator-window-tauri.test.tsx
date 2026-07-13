@@ -75,6 +75,18 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
     destroy,
   }),
 }));
+// Vite resolves the package export above to this concrete ESM subpath before a
+// dynamic import runs. Mock both identities so Vitest cannot externalize the
+// resolved `.js` module and silently bypass the close-listener seam.
+vi.mock('@tauri-apps/api/webviewWindow.js', () => ({
+  getCurrentWebviewWindow: () => ({
+    onCloseRequested: (h: (event: { preventDefault: () => void }) => void | Promise<void>) => {
+      closeHandler = h;
+      return Promise.resolve(() => {});
+    },
+    destroy,
+  }),
+}));
 vi.mock('@tauri-apps/api/event', () => ({
   listen: () => Promise.resolve(() => {}),
 }));
@@ -205,7 +217,7 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     // Wait until the manual mode has loaded into render (cursor-none present),
     // so the LOADED-mode close handler (not the initial null-mode one) is live.
     await waitFor(() => expect(host()?.className).toContain('cursor-none'));
-    expect(closeHandler).not.toBeNull();
+    await waitFor(() => expect(closeHandler).not.toBeNull());
     const event = { preventDefault: vi.fn() };
     await closeHandler?.(event);
     // Manual → end the session, prevent the default close, then destroy. The
@@ -231,7 +243,7 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     // so wait on that to confirm the mode resolved into render + the handler
     // re-registered with the (unconfirmed) manual mode.
     await waitFor(() => expect(host()?.className).toContain('cursor-none'));
-    expect(closeHandler).not.toBeNull();
+    await waitFor(() => expect(closeHandler).not.toBeNull());
     const event = { preventDefault: vi.fn() };
     await closeHandler?.(event);
     // Unconfirmed manual → treated as non-manual: window closes, session lives on.
@@ -251,7 +263,7 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     // ai mode drops cursor-none on the host — wait for that to confirm the mode
     // loaded before firing close (otherwise we'd hit the null-mode handler).
     await waitFor(() => expect(host()?.className).not.toContain('cursor-none'));
-    expect(closeHandler).not.toBeNull();
+    await waitFor(() => expect(closeHandler).not.toBeNull());
     const event = { preventDefault: vi.fn() };
     await closeHandler?.(event);
     // Agent-driven → window just closes; the session keeps running in the bg.
