@@ -122,6 +122,15 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toMatch(/secretSetInFlight = false;\s*form\.removeAttribute\('aria-busy'\)/);
   });
 
+  it('reconciles ambiguous owner-secret saves against versioned metadata', () => {
+    expect(body).toMatch(/let secretMetadataByName = new Map\(\)/);
+    expect(body).toMatch(/const previouslyPresent = secretMetadataByName\.has\(name\)/);
+    expect(body).toMatch(/String\(liveSecret\.updated_at \|\| ''\) !== previousUpdatedAt/);
+    expect(body).toContain('the save likely completed, so do not overwrite it again');
+    expect(body).toContain('Validate the dependent integration before another change');
+    expect(body).toContain('a new metadata version could not be confirmed');
+  });
+
   it('owner-secret reveal is single-flight and clears plaintext on hide/failure', () => {
     expect(body).toMatch(/const secretRevealsInFlight = new Set\(\);/);
     expect(body).toMatch(/secretRevealsInFlight\.has\(name\)/);

@@ -973,11 +973,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       // OWNER (403 for staff -> card stays hidden). Values NEVER ride the
       // list; Reveal POSTs the audited decrypt and shows the value until
       // Hide is clicked (cleared from the DOM on hide, never logged).
+      let secretMetadataByName = new Map();
       function renderSecrets(body) {
         const card = root.querySelector('[data-owner-only="secrets"]');
         const list = root.querySelector('[data-list="owner-secrets"]');
         if (!card || !list || !body) return;
         const rows = Array.isArray(body.secrets) ? body.secrets : [];
+        secretMetadataByName = new Map(
+          rows.map((secret) => [String(secret.name), String(secret.updated_at || '')]),
+        );
         if (!body.enabled) {
           list.innerHTML =
             '<div class="text-sm text-amber-600">Secrets are disabled on this deployment (MFA_ENCRYPTION_KEY unset).</div>';
@@ -1138,6 +1142,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         const value = String(fd.get('value') || '');
         const description = String(fd.get('description') || '');
         if (!name || !value) return;
+        const previouslyPresent = secretMetadataByName.has(name);
+        const previousUpdatedAt = secretMetadataByName.get(name) || '';
         secretSetInFlight = true;
         form.setAttribute('aria-busy', 'true');
         const controls = Array.from(form.elements);
@@ -1177,9 +1183,44 @@ const apiBaseUrl = resolveApiBaseUrl();
           await fetchSecrets();
         } catch (err) {
           if (status) {
-            status.textContent =
-              'failed (' + (err && err.message ? err.message : 'error') + ')';
-            status.className = 'text-[11px] text-red-600';
+            if (err && err.name === 'AbortError') {
+              const refreshed = await fetchSecrets().catch(() => null);
+              const liveSecret =
+                refreshed && Array.isArray(refreshed.secrets)
+                  ? refreshed.secrets.find((secret) => secret && secret.name === name)
+                  : null;
+              const metadataAdvanced =
+                liveSecret &&
+                (!previouslyPresent || String(liveSecret.updated_at || '') !== previousUpdatedAt);
+              if (metadataAdvanced) {
+                status.textContent = 'confirmed ✓';
+                status.className = 'text-[11px] text-emerald-600';
+                form.reset();
+                showBanner(
+                  'Secret-save outcome is unknown because the response timed out. Secret metadata was refreshed and "' +
+                    name +
+                    '" has a new version; the save likely completed, so do not overwrite it again. Validate the dependent integration before another change.',
+                );
+              } else if (liveSecret) {
+                status.textContent = 'verify';
+                status.className = 'text-[11px] text-amber-600';
+                showBanner(
+                  'Secret-save outcome is unknown because the response timed out. Secret metadata was refreshed but "' +
+                    name +
+                    '" has not changed; verify the dependent integration before deliberately retrying the exact value.',
+                );
+              } else {
+                status.textContent = 'unknown';
+                status.className = 'text-[11px] text-red-600';
+                showBanner(
+                  'Secret-save outcome is unknown because the response timed out, and a new metadata version could not be confirmed. Verify the dependent integration and secret list before retrying.',
+                );
+              }
+            } else {
+              status.textContent =
+                'failed (' + (err && err.message ? err.message : 'error') + ')';
+              status.className = 'text-[11px] text-red-600';
+            }
           }
         } finally {
           secretSetInFlight = false;

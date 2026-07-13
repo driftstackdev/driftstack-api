@@ -757,6 +757,57 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(submit.textContent).toBe('Save secret');
   });
 
+  it('owner-secret save timeout refreshes metadata before another blind overwrite', async () => {
+    let saved = false;
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({
+            enabled: true,
+            secrets: saved
+              ? [
+                  {
+                    name: 'stripe_key',
+                    description: 'billing',
+                    updated_at: '2026-07-13T01:00:00.000Z',
+                  },
+                ]
+              : [],
+          });
+        }
+        if (/\/v1\/admin\/owner\/secrets\/stripe_key$/.test(call.url) && method === 'PUT') {
+          saved = true;
+          return Promise.reject(timeout);
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-form="secret-set"]') as HTMLFormElement;
+    const name = form.querySelector('[name="name"]') as HTMLInputElement;
+    const value = form.querySelector('[name="value"]') as HTMLInputElement;
+    name.value = 'stripe_key';
+    value.value = 'sk_secret_must_never_appear';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(15);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
+    expect(window.document.querySelector('[data-secret-row="stripe_key"]')).toBeTruthy();
+    expect(text(window, '[data-field="secret-set-status"]')).toContain('confirmed');
+    expect(value.value).toBe('');
+    expect(text(window, '[data-banner]')).toMatch(
+      /secret-save outcome is unknown.*metadata was refreshed.*stripe_key.*new version.*save likely completed.*do not overwrite it again.*validate the dependent integration/i,
+    );
+  });
+
   it('owner-secret reveal is single-flight, visibly busy, and Hide clears plaintext', async () => {
     let resolveReveal: ((response: Response) => void) | undefined;
     const fallback = makeRouter({
