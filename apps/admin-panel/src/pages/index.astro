@@ -1302,6 +1302,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (refreshBtn) {
           refreshBtn.disabled = true;
           refreshBtn.setAttribute('aria-busy', 'true');
+          refreshBtn.textContent = 'Refreshing…';
         }
         return Promise.allSettled([
           fetchAudit(),
@@ -1316,6 +1317,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (refreshBtn) {
             refreshBtn.disabled = false;
             refreshBtn.removeAttribute('aria-busy');
+            refreshBtn.textContent = 'Refresh now';
           }
         });
       }

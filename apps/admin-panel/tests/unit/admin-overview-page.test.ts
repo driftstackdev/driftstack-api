@@ -216,6 +216,7 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     expect(refresh.disabled).toBe(true);
     expect(refresh.getAttribute('aria-busy')).toBe('true');
+    expect(refresh.textContent?.trim()).toBe('Refreshing…');
     await flush();
     const refreshCalls = fetchCalls.slice(before);
     expect(refreshCalls).toHaveLength(7);
@@ -224,6 +225,7 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     );
     expect(refresh.disabled).toBe(false);
     expect(refresh.hasAttribute('aria-busy')).toBe(false);
+    expect(refresh.textContent?.trim()).toBe('Refresh now');
   });
 
   it('open-incidents KPI: counts non-resolved incidents from /v1/admin/incidents (status !== resolved)', async () => {
