@@ -181,9 +181,23 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     );
     expect(body).toMatch(/outcome: successful \? 'success' : 'http_error',/);
     expect(body).toMatch(
-      /const isTimeout = e\?\.name === 'AbortError' \|\| e\?\.name === 'TimeoutError';/,
+      /const isTimeout = error\.name === 'AbortError' \|\| error\.name === 'TimeoutError';/,
     );
     expect(body).toMatch(/outcome: isTimeout \? 'timeout' : 'transport_error',/);
+  });
+
+  it('transport diagnostics: central redaction, exact timeout, and a 500-character pre/post bound', () => {
+    expect(body).toMatch(/import \{ redactText \} from '\.\.\/lib\/redact-url\.js';/);
+    expect(body).toMatch(/const TRANSPORT_ERROR_MAX_CHARS = 500;/);
+    expect(body).toMatch(/errorMessage: safeTransportError\(error\),/);
+    expect(body).toMatch(
+      /if \(error\.name === 'AbortError' \|\| error\.name === 'TimeoutError'\) return 'timeout';/,
+    );
+    expect(body).toMatch(/error\.message\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/);
+    expect(body).toMatch(
+      /\(redactText\(bounded\) \|\| 'transport failure'\)\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/,
+    );
+    expect(body).not.toMatch(/errorMessage: e\?\.message/);
   });
 
   it('response lifecycle: success body cancelled; failure body capped at 64 KiB decoded bytes and 200 characters without retaining an oversized chunk', () => {

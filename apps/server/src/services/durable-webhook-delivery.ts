@@ -45,6 +45,7 @@ import type { Database } from '../db/client.js';
 import { webhookDeliveries, webhookDeliveryAttempts, webhookEndpoints } from '../db/schema.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 import { ssrfGuardedFetch } from '../lib/ssrf-guarded-fetch.js';
+import { redactText } from '../lib/redact-url.js';
 
 /** Backoff schedule mirroring V-164 InMemoryWebhookDelivery. */
 export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
@@ -59,6 +60,7 @@ export const DEFAULT_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
 const RESPONSE_READ_MAX_BYTES = 64 * 1024;
 const RESPONSE_EXCERPT_MAX_CHARS = 200;
+const TRANSPORT_ERROR_MAX_CHARS = 500;
 
 // V-173.R — reclaim STALE in_flight rows. A worker that crashed / was deployed
 // mid-batch leaves a row stuck `in_flight` forever (it's never re-selected → the
@@ -556,8 +558,8 @@ export class DurableWebhookWorker {
       }
     } catch (err) {
       const durationMs = this.now() - startedMs;
-      const e = err as { name?: string; message?: string };
-      const isTimeout = e?.name === 'AbortError' || e?.name === 'TimeoutError';
+      const error = err instanceof Error ? err : new Error(String(err));
+      const isTimeout = error.name === 'AbortError' || error.name === 'TimeoutError';
       attempt = {
         attemptNumber,
         completedAtMs: this.now(),
@@ -565,7 +567,7 @@ export class DurableWebhookWorker {
         responseExcerpt: null,
         durationMs,
         outcome: isTimeout ? 'timeout' : 'transport_error',
-        errorMessage: e?.message ?? 'unknown error',
+        errorMessage: safeTransportError(error),
       };
     }
 
@@ -697,6 +699,15 @@ async function readResponseExcerpt(response: Response): Promise<string | null> {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+}
+
+function safeTransportError(error: Error): string {
+  if (error.name === 'AbortError' || error.name === 'TimeoutError') return 'timeout';
+  // Attempt history and the DLQ reason are customer-visible persisted data.
+  // Bound before redaction so an attacker-sized exception cannot turn the
+  // diagnostic path into a second resource-exhaustion surface.
+  const bounded = error.message.slice(0, TRANSPORT_ERROR_MAX_CHARS);
+  return (redactText(bounded) || 'transport failure').slice(0, TRANSPORT_ERROR_MAX_CHARS);
 }
 
 async function loadAttempts(database: Database, deliveryId: string): Promise<DeliveryAttempt[]> {

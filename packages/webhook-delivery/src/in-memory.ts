@@ -51,6 +51,12 @@ export const DEFAULT_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
 const RESPONSE_READ_MAX_BYTES = 64 * 1024;
 const RESPONSE_EXCERPT_MAX_CHARS = 200;
+const TRANSPORT_ERROR_MAX_CHARS = 500;
+const TRANSPORT_TOKEN_RE =
+  /([?&#](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|secret|password|signature|code)=)[^&\s"'`]+/gi;
+const TRANSPORT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
+const TRANSPORT_BASIC_RE = /(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi;
+const TRANSPORT_USERINFO_RE = /([a-z][a-z0-9+.-]*:\/\/)[^/?#\s@]+@/gi;
 /**
  * Default cap on `store.dlq`'s size (WD-4, LOW-severity audit finding,
  * 2026-07). Without a cap, an endpoint that fails forever accumulates one DLQ
@@ -508,8 +514,8 @@ class DeliveryWorker {
       };
     } catch (err) {
       const durationMs = this.now() - startedMs;
-      const e = err as { name?: string; message?: string };
-      const isTimeout = e?.name === 'AbortError' || e?.name === 'TimeoutError';
+      const error = err instanceof Error ? err : new Error(String(err));
+      const isTimeout = error.name === 'AbortError' || error.name === 'TimeoutError';
       attempt = {
         attempt: attemptNumber,
         completedAtMs: this.now(),
@@ -517,7 +523,7 @@ class DeliveryWorker {
         responseExcerpt: null,
         durationMs,
         outcome: isTimeout ? 'timeout' : 'transport_error',
-        errorMessage: e?.message ?? 'unknown error',
+        errorMessage: safeTransportError(error),
       };
     }
 
@@ -692,6 +698,20 @@ async function readResponseExcerpt(response: Response): Promise<string | null> {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+}
+
+function safeTransportError(error: Error): string {
+  if (error.name === 'AbortError' || error.name === 'TimeoutError') return 'timeout';
+  // This package deliberately has no apps/server dependency, so keep the
+  // central redactText credential classes mirrored here and pinned by tests.
+  const bounded = error.message.slice(0, TRANSPORT_ERROR_MAX_CHARS);
+  return (
+    bounded
+      .replace(TRANSPORT_TOKEN_RE, '$1[redacted]')
+      .replace(TRANSPORT_BEARER_RE, '$1[redacted]')
+      .replace(TRANSPORT_BASIC_RE, '$1[redacted]')
+      .replace(TRANSPORT_USERINFO_RE, '$1[redacted]@') || 'transport failure'
+  ).slice(0, TRANSPORT_ERROR_MAX_CHARS);
 }
 
 /**

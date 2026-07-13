@@ -289,4 +289,53 @@ describe('durable webhook response lifecycle', () => {
       outcome: 'http_error',
     });
   });
+
+  it('bounds and redacts credential-bearing transport errors before persistence', async () => {
+    const attemptRows: unknown[] = [];
+    const fetchFn = (() =>
+      Promise.reject(
+        new Error(
+          'fetch https://user:pass@customer.example/hook?token=tok_live_secret ' +
+            'https://customer.example/cb#access_token=fragment_secret ' +
+            'Bearer bearer.secret+/== Basic dXNlcjpwYXNz ' +
+            'x'.repeat(2_000),
+        ),
+      )) as unknown as typeof fetch;
+    const worker = new DurableWebhookWorker(
+      makeMockDb(baseDelivery(), baseEndpoint(), attemptRows),
+      fetchFn,
+      () => EMITTED_AT_SEC * 1000,
+    );
+
+    const result = await worker.processTick();
+
+    expect(result.retried).toBe(1);
+    expect(attemptRows).toHaveLength(1);
+    const persisted = attemptRows[0] as { errorMessage: string; outcome: string };
+    expect(persisted.outcome).toBe('transport_error');
+    expect(persisted.errorMessage.length).toBeLessThanOrEqual(500);
+    expect(persisted.errorMessage).toContain('[redacted]');
+    expect(persisted.errorMessage).not.toContain('user:pass');
+    expect(persisted.errorMessage).not.toContain('tok_live_secret');
+    expect(persisted.errorMessage).not.toContain('fragment_secret');
+    expect(persisted.errorMessage).not.toContain('bearer.secret');
+    expect(persisted.errorMessage).not.toContain('dXNlcjpwYXNz');
+  });
+
+  it('persists timeout as a fixed diagnostic rather than the thrown message', async () => {
+    const attemptRows: unknown[] = [];
+    const timeoutError = Object.assign(new Error('https://user:pass@example.test/?token=secret'), {
+      name: 'TimeoutError',
+    });
+    const fetchFn = (() => Promise.reject(timeoutError)) as unknown as typeof fetch;
+    const worker = new DurableWebhookWorker(
+      makeMockDb(baseDelivery(), baseEndpoint(), attemptRows),
+      fetchFn,
+      () => EMITTED_AT_SEC * 1000,
+    );
+
+    await worker.processTick();
+
+    expect(attemptRows[0]).toMatchObject({ outcome: 'timeout', errorMessage: 'timeout' });
+  });
 });

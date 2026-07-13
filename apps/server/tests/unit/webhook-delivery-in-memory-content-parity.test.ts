@@ -201,11 +201,29 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
       /errorMessage: response\.ok \? null : `HTTP \$\{response\.status\.toString\(\)\}`,/,
     );
     expect(body).toMatch(
-      /const isTimeout = e\?\.name === 'AbortError' \|\| e\?\.name === 'TimeoutError';/,
+      /const isTimeout = error\.name === 'AbortError' \|\| error\.name === 'TimeoutError';/,
     );
     expect(body).toMatch(
       /if \(attempt\.outcome === 'success'\) \{\s*\n?\s*this\.recordAttempt\(entry, attempt, false\);\s*\n?\s*return 'delivered';\s*\n?\s*\}\s*\n?\s*if \(attemptNumber >= maxAttempts\) \{\s*\n?\s*this\.recordAttempt\(entry, attempt, true\);\s*\n?\s*return 'dlqed';\s*\n?\s*\}/,
     );
+  });
+
+  it('transport diagnostics: mirrored credential classes, exact timeout, and a 500-character pre/post bound', () => {
+    expect(body).toMatch(/const TRANSPORT_ERROR_MAX_CHARS = 500;/);
+    expect(body).toMatch(/const TRANSPORT_TOKEN_RE =/);
+    expect(body).toMatch(/const TRANSPORT_BEARER_RE =/);
+    expect(body).toMatch(/const TRANSPORT_BASIC_RE =/);
+    expect(body).toMatch(/const TRANSPORT_USERINFO_RE =/);
+    expect(body).toMatch(/errorMessage: safeTransportError\(error\),/);
+    expect(body).toMatch(
+      /if \(error\.name === 'AbortError' \|\| error\.name === 'TimeoutError'\) return 'timeout';/,
+    );
+    expect(body).toMatch(/error\.message\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/);
+    expect(body).toMatch(/\.replace\(TRANSPORT_TOKEN_RE, '\$1\[redacted\]'\)/);
+    expect(body).toMatch(/\.replace\(TRANSPORT_BEARER_RE, '\$1\[redacted\]'\)/);
+    expect(body).toMatch(/\.replace\(TRANSPORT_BASIC_RE, '\$1\[redacted\]'\)/);
+    expect(body).toMatch(/\.replace\(TRANSPORT_USERINFO_RE, '\$1\[redacted\]@'\)/);
+    expect(body).not.toMatch(/errorMessage: e\?\.message/);
   });
 
   it("recordAttempt: success → status:'delivered' + nextAttemptAtMs:null + completedAtMs:now + leasedUntilMs:null; toDlq → DlqEntry with totalAttempts/attempts/enteredDlqAtMs/reason + dlq.set + queue.delete; retry → status:'pending' + nextAttemptAtMs = now + backoff (fallback 60min)", () => {

@@ -331,6 +331,47 @@ describe('processTick — failure + retry curve', () => {
     expect(updated?.attempts[0]?.responseStatus).toBeNull();
   });
 
+  it('bounds and redacts credential-bearing transport errors before attempt/DLQ storage', async () => {
+    const message =
+      'fetch https://user:pass@customer.example/hook?token=tok_live_secret ' +
+      'https://customer.example/cb#access_token=fragment_secret ' +
+      'Bearer bearer.secret+/== Basic dXNlcjpwYXNz ' +
+      'x'.repeat(2_000);
+    const { fn } = captureFetch(() => new Error(message));
+    const { handles } = build(fn);
+
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    await handles.processTick();
+
+    const updated = await handles.deliveries.get(record.id);
+    const errorMessage = updated?.attempts[0]?.errorMessage ?? '';
+    expect(updated?.attempts[0]?.outcome).toBe('transport_error');
+    expect(errorMessage.length).toBeLessThanOrEqual(500);
+    expect(errorMessage).toContain('[redacted]');
+    expect(errorMessage).not.toContain('user:pass');
+    expect(errorMessage).not.toContain('tok_live_secret');
+    expect(errorMessage).not.toContain('fragment_secret');
+    expect(errorMessage).not.toContain('bearer.secret');
+    expect(errorMessage).not.toContain('dXNlcjpwYXNz');
+  });
+
+  it('records timeout as a fixed diagnostic rather than the thrown message', async () => {
+    const error = Object.assign(new Error('https://user:pass@example.test/?token=secret'), {
+      name: 'TimeoutError',
+    });
+    const { fn } = captureFetch(() => error);
+    const { handles } = build(fn);
+
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    await handles.processTick();
+
+    const updated = await handles.deliveries.get(record.id);
+    expect(updated?.attempts[0]).toMatchObject({
+      outcome: 'timeout',
+      errorMessage: 'timeout',
+    });
+  });
+
   it("SSRF hardening: delivery fetch sets redirect:'error' (does NOT follow 3xx)", async () => {
     // A customer-controlled endpoint that 3xx-redirects must not be
     // followed (e.g. https://attacker → 30x → http://169.254.169.254).
