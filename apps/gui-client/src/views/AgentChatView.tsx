@@ -24,6 +24,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { useConfirm } from '../components/ConfirmProvider';
+import { useFocusTrap } from '../lib/use-focus-trap';
 import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
@@ -228,6 +229,8 @@ export function AgentChatView({
   const [recipeDesc, setRecipeDesc] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const saveDialogRef = useRef<HTMLDivElement>(null);
+  const saveDiscardConfirmOpenRef = useRef(false);
 
   // Multi-chat history (memory): each chat is persisted as its own transcript
   // so the customer can keep several conversations and reopen past ones.
@@ -358,25 +361,37 @@ export function AgentChatView({
     })();
   }
 
-  // Close the save dialog AND clear its draft, so reopening starts fresh
-  // instead of showing the previous (un-saved or just-saved) name/description.
-  function closeSaveDialog(): void {
+  // Successful saves and confirmed discards reset the dialog. Ordinary exit
+  // requests go through requestCloseSaveDialog below so an accidental backdrop
+  // click or Escape cannot erase a typed task name/description.
+  const resetSaveDialog = useCallback((): void => {
+    saveDiscardConfirmOpenRef.current = false;
     setSaveOpen(false);
     setRecipeLabel('');
     setRecipeDesc('');
     setSaveError(null);
-  }
+  }, []);
 
-  // a11y: Escape closes the save dialog (matches ConfirmProvider / the create
-  // modal). The backdrop already closes on click; keyboard users need a key path.
-  useEffect(() => {
-    if (!saveOpen) return undefined;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !saving) closeSaveDialog();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [saveOpen, saving]);
+  const requestCloseSaveDialog = useCallback((): void => {
+    if (saving || saveDiscardConfirmOpenRef.current) return;
+    if (recipeLabel.trim().length === 0 && recipeDesc.trim().length === 0) {
+      resetSaveDialog();
+      return;
+    }
+
+    saveDiscardConfirmOpenRef.current = true;
+    void confirm('Discard this unsaved task draft?', {
+      confirmLabel: 'Discard draft',
+      tone: 'danger',
+    }).then((discard) => {
+      saveDiscardConfirmOpenRef.current = false;
+      if (discard) resetSaveDialog();
+    });
+  }, [confirm, recipeDesc, recipeLabel, resetSaveDialog, saving]);
+
+  // Keep focus inside the modal, restore it to the trigger, and route Escape
+  // through the same dirty-draft guard as backdrop/Cancel.
+  useFocusTrap(saveOpen, saveDialogRef, requestCloseSaveDialog);
 
   async function saveRecipe(): Promise<void> {
     if (!client || chat.session === null) return;
@@ -393,9 +408,7 @@ export function AgentChatView({
         label,
         ...(recipeDesc.trim() !== '' ? { description: recipeDesc.trim() } : {}),
       });
-      setSaveOpen(false);
-      setRecipeLabel('');
-      setRecipeDesc('');
+      resetSaveDialog();
       toasts.push({
         title: 'Task saved',
         body: `“${recipe.label}” captured from this chat — replay it from Saved tasks.`,
@@ -890,9 +903,10 @@ export function AgentChatView({
       {/* Save-as-recipe dialog */}
       {saveOpen && (
         <div
+          ref={saveDialogRef}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={() => {
-            if (!saving) closeSaveDialog();
+          onClick={(e) => {
+            if (e.target === e.currentTarget) requestCloseSaveDialog();
           }}
         >
           <div
@@ -936,7 +950,7 @@ export function AgentChatView({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={closeSaveDialog}
+                onClick={requestCloseSaveDialog}
                 disabled={saving}
                 className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
               >

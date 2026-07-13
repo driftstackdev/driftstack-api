@@ -5,9 +5,10 @@
 // success toast carry the session id and trimmed label.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type { AgentMessageResponse, AgentSession } from '@driftstack/sdk';
 import type { ChatTurn, UseAgentChatResult } from '../../src/lib/use-agent-chat';
+import { ConfirmProvider } from '../../src/components/ConfirmProvider';
 
 const createRecipe = vi.fn(() => Promise.resolve({ id: 'rec_1', label: 'My flow' }));
 const pushToast = vi.fn();
@@ -127,21 +128,52 @@ describe('AgentChatView Save-as-recipe', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('clears the draft on Cancel so reopening the dialog starts fresh (no stale text)', async () => {
+  it('guards a typed draft across backdrop, Escape, and Cancel, then clears it after discard', async () => {
     const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
     chatState = baseChat({
       session: SESSION,
       turns: [{ id: 1, role: 'user', text: 'open example.com' }, planTurn],
     });
-    render(<AgentChatView />);
+    render(
+      <ConfirmProvider>
+        <AgentChatView />
+      </ConfirmProvider>,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
-    const name = await screen.findByPlaceholderText('e.g. Add 3 items to cart');
+    const saveDialog = await screen.findByRole('dialog', { name: 'Save chat as task' });
+    const name = within(saveDialog).getByPlaceholderText('e.g. Add 3 items to cart');
     fireEvent.change(name, { target: { value: 'half-typed name' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
 
-    // Reopen — the Name field is empty again, not the abandoned draft.
+    // An easy-to-miss backdrop click asks instead of erasing the draft.
+    fireEvent.click(saveDialog.parentElement!);
+    let discardDialog = await screen.findByRole('dialog', {
+      name: 'Discard this unsaved task draft?',
+    });
+    fireEvent.click(within(discardDialog).getByRole('button', { name: 'Cancel' }));
+    expect((name as HTMLInputElement).value).toBe('half-typed name');
+    await waitFor(() => expect(name).toHaveFocus());
+
+    // Escape follows the same path; cancelling the confirmation keeps the text.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    discardDialog = await screen.findByRole('dialog', {
+      name: 'Discard this unsaved task draft?',
+    });
+    fireEvent.click(within(discardDialog).getByRole('button', { name: 'Cancel' }));
+    expect((name as HTMLInputElement).value).toBe('half-typed name');
+    await waitFor(() => expect(name).toHaveFocus());
+
+    // Explicit Cancel is guarded too. Confirming is the one path that clears.
+    fireEvent.click(within(saveDialog).getByRole('button', { name: 'Cancel' }));
+    discardDialog = await screen.findByRole('dialog', {
+      name: 'Discard this unsaved task draft?',
+    });
+    fireEvent.click(within(discardDialog).getByRole('button', { name: 'Discard draft' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Save chat as task' })).toBeNull(),
+    );
+
+    // Reopen — the confirmed-discard draft is gone.
     fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
     const reopened: HTMLInputElement = await screen.findByPlaceholderText(
       'e.g. Add 3 items to cart',

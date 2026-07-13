@@ -3700,11 +3700,15 @@ function useProfileDraftCloseGuard({
   submitting,
   dialogRef,
   onClose,
+  discardPrompt = 'Discard your unsaved profile changes?',
+  discardLabel = 'Discard changes',
 }: {
   dirty: boolean;
   submitting: boolean;
   dialogRef: RefObject<HTMLElement | null>;
   onClose: () => void;
+  discardPrompt?: string;
+  discardLabel?: string;
 }): { requestClose: () => void; discardConfirmOpen: boolean } {
   const confirm = useConfirm();
   const confirmOpenRef = useRef(false);
@@ -3727,8 +3731,8 @@ function useProfileDraftCloseGuard({
 
     confirmOpenRef.current = true;
     setDiscardConfirmOpen(true);
-    void confirm('Discard your unsaved profile changes?', {
-      confirmLabel: 'Discard changes',
+    void confirm(discardPrompt, {
+      confirmLabel: discardLabel,
       tone: 'danger',
     }).then((discard) => {
       if (!mountedRef.current) return;
@@ -3736,7 +3740,7 @@ function useProfileDraftCloseGuard({
       setDiscardConfirmOpen(false);
       if (discard) onClose();
     });
-  }, [confirm, dirty, onClose, submitting]);
+  }, [confirm, dirty, discardLabel, discardPrompt, onClose, submitting]);
 
   useFocusTrap(true, dialogRef, requestClose);
   return { requestClose, discardConfirmOpen };
@@ -5184,10 +5188,16 @@ function ImportProfileModal({
   const [text, setText] = useState('');
   const [nameOverride, setNameOverride] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
-  // Trap focus in the modal + restore it to the opener on close (a11y).
-  useFocusTrap(true, dialogRef);
   const [fileName, setFileName] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const { requestClose, discardConfirmOpen } = useProfileDraftCloseGuard({
+    dirty: text.trim().length > 0 || nameOverride.trim().length > 0,
+    submitting: false,
+    dialogRef,
+    onClose,
+    discardPrompt: 'Discard this profile import draft?',
+    discardLabel: 'Discard import',
+  });
 
   function readFile(file: File): void {
     const reader = new FileReader();
@@ -5206,7 +5216,7 @@ function ImportProfileModal({
       aria-modal="true"
       aria-labelledby="import-profile-title"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
     >
       <div className="flex max-h-[90vh] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-md border border-surface-divider bg-surface-raised p-5 shadow-lg">
@@ -5217,7 +5227,8 @@ function ImportProfileModal({
           <button
             type="button"
             className="btn-secondary text-xs"
-            onClick={onClose}
+            onClick={requestClose}
+            disabled={discardConfirmOpen}
             aria-label="Close"
           >
             Close
@@ -5292,7 +5303,12 @@ function ImportProfileModal({
           </span>
         </label>
         <div className="mt-1 flex justify-end gap-2">
-          <button type="button" className="btn-secondary text-xs" onClick={onClose}>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={requestClose}
+            disabled={discardConfirmOpen}
+          >
             Cancel
           </button>
           <button
