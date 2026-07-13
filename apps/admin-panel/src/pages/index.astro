@@ -507,55 +507,28 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
       }
 
-      function keepDeadlineThroughBody(response, timeout) {
-        var cleared = false;
-        function clearDeadline() {
-          if (cleared) return;
-          cleared = true;
-          window.clearTimeout(timeout);
-        }
-        ['arrayBuffer', 'blob', 'formData', 'json', 'text'].forEach(function (method) {
-          var read = response[method];
-          if (typeof read !== 'function') return;
-          response[method] = function () {
-            try {
-              return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
-            } catch (error) {
-              clearDeadline();
-              throw error;
-            }
-          };
-        });
-        if (!response.body) clearDeadline();
-        return response;
-      }
-
       function authedFetch(path, init) {
         // Optional `init` lets callers issue non-GET requests (e.g. the owner
         // pricing PATCH); the bearer + credentials are merged in. Back-compat:
         // GET callers pass no init and behave exactly as before.
         var opts = init || {};
         var headers = Object.assign({ authorization: 'Bearer ' + token }, opts.headers || {});
-        var controller = new AbortController();
-        var timeout = window.setTimeout(() => controller.abort(), 15_000);
-        return fetch(
-          apiBaseUrl + path,
-          Object.assign({ credentials: 'include' }, opts, {
-            headers: headers,
-            signal: controller.signal,
-          }),
-        ).then(
-          (response) => keepDeadlineThroughBody(response, timeout),
-          (err) => {
-            window.clearTimeout(timeout);
+        return window
+          .driftstackFetchWithDeadline(
+            apiBaseUrl + path,
+            Object.assign({ credentials: 'include' }, opts, {
+              headers: headers,
+            }),
+            15_000,
+          )
+          .catch((err) => {
             if (err && err.name === 'AbortError') {
               const timeoutError = new Error('Request timed out. Try again.');
               timeoutError.name = 'AbortError';
               throw timeoutError;
             }
             throw err;
-          },
-        );
+          });
       }
 
       // Replace the SSR mock tier bars with the live distribution from

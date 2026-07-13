@@ -65,8 +65,12 @@ function setUpDom(
   };
   opts.beforeEval?.(window);
 
+  const deadlineScript = scriptBodies.find((s) => s.includes('driftstackFetchWithDeadline'));
+  if (!deadlineScript) throw new Error('admin deadline inline script not found');
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-overview"'));
   if (!pageScript) throw new Error('admin-overview inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(deadlineScript);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
   return { window: window as JSDOM['window'], fetchCalls };

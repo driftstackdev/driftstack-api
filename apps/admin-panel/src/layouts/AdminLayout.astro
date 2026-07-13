@@ -70,6 +70,48 @@ const navItems = [
         }
       })();
     </script>
+    <script is:inline data-admin-fetch-deadline>
+      // Installed before every slotted page script so admin transport deadlines
+      // cover response decoding, not just the wait for response headers.
+      (function () {
+        window.driftstackFetchWithDeadline = function (url, init, timeoutMs, suppliedController) {
+          var controller = suppliedController || new AbortController();
+          var timeout = window.setTimeout(function () {
+            controller.abort();
+          }, timeoutMs);
+          var requestInit = Object.assign({}, init || {}, { signal: controller.signal });
+          return fetch(url, requestInit).then(
+            function (response) {
+              var cleared = false;
+              function clearDeadline() {
+                if (cleared) return;
+                cleared = true;
+                window.clearTimeout(timeout);
+              }
+              ['arrayBuffer', 'blob', 'formData', 'json', 'text'].forEach(function (method) {
+                var read = response[method];
+                if (typeof read !== 'function') return;
+                response[method] = function () {
+                  try {
+                    return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
+                  } catch (error) {
+                    clearDeadline();
+                    throw error;
+                  }
+                };
+              });
+              // Nothing remains to decode on 204/HEAD-style responses.
+              if (!response.body) clearDeadline();
+              return response;
+            },
+            function (error) {
+              window.clearTimeout(timeout);
+              throw error;
+            },
+          );
+        };
+      })();
+    </script>
   </head>
   <body class="bg-tk-bg text-tk-ink">
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR operators skip the nav. */}

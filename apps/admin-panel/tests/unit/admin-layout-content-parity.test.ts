@@ -58,7 +58,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
 
   it('consumes the cross-origin SSO hash before every slotted page script', () => {
     const preflight = body.indexOf('data-admin-sso-preflight');
-    const slot = body.indexOf('<slot />');
+    const slot = body.lastIndexOf('<slot />');
     expect(preflight).toBeGreaterThan(-1);
     expect(slot).toBeGreaterThan(preflight);
     expect(body).toMatch(/location\.hash\.indexOf\('#token='\) === 0/);
@@ -67,6 +67,16 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
       /history\.replaceState\(null, '', location\.pathname \+ location\.search\)/,
     );
     expect(body.match(/location\.hash\.indexOf\('#token='\) === 0/g)).toHaveLength(1);
+  });
+
+  it('installs one response-body-aware deadline primitive before every slotted page script', () => {
+    const helper = body.indexOf('data-admin-fetch-deadline');
+    const slot = body.lastIndexOf('<slot />');
+    expect(helper).toBeGreaterThan(-1);
+    expect(slot).toBeGreaterThan(helper);
+    expect(body).toContain('window.driftstackFetchWithDeadline = function');
+    expect(body).toMatch(/read\.apply\(response, arguments\)\)\.finally\(clearDeadline\)/);
+    expect(body).toMatch(/if \(!response\.body\) clearDeadline\(\)/);
   });
 
   it('12 live navItems in canonical order; the backend-less Leads placeholder stays out', () => {

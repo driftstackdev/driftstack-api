@@ -67,8 +67,12 @@ function setUpDom(
   window.dashboardHydrated = () => {};
   opts.beforeEval?.(window);
 
+  const deadlineScript = scriptBodies.find((s) => s.includes('driftstackFetchWithDeadline'));
+  if (!deadlineScript) throw new Error('admin deadline inline script not found');
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-cost"'));
   if (!pageScript) throw new Error('admin-cost inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(deadlineScript);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
   return { window: window as JSDOM['window'], fetchCalls };
@@ -207,7 +211,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(built).toContain('COST_REQUEST_TIMEOUT_MS = 15_000');
     expect(built).toContain('Request timed out. Try again.');
     expect(built).toMatch(/signal: controller\.signal/);
-    expect(built).toContain('keepDeadlineThroughBody(response, timeout)');
+    expect(built).toContain('window.driftstackFetchWithDeadline(');
     expect(built).toMatch(/window\.clearTimeout\(timeout\)/);
     expect(built).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
