@@ -1,5 +1,5 @@
 # Static detail shells for arbitrary live ids. Cloudflare Pages serves the
 # destination while retaining the requested URL, so client code can read the
 # id from window.location.pathname without a Worker/SSR adapter.
-/accounts/:id /shells/account-detail 200
-/incidents/:id /shells/incident-detail 200
+/accounts/:id /shells/account-detail/index.html 200
+/incidents/:id /shells/incident-detail/index.html 200
