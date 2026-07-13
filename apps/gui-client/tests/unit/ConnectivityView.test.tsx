@@ -112,7 +112,7 @@ describe('ConnectivityView API-key row masking (audit)', () => {
     expect(screen.queryByText(/private-api\.internal|\/Users\/customer|token=secret/i)).toBeNull();
   });
 
-  it('preserves typed API problem guidance and kind', async () => {
+  it('preserves the typed API kind but never reflects remote problem prose', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new Error('background version probe unavailable'))),
@@ -139,10 +139,11 @@ describe('ConnectivityView API-key row masking (audit)', () => {
 
     expect(
       await screen.findByText(
-        'Invalid API key: Create a new key in the dashboard, then update Settings.',
+        'Your sign-in or API key was not accepted. Check Settings and try again.',
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('· invalid_key')).toBeInTheDocument();
+    expect(screen.queryByText(/Create a new key in the dashboard/)).toBeNull();
   });
 
   it('renders a ds_live_ key with the shared prefix-aware mask (ds_live_abcd…zzzz, NOT the old slice(0,8))', () => {

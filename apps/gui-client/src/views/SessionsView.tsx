@@ -12,7 +12,7 @@ import { LiveElapsed } from '../components/LiveElapsed';
 import { useSettings } from '../lib/SettingsContext';
 import { useToasts } from '../lib/toasts';
 import { useConfirm } from '../components/ConfirmProvider';
-import { DriftstackError, type Session } from '../lib/client';
+import { type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { humanizeError } from '../lib/humanize-error';
 import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
@@ -1035,9 +1035,6 @@ function friendlyError(err: unknown, baseUrl?: string): string {
   if (baseUrl !== undefined) {
     const diag = diagnosticFetchError(err, baseUrl);
     if (diag !== null) return diag;
-  }
-  if (err instanceof DriftstackError) {
-    return err.message;
   }
   return humanizeError(err, "Couldn't complete the session request. Try again.");
 }

@@ -5760,9 +5760,6 @@ function friendlyError(
       return `Couldn't reach ${baseUrl}. Check the URL, connection, firewall, or VPN, then try again.`;
     }
   }
-  if (err instanceof DriftstackError) {
-    return `${err.title} (${err.kind}): ${err.detail ?? err.message}`;
-  }
   return humanizeError(err, fallback);
 }
 

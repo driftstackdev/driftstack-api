@@ -244,7 +244,10 @@ describe('AgentChatView Save-as-recipe', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save task' }));
 
-    expect(await screen.findByText('quota exceeded')).toBeTruthy();
+    expect(
+      await screen.findByText('The item changed or is busy. Refresh and try again.'),
+    ).toBeTruthy();
+    expect(screen.queryByText('quota exceeded')).toBeNull();
     expect(pushToast).not.toHaveBeenCalled();
   });
 });

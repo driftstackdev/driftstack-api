@@ -15,7 +15,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { RelativeTime } from '../components/RelativeTime';
 import { SessionStatusBadge } from '../components/SessionStatusBadge';
 import { useSettings } from '../lib/SettingsContext';
-import { DriftstackError, type Session } from '../lib/client';
+import { type Session } from '../lib/client';
 import { humanizeError } from '../lib/humanize-error';
 
 interface HistoryState {
@@ -57,10 +57,7 @@ export function SessionsHistoryView(): JSX.Element {
         error: null,
       });
     } catch (err) {
-      const message =
-        err instanceof DriftstackError
-          ? err.message
-          : humanizeError(err, "Couldn't load session history. Try again.");
+      const message = humanizeError(err, "Couldn't load session history. Try again.");
       setState((s) => ({ ...s, loading: false, error: message }));
     }
   }, [client]);

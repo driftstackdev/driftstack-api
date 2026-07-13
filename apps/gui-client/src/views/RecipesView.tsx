@@ -17,7 +17,7 @@ import { EmptyState } from '../components/EmptyState';
 import { Skeleton, SkeletonRegion, SkeletonRows } from '../components/Skeleton';
 import { RelativeTime } from '../components/RelativeTime';
 import { useSettings } from '../lib/SettingsContext';
-import { DriftstackError, type DriftstackClient } from '../lib/client';
+import { type DriftstackClient } from '../lib/client';
 import { humanizeError } from '../lib/humanize-error';
 import type { AgentIntent, Recipe } from '@driftstack/sdk';
 
@@ -451,6 +451,5 @@ function intentSummary(intent: AgentIntent): string {
 }
 
 function friendly(err: unknown, fallback: string): string {
-  if (err instanceof DriftstackError) return err.message;
   return humanizeError(err, fallback);
 }

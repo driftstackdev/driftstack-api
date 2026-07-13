@@ -30,7 +30,7 @@ export async function readApiErrorMessage(res: Response): Promise<string> {
 
 const PROBLEM_TYPE_PREFIX = 'https://errors.driftstack.dev/';
 
-function fixedApiErrorMessage(problemType: string, status: number): string {
+export function fixedApiErrorMessage(problemType: string, status: number): string {
   const kind = problemType.startsWith(PROBLEM_TYPE_PREFIX)
     ? problemType.slice(PROBLEM_TYPE_PREFIX.length)
     : '';
@@ -76,6 +76,7 @@ function fixedApiErrorMessage(problemType: string, status: number): string {
   if (status === 401) {
     return 'Your sign-in or API key was not accepted. Check Settings and try again.';
   }
+  if (status === 402) return 'This action requires an active plan. Review Billing and try again.';
   if (status === 403) return 'You do not have permission to perform this action.';
   if (status === 404) return 'The requested item was not found. Refresh and try again.';
   if (status === 409) return 'The item changed or is busy. Refresh and try again.';

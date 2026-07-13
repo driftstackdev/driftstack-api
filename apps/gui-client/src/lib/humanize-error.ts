@@ -11,6 +11,22 @@ export function humanizeError(
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   const normalized = `${name} ${message}`.toLowerCase();
 
+  // The SDK's DriftstackError carries a stable kind/status, but its title,
+  // detail, and message come from the remote problem body. Classify from the
+  // contract fields and never reflect that prose into the installed client.
+  const record =
+    error !== null && typeof error === 'object'
+      ? (error as { kind?: unknown; status?: unknown })
+      : null;
+  const kind = typeof record?.kind === 'string' ? record.kind : '';
+  const status =
+    typeof record?.status === 'number' && Number.isInteger(record.status) ? record.status : 0;
+  if (kind !== '' && kind !== 'transport') {
+    const problemKind = kind === 'validation' ? 'validation-failed' : kind.replaceAll('_', '-');
+    return fixedApiErrorMessage(`${PROBLEM_TYPE_PREFIX}${problemKind}`, status);
+  }
+  if (status >= 400 && status <= 599) return fixedApiErrorMessage('', status);
+
   if (/abort|timed? out|timeout/.test(normalized)) {
     return 'The request took too long. Check your connection and try again.';
   }
@@ -35,3 +51,6 @@ export function humanizeError(
   }
   return fallback;
 }
+import { fixedApiErrorMessage } from './api-errors';
+
+const PROBLEM_TYPE_PREFIX = 'https://errors.driftstack.dev/';

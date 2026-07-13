@@ -79,13 +79,10 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
       });
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
-      const detail =
-        err instanceof DriftstackError
-          ? `${err.title}: ${err.detail ?? err.message}`
-          : humanizeError(
-              err,
-              'Connectivity check failed. Verify the API URL and key in Settings, then try again.',
-            );
+      const detail = humanizeError(
+        err,
+        'Connectivity check failed. Verify the API URL and key in Settings, then try again.',
+      );
       const errorKind = err instanceof DriftstackError ? err.kind : 'unknown';
       setResult({ ok: false, durationMs, detail, errorKind });
     } finally {

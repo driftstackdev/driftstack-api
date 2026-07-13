@@ -14,7 +14,6 @@
 
 import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  DriftstackError,
   type AgentIntent,
   type AgentIntentResult,
   type AgentMessageResponse,
@@ -417,11 +416,7 @@ export function AgentChatView({
         tone: 'success',
       });
     } catch (err) {
-      setSaveError(
-        err instanceof DriftstackError
-          ? err.message
-          : humanizeError(err, "Couldn't save the task. Try again."),
-      );
+      setSaveError(humanizeError(err, "Couldn't save the task. Try again."));
     } finally {
       setSaving(false);
     }
@@ -463,11 +458,7 @@ export function AgentChatView({
         });
       })
       .catch((err: unknown) => {
-        setBundledLlmEnableError(
-          err instanceof DriftstackError
-            ? err.message
-            : humanizeError(err, "Couldn't enable AI features. Try again."),
-        );
+        setBundledLlmEnableError(humanizeError(err, "Couldn't enable AI features. Try again."));
       })
       .finally(() => setBundledLlmEnabling(false));
   }

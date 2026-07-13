@@ -878,8 +878,5 @@ function friendlyError(err: unknown, mode?: 'cloud' | 'self-hosted', baseUrl?: s
     }
     return 'Authentication failed (401). Double-check the key, or create a new one at app.driftstack.dev/api-keys.';
   }
-  if (err instanceof DriftstackError) {
-    return `${err.title}: ${err.detail ?? err.message}`;
-  }
   return humanizeError(err, "Couldn't complete setup. Check the details and try again.");
 }
