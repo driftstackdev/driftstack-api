@@ -1,19 +1,13 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_ACCOUNT, MOCK_SUBSCRIPTION, TIER_DISPLAY_NAMES } from '../data/mocks.ts';
+import { TIER_DISPLAY_NAMES } from '../data/mocks.ts';
 
 // V-183 — progressive-enhancement wiring against /v1/billing.
-// SSG renders mock for instant paint; inline <script> fetches live
-// state + replaces card values. The portal action button POSTs to the
+// SSG renders an inert unavailable shell; inline <script> fetches live
+// state + replaces card values. The portal action button is enabled only
+// after that authoritative read, then POSTs to the
 // billing endpoint + redirects to the returned Stripe URL. Mirrors
 // V-180/V-181/V-182. (Trial-pack flow retired 2026-05-27.)
-
-function fmtIso(iso: string | null): string {
-  if (iso === null) return '—';
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
-const status = MOCK_SUBSCRIPTION?.status ?? 'no_subscription';
 // Fleet v2 (2026-07-02) — the 9-state Stripe lifecycle catalog is
 // load-bearing (an uncatalogued status renders unstyled); values sit on
 // the two-axis status tokens so badges flip with data-mode instead of
@@ -44,7 +38,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <header class="mb-10">
-      <p class="text-sm text-tk-ink-3" data-field="account-email">Account · {MOCK_ACCOUNT.email}</p>
+      <p class="text-sm text-tk-ink-3" data-field="account-email">Account · —</p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Billing</h1>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
         Manage subscription, payment method, and invoices.
@@ -67,36 +61,42 @@ const apiBaseUrl = resolveApiBaseUrl();
           <div>
             <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Subscription</p>
             <h2 class="mt-2 text-xl font-semibold text-tk-ink" data-field="sub-tier">
-              {MOCK_SUBSCRIPTION ? TIER_DISPLAY_NAMES[MOCK_SUBSCRIPTION.tier] : 'No active subscription'}
+              Billing state unavailable
             </h2>
-          <p class="mt-2 text-sm text-tk-ink-2" data-field="sub-summary">
-            {
-              MOCK_SUBSCRIPTION
-                ? `Renews ${fmtIso(MOCK_SUBSCRIPTION.current_period_end)} · ${MOCK_SUBSCRIPTION.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews'}`
-                : 'Upgrade to a paid tier to unlock concurrent caps + archetype access.'
-            }
-          </p>
+            <p class="mt-2 text-sm text-tk-ink-2" data-field="sub-summary">
+              Sign in to load your subscription and renewal details.
+            </p>
           </div>
         </div>
         <span
           data-field="sub-status-badge"
           class:list={[
             'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide',
-            STATUS_BADGE_CLASS[status],
+            STATUS_BADGE_CLASS.no_subscription,
           ]}
         >
-          {status.replace(/_/g, ' ')}
+          unavailable
         </span>
       </div>
       <div class="mt-6 flex flex-wrap gap-3">
-        <button type="button" class="btn-primary" data-action="portal">Manage in Stripe portal</button>
-        <a href="/select-tier/" class="btn-secondary" data-field="plan-cta">Change plan</a>
+        <button
+          type="button"
+          class="btn-primary hidden"
+          data-action="portal"
+          disabled
+          aria-disabled="true"
+          title="Live billing must load before opening Stripe."
+        >Manage in Stripe portal</button>
+        <a href="/select-tier/" class="btn-secondary" data-field="plan-cta">Choose a plan</a>
         <button
           type="button"
           data-action="cancel"
+          disabled
+          aria-disabled="true"
+          title="Live billing must load before opening Stripe."
           class:list={[
             'btn-secondary text-red-700',
-            MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end ? '' : 'hidden',
+            'hidden',
           ]}
         >
           Cancel in Stripe portal
@@ -115,7 +115,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         data-field="cancel-hint"
         class:list={[
           'mt-2 text-xs text-tk-ink-3',
-          MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end ? '' : 'hidden',
+          'hidden',
         ]}
       >
         Opens the Stripe billing portal in a new step — choose "Cancel plan" there to finish cancelling.
@@ -146,10 +146,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Invoices</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Recent invoices</h2>
           <p class="mt-3 text-sm text-tk-ink-3">
-            No invoices yet. Once your subscription renews, invoices appear
-            here. Each invoice carries a permanent
-            URL — bookmark for accounting. The full invoice history is also
-            accessible via the Stripe Customer Portal link above.
+            Invoice history and permanent receipt URLs are available in the
+            Stripe Customer Portal. Open it above after live billing loads.
           </p>
         </div>
       </div>
@@ -272,9 +270,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
-      // audit w2flmiw48 #4 — the account-email header was seeded from MOCK_ACCOUNT and
-      // never overwritten by live data (every customer saw the mock email). Populate it
-      // from /account/me; leave the placeholder on failure / no token.
+      // audit w2flmiw48 #4 — the account-email header used to be seeded from static
+      // sample data and never overwritten by live data. Populate it from /account/me;
+      // leave the neutral placeholder on failure / no token.
       if (token) {
         authedFetch('/v1/account/me')
           .then((r) => (r.ok ? r.json() : null))
@@ -293,11 +291,38 @@ const apiBaseUrl = resolveApiBaseUrl();
       const cancelHint = root.querySelector('[data-field="cancel-hint"]');
 
       let portalLoading = false;
+      let billingDataAvailable = false;
+      function setPortalAvailability(available) {
+        billingDataAvailable = available;
+        [portalBtn, cancelBtn].forEach((btn) => {
+          if (!btn) return;
+          btn.disabled = !available || portalLoading;
+          if (!available) {
+            btn.setAttribute('aria-disabled', 'true');
+            btn.title = 'Live billing must load before opening Stripe.';
+          } else {
+            btn.removeAttribute('aria-disabled');
+            btn.removeAttribute('title');
+          }
+        });
+      }
+
+      function renderBillingUnavailable(tier, summary, badge) {
+        setText('account-email', 'Account · —');
+        setText('sub-tier', tier);
+        setText('sub-summary', summary);
+        setStatusBadge(badge, 'no_subscription');
+        setPortalAvailability(false);
+        if (portalBtn) portalBtn.classList.add('hidden');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        if (cancelHint) cancelHint.classList.add('hidden');
+      }
+
       function setPortalLoading(loading) {
         portalLoading = loading;
         [portalBtn, cancelBtn].forEach((btn) => {
           if (!btn) return;
-          btn.disabled = loading;
+          btn.disabled = !billingDataAvailable || loading;
           btn.setAttribute('aria-busy', loading ? 'true' : 'false');
         });
         if (portalBtn) {
@@ -311,6 +336,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       async function handlePortal() {
         if (!token) {
           showBanner('Sign in to manage billing.');
+          return;
+        }
+        if (!billingDataAvailable) {
+          showBanner('Reload live billing before opening Stripe.');
           return;
         }
         if (portalLoading) return;
@@ -340,7 +369,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       // (a4460e2a).
 
       if (!token) {
-        showBanner('Sign in to see live billing state. Showing preview data below.');
+        renderBillingUnavailable(
+          'Billing state unavailable',
+          'Sign in to load your subscription and renewal details.',
+          'unavailable',
+        );
+        const cryptoEmpty = root.querySelector('[data-crypto-empty]');
+        if (cryptoEmpty) {
+          cryptoEmpty.textContent = 'Sign in to load recent crypto payments.';
+          cryptoEmpty.classList.remove('hidden');
+        }
+        showBanner('Sign in to see live billing state.');
         return;
       }
 
@@ -367,6 +406,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           // Subscription card.
           if (body.subscription) {
             const sub = body.subscription;
+            setPortalAvailability(true);
             setText('sub-tier', tierLabel(sub.tier));
             const summary =
               'Renews ' +
@@ -388,6 +428,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               else cancelHint.classList.remove('hidden');
             }
           } else {
+            setPortalAvailability(false);
             setText('sub-tier', 'No active subscription');
             setText(
               'sub-summary',
@@ -410,25 +451,21 @@ const apiBaseUrl = resolveApiBaseUrl();
           // but surface body.detail via err.message.
           if (err && err.status === 503) {
             // W588 — billing is activation-gated (Stripe not wired yet). Don't
-            // leave the SSG mock subscription (fabricated tier + renew date) on
+            // leave an unverified static subscription (fabricated tier + renew date) on
             // screen — a real customer reads it as their actual plan. Replace
             // the card with an honest "not configured" state.
             showBanner(
               'Live billing is not available yet — Driftstack is finishing Stripe setup. ' +
                 'We will email you when it ships. Your account access is unaffected.',
             );
-            setText('sub-tier', 'Billing not configured yet');
-            setText(
-              'sub-summary',
+            renderBillingUnavailable(
+              'Billing not configured yet',
               'Paid-plan billing activates once Stripe setup completes — nothing to pay or manage here yet.',
+              'pending setup',
             );
-            setStatusBadge('pending setup', 'no_subscription');
-            if (portalBtn) portalBtn.classList.add('hidden');
-            if (cancelBtn) cancelBtn.classList.add('hidden');
-            if (cancelHint) cancelHint.classList.add('hidden');
           } else {
             // 2026-06-24 — on a generic (non-503) failure, don't leave the
-            // SSG mock subscription (fabricated tier + renew date) on screen —
+            // an unverified static subscription (fabricated tier + renew date) on screen —
             // a real customer reads it as their actual plan. Neutralize the
             // card the same way the 503 branch does.
             showBanner(
@@ -439,15 +476,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                 ) +
                 ').',
             );
-            setText('sub-tier', 'Billing state unavailable');
-            setText(
-              'sub-summary',
+            renderBillingUnavailable(
+              'Billing state unavailable',
               "Couldn't load your live subscription state — reload to try again.",
+              'unavailable',
             );
-            setStatusBadge('unavailable', 'no_subscription');
-            if (portalBtn) portalBtn.classList.add('hidden');
-            if (cancelBtn) cancelBtn.classList.add('hidden');
-            if (cancelHint) cancelHint.classList.add('hidden');
           }
         })
         .finally(function () {

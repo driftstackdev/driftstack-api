@@ -39,9 +39,9 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
   const body = read(LIB);
   const layout = read(LAYOUT);
 
-  it("V-183 framing pinned: 'progressive-enhancement wiring against /v1/billing. SSG renders mock for instant paint; inline <script> fetches live state + replaces card values. The portal action button POSTs to the billing endpoint + redirects to the returned Stripe URL.' (Trial-pack flow retired 2026-05-27.) — pinned so the dual SSG-mock + live-replace pattern + the action→Stripe-redirect contract stays documented", () => {
+  it('V-183 framing pins an inert SSG shell that enables Stripe actions only after authoritative live billing loads', () => {
     expect(body).toMatch(
-      /\/\/ V-183 — progressive-enhancement wiring against \/v1\/billing\.\s*\n?\s*\/\/ SSG renders mock for instant paint; inline <script> fetches live\s*\n?\s*\/\/ state \+ replaces card values\. The portal action button POSTs to the/,
+      /\/\/ V-183 — progressive-enhancement wiring against \/v1\/billing\.\s*\/\/ SSG renders an inert unavailable shell; inline <script> fetches live\s*\/\/ state \+ replaces card values\. The portal action button is enabled only\s*\/\/ after that authoritative read, then POSTs to the/,
     );
   });
 
@@ -96,9 +96,9 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     expect(body).toMatch(/if \(portalLoading\) return;/);
   });
 
-  it("Cancel-at-period-end visibility: SSG class:list shows cancelBtn iff MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end + inline sub.cancel_at_period_end → hidden / else → visible — pinned so a subscription that's already set to cancel doesn't show the cancel button again (drift would let customers re-click cancel on an already-canceling sub)", () => {
+  it('Cancel-at-period-end visibility: the static shell is hidden+disabled, then an authoritative subscription shows cancel iff it is not already set to cancel', () => {
     expect(body).toMatch(
-      /MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION\.cancel_at_period_end \? '' : 'hidden',/,
+      /data-action="cancel"\s*disabled\s*aria-disabled="true"[\s\S]*?class:list=\{\[\s*'btn-secondary text-red-700',\s*'hidden',/,
     );
     expect(body).toMatch(
       /if \(cancelBtn\) \{\s*\n?\s*if \(sub\.cancel_at_period_end\) cancelBtn\.classList\.add\('hidden'\);\s*\n?\s*else cancelBtn\.classList\.remove\('hidden'\);\s*\n?\s*\}/,
@@ -117,9 +117,33 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     );
   });
 
-  it("No-token preview: !token → 'Sign in to see live billing state. Showing preview data below.' + early bail (mock data already painted via SSG) — pinned so unauthenticated visitors still see meaningful UI (the mock-data preview) rather than blank cards, with a clear sign-in prompt", () => {
+  it('The static and signed-out billing shell is neutral, non-actionable, and never fabricates account/subscription/invoice state', () => {
+    expect(body).not.toMatch(/MOCK_ACCOUNT|MOCK_SUBSCRIPTION/);
+    expect(body).toMatch(/data-field="account-email">Account · —<\/p>/);
+    expect(body).toMatch(/Billing state unavailable/);
+    expect(body).toMatch(/data-action="portal"\s*disabled\s*aria-disabled="true"/);
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*showBanner\('Sign in to see live billing state\. Showing preview data below\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /Invoice history and permanent receipt URLs are available in the\s*Stripe Customer Portal\./,
+    );
+    expect(body).toMatch(
+      /if \(!token\) \{\s*renderBillingUnavailable\(\s*'Billing state unavailable',\s*'Sign in to load your subscription and renewal details\.',\s*'unavailable',\s*\);[\s\S]*?showBanner\('Sign in to see live billing state\.'\);\s*return;/,
+    );
+    expect(body).not.toMatch(/Showing preview data below/);
+  });
+
+  it('Portal controls remain disabled through unavailable/loading states and are enabled only inside the live subscription branch', () => {
+    expect(body).toMatch(/let billingDataAvailable = false;/);
+    expect(body).toMatch(
+      /function setPortalAvailability\(available\) \{[\s\S]*?btn\.disabled = !available \|\| portalLoading;[\s\S]*?Live billing must load before opening Stripe\./,
+    );
+    expect(body).toMatch(
+      /async function handlePortal\(\) \{[\s\S]*?if \(!billingDataAvailable\) \{\s*showBanner\('Reload live billing before opening Stripe\.'\);\s*return;/,
+    );
+    expect(body).toMatch(
+      /if \(body\.subscription\) \{\s*const sub = body\.subscription;\s*setPortalAvailability\(true\);/,
+    );
+    expect(body).toMatch(
+      /function renderBillingUnavailable\(tier, summary, badge\) \{[\s\S]*?setPortalAvailability\(false\);[\s\S]*?portalBtn\.classList\.add\('hidden'\)/,
     );
   });
 

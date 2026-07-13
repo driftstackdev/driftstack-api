@@ -37,7 +37,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         >
           Docs
         </a>
-        <button type="button" class="btn-primary" data-show-create>New key</button>
+        <button
+          type="button"
+          class="btn-primary"
+          data-show-create
+          disabled
+          aria-disabled="true"
+          title="Live API keys must load before creating another."
+        >New key</button>
       </div>
     </header>
 
@@ -255,7 +262,7 @@ npm i @driftstack/sdk</code></pre>
           </div>
         </div>
         <div class="flex items-center gap-3 pt-2">
-          <button type="submit" class="btn-primary" data-create-submit>Create key</button>
+          <button type="submit" class="btn-primary" data-create-submit disabled>Create key</button>
           <button
             type="button"
             class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
@@ -388,7 +395,14 @@ npm i @driftstack/sdk</code></pre>
         environment (dev / staging / prod) — scopes are key-level, so a leaked dev key can't
         touch prod state.
       </p>
-      <button type="button" class="btn-primary mt-6 inline-flex" data-show-create>
+      <button
+        type="button"
+        class="btn-primary mt-6 inline-flex"
+        data-show-create
+        disabled
+        aria-disabled="true"
+        title="Live API keys must load before creating another."
+      >
         Create your first key
       </button>
     </div>
@@ -454,6 +468,7 @@ npm i @driftstack/sdk</code></pre>
       let createOutcomeReason = '';
       let refreshController = null;
       let refreshGeneration = 0;
+      let keyDataAvailable = false;
 
       function showBanner(text) {
         if (!banner) return;
@@ -464,6 +479,38 @@ npm i @driftstack/sdk</code></pre>
       function hideBanner() {
         if (!banner) return;
         banner.classList.add('hidden');
+      }
+
+      function setCreateAvailability(available) {
+        keyDataAvailable = available;
+        showCreateBtns.forEach((button) => {
+          button.disabled = !available;
+          if (available) {
+            button.removeAttribute('aria-disabled');
+            button.removeAttribute('title');
+          } else {
+            button.setAttribute('aria-disabled', 'true');
+            button.title = 'Live API keys must load before creating another.';
+          }
+        });
+        if (createSubmit) {
+          createSubmit.disabled =
+            !available || createInFlight || createOutcomeBlocked;
+        }
+      }
+
+      function renderUnavailable(message) {
+        keySnapshot = [];
+        setCreateAvailability(false);
+        if (formWrap) formWrap.classList.add('hidden');
+        if (empty) empty.classList.add('hidden');
+        if (ul) {
+          ul.classList.remove('hidden');
+          ul.innerHTML =
+            '<li class="px-6 py-8 text-center text-sm text-tk-ink-3">' +
+            message +
+            '</li>';
+        }
       }
 
       // V-331b — every API-key read and mutation honors the dashboard's
@@ -666,6 +713,7 @@ npm i @driftstack/sdk</code></pre>
             if (!isCurrent()) return;
             const keys = body.data || [];
             keySnapshot = keys;
+            setCreateAvailability(true);
             if (keys.length === 0) {
               ul.classList.add('hidden');
               empty.classList.remove('hidden');
@@ -681,6 +729,11 @@ npm i @driftstack/sdk</code></pre>
           })
           .catch((err) => {
             if (!isCurrent()) return;
+            renderUnavailable(
+              err && err.name === 'AbortError'
+                ? 'Loading API keys took too long. Reload to try again.'
+                : 'Could not load live API keys. Reload to try again.',
+            );
             showBanner(
               err && err.name === 'AbortError'
                 ? "Loading API keys took too long. Check your connection and retry."
@@ -1017,8 +1070,12 @@ npm i @driftstack/sdk</code></pre>
       }
 
       function showCreate() {
-        if (!token) {
-          showBanner('Sign in to create API keys.');
+        if (!token || !keyDataAvailable) {
+          showBanner(
+            token
+              ? 'Reload live API keys before creating another.'
+              : 'Sign in to create API keys.',
+          );
           return;
         }
         formWrap.classList.remove('hidden');
@@ -1067,6 +1124,10 @@ npm i @driftstack/sdk</code></pre>
 
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
+        if (!token || !keyDataAvailable) {
+          showBanner('Reload live API keys before creating another.');
+          return;
+        }
         if (createInFlight) return;
         if (createOutcomeBlocked) {
           createError.textContent =
@@ -1142,7 +1203,7 @@ npm i @driftstack/sdk</code></pre>
           .finally(() => {
             window.clearTimeout(timeout);
             createInFlight = false;
-            createSubmit.disabled = createOutcomeBlocked;
+            createSubmit.disabled = !keyDataAvailable || createOutcomeBlocked;
             createSubmit.setAttribute('aria-busy', 'false');
             createSubmit.textContent = createOutcomeBlocked
               ? createOutcomeReason === 'created'
@@ -1183,7 +1244,8 @@ npm i @driftstack/sdk</code></pre>
       });
 
       if (!token) {
-        showBanner('Sign in to see live API keys. Showing preview data below.');
+        renderUnavailable('Sign in to load your API keys.');
+        showBanner('Sign in to see live API keys.');
         return;
       }
 

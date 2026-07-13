@@ -140,6 +140,28 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     );
   });
 
+  it('Static, signed-out, and failed list states keep key creation unavailable and replace indefinite skeletons with an explicit non-authoritative row', () => {
+    expect(body.match(/data-show-create\s*disabled\s*aria-disabled="true"/g)).toHaveLength(2);
+    expect(body).toMatch(/let keyDataAvailable = false;/);
+    expect(body).toMatch(
+      /function setCreateAvailability\(available\) \{\s*keyDataAvailable = available;[\s\S]*?button\.disabled = !available;[\s\S]*?Live API keys must load before creating another\./,
+    );
+    expect(body).toMatch(
+      /function renderUnavailable\(message\) \{\s*keySnapshot = \[\];\s*setCreateAvailability\(false\);[\s\S]*?ul\.classList\.remove\('hidden'\);[\s\S]*?message \+\s*'<\/li>';/,
+    );
+    expect(body).toMatch(
+      /\.then\(\(body\) => \{\s*if \(!isCurrent\(\)\) return;\s*const keys = body\.data \|\| \[\];\s*keySnapshot = keys;\s*setCreateAvailability\(true\);/,
+    );
+    expect(body).toMatch(
+      /\.catch\(\(err\) => \{\s*if \(!isCurrent\(\)\) return;\s*renderUnavailable\(/,
+    );
+    expect(body).toMatch(/function showCreate\(\) \{\s*if \(!token \|\| !keyDataAvailable\) \{/);
+    expect(body).toMatch(
+      /if \(!token\) \{\s*renderUnavailable\('Sign in to load your API keys\.'\);\s*showBanner\('Sign in to see live API keys\.'\);\s*return;/,
+    );
+    expect(body).not.toMatch(/Showing preview data below/);
+  });
+
   it("Rotate-reveal plaintext-wipe-on-dismiss framing pinned: 'Wipe plaintext from DOM so it isn't recoverable post-dismiss.' + rotatePlaintext.textContent = '' on hide — pinned so the plaintext doesn't linger in the DOM after the customer dismisses (drift to leaving it would let post-dismiss page inspectors recover the plaintext, defeating the 'shown ONCE' contract)", () => {
     expect(body).toMatch(/\/\/ Wipe plaintext from DOM so it isn't recoverable post-dismiss\./);
     expect(body).toMatch(/rotatePlaintext\.textContent = '';/);
