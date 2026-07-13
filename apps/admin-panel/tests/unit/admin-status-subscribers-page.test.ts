@@ -33,7 +33,7 @@ interface Sub {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -202,5 +202,74 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     expect(posts[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
     expect(form.hasAttribute('aria-busy')).toBe(false);
     expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a newer refresh supersedes a late older response', async () => {
+    let resolveInitial: ((response: Response) => void) | undefined;
+    const initial = new Promise<Response>((resolve) => {
+      resolveInitial = resolve;
+    });
+    let reads = 0;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method && call.init.method !== 'GET') return json({}, 404);
+        reads += 1;
+        if (reads === 1) return initial;
+        return json({ data: [mkSub({ id: 'sub_newest', email: 'newest@example.com' })] });
+      },
+    });
+    win = window;
+
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
+    expect((fetchCalls[0]?.init?.signal as AbortSignal).aborted).toBe(true);
+    expect(window.document.querySelector('[data-force-unsub="sub_newest"]')).toBeTruthy();
+
+    resolveInitial?.(json({ data: [mkSub({ id: 'sub_stale', email: 'stale@example.com' })] }));
+    await flush();
+
+    expect(window.document.querySelector('[data-force-unsub="sub_newest"]')).toBeTruthy();
+    expect(window.document.querySelector('[data-force-unsub="sub_stale"]')).toBeNull();
+  });
+
+  it('an intentionally superseded refresh cannot publish a false timeout banner', async () => {
+    let rejectInitial: ((error: Error) => void) | undefined;
+    const initial = new Promise<Response>((_resolve, reject) => {
+      rejectInitial = reject;
+    });
+    let reads = 0;
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: () => {
+        reads += 1;
+        return reads === 1 ? initial : json({ data: [] });
+      },
+    });
+    win = window;
+
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+    rejectInitial?.(new window.DOMException('superseded', 'AbortError'));
+    await flush();
+
+    expect(window.document.querySelector('[data-banner]')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('pagehide aborts the owned refresh and suppresses its late completion', async () => {
+    let resolveRead: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => {
+      resolveRead = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), { route: () => pending });
+    win = window;
+    window.dispatchEvent(new window.Event('pagehide'));
+    expect((fetchCalls[0]?.init?.signal as AbortSignal).aborted).toBe(true);
+
+    resolveRead?.(json({ data: [mkSub({ id: 'sub_after_hide' })] }));
+    await flush();
+    expect(window.document.querySelector('[data-force-unsub="sub_after_hide"]')).toBeNull();
+    expect(
+      window.document.querySelector('[data-page="status-subscribers"]')?.hasAttribute('aria-busy'),
+    ).toBe(false);
   });
 });

@@ -97,6 +97,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const SUBSCRIBER_TIMEOUT_MS = 15_000;
       let refreshController = null;
+      let refreshGeneration = 0;
       const forceUnsubsInFlight = new Set();
       let addInFlight = false;
 
@@ -216,6 +217,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (refreshController) refreshController.abort();
         const controller = new AbortController();
+        const generation = ++refreshGeneration;
         refreshController = controller;
         root.setAttribute('aria-busy', 'true');
         return boundedFetch(
@@ -228,6 +230,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.json();
           })
           .then(function (body) {
+            if (generation !== refreshGeneration) return;
             const subs = body.data || [];
             if (subs.length === 0) {
               if (list)
@@ -248,6 +251,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           })
           .catch(function (err) {
+            // A poll/manual/post-mutation refresh intentionally aborts the
+            // previous read. Its late rejection (or a response that had
+            // already reached body parsing) must not overwrite the newer
+            // list or publish a false timeout banner.
+            if (generation !== refreshGeneration) return;
             showBanner(
               'Failed to load subscribers: ' +
                 requestErrorMessage(err, 'network error'),
@@ -255,15 +263,26 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
           })
           .finally(function () {
-            if (refreshController === controller) {
+            if (generation === refreshGeneration) {
               refreshController = null;
               root.removeAttribute('aria-busy');
-            }
-            if (typeof window.dashboardHydrated === 'function') {
-              window.dashboardHydrated();
+              if (typeof window.dashboardHydrated === 'function') {
+                window.dashboardHydrated();
+              }
             }
           });
       }
+
+      window.addEventListener(
+        'pagehide',
+        function () {
+          refreshGeneration += 1;
+          if (refreshController) refreshController.abort();
+          refreshController = null;
+          root.removeAttribute('aria-busy');
+        },
+        { once: true },
+      );
 
       function wireForceUnsub() {
         if (!list) return;
