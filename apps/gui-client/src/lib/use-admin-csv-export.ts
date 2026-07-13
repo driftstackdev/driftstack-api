@@ -1,22 +1,24 @@
 // V-534.AX — admin CSV export hook.
 //
 // Wraps GET /v1/admin/crypto-orders.csv (V-666.AC). The endpoint requires
-// `Authorization: Bearer` so a plain anchor link won't work — we fetch
-// the response as a blob, mint an object URL, and trigger a download
-// via a synthesized anchor click. The blob URL is revoked immediately
-// after the click to avoid leaking it for the rest of the session.
+// `Authorization: Bearer` so a plain anchor link won't work. The bounded
+// response is saved through the shared Tauri filesystem/browser fallback,
+// which avoids WKWebView's silently swallowed synthesized downloads.
 //
 // State machine: idle | downloading | failed. Successful downloads
 // snap back to idle so the button is immediately usable again.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { downloadBlob, readBoundedDownloadBlob } from './download';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 import type { AdminCryptoOrder } from './use-admin-crypto-orders-list';
 
 export type AdminCsvExportState =
-  { kind: 'idle' } | { kind: 'downloading' } | { kind: 'failed'; message: string };
+  | { kind: 'idle' }
+  | { kind: 'downloading' }
+  | { kind: 'failed'; message: string };
 
 export interface UseAdminCsvExportOpts {
   status?: AdminCryptoOrder['status'] | 'cancelled' | null;
@@ -74,8 +76,6 @@ export function useAdminCsvExport(opts: UseAdminCsvExportOpts = {}): UseAdminCsv
     }
 
     setState({ kind: 'downloading' });
-    let objectUrl: string | null = null;
-    let anchor: HTMLAnchorElement | null = null;
     try {
       const res = await fetchWithDeadline(url.toString(), {
         method: 'GET',
@@ -90,17 +90,19 @@ export function useAdminCsvExport(opts: UseAdminCsvExportOpts = {}): UseAdminCsv
         if (sequence === sequenceRef.current) setState({ kind: 'failed', message });
         return;
       }
-      const blob = await res.blob();
+      const blob = await readBoundedDownloadBlob(res);
       if (sequence !== sequenceRef.current) return;
-      objectUrl = URL.createObjectURL(blob);
       const filename = buildFilename(new Date());
-      anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = filename;
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      if (sequence === sequenceRef.current) setState({ kind: 'idle' });
+      const saved = await downloadBlob(filename, blob);
+      if (sequence !== sequenceRef.current) return;
+      setState(
+        saved
+          ? { kind: 'idle' }
+          : {
+              kind: 'failed',
+              message: 'The CSV export could not be saved. Check Downloads access and try again.',
+            },
+      );
     } catch (err) {
       if (sequence === sequenceRef.current) {
         setState({
@@ -114,10 +116,6 @@ export function useAdminCsvExport(opts: UseAdminCsvExportOpts = {}): UseAdminCsv
         });
       }
     } finally {
-      if (anchor?.parentNode !== null && anchor?.parentNode !== undefined) {
-        anchor.parentNode.removeChild(anchor);
-      }
-      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
       if (requestRef.current === controller) {
         requestRef.current = null;
         inFlightRef.current = false;

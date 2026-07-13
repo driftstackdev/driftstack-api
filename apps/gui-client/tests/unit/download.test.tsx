@@ -5,6 +5,8 @@
 // with whether a save was actually performed so callers can gate the success
 // toast (sweep2 HIGH — the toast used to lie while nothing was written).
 
+import { readFileSync } from 'node:fs';
+
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 const writeFile = vi.fn();
@@ -14,7 +16,13 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   BaseDirectory: { Download: 7 },
 }));
 
-import { timestampedFilename, downloadJson, downloadBlob } from '../../src/lib/download';
+import {
+  DownloadResponseTooLargeError,
+  downloadBlob,
+  downloadJson,
+  readBoundedDownloadBlob,
+  timestampedFilename,
+} from '../../src/lib/download';
 
 function tauri(on: boolean): void {
   (globalThis as unknown as { isTauri?: boolean }).isTauri = on || undefined;
@@ -28,6 +36,68 @@ describe('timestampedFilename', () => {
     expect(timestampedFilename('x', 'csv', new Date('2026-01-05T00:00:00Z'))).toBe(
       'x-2026-01-05.csv',
     );
+  });
+});
+
+describe('readBoundedDownloadBlob', () => {
+  it('guards both authenticated response-download hooks', () => {
+    for (const relative of [
+      '../../src/lib/use-receipt-pdf-download.ts',
+      '../../src/lib/use-admin-csv-export.ts',
+    ]) {
+      const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
+      expect(source, relative).toContain('readBoundedDownloadBlob');
+      expect(source, relative).toContain('downloadBlob');
+      expect(source, relative).not.toMatch(/\bres\.blob\(/);
+    }
+  });
+
+  it('streams a normal body and preserves its response MIME type', async () => {
+    const response = new Response('order_id\nord_1\n', {
+      headers: { 'content-type': 'text/csv; charset=utf-8' },
+    });
+
+    const blob = await readBoundedDownloadBlob(response, 64);
+    expect(blob.type).toBe('text/csv; charset=utf-8');
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (): void => resolve(reader.result as string);
+      reader.onerror = (): void => reject(reader.error ?? new Error('blob read failed'));
+      reader.readAsText(blob);
+    });
+    expect(text).toBe('order_id\nord_1\n');
+  });
+
+  it('rejects declared oversize before pulling and cancels the body', async () => {
+    const pull = vi.fn();
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream<Uint8Array>({ pull, cancel }), {
+      headers: { 'content-length': '5' },
+    });
+
+    await expect(readBoundedDownloadBlob(response, 4)).rejects.toBeInstanceOf(
+      DownloadResponseTooLargeError,
+    );
+    expect(pull).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('cancels a chunked response on the first over-cap chunk', async () => {
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.enqueue(new Uint8Array([4, 5]));
+        },
+        cancel,
+      }),
+    );
+
+    await expect(readBoundedDownloadBlob(response, 4)).rejects.toBeInstanceOf(
+      DownloadResponseTooLargeError,
+    );
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });
 
@@ -71,6 +141,19 @@ describe('downloadJson (browser / anchor fallback)', () => {
   it('resolves false (no claimed success) when createObjectURL is unavailable', async () => {
     (URL as unknown as { createObjectURL?: unknown }).createObjectURL = undefined;
     await expect(downloadJson('out.json', { a: 1 })).resolves.toBe(false);
+  });
+
+  it('removes the anchor and revokes its URL when the browser click throws', async () => {
+    const revokeObjectURL = vi.fn();
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => 'blob:throw');
+    (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = revokeObjectURL;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      throw new Error('click blocked');
+    });
+
+    await expect(downloadJson('out.json', { a: 1 })).rejects.toThrow('click blocked');
+    expect(document.querySelector('a[href="blob:throw"]')).toBeNull();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:throw');
   });
 });
 

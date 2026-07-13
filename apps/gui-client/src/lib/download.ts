@@ -12,6 +12,68 @@
 
 import { isTauri } from '@tauri-apps/api/core';
 
+/** Generous ceiling for operator exports while preventing unbounded buffering. */
+export const DOWNLOAD_MAX_BYTES = 64 * 1024 * 1024;
+
+export class DownloadResponseTooLargeError extends Error {
+  constructor() {
+    super('The download was too large. Narrow the export and try again.');
+    this.name = 'DownloadResponseTooLargeError';
+  }
+}
+
+/**
+ * Stream a successful download into a Blob without trusting Content-Length.
+ * The caller keeps its request deadline armed through this read, so a stalled
+ * response body still follows the existing timeout path.
+ */
+export async function readBoundedDownloadBlob(
+  response: Response,
+  maxBytes = DOWNLOAD_MAX_BYTES,
+): Promise<Blob> {
+  // Preserve legacy structural response doubles while every real fetch
+  // Response takes the bounded streamed path below.
+  if ((response as { body?: ReadableStream<Uint8Array> | null }).body === undefined) {
+    return response.blob();
+  }
+
+  const declared = response.headers.get('content-length');
+  if (declared !== null && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new DownloadResponseTooLargeError();
+  }
+
+  const type = response.headers.get('content-type') ?? '';
+  if (response.body === null) return new Blob([], { type });
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined || value.byteLength === 0) continue;
+      if (total + value.byteLength > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new DownloadResponseTooLargeError();
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Blob([bytes.buffer], { type });
+}
+
 /** Stable, filesystem-safe filename: `<prefix>-YYYY-MM-DD.<ext>` (UTC). */
 export function timestampedFilename(prefix: string, ext: string, now: Date): string {
   const y = now.getUTCFullYear().toString().padStart(4, '0');
@@ -50,14 +112,17 @@ function anchorDownload(filename: string, blob: Blob): boolean {
   if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return false;
   const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = objectUrl;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(objectUrl);
-  return true;
+  try {
+    a.href = objectUrl;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    return true;
+  } finally {
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 /**

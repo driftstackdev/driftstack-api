@@ -5,11 +5,12 @@
 //            required either way.
 //
 // Fetches /v1/billing/crypto-orders/:id/receipt.{pdf,txt} with the
-// auth header attached and triggers a browser download via a
-// synthesized anchor click.
+// auth header attached, bounds the body, then uses the shared Tauri
+// filesystem/browser fallback so desktop downloads are real writes.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { downloadBlob, readBoundedDownloadBlob } from './download';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
@@ -50,8 +51,6 @@ export function useReceiptPdfDownload(): UseReceiptPdfDownloadResult {
       const controller = new AbortController();
       requestRef.current = controller;
       setState({ kind: 'downloading', format });
-      let objectUrl: string | null = null;
-      let anchor: HTMLAnchorElement | null = null;
       try {
         const baseUrl = settings.baseUrl.replace(/\/+$/, '');
         const res = await fetchWithDeadline(
@@ -70,16 +69,19 @@ export function useReceiptPdfDownload(): UseReceiptPdfDownloadResult {
           if (sequence === sequenceRef.current) setState({ kind: 'failed', format, message });
           return;
         }
-        const blob = await res.blob();
+        const blob = await readBoundedDownloadBlob(res);
         if (sequence !== sequenceRef.current) return;
-        objectUrl = URL.createObjectURL(blob);
-        anchor = document.createElement('a');
-        anchor.href = objectUrl;
-        anchor.download = `receipt-${orderId}.${format}`;
-        anchor.style.display = 'none';
-        document.body.appendChild(anchor);
-        anchor.click();
-        if (sequence === sequenceRef.current) setState({ kind: 'idle' });
+        const saved = await downloadBlob(`receipt-${orderId}.${format}`, blob);
+        if (sequence !== sequenceRef.current) return;
+        setState(
+          saved
+            ? { kind: 'idle' }
+            : {
+                kind: 'failed',
+                format,
+                message: 'The receipt could not be saved. Check Downloads access and try again.',
+              },
+        );
       } catch (err) {
         if (sequence === sequenceRef.current) {
           setState({
@@ -94,10 +96,6 @@ export function useReceiptPdfDownload(): UseReceiptPdfDownloadResult {
           });
         }
       } finally {
-        if (anchor?.parentNode !== null && anchor?.parentNode !== undefined) {
-          anchor.parentNode.removeChild(anchor);
-        }
-        if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
         if (requestRef.current === controller) {
           requestRef.current = null;
           inFlightRef.current = false;

@@ -210,6 +210,21 @@ describe('V-534.BM useReceiptPdfDownload', () => {
     await waitFor(() => expect(result.current.state.kind).toBe('idle'));
   });
 
+  it('reports an honest failure when the response cannot be saved', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(pdfResponse())),
+    );
+    (URL as unknown as { createObjectURL?: unknown }).createObjectURL = undefined;
+    const { result } = renderHook(() => useReceiptPdfDownload());
+    await act(async () => result.current.download('ord_x'));
+    expect(result.current.state).toEqual({
+      kind: 'failed',
+      format: 'pdf',
+      message: 'The receipt could not be saved. Check Downloads access and try again.',
+    });
+  });
+
   it('refuses to download when no API key is configured', async () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },

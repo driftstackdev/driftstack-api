@@ -240,6 +240,20 @@ describe('V-534.AX useAdminCsvExport', () => {
     }
   });
 
+  it('reports an honest failure when the response cannot be saved', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(csvResponse('order_id\n'))),
+    );
+    (URL as unknown as { createObjectURL?: unknown }).createObjectURL = undefined;
+    const { result } = renderHook(() => useAdminCsvExport());
+    await act(async () => result.current.download());
+    expect(result.current.state).toEqual({
+      kind: 'failed',
+      message: 'The CSV export could not be saved. Check Downloads access and try again.',
+    });
+  });
+
   it('refuses to download when no API key is configured', async () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },
