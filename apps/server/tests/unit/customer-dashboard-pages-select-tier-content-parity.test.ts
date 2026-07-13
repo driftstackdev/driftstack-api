@@ -95,19 +95,22 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("V-501 withBusy wrapper: btn.disabled = true + textContent = 'Redirecting…' + restore original on error + early-bail if btn.disabled — pinned so double-clicks don't fire two POST /v1/billing/* calls (which would create two Stripe checkout sessions for the same intent)", () => {
-    expect(body).toMatch(
-      /function withBusy\(btn, work\) \{\s*\n?\s*if \(btn\.disabled\) return Promise\.resolve\(\);\s*\n?\s*const original = btn\.textContent;\s*\n?\s*btn\.disabled = true;\s*\n?\s*btn\.textContent = 'Redirecting…';/,
-    );
-    expect(body).toMatch(
-      /\.catch\(\(err\) => \{\s*\n?\s*btn\.disabled = false;\s*\n?\s*btn\.textContent = original;\s*\n?\s*throw err;\s*\n?\s*\}\);/,
-    );
+  it("V-501 withBusy wrapper: WeakSet single-flight + Redirecting label + finally restoration — pinned so double-clicks don't fire two POST /v1/billing/* calls", () => {
+    expect(body).toMatch(/if \(busyCheckoutButtons\.has\(btn\)\) return Promise\.resolve\(\);/);
+    expect(body).toMatch(/busyCheckoutButtons\.add\(btn\);/);
+    expect(body).toMatch(/btn\.textContent = 'Redirecting…';/);
+    expect(body).toMatch(/\.finally\(\(\) => \{/);
+    expect(body).toMatch(/busyCheckoutButtons\.delete\(btn\);/);
+    expect(body).toMatch(/btn\.disabled = false;/);
+    expect(body).toMatch(/btn\.textContent = original;/);
   });
 
   it("POST /v1/billing/checkout-session contract: tier + billing_period:'monthly' + success_url with ?subscribed={tier} + cancel_url → /select-tier — pinned so the post-checkout landing URL signals which tier was purchased (for the dashboard home to read; 2026-07-02 the landing moved from /first-session to / with the account-portal IA) and billing_period stays 'monthly' (drift to dropping would silently default server-side, which may or may not match customer intent)", () => {
-    expect(body).toMatch(
-      /authedFetch\('\/v1\/billing\/checkout-session', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*tier,\s*\n?\s*billing_period: 'monthly',\s*\n?\s*success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier,\s*\n?\s*cancel_url: window\.location\.origin \+ '\/select-tier',\s*\n?\s*\}\),\s*\n?\s*\}\)/,
-    );
+    expect(body).toMatch(/authedFetch\('\/v1\/billing\/checkout-session'/);
+    expect(body).toMatch(/headers: \{ 'idempotency-key': checkoutKey \}/);
+    expect(body).toMatch(/tier,\s*\n?\s*billing_period: 'monthly'/);
+    expect(body).toMatch(/success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier/);
+    expect(body).toMatch(/cancel_url: window\.location\.origin \+ '\/select-tier'/);
   });
 
   it('Concurrent + Profiles display via TIER_CONCURRENT_SESSION_LIMITS[t.id].toString() + String(PROFILES_PER_TIER[t.id]) — pinned so the per-tier cap display is sourced from the canonical api-types tables (drift to hardcoded numbers in the JSX would diverge from server-side limits when caps change)', () => {

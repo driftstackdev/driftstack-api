@@ -46,6 +46,7 @@ export class StripeBillingProvider implements BillingProvider {
     successUrl: string;
     cancelUrl: string;
     accountId: string;
+    idempotencyKey?: string;
   }): Promise<{ url: string; sessionId: string }> {
     const result = await this.client.createSubscriptionCheckoutSession({
       customerId: args.customerId,
@@ -54,6 +55,7 @@ export class StripeBillingProvider implements BillingProvider {
       cancelUrl: args.cancelUrl,
       clientReferenceId: args.accountId,
       metadata: { driftstack_account_id: args.accountId },
+      ...(args.idempotencyKey !== undefined ? { idempotencyKey: args.idempotencyKey } : {}),
     });
     return { url: result.url, sessionId: result.id };
   }

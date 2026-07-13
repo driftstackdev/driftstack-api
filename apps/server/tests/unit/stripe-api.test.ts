@@ -126,6 +126,7 @@ describe('StripeApiClient.createSubscriptionCheckoutSession', () => {
       cancelUrl: 'https://app.driftstack.dev/cancel',
       clientReferenceId: 'acc_uuid',
       metadata: { plan: 'api_builder' },
+      idempotencyKey: 'checkout-attempt-123',
     });
     expect(result.id).toBe('cs_test_abc');
     expect(result.url).toContain('checkout.stripe.com');
@@ -136,6 +137,8 @@ describe('StripeApiClient.createSubscriptionCheckoutSession', () => {
     expect(body).toContain('client_reference_id=acc_uuid');
     expect(body).toContain('automatic_tax%5Benabled%5D=true');
     expect(body).toContain('subscription_data%5Bmetadata%5D%5Bplan%5D=api_builder');
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers['Idempotency-Key']).toBe('checkout-attempt-123');
   });
 });
 

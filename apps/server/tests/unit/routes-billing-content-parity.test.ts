@@ -114,13 +114,17 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     expect((body.match(/app\.requireScope\('admin:billing'\)/g) ?? []).length).toBe(3);
   });
 
-  it('Checkout-session: V-248 allowlist gate on customer-supplied success/cancel URLs; service.createCheckoutSession with snake→camel; reply checkout_url + checkout_session_id', () => {
+  it('Checkout-session: validates retry identity, V-248 allowlists return URLs, and forwards both to the service', () => {
+    expect(body).toMatch(/const idempotency = readIdempotencyKey\(req\);/);
+    expect(body).toMatch(
+      /if \(idempotency\.kind === 'invalid'\) \{\s*\n?\s*throw new BadRequestError\('Invalid Idempotency-Key header\.'\);\s*\n?\s*\}/,
+    );
     expect(body).toMatch(/\/\/ V-248 — gate customer-supplied return URLs against the allowlist\./);
     expect(body).toMatch(
       /const successUrl =\s*\n?\s*parsed\.data\.success_url !== undefined\s*\n?\s*\? validateReturnUrl\(parsed\.data\.success_url, 'success_url'\)\s*\n?\s*: undefined;\s*\n?\s*const cancelUrl =\s*\n?\s*parsed\.data\.cancel_url !== undefined\s*\n?\s*\? validateReturnUrl\(parsed\.data\.cancel_url, 'cancel_url'\)\s*\n?\s*: undefined;/,
     );
     expect(body).toMatch(
-      /const result = await service\.createCheckoutSession\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*tier: parsed\.data\.tier,\s*\n?\s*billingPeriod: parsed\.data\.billing_period,\s*\n?\s*\.\.\.\(successUrl !== undefined \? \{ successUrl \} : \{\}\),\s*\n?\s*\.\.\.\(cancelUrl !== undefined \? \{ cancelUrl \} : \{\}\),\s*\n?\s*\}\);/,
+      /const result = await service\.createCheckoutSession\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*tier: parsed\.data\.tier,\s*\n?\s*billingPeriod: parsed\.data\.billing_period,\s*\n?\s*\.\.\.\(idempotency\.kind === 'valid' \? \{ idempotencyKey: idempotency\.key \} : \{\}\),\s*\n?\s*\.\.\.\(successUrl !== undefined \? \{ successUrl \} : \{\}\),\s*\n?\s*\.\.\.\(cancelUrl !== undefined \? \{ cancelUrl \} : \{\}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /return \{\s*\n?\s*checkout_url: result\.url,\s*\n?\s*checkout_session_id: result\.sessionId,\s*\n?\s*\};/,

@@ -292,7 +292,11 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           .then(() => work(controller.signal))
           .catch((err) => {
             if (err && err.name === 'AbortError') {
-              throw new Error('The billing request took too long. Check your connection and try again.');
+              const timeoutError = new Error(
+                'The billing request took too long. Check your connection and try again.',
+              );
+              timeoutError.name = 'AbortError';
+              throw timeoutError;
             }
             throw err;
           })
@@ -321,6 +325,18 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
 
       const tierButtons = root.querySelectorAll('[data-action="buy-tier"]');
       const cryptoLinksByTier = new Map();
+      const checkoutKeysByTier = new Map();
+
+      function checkoutKeyFor(tier) {
+        const existing = checkoutKeysByTier.get(tier);
+        if (existing) return existing;
+        const key =
+          window.crypto && typeof window.crypto.randomUUID === 'function'
+            ? window.crypto.randomUUID()
+            : 'checkout-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        checkoutKeysByTier.set(tier, key);
+        return key;
+      }
 
       function applySubscriptionState(sub) {
         currentSubscription = sub;
@@ -396,10 +412,12 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             return;
           }
 
+          const checkoutKey = checkoutKeyFor(tier);
           withBusy(btn, (signal) =>
             authedFetch('/v1/billing/checkout-session', {
               method: 'POST',
               signal,
+              headers: { 'idempotency-key': checkoutKey },
               body: JSON.stringify({
                 tier,
                 billing_period: 'monthly',
@@ -408,6 +426,9 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
               }),
             })
               .then((r) => {
+                // An HTTP response settles this attempt. Only a transport
+                // failure keeps the key so a retry replays Stripe's result.
+                checkoutKeysByTier.delete(tier);
                 // Wave 1086+ B1 client-side leg: 404/503 on /v1/billing/*
                 // means billing isn't wired (DRIFTSTACK_TIER_PRICE_IDS
                 // env var missing). Surface a customer-friendly message

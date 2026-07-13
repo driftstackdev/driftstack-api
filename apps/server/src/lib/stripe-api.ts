@@ -117,6 +117,8 @@ export class StripeApiClient {
     clientReferenceId: string;
     /** Optional metadata round-tripped onto the resulting subscription. */
     metadata?: Record<string, string>;
+    /** Safe-retry key supplied by the caller and forwarded to Stripe unchanged. */
+    idempotencyKey?: string;
   }): Promise<{ id: string; url: string }> {
     const body: Record<string, string> = {
       mode: 'subscription',
@@ -138,7 +140,11 @@ export class StripeApiClient {
         body[`subscription_data[metadata][${k}]`] = v;
       }
     }
-    return this.post<{ id: string; url: string }>('/v1/checkout/sessions', body);
+    return this.post<{ id: string; url: string }>(
+      '/v1/checkout/sessions',
+      body,
+      args.idempotencyKey,
+    );
   }
 
   /**

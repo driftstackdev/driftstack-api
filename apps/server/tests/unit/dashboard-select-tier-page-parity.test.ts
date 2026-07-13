@@ -48,7 +48,8 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
 
     // Implementation.
     expect(p).toMatch(/function withBusy\(btn, work\) \{/);
-    expect(p).toMatch(/if \(btn\.disabled\) return Promise\.resolve\(\)/);
+    expect(p).toMatch(/if \(busyCheckoutButtons\.has\(btn\)\) return Promise\.resolve\(\)/);
+    expect(p).toMatch(/busyCheckoutButtons\.add\(btn\)/);
     expect(p).toMatch(/btn\.textContent = 'Redirecting…'/);
   });
 
@@ -110,9 +111,11 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
   it("CRITICAL paid-tier POST /v1/billing/checkout-session contract pinned — body {tier, billing_period:'monthly', success_url, cancel_url}. success_url lands on /?subscribed=<tier> (2026-07-02: was /first-session, which the account-portal IA deleted — the dashboard home reads ?subscribed); cancel_url returns to /select-tier.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /authedFetch\('\/v1\/billing\/checkout-session', \{\s*\n\s+method: 'POST',\s*\n\s+body: JSON\.stringify\(\{\s*\n\s+tier,\s*\n\s+billing_period: 'monthly',\s*\n\s+success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier,\s*\n\s+cancel_url: window\.location\.origin \+ '\/select-tier',/,
-    );
+    expect(p).toMatch(/authedFetch\('\/v1\/billing\/checkout-session'/);
+    expect(p).toMatch(/headers: \{ 'idempotency-key': checkoutKey \}/);
+    expect(p).toMatch(/tier,\s*\n\s+billing_period: 'monthly'/);
+    expect(p).toMatch(/success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier/);
+    expect(p).toMatch(/cancel_url: window\.location\.origin \+ '\/select-tier'/);
   });
 
   it('CRITICAL on-checkout-response redirect to body.checkout_url, guarded against a missing checkout_url (Finding #20 — a 200 with no checkout_url must throw, not leave the button stuck on "Redirecting…" forever). The redirect IS the Stripe handoff; drift to dropping would leave customers stuck on /select-tier with no path forward.', () => {
@@ -132,9 +135,12 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
   it("CRITICAL authedFetch helper bundles Bearer auth + content-type + credentials:'include'. Every billing-route call goes through this helper. Drift to inlining would let some calls miss the auth header.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /function authedFetch\(path, init = \{\}\) \{\s*\n\s+return fetch\(apiBaseUrl \+ path, \{\s*\n\s+\.\.\.init,\s*\n\s+headers: \{\s*\n\s+\.\.\.\(init\.headers \|\| \{\}\),\s*\n\s+authorization: 'Bearer ' \+ token,\s*\n\s+'content-type': 'application\/json',\s*\n\s+\},\s*\n\s+credentials: 'include',\s*\n\s+\}\)/,
-    );
+    expect(p).toMatch(/function authedFetch\(path, init = \{\}\) \{/);
+    expect(p).toMatch(/const ownsController = !init\.signal;/);
+    expect(p).toMatch(/return fetch\(apiBaseUrl \+ path, \{/);
+    expect(p).toMatch(/\.\.\.\(init\.headers \|\| \{\}\)/);
+    expect(p).toMatch(/authorization: 'Bearer ' \+ token/);
+    expect(p).toMatch(/credentials: 'include'/);
   });
 
   it("CRITICAL Sign-up-first guard pinned on the paid-tier checkout button. When localStorage.ds_web_session_token is missing, the button shows 'Sign up first.' banner instead of firing the API call. Drift to skipping would let unauthed clicks hit /v1/billing/* with no Bearer + return 401.", () => {
@@ -164,9 +170,10 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
   it('CRITICAL withBusy() error-handler restores original label + re-enables button on failure. Drift to dropping would leave the button permanently disabled on transient errors.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /\.catch\(\(err\) => \{\s*\n\s+btn\.disabled = false;\s*\n\s+btn\.textContent = original;\s*\n\s+throw err;/,
-    );
+    expect(p).toMatch(/\.finally\(\(\) => \{/);
+    expect(p).toMatch(/busyCheckoutButtons\.delete\(btn\);/);
+    expect(p).toMatch(/btn\.disabled = false;/);
+    expect(p).toMatch(/btn\.textContent = original;/);
   });
 
   it('CRITICAL select-tier uses DashboardLayout + withSidebar={false}. The tier-picker is part of the onboarding flow — no sidebar (matches W735-W739 auth-page pattern).', () => {

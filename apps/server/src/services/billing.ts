@@ -45,6 +45,7 @@ export interface BillingProvider {
     successUrl: string;
     cancelUrl: string;
     accountId: string;
+    idempotencyKey?: string;
   }): Promise<{ url: string; sessionId: string }>;
 
   /** Open a Stripe Customer Portal session for the given customer. */
@@ -134,6 +135,7 @@ export class BillingService {
     billingPeriod: 'monthly' | 'annual';
     successUrl?: string;
     cancelUrl?: string;
+    idempotencyKey?: string;
   }): Promise<{ url: string; sessionId: string }> {
     const account = await this.repo.getAccount(args.accountId);
     if (account === null) throw new NotFoundError('Account not found.');
@@ -175,6 +177,7 @@ export class BillingService {
       priceId,
       successUrl: args.successUrl ?? this.config.defaultSuccessUrl,
       cancelUrl: args.cancelUrl ?? this.config.defaultCancelUrl,
+      ...(args.idempotencyKey !== undefined ? { idempotencyKey: args.idempotencyKey } : {}),
     });
   }
 

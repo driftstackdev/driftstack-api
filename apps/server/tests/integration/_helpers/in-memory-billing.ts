@@ -49,6 +49,7 @@ export interface InMemoryProviderState {
     customerId: string;
     accountId: string;
     priceId: string;
+    idempotencyKey: string | null;
     kind: 'subscription';
   }>;
   portalSessions: Array<{ id: string; customerId: string }>;
@@ -82,6 +83,7 @@ export class InMemoryBillingProvider implements BillingProvider {
     successUrl: string;
     cancelUrl: string;
     accountId: string;
+    idempotencyKey?: string;
   }): Promise<{ url: string; sessionId: string }> {
     const sessionId = `cs_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
     this.state.checkoutSessions.push({
@@ -89,6 +91,7 @@ export class InMemoryBillingProvider implements BillingProvider {
       customerId: args.customerId,
       accountId: args.accountId,
       priceId: args.priceId,
+      idempotencyKey: args.idempotencyKey ?? null,
       kind: 'subscription',
     });
     void args.successUrl;

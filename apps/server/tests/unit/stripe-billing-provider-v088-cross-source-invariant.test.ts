@@ -154,12 +154,15 @@ describe('W943 V-088 StripeBillingProvider cross-source invariant', () => {
     expect(p).toMatch(/return \{ url: result\.url \};/);
   });
 
-  // ─── 5-field createSubscriptionCheckout args ─────────────────
+  // ─── createSubscriptionCheckout args + retry identity ────────
 
-  it('CRITICAL createSubscriptionCheckout takes 5 args — customerId + priceId + successUrl + cancelUrl + accountId. The 5-arg shape matches V-082 BillingProvider interface; drift would break interface conformance.', () => {
+  it('CRITICAL createSubscriptionCheckout takes the 5 Stripe fields plus optional idempotencyKey and forwards the retry identity to Stripe', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
     expect(p).toMatch(
-      /async createSubscriptionCheckout\(args: \{\s*\n\s*customerId: string;\s*\n\s*priceId: string;\s*\n\s*successUrl: string;\s*\n\s*cancelUrl: string;\s*\n\s*accountId: string;\s*\n\s*\}\)/,
+      /async createSubscriptionCheckout\(args: \{\s*\n\s*customerId: string;\s*\n\s*priceId: string;\s*\n\s*successUrl: string;\s*\n\s*cancelUrl: string;\s*\n\s*accountId: string;\s*\n\s*idempotencyKey\?: string;\s*\n\s*\}\)/,
+    );
+    expect(p).toMatch(
+      /\.\.\.\(args\.idempotencyKey !== undefined \? \{ idempotencyKey: args\.idempotencyKey \} : \{\}\),/,
     );
   });
 

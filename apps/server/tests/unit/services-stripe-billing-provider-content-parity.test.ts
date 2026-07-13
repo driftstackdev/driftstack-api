@@ -81,12 +81,15 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
   });
 
   it('createSubscriptionCheckout: clientReferenceId=accountId + metadata{driftstack_account_id}; returns { url, sessionId }', () => {
+    expect(body).toMatch(/async createSubscriptionCheckout\(args: \{/);
+    expect(body).toMatch(/idempotencyKey\?: string;/);
     expect(body).toMatch(
-      /async createSubscriptionCheckout\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*priceId: string;\s*\n?\s*successUrl: string;\s*\n?\s*cancelUrl: string;\s*\n?\s*accountId: string;\s*\n?\s*\}\): Promise<\{ url: string; sessionId: string \}> \{/,
+      /const result = await this\.client\.createSubscriptionCheckoutSession\(\{/,
     );
-    expect(body).toMatch(
-      /const result = await this\.client\.createSubscriptionCheckoutSession\(\{\s*\n?\s*customerId: args\.customerId,\s*\n?\s*priceId: args\.priceId,\s*\n?\s*successUrl: args\.successUrl,\s*\n?\s*cancelUrl: args\.cancelUrl,\s*\n?\s*clientReferenceId: args\.accountId,\s*\n?\s*metadata: \{ driftstack_account_id: args\.accountId \},\s*\n?\s*\}\);\s*\n?\s*return \{ url: result\.url, sessionId: result\.id \};/,
-    );
+    expect(body).toMatch(/clientReferenceId: args\.accountId,/);
+    expect(body).toMatch(/metadata: \{ driftstack_account_id: args\.accountId \},/);
+    expect(body).toMatch(/\{ idempotencyKey: args\.idempotencyKey \}/);
+    expect(body).toMatch(/return \{ url: result\.url, sessionId: result\.id \};/);
   });
 
   it('createTrialPackCheckout fully removed 2026-05-27 (trial_pack retirement)', () => {

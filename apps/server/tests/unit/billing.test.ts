@@ -93,6 +93,30 @@ describe('BillingService.createCheckoutSession — missing tier in price map', (
   });
 });
 
+describe('BillingService.createCheckoutSession — idempotency propagation', () => {
+  it('passes a supplied key unchanged to the billing provider', async () => {
+    const repo = new InMemoryBillingRepo();
+    const provider = new InMemoryBillingProvider();
+    const accountId = '00000000-0000-4000-8000-000000000abd';
+    seedAccount(repo, accountId);
+    const original = provider.createSubscriptionCheckout.bind(provider);
+    let receivedKey: string | undefined;
+    provider.createSubscriptionCheckout = async (args) => {
+      receivedKey = args.idempotencyKey;
+      return original(args);
+    };
+
+    await makeService(repo, provider).createCheckoutSession({
+      accountId,
+      tier: 'api_starter',
+      billingPeriod: 'monthly',
+      idempotencyKey: 'checkout-attempt-123',
+    });
+
+    expect(receivedKey).toBe('checkout-attempt-123');
+  });
+});
+
 // Double-subscribe guard — an already-subscribed customer hitting
 // checkout-session again (e.g. a stale "Change plan" link routing
 // through Checkout instead of the portal) must NOT be able to mint a

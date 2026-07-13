@@ -30,7 +30,10 @@ describe('POST /v1/billing/checkout-session', () => {
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/checkout-session',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'checkout-attempt-123',
+      },
       payload: { tier: 'api_builder', billing_period: 'monthly' },
     });
     expect(res.statusCode).toBe(200);
@@ -42,6 +45,25 @@ describe('POST /v1/billing/checkout-session', () => {
     expect(fx.billingProvider.state.checkoutSessions).toHaveLength(1);
     expect(fx.billingProvider.state.checkoutSessions[0]?.kind).toBe('subscription');
     expect(fx.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_api_builder_monthly');
+    expect(fx.billingProvider.state.checkoutSessions[0]?.idempotencyKey).toBe(
+      'checkout-attempt-123',
+    );
+  });
+
+  it('400 rejects an invalid Idempotency-Key before creating Checkout', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'contains whitespace',
+      },
+      payload: { tier: 'api_builder', billing_period: 'monthly' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toContain('Invalid Idempotency-Key');
+    expect(fx.billingProvider.state.checkoutSessions).toHaveLength(0);
   });
 
   it('403 when the key lacks admin:billing scope (write-only key)', async () => {

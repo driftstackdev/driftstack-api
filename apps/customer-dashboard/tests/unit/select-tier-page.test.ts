@@ -137,6 +137,59 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(body.billing_period).toBe('monthly');
     expect(typeof body.tier).toBe('string');
     expect(body.tier.length).toBeGreaterThan(0);
+    expect(new Headers(call?.init?.headers).get('idempotency-key')).toBeTruthy();
+  });
+
+  it('reuses the checkout idempotency key only after an ambiguous transport failure', async () => {
+    const attempts: MockFetchCall[] = [];
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/checkout-session$/.test(call.url)) {
+          attempts.push(call);
+          return Promise.reject(abort);
+        }
+        return json({});
+      },
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier"]');
+    await flush();
+    clickFirst(window, '[data-action="buy-tier"]');
+    await flush();
+
+    expect(attempts).toHaveLength(2);
+    const firstKey = new Headers(attempts[0]?.init?.headers).get('idempotency-key');
+    const secondKey = new Headers(attempts[1]?.init?.headers).get('idempotency-key');
+    expect(firstKey).toBeTruthy();
+    expect(secondKey).toBe(firstKey);
+    expect(text(window, '[data-banner]')).toContain('billing request took too long');
+  });
+
+  it('starts a new checkout attempt after an HTTP response settles the prior key', async () => {
+    const attempts: MockFetchCall[] = [];
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/checkout-session$/.test(call.url)) attempts.push(call);
+        return json({ detail: 'temporary refusal' }, 503);
+      },
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier"]');
+    await flush();
+    clickFirst(window, '[data-action="buy-tier"]');
+    await flush();
+
+    expect(attempts).toHaveLength(2);
+    const firstKey = new Headers(attempts[0]?.init?.headers).get('idempotency-key');
+    const secondKey = new Headers(attempts[1]?.init?.headers).get('idempotency-key');
+    expect(firstKey).toBeTruthy();
+    expect(secondKey).toBeTruthy();
+    expect(secondKey).not.toBe(firstKey);
   });
 
   it('bounds the initial subscription read and aborts it when the page is left', async () => {

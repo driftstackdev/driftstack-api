@@ -1,13 +1,14 @@
 // V-666.AO + v2-#19 — shared Idempotency-Key parser.
 //
-// Two routes consume the customer-facing `Idempotency-Key` request
+// Three routes consume the customer-facing `Idempotency-Key` request
 // header today:
 //
+//   - POST /v1/billing/checkout-session (Stripe Checkout safe retry)
 //   - POST /v1/billing/crypto-checkout (V-666.AO; documented at
 //     /docs/idempotency-keys on the marketing site)
 //   - POST /v1/agent-sessions (v2-#19; Stripe-pattern dedup)
 //
-// Both follow the same validation contract documented at
+// All three follow the same validation contract documented at
 // apps/marketing-site/src/pages/docs/idempotency-keys.astro:
 //   - empty / whitespace-only → treat as absent
 //   - >255 ASCII chars → invalid (return 400)
@@ -22,9 +23,7 @@
 import type { FastifyRequest } from 'fastify';
 
 export type IdempotencyHeader =
-  | { kind: 'absent' }
-  | { kind: 'valid'; key: string }
-  | { kind: 'invalid' };
+  { kind: 'absent' } | { kind: 'valid'; key: string } | { kind: 'invalid' };
 
 /**
  * Read + validate the `Idempotency-Key` header off a Fastify request.

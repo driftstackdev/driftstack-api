@@ -82,16 +82,23 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it('BillingProvider: 3-method boundary (ensureCustomer + createSubscriptionCheckout + createPortalSession)', () => {
+  it('BillingProvider: 3-method boundary carries optional Checkout retry identity', () => {
     expect(body).toMatch(/export interface BillingProvider \{/);
     expect(body).toMatch(
       /ensureCustomer\(args: \{ accountId: string; email: string; name: string \| null \}\): Promise<string>;/,
     );
     expect(body).toMatch(
-      /createSubscriptionCheckout\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*priceId: string;\s*\n?\s*successUrl: string;\s*\n?\s*cancelUrl: string;\s*\n?\s*accountId: string;\s*\n?\s*\}\): Promise<\{ url: string; sessionId: string \}>;/,
+      /createSubscriptionCheckout\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*priceId: string;\s*\n?\s*successUrl: string;\s*\n?\s*cancelUrl: string;\s*\n?\s*accountId: string;\s*\n?\s*idempotencyKey\?: string;\s*\n?\s*\}\): Promise<\{ url: string; sessionId: string \}>;/,
     );
     expect(body).toMatch(
       /createPortalSession\(args: \{ customerId: string; returnUrl: string \}\): Promise<\{ url: string \}>;/,
+    );
+  });
+
+  it('createCheckoutSession forwards an optional retry identity without changing absent requests', () => {
+    expect(body).toMatch(/idempotencyKey\?: string;/);
+    expect(body).toMatch(
+      /\.\.\.\(args\.idempotencyKey !== undefined \? \{ idempotencyKey: args\.idempotencyKey \} : \{\}\),/,
     );
   });
 

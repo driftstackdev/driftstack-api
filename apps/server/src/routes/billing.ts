@@ -14,6 +14,7 @@ import type { BillingService, SubscriptionMirror } from '../services/billing.js'
 import { BadRequestError, FeatureUnavailableError, ValidationError } from '../lib/errors.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import { readIdempotencyKey } from '../lib/idempotency-key.js';
 
 // V-248 / V-246-P1-001 — Stripe checkout return URL allowlist.
 // Customer-supplied success_url + cancel_url are passed through to
@@ -86,6 +87,10 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
+      const idempotency = readIdempotencyKey(req);
+      if (idempotency.kind === 'invalid') {
+        throw new BadRequestError('Invalid Idempotency-Key header.');
+      }
       const parsed = CreateCheckoutSessionRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -102,6 +107,7 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
         accountId: ctx.account.id,
         tier: parsed.data.tier,
         billingPeriod: parsed.data.billing_period,
+        ...(idempotency.kind === 'valid' ? { idempotencyKey: idempotency.key } : {}),
         ...(successUrl !== undefined ? { successUrl } : {}),
         ...(cancelUrl !== undefined ? { cancelUrl } : {}),
       });
