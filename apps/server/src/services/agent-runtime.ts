@@ -91,6 +91,15 @@ export type RunTurnResult =
       session: AgentSessionRecord;
     }
   | {
+      /** This owner account already has the configured maximum number of AI
+       *  turns in flight across its other sessions. The route maps this
+       *  non-mutating result to the existing typed retryable 429 problem. */
+      kind: 'account-turn-limit';
+      current: number;
+      limit: number;
+      session: AgentSessionRecord;
+    }
+  | {
       // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through.
       // The user_message was recorded as an actor='operator' transcript
       // entry; no decompose / executor ran. Customer's gui-client is
@@ -136,6 +145,9 @@ export interface AgentRuntimeDeps {
   executor: AgentExecutor;
   sessions: AgentSessionsRepo;
   archetype: string;
+  /** Per-owner-account AI turns allowed concurrently across distinct agent
+   *  sessions. Manual transcript-only turns do not consume a slot. Default 3. */
+  maxConcurrentTurnsPerAccount?: number;
   /** v2-#4 Q.1.e — optional usage recorder. When wired, AgentRuntime
    *  persists a usage_records row per decompose() call that returns
    *  a `usage` block. */
@@ -277,11 +289,20 @@ export class AgentRuntime {
   // singleton runtime in one systemd process, so an in-process set is the exact
   // current execution boundary. Reject instead of queueing: an API burst must
   // not become an unbounded chain of stale natural-language tasks. Different
-  // session ids remain independent. A horizontally scaled API must promote
-  // this same contract to a distributed per-session lock.
+  // session ids remain independent up to the owner-account ceiling below. A
+  // horizontally scaled API must promote both contracts to distributed locks;
+  // per-instance bounding still caps each process's own LLM/worker fan-out.
   private readonly activeTurnSessionIds = new Set<string>();
+  private readonly activeTurnAccountCounts = new Map<string, number>();
+  private readonly maxConcurrentTurnsPerAccount: number;
 
-  constructor(private readonly deps: AgentRuntimeDeps) {}
+  constructor(private readonly deps: AgentRuntimeDeps) {
+    const limit = deps.maxConcurrentTurnsPerAccount ?? 3;
+    if (!Number.isSafeInteger(limit) || limit < 1) {
+      throw new Error('maxConcurrentTurnsPerAccount must be a positive safe integer');
+    }
+    this.maxConcurrentTurnsPerAccount = limit;
+  }
 
   /**
    * Persist ONE bundled-LLM cost row with the billing-integrity discipline the
@@ -351,30 +372,59 @@ export class AgentRuntime {
   }
 
   async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
-    if (this.activeTurnSessionIds.has(args.agentSessionId)) {
-      const session = await this.deps.sessions.get(args.agentSessionId);
-      if (session === null) {
-        throw new Error(`AgentSession ${args.agentSessionId} not found`);
-      }
-      return { kind: 'turn-in-progress', session };
-    }
-
-    this.activeTurnSessionIds.add(args.agentSessionId);
-    try {
-      return await this.runExclusiveTurn(args);
-    } finally {
-      // Covers success, controlled result variants, decomposer failures, and
-      // executor/repository throws. A failed turn can never strand the session.
-      this.activeTurnSessionIds.delete(args.agentSessionId);
-    }
-  }
-
-  private async runExclusiveTurn(args: RunTurnArgs): Promise<RunTurnResult> {
-    const at = (args.now ?? new Date()).toISOString();
     const session = await this.deps.sessions.get(args.agentSessionId);
     if (session === null) {
       throw new Error(`AgentSession ${args.agentSessionId} not found`);
     }
+    if (this.activeTurnSessionIds.has(args.agentSessionId)) {
+      return { kind: 'turn-in-progress', session };
+    }
+
+    // Bound one owner's aggregate AI work across DISTINCT sessions. The
+    // per-session set above prevents stale same-session queues; this account
+    // counter prevents alternate session ids / BYOK keys from fanning out into
+    // unbounded LLM calls and control-plane plans. It is synchronous between
+    // the last await and the increment, so concurrent continuations cannot all
+    // observe a stale count on Node's event loop. Manual mode only appends one
+    // transcript entry and never decomposes or dispatches, so it bypasses the
+    // expensive-work slot while retaining the per-session lock.
+    const consumesAccountSlot = session.mode !== 'manual';
+    const currentForAccount = this.activeTurnAccountCounts.get(session.accountId) ?? 0;
+    if (consumesAccountSlot && currentForAccount >= this.maxConcurrentTurnsPerAccount) {
+      return {
+        kind: 'account-turn-limit',
+        current: currentForAccount,
+        limit: this.maxConcurrentTurnsPerAccount,
+        session,
+      };
+    }
+
+    this.activeTurnSessionIds.add(args.agentSessionId);
+    if (consumesAccountSlot) {
+      this.activeTurnAccountCounts.set(session.accountId, currentForAccount + 1);
+    }
+    try {
+      // Use the SAME session snapshot that decided slot ownership. Re-fetching
+      // here would let a concurrent manual→AI mode change bypass the account
+      // slot after the earlier manual-mode check.
+      return await this.runExclusiveTurn(args, session);
+    } finally {
+      // Covers success, controlled result variants, decomposer failures, and
+      // executor/repository throws. A failed turn can never strand the session.
+      this.activeTurnSessionIds.delete(args.agentSessionId);
+      if (consumesAccountSlot) {
+        const remaining = (this.activeTurnAccountCounts.get(session.accountId) ?? 1) - 1;
+        if (remaining <= 0) this.activeTurnAccountCounts.delete(session.accountId);
+        else this.activeTurnAccountCounts.set(session.accountId, remaining);
+      }
+    }
+  }
+
+  private async runExclusiveTurn(
+    args: RunTurnArgs,
+    session: AgentSessionRecord,
+  ): Promise<RunTurnResult> {
+    const at = (args.now ?? new Date()).toISOString();
     if (session.status !== 'active') {
       // Closed/paused sessions return a short-circuit result. The
       // caller (route handler) maps this to a 409 Conflict — the

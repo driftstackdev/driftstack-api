@@ -1233,6 +1233,164 @@ describe('AgentRuntime.runTurn — per-session in-flight gate', () => {
   });
 });
 
+describe('AgentRuntime.runTurn — per-account AI-turn fairness gate', () => {
+  it('rejects a second same-account AI session without work, keeps another account independent, and accepts after release', async () => {
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let calls = 0;
+    const sessions = new InMemoryAgentSessionsRepo();
+    const holdingSession = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+    });
+    const blockedSession = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+    });
+    const otherAccountSession = await sessions.create({
+      accountId: 'acc_2',
+      tokenBudgetTotal: 100_000,
+    });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async (args) => {
+          calls += 1;
+          if (args.task === 'hold') {
+            markStarted();
+            await blocker;
+          }
+          return {
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'Which page?',
+            tokensConsumed: 1,
+          };
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      maxConcurrentTurnsPerAccount: 1,
+    });
+
+    const holding = runtime.runTurn({
+      agentSessionId: holdingSession.id,
+      userMessage: 'hold',
+    });
+    await started;
+
+    const blocked = await runtime.runTurn({
+      agentSessionId: blockedSession.id,
+      userMessage: 'blocked',
+    });
+    expect(blocked).toMatchObject({ kind: 'account-turn-limit', current: 1, limit: 1 });
+    expect(calls).toBe(1);
+    expect((await sessions.get(blockedSession.id))?.transcript).toHaveLength(0);
+
+    const independent = await runtime.runTurn({
+      agentSessionId: otherAccountSession.id,
+      userMessage: 'other account',
+    });
+    expect(independent.kind).toBe('clarify');
+    expect(calls).toBe(2);
+
+    release();
+    expect((await holding).kind).toBe('clarify');
+    const replacement = await runtime.runTurn({
+      agentSessionId: blockedSession.id,
+      userMessage: 'after release',
+    });
+    expect(replacement.kind).toBe('clarify');
+    expect(calls).toBe(3);
+  });
+
+  it('manual transcript-only turns bypass a full AI slot, and a thrown AI turn releases it', async () => {
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let shouldThrow = false;
+    const sessions = new InMemoryAgentSessionsRepo();
+    const aiSession = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const manualSession = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      mode: 'manual',
+    });
+    const replacementSession = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+    });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async (args) => {
+          if (args.task === 'hold') {
+            markStarted();
+            await blocker;
+          }
+          if (shouldThrow) throw new Error('Anthropic response was not valid JSON');
+          return {
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'Which page?',
+            tokensConsumed: 1,
+          };
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      maxConcurrentTurnsPerAccount: 1,
+    });
+
+    const holding = runtime.runTurn({ agentSessionId: aiSession.id, userMessage: 'hold' });
+    await started;
+    const manual = await runtime.runTurn({
+      agentSessionId: manualSession.id,
+      userMessage: 'operator note',
+    });
+    expect(manual.kind).toBe('logged-manual');
+    release();
+    await holding;
+
+    shouldThrow = true;
+    await expect(
+      runtime.runTurn({ agentSessionId: aiSession.id, userMessage: 'throw' }),
+    ).rejects.toThrow(/not valid JSON/);
+    shouldThrow = false;
+    expect(
+      (
+        await runtime.runTurn({
+          agentSessionId: replacementSession.id,
+          userMessage: 'after throw',
+        })
+      ).kind,
+    ).toBe('clarify');
+  });
+
+  it('rejects an invalid injected account concurrency limit at construction', () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    expect(
+      () =>
+        new AgentRuntime({
+          decomposer: new DeterministicAgentDecomposer(),
+          executor: new StubAgentExecutor(),
+          sessions,
+          archetype: 'iphone16pro_ios18_7_safari26_4',
+          maxConcurrentTurnsPerAccount: 0,
+        }),
+    ).toThrow(/positive safe integer/);
+  });
+});
+
 describe('W589 task-refusal start-gate wiring', () => {
   // A decomposer that records whether it was ever called — the start-gate
   // must short-circuit BEFORE any LLM decompose on a refusal.

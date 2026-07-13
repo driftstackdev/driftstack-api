@@ -71,6 +71,17 @@ describe('loadConfig', () => {
     ).toBe(5);
   });
 
+  it('agentTurnMaxAccountInFlight — prod default 3; tunable via AGENT_TURN_MAX_ACCOUNT_INFLIGHT (cross-session fleet fairness)', () => {
+    const base = {
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    };
+    expect(loadConfig(base).agentTurnMaxAccountInFlight).toBe(3);
+    expect(
+      loadConfig({ ...base, AGENT_TURN_MAX_ACCOUNT_INFLIGHT: '5' }).agentTurnMaxAccountInFlight,
+    ).toBe(5);
+  });
+
   it('globalIpRateLimitPerMin — prod default 600/min/IP; tunable via GLOBAL_IP_RATE_LIMIT_PER_MIN; 0 disables (DoS hardening)', () => {
     const base = {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',

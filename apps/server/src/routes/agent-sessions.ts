@@ -110,6 +110,7 @@ import {
   PairModeConflictError,
   PairModeStateInvalidTransitionRouteError,
   ProxyValidationFailedError,
+  RateLimitedError,
   ValidationError,
 } from '../lib/errors.js';
 // S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate (create path).
@@ -4038,6 +4039,12 @@ export function registerAgentSessionsRoutes(
         if (result.kind === 'turn-in-progress') {
           throw new ConflictError(
             'Another turn is already running for this agent session. Retry after it completes.',
+          );
+        }
+        if (result.kind === 'account-turn-limit') {
+          throw new RateLimitedError(
+            1,
+            `This account already has ${result.current.toString()} AI turns running; the current limit is ${result.limit.toString()}. Retry after one finishes.`,
           );
         }
         if (result.kind === 'session-closed') {

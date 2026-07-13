@@ -203,6 +203,11 @@ const ConfigSchema = z.object({
   // tune via BUNDLED_TURN_MAX_CONCURRENCY. Only consulted when the
   // bundled-LLM leg is wired (deploymentFallbackKey + bundledLlmService).
   bundledTurnMaxConcurrency: z.coerce.number().int().positive().default(3),
+  // Fleet-fairness hardening — maximum concurrent AI turns for one owner
+  // account across distinct agent sessions, regardless of BYOK/bundled/
+  // deterministic key path. Manual transcript-only turns bypass it. Default 3;
+  // tune via AGENT_TURN_MAX_ACCOUNT_INFLIGHT.
+  agentTurnMaxAccountInFlight: z.coerce.number().int().positive().default(3),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -712,6 +717,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     agentRelayMaxAccountInFlight: env.AGENT_RELAY_MAX_ACCOUNT_INFLIGHT,
     agentUploadMaxAccountInFlightCount: env.AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT,
     bundledTurnMaxConcurrency: env.BUNDLED_TURN_MAX_CONCURRENCY,
+    agentTurnMaxAccountInFlight: env.AGENT_TURN_MAX_ACCOUNT_INFLIGHT,
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,

@@ -55,16 +55,27 @@ describe('services/agent-runtime content parity', () => {
     expect(body).toMatch(/keySource\?: 'header' \| 'cached' \| 'bundled' \| 'fallback' \| 'none';/);
   });
 
-  it('RunTurnResult 5-variant discriminated union pinned: plan-executed + clarify + refuse + session-closed + logged-manual. + Arc 2 8.6 manual-mode framing for logged-manual. Drift to dropping a variant would break the route handler exhaustive switch + leave one of the 5 turn paths unhandled', () => {
+  it('RunTurnResult internal/public discriminants include plan/clarify/refuse, session/account concurrency, closed, and manual paths', () => {
     expect(body).toMatch(/export type RunTurnResult =/);
     expect(body).toMatch(/kind: 'plan-executed';/);
     expect(body).toMatch(/kind: 'clarify';/);
     expect(body).toMatch(/kind: 'refuse';/);
     expect(body).toMatch(/kind: 'session-closed';/);
+    expect(body).toMatch(/kind: 'turn-in-progress';/);
+    expect(body).toMatch(/kind: 'account-turn-limit';/);
     expect(body).toMatch(/kind: 'logged-manual';/);
     expect(body).toMatch(
       /\/\/ Arc 2 sub-slice 8\.6 \(v2-#8\) — manual mode pass-through\.\s*\n?\s*\/\/ The user_message was recorded as an actor='operator' transcript\s*\n?\s*\/\/ entry; no decompose \/ executor ran\./,
     );
+  });
+
+  it('per-account AI turn fairness is positive, defaults to three, and manual mode bypasses only the account slot', () => {
+    expect(body).toMatch(/maxConcurrentTurnsPerAccount\?: number;/);
+    expect(body).toMatch(/const limit = deps\.maxConcurrentTurnsPerAccount \?\? 3;/);
+    expect(body).toMatch(/const consumesAccountSlot = session\.mode !== 'manual';/);
+    expect(body).toMatch(/currentForAccount >= this\.maxConcurrentTurnsPerAccount/);
+    expect(body).toMatch(/this\.activeTurnAccountCounts\.delete\(session\.accountId\)/);
+    expect(body).toMatch(/return await this\.runExclusiveTurn\(args, session\);/);
   });
 
   it("v2-#4 Q.1.e AgentDecomposerUsageRecorder framing pinned: 'per-turn usage recorder. AgentRuntime calls this after every decomposer.decompose() that returns a usage block. Bootstrap wires this to a usage_records writer when the Drizzle dependency direction is permitted. When unwired, AgentRuntime silently skips recording — the dashboard usage page only reflects what we successfully persisted, so a missing wire shows as missing cost data rather than a synthesized zero.' — pinned so the optional-recorder + silent-skip-when-unwired + no-synthesized-zero contract all stay documented", () => {

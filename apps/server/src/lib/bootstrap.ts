@@ -1056,6 +1056,7 @@ export async function createProductionDeps(
     executor: agentExecutor,
     sessions: agentSessionsRepo,
     archetype: 'iphone17_ios18_7_safari26_4',
+    maxConcurrentTurnsPerAccount: config.agentTurnMaxAccountInFlight,
     usageRecorder: agentDecomposerUsageRecorder,
     eventBus: agentSessionEventBus,
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
