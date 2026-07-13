@@ -243,8 +243,48 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
 
+      const clearsInFlight = new Set();
+      function clearOperationKey(accountId, bucketKey) {
+        return String(accountId) + '\u0000' + String(bucketKey);
+      }
+
+      function clearControlState(accountId, bucketKey) {
+        const pending = clearsInFlight.has(clearOperationKey(accountId, bucketKey));
+        return {
+          pending,
+          attrs: pending
+            ? ' disabled aria-disabled="true" aria-busy="true" title="Wait for the current override clear to finish."'
+            : '',
+          label: pending ? 'Clear pending…' : 'Clear now',
+        };
+      }
+
+      function syncClearControls(accountId, bucketKey) {
+        const state = clearControlState(accountId, bucketKey);
+        root.querySelectorAll('[data-action="clear"]').forEach((control) => {
+          if (
+            control.getAttribute('data-account-id') !== String(accountId) ||
+            control.getAttribute('data-bucket-key') !== String(bucketKey)
+          ) {
+            return;
+          }
+          control.disabled = state.pending;
+          control.textContent = state.label;
+          if (state.pending) {
+            control.setAttribute('aria-disabled', 'true');
+            control.setAttribute('aria-busy', 'true');
+            control.title = 'Wait for the current override clear to finish.';
+          } else {
+            control.removeAttribute('aria-disabled');
+            control.removeAttribute('aria-busy');
+            control.removeAttribute('title');
+          }
+        });
+      }
+
       function rowHtml(o) {
         const bucketLabel = BUCKET_LABEL[o.bucket_key] || o.bucket_key;
+        const clearState = clearControlState(o.account_id, o.bucket_key);
         const reasonFrag = o.reason
           ? '<p class="mt-3 text-sm text-tk-ink-2">' + escapeHtml(o.reason) + '</p>'
           : '';
@@ -276,7 +316,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(o.account_id) +
           '" data-bucket-key="' +
           escapeHtml(o.bucket_key) +
-          '" class="text-sm text-red-700 hover:underline">Clear now</button>' +
+          '"' +
+          clearState.attrs +
+          ' class="text-sm text-red-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60">' +
+          clearState.label +
+          '</button>' +
           '</div></div></li>'
         );
       }
@@ -362,13 +406,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      const clearsInFlight = new Set();
       async function clear(prefixedAccountId, bucketKey, btn) {
         if (!token) return;
-        const operationKey = prefixedAccountId + '\u0000' + bucketKey;
+        const operationKey = clearOperationKey(prefixedAccountId, bucketKey);
         if (clearsInFlight.has(operationKey)) return;
         clearsInFlight.add(operationKey);
-        const originalText = btn ? btn.textContent : 'Clear now';
+        syncClearControls(prefixedAccountId, bucketKey);
         if (btn) {
           btn.disabled = true;
           btn.setAttribute('aria-busy', 'true');
@@ -432,11 +475,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
         } finally {
           clearsInFlight.delete(operationKey);
-          if (btn) {
-            btn.disabled = false;
-            btn.removeAttribute('aria-busy');
-            btn.textContent = originalText;
-          }
+          syncClearControls(prefixedAccountId, bucketKey);
         }
       }
 

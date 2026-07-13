@@ -67,12 +67,21 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
 
   it('clear-now uses a destructive composite-key lease with accessible busy feedback', () => {
     expect(body).toMatch(/const clearsInFlight = new Set\(\);/);
-    expect(body).toMatch(/prefixedAccountId \+ '\\u0000' \+ bucketKey/);
+    expect(body).toMatch(/function clearOperationKey\(accountId, bucketKey\)/);
+    expect(body).toMatch(/String\(accountId\) \+ '\\u0000' \+ String\(bucketKey\)/);
     expect(body).toMatch(/if \(clearsInFlight\.has\(operationKey\)\) return;/);
     expect(body).toMatch(/\{ confirmLabel: 'Clear', destructive: true \}/);
     expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toContain("btn.textContent = 'Confirming…'");
     expect(body).toContain("btn.textContent = 'Clearing…'");
+  });
+
+  it('re-rendered rows inherit and visibly explain a pending clear lease', () => {
+    expect(body).toMatch(/function clearControlState\(accountId, bucketKey\)/);
+    expect(body).toMatch(/clearsInFlight\.has\(clearOperationKey\(accountId, bucketKey\)\)/);
+    expect(body).toContain('Clear pending…');
+    expect(body).toContain('Wait for the current override clear to finish.');
+    expect(body).toMatch(/function syncClearControls\(accountId, bucketKey\)/);
   });
 
   it('bucket-key footnote lists the canonical enum (global + sessions:create + agent_sessions:message)', () => {

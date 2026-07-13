@@ -241,6 +241,47 @@ describe('admin rate-limit-overrides page — clear-now (operator)', () => {
     ).toBeNull();
   });
 
+  it('keeps a refreshed replacement row visibly busy and rejects a forced second clear', async () => {
+    const overrides = [{ ...OV_A }];
+    let finishDelete: (response: Response) => void = () => {};
+    const pendingDelete = new Promise<Response>((resolve) => {
+      finishDelete = resolve;
+    });
+    const fallback = makeRouter(overrides);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => (call.init?.method === 'DELETE' ? pendingDelete : fallback(call)),
+    });
+    win = window;
+    await flush();
+
+    const original = window.document.querySelector(
+      '[data-action="clear"][data-account-id="acc_a"]',
+    ) as HTMLButtonElement;
+    original.click();
+    await flush(2);
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+
+    const replacement = window.document.querySelector(
+      '[data-action="clear"][data-account-id="acc_a"]',
+    ) as HTMLButtonElement;
+    expect(replacement).not.toBe(original);
+    expect(replacement.disabled).toBe(true);
+    expect(replacement.getAttribute('aria-busy')).toBe('true');
+    expect(replacement.title).toMatch(/wait for the current override clear/i);
+    expect(replacement.textContent).toBe('Clear pending…');
+    replacement.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush(2);
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+
+    overrides.splice(0, 1);
+    finishDelete(new Response(null, { status: 204 }));
+    await flush();
+    expect(
+      window.document.querySelector('[data-action="clear"][data-account-id="acc_a"]'),
+    ).toBeNull();
+  });
+
   it('load failure removes every mock Clear action and leaves an honest non-actionable state', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       route: () => json({ detail: 'unavailable' }, 503),
