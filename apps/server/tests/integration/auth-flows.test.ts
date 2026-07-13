@@ -14,6 +14,7 @@ import { AuthFlowError, AuthFlowsService } from '../../src/services/auth-flows.j
 import {
   InMemoryMfaChallengeStore,
   MAX_MFA_CHALLENGE_ATTEMPTS,
+  generateChallengeToken,
   redisKey as mfaChallengeKey,
 } from '../../src/services/mfa-challenge-store.js';
 import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
@@ -38,6 +39,7 @@ function makeMfaDirectService(): {
   service: AuthFlowsService;
   challenges: InMemoryMfaChallengeStore;
   getStatus: ReturnType<typeof vi.fn>;
+  verifyCode: ReturnType<typeof vi.fn>;
 } {
   const repo = new InMemoryAuthFlowsRepo();
   const logger = createTestLogger();
@@ -49,6 +51,7 @@ function makeMfaDirectService(): {
     lastUsedAt: null,
     unusedRecoveryCodes: 10,
   });
+  const verifyCode = vi.fn().mockResolvedValue('totp');
   const service = new AuthFlowsService(
     repo,
     email,
@@ -61,10 +64,10 @@ function makeMfaDirectService(): {
     },
     null,
     null,
-    { getStatus } as never,
+    { getStatus, verifyCode } as never,
     challenges,
   );
-  return { repo, service, challenges, getStatus };
+  return { repo, service, challenges, getStatus, verifyCode };
 }
 
 interface SignupResponse {
@@ -964,6 +967,77 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
     expect(setPassword).toHaveBeenCalledTimes(1);
     expect(revokeAll).toHaveBeenCalledWith(signup.account.id, expect.any(Date));
     expect(await repo.listActiveWebSessionsForAccount(signup.account.id, new Date())).toEqual([]);
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthFlowsService.completeMfaChallenge — fail-closed challenge integrity', () => {
+  it('rejects an unavailable attempt IP when the challenge was issued from a known IP without consuming the legitimate retry', async () => {
+    const { repo, service, challenges, verifyCode } = makeMfaDirectService();
+    const signup = await service.signup({
+      email: 'mfa-ip-bound@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    repo.seedAccount({ ...signup.account, emailVerifiedAt: new Date() });
+    const login = await service.login({
+      email: signup.account.email,
+      password: 'correct horse battery staple',
+      issuedFromIp: '203.0.113.9',
+      userAgent: 'bound-browser',
+    });
+    expect(login.kind).toBe('mfa_required');
+    if (login.kind !== 'mfa_required') throw new Error('expected MFA challenge');
+
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: login.challengeToken,
+        code: '123456',
+        sourceIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+    expect(verifyCode).not.toHaveBeenCalled();
+    expect(await challenges.peek(mfaChallengeKey(login.challengeToken))).not.toBeNull();
+
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: login.challengeToken,
+        code: '123456',
+        sourceIp: '203.0.113.9',
+        userAgent: null,
+      }),
+    ).resolves.toMatchObject({ via: 'totp' });
+  });
+
+  it.each([
+    ['invalid JSON', '{not-json'],
+    [
+      'invalid field types',
+      JSON.stringify({
+        account_id: null,
+        email: 'customer@driftstack.local',
+        source_ip: '203.0.113.9',
+        issued_at: 'now',
+        issued_user_agent: null,
+      }),
+    ],
+  ])('consumes %s without calling the verifier or minting a session', async (_label, raw) => {
+    const { repo, service, challenges, verifyCode } = makeMfaDirectService();
+    const challengeToken = generateChallengeToken();
+    await challenges.set(mfaChallengeKey(challengeToken), raw, 60);
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken,
+        code: '123456',
+        sourceIp: '203.0.113.9',
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+    expect(await challenges.peek(mfaChallengeKey(challengeToken))).toBeNull();
+    expect(verifyCode).not.toHaveBeenCalled();
     expect(insertSession).not.toHaveBeenCalled();
   });
 });

@@ -467,6 +467,26 @@ function stepUpAttemptsKey(accountId: string): string {
   return `mfa-stepup-attempts:${accountId}`;
 }
 
+function parseMfaChallengePayload(raw: string): MfaChallengePayload | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const { account_id, email, source_ip, issued_at, issued_user_agent } = record;
+  if (typeof account_id !== 'string' || account_id.length === 0) return null;
+  if (typeof email !== 'string' || email.length === 0) return null;
+  if (source_ip !== null && typeof source_ip !== 'string') return null;
+  if (typeof issued_at !== 'number' || !Number.isFinite(issued_at)) return null;
+  if (issued_user_agent !== null && typeof issued_user_agent !== 'string') return null;
+
+  return { account_id, email, source_ip, issued_at, issued_user_agent };
+}
+
 export class AuthFlowsService {
   constructor(
     private readonly repo: AuthFlowsRepo,
@@ -915,19 +935,23 @@ export class AuthFlowsService {
 
     // Peek first so an IP mismatch doesn't consume the token (legit
     // user can still retry from the right IP).
-    const peek = await this.mfaChallenges.peek(mfaChallengeKey(args.challengeToken));
+    const challengeKey = mfaChallengeKey(args.challengeToken);
+    const peek = await this.mfaChallenges.peek(challengeKey);
     if (peek === null) {
       throw new AuthFlowError(
         'invalid_auth_token',
         'Challenge token is unknown or expired. Sign in again.',
       );
     }
-    const payload = JSON.parse(peek) as MfaChallengePayload;
-    if (
-      payload.source_ip !== null &&
-      args.sourceIp !== null &&
-      payload.source_ip !== args.sourceIp
-    ) {
+    const payload = parseMfaChallengePayload(peek);
+    if (payload === null) {
+      // Corrupt state can never become a valid customer retry. Remove it so
+      // malformed Redis data fails closed as a stable auth error instead of a
+      // repeatable 500 or a verifier call with an invalid account identity.
+      await this.mfaChallenges.consume(challengeKey);
+      throw new AuthFlowError('invalid_auth_token', 'Challenge token is invalid. Sign in again.');
+    }
+    if (payload.source_ip !== null && payload.source_ip !== args.sourceIp) {
       throw new AuthFlowError(
         'invalid_auth_token',
         'Challenge token was issued from a different IP. Sign in again.',
@@ -948,7 +972,7 @@ export class AuthFlowsService {
         MFA_CHALLENGE_TTL_SECONDS,
       );
       if (attempts >= MAX_MFA_CHALLENGE_ATTEMPTS) {
-        await this.mfaChallenges.consume(mfaChallengeKey(args.challengeToken));
+        await this.mfaChallenges.consume(challengeKey);
         throw new AuthFlowError(
           'invalid_auth_token',
           'Too many incorrect codes for this sign-in. Sign in again to retry.',
@@ -969,7 +993,7 @@ export class AuthFlowsService {
     // closes the concurrent window (both peek before either consumes). Issue
     // the session with the user-agent recorded at /login time so the row
     // looks like the original login attempt, not the challenge POST.
-    const consumed = await this.mfaChallenges.consume(mfaChallengeKey(args.challengeToken));
+    const consumed = await this.mfaChallenges.consume(challengeKey);
     if (consumed === null) {
       throw new AuthFlowError(
         'invalid_auth_token',

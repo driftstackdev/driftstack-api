@@ -193,11 +193,9 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
       /\/\/ Peek first so an IP mismatch doesn't consume the token \(legit\s*\n?\s*\/\/ user can still retry from the right IP\)\./,
     );
     expect(body).toMatch(
-      /if \(\s*\n?\s*payload\.source_ip !== null &&\s*\n?\s*args\.sourceIp !== null &&\s*\n?\s*payload\.source_ip !== args\.sourceIp\s*\n?\s*\) \{\s*\n?\s*throw new AuthFlowError\(\s*\n?\s*'invalid_auth_token',\s*\n?\s*'Challenge token was issued from a different IP\. Sign in again\.',/,
+      /if \(payload\.source_ip !== null && payload\.source_ip !== args\.sourceIp\) \{\s*\n?\s*throw new AuthFlowError\(\s*\n?\s*'invalid_auth_token',\s*\n?\s*'Challenge token was issued from a different IP\. Sign in again\.',/,
     );
-    expect(body).toMatch(
-      /await this\.mfaChallenges\.consume\(mfaChallengeKey\(args\.challengeToken\)\);/,
-    );
+    expect(body).toMatch(/await this\.mfaChallenges\.consume\(challengeKey\);/);
     expect(body).toMatch(
       /\/\/ V-353d — mark the freshly-issued session as MFA-satisfied so\s*\n?\s*\/\/ step-up gates pass on it\./,
     );
@@ -206,12 +204,27 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
+  it('V-353d completeMfaChallenge runtime-validates stored JSON and consumes corrupt state before verification', () => {
+    expect(body).toMatch(
+      /function parseMfaChallengePayload\(raw: string\): MfaChallengePayload \| null \{/,
+    );
+    expect(body).toMatch(/value = JSON\.parse\(raw\);/);
+    expect(body).toMatch(
+      /if \(value === null \|\| typeof value !== 'object' \|\| Array\.isArray\(value\)\)/,
+    );
+    expect(body).toMatch(/typeof account_id !== 'string' \|\| account_id\.length === 0/);
+    expect(body).toMatch(/typeof issued_at !== 'number' \|\| !Number\.isFinite\(issued_at\)/);
+    expect(body).toMatch(
+      /const payload = parseMfaChallengePayload\(peek\);\s*\n?\s*if \(payload === null\) \{[\s\S]+?await this\.mfaChallenges\.consume\(challengeKey\);[\s\S]+?'Challenge token is invalid\. Sign in again\.'/,
+    );
+  });
+
   it('V-353d completeMfaChallenge: atomic single-use — consume()=GETDEL return is checked; a concurrent race-loser (consumed===null) throws instead of minting a second session', () => {
     // Regression guard for the concurrent double-submit window: two requests
     // racing the same valid code both pass peek+verify, but consume() (atomic
     // GETDEL) returns the payload to exactly one — the loser must be rejected.
     expect(body).toMatch(
-      /const consumed = await this\.mfaChallenges\.consume\(mfaChallengeKey\(args\.challengeToken\)\);\s*\n?\s*if \(consumed === null\) \{\s*\n?\s*throw new AuthFlowError\(\s*\n?\s*'invalid_auth_token',\s*\n?\s*'Challenge token was already used\. Sign in again\.',/,
+      /const consumed = await this\.mfaChallenges\.consume\(challengeKey\);\s*\n?\s*if \(consumed === null\) \{\s*\n?\s*throw new AuthFlowError\(\s*\n?\s*'invalid_auth_token',\s*\n?\s*'Challenge token was already used\. Sign in again\.',/,
     );
   });
 
