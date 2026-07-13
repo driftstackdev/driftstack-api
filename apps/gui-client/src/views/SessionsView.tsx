@@ -14,6 +14,7 @@ import { useToasts } from '../lib/toasts';
 import { useConfirm } from '../components/ConfirmProvider';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { humanizeError } from '../lib/humanize-error';
 import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
 import { countActiveAgentSessions } from '../lib/active-agent-sessions';
 
@@ -1038,10 +1039,7 @@ function friendlyError(err: unknown, baseUrl?: string): string {
   if (err instanceof DriftstackError) {
     return err.message;
   }
-  if (err instanceof Error) {
-    return err.message;
-  }
-  return 'unknown error';
+  return humanizeError(err, "Couldn't complete the session request. Try again.");
 }
 
 function formatTime(ms: number): string {

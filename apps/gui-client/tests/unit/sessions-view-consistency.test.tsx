@@ -152,3 +152,17 @@ describe('SessionsView consistency #11 — New session confirms the bare path', 
     expect(sessionsCreate).not.toHaveBeenCalled();
   });
 });
+
+describe('SessionsView customer-safe error copy', () => {
+  it('does not render an unknown session-list exception', async () => {
+    sessionsList.mockRejectedValueOnce(
+      new Error('SQLite failed /Users/customer token=secret private-control.internal'),
+    );
+
+    render(<SessionsView onGoToSettings={vi.fn()} />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't complete the session request. Try again.");
+    expect(alert).not.toHaveTextContent(/SQLite|\/Users|token=secret|private-control/i);
+  });
+});
