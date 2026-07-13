@@ -59,4 +59,16 @@ describe('RecipesView initial loading state', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open AI Browser Automation' }));
     expect(onGoToAI).toHaveBeenCalledOnce();
   });
+
+  it('turns native list failures into safe retry copy', async () => {
+    listRecipes.mockRejectedValueOnce(
+      new TypeError('fetch failed: getaddrinfo ENOTFOUND internal-api.private'),
+    );
+
+    render(<RecipesView onGoToAI={vi.fn()} onGoToSettings={vi.fn()} />);
+
+    expect(await screen.findByText('Check your connection and try again.')).toBeInTheDocument();
+    expect(screen.queryByText(/internal-api\.private/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
 });

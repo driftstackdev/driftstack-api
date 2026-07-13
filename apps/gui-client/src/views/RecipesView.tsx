@@ -18,6 +18,7 @@ import { Skeleton, SkeletonRegion, SkeletonRows } from '../components/Skeleton';
 import { RelativeTime } from '../components/RelativeTime';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type DriftstackClient } from '../lib/client';
+import { humanizeError } from '../lib/humanize-error';
 import type { AgentIntent, Recipe } from '@driftstack/sdk';
 
 // RecipeDetail (Recipe + the replayable intent_log) is not re-exported
@@ -94,7 +95,11 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
         error: null,
       });
     } catch (err) {
-      setList((s) => ({ ...s, loading: false, error: friendly(err) }));
+      setList((s) => ({
+        ...s,
+        loading: false,
+        error: friendly(err, "Couldn't load saved tasks. Try again."),
+      }));
     }
   }, [client]);
 
@@ -118,7 +123,13 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
         if (!cancelled) setDetail({ recipe, loading: false, error: null });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setDetail({ recipe: null, loading: false, error: friendly(err) });
+        if (!cancelled) {
+          setDetail({
+            recipe: null,
+            loading: false,
+            error: friendly(err, "Couldn't load this saved task. Try again."),
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -439,8 +450,7 @@ function intentSummary(intent: AgentIntent): string {
   }
 }
 
-function friendly(err: unknown): string {
+function friendly(err: unknown, fallback: string): string {
   if (err instanceof DriftstackError) return err.message;
-  if (err instanceof Error) return err.message;
-  return String(err);
+  return humanizeError(err, fallback);
 }
