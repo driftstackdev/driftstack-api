@@ -241,7 +241,7 @@ describe('W378.A marketing-site /legal/dpa.md content parity', () => {
     );
     expect(body).not.toMatch(/all\s+Customer Data resides on the EU-jurisdiction infrastructure/);
     expect(body).toMatch(/at least 30 days'\s+notice under Section 9 \(Sub-processor amendment\)/);
-    expect(body).toMatch(/\[`\/trust\/sub-processors`\]\(\/trust\/sub-processors\)/);
+    expect(body).toMatch(/\[`\/trust\/sub-processors`\]\(\/trust\/sub-processors\/\)/);
   });
 
   it('Annex 4 SCCs: 3 module selections (no-SCC-internal / Module 3 sub-processor / Module 1+3 controller-capacity)', () => {

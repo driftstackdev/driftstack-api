@@ -25,7 +25,7 @@ describe('W285.A welcome page CTA consistency', () => {
   });
 
   it('upgrade CTA links to /select-tier', () => {
-    expect(body).toMatch(/href=["']\/select-tier["']/);
+    expect(body).toMatch(/href=["']\/select-tier\/["']/);
   });
 
   it('does not link to the legacy /pricing route from the dashboard', () => {

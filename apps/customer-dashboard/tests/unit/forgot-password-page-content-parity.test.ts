@@ -82,7 +82,7 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
 
   it('/login cross-link present ("Remembered it? Sign in")', () => {
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/login"\s*\n?\s*class="[^"]+"\s*>\s*Sign in\s*<\/a\s*>/,
+      /<a\s*\n?\s*href="\/login\/"\s*\n?\s*class="[^"]+"\s*>\s*Sign in\s*<\/a\s*>/,
     );
     expect(body).toMatch(/Remembered it\?/);
   });

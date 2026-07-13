@@ -48,7 +48,7 @@ describe('W359.A /docs/recordings parity', () => {
   );
 
   it.skip('roadmap framing + V-540 reference stay pinned', () => {
-    expect(body).toMatch(/Session recordings are on the\s+<a href="\/roadmap">roadmap<\/a>/);
+    expect(body).toMatch(/Session recordings are on the\s+<a href="\/roadmap\/">roadmap<\/a>/);
     expect(body).toMatch(/under V-540 but not yet exposed via the public API/);
   });
 
@@ -99,7 +99,7 @@ describe('W359.A /docs/recordings parity', () => {
   });
 
   it('capture-bytes-yourself workaround cited (the workable observation pipeline today)', () => {
-    expect(body).toMatch(/<a href="\/docs\/sessions">Sessions API<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sessions\/">Sessions API<\/a>/);
     expect(body).toMatch(/<code>POST \/v1\/sessions\/:id\/capture<\/code>/);
     // Astro renders `{`...`}` template-literal expressions as plain
     // text inside the <code> tag.

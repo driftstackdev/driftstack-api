@@ -104,7 +104,7 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
 
   it('back-link to /incidents list pinned', () => {
     expect(body).toMatch(
-      /<a href="\/incidents" class="text-sm text-tk-accent hover:underline">← Back to incidents<\/a>/,
+      /<a href="\/incidents\/" class="text-sm text-tk-accent hover:underline">← Back to incidents<\/a>/,
     );
   });
 

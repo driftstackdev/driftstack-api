@@ -136,7 +136,7 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
 
   it('/signup "restart signup" cross-link present', () => {
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/signup"\s*\n?\s*class="[^"]+"\s*>\s*restart signup\s*<\/a\s*>/,
+      /<a\s*\n?\s*href="\/signup\/"\s*\n?\s*class="[^"]+"\s*>\s*restart signup\s*<\/a\s*>/,
     );
     expect(body).toMatch(/Token expired or never arrived\?/);
   });

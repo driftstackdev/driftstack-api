@@ -24,7 +24,7 @@ import CtaBand from '../components/CtaBand.astro';
     </p>
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Driftstack ships iPhone Safari sessions on demand, built on
-      real <a href="/glossary#webkit" class="text-tk-accent-text underline">WebKit</a>
+      real <a href="/glossary/#webkit" class="text-tk-accent-text underline">WebKit</a>
       — the same engine every physical iPhone runs — with nothing
       quietly modified while the browser is running ("patched at
       runtime"), so there's nothing for detection systems to spot.
@@ -48,7 +48,7 @@ import CtaBand from '../components/CtaBand.astro';
             browser's behaviour on the fly (rewriting JavaScript at
             runtime). Detection systems are built to catch exactly that —
             the fingerprint values those tools return, like the
-            <a href="/glossary#canvas-hash" class="text-tk-accent-text underline">canvas</a>
+            <a href="/glossary/#canvas-hash" class="text-tk-accent-text underline">canvas</a>
             and WebGL hashes (values derived from how the browser draws
             an invisible test image), come out 100% unique per session:
             the literal opposite of a real iPhone, which returns
@@ -74,10 +74,10 @@ import CtaBand from '../components/CtaBand.astro';
             customer-configurable
             egress (SOCKS5 · WireGuard · OpenVPN): session traffic
             leaves for the web through an exit you control — your own
-            proxy or VPN (<a href="/glossary#egress" class="text-tk-accent-text underline">what's egress?</a>).
+            proxy or VPN (<a href="/glossary/#egress" class="text-tk-accent-text underline">what's egress?</a>).
             See
             <a
-              href="/trust/security-overview"
+              href="/trust/security-overview/"
               class="text-tk-accent-text underline underline-offset-4"
               >/trust/security-overview</a
             >
@@ -118,7 +118,7 @@ import CtaBand from '../components/CtaBand.astro';
           data abroad, and nothing is transferred that isn't disclosed.
           The per-vendor breakdown — who runs where, doing what, on
           which legal basis — lives on
-          <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a>.
+          <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a>.
         </p>
       </div>
       <div>
@@ -195,7 +195,7 @@ import CtaBand from '../components/CtaBand.astro';
           data (account-scope leakage)? Can a dashboard login be
           stolen (web-session-token security)? Findings
           with closure status published at
-          <a href="/security" class="text-tk-accent-text underline">
+          <a href="/security/" class="text-tk-accent-text underline">
             /security
           </a>. A deeper full audit ("pre-flight") runs before each
           new customer's first paid month — their first production
@@ -225,7 +225,7 @@ import CtaBand from '../components/CtaBand.astro';
           scenario is rehearseable on staging — our test copy of the
           platform — before commercial
           activation. How incidents get published:
-          <a href="/trust/incidents" class="text-tk-accent-text underline">
+          <a href="/trust/incidents/" class="text-tk-accent-text underline">
             /trust/incidents
           </a>.
         </p>
@@ -245,7 +245,7 @@ import CtaBand from '../components/CtaBand.astro';
           list (additions,
           removals, region migrations) is published 30 days
           before it takes effect at
-          <a href="/trust/sub-processors" class="text-tk-accent-text underline">
+          <a href="/trust/sub-processors/" class="text-tk-accent-text underline">
             /trust/sub-processors
           </a>. If a new sub-processor doesn't meet your
           requirements, those 30 days are your right-of-objection
@@ -271,7 +271,7 @@ import CtaBand from '../components/CtaBand.astro';
           sunsets the cloud service, escrow releases the source
           so customers can continue running on their own
           hardware indefinitely. The
-          <a href="/faq#acceptable-use" class="text-tk-accent-text underline">
+          <a href="/faq/#acceptable-use" class="text-tk-accent-text underline">
             FAQ "what if Driftstack goes away?"
           </a>
           entry has the full mechanics.
@@ -302,7 +302,7 @@ import CtaBand from '../components/CtaBand.astro';
       <div class="flex gap-4 border-b border-tk-border pb-4">
         <dt class="w-40 shrink-0 text-sm text-tk-ink-3">Sub-processors</dt>
         <dd class="text-sm text-tk-ink">
-          <a href="/trust/sub-processors" class="text-tk-accent-text underline"
+          <a href="/trust/sub-processors/" class="text-tk-accent-text underline"
             >/trust/sub-processors</a
           >
         </dd>
@@ -318,9 +318,9 @@ import CtaBand from '../components/CtaBand.astro';
   <CtaBand
     title="Want to try it?"
     lead="Start free — one profile, 20-minute sessions on real iPhone Safari, no card required. Perpetual, no expiry."
-    primaryHref="/pricing#free"
+    primaryHref="/pricing/#free"
     primaryLabel="Start free"
-    secondaryHref="/trust"
+    secondaryHref="/trust/"
     secondaryLabel="Visit the trust center"
   />
 </BaseLayout>

@@ -212,7 +212,7 @@ describe('W358.C admin-panel /index overview page content parity', () => {
   });
 
   it('"recent admin activity" → /audit-log full-log cross-link resolves', () => {
-    expect(body).toMatch(/<a href="\/audit-log"/);
+    expect(body).toMatch(/<a href="\/audit-log\/"/);
     expect(body).toMatch(/See full log →/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/src/pages/audit-log.astro'))).toBe(true);
   });

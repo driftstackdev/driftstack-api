@@ -34,6 +34,6 @@ describe('W328.C /login ↔ auth route parity', () => {
   });
 
   it('page links to /forgot-password for the recovery path', () => {
-    expect(page).toMatch(/href=['"]\/forgot-password['"]/);
+    expect(page).toMatch(/href=['"]\/forgot-password\/['"]/);
   });
 });

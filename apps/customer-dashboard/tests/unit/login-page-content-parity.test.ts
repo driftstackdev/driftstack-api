@@ -146,7 +146,7 @@ describe('W369.B customer-dashboard /login page content parity', () => {
 
   it('forgot-password cross-link to /forgot-password pinned', () => {
     expect(body).toMatch(
-      /<a href="\/forgot-password" class="[^"]+"\s*>\s*Forgot your password\?\s*<\/a\s*>/,
+      /<a href="\/forgot-password\/" class="[^"]+"\s*>\s*Forgot your password\?\s*<\/a\s*>/,
     );
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/forgot-password.astro')),

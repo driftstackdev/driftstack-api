@@ -138,7 +138,7 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
   it('cross-link back to /pricing glanceable view pinned (companion-page framing)', () => {
     // S20 2026-07-06: AA accent-text tone (raw accent measured 2.71:1 here).
     expect(body).toMatch(
-      /<a href="\/pricing" class="text-tk-accent-text underline">\/pricing<\/a>/,
+      /<a href="\/pricing\/" class="text-tk-accent-text underline">\/pricing<\/a>/,
     );
     expect(body).toMatch(/Looking for the glanceable view\?/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(

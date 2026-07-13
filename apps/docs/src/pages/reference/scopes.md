@@ -125,7 +125,7 @@ When you mint a key from the dashboard or via
   The key authenticates the webhook signature but cannot
   call any `/v1/*` endpoint. (This is the recommended
   pattern — the webhook signing secret is separate from API
-  keys; see [webhooks docs](/webhooks/endpoints) for details.)
+  keys; see [webhooks docs](/webhooks/endpoints/) for details.)
 - **Dashboard / customer self-service:** `account_owner`. The
   default scope minted by the customer dashboard's "first key"
   flow.

@@ -88,6 +88,6 @@ describe('W341.C admin /accounts/[id] detail endpoint parity', () => {
   });
 
   it('"Back to accounts" breadcrumb resolves to the list page', () => {
-    expect(page).toMatch(/href="\/accounts"/);
+    expect(page).toMatch(/href="\/accounts\/"/);
   });
 });

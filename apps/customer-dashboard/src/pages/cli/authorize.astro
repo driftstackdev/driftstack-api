@@ -57,11 +57,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       <div class="mt-6 grid grid-cols-2 gap-3">
         <a
           data-signup-link
-          href="/signup"
+          href="/signup/"
           class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-center text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
           >Create account</a
         >
-        <a data-signin-link href="/login" class="btn-primary text-center">Sign in</a>
+        <a data-signin-link href="/login/" class="btn-primary text-center">Sign in</a>
       </div>
       <p class="mt-3 text-xs text-tk-ink-3 text-center">
         You'll be brought back to this page automatically.
@@ -71,7 +71,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div data-state="confirm" class="mt-8 hidden">
       <p class="text-sm text-tk-ink-2">
         The Driftstack desktop client is requesting a restricted device key bound to your
-        account. It remains active until you revoke it from <a href="/api-keys" class="text-tk-accent-text underline">API keys</a>.
+        account. It remains active until you revoke it from <a href="/api-keys/" class="text-tk-accent-text underline">API keys</a>.
       </p>
       <label class="mt-6 block text-sm font-medium text-tk-ink-2">
         Verification code from the desktop app
@@ -124,7 +124,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         The desktop app should reopen automatically. If it doesn't, switch back to it
         manually — it will pick up the credentials on the next poll.
       </p>
-      <a href="/api-keys" class="mt-6 block text-center text-sm text-tk-accent-text underline">
+      <a href="/api-keys/" class="mt-6 block text-center text-sm text-tk-accent-text underline">
         View your API keys
       </a>
     </div>

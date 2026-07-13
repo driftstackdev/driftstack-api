@@ -226,7 +226,7 @@ Required scope: `write` or `write:profiles`.
 ## Audit-log emission
 
 Only the restore operation surfaces in the customer audit log
-([/api/audit-log](/api/audit-log)) — because it creates a new
+([/api/audit-log](/api/audit-log/)) — because it creates a new
 profile. Capture and delete do not emit an audit entry today.
 
 - `profile.created` — fires on restore (creating the new profile).
@@ -235,7 +235,7 @@ profile. Capture and delete do not emit an audit entry today.
   `restored_from_snapshot` (the source snapshot id, `psnap_<uuid>`).
 
 This event filters cleanly via the query parameters; see
-[/api/audit-log](/api/audit-log) for the filter shape.
+[/api/audit-log](/api/audit-log/) for the filter shape.
 
 ## Tier-cap interaction
 

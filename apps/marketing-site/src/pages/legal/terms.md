@@ -345,7 +345,7 @@ Organisational Measures) sets out the protective measures.
    will not change in ways that break Customer Workflows, or will not
    detect or block Customer's automation. The Service's fingerprint
    parity is a moving target; the
-   [cumulative fingerprint rig](/trust/cumulative-rig) parity ledger
+   [cumulative fingerprint rig](/trust/cumulative-rig/) parity ledger
    documents the current state of known residuals.
 
 ## 12. Indemnification

@@ -142,20 +142,20 @@ prompt the customer first.
 
 ## Cross-references
 
-- [Idempotency keys](/reference/idempotency) — when retrying a POST
+- [Idempotency keys](/reference/idempotency/) — when retrying a POST
   that creates a resource, send an `Idempotency-Key` header so the
   retry replays the original response instead of minting a duplicate.
-- [Pagination](/reference/pagination) — cursor-based pagination
+- [Pagination](/reference/pagination/) — cursor-based pagination
   contract shared across every list endpoint; request shape,
   opaque-cursor semantics, and TS/Python/Go drive-to-completion loops.
-- [Prometheus metrics](/reference/metrics) — operators integrating
+- [Prometheus metrics](/reference/metrics/) — operators integrating
   Driftstack into their own observability stack: counter catalogue,
   bearer-token gate, suggested alert thresholds.
-- [API key scopes](/reference/scopes) — when a request returns
+- [API key scopes](/reference/scopes/) — when a request returns
   `forbidden`, the `detail` names the required scope.
-- [Rate limits](/reference/rate-limits) — when a request returns
+- [Rate limits](/reference/rate-limits/) — when a request returns
   `rate-limited`, the `Retry-After` header carries the wait time.
-- [SDK quickstarts](/sdk/typescript-quickstart) — built-in retry
+- [SDK quickstarts](/sdk/typescript-quickstart/) — built-in retry
   configuration for each language.
 
 ## Source of truth

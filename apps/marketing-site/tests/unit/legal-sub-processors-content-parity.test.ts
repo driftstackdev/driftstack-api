@@ -184,7 +184,7 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
   it('cross-links: canonical DPA + privacy routes + /docs/security-overview + the docs data-residency page (S49: redirected successor)', () => {
     expect(body).toMatch(/\[Data Processing Addendum\]\(\/legal\/dpa\/\)/);
     expect(body).toMatch(/\[Privacy Policy\]\(\/legal\/privacy\/\)/);
-    expect(body).toMatch(/\[\/docs\/security-overview\]\(\/docs\/security-overview\)/);
+    expect(body).toMatch(/\[\/docs\/security-overview\]\(\/docs\/security-overview\/\)/);
     expect(body).toMatch(
       /\[docs\.driftstack\.dev\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/\)/,
     );

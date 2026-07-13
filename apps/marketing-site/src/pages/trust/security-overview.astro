@@ -19,11 +19,11 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust' }, { name: 'Security overview' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust/' }, { name: 'Security overview' }]}
     />
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Architecture deep-dive lives at
-      <a href="/security" class="text-tk-accent-text underline">/security</a>;
+      <a href="/security/" class="text-tk-accent-text underline">/security</a>;
       this page is what you skim before scheduling a vendor review
       call. Each claim links to the code, test, or doc you can verify
       for yourself.
@@ -240,7 +240,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               <a href="https://docs.driftstack.dev/reference/data-residency/" class="text-tk-accent-text underline"
                 >data residency</a
               >. Full sub-processor list at
-              <a href="/trust/sub-processors" class="text-tk-accent-text underline"
+              <a href="/trust/sub-processors/" class="text-tk-accent-text underline"
                 >/trust/sub-processors</a
               >.
             </p>
@@ -257,7 +257,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               setting to configure yet. Stored session recordings,
               with controls over how long they're kept, are on the
               roadmap — see
-              <a href="/docs/recordings" class="text-tk-accent-text underline"
+              <a href="/docs/recordings/" class="text-tk-accent-text underline"
                 >/docs/recordings</a
               >.
             </p>
@@ -295,7 +295,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               the incident-response SLA window. Live status at
               <a href="https://status.driftstack.dev" class="text-tk-accent-text underline">status.driftstack.dev</a>;
               historical archive at
-              <a href="/trust/incidents" class="text-tk-accent-text underline">/trust/incidents</a>.
+              <a href="/trust/incidents/" class="text-tk-accent-text underline">/trust/incidents</a>.
             </p>
           </div>
         </li>
@@ -311,7 +311,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               private for 90 days while we fix it (the coordinated
               disclosure window), extendable on agreement.
               Full policy at
-              <a href="/trust/compliance" class="text-tk-accent-text underline"
+              <a href="/trust/compliance/" class="text-tk-accent-text underline"
                 >/trust/compliance</a
               >.
             </p>
@@ -352,10 +352,10 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
                understated the count by one. */}
           <p class="mt-3 max-w-prose text-tk-ink-2">
             The
-            <a href="/security" class="text-tk-accent-text underline">architecture deep-dive at /security</a>
+            <a href="/security/" class="text-tk-accent-text underline">architecture deep-dive at /security</a>
             walks the six-pillar surface in detail. For pen-test
             evidence or compliance certifications, see
-            <a href="/trust/compliance" class="text-tk-accent-text underline"
+            <a href="/trust/compliance/" class="text-tk-accent-text underline"
               >/trust/compliance</a
             >. Anything else, just email.
           </p>

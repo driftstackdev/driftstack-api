@@ -56,13 +56,13 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
   });
 
   it('free-tier CTA + figures pinned: Start free / #free anchor / one-profile subline', () => {
-    expect(body).toMatch(/href="\/pricing#free"/);
+    expect(body).toMatch(/href="\/pricing\/#free"/);
     expect(body).toMatch(/Start free/);
     expect(body).toMatch(/One profile · 20-minute sessions · no card required\./);
   });
 
   it('Comparison cross-link pinned (v2 2026-07-03: the hero secondary CTA is now "See how it works" → the in-page how-it-works section; the /comparison deep link moved into the proof section as the tool-by-tool "comparison page" link)', () => {
-    expect(body).toMatch(/href="\/comparison"/);
+    expect(body).toMatch(/href="\/comparison\/"/);
     expect(body).toMatch(/comparison page/);
     expect(body).toMatch(/See how it works/);
     // The prior "Why not Browserless?" CTA must NOT return.
@@ -116,7 +116,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
       /how long a\s*\n?\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
     );
     expect(body).toMatch(/how much of your concurrent cap it used/);
-    expect(body).toMatch(/href="\/trust\/sub-processors"/);
+    expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
     expect(body).not.toMatch(
@@ -138,7 +138,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(
       /swapping the proxy on a session that's already running is on the\s*\n?\s*roadmap/,
     );
-    expect(body).toMatch(/href="\/trust\/security-overview"/);
+    expect(body).toMatch(/href="\/trust\/security-overview\/"/);
     // The stale "egress itself is not shipped" outlier must NOT return —
     // it self-contradicted every other egress surface on the site.
     expect(body).not.toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard \(not shipped\)/);
@@ -164,7 +164,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
 
   it('self-hosted teaser pinned (v2 compact band): "Run Driftstack on your own infrastructure." + /self-hosted link + the page exists', () => {
     expect(body).toMatch(/Run Driftstack on your own infrastructure\./);
-    expect(body).toMatch(/href="\/self-hosted"/);
+    expect(body).toMatch(/href="\/self-hosted\/"/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/self-hosted.astro'))).toBe(
       true,
     );

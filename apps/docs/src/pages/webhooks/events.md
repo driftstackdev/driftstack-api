@@ -51,7 +51,9 @@ with the following envelope:
   "id": "<uuid>",
   "type": "<event-type>",
   "created_at": "2026-05-05T12:34:56.789Z",
-  "data": {/* per-event-type shape, see below */}
+  "data": {
+    /* per-event-type shape, see below */
+  }
 }
 ```
 
@@ -284,7 +286,7 @@ the staleness threshold). These are the three values
 `CryptoOrdersService` emits; the underlying NowPayments sub-status
 (timeout / refunded / cancelled) is collapsed into `ipn`.
 
-See [Crypto checkout API](/api/billing-crypto) for the full
+See [Crypto checkout API](/api/billing-crypto/) for the full
 order lifecycle + status state machine. The webhook event mirrors
 the same `events[]` log shape returned by `GET /v1/billing/crypto-
 orders`.

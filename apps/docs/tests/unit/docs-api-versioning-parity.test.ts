@@ -50,7 +50,7 @@ describe('W256.D docs/api/versioning ↔ live API surface parity', () => {
     const missing: string[] = [];
     for (const href of links) {
       // Try .md, .astro, and directory + index variants.
-      const stem = href.replace(/^\//, '');
+      const stem = href.replace(/^\//, '').replace(/\/$/, '');
       const candidates = [`${stem}.md`, `${stem}.astro`, `${stem}/index.md`, `${stem}/index.astro`];
       if (!candidates.some((c) => existsSync(resolve(DOCS_PAGES, c)))) {
         missing.push(href);

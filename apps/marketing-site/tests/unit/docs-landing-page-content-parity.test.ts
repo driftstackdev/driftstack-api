@@ -53,10 +53,10 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
       // Quickstart card points at the docs successor of the deleted
       // /docs/api-quickstart mirror.
       { href: 'https://docs.driftstack.dev/quickstart-curl/', label: 'Quickstart' },
-      { href: '/api-reference', label: 'API reference' },
-      { href: '/docs/sdk-typescript', label: 'SDKs' },
-      { href: '/docs/webhooks', label: 'Webhooks' },
-      { href: '/self-hosted', label: 'Self-hosted' },
+      { href: '/api-reference/', label: 'API reference' },
+      { href: '/docs/sdk-typescript/', label: 'SDKs' },
+      { href: '/docs/webhooks/', label: 'Webhooks' },
+      { href: '/self-hosted/', label: 'Self-hosted' },
     ];
     let lastIdx = -1;
     for (const card of cards) {

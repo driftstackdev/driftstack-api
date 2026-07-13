@@ -153,8 +153,8 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/showAlreadyRegistered\(payload\.email\)/);
     // The banner gains a /login link + a /forgot-password link, both
     // carrying the email through the query string.
-    expect(body).toMatch(/'\/login' \+ q/);
-    expect(body).toMatch(/'\/forgot-password' \+ q/);
+    expect(body).toMatch(/'\/login\/' \+ q/);
+    expect(body).toMatch(/'\/forgot-password\/' \+ q/);
     expect(body).toMatch(/encodeURIComponent\(email\)/);
   });
 });

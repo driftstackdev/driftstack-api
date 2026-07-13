@@ -98,7 +98,7 @@ const cockpitProfiles = [
             phones.
           </p>
           <div class="mt-5 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
-            <a href="/pricing#free" class="btn-primary">Start free</a>
+            <a href="/pricing/#free" class="btn-primary">Start free</a>
             <a href="#how-it-works" class="btn-secondary">See how it works</a>
           </div>
           <p class="mt-3 text-xs text-tk-ink-2 sm:mt-4">
@@ -251,12 +251,12 @@ const cockpitProfiles = [
           </svg>
         </IconTile>
         Keep separate identities on services that recognize your device by its
-        <a href="/glossary#fingerprint" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">fingerprint</a>
+        <a href="/glossary/#fingerprint" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">fingerprint</a>
         — the traits a website can measure about a browser. Persistent
         profiles let each account look like its own physical phone, every
         session, every time.
         <a
-          href="/use-cases/multi-account"
+          href="/use-cases/multi-account/"
           class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
           >More →</a
         >
@@ -273,7 +273,7 @@ const cockpitProfiles = [
         rendering, same JavaScript timing, same quirks — the bug you
         reproduce is the bug your users hit.
         <a
-          href="/use-cases/qa-testing"
+          href="/use-cases/qa-testing/"
           class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
           >More →</a
         >
@@ -290,7 +290,7 @@ const cockpitProfiles = [
         Chrome. With Driftstack, your scraper sees what an iPhone visitor
         would see — no redirects to "please use our app" pages.
         <a
-          href="/use-cases/web-scraping"
+          href="/use-cases/web-scraping/"
           class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
           >More →</a
         >
@@ -487,27 +487,27 @@ const cockpitProfiles = [
           <p class="mt-5 max-w-prose text-base text-tk-ink-2 leading-relaxed">
             Detection systems read hundreds of small signals. A typical
             stealth browser fakes its one-line introduction (the
-            <a href="/glossary#user-agent" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">user-agent</a>
+            <a href="/glossary/#user-agent" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">user-agent</a>
             string) but leaks its real engine in how it draws, renders 3D,
             and processes sound — the
-            <a href="/glossary#canvas-hash" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">canvas</a>,
+            <a href="/glossary/#canvas-hash" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">canvas</a>,
             WebGL, and audio fingerprints. Driftstack runs Apple's WebKit, so
             every signal returns the exact iPhone value — not approximate.
           </p>
           <p class="mt-4 text-sm text-tk-ink-3">
             A 7-signal preview. The
             <a
-              href="/trust/cumulative-rig"
+              href="/trust/cumulative-rig/"
               class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
               >full signal-by-signal table</a
             > shows every check — see the
             <a
-              href="/trust/security-overview"
+              href="/trust/security-overview/"
               class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
               >security overview</a
             >
             for what's live today, and the
-            <a href="/comparison" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>
+            <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>
             for the tool-by-tool detail.
           </p>
           <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
@@ -643,7 +643,7 @@ try {
         <p class="mt-4 text-base leading-7 text-tk-ink-2">
           <strong class="text-tk-ink">Your own internet exit, per profile.</strong>
           Full control over where traffic exits (your
-          <a href="/glossary#egress" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">egress</a>)
+          <a href="/glossary/#egress" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">egress</a>)
           — connect your own SOCKS5 proxy (UDP included), OpenVPN, or
           WireGuard. And unlike anyone else, the traffic that normally slips
           around a proxy and gives you away — real-time connections (WebRTC)
@@ -798,17 +798,17 @@ try {
           Your account data lives on EU servers. We don't log what your sessions visit or
           do — only the operational metadata we need to bill: how long a
           session ran, which iPhone model + iOS + Safari combination it used
-          (its <a href="/glossary#archetype" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">archetype</a>),
+          (its <a href="/glossary/#archetype" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">archetype</a>),
           and how much of your concurrent cap it used. Where data lives, and
           every outside company that handles it for us, is on the
-          <a href="/trust/sub-processors" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
+          <a href="/trust/sub-processors/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
         </p>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
           Customer-configurable egress — attaching your own internet exit (a
           SOCKS5 proxy, OpenVPN, or WireGuard) to each profile — is live;
           swapping the proxy on a session that's already running is on the
           roadmap. See the
-          <a href="/trust/security-overview" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">security overview</a>
+          <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">security overview</a>
           for the current implementation state.
         </p>
       </div>
@@ -860,7 +860,7 @@ try {
           destination URLs, response bodies, or session content. Every
           outside company that handles data for us (our sub-processors) is
           listed on the
-          <a href="/trust/sub-processors" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
+          <a href="/trust/sub-processors/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
         </Card>
       </div>
     </div>
@@ -889,7 +889,7 @@ try {
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>{manualCaps} concurrent sessions per tier</span></li>
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>Unlimited hours within your concurrent cap</span></li>
         </ul>
-        <a href="/pricing#manual" class="btn-secondary mt-7 inline-flex">See Manual pricing →</a>
+        <a href="/pricing/#manual" class="btn-secondary mt-7 inline-flex">See Manual pricing →</a>
       </div>
       <div class="card p-8">
         <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">API</p>
@@ -913,7 +913,7 @@ try {
                the clause it actually governs. */}
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>AI assistant on every API tier — connect your own Anthropic key and pay Anthropic directly, no Driftstack markup; an optional bundled assistant (no key needed) comes with API Builder and up</span></li>
         </ul>
-        <a href="/pricing#api" class="btn-secondary mt-7 inline-flex">See API pricing →</a>
+        <a href="/pricing/#api" class="btn-secondary mt-7 inline-flex">See API pricing →</a>
       </div>
     </div>
     <div class="mt-10 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
@@ -922,7 +922,7 @@ try {
         you're driving by hand; API from {apiFrom}/mo if your code is running
         sessions. A person clicking → Manual. Code calling → API.
       </p>
-      <a href="/pricing" class="btn-primary shrink-0">See pricing</a>
+      <a href="/pricing/" class="btn-primary shrink-0">See pricing</a>
     </div>
   </Section>
 
@@ -932,14 +932,14 @@ try {
     title="Run Driftstack on your own infrastructure."
     lead="For privacy, full control, or sustained high-volume use. We help you pick the right hardware, install the coordination software that runs it all (the control plane), and operate the fleet. Three packages, annual contracts, hands-on onboarding."
   >
-    <a href="/self-hosted" class="btn-secondary mt-8 inline-flex">See self-hosted →</a>
+    <a href="/self-hosted/" class="btn-secondary mt-8 inline-flex">See self-hosted →</a>
   </Section>
 
   <!-- ═══ 13 · FINAL CTA ═══ -->
   <CtaBand
     title="See it for yourself. Free."
     lead="iPhone Safari sessions on real WebKit — Apple's own browser engine — one profile, 20-minute manual sessions, no card required. Plenty of room to point your workflow at it and decide on your own terms."
-    primaryHref="/pricing#free"
+    primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="https://docs.driftstack.dev"
     secondaryLabel="Read the docs"
@@ -951,6 +951,6 @@ try {
   <div
     class="fixed inset-x-0 bottom-0 z-40 border-t border-tk-border bg-tk-bg/90 px-4 py-3 backdrop-blur-sm md:hidden"
   >
-    <a href="/pricing#free" class="btn-primary w-full text-center">Start free</a>
+    <a href="/pricing/#free" class="btn-primary w-full text-center">Start free</a>
   </div>
 </BaseLayout>

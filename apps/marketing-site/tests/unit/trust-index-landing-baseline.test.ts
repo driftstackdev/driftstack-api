@@ -14,7 +14,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/trust/index.astro');
 
-const REQUIRED_CARDS = ['/security', '/trust/sub-processors', '/trust/incidents', '/legal/dpa'];
+const REQUIRED_CARDS = ['/security/', '/trust/sub-processors/', '/trust/incidents/', '/legal/dpa/'];
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');

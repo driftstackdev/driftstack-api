@@ -76,7 +76,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       with your <code>order_id</code> + the TX hash. We'll generate
       a top-up invoice for the difference — that's the resolution
       path. Crypto payments are non-refundable
-      (<a href="/legal/refunds">policy</a>), so we don't send the
+      (<a href="/legal/refunds/">policy</a>), so we don't send the
       partial back; we complete the order via top-up instead.
     </p>
 
@@ -86,7 +86,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       payment, the order timed out (24h with no on-chain activity),
       or the provider declined the payment on their side. In all
       three cases the next step is the same — open a fresh order
-      from <a href="/pricing">/pricing</a> and try again.
+      from <a href="/pricing/">/pricing</a> and try again.
     </p>
     <p>
       <strong>If funds left your wallet but the order is failed</strong>:
@@ -129,7 +129,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         and click it to re-open the address modal, or</li>
       <li>Cancel the order (only possible while still
         <code>pending</code> with no payment activity) and start
-        fresh from <a href="/pricing">/pricing</a>.</li>
+        fresh from <a href="/pricing/">/pricing</a>.</li>
     </ul>
 
     <h2>Symptom: I want to download a receipt</h2>
@@ -174,8 +174,8 @@ curl -H "Authorization: Bearer $DRIFTSTACK_API_KEY" \\
 
     <h2>Related</h2>
     <ul>
-      <li><a href="/docs/billing-crypto-overview">Crypto payments — how it works</a></li>
-      <li><a href="/docs/billing-faq">Billing FAQ</a></li>
+      <li><a href="/docs/billing-crypto-overview/">Crypto payments — how it works</a></li>
+      <li><a href="/docs/billing-faq/">Billing FAQ</a></li>
       <li><a href="https://docs.driftstack.dev/webhooks/crypto-events/"><code>crypto.order.paid</code> webhook events</a></li>
     </ul>
   </main>

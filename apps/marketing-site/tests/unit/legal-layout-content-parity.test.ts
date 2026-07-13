@@ -62,11 +62,11 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
       (m) => ({ href: m[1], label: m[2] }),
     );
     expect(entries).toEqual([
-      { href: '/legal/terms', label: 'Terms of Service' },
-      { href: '/legal/privacy', label: 'Privacy Policy' },
-      { href: '/legal/dpa', label: 'Data Processing Agreement' },
-      { href: '/legal/aup', label: 'Acceptable Use Policy' },
-      { href: '/trust/sub-processors', label: 'Sub-processors' },
+      { href: '/legal/terms/', label: 'Terms of Service' },
+      { href: '/legal/privacy/', label: 'Privacy Policy' },
+      { href: '/legal/dpa/', label: 'Data Processing Agreement' },
+      { href: '/legal/aup/', label: 'Acceptable Use Policy' },
+      { href: '/trust/sub-processors/', label: 'Sub-processors' },
     ]);
   });
 

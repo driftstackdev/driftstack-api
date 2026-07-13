@@ -93,7 +93,7 @@ describe('OAuth client callback page', () => {
       window.document.querySelector('[data-callback-unknown]')?.classList.contains('hidden'),
     ).toBe(false);
     expect(window.document.querySelector('[data-callback-unknown] a')?.getAttribute('href')).toBe(
-      '/login',
+      '/login/',
     );
   });
 

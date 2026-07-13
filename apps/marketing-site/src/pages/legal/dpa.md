@@ -522,7 +522,7 @@ notice under Section 9 (Sub-processor amendment) before any data
 is migrated to a non-EU region, including the right to keep
 Customer's data on EU infrastructure or terminate the affected
 portion of the Subscription. The trust page at
-[`/trust/sub-processors`](/trust/sub-processors) carries the same
+[`/trust/sub-processors`](/trust/sub-processors/) carries the same
 explanation in plain language.
 
 ---

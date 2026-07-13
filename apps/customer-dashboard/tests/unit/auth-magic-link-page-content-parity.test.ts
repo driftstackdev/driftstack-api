@@ -129,7 +129,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
   it('/login cross-link present ("Link expired? Request a fresh one")', () => {
     expect(body).toMatch(/Link expired\? Request a fresh one from the/);
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/login"\s*\n?\s*class="[^"]+"\s*>\s*login page\s*<\/a\s*>/,
+      /<a\s*\n?\s*href="\/login\/"\s*\n?\s*class="[^"]+"\s*>\s*login page\s*<\/a\s*>/,
     );
     expect(existsSync(LOGIN_PAGE)).toBe(true);
   });

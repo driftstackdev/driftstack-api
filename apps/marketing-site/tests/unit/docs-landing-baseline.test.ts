@@ -18,7 +18,7 @@ function read(p: string): string {
 
 function pageExists(href: string): boolean {
   // Strip leading slash; the marketing pages dir doesn't carry one.
-  const rel = href.replace(/^\//, '');
+  const rel = href.replace(/^\//, '').replace(/\/$/, '');
   // Try .astro + .md + subdir-index.
   return [
     resolve(PAGES_DIR, rel + '.astro'),

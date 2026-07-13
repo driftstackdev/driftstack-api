@@ -37,7 +37,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases' }, { name: 'Multi-account operations' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases/' }, { name: 'Multi-account operations' }]}
     />
   </PageHero>
 
@@ -108,7 +108,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     lead="A person clicking → Manual. It's priced on one number: how many sessions you keep open at the same time."
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
-      <a href="/pricing#manual" class="btn-secondary">See Manual pricing →</a>
+      <a href="/pricing/#manual" class="btn-secondary">See Manual pricing →</a>
       <p class="text-sm text-tk-ink-3">
         Start free first — one profile, 20-minute sessions, no card required.
       </p>
@@ -117,7 +117,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
       One honest line before you build on us: Driftstack keeps accounts apart;
       staying inside each service's rules stays your call. The boundary is
       written down in plain words in the
-      <a href="/legal/aup" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
+      <a href="/legal/aup/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
       — read it before you sign up if you're unsure.
     </p>
   </Section>
@@ -138,16 +138,16 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     </div>
     <p class="mt-8 text-sm text-tk-ink-3">
       Everything else is on the
-      <a href="/faq" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">full FAQ</a>.
+      <a href="/faq/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">full FAQ</a>.
     </p>
   </Section>
 
   <CtaBand
     title="Keep them apart. Keep them alive."
     lead="Open a real iPhone session on the free tier and watch a profile hold its identity across runs — no card required."
-    primaryHref="/pricing#free"
+    primaryHref="/pricing/#free"
     primaryLabel="Start free"
-    secondaryHref="/pricing#manual"
+    secondaryHref="/pricing/#manual"
     secondaryLabel="See Manual pricing"
   />
 </BaseLayout>

@@ -214,10 +214,10 @@ describe('reset-password page — local integration', () => {
     expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
     expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
     expect(
-      window.document.querySelector('[data-unknown-recovery] a[href="/login"]')?.textContent,
+      window.document.querySelector('[data-unknown-recovery] a[href="/login/"]')?.textContent,
     ).toMatch(/try signing in with the new password/i);
     expect(
-      window.document.querySelector('[data-unknown-recovery] a[href="/forgot-password"]')
+      window.document.querySelector('[data-unknown-recovery] a[href="/forgot-password/"]')
         ?.textContent,
     ).toMatch(/request a fresh reset link/i);
     expect(bannerText(window)).toMatch(

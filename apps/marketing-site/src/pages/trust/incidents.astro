@@ -61,7 +61,7 @@ function severityClass(s: Incident['severity']): string {
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust' }, { name: 'Incidents' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust/' }, { name: 'Incidents' }]}
     />
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Every customer-impacting outage or security event gets a public
@@ -212,7 +212,7 @@ function severityClass(s: Incident['severity']): string {
     lead="Customers can opt into incident emails at the dashboard's settings page. Future updates: status.driftstack.dev with email + RSS subscription."
     primaryHref="https://app.driftstack.dev/settings"
     primaryLabel="Manage notifications"
-    secondaryHref="/trust"
+    secondaryHref="/trust/"
     secondaryLabel="Back to trust center"
   />
 </BaseLayout>

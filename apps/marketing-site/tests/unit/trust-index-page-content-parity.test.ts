@@ -46,13 +46,13 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
 
   it('7 canonical trust-hub cards pinned with cross-links to companion pages (Cumulative rig card added 2026-05-16 when /trust/cumulative-rig methodology page shipped)', () => {
     for (const [href, heading] of [
-      ['/security', 'Architecture + posture →'],
-      ['/trust/sub-processors', 'Live list + regions →'],
-      ['/trust/incidents', 'Past events + post-mortems →'],
-      ['/legal/dpa', 'DPA · Privacy · Terms · AUP →'],
-      ['/trust/compliance', 'Certifications + pen-test + disclosure →'],
-      ['/trust/security-overview', "Evaluator's checklist →"],
-      ['/trust/cumulative-rig', 'Signal-by-signal methodology →'],
+      ['/security/', 'Architecture + posture →'],
+      ['/trust/sub-processors/', 'Live list + regions →'],
+      ['/trust/incidents/', 'Past events + post-mortems →'],
+      ['/legal/dpa/', 'DPA · Privacy · Terms · AUP →'],
+      ['/trust/compliance/', 'Certifications + pen-test + disclosure →'],
+      ['/trust/security-overview/', "Evaluator's checklist →"],
+      ['/trust/cumulative-rig/', 'Signal-by-signal methodology →'],
     ] as const) {
       expect(body, `card cross-link missing: ${href}`).toMatch(
         new RegExp(`href="${href.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}"`),
@@ -126,7 +126,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
   it('DPA pre-signed-by-Driftstack + Article 28(2) SCC framing pinned', () => {
     // Astro wraps the <a> tag awkwardly; check the substantive
     // copy fragments separately.
-    expect(body).toMatch(/The DPA at <a href="\/legal\/dpa"/);
+    expect(body).toMatch(/The DPA at <a href="\/legal\/dpa\/"/);
     // S20c 2026-07-06 plain-language pass: pre-signed + SCC facts,
     // plain words lead.
     expect(body).toMatch(/is already signed by Driftstack — sign your side and it's\s+in force/);

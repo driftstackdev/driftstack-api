@@ -45,7 +45,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         Issue a crypto refund. Crypto payments are non-refundable
         by policy; there is no admin endpoint that initiates a
         crypto-side reversal. See
-        <a href="/legal/refunds">/legal/refunds</a> for the binding
+        <a href="/legal/refunds/">/legal/refunds</a> for the binding
         rules. Stripe refund handling is unchanged and runs through
         the Stripe dashboard with audit-only records on our side.
       </li>
@@ -135,7 +135,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       Every admin write lands in <code>admin_audit_log</code> with the
       acting admin key id, the action, the resource it touched, and
       a timestamp. The customer-facing
-      <a href="/docs/audit-log">audit log</a> page documents the
+      <a href="/docs/audit-log/">audit log</a> page documents the
       schema. Audit rows are archived to R2 after 90 days (per
       ADR-006).
     </p>
@@ -160,8 +160,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>Related</h2>
     <ul>
-      <li><a href="/docs/audit-log">Audit log schema</a></li>
-      <li><a href="/docs/billing-crypto-overview">Crypto payments — how it works</a></li>
+      <li><a href="/docs/audit-log/">Audit log schema</a></li>
+      <li><a href="/docs/billing-crypto-overview/">Crypto payments — how it works</a></li>
       <li><a href="https://docs.driftstack.dev/quickstart-curl/">Customer-facing API quickstart</a></li>
     </ul>
   </main>

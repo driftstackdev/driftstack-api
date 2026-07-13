@@ -136,7 +136,7 @@ describe('W370.A marketing-site /changelog page content parity', () => {
   });
 
   it('cross-link to /docs resolves', () => {
-    expect(body).toMatch(/href="\/docs"/);
+    expect(body).toMatch(/href="\/docs\/"/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs.astro'))).toBe(true);
   });
 });

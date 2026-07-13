@@ -37,7 +37,7 @@ describe('W268.C /welcome onboarding ↔ TRIAL_PACK + subscription parity', () =
 
   it('CTAs target the dashboard home (free start) + /select-tier (upgrade)', () => {
     expect(page).toMatch(/<a href="\/" class="btn-primary/);
-    expect(page).toMatch(/href="\/select-tier"/);
+    expect(page).toMatch(/href="\/select-tier\/"/);
   });
 
   it('no fictional tier-related claims (e.g. lifetime / unlimited-sessions)', () => {

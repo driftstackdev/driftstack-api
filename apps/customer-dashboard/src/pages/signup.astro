@@ -62,7 +62,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </p>
         <a
           data-continue-verification
-          href="/verify-email"
+          href="/verify-email/"
           class="btn-primary mt-4 flex w-full items-center justify-center"
           >Continue to email verification</a
         >
@@ -182,7 +182,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <p class="mt-6 text-xs text-tk-ink-3">
         Already have an account? <a
           data-login-link
-          href="/login"
+          href="/login/"
           class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Sign in</a
         >.
       </p>
@@ -256,14 +256,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         const msg = document.createElement('span');
         msg.textContent = 'An account with this email already exists. ';
         const signIn = document.createElement('a');
-        signIn.href = '/login' + q;
+        signIn.href = '/login/' + q;
         signIn.className =
           'text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2';
         signIn.textContent = 'Sign in';
         const sep = document.createElement('span');
         sep.textContent = ' or ';
         const reset = document.createElement('a');
-        reset.href = '/forgot-password' + q;
+        reset.href = '/forgot-password/' + q;
         reset.className =
           'text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2';
         reset.textContent = 'reset your password';

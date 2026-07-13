@@ -27,7 +27,7 @@ describe('W332.C /welcome onboarding baseline', () => {
   });
 
   it('pick-a-tier CTA links to /select-tier', () => {
-    expect(body).toContain('href="/select-tier"');
+    expect(body).toContain('href="/select-tier/"');
   });
 
   it('positions the free plan at $0 / no card / no expiry (trial pack removed)', () => {

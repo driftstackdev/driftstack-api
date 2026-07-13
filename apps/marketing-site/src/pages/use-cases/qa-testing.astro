@@ -31,7 +31,7 @@ import CtaBand from '../../components/CtaBand.astro';
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases' }, { name: 'QA + testing' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases/' }, { name: 'QA + testing' }]}
     />
   </PageHero>
 
@@ -128,7 +128,7 @@ try {
     lead="The API ladder is built for code-first workloads — SDK keys, session creation from CI, concurrent caps sized for parallel suites. (Every paid tier includes API access; the API ladder's caps are sized for it.)"
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
-      <a href="/pricing#api" class="btn-secondary">See API pricing →</a>
+      <a href="/pricing/#api" class="btn-secondary">See API pricing →</a>
       <p class="text-sm text-tk-ink-3">
         The free tier is manual-only — use it to check by hand that pages
         render right and the fingerprint holds up, before you connect the
@@ -140,7 +140,7 @@ try {
   <CtaBand
     title="Green in CI. Green on the phone."
     lead="Verify the rendering by hand on the free tier, then point your pipeline at the API ladder when you're convinced."
-    primaryHref="/pricing#free"
+    primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="https://docs.driftstack.dev"
     secondaryLabel="Read the docs"

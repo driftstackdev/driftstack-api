@@ -109,7 +109,7 @@ describe('W358.A /docs/crypto-orders-ops-runbook parity', () => {
   });
 
   it('non-refundable + customer-credit-not-refund framing pinned (auditable decision)', () => {
-    expect(body).toMatch(/<a href="\/legal\/refunds">non-refundable policy<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/refunds\/">non-refundable policy<\/a>/);
     expect(body).toMatch(/Crypto is non-\s*refundable/);
     expect(body).toMatch(/resolution is to credit the customer's\s+next billing cycle, not refund/);
   });

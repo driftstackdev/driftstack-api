@@ -173,7 +173,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
       /<h3 class="font-medium text-tk-ink">Can I switch tiers mid-month\?<\/h3>/,
     );
     expect(body).toMatch(/<h3 class="font-medium text-tk-ink">Does the free tier expire\?<\/h3>/);
-    expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See full FAQ<\/a>/);
+    expect(body).toMatch(/<a href="\/faq\/" class="btn-secondary">See full FAQ<\/a>/);
   });
 
   it('free-tier header card cross-links: signup + docs + data-bound price', () => {
@@ -196,7 +196,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     // text-tk-accent-text token (raw text-tk-accent fails WCAG AA on
     // the dark bg).
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/pricing\/comparison"\s*\n?\s*class="font-medium text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
+      /<a\s*\n?\s*href="\/pricing\/comparison\/"\s*\n?\s*class="font-medium text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
     );
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing/comparison.astro')),
@@ -211,7 +211,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/Hardware procurement detail at\{' '\}/);
     // v2: accent-colored TEXT uses the AA-safe text-tk-accent-text token.
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/self-hosted"\s*\n?\s*class="text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
+      /<a\s*\n?\s*href="\/self-hosted\/"\s*\n?\s*class="text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
     );
   });
 });

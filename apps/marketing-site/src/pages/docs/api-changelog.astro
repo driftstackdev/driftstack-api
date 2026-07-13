@@ -123,7 +123,7 @@ B: when the user clicks the verification link in
       <li>
         <strong>Docs — API security headers reference.</strong>
         New page at
-        <a href="/docs/api-security-headers">/docs/api-security-headers</a>
+        <a href="/docs/api-security-headers/">/docs/api-security-headers</a>
         listing the HSTS, Cache-Control, CORS, CORP, and helmet
         defaults we set. Useful for security reviewers and
         integrators auditing the response surface.
@@ -395,12 +395,12 @@ B: when the user clicks the verification link in
         stored one increment a new <code>body_mismatches</code>
         counter and fire a structured warn log. The contract is
         unchanged (still replays the original order). See
-        <a href="/docs/idempotency-keys">/docs/idempotency-keys</a>.
+        <a href="/docs/idempotency-keys/">/docs/idempotency-keys</a>.
       </li>
       <li>
         <strong>Ops runbook.</strong>
         Added
-        <a href="/docs/crypto-orders-ops-runbook">/docs/crypto-orders-ops-runbook</a>
+        <a href="/docs/crypto-orders-ops-runbook/">/docs/crypto-orders-ops-runbook</a>
         — the support workflow for stuck orders, duplicate-charge
         claims, and reconciliation.
       </li>
@@ -425,7 +425,7 @@ B: when the user clicks the verification link in
         <code>Idempotency-Key</code> request header. Duplicate
         requests within 24 hours return the original order with an
         <code>Idempotent-Replayed: 1</code> response header. See
-        <a href="/docs/idempotency-keys">/docs/idempotency-keys</a>.
+        <a href="/docs/idempotency-keys/">/docs/idempotency-keys</a>.
       </li>
       <li>
         <strong>Events — <code>crypto.order.failed</code> emitted server-side.</strong>
@@ -442,7 +442,7 @@ B: when the user clicks the verification link in
         <strong>Admin CSV export — reference doc.</strong>
         <code>GET /v1/admin/crypto-orders.csv</code> is now
         documented at
-        <a href="/docs/admin-csv-export">/docs/admin-csv-export</a>
+        <a href="/docs/admin-csv-export/">/docs/admin-csv-export</a>
         with the per-column contract + truncation header
         (<code>X-Driftstack-Export-Truncated</code>). The endpoint
         itself was added in 2026-04; the doc page is new.
@@ -484,7 +484,7 @@ B: when the user clicks the verification link in
         <code>next_cursor</code> alongside <code>orders</code>;
         callers walk pages by passing the previous response's
         cursor on the <code>?cursor=</code> query string. See
-        <a href="/docs/admin-api-pagination">/docs/admin-api-pagination</a>.
+        <a href="/docs/admin-api-pagination/">/docs/admin-api-pagination</a>.
       </li>
       <li>
         <strong>Events — <code>crypto.order.paid</code> emitted server-side.</strong>
@@ -533,14 +533,14 @@ B: when the user clicks the verification link in
 
     <h2>Versioning policy</h2>
     <p>
-      See <a href="/docs/api-versioning">the versioning policy</a> for
+      See <a href="/docs/api-versioning/">the versioning policy</a> for
       the full lifecycle:
     </p>
     <ul>
       <li>New endpoints + new optional fields ship without bumping the version.</li>
       <li>Removing a field or changing its type requires the 90-day
         deprecation window documented in
-        <a href="/docs/api-versioning">/docs/api-versioning</a>, with
+        <a href="/docs/api-versioning/">/docs/api-versioning</a>, with
         a <code>Deprecation</code> response header (RFC 5988) carrying
         the sunset date from the moment the deprecation lands.</li>
       <li>Major-version bumps (next is v2) ship in lock-step with
@@ -563,9 +563,9 @@ B: when the user clicks the verification link in
 
     <h2>Related</h2>
     <ul>
-      <li><a href="/docs/api-versioning">API versioning policy</a></li>
-      <li><a href="/api-reference">API reference</a></li>
-      <li><a href="/docs/error-codes">Error codes</a></li>
+      <li><a href="/docs/api-versioning/">API versioning policy</a></li>
+      <li><a href="/api-reference/">API reference</a></li>
+      <li><a href="/docs/error-codes/">Error codes</a></li>
     </ul>
   </main>
 </BaseLayout>

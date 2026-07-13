@@ -172,7 +172,7 @@ When an order transitions to `paid`, Driftstack fires a
 
 Same canonical envelope (`id` / `type` / `created_at` / `data`) and
 HMAC-SHA256 signature scheme as every other Driftstack webhook
-([webhook signing](/webhooks/events)). Idempotent: delivery is
+([webhook signing](/webhooks/events/)). Idempotent: delivery is
 retried up to 5 times after the initial attempt (6 attempts total) if
 your endpoint returns non-2xx, each carrying the same top-level `id` —
 dedup on that `id` (also surfaced as `X-Driftstack-Event-Id`).

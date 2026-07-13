@@ -44,7 +44,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust' }, { name: 'Sub-processors' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust/' }, { name: 'Sub-processors' }]}
     />
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       The complete list of organisations that process customer data on
@@ -55,7 +55,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
       This page is the customer-facing source of truth for sub-processor
       changes. Adding or removing an entry triggers a 30-day notice to all
       customers per Article 28(2) of the GDPR; the same content also lives
-      in <a href="/legal/dpa" class="text-tk-accent-text underline"
+      in <a href="/legal/dpa/" class="text-tk-accent-text underline"
         >Annex 3 of the Data Processing Agreement</a
       >.
     </p>
@@ -182,7 +182,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
           Customers who object to a sub-processor change have the right to
           terminate the affected portion of the service before the change
           takes effect. The mechanics live in the
-          <a href="/legal/dpa" class="text-tk-accent-text underline">DPA</a>
+          <a href="/legal/dpa/" class="text-tk-accent-text underline">DPA</a>
           (Article 28(2) — Sub-processor amendment).
         </p>
         <p>

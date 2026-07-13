@@ -92,7 +92,7 @@ describe('OAuth client merge confirmation page', () => {
       window.document.querySelector('[data-merge-unknown]')?.classList.contains('hidden'),
     ).toBe(false);
     expect(window.document.querySelector('[data-merge-unknown] a')?.getAttribute('href')).toBe(
-      '/security',
+      '/security/',
     );
   });
 });

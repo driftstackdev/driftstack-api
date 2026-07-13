@@ -13,7 +13,7 @@ your account is hitting right now — tier defaults merged with any
 active admin overrides.
 
 For the broader explanation of how rate limits work + the per-tier
-defaults table, see [/reference/rate-limits](/reference/rate-limits).
+defaults table, see [/reference/rate-limits](/reference/rate-limits/).
 
 ## Get effective rate-limit config
 
@@ -109,7 +109,7 @@ hitting that bucket's cap returns 429.
 
 The defaults the endpoint returns when no override is active are
 locked in `packages/api-types/src/common.ts:TIER_RATE_LIMIT_DEFAULTS`.
-Full table at [/reference/rate-limits](/reference/rate-limits).
+Full table at [/reference/rate-limits](/reference/rate-limits/).
 
 ## Admin overrides
 
@@ -171,7 +171,7 @@ The IETF draft-standard `ratelimit-limit` / `ratelimit-remaining` /
 semantic difference: `ratelimit-reset` is **relative** seconds-from-now
 (per the draft), while `x-ratelimit-reset` is an absolute unix
 timestamp. Full table at
-[/reference/rate-limits](/reference/rate-limits).
+[/reference/rate-limits](/reference/rate-limits/).
 
 ## What happens when you hit a cap
 
@@ -195,7 +195,7 @@ emitted on every response, not just 429s.
 The `Retry-After` HTTP header carries the same value as
 `retry_after_seconds`. SDK clients honour it automatically with
 exponential backoff capped at 10s; see
-[/reference/errors](/reference/errors) for retry-loop examples.
+[/reference/errors](/reference/errors/) for retry-loop examples.
 
 ## Source of truth
 

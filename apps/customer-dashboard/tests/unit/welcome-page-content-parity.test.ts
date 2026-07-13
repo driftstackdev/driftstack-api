@@ -81,7 +81,7 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
 
   it('CTAs go to the dashboard home (free start) + /select-tier (upgrade) — destinations exist (2026-07-02: free CTA moved off the deleted /first-session)', () => {
     expect(body).toMatch(/<a href="\/" class="btn-primary/);
-    expect(body).toMatch(/href="\/select-tier"/);
+    expect(body).toMatch(/href="\/select-tier\/"/);
     expect(existsSync(SELECT_TIER)).toBe(true);
   });
 

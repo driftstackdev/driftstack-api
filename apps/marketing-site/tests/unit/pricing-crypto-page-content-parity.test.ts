@@ -110,8 +110,8 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
     const occurrences = body.match(/Crypto payments are non-refundable/g);
     expect(occurrences).not.toBeNull();
     expect(occurrences!.length).toBeGreaterThanOrEqual(2);
-    expect(body).toMatch(/<a href="\/legal\/refunds">refund policy<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/refunds">\/legal\/refunds<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/refunds\/">refund policy<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/refunds\/">\/legal\/refunds<\/a>/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/refunds.md'))).toBe(
       true,
     );

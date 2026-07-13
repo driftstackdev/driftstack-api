@@ -40,7 +40,7 @@ console.log(order.order_id, order.payment_address);`}</code></pre>
       On a duplicate key within the 24h window, the SDK returns the
       original order — same <code>order_id</code>, same
       <code>created_at</code>. See
-      <a href="/docs/idempotency-keys">/docs/idempotency-keys</a>.
+      <a href="/docs/idempotency-keys/">/docs/idempotency-keys</a>.
     </p>
 
     <h2>List + drill down</h2>
@@ -96,7 +96,7 @@ for await (const o of client.cryptoOrders.listAll({ status: 'paid' })) {
       Crypto payments are non-refundable. Cancelling a pending
       order halts its pay window; cancelling a paid order is not
       supported — past billing periods stay billed. See
-      <a href="/legal/refunds">/legal/refunds</a>.
+      <a href="/legal/refunds/">/legal/refunds</a>.
     </p>
 
     <h2>Fetch the receipt</h2>
@@ -133,11 +133,11 @@ console.log(receipt.paid_at, receipt.price_cents);`}</code></pre>
 
     <h2>Related</h2>
     <ul>
-      <li><a href="/docs/sdk-typescript">TypeScript SDK quickstart</a></li>
-      <li><a href="/docs/sdk-python-crypto-orders">Python SDK crypto orders</a></li>
-      <li><a href="/docs/sdk-go-crypto-orders">Go SDK crypto orders</a></li>
+      <li><a href="/docs/sdk-typescript/">TypeScript SDK quickstart</a></li>
+      <li><a href="/docs/sdk-python-crypto-orders/">Python SDK crypto orders</a></li>
+      <li><a href="/docs/sdk-go-crypto-orders/">Go SDK crypto orders</a></li>
       <li><a href="https://docs.driftstack.dev/guides/paying-with-crypto/">Integration guide</a></li>
-      <li><a href="/docs/idempotency-keys">Idempotency keys</a></li>
+      <li><a href="/docs/idempotency-keys/">Idempotency keys</a></li>
       <li><a href="https://docs.driftstack.dev/webhooks/crypto-events/">Crypto webhook events</a></li>
     </ul>
   </main>

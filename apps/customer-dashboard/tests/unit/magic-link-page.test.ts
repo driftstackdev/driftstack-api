@@ -93,7 +93,7 @@ describe('magic-link consume page', () => {
       /outcome is unknown.*consumed this one-time link.*credential did not reach this browser.*do not try this link again.*fresh sign-in link/i,
     );
     expect(window.document.querySelector('[data-unknown-recovery] a')?.getAttribute('href')).toBe(
-      '/login',
+      '/login/',
     );
 
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));

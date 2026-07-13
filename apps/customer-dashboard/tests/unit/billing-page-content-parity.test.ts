@@ -62,7 +62,7 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     // subscribed accounts see their tier. No trial-pack purchase UI.
     expect(body).toMatch(/Upgrade to a paid tier to unlock concurrent caps/);
     expect(body).toMatch(/No active subscription/);
-    expect(body).toMatch(/href="\/select-tier"/);
+    expect(body).toMatch(/href="\/select-tier\/"/);
     // The deleted endpoint must not reappear in any form.
     expect(body).not.toContain('/v1/billing/trial-pack');
     expect(body).not.toMatch(/trial pack/i);

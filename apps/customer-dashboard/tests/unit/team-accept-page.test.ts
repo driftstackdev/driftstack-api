@@ -84,7 +84,7 @@ describe('team invite acceptance page', () => {
       window.document.querySelector('[data-accept-unknown]')?.classList.contains('hidden'),
     ).toBe(false);
     expect(window.document.querySelector('[data-accept-unknown] a')?.getAttribute('href')).toBe(
-      '/team',
+      '/team/',
     );
   });
 });

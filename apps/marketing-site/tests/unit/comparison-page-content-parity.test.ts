@@ -93,7 +93,7 @@ describe('W366.A marketing-site /comparison page content parity', () => {
   });
 
   it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / manual / perpetual)', () => {
-    expect(body).toMatch(/href="\/pricing#free"/);
+    expect(body).toMatch(/href="\/pricing\/#free"/);
     expect(body).toMatch(/Free tier — one profile, manual, perpetual\./);
     // The cross-linked anchor must exist on /pricing.
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(

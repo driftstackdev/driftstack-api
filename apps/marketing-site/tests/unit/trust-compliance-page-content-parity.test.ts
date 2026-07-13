@@ -56,7 +56,7 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
       /<span[\s\S]{0,40}class="inline-block rounded-full bg-emerald-50[\s\S]{0,80}>\s*In place\s*<\/span\s*>/,
     );
     expect(body).toMatch(
-      /<a href="\/legal\/dpa" class="text-tk-accent-text underline">\/legal\/dpa<\/a>/,
+      /<a href="\/legal\/dpa\/" class="text-tk-accent-text underline">\/legal\/dpa<\/a>/,
     );
   });
 
@@ -150,7 +150,7 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
     expect(body).toMatch(
       /Per our written retention policy \(internal decision record\s+ADR-006\):/,
     ); // S20c 2026-07-06
-    expect(body).toMatch(/<a href="\/docs\/audit-log" class="text-tk-accent-text underline"/);
+    expect(body).toMatch(/<a href="\/docs\/audit-log\/" class="text-tk-accent-text underline"/);
   });
 
   it('hero copy pinned: "Compliance posture & disclosure" (Fleet v2 S10: hero renders via <PageHero> — the title lives in the title prop as a raw "&", HTML-escaped to &amp; at build time)', () => {

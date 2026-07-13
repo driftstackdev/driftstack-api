@@ -8,7 +8,7 @@ description: Driftstack API versioning policy — additive vs breaking changes, 
 
 Versioning policy for the HTTP API surface (`/v1/*`, eventually
 `/v2/*`). Distinct from the SDK versioning policy at
-[`docs.driftstack.dev/sdk/versioning`](/sdk/versioning): SDKs version
+[`docs.driftstack.dev/sdk/versioning`](/sdk/versioning/): SDKs version
 independently of the API; this doc covers the API endpoint contract.
 
 ## TL;DR
@@ -164,9 +164,9 @@ When `/v2/*` does ship, expect:
 
 ## Related
 
-- Webhook event catalog: [`docs.driftstack.dev/webhooks/events`](/webhooks/events).
-- Rate-limit policy: [`docs.driftstack.dev/reference/rate-limits`](/reference/rate-limits).
-- Error handling: [`docs.driftstack.dev/sdk/error-handling`](/sdk/error-handling).
+- Webhook event catalog: [`docs.driftstack.dev/webhooks/events`](/webhooks/events/).
+- Rate-limit policy: [`docs.driftstack.dev/reference/rate-limits`](/reference/rate-limits/).
+- Error handling: [`docs.driftstack.dev/sdk/error-handling`](/sdk/error-handling/).
 - OpenAPI spec is served at `/openapi.json` on the live API host
   (`api.driftstack.dev/openapi.json`) and rendered as a browsable
   reference by Scalar UI at `api.driftstack.dev/docs`.

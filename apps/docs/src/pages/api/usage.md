@@ -84,7 +84,7 @@ bound, not a monthly meter, and is not surfaced here.
 
 This endpoint does not surface the concurrent-sessions cap or the
 profile-count cap — those are tier-table values enforced at create
-time. See [/reference/rate-limits](/reference/rate-limits) for the
+time. See [/reference/rate-limits](/reference/rate-limits/) for the
 full per-tier configuration.
 
 ## Daily series

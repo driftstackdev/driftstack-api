@@ -110,7 +110,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   });
 
   it('cross-link to /trust (back to trust center) pinned (Fleet v2 S10: the CTA section became a <CtaBand> — the btn-secondary anchor renders from the secondaryHref/secondaryLabel props)', () => {
-    expect(body).toMatch(/secondaryHref="\/trust"\s*\n?\s*secondaryLabel="Back to trust center"/);
+    expect(body).toMatch(/secondaryHref="\/trust\/"\s*\n?\s*secondaryLabel="Back to trust center"/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/trust/index.astro'))).toBe(
       true,
     );

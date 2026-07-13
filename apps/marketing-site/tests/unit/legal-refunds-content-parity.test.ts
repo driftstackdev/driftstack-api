@@ -69,7 +69,7 @@ describe('W378.B marketing-site /legal/refunds.md content parity', () => {
   });
 
   it('cost-monitoring cross-link in the LLM-overage no-refund line', () => {
-    expect(body).toMatch(/\[billing dashboard\]\(\/docs\/cost-monitoring\)/);
+    expect(body).toMatch(/\[billing dashboard\]\(\/docs\/cost-monitoring\/\)/);
   });
 
   it('Card refund mechanics: support@driftstack.dev + 5–10 business day Stripe timing', () => {
@@ -111,7 +111,7 @@ describe('W378.B marketing-site /legal/refunds.md content parity', () => {
   });
 
   it('/pricing/crypto cross-link pinned (lifecycle deep-dive)', () => {
-    expect(body).toMatch(/\[`\/pricing\/crypto`\]\(\/pricing\/crypto\)/);
+    expect(body).toMatch(/\[`\/pricing\/crypto`\]\(\/pricing\/crypto\/\)/);
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing/crypto.astro')),
     ).toBe(true);

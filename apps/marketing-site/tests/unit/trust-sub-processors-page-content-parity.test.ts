@@ -92,10 +92,10 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   it('/legal/dpa Annex 3 cross-link pinned + DPA file exists', () => {
     // Astro wraps the closing `>` onto a new line; tolerate whitespace.
     expect(body).toMatch(
-      /<a href="\/legal\/dpa" class="text-tk-accent-text underline"\s*>\s*Annex 3 of the Data Processing Agreement\s*<\/a\s*>/,
+      /<a href="\/legal\/dpa\/" class="text-tk-accent-text underline"\s*>\s*Annex 3 of the Data Processing Agreement\s*<\/a\s*>/,
     );
     // Article 28(2) reference cross-link.
-    expect(body).toMatch(/<a href="\/legal\/dpa" class="text-tk-accent-text underline">DPA<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/dpa\/" class="text-tk-accent-text underline">DPA<\/a>/);
     expect(body).toMatch(/\(Article 28\(2\) — Sub-processor amendment\)/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/dpa.md'))).toBe(true);
   });

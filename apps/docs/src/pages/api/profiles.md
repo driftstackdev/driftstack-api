@@ -345,7 +345,7 @@ description, and underlying browser state mutate as you use it.
 The snapshot's recorded metadata (archetype, name, description) is
 frozen the moment you capture it. Browser state (cookies, logins)
 is NOT captured at v1 — see
-[/api/profile-snapshots](/api/profile-snapshots) for the full
+[/api/profile-snapshots](/api/profile-snapshots/) for the full
 contract.
 
 **Capture**

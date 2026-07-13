@@ -116,7 +116,7 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
   });
 
   it('cross-link to /faq resolves (common-questions teaser section)', () => {
-    expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See FAQ<\/a>/);
+    expect(body).toMatch(/<a href="\/faq\/" class="btn-secondary">See FAQ<\/a>/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro'))).toBe(true);
   });
 

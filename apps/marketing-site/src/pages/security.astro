@@ -30,7 +30,7 @@ import CtaBand from '../components/CtaBand.astro';
     <p class="mt-4 max-w-2xl text-sm text-tk-ink-3">
       This page is security in plain terms. The deep technical posture —
       parameter by parameter, control by control — lives at
-      <a href="/trust/security-overview" class="text-tk-accent-text underline"
+      <a href="/trust/security-overview/" class="text-tk-accent-text underline"
         >/trust/security-overview</a
       >.
     </p>
@@ -87,7 +87,7 @@ import CtaBand from '../components/CtaBand.astro';
         <p class="mt-3 text-tk-ink-2">
           Each profile can attach its own egress configuration — its
           own exit to the internet
-          (<a href="/glossary#egress" class="text-tk-accent-text underline">egress</a>):
+          (<a href="/glossary/#egress" class="text-tk-accent-text underline">egress</a>):
           a SOCKS5 proxy — including the video-call and modern-web
           traffic types (UDP / WebRTC / QUIC) that many proxies drop —
           an OpenVPN file (.ovpn), or a WireGuard file (.conf). A
@@ -98,7 +98,7 @@ import CtaBand from '../components/CtaBand.astro';
           exits via Driftstack-managed infrastructure. We never
           store destination response bodies — the pages your
           sessions visit. See
-          <a href="/trust/security-overview" class="text-tk-accent-text underline">/trust/security-overview</a>
+          <a href="/trust/security-overview/" class="text-tk-accent-text underline">/trust/security-overview</a>
           for the full posture.
         </p>
       </div>
@@ -259,7 +259,7 @@ import CtaBand from '../components/CtaBand.astro';
         <strong class="block text-tk-ink">Sub-processors are listed.</strong>
         Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe,
         Anthropic, Moneybird, MacStadium. Full list with purpose +
-        jurisdiction at <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a>.
+        jurisdiction at <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a>.
       </li>
       <li class="card bg-tk-raised p-6 text-sm text-tk-ink-2">
         <IconTile class="mb-3">
@@ -520,7 +520,7 @@ import CtaBand from '../components/CtaBand.astro';
                 top at run time — a "shim") and continuously
                 updated; we can't promise forever-perfect parity
                 against every detection vendor. See the
-                <a href="/trust/cumulative-rig" class="text-tk-accent-text underline">cumulative-rig
+                <a href="/trust/cumulative-rig/" class="text-tk-accent-text underline">cumulative-rig
                 methodology</a> for what we do guarantee.
               </span>
             </li>
@@ -621,7 +621,7 @@ import CtaBand from '../components/CtaBand.astro';
     lead="Email security@driftstack.dev with the question. We answer everything in writing — no NDAs to read a one-paragraph answer about scrypt parameters or TLS cipher suites."
     primaryHref="mailto:security@driftstack.dev?subject=Security%20question"
     primaryLabel="Email security"
-    secondaryHref="/trust/security-overview"
+    secondaryHref="/trust/security-overview/"
     secondaryLabel="Read the full posture"
   />
 </BaseLayout>

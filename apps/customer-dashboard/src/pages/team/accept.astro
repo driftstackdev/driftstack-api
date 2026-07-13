@@ -42,17 +42,17 @@ const apiBaseUrl = resolveApiBaseUrl();
         data-accept-unknown
         class="mb-5 hidden rounded-lg border border-tk-border bg-tk-surface px-4 py-4 text-sm text-tk-ink-2"
       >
-        <a href="/team" class="btn-primary flex w-full items-center justify-center"
+        <a href="/team/" class="btn-primary flex w-full items-center justify-center"
           >Open Team to check access</a
         >
       </div>
       <p class="mt-6 hidden text-xs text-tk-ink-3" data-field="signin-hint">
         Not signed in? <a
-          href="/login"
+          href="/login/"
           data-link="signin"
           class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Sign in</a
         > or <a
-          href="/signup"
+          href="/signup/"
           data-link="signup"
           class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
           >create your account</a
@@ -149,7 +149,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
         })
         .then(() => {
-          window.location.href = '/team';
+          window.location.href = '/team/';
         })
         .catch((err) => {
           if (err && err.name === 'AbortError') {

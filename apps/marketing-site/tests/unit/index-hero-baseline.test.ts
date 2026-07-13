@@ -29,7 +29,7 @@ describe('W304.B /index hero baseline', () => {
   });
 
   it('hero leads with the free-tier entry CTA', () => {
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary">Start free<\/a>/);
   });
 
   it('hero subline cites the free-tier framing', () => {

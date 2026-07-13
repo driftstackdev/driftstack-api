@@ -163,6 +163,6 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
       /capture<\/code> takes one of three kinds:\s*\n?\s*<code class="font-mono">screenshot<\/code>,\s*\n?\s*<code class="font-mono">dom_snapshot<\/code>, or\s*\n?\s*<code class="font-mono">pdf<\/code>/,
     );
     // S20c 2026-07-06: same R2 + signed-URL facts, said plainly.
-    expect(body).toMatch(/Session video recording is on the\s*\n?\s*<a href="\/roadmap"/);
+    expect(body).toMatch(/Session video recording is on the\s*\n?\s*<a href="\/roadmap\/"/);
   });
 });

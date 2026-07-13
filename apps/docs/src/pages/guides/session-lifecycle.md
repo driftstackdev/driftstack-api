@@ -144,7 +144,7 @@ Every error returned by the session endpoints conforms to the [problem+json shap
 - `410 Gone` (`https://errors.driftstack.dev/session-destroyed`) — operating on a session that has already been destroyed.
 - `502 Bad Gateway` / `503 Service Unavailable` — driver-side error (`driver-error` / `driver-not-integrated` / `feature-unavailable`).
 
-The SDKs map these to typed error classes — catch `RateLimitError`, `ConcurrencyLimitError`, the tier-limit class (`TierLimitError` in TypeScript, `QuotaExceededError` in Python and Go), `SessionDestroyedError`, `DriverError`, etc. The full mapping lives at [/reference/errors](/reference/errors).
+The SDKs map these to typed error classes — catch `RateLimitError`, `ConcurrencyLimitError`, the tier-limit class (`TierLimitError` in TypeScript, `QuotaExceededError` in Python and Go), `SessionDestroyedError`, `DriverError`, etc. The full mapping lives at [/reference/errors](/reference/errors/).
 
 ## Session events on the webhook bus
 

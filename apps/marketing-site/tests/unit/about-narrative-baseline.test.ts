@@ -38,7 +38,7 @@ describe('W334.B /about narrative baseline', () => {
       /transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy/,
     );
     expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
-    expect(body).toMatch(/href="\/trust\/sub-processors"/);
+    expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
     expect(body).not.toMatch(/Hetzner\s+Falkenstein/);
     expect(body).not.toMatch(/Neon\s+EU/);
     expect(body).not.toMatch(/Cloudflare\s+R2\s+EU/);

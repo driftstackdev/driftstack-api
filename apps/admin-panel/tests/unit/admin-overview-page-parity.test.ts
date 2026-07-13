@@ -107,7 +107,7 @@ describe('W347.C admin /index overview parity', () => {
   });
 
   it('"See full log" CTA targets /audit-log', () => {
-    expect(page).toMatch(/href="\/audit-log"[^>]*>[\s\S]{0,80}See full log/);
+    expect(page).toMatch(/href="\/audit-log\/"[^>]*>[\s\S]{0,80}See full log/);
   });
 
   it('staff-only framing is preserved in the page header', () => {

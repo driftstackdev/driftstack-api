@@ -19,7 +19,7 @@ import IconTile from '../../components/IconTile.astro';
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust' }, { name: 'Compliance' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust/' }, { name: 'Compliance' }]}
     />
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Where we are today, where we're going, and how to engage the
@@ -60,7 +60,7 @@ import IconTile from '../../components/IconTile.astro';
               >
             </td>
             <td class="py-3 align-top text-tk-ink-2">Today — see
-              <a href="/legal/dpa" class="text-tk-accent-text underline">/legal/dpa</a>
+              <a href="/legal/dpa/" class="text-tk-accent-text underline">/legal/dpa</a>
             </td>
           </tr>
           <tr class="border-b border-tk-border">
@@ -247,7 +247,7 @@ import IconTile from '../../components/IconTile.astro';
       </p>
       <p class="mt-4 max-w-prose text-tk-ink-2">
         The live list is published at
-        <a href="/trust/sub-processors" class="text-tk-accent-text underline"
+        <a href="/trust/sub-processors/" class="text-tk-accent-text underline"
           >/trust/sub-processors</a
         > and material changes will also be available as an RSS feed
         you can subscribe to — the subscribe link appears on that
@@ -268,7 +268,7 @@ import IconTile from '../../components/IconTile.astro';
         <li>
           <span class="font-medium text-tk-ink">Customer-facing audit log</span> —
           retained per the customer's tier (see
-          <a href="/docs/audit-log" class="text-tk-accent-text underline"
+          <a href="/docs/audit-log/" class="text-tk-accent-text underline"
             >/docs/audit-log</a>),
           surfaced via the dashboard +
           <code class="font-mono">GET /v1/account/audit-log</code>.

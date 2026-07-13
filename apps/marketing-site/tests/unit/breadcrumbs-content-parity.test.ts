@@ -74,7 +74,7 @@ describe('S19 Breadcrumbs component + adoption', () => {
       'pages/use-cases/qa-testing.astro',
       'pages/use-cases/web-scraping.astro',
     ]) {
-      expect(read(p)).toContain("{ name: 'Use cases', href: '/use-cases' }");
+      expect(read(p)).toContain("{ name: 'Use cases', href: '/use-cases/' }");
     }
     for (const p of [
       'pages/trust/security-overview.astro',
@@ -83,7 +83,7 @@ describe('S19 Breadcrumbs component + adoption', () => {
       'pages/trust/incidents.astro',
       'pages/trust/cumulative-rig.astro',
     ]) {
-      expect(read(p)).toContain("{ name: 'Trust center', href: '/trust' }");
+      expect(read(p)).toContain("{ name: 'Trust center', href: '/trust/' }");
     }
   });
 });

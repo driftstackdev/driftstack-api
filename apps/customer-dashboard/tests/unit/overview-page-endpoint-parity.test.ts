@@ -121,9 +121,9 @@ describe('W337.C dashboard /index overview endpoint parity', () => {
   });
 
   it('links downstream account-portal surfaces the page CTAs target (2026-07-02: the operational /sessions link left with the account-portal IA — sessions are driven in the desktop app)', () => {
-    expect(body).toContain('href="/billing"');
-    expect(body).toContain('href="/select-tier"');
-    expect(body).toContain('href="/team"');
+    expect(body).toContain('href="/billing/"');
+    expect(body).toContain('href="/select-tier/"');
+    expect(body).toContain('href="/team/"');
   });
 
   it('no residual trial-pack credit formatting (trial pack removed 2026-05-27)', () => {

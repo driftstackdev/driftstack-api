@@ -36,7 +36,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases' }, { name: 'Web scraping' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases/' }, { name: 'Web scraping' }]}
     />
   </PageHero>
 
@@ -85,7 +85,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
       The signal-by-signal detail — what a detector measures and what each
       side returns — is on the
-      <a href="/comparison" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>.
+      <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>.
     </p>
   </Section>
 
@@ -95,14 +95,14 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     lead="Drive sessions from the TypeScript, Python, or Go SDK — or any HTTP client — with structured actions: navigate, interact, capture, extract. One cap on how many sessions run at the same time (think browser tabs open at once) — hours inside it aren't metered."
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
-      <a href="/pricing#api" class="btn-secondary">See API pricing →</a>
+      <a href="/pricing/#api" class="btn-secondary">See API pricing →</a>
       <p class="text-sm text-tk-ink-3">
         Migrating from a Chromium vendor? The FAQ below covers what changes.
       </p>
     </div>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
       Collect responsibly: the
-      <a href="/legal/aup" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
+      <a href="/legal/aup/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
       draws the line in plain words — market research and price monitoring
       are what this page is about; scraping that gets around logins
       (authentication) or past a site's reasonable rate limits is not
@@ -126,16 +126,16 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     </div>
     <p class="mt-8 text-sm text-tk-ink-3">
       Everything else is on the
-      <a href="/faq" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">full FAQ</a>.
+      <a href="/faq/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">full FAQ</a>.
     </p>
   </Section>
 
   <CtaBand
     title="Collect the web your users actually see."
     lead="Run a free manual session next to your current vendor and compare the output on your own flows — no card required."
-    primaryHref="/pricing#free"
+    primaryHref="/pricing/#free"
     primaryLabel="Start free"
-    secondaryHref="/pricing#api"
+    secondaryHref="/pricing/#api"
     secondaryLabel="See API pricing"
   />
 </BaseLayout>

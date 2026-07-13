@@ -75,6 +75,6 @@ describe('W346.B /forgot-password expiry-window parity', () => {
   });
 
   it('cancel link routes back to /login (consistent with sign-in flow)', () => {
-    expect(page).toMatch(/href="\/login"/);
+    expect(page).toMatch(/href="\/login\/"/);
   });
 });

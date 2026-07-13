@@ -43,7 +43,7 @@ We do **not** issue refunds in these scenarios:
 - Tier downgrade. The downgrade takes effect at the next renewal;
   no proration is issued for the unused portion of the current tier.
 - Usage that exceeded customer expectations (e.g. LLM-bundled
-  spend). We surface estimated cost in the [billing dashboard](/docs/cost-monitoring)
+  spend). We surface estimated cost in the [billing dashboard](/docs/cost-monitoring/)
   so you can shape usage before the next cycle.
 
 ## How refunds work — card payments (Stripe)
@@ -96,7 +96,7 @@ If your situation needs an actual cash refund, please pay via card
 (Stripe) — card refunds follow the standard mechanics documented in
 the section above.
 
-For more on the crypto-payment lifecycle, see [`/pricing/crypto`](/pricing/crypto).
+For more on the crypto-payment lifecycle, see [`/pricing/crypto`](/pricing/crypto/).
 
 ## Relationship to SLA credits
 

@@ -34,7 +34,7 @@ describe('W336.B /404 + /500 error pages baseline', () => {
 
   it('/404 offers Back home + See pricing CTAs', () => {
     expect(p404).toContain('href="/"');
-    expect(p404).toContain('href="/pricing"');
+    expect(p404).toContain('href="/pricing/"');
   });
 
   it('/500 frames the error as on-us (no customer blame)', () => {

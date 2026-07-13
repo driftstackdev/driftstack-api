@@ -66,7 +66,7 @@ describe('W367.A marketing-site /about page content parity', () => {
     // flows" claim contradicted the real sub-processor list (US
     // processors under SCCs + DPF). It MUST NOT come back.
     expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
-    expect(body).toMatch(/href="\/trust\/sub-processors"/);
+    expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
     expect(body).not.toMatch(/Compute in Hetzner Falkenstein/);
     expect(body).not.toMatch(/Database on Neon EU/);
     expect(body).not.toMatch(/Object\s+storage on Cloudflare R2 EU/);
@@ -96,10 +96,10 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toMatch(/30 days' warning before we change vendors — Article 28\(2\)/);
     expect(body).toMatch(/If we ever shut down, you keep the software \(source escrow\)/);
     // Each card cross-links to a verifiable public page.
-    expect(body).toMatch(/href="\/security"/);
-    expect(body).toMatch(/href="\/trust\/incidents"/);
-    expect(body).toMatch(/href="\/trust\/sub-processors"/);
-    expect(body).toMatch(/href="\/faq#acceptable-use"/);
+    expect(body).toMatch(/href="\/security\/"/);
+    expect(body).toMatch(/href="\/trust\/incidents\/"/);
+    expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
+    expect(body).toMatch(/href="\/faq\/#acceptable-use"/);
     // F-5 — "Pre-launch" labels must not return.
     expect(body).not.toMatch(/Pre-launch security audit, on a cadence/);
     expect(body).not.toMatch(/Disaster recovery rehearsed pre-launch/);
@@ -141,7 +141,7 @@ describe('W367.A marketing-site /about page content parity', () => {
   });
 
   it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / 20-minute / no card). 2026-07-03 Fleet v2 — the bottom CTA is now the shared CtaBand component, so the destination is pinned via its primaryHref prop.', () => {
-    expect(body).toMatch(/primaryHref="\/pricing#free"/);
+    expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/Start free — one profile, 20-minute sessions on real/);
     expect(body).toMatch(/Perpetual, no expiry\./);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(

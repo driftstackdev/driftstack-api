@@ -157,7 +157,7 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   it('cross-link to /security architecture deep-dive pinned', () => {
     expect(body).toMatch(
-      /<a href="\/security" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>/,
+      /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>/,
     );
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/security.astro'))).toBe(
       true,

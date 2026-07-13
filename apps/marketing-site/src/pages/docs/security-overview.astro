@@ -37,7 +37,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <strong>In transit:</strong> TLS 1.2+ enforced on every
         public endpoint. HSTS is set with
         <code>max-age=63072000; includeSubDomains; preload</code> —
-        see <a href="/docs/api-security-headers">API security headers</a>
+        see <a href="/docs/api-security-headers/">API security headers</a>
         for the full set.
       </li>
       <li>
@@ -46,7 +46,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         underlying objects are never publicly listable. Managed API session
         recordings in R2 are a roadmap item; the desktop app's current manual
         recorder saves streamed frames locally on the operator's machine. See
-        <a href="/docs/recordings">/docs/recordings</a> for the distinction.
+        <a href="/docs/recordings/">/docs/recordings</a> for the distinction.
       </li>
       <li>
         <strong>Profile state:</strong> Per-profile browser state
@@ -74,7 +74,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         Admin actions are gated behind a separate
         <code>driftstack_internal_admin</code> scope that no customer
-        key can hold. See <a href="/docs/admin-api">/docs/admin-api</a>
+        key can hold. See <a href="/docs/admin-api/">/docs/admin-api</a>
         for the surface.
       </li>
       <li>
@@ -103,14 +103,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         Customer data egress to non-EU regions is restricted to the
         subprocessors enumerated below and on the
-        <a href="/legal/sub-processors">sub-processor list</a>. See
+        <a href="/legal/sub-processors/">sub-processor list</a>. See
         <a href="https://docs.driftstack.dev/reference/data-residency/">/docs/data-residency</a> for
         the per-category breakdown.
       </li>
       <li>
         Rate-limiting is enforced application-side via token buckets
         (per-account + per-IP); see
-        <a href="/docs/rate-limits">/docs/rate-limits</a> for the
+        <a href="/docs/rate-limits/">/docs/rate-limits</a> for the
         bucket model. DDoS absorption is handled at the CDN edge.
       </li>
     </ul>
@@ -144,7 +144,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       A full sub-processor list with a description of what each
       receives is available at
-      <a href="/legal/sub-processors">/legal/sub-processors</a>. The
+      <a href="/legal/sub-processors/">/legal/sub-processors</a>. The
       shortlist as of 2026:
     </p>
     <ul>
@@ -166,7 +166,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
     <ul>
       <li>
-        <a href="/docs/audit-log">Account audit log</a> — every
+        <a href="/docs/audit-log/">Account audit log</a> — every
         mutation on your account (key mints, profile changes, billing
         events).
       </li>
@@ -181,7 +181,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>Incident response</h2>
     <p>
-      See <a href="/docs/incident-policy">/docs/incident-policy</a>
+      See <a href="/docs/incident-policy/">/docs/incident-policy</a>
       for the disclosure timeline + the
       <a href="https://status.driftstack.dev">status page</a>
       cadence. Security-relevant incidents are disclosed within 72h
@@ -192,7 +192,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       Email <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>
       with the details. We respond within 1 business day. Our
-      <a href="/legal/vulnerability-disclosure">vulnerability
+      <a href="/legal/vulnerability-disclosure/">vulnerability
       disclosure policy</a> covers safe-harbour for good-faith
       research; please review it before testing.
     </p>
@@ -200,10 +200,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>Related</h2>
     <ul>
       <li><a href="https://docs.driftstack.dev/reference/data-residency/">Data residency</a></li>
-      <li><a href="/docs/admin-api">Admin API + scope</a></li>
-      <li><a href="/docs/incident-policy">Incident policy</a></li>
-      <li><a href="/docs/audit-log">Audit log</a></li>
-      <li><a href="/legal/sub-processors">Sub-processors</a></li>
+      <li><a href="/docs/admin-api/">Admin API + scope</a></li>
+      <li><a href="/docs/incident-policy/">Incident policy</a></li>
+      <li><a href="/docs/audit-log/">Audit log</a></li>
+      <li><a href="/legal/sub-processors/">Sub-processors</a></li>
     </ul>
   </main>
 </BaseLayout>

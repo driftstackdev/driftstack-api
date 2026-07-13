@@ -129,7 +129,7 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
 
   it('back link to /accounts list pinned', () => {
     expect(body).toMatch(
-      /<a href="\/accounts" class="text-tk-accent hover:underline">← Back to accounts<\/a>/,
+      /<a href="\/accounts\/" class="text-tk-accent hover:underline">← Back to accounts<\/a>/,
     );
   });
 

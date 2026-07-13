@@ -119,7 +119,7 @@ within one business day.
 
 - [Data Processing Addendum](/legal/dpa/)
 - [Privacy Policy](/legal/privacy/)
-- [/docs/security-overview](/docs/security-overview) — overall
+- [/docs/security-overview](/docs/security-overview/) — overall
   security posture + controls.
 - [docs.driftstack.dev/reference/data-residency](https://docs.driftstack.dev/reference/data-residency/) — region-pinning + the
   no-cross-region-copy guarantee.

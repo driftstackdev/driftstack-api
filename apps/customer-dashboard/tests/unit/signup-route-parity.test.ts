@@ -29,7 +29,7 @@ describe('W329.C /signup ↔ auth route parity', () => {
   });
 
   it('page links to /login as the sign-in path', () => {
-    expect(page).toMatch(/href=['"]\/login['"]/);
+    expect(page).toMatch(/href=['"]\/login\/['"]/);
   });
 
   it('page collects email + password (signup uses password auth, not magic-link)', () => {

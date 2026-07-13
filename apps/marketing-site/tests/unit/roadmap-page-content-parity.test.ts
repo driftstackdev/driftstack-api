@@ -164,7 +164,7 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
   });
 
   it('free-tier CTA cross-link points at /pricing#free (consistent with /about + /comparison)', () => {
-    expect(body).toMatch(/href="\/pricing#free"/);
+    expect(body).toMatch(/href="\/pricing\/#free"/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(
       true,
     );
