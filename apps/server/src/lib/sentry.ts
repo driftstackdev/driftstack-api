@@ -98,25 +98,36 @@ function isSensitiveKey(key: string): boolean {
 /**
  * V-494 — recursively walk a Sentry event-shaped value and replace
  * sensitive field values with `'[redacted]'`. Mutates in place to
- * avoid allocating a parallel object tree on every event. Stops
- * descending at scalars or after a max depth (defensive against
- * accidentally cyclic structures Sentry may attach).
+ * avoid allocating a parallel object tree on every event. Over-depth
+ * and cyclic subtrees are replaced with a fixed sentinel; merely stopping
+ * traversal would leave deeper credentials attached for Sentry to serialize.
  */
-function scrubInPlace(value: unknown, depth = 0): void {
-  if (depth > 8) return;
-  if (value === null || typeof value !== 'object') return;
+const MAX_SENTRY_SCRUB_DEPTH = 8;
+const REDACTED_SENTRY_STRUCTURE = '[redacted: structure limit]';
+function scrubValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth >= MAX_SENTRY_SCRUB_DEPTH || seen.has(value)) return REDACTED_SENTRY_STRUCTURE;
+  seen.add(value);
   if (Array.isArray(value)) {
-    for (const item of value) scrubInPlace(item, depth + 1);
-    return;
+    for (let index = 0; index < value.length; index += 1) {
+      value[index] = scrubValue(value[index], depth + 1, seen);
+    }
+    seen.delete(value);
+    return value;
   }
   const obj = value as Record<string, unknown>;
   for (const key of Object.keys(obj)) {
     if (isSensitiveKey(key)) {
       obj[key] = '[redacted]';
     } else {
-      scrubInPlace(obj[key], depth + 1);
+      obj[key] = scrubValue(obj[key], depth + 1, seen);
     }
   }
+  seen.delete(value);
+  return value;
+}
+function scrubInPlace(value: unknown): void {
+  scrubValue(value, 0, new WeakSet<object>());
 }
 
 function scrubSentryEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {

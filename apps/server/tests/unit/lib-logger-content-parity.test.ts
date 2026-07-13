@@ -129,11 +129,14 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
     // message+stack — ApiError.detail/extensions + a nested upstream error's
     // cause/config bypassed the old message+stack-only redaction).
     expect(body).toMatch(/export function redactErrSerializer\(/);
-    expect(body).toMatch(/return redactErrValue\(base, 0\)/);
-    // The recursive helper redacts every string + bounds recursion (depth cap
-    // guards cyclic refs; redactText is a no-op on clean strings).
+    expect(body).toMatch(/return redactErrValue\(base, 0, new WeakSet<object>\(\)\)/);
+    // The recursive helper redacts every string + fails closed at its depth/cycle
+    // boundary; redactText is a no-op on clean strings.
     expect(body).toMatch(/if \(typeof value === 'string'\) return redactText\(value\)/);
-    expect(body).toMatch(/depth >= MAX_ERR_REDACT_DEPTH/);
+    expect(body).toMatch(
+      /if \(depth >= MAX_ERR_REDACT_DEPTH \|\| seen\.has\(value\)\) return REDACTED_ERR_STRUCTURE/,
+    );
+    expect(body).toMatch(/new WeakSet<object>\(\)/);
     // ...AND is actually wired into the pino serializers (else the leak returns
     // even though the function exists — the behavioral test wouldn't catch an
     // un-wiring since it calls the function directly).

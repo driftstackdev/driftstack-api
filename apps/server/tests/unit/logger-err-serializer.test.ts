@@ -53,4 +53,28 @@ describe('redactErrSerializer', () => {
     expect(cause.auth as string).not.toContain('sk-live-NESTED');
     expect(cause.auth as string).toContain('Bearer [redacted]');
   });
+
+  it('fails closed on an over-depth credential subtree instead of returning it untouched', () => {
+    const e = new Error('dispatch failed') as Error & { upstream?: unknown };
+    let nested: Record<string, unknown> = {
+      detail: 'https://upstream.invalid/callback?code=DEEP_AUTH_SECRET',
+    };
+    for (let depth = 0; depth < 10; depth += 1) nested = { nested };
+    e.upstream = nested;
+
+    const serialized = JSON.stringify(redactErrSerializer(e));
+    expect(serialized).not.toContain('DEEP_AUTH_SECRET');
+    expect(serialized).toContain('[redacted: structure limit]');
+  });
+
+  it('cuts cyclic error properties so the redacted result remains JSON-serializable', () => {
+    const e = new Error('dispatch failed') as Error & { upstream?: unknown };
+    const cycle: Record<string, unknown> = { authorization: 'Bearer CYCLE_SECRET' };
+    cycle.self = cycle;
+    e.upstream = cycle;
+
+    const serialized = JSON.stringify(redactErrSerializer(e));
+    expect(serialized).not.toContain('CYCLE_SECRET');
+    expect(serialized).toContain('[redacted: structure limit]');
+  });
 });

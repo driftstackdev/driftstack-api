@@ -38,8 +38,8 @@
 //       client_secret + clientsecret.
 //     - TOTP keys (3): totp_secret + totpsecret + mfasecret.
 //
-//   scrubInPlace recursion bound — depth > 8 returns early. The depth
-//     guard defends against Sentry-attached cyclic structures.
+//   scrubInPlace recursion bound — over-depth/cyclic subtrees are replaced.
+//     The fail-closed guard prevents deep credentials and JSON cycles surviving.
 //
 //   scrubSentryEvent walks 4 envelope shapes: event.request +
 //     event.extra + event.contexts + event.breadcrumbs.
@@ -190,13 +190,13 @@ describe('W969 V-494 sentry scrub mirror cross-source invariant', () => {
 
   // ─── scrubInPlace recursion bound ────────────────────────────
 
-  it("CRITICAL scrubInPlace depth bound — 'if (depth > 8) return;'. The depth-8 guard defends against accidentally cyclic Sentry-attached structures.", () => {
+  it('CRITICAL scrubInPlace depth/cycle bound fails closed with a non-secret sentinel.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/sentry.ts'));
-    expect(p).toMatch(/if \(depth > 8\) return;/);
-    expect(p).toMatch(/Stops/);
+    expect(p).toMatch(/const MAX_SENTRY_SCRUB_DEPTH = 8;/);
     expect(p).toMatch(
-      /descending at scalars or after a max depth \(defensive against\s*\n\s*\*\s*accidentally cyclic structures Sentry may attach\)\./,
+      /if \(depth >= MAX_SENTRY_SCRUB_DEPTH \|\| seen\.has\(value\)\) return REDACTED_SENTRY_STRUCTURE/,
     );
+    expect(p).toMatch(/const REDACTED_SENTRY_STRUCTURE = '\[redacted: structure limit\]';/);
   });
 
   // ─── scrubSentryEvent 4-envelope walk ────────────────────────
@@ -300,7 +300,7 @@ describe('W969 V-494 sentry scrub mirror cross-source invariant', () => {
     expect(event.not_sensitive).toBe('visible');
   });
 
-  it('CRITICAL __test_scrubInPlace runtime recurses into nested objects + arrays. Cyclic structures past depth 8 are silently stopped (defensive bound).', () => {
+  it('CRITICAL __test_scrubInPlace runtime recurses into nested objects + arrays.', () => {
     const event: {
       request: { data: { totp_secret: string } };
       breadcrumbs: { data: { client_secret: string } }[];

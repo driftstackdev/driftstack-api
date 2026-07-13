@@ -172,12 +172,30 @@ describe('V-494 — Sentry scrub: nested structures', () => {
     expect(event.extra.requestId).toBe('req_1');
   });
 
-  it('does not infinite-loop on cycles (depth-bounded)', () => {
+  it('cuts cycles instead of leaving an unserializable reference attached', () => {
     const a: Record<string, unknown> = { password: 'x' };
     const b: Record<string, unknown> = { ref: a };
     a.ref = b;
     expect(() => scrubInPlace(a)).not.toThrow();
     expect(a.password).toBe('[redacted]');
+    const serialized = JSON.stringify(a);
+    expect(serialized).toContain('[redacted: structure limit]');
+  });
+
+  it('fails closed on over-depth subtrees so a deep secret cannot reach Sentry', () => {
+    const event: Record<string, unknown> = {};
+    let cursor = event;
+    for (let depth = 0; depth < 12; depth += 1) {
+      const child: Record<string, unknown> = {};
+      cursor.nested = child;
+      cursor = child;
+    }
+    cursor.authorization = 'Bearer DEEP_SENTRY_SECRET';
+
+    scrubInPlace(event);
+    const serialized = JSON.stringify(event);
+    expect(serialized).not.toContain('DEEP_SENTRY_SECRET');
+    expect(serialized).toContain('[redacted: structure limit]');
   });
 
   it('leaves scalars and null alone', () => {

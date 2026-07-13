@@ -15,22 +15,32 @@ import { redactUrlQueryTokens, redactText } from './redact-url.js';
  * sibling of the lib/sentry.ts exception scrub). So run redactText over EVERY
  * string value in the serialized error (recursively, depth-capped). redactText
  * is a byte-identical no-op on credential-free strings, so this never mangles
- * clean diagnostic text; the depth cap bounds recursion + guards cyclic refs.
+ * clean diagnostic text. Over-depth and cyclic subtrees are REPLACED rather
+ * than returned: returning the original object at the cap would retain the very
+ * credential strings the cap is supposed to protect (and retain JSON cycles).
  */
 const MAX_ERR_REDACT_DEPTH = 6;
-function redactErrValue(value: unknown, depth: number): unknown {
+const REDACTED_ERR_STRUCTURE = '[redacted: structure limit]';
+function redactErrValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (typeof value === 'string') return redactText(value);
-  if (value === null || typeof value !== 'object' || depth >= MAX_ERR_REDACT_DEPTH) return value;
-  if (Array.isArray(value)) return value.map((v) => redactErrValue(v, depth + 1));
+  if (value === null || typeof value !== 'object') return value;
+  if (depth >= MAX_ERR_REDACT_DEPTH || seen.has(value)) return REDACTED_ERR_STRUCTURE;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const redacted = value.map((v) => redactErrValue(v, depth + 1, seen));
+    seen.delete(value);
+    return redacted;
+  }
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = redactErrValue(v, depth + 1);
+    out[k] = redactErrValue(v, depth + 1, seen);
   }
+  seen.delete(value);
   return out;
 }
 export function redactErrSerializer(err: unknown): Record<string, unknown> {
   const base = pino.stdSerializers.err(err as Error) as Record<string, unknown>;
-  return redactErrValue(base, 0) as Record<string, unknown>;
+  return redactErrValue(base, 0, new WeakSet<object>()) as Record<string, unknown>;
 }
 
 /**

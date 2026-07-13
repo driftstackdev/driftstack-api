@@ -91,16 +91,19 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
 
   it('scrubInPlace: depth-cap (8) + array branch + Object.keys walk + replaces sensitive value with "[redacted]"', () => {
     expect(body).toMatch(
-      /V-494 — recursively walk a Sentry event-shaped value and replace\s*\n?\s*\*\s*sensitive field values with `'\[redacted\]'`\. Mutates in place to\s*\n?\s*\*\s*avoid allocating a parallel object tree on every event\. Stops\s*\n?\s*\*\s*descending at scalars or after a max depth \(defensive against\s*\n?\s*\*\s*accidentally cyclic structures Sentry may attach\)/,
-    );
-    expect(body).toMatch(/if \(depth > 8\) return;/);
-    expect(body).toMatch(/if \(value === null \|\| typeof value !== 'object'\) return;/);
-    expect(body).toMatch(
-      /if \(Array\.isArray\(value\)\) \{\s*\n?\s*for \(const item of value\) scrubInPlace\(item, depth \+ 1\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /V-494 — recursively walk a Sentry event-shaped value and replace\s*\n?\s*\*\s*sensitive field values with `'\[redacted\]'`\. Mutates in place to\s*\n?\s*\*\s*avoid allocating a parallel object tree on every event\. Over-depth\s*\n?\s*\*\s*and cyclic subtrees are replaced with a fixed sentinel/,
     );
     expect(body).toMatch(
-      /if \(isSensitiveKey\(key\)\) \{\s*\n?\s*obj\[key\] = '\[redacted\]';\s*\n?\s*\} else \{\s*\n?\s*scrubInPlace\(obj\[key\], depth \+ 1\);\s*\n?\s*\}/,
+      /if \(depth >= MAX_SENTRY_SCRUB_DEPTH \|\| seen\.has\(value\)\) return REDACTED_SENTRY_STRUCTURE/,
     );
+    expect(body).toMatch(/if \(value === null \|\| typeof value !== 'object'\) return value;/);
+    expect(body).toMatch(
+      /if \(Array\.isArray\(value\)\) \{[\s\S]*value\[index\] = scrubValue\(value\[index\], depth \+ 1, seen\);[\s\S]*return value;/,
+    );
+    expect(body).toMatch(
+      /if \(isSensitiveKey\(key\)\) \{\s*\n?\s*obj\[key\] = '\[redacted\]';\s*\n?\s*\} else \{\s*\n?\s*obj\[key\] = scrubValue\(obj\[key\], depth \+ 1, seen\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/scrubValue\(value, 0, new WeakSet<object>\(\)\);/);
   });
 
   it('scrubSentryEvent: sanitizes request URL/query_string then walks event.request / extra / contexts / breadcrumbs', () => {
