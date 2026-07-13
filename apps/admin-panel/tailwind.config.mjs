@@ -21,6 +21,7 @@ export default {
           accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
           'accent-2': 'rgb(var(--accent-2-rgb) / <alpha-value>)',
           'accent-strong': 'rgb(var(--accent-strong-rgb) / <alpha-value>)',
+          'accent-hover': 'rgb(var(--accent-strong-rgb) / <alpha-value>)',
           'accent-ink': 'var(--accent-ink)',
           'accent-soft': 'var(--accent-soft)',
           ready: 'rgb(var(--ready-rgb) / <alpha-value>)',
