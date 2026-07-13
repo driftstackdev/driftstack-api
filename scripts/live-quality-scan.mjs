@@ -132,10 +132,15 @@ function extractLinks(html, baseUrl) {
 const pages = new Map(); // url -> {status, ms, title, depth}
 const externalChecked = new Map(); // url -> status
 const issues = [];
+const warnings = [];
 const queue = SEEDS.map((u) => ({ url: u, depth: 0, from: '(seed)' }));
 
 function addIssue(type, url, detail, from) {
   issues.push({ type, url, detail, from });
+}
+
+function addWarning(type, url, detail, from) {
+  warnings.push({ type, url, detail, from });
 }
 
 let externalBudget = MAX_EXTERNAL;
@@ -155,8 +160,15 @@ while (queue.length && pages.size < MAX_PAGES) {
     // external link on a HEAD error alone; confirm with a real GET first.
     if (r.status === 0 || r.status >= 400) r = await get(norm, 'GET');
     externalChecked.set(norm, r.status);
-    if (r.status === 0 || r.status >= 400)
+    // An authenticated or anti-bot external destination can reject this
+    // credential-free scanner even though the link is valid in a signed-in
+    // browser. Keep it visible for human verification, but do not fail a
+    // Driftstack release gate for an access policy we do not control.
+    if (r.status === 401 || r.status === 403) {
+      addWarning('unverifiable-external-link', norm, `HTTP ${r.status}`, from);
+    } else if (r.status === 0 || r.status >= 400) {
       addIssue('broken-external-link', norm, r.err || `HTTP ${r.status}`, from);
+    }
     continue;
   }
 
@@ -214,6 +226,8 @@ while (queue.length && pages.size < MAX_PAGES) {
 // ---- report ----
 const byType = {};
 for (const i of issues) (byType[i.type] ??= []).push(i);
+const warningsByType = {};
+for (const warning of warnings) (warningsByType[warning.type] ??= []).push(warning);
 const slowest = [...pages.entries()]
   .filter(([, p]) => p.status >= 200 && p.status < 300)
   .sort((a, b) => b[1].ms - a[1].ms)
@@ -221,7 +235,7 @@ const slowest = [...pages.entries()]
 
 console.log(`\nLIVE QUALITY SCAN — ${new Date().toISOString()}`);
 console.log(
-  `seeds: ${SEEDS.length} | crawled ${pages.size} pages + ${externalChecked.size} external | ${issues.length} issue(s)\n`,
+  `seeds: ${SEEDS.length} | crawled ${pages.size} pages + ${externalChecked.size} external | ${issues.length} issue(s), ${warnings.length} warning(s)\n`,
 );
 const ORDER = [
   'unreachable',
@@ -241,6 +255,14 @@ for (const type of ORDER) {
   if (list.length > 40) console.log(`  … +${list.length - 40} more`);
   console.log('');
 }
+for (const [type, list] of Object.entries(warningsByType)) {
+  console.log(`### ${type} warning (${list.length})`);
+  for (const warning of list.slice(0, 40)) {
+    console.log(`  - ${warning.url}\n      ${warning.detail}   [linked from ${warning.from}]`);
+  }
+  if (list.length > 40) console.log(`  … +${list.length - 40} more`);
+  console.log('');
+}
 console.log('slowest OK pages:');
 for (const [u, p] of slowest) console.log(`  ${String(p.ms).padStart(6)}ms  ${u}`);
 
@@ -254,6 +276,7 @@ if (JSON_OUT) {
         seeds: SEEDS,
         pages: Object.fromEntries(pages),
         issues,
+        warnings,
       },
       null,
       2,
@@ -261,5 +284,7 @@ if (JSON_OUT) {
   );
   console.log(`\njson → ${JSON_OUT}`);
 }
-console.log(`\n${issues.length === 0 ? '✅ clean' : `❌ ${issues.length} defect(s)`}`);
+console.log(
+  `\n${issues.length === 0 ? `✅ clean${warnings.length ? ` (${warnings.length} warning(s))` : ''}` : `❌ ${issues.length} defect(s)`}`,
+);
 process.exit(issues.length === 0 ? 0 : 1);

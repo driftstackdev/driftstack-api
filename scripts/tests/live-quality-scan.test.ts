@@ -7,12 +7,15 @@ import { describe, expect, it } from 'vitest';
 
 const SCRIPT = resolve(process.cwd(), 'scripts/live-quality-scan.mjs');
 
-async function runScan(baseUrl: string): Promise<{ code: number | null; output: string }> {
+async function runScan(
+  baseUrl: string,
+  options: { maxExternal?: number } = {},
+): Promise<{ code: number | null; output: string }> {
   const child = spawn(process.execPath, [SCRIPT, baseUrl], {
     env: {
       ...process.env,
       MAX_DEPTH: '2',
-      MAX_EXTERNAL: '0',
+      MAX_EXTERNAL: String(options.maxExternal ?? 0),
       MAX_PAGES: '5',
       SLOW_MS: '10000',
       TIMEOUT_MS: '2000',
@@ -60,6 +63,88 @@ describe('live-quality-scan redirect detection', () => {
     } finally {
       server.close();
       await once(server, 'close');
+    }
+  });
+
+  it('reports a confirmed external 403 as an unverifiable warning without failing', async () => {
+    const external = createServer((_req, res) => {
+      res.writeHead(403, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Sign in required</title></head></html>');
+    });
+    external.listen(0, '127.0.0.1');
+    await once(external, 'listening');
+    const externalAddress = external.address();
+    if (externalAddress === null || typeof externalAddress === 'string') {
+      throw new Error('missing external test port');
+    }
+
+    const internal = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(
+        `<html><head><title>Root</title></head><body><a href="http://127.0.0.1:${externalAddress.port}/account">Account</a></body></html>`,
+      );
+    });
+    internal.listen(0, '127.0.0.1');
+    await once(internal, 'listening');
+    const internalAddress = internal.address();
+    if (internalAddress === null || typeof internalAddress === 'string') {
+      throw new Error('missing internal test port');
+    }
+
+    try {
+      const result = await runScan(`http://127.0.0.1:${internalAddress.port}`, {
+        maxExternal: 2,
+      });
+      expect(result.code).toBe(0);
+      expect(result.output).toContain('0 issue(s), 1 warning(s)');
+      expect(result.output).toContain('unverifiable-external-link warning (1)');
+      expect(result.output).toContain('HTTP 403');
+      expect(result.output).not.toContain('broken-external-link');
+      expect(result.output).toContain('✅ clean (1 warning(s))');
+    } finally {
+      internal.close();
+      external.close();
+      await Promise.all([once(internal, 'close'), once(external, 'close')]);
+    }
+  });
+
+  it('keeps a confirmed external 404 as a release-blocking defect', async () => {
+    const external = createServer((_req, res) => {
+      res.writeHead(404, { 'content-type': 'text/html' });
+      res.end('<html><head><title>Missing</title></head></html>');
+    });
+    external.listen(0, '127.0.0.1');
+    await once(external, 'listening');
+    const externalAddress = external.address();
+    if (externalAddress === null || typeof externalAddress === 'string') {
+      throw new Error('missing external test port');
+    }
+
+    const internal = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(
+        `<html><head><title>Root</title></head><body><a href="http://127.0.0.1:${externalAddress.port}/missing">Missing</a></body></html>`,
+      );
+    });
+    internal.listen(0, '127.0.0.1');
+    await once(internal, 'listening');
+    const internalAddress = internal.address();
+    if (internalAddress === null || typeof internalAddress === 'string') {
+      throw new Error('missing internal test port');
+    }
+
+    try {
+      const result = await runScan(`http://127.0.0.1:${internalAddress.port}`, {
+        maxExternal: 2,
+      });
+      expect(result.code).toBe(1);
+      expect(result.output).toContain('broken-external-link (1)');
+      expect(result.output).toContain('HTTP 404');
+      expect(result.output).toContain('❌ 1 defect(s)');
+    } finally {
+      internal.close();
+      external.close();
+      await Promise.all([once(internal, 'close'), once(external, 'close')]);
     }
   });
 });
