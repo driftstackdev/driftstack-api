@@ -215,21 +215,29 @@ const READBACK_MIN_BUDGET_TOKENS = 6_000;
 // DRIFT from what the customer reviewed (a same-phrase/different-target action could
 // be greenlit without re-review — the known v1.1 gate limitation, now live-reachable).
 // Plan turns persist their structured `intents` on the transcript entry (see the
-// plan-path `planEntry`), and the just-appended approval user-turn carries none, so
-// the LAST entry with non-empty `intents` is exactly the halted plan. Returned as a
-// plan-kind result with tokensConsumed 0 and NO usage, so the runtime writes no cost
-// row + no token debit (the resume is free). Returns null when there is no prior plan
-// (fresh session / corrupt transcript) → the caller falls back to a normal decompose.
+// plan-path `planEntry`). Resume is deliberately bound to the IMMEDIATELY preceding
+// agent entry and its explicit `awaitingConfirmation` marker. Scanning backward to
+// any structured plan would replay a completed/stale plan; forwarding a grant when
+// no marked plan exists would let a caller pre-authorize a newly decomposed action
+// without ever seeing the confirmation halt. Returned as a plan-kind result with
+// tokensConsumed 0 and NO usage, so the runtime writes no cost row + no token debit
+// (the resume is free). Returns null for a fresh, completed, stale, or malformed plan.
 function reconstructHaltedPlan(
   transcript: ReadonlyArray<TranscriptEntry>,
 ): Extract<DecomposeResult, { kind: 'plan' }> | null {
-  for (let i = transcript.length - 1; i >= 0; i--) {
-    const intents = transcript[i]?.intents;
-    if (intents !== undefined && intents.length > 0) {
-      return { kind: 'plan', intents, tokensConsumed: 0 };
-    }
+  // runTurn appends the current approval user entry before reaching here, so
+  // the only plan it may authorize is exactly one entry earlier.
+  const pending = transcript.at(-2);
+  const intents = pending?.intents;
+  if (
+    pending?.role !== 'agent' ||
+    pending.awaitingConfirmation !== true ||
+    intents === undefined ||
+    intents.length === 0
+  ) {
+    return null;
   }
-  return null;
+  return { kind: 'plan', intents, tokensConsumed: 0 };
 }
 
 function delay(ms: number): Promise<void> {
@@ -353,8 +361,10 @@ export class AgentRuntime {
       role: 'user' as const,
       body: args.userMessage,
     };
-    await this.deps.sessions.appendTranscript(session.id, userEntry);
-    const sessionWithUser = (await this.deps.sessions.get(session.id))!;
+    // Use the append's row-locked return as the exact history snapshot for this
+    // turn. A separate get can observe a later concurrent append, mis-attribute
+    // the SSE index, and bind an approval to the wrong user turn.
+    const sessionWithUser = await this.deps.sessions.appendTranscript(session.id, userEntry);
     // Arc 2 sub-slice 8.3 (v2-#8) — publish the user-turn entry to
     // the SSE event bus. Index = length-1 of the post-append
     // transcript so subscribers can resume via Last-Event-ID.
@@ -389,6 +399,10 @@ export class AgentRuntime {
       args.approvedConsequentialActions !== undefined && args.approvedConsequentialActions.size > 0
         ? reconstructHaltedPlan(sessionWithUser.transcript)
         : null;
+    // A grant is valid only for the verified paused-plan resume above. Never
+    // forward caller-supplied preapprovals into a fresh decomposition.
+    const verifiedConsequentialApprovals =
+      resumePlan !== null ? args.approvedConsequentialActions : undefined;
     let decomposed: DecomposeResult;
     if (resumePlan !== null) {
       decomposed = resumePlan;
@@ -557,8 +571,8 @@ export class AgentRuntime {
       // owning node; the legacy driver-path executor keeps using `sessionId`.
       agentSessionId: session.id,
       plan: decomposed,
-      ...(args.approvedConsequentialActions !== undefined
-        ? { approvedConsequentialActions: args.approvedConsequentialActions }
+      ...(verifiedConsequentialApprovals !== undefined
+        ? { approvedConsequentialActions: verifiedConsequentialApprovals }
         : {}),
     });
 

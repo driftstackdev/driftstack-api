@@ -23,6 +23,7 @@ const TranscriptEntrySchema = z
     role: z.enum(['user', 'agent', 'operator']),
     body: z.string(),
     intents: z.array(AgentIntentSchema).optional(),
+    awaitingConfirmation: z.boolean().optional(),
   })
   // Preserve additive transcript metadata written by a newer producer instead
   // of making an older reader brick the whole encrypted session.

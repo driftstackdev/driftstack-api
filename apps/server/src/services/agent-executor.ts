@@ -545,5 +545,6 @@ export function runResultToTranscriptEntry(
     at,
     role: 'agent',
     body: lines.join('\n'),
+    ...(runResult.awaitingConfirmation === true ? { awaitingConfirmation: true } : {}),
   };
 }

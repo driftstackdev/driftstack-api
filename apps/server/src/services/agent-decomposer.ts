@@ -48,6 +48,12 @@ export interface TranscriptEntry {
    * re-running the LLM decomposer.
    */
   intents?: ReadonlyArray<AgentIntent>;
+  /**
+   * True only for an agent plan entry whose executor halted before a
+   * consequential action. Approval resumption is bound to the immediately
+   * preceding entry carrying this marker; completed plans are never replayed.
+   */
+  awaitingConfirmation?: boolean;
 }
 
 /**

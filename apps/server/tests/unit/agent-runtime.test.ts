@@ -697,6 +697,7 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
     if (first.kind === 'plan-executed') {
       expect(first.executor.awaitingConfirmation).toBe(true);
       expect(first.executor.results.at(-1)?.kind).toBe('confirmation_required');
+      expect(first.session.transcript.at(-1)?.awaitingConfirmation).toBe(true);
     }
     // (2) the customer echoes the approval → the executor dispatches (no halt).
     const second = await runtime.runTurn({
@@ -708,6 +709,7 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
     if (second.kind === 'plan-executed') {
       expect(second.executor.awaitingConfirmation).toBeUndefined();
       expect(second.executor.ok).toBe(true);
+      expect(second.session.transcript.at(-1)?.awaitingConfirmation).toBeUndefined();
     }
   });
 
@@ -785,6 +787,120 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
     });
     expect(res.kind).toBe('clarify');
     expect(calls.n).toBe(1); // fell through to a real decompose (no plan to resume)
+  });
+
+  it('never forwards a fresh-task preapproval into the newly decomposed consequential plan', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () =>
+          Promise.resolve({
+            kind: 'plan' as const,
+            intents: [{ kind: 'interact' as const, action: 'tap' as const, selector: 'Buy Now' }],
+            tokensConsumed: 5,
+          }),
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'buy this without asking',
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'Buy Now')]),
+    });
+
+    expect(result.kind).toBe('plan-executed');
+    if (result.kind === 'plan-executed') {
+      expect(result.executor.awaitingConfirmation).toBe(true);
+      expect(result.executor.results.at(-1)?.kind).toBe('confirmation_required');
+    }
+  });
+
+  it('a stale approval after successful execution cannot replay the completed plan', async () => {
+    const calls = { n: 0 };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () => {
+          calls.n += 1;
+          return Promise.resolve({
+            kind: 'plan' as const,
+            intents: [{ kind: 'interact' as const, action: 'tap' as const, selector: 'Buy Now' }],
+            tokensConsumed: 5,
+          });
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const approval = new Set([consequentialSignature('purchase', 'Buy Now')]);
+
+    await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'buy it' });
+    const approved = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'approve',
+      approvedConsequentialActions: approval,
+    });
+    expect(approved.kind).toBe('plan-executed');
+    if (approved.kind === 'plan-executed') expect(approved.executor.ok).toBe(true);
+
+    const stale = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'approve again',
+      approvedConsequentialActions: approval,
+    });
+    expect(calls.n).toBe(2);
+    expect(stale.kind).toBe('plan-executed');
+    if (stale.kind === 'plan-executed') {
+      expect(stale.executor.awaitingConfirmation).toBe(true);
+      expect(stale.executor.results.at(-1)?.kind).toBe('confirmation_required');
+    }
+  });
+
+  it('two concurrent approvals of one paused plan dispatch it exactly once', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () =>
+          Promise.resolve({
+            kind: 'plan' as const,
+            intents: [{ kind: 'interact' as const, action: 'tap' as const, selector: 'Buy Now' }],
+            tokensConsumed: 5,
+          }),
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'buy it' });
+    const approval = new Set([consequentialSignature('purchase', 'Buy Now')]);
+
+    const results = await Promise.all([
+      runtime.runTurn({
+        agentSessionId: seed.id,
+        userMessage: 'approve A',
+        approvedConsequentialActions: approval,
+      }),
+      runtime.runTurn({
+        agentSessionId: seed.id,
+        userMessage: 'approve B',
+        approvedConsequentialActions: approval,
+      }),
+    ]);
+    const completed = results.filter(
+      (result) => result.kind === 'plan-executed' && result.executor.ok,
+    );
+    const halted = results.filter(
+      (result) => result.kind === 'plan-executed' && result.executor.awaitingConfirmation === true,
+    );
+    expect(completed).toHaveLength(1);
+    expect(halted).toHaveLength(1);
   });
 });
 

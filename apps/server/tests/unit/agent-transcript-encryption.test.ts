@@ -13,6 +13,7 @@ const transcript = [
     at: '2026-07-12T00:00:01.000Z',
     role: 'agent' as const,
     body: 'typed into #password',
+    awaitingConfirmation: true,
     intents: [
       {
         kind: 'interact' as const,
