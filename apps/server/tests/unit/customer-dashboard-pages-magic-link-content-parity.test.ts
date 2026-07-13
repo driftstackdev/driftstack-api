@@ -71,9 +71,10 @@ describe('customer-dashboard/pages/auth/magic-link content parity', () => {
     );
   });
 
-  it('On-error-showFallbackForm-with-prefill framing pinned: \'.catch((err) => { showFallbackForm(token); showBanner(err && err.message ? err.message : "Magic-link sign-in failed."); })\' — pinned so the failed-consume-prefills-fallback-form UX contract stays documented (drift to clearing the token on error would force the user to re-type from the email)', () => {
+  it('On-error keeps the token prefilled and routes visible copy through the shared fixed mapper', () => {
     expect(body).toMatch(
-      /\.catch\(\(err\) => \{[\s\S]+?if \(err && err\.name === 'AbortError'\)[\s\S]+?showFallbackForm\(token\);\s*\n?\s*showBanner\(err && err\.message \? err\.message : 'Magic-link sign-in failed\.'\);/,
+      /\.catch\(\(err\) => \{[\s\S]+?if \(err && err\.name === 'AbortError'\)[\s\S]+?showFallbackForm\(token\);\s*\n?\s*showBanner\(\s*\n?\s*window\.driftstackRequestErrorMessage\(err, 'Magic-link sign-in failed\.'\),\s*\n?\s*\);/,
     );
+    expect(body).not.toMatch(/showBanner\(err && err\.message/);
   });
 });

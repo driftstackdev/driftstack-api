@@ -56,7 +56,7 @@ describe('W491.C apps/customer-dashboard/src/pages/forgot-password.astro content
 
   it('POST /v1/auth/password-reset/request fetch contract: content-type:application/json + body:{email} — pinned so the endpoint path + payload shape stays in sync with the V-079 server route (drift would silently break the reset flow)', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ email: email \}\),\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ email: email \}\),\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
     );
   });
 
@@ -72,10 +72,11 @@ describe('W491.C apps/customer-dashboard/src/pages/forgot-password.astro content
     );
   });
 
-  it("problem+json error surfacing: r.json().catch(() => ({})).then((b) => Promise.reject(new Error(b.detail || 'HTTP N'))) — pinned so server-returned problem+json detail (like rate-limit-exceeded with a specific message) reaches the customer's banner (drift to bare 'HTTP 429' would hide the operational detail like 'Try again in 60 seconds')", () => {
+  it('maps problem+json through the shared fixed response boundary', () => {
     expect(body).toMatch(
-      /r\.ok\s*\n?\s*\? r\.json\(\)\s*\n?\s*: r\s*\n?\s*\.json\(\)\s*\n?\s*\.catch\(\(\) => \(\{\}\)\)\s*\n?\s*\.then\(\(b\) => Promise\.reject\(new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)\)\),/,
+      /\.then\(\(b\) => Promise\.reject\(window\.driftstackResponseError\(r, b\)\)\),/,
     );
+    expect(body).not.toMatch(/new Error\(b\.detail/);
   });
 
   it("Success-state visibility flip: form.classList.add('hidden') + success.classList.remove('hidden') after successful submission — pinned so the form disappears after submit (drift to leaving form visible would let customers re-submit and trigger rate limits)", () => {
@@ -88,7 +89,7 @@ describe('W491.C apps/customer-dashboard/src/pages/forgot-password.astro content
     expect(body).toMatch(/<DashboardLayout title="Forgot password" withSidebar=\{false\}>/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Remembered it\? <a\s*\n?\s*href="\/login"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
+      /Remembered it\? <a\s*\n?\s*href="\/login\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>Sign in<\/a\s*\n?\s*>/,
     );
   });
 

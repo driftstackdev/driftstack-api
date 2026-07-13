@@ -79,7 +79,7 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
 
   it('POST /v1/auth/login contract: payload {email, password} (no name, no MFA challenge fields — the MFA path comes back in the discriminated-union response, not in the request) + content-type:application/json — pinned so the request shape stays minimal (drift to adding mfa_token in request would break the V-353d flow that decides server-side whether MFA is needed)', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/login', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/login', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
     );
   });
 
@@ -90,20 +90,21 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     expect(body).toMatch(/window\.location\.href = next \? next : '\/';/);
   });
 
-  it("problem+json error surfacing on login: r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP N'))) — pinned so server-returned auth-specific error messages (like 'Email or password is incorrect' or rate-limit detail) reach the customer banner (drift to bare 'HTTP 401' would hide whether it was a bad password vs a rate-limit hit)", () => {
+  it('maps problem+json through fixed copy while preserving stable type/status for the email-verification recovery branch', () => {
     expect(body).toMatch(
-      /r\.ok\s*\n?\s*\? r\.json\(\)\s*\n?\s*: r\s*\n?\s*\.json\(\)\s*\n?\s*\.then\(\(b\) =>\s*\n?\s*Promise\.reject\(new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\.toString\(\)\)\),\s*\n?\s*\),/,
+      /const err = window\.driftstackResponseError\(r, b\);\s*\n?\s*err\.problemType = b\.type;\s*\n?\s*err\.status = r\.status;\s*\n?\s*err\.email = payload\.email;\s*\n?\s*return Promise\.reject\(err\);/,
     );
+    expect(body).not.toMatch(/new Error\(b\.detail/);
   });
 
   it("Forgot-password + Create-one fallback links: 'Forgot your password?' → /forgot-password + 'No account yet? Create one' → /signup (with data-signup-link for the V-269 next= rewrite hook) — pinned so the dual escape hatches (recover password / sign up instead) stay visible on every sign-in attempt", () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Forgot your password\?\s*<\/a\s*\n?\s*>/,
+      /<a href="\/forgot-password\/" class="text-tk-accent-text[^"]*"\s*\n?\s*>Forgot your password\?<\/a\s*\n?\s*>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /No account yet\? <a\s*\n?\s*data-signup-link\s*\n?\s*href="\/signup"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Create one\s*<\/a/,
+      /No account yet\? <a\s*\n?\s*data-signup-link\s*\n?\s*href="\/signup\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>Create one<\/a/,
     );
   });
 

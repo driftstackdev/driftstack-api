@@ -49,23 +49,24 @@ describe('customer-dashboard/pages/auth/oauth-client/confirm-merge content parit
       /showBanner\("Missing 'token' query parameter\. Click the link in the verify-merge email\."\);/,
     );
     expect(body).toMatch(
-      /Link expired or invalid\? Sign in via password \+ retry the IDP\s*\n?\s*button from the <a\s*\n?\s*href="\/login"/,
+      /Link expired or invalid\? Sign in via password \+ retry the IDP\s*\n?\s*button from the <a\s*\n?\s*href="\/login\/"/,
     );
   });
 
   it("fetch credentials:'include' + POST /v1/auth/oauth-client/confirm-merge + content-type:application/json + body:JSON.stringify({token}) framing pinned. Drift to credentials:'omit' would not send the session cookie + drift to a non-JSON body would mismatch the server schema", () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/confirm-merge', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ token: token \}\),\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/confirm-merge', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ token: token \}\),\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
     );
   });
 
-  it('On-success-navigate-to-/ + on-error-detail-or-HTTP-status framing pinned: \'.then(() => { window.location.href = "/"; })\' + \'.catch((err) => { showBanner(err && err.message ? err.message : "Merge confirmation failed."); })\' — pinned so the redirect-on-success + body.detail-prefix-with-HTTP-fallback + fallback-error-text contract all stay documented', () => {
+  it('On success navigates home; on failure uses fixed shared response/request copy', () => {
     expect(body).toMatch(/\.then\(\(\) => \{\s*\n?\s*window\.location\.href = '\/';\s*\n?\s*\}\)/);
     expect(body).toMatch(
-      /\.then\(\(b\) => Promise\.reject\(new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)\)\),/,
+      /\.then\(\(b\) => Promise\.reject\(window\.driftstackResponseError\(r, b\)\)\),/,
     );
     expect(body).toMatch(
-      /showBanner\(err && err\.message \? err\.message : 'Merge confirmation failed\.'\);/,
+      /window\.driftstackRequestErrorMessage\(\s*\n?\s*err,\s*\n?\s*'Account linking could not be confirmed\. Request a new link and try again\.',/,
     );
+    expect(body).not.toMatch(/new Error\(b\.detail/);
   });
 });

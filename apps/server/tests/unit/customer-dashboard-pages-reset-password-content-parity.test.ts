@@ -48,7 +48,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
     // (bg-rose-400/10 over the auth-card surface), where accent-text measures
     // 4.42:1 — so it reads the ink underline tone instead (hover accent-text).
     expect(body).toMatch(
-      /No reset token in URL\. Open the page from the link in your reset email, or\s*\n?\s*<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="font-medium text-tk-ink underline[^"]*"\s*\n?\s*>\s*request a new one\s*<\/a\s*\n?\s*>\./,
+      /No reset token in URL\. Open the page from the link in your reset email, or\s*\n?\s*<a\s*\n?\s*href="\/forgot-password\/"\s*\n?\s*class="font-medium text-tk-ink underline[^"]*"\s*\n?\s*>request a new one<\/a\s*\n?\s*>\./,
     );
   });
 
@@ -81,17 +81,18 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
     expect(body).toContain("'/v1/auth/mfa/challenge'");
   });
 
-  it("problem+json error surfacing: r.json().catch(() => ({})).then((b) => Promise.reject(new Error(b.detail || 'HTTP N'))) — pinned so server-returned problem+json detail (like 'token expired' or 'token already used') reaches the customer banner (drift to bare 'HTTP 400' would hide which specific reset-token error happened)", () => {
+  it('maps password-reset problem+json through the shared fixed response boundary', () => {
     expect(body).toMatch(
-      /r\.ok\s*\n?\s*\? r\.json\(\)\s*\n?\s*: r\s*\n?\s*\.json\(\)\s*\n?\s*\.catch\(\(\) => \(\{\}\)\)\s*\n?\s*\.then\(\(b\) => Promise\.reject\(new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)\)\),/,
+      /\.then\(\(b\) => Promise\.reject\(window\.driftstackResponseError\(r, b\)\)\),/,
     );
+    expect(body).not.toMatch(/new Error\(b\.detail/);
   });
 
   it("Page chrome + cross-link: withSidebar={false} + 'Choose a new password for your Driftstack account. The link is single-use; if you need another, request one from the forgot-password page.' framing + /forgot-password cross-link — pinned so customers landing on an expired token have a clear path back to request a new one (instead of getting stuck)", () => {
     expect(body).toMatch(/<DashboardLayout title="Reset password" withSidebar=\{false\}>/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Choose a new password for your Driftstack account\. The link is single-use; if you need\s*\n?\s*another, request one from the\s*\n?\s*<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*forgot-password\s*<\/a\s*\n?\s*> page\./,
+      /Choose a new password for your Driftstack account\. The link is single-use; if you need\s*\n?\s*another, request one from the\s*\n?\s*<a\s*\n?\s*href="\/forgot-password\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>forgot-password<\/a\s*\n?\s*> page\./,
     );
   });
 
