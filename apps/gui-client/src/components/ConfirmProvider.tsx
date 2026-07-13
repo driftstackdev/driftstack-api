@@ -17,6 +17,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useModalPresence } from '../lib/use-modal-presence';
 
 export interface ConfirmOptions {
   /** Label for the affirmative button (default 'Confirm'). */
@@ -49,6 +50,10 @@ export function useConfirm(): ConfirmFn {
 
 export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Element {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
+  const { shouldRender, isExiting } = useModalPresence(pending !== null);
+  const lastPendingRef = useRef<PendingConfirm | null>(null);
+  if (pending !== null) lastPendingRef.current = pending;
+  const renderedPending = pending ?? lastPendingRef.current;
 
   const confirm = useCallback<ConfirmFn>((message, opts) => {
     return new Promise<boolean>((resolve) => {
@@ -122,20 +127,29 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      {pending !== null && (
+      {shouldRender && renderedPending !== null && (
         <div
           ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-dialog-message"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          {...(isExiting ? { 'aria-hidden': true, inert: '' } : {})}
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 ${
+            isExiting
+              ? 'pointer-events-none animate-modal-backdrop-out'
+              : 'animate-modal-backdrop-in'
+          }`}
           onClick={(e) => {
-            if (e.target === e.currentTarget) settle(false);
+            if (!isExiting && e.target === e.currentTarget) settle(false);
           }}
         >
-          <div className="w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl">
+          <div
+            className={`w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl ${
+              isExiting ? 'animate-modal-panel-out' : 'animate-modal-panel-in'
+            }`}
+          >
             <p id="confirm-dialog-message" className="whitespace-pre-line text-sm text-ink-primary">
-              {pending.message}
+              {renderedPending.message}
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
@@ -149,10 +163,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
               <button
                 ref={confirmBtnRef}
                 type="button"
-                className={pending.tone === 'danger' ? 'btn-danger' : 'btn-primary'}
+                className={renderedPending.tone === 'danger' ? 'btn-danger' : 'btn-primary'}
                 onClick={() => settle(true)}
               >
-                {pending.confirmLabel}
+                {renderedPending.confirmLabel}
               </button>
             </div>
           </div>

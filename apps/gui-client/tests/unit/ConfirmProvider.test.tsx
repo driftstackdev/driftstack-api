@@ -59,8 +59,14 @@ describe('ConfirmProvider / useConfirm (desktop branded confirm)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(results).toEqual([true]));
-    // Modal is dismissed after a choice.
-    expect(screen.queryByText('Remove this item?')).not.toBeInTheDocument();
+    // Promise/focus semantics settle immediately, while the inert tree remains
+    // for the shared 120ms exit paint before it is removed.
+    const exitingDialog = screen.getByRole('dialog', { hidden: true });
+    expect(exitingDialog).toHaveAttribute('aria-hidden', 'true');
+    expect(exitingDialog).toHaveAttribute('inert');
+    expect(exitingDialog).toHaveClass('pointer-events-none', 'animate-modal-backdrop-out');
+    expect(exitingDialog.firstElementChild).toHaveClass('animate-modal-panel-out');
+    await waitFor(() => expect(screen.queryByText('Remove this item?')).not.toBeInTheDocument());
   });
 
   it('Cancel resolves the promise false', async () => {
