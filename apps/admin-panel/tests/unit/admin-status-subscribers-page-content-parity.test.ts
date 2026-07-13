@@ -92,6 +92,19 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     );
   });
 
+  it('reconciles ambiguous force-unsubscribe and force-subscribe outcomes', () => {
+    expect(body).toMatch(/const uncertainForceUnsubs = new Set\(\)/);
+    expect(body).toMatch(/let addOutcomeUnknown = false/);
+    expect(body).toMatch(/uncertainForceUnsubs\.has\(id\)/);
+    expect(body).toMatch(/Force-unsubscribe outcome is unknown after the request timed out/);
+    expect(body).toMatch(/still shows ' \+/);
+    expect(body).toMatch(/no longer shows ' \+/);
+    expect(body).toMatch(/if \(addInFlight \|\| addOutcomeUnknown\) return/);
+    expect(body).toMatch(/Add-subscriber outcome is unknown after the request timed out/);
+    expect(body).toMatch(/returned unsubscribe link cannot be recovered/);
+    expect(body).toMatch(/submitBtn\.disabled = addOutcomeUnknown/);
+  });
+
   it('50-default + ?limit=&offset= server-side pagination framing', () => {
     expect(body).toMatch(
       /Subscribers list paginated server-side \(default 50 per page; <code>\?limit=&amp;offset=<\/code>/,

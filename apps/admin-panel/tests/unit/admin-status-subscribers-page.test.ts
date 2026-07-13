@@ -78,6 +78,11 @@ function json(obj: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' },
   });
 }
+function abortError(): Error {
+  const error = new Error('request aborted');
+  error.name = 'AbortError';
+  return error;
+}
 async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
@@ -161,6 +166,39 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeNull();
   });
 
+  it('force-unsub timeout refreshes status and blocks replay after likely completion', async () => {
+    const subscriber = mkSub({ id: 'sub_timeout', unsubscribed_at: null });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/sub_timeout\/force-unsubscribe$/.test(call.url)) {
+          subscriber.unsubscribed_at = '2026-05-29T12:00:00.000Z';
+          return Promise.reject(abortError());
+        }
+        return json({ data: [subscriber] });
+      },
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-force-unsub="sub_timeout"]',
+    ) as HTMLButtonElement;
+    button.click();
+    await flush();
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'POST' && /\/force-unsubscribe$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-force-unsub="sub_timeout"]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*no longer shows.*active.*likely completed.*do not submit it again/i,
+    );
+  });
+
   it('force-unsub cancelled: no POST fired, the action stays', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       confirmReturns: false,
@@ -202,6 +240,41 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     expect(posts[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
     expect(form.hasAttribute('aria-busy')).toBe(false);
     expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('force-subscribe timeout reconciles the list and blocks unrecoverable-link replay', async () => {
+    const subscribers: Sub[] = [];
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/force-subscribe$/.test(call.url)) {
+          subscribers.push(mkSub({ id: 'sub_added_unknown', email: 'new@example.com' }));
+          return Promise.reject(abortError());
+        }
+        return json({ data: subscribers });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-add-form]') as HTMLFormElement;
+    const email = window.document.querySelector('#add-email') as HTMLInputElement;
+    email.value = 'new@example.com';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'POST' && /\/force-subscribe$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-list]')?.textContent).toContain('new@example.com');
+    const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Check status');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*list now contains.*likely completed.*unsubscribe link cannot be recovered.*do not submit it again/i,
+    );
   });
 
   it('a newer refresh supersedes a late older response', async () => {

@@ -99,7 +99,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       let refreshController = null;
       let refreshGeneration = 0;
       const forceUnsubsInFlight = new Set();
+      const uncertainForceUnsubs = new Set();
       let addInFlight = false;
+      let addOutcomeUnknown = false;
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         const timeout = window.setTimeout(() => controller.abort(), SUBSCRIBER_TIMEOUT_MS);
@@ -167,18 +169,25 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function row(sub) {
         const canForceUnsub = !sub.unsubscribed_at && sub.email;
+        const forceUnsubUnknown = uncertainForceUnsubs.has(String(sub.id));
         const action = canForceUnsub
           ? '<button type="button" data-force-unsub="' +
             escapeHtml(sub.id) +
             '" data-email="' +
             escapeHtml(sub.email) +
-            '" class="text-sm text-rose-700 hover:underline">Force unsubscribe</button>'
+            '"' +
+            (forceUnsubUnknown ? ' disabled aria-disabled="true"' : '') +
+            ' class="text-sm text-rose-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60">' +
+            (forceUnsubUnknown ? 'Check status' : 'Force unsubscribe') +
+            '</button>'
           : '<span class="text-xs text-tk-ink-3">no action</span>';
         const emailDisplay = sub.email
           ? escapeHtml(sub.email)
           : '<span class="font-mono text-xs text-tk-ink-3">(purged — V-295c3-tombstone)</span>';
         return (
-          '<li class="px-6 py-4">' +
+          '<li data-subscriber-email="' +
+          escapeHtml(sub.email ? String(sub.email).toLowerCase() : '') +
+          '" class="px-6 py-4">' +
           '<div class="flex items-start justify-between gap-6">' +
           '<div class="min-w-0 flex-1">' +
           '<p class="text-base font-medium text-tk-ink">' +
@@ -213,7 +222,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               '<h2 class="text-base font-semibold tracking-tight text-tk-ink">Sign in to view subscribers</h2>' +
               '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">Sign in with a staff admin key via the dashboard SSO bridge to load status-page subscribers.</p>' +
               '</li>';
-          return Promise.resolve();
+          return Promise.resolve(false);
         }
         if (refreshController) refreshController.abort();
         const controller = new AbortController();
@@ -243,12 +252,13 @@ const apiBaseUrl = resolveApiBaseUrl();
                   '<h2 class="text-base font-semibold tracking-tight text-tk-ink">No subscribers yet</h2>' +
                   '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">When visitors subscribe to incident notifications on status.driftstack.dev, they appear here for support and compliance review.</p>' +
                   '</li>';
-              return;
+              return true;
             }
             if (list) {
               list.innerHTML = subs.map(row).join('');
               wireForceUnsub();
             }
+            return true;
           })
           .catch(function (err) {
             // A poll/manual/post-mutation refresh intentionally aborts the
@@ -261,6 +271,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 requestErrorMessage(err, 'network error'),
               true,
             );
+            return false;
           })
           .finally(function () {
             if (generation === refreshGeneration) {
@@ -291,7 +302,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           btn.addEventListener('click', async function () {
             const id = btn.getAttribute('data-force-unsub');
             const email = btn.getAttribute('data-email');
-            if (!id || forceUnsubsInFlight.has(id)) return;
+            if (!id || uncertainForceUnsubs.has(id) || forceUnsubsInFlight.has(id)) return;
             forceUnsubsInFlight.add(id);
             const idleLabel = btn.textContent || 'Force unsubscribe';
             btn.disabled = true;
@@ -321,6 +332,26 @@ const apiBaseUrl = resolveApiBaseUrl();
               await response.json();
               await refresh();
             } catch (err) {
+              if (err && err.name === 'AbortError') {
+                uncertainForceUnsubs.add(id);
+                const refreshed = Boolean(await refresh());
+                const stillActive = Array.from(
+                  list ? list.querySelectorAll('[data-force-unsub]') : [],
+                ).some((action) => action.getAttribute('data-force-unsub') === id);
+                showBanner(
+                  !refreshed
+                    ? 'Force-unsubscribe outcome is unknown after the request timed out, and the subscriber list could not be refreshed. Do not submit it again on this page; reload later to verify status first.'
+                    : stillActive
+                      ? 'Force-unsubscribe outcome is unknown after the request timed out. The refreshed list still shows ' +
+                        email +
+                        ' active, but completion may be delayed. Do not submit it again on this page; reload later and retry only if it remains active.'
+                      : 'Force-unsubscribe outcome is unknown after the request timed out. The refreshed list no longer shows ' +
+                        email +
+                        ' active, so it likely completed. Do not submit it again.',
+                  true,
+                );
+                return;
+              }
               showBanner(
                 'Force-unsubscribe failed: ' + requestErrorMessage(err, 'network error'),
                 true,
@@ -328,9 +359,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             } finally {
               forceUnsubsInFlight.delete(id);
               if (btn.isConnected) {
-                btn.disabled = false;
+                const outcomeUnknown = uncertainForceUnsubs.has(id);
+                btn.disabled = outcomeUnknown;
                 btn.removeAttribute('aria-busy');
-                btn.textContent = idleLabel;
+                btn.textContent = outcomeUnknown ? 'Check status' : idleLabel;
               }
             }
           });
@@ -346,7 +378,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (addForm) {
         addForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
-          if (addInFlight) return;
+          if (addInFlight || addOutcomeUnknown) return;
           const token = getToken();
           if (!token) {
             showBanner('Sign in with a staff admin account first.', true);
@@ -395,7 +427,30 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (emailEl && 'value' in emailEl) emailEl.value = '';
               return refreshWithLive();
             })
-            .catch((err) => {
+            .catch(async (err) => {
+              if (err && err.name === 'AbortError') {
+                addOutcomeUnknown = true;
+                const refreshed = Boolean(await refresh());
+                const normalizedEmail = email.toLowerCase();
+                const appearsInList = Array.from(
+                  list ? list.querySelectorAll('[data-subscriber-email]') : [],
+                ).some(
+                  (item) => item.getAttribute('data-subscriber-email') === normalizedEmail,
+                );
+                showBanner(
+                  !refreshed
+                    ? 'Add-subscriber outcome is unknown after the request timed out, and the authoritative list could not be refreshed. Do not submit this address again on this page; reload later to verify it first.'
+                    : appearsInList
+                      ? 'Add-subscriber outcome is unknown after the request timed out. The authoritative list now contains ' +
+                        email +
+                        ', so the add likely completed, but the returned unsubscribe link cannot be recovered. Do not submit it again; the customer can unsubscribe from a notification email or staff can remove the row here.'
+                      : 'Add-subscriber outcome is unknown after the request timed out. The refreshed list does not show ' +
+                        email +
+                        ' yet, but completion may be delayed. Do not submit it again on this page; reload later and retry only if it remains absent.',
+                  true,
+                );
+                return;
+              }
               showBanner(
                 'Add subscriber failed: ' + requestErrorMessage(err, 'network error'),
                 true,
@@ -405,8 +460,8 @@ const apiBaseUrl = resolveApiBaseUrl();
               addInFlight = false;
               addForm.removeAttribute('aria-busy');
               if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Add subscriber';
+                submitBtn.disabled = addOutcomeUnknown;
+                submitBtn.textContent = addOutcomeUnknown ? 'Check status' : 'Add subscriber';
               }
             });
         });
