@@ -72,6 +72,14 @@ function registerEchoNode(fx: TestAppFixture, nodeId: string): void {
   });
 }
 
+async function waitFor(cond: () => boolean, label: string, budgetMs = 5_000): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  while (!cond()) {
+    if (Date.now() > deadline) throw new Error(`waitFor timed out: ${label}`);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
 describe('GET /v1/agent-sessions/:id/downloads (activation gate off)', () => {
   let fx: TestAppFixture;
   afterEach(async () => {
@@ -162,6 +170,58 @@ describe('GET /v1/agent-sessions/:id/downloads (wired)', () => {
     const body = res.json<FetchBody>();
     expect(body.status).toBe('ok');
     expect(body.file).toEqual({ name: 'report.pdf', mime: 'application/pdf', dataB64: DATA_B64 });
+  });
+
+  it('admits only one large download fetch per account and releases the slot on settle', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const id = await createSession(fx);
+    const nodeId = 'node-dl-account-memory-cap';
+    const relayed: string[] = [];
+    fx.fleetControlRegistry.register(nodeId, (data) => {
+      const frame = JSON.parse(data) as { type?: string };
+      if (frame.type !== undefined) relayed.push(frame.type);
+      // Keep the first fetch pending so its account reservation remains held.
+    });
+    await fx.agentSessionsRepo!.setNodeId(id, nodeId);
+
+    const first = fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/downloads/content?name=first.bin`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    await waitFor(
+      () => relayed.filter((type) => type === 'fetchDownload').length === 1,
+      'first download fetch relayed',
+    );
+
+    const second = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/downloads/content?name=second.bin`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json<FetchBody>()).toMatchObject({
+      status: 'error',
+      file: null,
+      reason: expect.stringMatching(/another file download is already in progress/i),
+    });
+    expect(relayed.filter((type) => type === 'fetchDownload')).toHaveLength(1);
+
+    // Closing settles the correlator and runs the route's finally, which must
+    // release both its ordinary relay slot and its dedicated large-fetch slot.
+    fx.fleetControlRegistry.get(nodeId)!.close('test release');
+    await first;
+
+    const replacementNodeId = 'node-dl-account-memory-cap-replacement';
+    await fx.agentSessionsRepo!.setNodeId(id, replacementNodeId);
+    registerEchoNode(fx, replacementNodeId);
+    const afterRelease = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/downloads/content?name=after.bin`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(afterRelease.statusCode).toBe(200);
+    expect(afterRelease.json<FetchBody>().status).toBe('ok');
   });
 
   it('fetch with no ?name= → 400/422', async () => {

@@ -1,13 +1,12 @@
-// Hardening (2026-06-24, LOW defense-in-depth; widened 2026-06-30 to a 5th
-// route) — integration tests for the per-ACCOUNT CONCURRENT-RELAY COUNT cap
-// shared across the control-relay routes that carry only the `global` RATE
+// Hardening (2026-06-24, LOW defense-in-depth) — integration tests for the
+// per-ACCOUNT CONCURRENT-RELAY COUNT cap shared across the lightweight control-
+// relay routes that carry only the `global` RATE
 // limiter (which bounds requests/window, NOT how many handlers can be awaiting
 // a 10–30s relay at once):
 //   GET  /v1/agent-sessions/:id/cookies
 //   POST /v1/agent-sessions/:id/cookies/set
 //   POST /v1/agent-sessions/:id/history
 //   GET  /v1/agent-sessions/:id/downloads
-//   GET  /v1/agent-sessions/:id/downloads/content
 //
 // Each route reserves a per-account slot (Map<accountId, number>) BEFORE relaying,
 // sheds the (cap+1)-th request with a discriminated busy outcome WITHOUT relaying,
@@ -16,8 +15,13 @@
 //   1. concurrent requests up to the cap relay; the (cap+1)-th is shed (status
 //      'error' + the "too many concurrent requests" reason) and is NEVER relayed,
 //   2. releasing an in-flight relay frees a slot (a fresh request then relays),
-//   3. the cap is SHARED across the four routes (a mix fills it),
+//   3. the cap is SHARED across the lightweight routes (a mix fills it),
 //   4. per-account isolation — one account at the cap doesn't block another.
+//
+// The download-content route also takes this shared slot, but separately admits
+// only one large fetch per account because a 64 MiB file expands to ~85.3 MiB of
+// base64 before parser/response copies. Its dedicated memory guard is exercised
+// by agent-sessions-downloads-route.test.ts instead of this CAP=2 matrix.
 //
 // The cap is injectable: buildTestApp({ relayMaxAccountInFlight }) threads a TINY
 // cap into AppDeps so we trip it with 2 concurrent relays. We keep relays "in
@@ -108,16 +112,7 @@ function getDownloads(fx: TestAppFixture, id: string, plaintext: string) {
     headers: { authorization: `Bearer ${plaintext}` },
   });
 }
-// GET downloads content — hang frame type 'fetchDownload'.
-function getDownloadContent(fx: TestAppFixture, id: string, plaintext: string) {
-  return fx.app.inject({
-    method: 'GET',
-    url: `/v1/agent-sessions/${id}/downloads/content?name=x.pdf`,
-    headers: { authorization: `Bearer ${plaintext}` },
-  });
-}
-
-describe('per-account concurrent-relay cap (shared across cookies/set, history, downloads list+content)', () => {
+describe('per-account concurrent-relay cap (shared across cookies/set, history, and downloads list)', () => {
   let fx: TestAppFixture;
   afterEach(async () => {
     if (fx) await fx.cleanup();
@@ -128,7 +123,6 @@ describe('per-account concurrent-relay cap (shared across cookies/set, history, 
     ['cookies/set', 'setCookies', postCookiesSet],
     ['history', 'navigateHistory', postHistory],
     ['downloads list', 'listDownloads', getDownloads],
-    ['downloads content', 'fetchDownload', getDownloadContent],
   ] as const)(
     '%s — CAP concurrent relays are accepted, the (CAP+1)-th is shed (status:"error", never relayed)',
     async (_label, frameType, fire) => {

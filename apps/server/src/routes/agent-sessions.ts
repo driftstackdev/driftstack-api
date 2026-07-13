@@ -2438,9 +2438,29 @@ export function registerAgentSessionsRoutes(
       else accountRelayInFlight.set(acct, next);
     };
   }
-  // The discriminated reason the four routes surface when the account is at its
+  // The discriminated reason the five routes surface when the account is at its
   // concurrent-relay cap (shared so the GUI/clients see one consistent message).
   const RELAY_BUSY_REASON = 'too many concurrent requests for this account — retry shortly';
+
+  // A download fetch is qualitatively larger than the other relays above: one
+  // contract-valid 64 MiB file arrives as ~85.3 MiB of base64 JSON, then exists
+  // simultaneously as raw WebSocket bytes, a UTF-8 string, parsed data, and an
+  // HTTP response. The shared count cap of 16 bounds correlator/handler count but
+  // would still admit gigabyte-scale retained memory for one authenticated
+  // account. Keep only ONE large fetch in flight per account. Lightweight list,
+  // cookie, and history relays remain independently usable while it runs.
+  //
+  // This is intentionally in-memory like accountRelayInFlight: production is a
+  // single API process today. A multi-instance deployment must move both guards
+  // to the same shared reservation store.
+  const accountDownloadFetchInFlight = new Set<string>();
+  function reserveDownloadFetchSlot(acct: string): (() => void) | null {
+    if (accountDownloadFetchInFlight.has(acct)) return null;
+    accountDownloadFetchInFlight.add(acct);
+    return () => accountDownloadFetchInFlight.delete(acct);
+  }
+  const DOWNLOAD_FETCH_BUSY_REASON =
+    'another file download is already in progress for this account — retry when it finishes';
 
   // Cookie-IMPORT — the WRITE-twin of GET /:id/cookies. Relays a customer's exported
   // jar (the EXACT CookieSchema shape the read/Export emits — a cookies.json
@@ -2987,6 +3007,11 @@ export function registerAgentSessionsRoutes(
       if (releaseRelay === null) {
         return { file: null, status: 'error' as const, reason: RELAY_BUSY_REASON };
       }
+      const releaseDownloadFetch = reserveDownloadFetchSlot(rec.accountId);
+      if (releaseDownloadFetch === null) {
+        releaseRelay();
+        return { file: null, status: 'error' as const, reason: DOWNLOAD_FETCH_BUSY_REASON };
+      }
       try {
         const outcome = await conn.requestDownloadFetch(randomUUID(), rec.id, q.data.name);
         if (outcome.status === 'data') {
@@ -3015,6 +3040,7 @@ export function registerAgentSessionsRoutes(
         }
         return { file: null, status: 'timeout' as const };
       } finally {
+        releaseDownloadFetch();
         releaseRelay();
       }
     },
