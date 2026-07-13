@@ -12,12 +12,13 @@
 // once the order reaches paid; before that we surface the polling
 // status so the user knows we're waiting for on-chain confirmation.
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { CryptoOrderSummaryCard } from '../components/CryptoOrderSummaryCard';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { formatTimestamp } from '../lib/crypto-format';
+import { useFocusTrap } from '../lib/use-focus-trap';
 import { useCancelOrder } from '../lib/use-cancel-order';
 import { useCryptoOrder, type CryptoOrderEvent } from '../lib/use-crypto-order';
 import { CryptoReceiptView } from './CryptoReceiptView';
@@ -53,19 +54,8 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
   const { state, refetch } = useCryptoOrder(props.orderId);
   const cancel = useCancelOrder();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const keepBtnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!confirmOpen) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setConfirmOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    keepBtnRef.current?.focus();
-    return () => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [confirmOpen]);
+  const confirmDialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(confirmOpen, confirmDialogRef, () => setConfirmOpen(false));
 
   if (props.orderId === null) {
     return (
@@ -136,10 +126,14 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
       {isPaid && <CryptoReceiptView orderId={order.order_id} />}
       {confirmOpen && (
         <div
+          ref={confirmDialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="Confirm order cancellation"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmOpen(false);
+          }}
         >
           <div className="flex w-full max-w-md flex-col gap-4 rounded-md border border-surface-divider bg-surface-base p-6">
             <h3 className="text-base font-semibold">Cancel this order?</h3>
@@ -151,7 +145,6 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
             </p>
             <div className="flex justify-end gap-2">
               <button
-                ref={keepBtnRef}
                 type="button"
                 onClick={() => setConfirmOpen(false)}
                 className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"

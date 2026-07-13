@@ -30,11 +30,13 @@
 // NOT surface refund actions; customer cancellation stops future
 // billing periods but does not refund the current period.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CryptoOrderAdminDetailDrawer } from '../components/CryptoOrderAdminDetailDrawer';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
+import { useConfirm } from '../components/ConfirmProvider';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { formatCents, formatRelative } from '../lib/crypto-format';
+import { useFocusTrap } from '../lib/use-focus-trap';
 import {
   useAdminCryptoOrdersList,
   type AdminCryptoOrder,
@@ -53,6 +55,7 @@ const STATUS_OPTIONS: Array<{ value: AdminCryptoOrder['status'] | ''; label: str
 ];
 
 export function CryptoOrdersAdminView(): JSX.Element {
+  const confirm = useConfirm();
   const [status, setStatus] = useState<AdminCryptoOrder['status'] | ''>('');
   const [search, setSearch] = useState<string>('');
   const [paymentIdFilter, setPaymentIdFilter] = useState<string>('');
@@ -86,23 +89,34 @@ export function CryptoOrdersAdminView(): JSX.Element {
     }
   }, [internalNote.state, internalNote, refetch]);
 
-  // V-534.BL — modal a11y: escape closes the note dialog; the textarea
-  // receives focus on open.
-  const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (noteTarget === null) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        setNoteTarget(null);
-        setNoteInput('');
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    noteTextareaRef.current?.focus();
-    return () => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [noteTarget]);
+  const noteDialogRef = useRef<HTMLDivElement>(null);
+  const noteDiscardConfirmOpenRef = useRef(false);
+  const closeNoteEditor = useCallback((): void => {
+    noteDiscardConfirmOpenRef.current = false;
+    setNoteTarget(null);
+    setNoteInput('');
+  }, []);
+  const requestCloseNoteEditor = useCallback((): void => {
+    if (
+      noteTarget === null ||
+      internalNote.state.kind === 'submitting' ||
+      noteDiscardConfirmOpenRef.current
+    )
+      return;
+    if (noteInput === (noteTarget.internal_note ?? '')) {
+      closeNoteEditor();
+      return;
+    }
+    noteDiscardConfirmOpenRef.current = true;
+    void confirm('Discard this unsaved internal note?', {
+      confirmLabel: 'Discard note',
+      tone: 'danger',
+    }).then((discard) => {
+      noteDiscardConfirmOpenRef.current = false;
+      if (discard) closeNoteEditor();
+    });
+  }, [closeNoteEditor, confirm, internalNote.state.kind, noteInput, noteTarget]);
+  useFocusTrap(noteTarget !== null, noteDialogRef, requestCloseNoteEditor);
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
@@ -316,10 +330,14 @@ export function CryptoOrdersAdminView(): JSX.Element {
 
       {noteTarget !== null && (
         <div
+          ref={noteDialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="Edit internal note"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) requestCloseNoteEditor();
+          }}
         >
           <div className="flex w-full max-w-md flex-col gap-4 rounded-md border border-surface-divider bg-surface-base p-6">
             <h3 className="text-base font-semibold">Internal note</h3>
@@ -331,9 +349,9 @@ export function CryptoOrdersAdminView(): JSX.Element {
             <label className="flex flex-col gap-1 text-sm">
               <span className="sr-only">Internal note</span>
               <textarea
-                ref={noteTextareaRef}
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
+                disabled={internalNote.state.kind === 'submitting'}
                 rows={5}
                 maxLength={2000}
                 placeholder="VIP — manual outreach scheduled / fraud signal / etc."
@@ -343,10 +361,8 @@ export function CryptoOrdersAdminView(): JSX.Element {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setNoteTarget(null);
-                  setNoteInput('');
-                }}
+                onClick={requestCloseNoteEditor}
+                disabled={internalNote.state.kind === 'submitting'}
                 className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"
               >
                 Cancel

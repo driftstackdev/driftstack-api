@@ -29,6 +29,7 @@ import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatCents, formatProduct, formatRelative } from '../lib/crypto-format';
+import { useFocusTrap } from '../lib/use-focus-trap';
 import { useCancelOrder } from '../lib/use-cancel-order';
 import { useCryptoOrdersList } from '../lib/use-crypto-orders-list';
 import { CryptoOrderDetailView } from './CryptoOrderDetailView';
@@ -71,20 +72,8 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
   const cancel = useCancelOrder();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [cancelConfirmFor, setCancelConfirmFor] = useState<string | null>(null);
-  const keepBtnRef = useRef<HTMLButtonElement>(null);
-
-  // V-534.BK — escape closes the cancel-confirm modal.
-  useEffect(() => {
-    if (cancelConfirmFor === null) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setCancelConfirmFor(null);
-    };
-    window.addEventListener('keydown', onKey);
-    keepBtnRef.current?.focus();
-    return () => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [cancelConfirmFor]);
+  const cancelDialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(cancelConfirmFor !== null, cancelDialogRef, () => setCancelConfirmFor(null));
 
   // Refresh the list on a successful cancel so the new 'cancelled'
   // status flows into the table. The cancel-hook's `succeeded` state
@@ -349,10 +338,14 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
 
       {cancelConfirmFor !== null && (
         <div
+          ref={cancelDialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="Confirm order cancellation"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCancelConfirmFor(null);
+          }}
         >
           <div className="flex w-full max-w-md flex-col gap-4 rounded-md border border-surface-divider bg-surface-base p-6">
             <h3 className="text-base font-semibold">Cancel this order?</h3>
@@ -364,7 +357,6 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
             </p>
             <div className="flex justify-end gap-2">
               <button
-                ref={keepBtnRef}
                 type="button"
                 onClick={() => setCancelConfirmFor(null)}
                 className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"

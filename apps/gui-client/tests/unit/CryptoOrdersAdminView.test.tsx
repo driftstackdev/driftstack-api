@@ -3,7 +3,8 @@
 // V-534.AM — extended for row-click → detail-drawer wiring.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ConfirmProvider } from '../../src/components/ConfirmProvider';
 
 interface MockSettings {
   settings: { apiKey: string | null; baseUrl: string };
@@ -372,6 +373,49 @@ describe('V-534.BL CryptoOrdersAdminView — internal-note modal a11y', () => {
     const dialog = screen.getByRole('dialog', { name: /Edit internal note/i });
     const textarea = dialog.querySelector('textarea');
     expect(document.activeElement).toBe(textarea);
+  });
+
+  it('guards a changed note on Escape and only clears it after confirmed discard', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ orders: [makeOrder({ order_id: 'ord_draft' })] }),
+        } as unknown as Response),
+      ),
+    );
+    render(
+      <ConfirmProvider>
+        <CryptoOrdersAdminView />
+      </ConfirmProvider>,
+    );
+    fireEvent.click(
+      await waitFor(() =>
+        screen.getByRole('button', { name: /Edit internal note for ord_draft/i }),
+      ),
+    );
+    const noteDialog = screen.getByRole('dialog', { name: /Edit internal note/i });
+    const textarea = noteDialog.querySelector('textarea') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'do not lose this' } });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    let discardDialog = await screen.findByRole('dialog', {
+      name: 'Discard this unsaved internal note?',
+    });
+    fireEvent.click(within(discardDialog).getByRole('button', { name: 'Cancel' }));
+    expect(textarea.value).toBe('do not lose this');
+    await waitFor(() => expect(textarea).toHaveFocus());
+
+    fireEvent.click(within(noteDialog).getByRole('button', { name: 'Cancel' }));
+    discardDialog = await screen.findByRole('dialog', {
+      name: 'Discard this unsaved internal note?',
+    });
+    fireEvent.click(within(discardDialog).getByRole('button', { name: 'Discard note' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Edit internal note/i })).toBeNull(),
+    );
   });
 });
 

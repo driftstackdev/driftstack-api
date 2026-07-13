@@ -200,6 +200,32 @@ describe('V-534.AD CryptoOrderDetailView', () => {
     });
   });
 
+  it('traps cancellation focus and restores it to the opener when kept', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(orderPayload()),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrderDetailView orderId="ord_42" />);
+    const opener = await waitFor(() => screen.getByRole('button', { name: /Cancel order/i }));
+    opener.focus();
+    fireEvent.click(opener);
+    const keep = await waitFor(() => screen.getByRole('button', { name: /Keep order/i }));
+    const confirm = screen.getByRole('button', { name: /Confirm cancel/i });
+    expect(keep).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(confirm).toHaveFocus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(keep).toHaveFocus();
+    fireEvent.click(keep);
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
   it('V-534.BE renders the events timeline when the envelope carries events', async () => {
     vi.stubGlobal(
       'fetch',

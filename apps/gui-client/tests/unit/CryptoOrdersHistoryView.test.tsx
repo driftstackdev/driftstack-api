@@ -465,7 +465,7 @@ describe('V-534.BJ CryptoOrdersHistoryView — cancel confirmation modal', () =>
     expect(screen.queryByRole('dialog', { name: /Confirm order cancellation/i })).toBeNull();
   });
 
-  it('V-534.BK focuses the Keep order button when the modal opens', async () => {
+  it('V-534.BK traps focus on the safe action and restores the Cancel opener', async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -481,9 +481,17 @@ describe('V-534.BJ CryptoOrdersHistoryView — cancel confirmation modal', () =>
     const btn = await waitFor(() =>
       screen.getByRole('button', { name: /Cancel order ord_focus/i }),
     );
+    btn.focus();
     fireEvent.click(btn);
     const keepBtn = await waitFor(() => screen.getByRole('button', { name: /Keep order/i }));
+    const confirmBtn = screen.getByRole('button', { name: /Confirm cancel/i });
     expect(document.activeElement).toBe(keepBtn);
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(confirmBtn);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(keepBtn);
+    fireEvent.click(keepBtn);
+    await waitFor(() => expect(document.activeElement).toBe(btn));
   });
 
   it('clicking Cancel opens a confirm modal; clicking Keep order closes it without firing', async () => {
