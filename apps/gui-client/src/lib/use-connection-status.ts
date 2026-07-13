@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedDiagnosticJson } from './read-bounded-json';
+import { humanizeError } from './humanize-error';
 
 const PROBE_INTERVAL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 8_000;
@@ -139,18 +140,17 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
         setStatus((prev) => ({
           state: 'offline',
           lastOkAt: prev.lastOkAt,
-          lastError: `HTTP ${res.status}`,
+          lastError: probeResponseError(res.status),
           driver: prev.driver,
           agentExecution: prev.agentExecution,
         }));
       } catch (err) {
         if (cancelled) return;
+        const errorName = err && typeof err === 'object' && 'name' in err ? String(err.name) : '';
         const message =
-          err instanceof Error
-            ? err.name === 'AbortError'
-              ? 'Probe timed out'
-              : err.message
-            : String(err);
+          errorName === 'AbortError'
+            ? 'Connection check timed out. Check your connection and try again.'
+            : humanizeError(err, 'Connection check failed. Open Settings and try again.');
         setStatus((prev) => ({
           state: 'offline',
           lastOkAt: prev.lastOkAt,
@@ -179,4 +179,13 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
   }, [baseUrl]);
 
   return status;
+}
+
+function probeResponseError(status: number): string {
+  if (status === 401 || status === 403) {
+    return 'Your sign-in or API key was not accepted. Check Settings and try again.';
+  }
+  if (status === 429) return 'The server is receiving too many requests. Try again shortly.';
+  if (status >= 500) return 'The service is temporarily unavailable. Try again shortly.';
+  return 'The server returned an unexpected response. Check Settings and try again.';
 }
