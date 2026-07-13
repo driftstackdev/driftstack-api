@@ -114,6 +114,19 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toContain("'ds_web_session_token'");
   });
 
+  it('bounds hydration and serializes every API-key mutation', () => {
+    expect(body).toContain('const API_KEY_TIMEOUT_MS = 15_000;');
+    expect(body).toContain('const mutationButtonsInFlight = new WeakSet();');
+    expect(body).toContain('let createInFlight = false;');
+    expect(body).toMatch(/if \(mutationButtonsInFlight\.has\(btn\)\) return;/);
+    expect(body).toMatch(/if \(createInFlight\) return;/);
+    expect(body.match(/signal: controller\.signal/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(body).toContain('Loading API keys took too long. Check your connection and retry.');
+    expect(body).toContain('Creating the key took too long. Check your connection and try again.');
+    expect(body).toContain('Rotating took too long. Check your connection and try again.');
+    expect(body).toContain('Revoking took too long. Check your connection and try again.');
+  });
+
   it('footer scope summary copy stays accurate (broad scopes only — granular not promoted here)', () => {
     // V-174 — footer summary. Mentions read/write/account_owner
     // explicitly and recommends narrowest-scoped key.

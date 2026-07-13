@@ -217,9 +217,15 @@ describe('api-keys page — local integration', () => {
     ) as HTMLInputElement | null;
     if (broad) broad.checked = true;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
-    const post = fetchCalls.find((c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url));
+    const posts = fetchCalls.filter(
+      (c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url),
+    );
+    expect(posts).toHaveLength(1);
+    const post = posts[0];
     expect(post).toBeTruthy();
+    expect(post?.init?.signal).toBeDefined();
     const body = JSON.parse(String(post?.init?.body));
     expect(body.name).toBe('My new key');
     expect(Array.isArray(body.scopes)).toBe(true);
@@ -276,10 +282,17 @@ describe('api-keys page — local integration', () => {
     });
     win = window;
     await flush();
-    (window.document.querySelector('[data-rotate="key_active"]') as HTMLButtonElement).click();
+    const rotateBtn = window.document.querySelector(
+      '[data-rotate="key_active"]',
+    ) as HTMLButtonElement;
+    rotateBtn.dispatchEvent(new window.Event('click'));
+    rotateBtn.dispatchEvent(new window.Event('click'));
     await flush();
-    const rot = fetchCalls.find((c) => /\/v1\/api-keys\/key_active\/rotate$/.test(c.url));
+    const rotations = fetchCalls.filter((c) => /\/v1\/api-keys\/key_active\/rotate$/.test(c.url));
+    expect(rotations).toHaveLength(1);
+    const rot = rotations[0];
     expect(rot?.init?.method).toBe('POST');
+    expect(rot?.init?.signal).toBeDefined();
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(false);
     expect(window.document.querySelector('[data-rotate-plaintext]')?.textContent).toBe(
       'ds_live_ROTATED_SECRET',
@@ -299,10 +312,17 @@ describe('api-keys page — local integration', () => {
     });
     win = window;
     await flush();
-    (window.document.querySelector('[data-revoke="key_active"]') as HTMLButtonElement).click();
+    const revokeBtn = window.document.querySelector(
+      '[data-revoke="key_active"]',
+    ) as HTMLButtonElement;
+    revokeBtn.dispatchEvent(new window.Event('click'));
+    revokeBtn.dispatchEvent(new window.Event('click'));
     await flush();
-    const del = fetchCalls.find((c) => c.init?.method === 'DELETE');
+    const deletes = fetchCalls.filter((c) => c.init?.method === 'DELETE');
+    expect(deletes).toHaveLength(1);
+    const del = deletes[0];
     expect(del?.url).toMatch(/\/v1\/api-keys\/key_active$/);
+    expect(del?.init?.signal).toBeDefined();
     // After refresh the key is revoked → no rotate/revoke buttons remain.
     expect(window.document.querySelector('[data-revoke="key_active"]')).toBeNull();
   });

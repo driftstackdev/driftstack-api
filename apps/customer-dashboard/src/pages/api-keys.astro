@@ -443,6 +443,9 @@ npm i @driftstack/sdk</code></pre>
       const revealDismiss = root.querySelector('[data-created-dismiss]');
       const showCreateBtns = root.querySelectorAll('[data-show-create]');
       const token = localStorage.getItem('ds_web_session_token');
+      const API_KEY_TIMEOUT_MS = 15_000;
+      const mutationButtonsInFlight = new WeakSet();
+      let createInFlight = false;
 
       function showBanner(text) {
         if (!banner) return;
@@ -562,8 +565,11 @@ npm i @driftstack/sdk</code></pre>
 
       function refresh() {
         if (!token) return;
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
         return fetch(apiBaseUrl + '/v1/api-keys', {
           headers: { authorization: 'Bearer ' + token },
+          signal: controller.signal,
         })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
@@ -582,12 +588,15 @@ npm i @driftstack/sdk</code></pre>
           })
           .catch((err) => {
             showBanner(
-              "Couldn't load live API keys (" +
-                (err && err.message ? err.message : 'network error') +
-                ').',
+              err && err.name === 'AbortError'
+                ? "Loading API keys took too long. Check your connection and retry."
+                : "Couldn't load live API keys (" +
+                  (err && err.message ? err.message : 'network error') +
+                  ').',
             );
           })
           .finally(function () {
+            window.clearTimeout(timeout);
             // 2026-05-21 — signal the layout's opacity-gate that the
             // /v1/api-keys fetch resolved (success or failure).
             if (typeof window.dashboardHydrated === 'function') {
@@ -600,6 +609,8 @@ npm i @driftstack/sdk</code></pre>
         const buttons = ul.querySelectorAll('[data-revoke]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
+            if (mutationButtonsInFlight.has(btn)) return;
+            mutationButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-revoke');
             const name = btn.getAttribute('data-revoke-name') || '(unnamed)';
             const ok = await window.driftstackConfirm(
@@ -608,12 +619,19 @@ npm i @driftstack/sdk</code></pre>
                 '"? Apps using this key will start receiving 401 immediately. This cannot be undone.',
               { confirmLabel: 'Revoke', destructive: true },
             );
-            if (!ok) return;
+            if (!ok) {
+              mutationButtonsInFlight.delete(btn);
+              return;
+            }
             btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Revoking…';
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
             fetch(apiBaseUrl + '/v1/api-keys/' + encodeURIComponent(id), {
               method: 'DELETE',
               headers: { authorization: 'Bearer ' + token },
+              signal: controller.signal,
             })
               .then((r) => {
                 if (!r.ok && r.status !== 204) {
@@ -628,9 +646,16 @@ npm i @driftstack/sdk</code></pre>
               })
               .catch((err) => {
                 showBanner(
-                  'Revoke failed: ' + (err && err.message ? err.message : 'network error'),
+                  err && err.name === 'AbortError'
+                    ? 'Revoking took too long. Check your connection and try again.'
+                    : 'Revoke failed: ' + (err && err.message ? err.message : 'network error'),
                 );
+              })
+              .finally(() => {
+                window.clearTimeout(timeout);
+                mutationButtonsInFlight.delete(btn);
                 btn.disabled = false;
+                btn.setAttribute('aria-busy', 'false');
                 btn.textContent = 'Revoke';
               });
           });
@@ -695,6 +720,8 @@ npm i @driftstack/sdk</code></pre>
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
+            if (mutationButtonsInFlight.has(btn)) return;
+            mutationButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-rotate');
             const name = btn.getAttribute('data-rotate-name') || '(unnamed)';
             const ok = await window.driftstackConfirm(
@@ -703,9 +730,15 @@ npm i @driftstack/sdk</code></pre>
                 '"? A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime.',
               { confirmLabel: 'Rotate', destructive: true },
             );
-            if (!ok) return;
+            if (!ok) {
+              mutationButtonsInFlight.delete(btn);
+              return;
+            }
             btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Rotating…';
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
             fetch(apiBaseUrl + '/v1/api-keys/' + encodeURIComponent(id) + '/rotate', {
               method: 'POST',
               headers: {
@@ -713,6 +746,7 @@ npm i @driftstack/sdk</code></pre>
                 'content-type': 'application/json',
               },
               body: '{}',
+              signal: controller.signal,
             })
               .then((r) => {
                 if (!r.ok) {
@@ -737,9 +771,16 @@ npm i @driftstack/sdk</code></pre>
               })
               .catch((err) => {
                 showBanner(
-                  'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
+                  err && err.name === 'AbortError'
+                    ? 'Rotating took too long. Check your connection and try again.'
+                    : 'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
                 );
+              })
+              .finally(() => {
+                window.clearTimeout(timeout);
+                mutationButtonsInFlight.delete(btn);
                 btn.disabled = false;
+                btn.setAttribute('aria-busy', 'false');
                 btn.textContent = 'Rotate';
               });
           });
@@ -797,6 +838,7 @@ npm i @driftstack/sdk</code></pre>
 
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
+        if (createInFlight) return;
         createError.classList.add('hidden');
         createError.textContent = '';
         const fd = new FormData(form);
@@ -818,8 +860,12 @@ npm i @driftstack/sdk</code></pre>
           scopes = [scope];
         }
 
+        createInFlight = true;
         createSubmit.disabled = true;
+        createSubmit.setAttribute('aria-busy', 'true');
         createSubmit.textContent = 'Creating…';
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
         fetch(apiBaseUrl + '/v1/api-keys', {
           method: 'POST',
           headers: {
@@ -827,6 +873,7 @@ npm i @driftstack/sdk</code></pre>
             authorization: 'Bearer ' + token,
           },
           body: JSON.stringify({ name: name, scopes: scopes }),
+          signal: controller.signal,
         })
           .then((r) =>
             r.ok
@@ -846,11 +893,19 @@ npm i @driftstack/sdk</code></pre>
             return refresh();
           })
           .catch((err) => {
-            createError.textContent = err && err.message ? err.message : 'Create failed.';
+            createError.textContent =
+              err && err.name === 'AbortError'
+                ? 'Creating the key took too long. Check your connection and try again.'
+                : err && err.message
+                  ? err.message
+                  : 'Create failed.';
             createError.classList.remove('hidden');
           })
           .finally(() => {
+            window.clearTimeout(timeout);
+            createInFlight = false;
             createSubmit.disabled = false;
+            createSubmit.setAttribute('aria-busy', 'false');
             createSubmit.textContent = 'Create key';
           });
       });
