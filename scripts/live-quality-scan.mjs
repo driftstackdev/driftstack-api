@@ -171,8 +171,14 @@ while (queue.length && pages.size < MAX_PAGES) {
     addIssue('broken-page', norm, `HTTP ${r.status}`, from);
     continue;
   }
-  if (r.status >= 300) {
-    addIssue('unexpected-redirect', norm, `HTTP ${r.status} → ${r.finalUrl}`, from);
+  // fetch follows redirects, so `r.status` is the FINAL response status and can
+  // never reveal an intermediate 301/302/307/308. Compare the requested and
+  // final URLs instead; URL serialization avoids a false positive for an origin
+  // written without its implicit root slash (`https://example.com`).
+  const requestedUrl = new URL(norm).toString();
+  const finalUrl = r.finalUrl ? new URL(r.finalUrl).toString() : requestedUrl;
+  if (finalUrl !== requestedUrl) {
+    addIssue('unexpected-redirect', norm, `followed redirect → ${finalUrl}`, from);
   }
   if (r.ms > SLOW_MS) addIssue('slow-page', norm, `${Math.round(r.ms)}ms (> ${SLOW_MS}ms)`, from);
 

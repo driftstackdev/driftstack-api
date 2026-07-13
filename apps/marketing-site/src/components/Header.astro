@@ -60,7 +60,7 @@ const pathname = Astro.url.pathname;
       {
         navItems.map((item) => (
           <a
-            href={item.href}
+            href={item.external ? item.href : `${item.href}/`}
             aria-current={pathname === item.href ? 'page' : undefined}
             class:list={[
               // 2026-05-21 — font-medium on base class so width stays
@@ -97,13 +97,13 @@ const pathname = Astro.url.pathname;
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
       </button>
-      <a href="https://app.driftstack.dev/login" class="nav-link">Sign in</a>
-      <a href="/pricing#free" class="btn-primary">Start free</a>
+      <a href="https://app.driftstack.dev/login/" class="nav-link">Sign in</a>
+      <a href="/pricing/#free" class="btn-primary">Start free</a>
     </nav>
 
     <!-- Mobile: CTA visible at all widths, nav collapsed into <details> -->
     <div class="flex items-center gap-3 md:hidden">
-      <a href="/pricing#free" class="btn-primary text-sm">Start free</a>
+      <a href="/pricing/#free" class="btn-primary text-sm">Start free</a>
       <details class="relative" data-mobile-nav>
         <summary
           class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:border-tk-ink-3/40 hover:text-tk-ink [&::-webkit-details-marker]:hidden"
@@ -132,7 +132,7 @@ const pathname = Astro.url.pathname;
           {
             [...navItems, ...mobileExtraItems].map((item) => (
               <a
-                href={item.href}
+                href={'external' in item && item.external ? item.href : `${item.href}/`}
                 aria-current={pathname === item.href ? 'page' : undefined}
                 class:list={[
                   // 2026-05-21 — same constant-font-weight pattern as the
@@ -150,7 +150,7 @@ const pathname = Astro.url.pathname;
             ))
           }
           <a
-            href="https://app.driftstack.dev/login"
+            href="https://app.driftstack.dev/login/"
             class="rounded px-3 py-2 text-sm text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink"
           >
             Sign in

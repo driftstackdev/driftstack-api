@@ -108,11 +108,11 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     );
   });
 
-  it('Sign in CTA → app.driftstack.dev/login + Start free CTA → /pricing#free', () => {
+  it('Sign in CTA + Start free CTA use canonical trailing-slash page URLs', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary">Start free<\/a>/);
   });
 
   it('mobile hamburger: native <details>/<summary> with an explicit initial accessibility state', () => {
@@ -128,8 +128,8 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/data-theme-toggle[\s\S]*?title="Switch to light theme"/);
   });
 
-  it('mobile CTA: "Start free" (shorter mobile label, same /pricing#free target)', () => {
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary text-sm">Start free<\/a>/);
+  it('mobile CTA: "Start free" (shorter mobile label, same canonical pricing target)', () => {
+    expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary text-sm">Start free<\/a>/);
   });
 
   it('external nav-items render target="_blank" + rel="noopener noreferrer"', () => {
@@ -177,25 +177,25 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
   });
 
   it('Product column 6 links pinned (F-3 — /roadmap removed from Product; 2026-07-03 S11 scoped the check to the Product column since /roadmap now lives in Company): Pricing / Comparison / Self-hosted / Docs[ext] / Sign up / Sign in', () => {
-    expect(body).toMatch(/<a href="\/pricing" class="nav-link">Pricing<\/a>/);
-    expect(body).toMatch(/<a href="\/comparison" class="nav-link">Comparison<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing\/" class="nav-link">Pricing<\/a>/);
+    expect(body).toMatch(/<a href="\/comparison\/" class="nav-link">Comparison<\/a>/);
     const productColumn = body.slice(body.indexOf('>Product</h3>'), body.indexOf('>Company</h3>'));
     expect(productColumn).not.toMatch(/<a href="\/roadmap"/);
-    expect(body).toMatch(/<a href="\/self-hosted" class="nav-link">Self-hosted<\/a>/);
+    expect(body).toMatch(/<a href="\/self-hosted\/" class="nav-link">Self-hosted<\/a>/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"[\s\S]+?Docs/);
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/signup" class="nav-link">Sign up<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/signup\/" class="nav-link">Sign up<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
     );
   });
 
   it('Company column: About / FAQ / Changelog / Roadmap (2026-07-03 S11) + support@ + sales@ mailto', () => {
-    expect(body).toMatch(/<a href="\/about" class="nav-link">About<\/a>/);
-    expect(body).toMatch(/<a href="\/faq" class="nav-link">FAQ<\/a>/);
-    expect(body).toMatch(/<a href="\/changelog" class="nav-link">Changelog<\/a>/);
-    expect(body).toMatch(/<a href="\/roadmap" class="nav-link">Roadmap<\/a>/);
+    expect(body).toMatch(/<a href="\/about\/" class="nav-link">About<\/a>/);
+    expect(body).toMatch(/<a href="\/faq\/" class="nav-link">FAQ<\/a>/);
+    expect(body).toMatch(/<a href="\/changelog\/" class="nav-link">Changelog<\/a>/);
+    expect(body).toMatch(/<a href="\/roadmap\/" class="nav-link">Roadmap<\/a>/);
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev" class="nav-link">support@driftstack\.dev<\/a>/,
     );
@@ -205,17 +205,19 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
   });
 
   it('Trust meta-row links present (F-3 — moved out of headed column): Trust / Security / Sub-processors / Status[external]', () => {
-    expect(body).toMatch(/<a href="\/trust" class="nav-link">Trust<\/a>/);
-    expect(body).toMatch(/<a href="\/security" class="nav-link">Security<\/a>/);
-    expect(body).toMatch(/<a href="\/trust\/sub-processors" class="nav-link">Sub-processors<\/a>/);
+    expect(body).toMatch(/<a href="\/trust\/" class="nav-link">Trust<\/a>/);
+    expect(body).toMatch(/<a href="\/security\/" class="nav-link">Security<\/a>/);
+    expect(body).toMatch(
+      /<a href="\/trust\/sub-processors\/" class="nav-link">Sub-processors<\/a>/,
+    );
     expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"[\s\S]+?Status/);
   });
 
   it('Legal meta-row links present (F-3 — moved out of headed column): Terms / Privacy / DPA / Acceptable Use', () => {
-    expect(body).toMatch(/<a href="\/legal\/terms" class="nav-link">Terms<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/privacy" class="nav-link">Privacy<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/dpa" class="nav-link">DPA<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/aup" class="nav-link">Acceptable Use<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/terms\/" class="nav-link">Terms<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/privacy\/" class="nav-link">Privacy<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/dpa\/" class="nav-link">DPA<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/aup\/" class="nav-link">Acceptable Use<\/a>/);
   });
 
   it('VAT/BTW disclosure removed from footer prominent bar per F-3 (Issue 7) — that detail belongs on /pricing context, not on every page', () => {

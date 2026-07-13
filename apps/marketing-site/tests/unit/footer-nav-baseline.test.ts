@@ -46,9 +46,9 @@ describe('W337.B BaseLayout (Header + Footer) nav baseline', () => {
   const pageUrls = buildPageUrls();
 
   it('Footer contains the canonical product nav (F-3 — /roadmap removed per Issue 5; 2026-07-03 S11 — /roadmap returned as a COMPANY-column link, so the not-in-Product check is scoped to the Product column)', () => {
-    expect(footer).toContain('href="/pricing"');
-    expect(footer).toContain('href="/comparison"');
-    expect(footer).toContain('href="/self-hosted"');
+    expect(footer).toContain('href="/pricing/"');
+    expect(footer).toContain('href="/comparison/"');
+    expect(footer).toContain('href="/self-hosted/"');
     const productStart = footer.indexOf('>Product</h3>');
     const companyStart = footer.indexOf('>Company</h3>');
     expect(productStart).toBeGreaterThan(-1);
@@ -60,24 +60,26 @@ describe('W337.B BaseLayout (Header + Footer) nav baseline', () => {
   it('Footer Company column links /roadmap (2026-07-03 S11 — roadmap is reachable from every page via the footer; it stays out of the header nav on purpose)', () => {
     const companyStart = footer.indexOf('>Company</h3>');
     expect(companyStart).toBeGreaterThan(-1);
-    expect(footer.slice(companyStart)).toContain('href="/roadmap"');
+    expect(footer.slice(companyStart)).toContain('href="/roadmap/"');
   });
 
   it('Footer contains the canonical trust nav', () => {
-    expect(footer).toContain('href="/trust"');
-    expect(footer).toContain('href="/security"');
-    expect(footer).toContain('href="/trust/sub-processors"');
+    expect(footer).toContain('href="/trust/"');
+    expect(footer).toContain('href="/security/"');
+    expect(footer).toContain('href="/trust/sub-processors/"');
   });
 
   it('Footer contains the canonical company nav', () => {
-    expect(footer).toContain('href="/about"');
-    expect(footer).toContain('href="/faq"');
-    expect(footer).toContain('href="/changelog"');
+    expect(footer).toContain('href="/about/"');
+    expect(footer).toContain('href="/faq/"');
+    expect(footer).toContain('href="/changelog/"');
   });
 
   it('every internal href in the Footer resolves to a real marketing page', () => {
     const hrefs = [...footer.matchAll(/href="(\/[A-Za-z0-9/_-]*)"/g)].map((m) => m[1]!);
-    const offenders = hrefs.filter((h) => h !== '/' && !pageUrls.has(h));
+    const offenders = hrefs.filter(
+      (h) => h !== '/' && !pageUrls.has(h.endsWith('/') ? h.slice(0, -1) : h),
+    );
     expect(offenders).toEqual([]);
   });
 

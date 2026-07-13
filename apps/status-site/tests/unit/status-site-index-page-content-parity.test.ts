@@ -95,8 +95,8 @@ describe('W371.C status-site /index page content parity', () => {
   });
 
   it('quick-nav cross-links pinned: /subscribe + /history (90 days)', () => {
-    expect(body).toMatch(/<a\s+href="\/subscribe"/);
-    expect(body).toMatch(/<a\s+href="\/history"/);
+    expect(body).toMatch(/<a\s+href="\/subscribe\/"/);
+    expect(body).toMatch(/<a\s+href="\/history\/"/);
     expect(body).toMatch(/Subscribe to incident emails/);
     expect(body).toMatch(/Full incident history \(90 days\)/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/src/pages/subscribe.astro'))).toBe(true);

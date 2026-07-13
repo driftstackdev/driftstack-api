@@ -182,23 +182,23 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-tk-accent-text">Privacy<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-tk-accent-text">Privacy<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/terms" class="hover:text-tk-accent-text">Terms<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/terms\/" class="hover:text-tk-accent-text">Terms<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/dpa" class="hover:text-tk-accent-text">DPA<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/dpa\/" class="hover:text-tk-accent-text">DPA<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/aup" class="hover:text-tk-accent-text">AUP<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/aup\/" class="hover:text-tk-accent-text">AUP<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors" class="hover:text-tk-accent-text"\s*\n?\s*>Sub-processors<\/a\s*>/,
+      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors\/" class="hover:text-tk-accent-text"\s*\n?\s*>Sub-processors<\/a\s*>/,
     );
   });
 

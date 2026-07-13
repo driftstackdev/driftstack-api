@@ -230,19 +230,19 @@ const navSections: NavSection[] = [
                   // Carry the next-admin intent through /login as a
                   // doubly-encoded ?next= round-trip.
                   var loginNext = '/?next-admin=' + encodeURIComponent(nextAdmin);
-                  location.replace('/login?next=' + encodeURIComponent(loginNext));
+                  location.replace('/login/?next=' + encodeURIComponent(loginNext));
                   return;
                 }
                 if (!t || t.length === 0) {
                   var here = location.pathname + location.search;
-                  location.replace('/login?next=' + encodeURIComponent(here));
+                  location.replace('/login/?next=' + encodeURIComponent(here));
                   return;
                 }
                 if (localStorage.getItem('ds_is_team_user') === '1') {
                   document.documentElement.setAttribute('data-pre-team-user', 'true');
                 }
               } catch (_) {
-                location.replace('/login');
+                location.replace('/login/');
               }
             })();
         </script>
@@ -558,7 +558,7 @@ const navSections: NavSection[] = [
                       —
                     </p>
                     <div class="flex items-center gap-2 text-[11px] text-tk-ink-3">
-                      <a href="/settings" class="hover:text-tk-ink">
+                      <a href="/settings/" class="hover:text-tk-ink">
                         Account settings
                       </a>
                       <span aria-hidden="true">·</span>
@@ -587,12 +587,11 @@ const navSections: NavSection[] = [
                         const active =
                           item.href === '/'
                             ? pathname === '/'
-                            : pathname === item.href ||
-                              pathname.startsWith(item.href + '/');
+                            : pathname === item.href || pathname.startsWith(item.href + '/');
                         return (
                           <li>
                             <a
-                              href={item.href}
+                              href={item.href === '/' ? '/' : `${item.href}/`}
                               aria-current={active ? 'page' : undefined}
                               class:list={[
                                 // 2026-05-21 — font-weight stays constant across
@@ -1201,7 +1200,7 @@ const navSections: NavSection[] = [
               } catch (_) {
                 /* swallow */
               }
-              window.location.href = '/login';
+              window.location.href = '/login/';
             });
           }
 
@@ -1239,7 +1238,7 @@ const navSections: NavSection[] = [
                   /* swallow */
                 }
                 window.location.href =
-                  '/login?next=' + encodeURIComponent(location.pathname + location.search);
+                  '/login/?next=' + encodeURIComponent(location.pathname + location.search);
                 return null;
               }
               return r.ok ? r.json() : null;
@@ -1806,11 +1805,11 @@ const navSections: NavSection[] = [
               relative paths would 404 against the Cloudflare Pages
               project that serves the dashboard. */}
           <nav class="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <a href="https://driftstack.dev/legal/privacy" class="hover:text-tk-accent-text">Privacy</a>
-            <a href="https://driftstack.dev/legal/terms" class="hover:text-tk-accent-text">Terms</a>
-            <a href="https://driftstack.dev/legal/dpa" class="hover:text-tk-accent-text">DPA</a>
-            <a href="https://driftstack.dev/legal/aup" class="hover:text-tk-accent-text">AUP</a>
-            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-tk-accent-text"
+            <a href="https://driftstack.dev/legal/privacy/" class="hover:text-tk-accent-text">Privacy</a>
+            <a href="https://driftstack.dev/legal/terms/" class="hover:text-tk-accent-text">Terms</a>
+            <a href="https://driftstack.dev/legal/dpa/" class="hover:text-tk-accent-text">DPA</a>
+            <a href="https://driftstack.dev/legal/aup/" class="hover:text-tk-accent-text">AUP</a>
+            <a href="https://driftstack.dev/trust/sub-processors/" class="hover:text-tk-accent-text"
               >Sub-processors</a
             >
           </nav>
@@ -1985,14 +1984,14 @@ const navSections: NavSection[] = [
         }
         var actions = [
           { label: 'Go to Overview', run: nav('/') },
-          { label: 'Go to API keys', run: nav('/api-keys') },
-          { label: 'Go to Webhooks', run: nav('/webhooks') },
-          { label: 'Go to Usage', run: nav('/usage') },
-          { label: 'Go to Billing', run: nav('/billing') },
-          { label: 'Go to Audit log', run: nav('/audit-log') },
-          { label: 'Go to Team', run: nav('/team') },
-          { label: 'Go to Settings', run: nav('/settings') },
-          { label: 'New API key', run: nav('/api-keys') },
+          { label: 'Go to API keys', run: nav('/api-keys/') },
+          { label: 'Go to Webhooks', run: nav('/webhooks/') },
+          { label: 'Go to Usage', run: nav('/usage/') },
+          { label: 'Go to Billing', run: nav('/billing/') },
+          { label: 'Go to Audit log', run: nav('/audit-log/') },
+          { label: 'Go to Team', run: nav('/team/') },
+          { label: 'Go to Settings', run: nav('/settings/') },
+          { label: 'New API key', run: nav('/api-keys/') },
           { label: 'Get the desktop app', run: function () { window.open('https://docs.driftstack.dev/quickstart/', '_blank', 'noopener'); } },
           {
             label: 'Copy account ID',

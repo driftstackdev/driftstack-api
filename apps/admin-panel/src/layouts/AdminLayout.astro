@@ -269,7 +269,7 @@ const navItems = [
               navItems.map((item) => (
                 <li>
                   <a
-                    href={item.href}
+                    href={item.href === '/' ? '/' : `${item.href}/`}
                     aria-current={pathname === item.href || pathname.startsWith(item.href + '/')
                       ? 'page'
                       : undefined}
