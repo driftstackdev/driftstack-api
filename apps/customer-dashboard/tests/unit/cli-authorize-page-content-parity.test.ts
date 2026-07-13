@@ -82,6 +82,17 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/body: JSON\.stringify\(\{ code: code, state: state \}\)/);
   });
 
+  it('serializes and bounds the consequential bind request', () => {
+    expect(body).toContain('const AUTHORIZE_TIMEOUT_MS = 15_000;');
+    expect(body).toContain('let authorizeInFlight = false;');
+    expect(body).toMatch(/if \(authorizeInFlight\) return;/);
+    expect(body).toMatch(/authorizeBtn\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toMatch(/const controller = new AbortController\(\);/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/window\.clearTimeout\(timeout\);\s*authorizeInFlight = false;/);
+    expect(body).toContain('Authorization took too long. Check your connection and try again.');
+  });
+
   it('V-328e OS deep-link: driftstack://auth/callback?code=…&state=… after 600ms delay', () => {
     expect(body).toMatch(/V-328e/);
     expect(body).toMatch(

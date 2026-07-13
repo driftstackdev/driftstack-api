@@ -234,6 +234,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const authorizeBtn = sections.confirm.querySelector('[data-authorize]');
       const cancelBtn = sections.confirm.querySelector('[data-cancel]');
       const retryBtn = sections.error.querySelector('[data-retry]');
+      const AUTHORIZE_TIMEOUT_MS = 15_000;
+      let authorizeInFlight = false;
 
       // Server's document_key values are 'tos' | 'privacy' | 'dpa' |
       // 'aup' but the marketing-site URL slug for the terms-of-service
@@ -290,8 +292,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function authorize() {
+        if (authorizeInFlight) return;
+        authorizeInFlight = true;
         authorizeBtn.disabled = true;
+        authorizeBtn.setAttribute('aria-busy', 'true');
         authorizeBtn.textContent = 'Authorizing…';
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), AUTHORIZE_TIMEOUT_MS);
         fetch(apiBaseUrl + '/v1/auth/cli-authorize/bind', {
           method: 'POST',
           headers: {
@@ -299,6 +306,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             authorization: 'Bearer ' + sessionToken,
           },
           body: JSON.stringify({ code: code, state: state }),
+          signal: controller.signal,
         })
           .then((r) => {
             if (r.ok) return r.json();
@@ -349,10 +357,19 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             if (err && err.message === '__legal_accept_required__') return;
-            showError(err && err.message ? err.message : 'Authorization failed.');
+            showError(
+              err && err.name === 'AbortError'
+                ? 'Authorization took too long. Check your connection and try again.'
+                : err && err.message
+                  ? err.message
+                  : 'Authorization failed.',
+            );
           })
           .finally(() => {
+            window.clearTimeout(timeout);
+            authorizeInFlight = false;
             authorizeBtn.disabled = false;
+            authorizeBtn.setAttribute('aria-busy', 'false');
             authorizeBtn.textContent = 'Authorize';
           });
       }

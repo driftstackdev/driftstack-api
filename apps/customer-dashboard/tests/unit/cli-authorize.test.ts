@@ -151,6 +151,25 @@ describe('cli-authorize page — local integration', () => {
     expect(preview?.textContent).toContain('ABCDEF'.slice(0, 6));
   });
 
+  it('coalesces forced duplicate authorize clicks into one bind request', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    local.setFetchPlan([
+      () => new local.window.Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ]);
+    const authorizeBtn = local.window.document.querySelector(
+      '[data-authorize]',
+    ) as HTMLButtonElement;
+    authorizeBtn.dispatchEvent(new local.window.MouseEvent('click'));
+    authorizeBtn.dispatchEvent(new local.window.MouseEvent('click'));
+    expect(local.fetchCalls).toHaveLength(1);
+    expect(local.fetchCalls[0]?.init?.signal).toBeDefined();
+    await flush();
+  });
+
   it('on 409 LegalAcceptanceRequired with top-level pending_acceptances, surfaces legal-accept UI with mapped slugs + friendly labels (regression for .extensions.* shape AND tos→terms URL slug)', async () => {
     const html = loadBuiltPage();
     const local = setUpDom(html, (window) => {
