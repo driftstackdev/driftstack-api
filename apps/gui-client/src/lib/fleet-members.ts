@@ -14,6 +14,7 @@
 // across edits for any future "session ran on member X" reference.
 
 import { LazyStore } from '@tauri-apps/plugin-store';
+import { readBoundedDiagnosticJson } from './read-bounded-json';
 
 export interface FleetMember {
   id: string;
@@ -163,11 +164,11 @@ export async function pingFleetMember(member: FleetMember): Promise<FleetMemberP
     if (!res.ok) {
       return { ok: false, durationMs: dur, error: `HTTP ${res.status.toString()}` };
     }
-    const body = (await res.json()) as {
+    const body = await readBoundedDiagnosticJson<{
       version?: unknown;
       driver?: unknown;
       playwright_browser?: unknown;
-    };
+    }>(res);
     const out: FleetMemberPing = { ok: true, durationMs: dur };
     if (typeof body.version === 'string') out.version = body.version;
     if (body.driver === 'mock' || body.driver === 'webkit' || body.driver === 'playwright') {

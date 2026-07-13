@@ -23,6 +23,7 @@ import { ConnectivityView } from './ConnectivityView';
 import { RelativeTime } from '../components/RelativeTime';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { readBoundedDiagnosticJson } from '../lib/read-bounded-json';
 import { friendlySettingsActionError } from '../lib/settings-error-copy';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
@@ -305,7 +306,9 @@ export function SettingsView(): JSX.Element {
         setTestState({ kind: 'fail', message: `HTTP ${res.status.toString()}` });
         return;
       }
-      const body = (await res.json().catch(() => ({}))) as { git_sha?: string };
+      const body = await readBoundedDiagnosticJson<{ git_sha?: string }>(res).catch(
+        (): { git_sha?: string } => ({}),
+      );
       if (connectionTestTokenRef.current !== token) return;
       setTestState({ kind: 'ok', version: body.git_sha ?? 'unknown' });
     } catch (err) {

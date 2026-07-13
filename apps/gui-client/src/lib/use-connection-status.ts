@@ -19,6 +19,7 @@
 // session goes offline mid-run.
 
 import { useEffect, useRef, useState } from 'react';
+import { readBoundedDiagnosticJson } from './read-bounded-json';
 
 const PROBE_INTERVAL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 8_000;
@@ -103,7 +104,10 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           let driver: ServerDriver | null = null;
           let agentExecution: AgentExecution | null = null;
           try {
-            const body = (await res.json()) as { driver?: unknown; agent_execution?: unknown };
+            const body = await readBoundedDiagnosticJson<{
+              driver?: unknown;
+              agent_execution?: unknown;
+            }>(res);
             if (
               body.driver === 'mock' ||
               body.driver === 'webkit' ||
