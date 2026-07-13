@@ -6,7 +6,7 @@
 // 200 OK (missing/invalid required field) throws instead of silently
 // coercing into a plausible-looking result (e.g. payment_id -> "undefined").
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { NowPaymentsApiClient } from '../../src/lib/nowpayments-api.js';
 import { createTestLogger } from '../../src/lib/logger.js';
 
@@ -124,6 +124,7 @@ describe('NowPaymentsApiClient.createPayment', () => {
     const client = makeClient(fetchImpl);
     await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toMatchObject({
       status: 400,
+      message: 'NowPayments POST /v1/payment returned 400',
     });
   });
 
@@ -204,5 +205,86 @@ describe('NowPaymentsApiClient.getPayment', () => {
     expect(calls[0]!.url).toBe(
       `https://api.nowpayments.io/v1/payment/${encodeURIComponent('some id/with?chars')}`,
     );
+  });
+});
+
+describe('NowPaymentsApiClient — bounded response handling', () => {
+  it('rejects an oversized declared response before reading its body', async () => {
+    const cancel = vi.fn();
+    const fetchImpl: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel,
+          }),
+          {
+            status: 200,
+            headers: { 'content-length': String(256 * 1024 + 1) },
+          },
+        ),
+      );
+    const client = makeClient(fetchImpl);
+
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toMatchObject({
+      status: 200,
+      message: 'NowPayments POST /v1/payment response exceeded 262144-byte limit',
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('cancels an unknown-length response when streamed bytes cross the limit', async () => {
+    const cancel = vi.fn();
+    const fetchImpl: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(256 * 1024));
+              controller.enqueue(new Uint8Array(1));
+            },
+            cancel,
+          }),
+          { status: 502 },
+        ),
+      );
+    const client = makeClient(fetchImpl);
+
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toMatchObject({
+      status: 502,
+      message: 'NowPayments POST /v1/payment response exceeded 262144-byte limit',
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the timeout armed while an otherwise-valid response body stalls', async () => {
+    const fetchImpl: typeof fetch = (_input, init) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              signal?.addEventListener('abort', () => {
+                controller.error(new Error('body aborted'));
+              });
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    };
+    const client = makeClient(fetchImpl, { timeoutMs: 50 });
+
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toThrow('body aborted');
+  });
+
+  it('returns a fixed protocol error for malformed success JSON', async () => {
+    const fetchImpl: typeof fetch = () =>
+      Promise.resolve(new Response('<html>bad gateway</html>', { status: 200 }));
+    const client = makeClient(fetchImpl);
+
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toMatchObject({
+      status: 200,
+      message: 'NowPayments POST /v1/payment response was not JSON',
+    });
   });
 });

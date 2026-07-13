@@ -271,21 +271,21 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
 
   // ─── Non-JSON 200 error envelope ─────────────────────────────
 
-  it("CRITICAL non-JSON response wraps in StripeApiError with type:'malformed_response' + first-200-chars message. The 200-char truncation prevents giant HTML error-page bodies from flooding logs.", () => {
+  it("CRITICAL non-JSON response wraps in StripeApiError with type:'malformed_response' + a fixed message. No attacker-controlled HTML is copied into the error logged by the global 5xx handler.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
     expect(p).toMatch(/'Stripe response was not JSON'/);
-    expect(p).toMatch(/type: 'malformed_response', message: text\.slice\(0, 200\)/);
+    expect(p).toMatch(/type: 'malformed_response', message: 'Stripe response was not JSON'/);
     expect(p).toMatch(/err\.name = 'StripeApiError';/);
   });
 
   // ─── 4xx/5xx error envelope ──────────────────────────────────
 
-  it("CRITICAL non-2xx response wraps in StripeApiError with parsed.error or fallback type:'unknown_error'. The error-or-unknown fallback keeps the StripeApiError stripeError.type always populated.", () => {
+  it("CRITICAL non-2xx response normalizes documented classification fields with fallback type:'unknown_error'. Free-form upstream content is excluded from the logged Error.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
-    expect(p).toMatch(
-      /const stripeError = \(parsed as \{ error\?: StripeApiError\['stripeError'\] \}\)\.error \?\? \{/,
-    );
-    expect(p).toMatch(/type: 'unknown_error',/);
+    expect(p).toMatch(/function parseStripeError\(parsed: unknown\)/);
+    expect(p).toMatch(/const stripeError = parseStripeError\(parsed\);/);
+    expect(p).toMatch(/return \{ type: 'unknown_error' \};/);
+    expect(p).not.toMatch(/stripeError\.message \?\? stripeError\.type/);
   });
 
   // ─── Error logging via injected logger ───────────────────────
@@ -357,7 +357,7 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
     } as Partial<StripeApiError>);
   });
 
-  it("CRITICAL non-JSON response throws StripeApiError with type:'malformed_response'. Truncated body lands in the message field.", async () => {
+  it("CRITICAL non-JSON response throws StripeApiError with type:'malformed_response'. A fixed message replaces upstream body text.", async () => {
     const fetchImpl: typeof fetch = () =>
       Promise.resolve(new Response('<!doctype html><html>nope</html>', { status: 502 }));
     const client = new StripeApiClient({
@@ -369,7 +369,7 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
     await expect(client.createCustomer({ email: 'a@b.c' })).rejects.toMatchObject({
       name: 'StripeApiError',
       status: 502,
-      stripeError: { type: 'malformed_response' },
+      stripeError: { type: 'malformed_response', message: 'Stripe response was not JSON' },
     });
   });
 

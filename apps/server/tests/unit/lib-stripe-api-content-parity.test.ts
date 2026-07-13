@@ -79,6 +79,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     expect(body).toMatch(/const DEFAULT_API_VERSION = '2024-12-18\.acacia';/);
     expect(body).toMatch(/const DEFAULT_TIMEOUT_MS = 10_000;/);
     expect(body).toMatch(/const DEFAULT_BASE_URL = 'https:\/\/api\.stripe\.com';/);
+    expect(body).toMatch(/const MAX_STRIPE_RESPONSE_BODY_BYTES = 256 \* 1024;/);
   });
 
   it('StripeApiClientConfig: secretKey + optional apiVersion/timeoutMs/baseUrl/fetchImpl + logger', () => {
@@ -168,9 +169,12 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
   });
 
   it('post() error paths: malformed_response on JSON parse fail + StripeApiError on !res.ok', () => {
+    expect(body).toMatch(/readBoundedResponseBody\(res, MAX_STRIPE_RESPONSE_BODY_BYTES\)/);
+    expect(body).toMatch(/err instanceof ResponseBodyLimitError/);
     expect(body).toMatch(
-      /stripeError: \{ type: 'malformed_response', message: text\.slice\(0, 200\) \},/,
+      /stripeError: \{ type: 'malformed_response', message: 'Stripe response was not JSON' \},/,
     );
+    expect(body).toMatch(/const stripeError = parseStripeError\(parsed\);/);
     expect(body).toMatch(/err\.name = 'StripeApiError';/);
     expect(body).toMatch(
       /this\.config\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'stripe-api',\s*\n?\s*path,\s*\n?\s*status: res\.status,\s*\n?\s*stripeErrorType: stripeError\.type,\s*\n?\s*stripeErrorCode: stripeError\.code,\s*\n?\s*\},\s*\n?\s*'Stripe API error',\s*\n?\s*\);/,

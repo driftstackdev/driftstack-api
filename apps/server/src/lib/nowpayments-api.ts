@@ -13,11 +13,14 @@
 // IPN signing uses a separate secret (`NOWPAYMENTS_IPN_SECRET`); see
 // lib/nowpayments-signing.ts.
 //
-// Errors land as plain Error objects with the upstream message
-// embedded. The 502 "NowPayments returned 4xx/5xx" translation lives
-// in the route layer.
+// Errors land as plain Error objects with a fixed provider/status message.
+// Upstream response text is never copied into the Error because the checkout
+// route logs it on soft-failure. The route keeps its existing stub fallback.
 
 import type { Logger } from './logger.js';
+import { readBoundedResponseBody, ResponseBodyLimitError } from './bounded-response-body.js';
+
+const MAX_NOWPAYMENTS_RESPONSE_BODY_BYTES = 256 * 1024;
 
 export interface NowPaymentsApiClientConfig {
   /** NowPayments API key (live env). */
@@ -210,21 +213,29 @@ export class NowPaymentsApiClient {
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: ac.signal,
       });
-      if (!res.ok) {
-        let detail = '';
-        try {
-          const text = await res.text();
-          detail = text.slice(0, 500);
-        } catch {
-          /* ignore */
-        }
-        const err = new Error(
-          `NowPayments ${method} ${path} returned ${res.status.toString()}: ${detail}`,
+      let text: string;
+      try {
+        text = await readBoundedResponseBody(res, MAX_NOWPAYMENTS_RESPONSE_BODY_BYTES);
+      } catch (err) {
+        if (!(err instanceof ResponseBodyLimitError)) throw err;
+        const bodyLimitError = new Error(
+          `NowPayments ${method} ${path} response exceeded ${MAX_NOWPAYMENTS_RESPONSE_BODY_BYTES.toString()}-byte limit`,
         );
+        (bodyLimitError as Error & { status?: number }).status = res.status;
+        throw bodyLimitError;
+      }
+      if (!res.ok) {
+        const err = new Error(`NowPayments ${method} ${path} returned ${res.status.toString()}`);
         (err as Error & { status?: number }).status = res.status;
         throw err;
       }
-      return (await res.json()) as T;
+      try {
+        return (text.length === 0 ? {} : JSON.parse(text)) as T;
+      } catch {
+        const err = new Error(`NowPayments ${method} ${path} response was not JSON`);
+        (err as Error & { status?: number }).status = res.status;
+        throw err;
+      }
     } finally {
       clearTimeout(timer);
     }

@@ -32,6 +32,7 @@
 // New endpoint touches land here as one method per Stripe resource.
 
 import type { Logger } from './logger.js';
+import { readBoundedResponseBody, ResponseBodyLimitError } from './bounded-response-body.js';
 
 export interface StripeApiClientConfig {
   /** Stripe secret key (sk_live_... or sk_test_...). */
@@ -64,6 +65,20 @@ export interface StripeApiError extends Error {
 const DEFAULT_API_VERSION = '2024-12-18.acacia';
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_BASE_URL = 'https://api.stripe.com';
+const MAX_STRIPE_RESPONSE_BODY_BYTES = 256 * 1024;
+
+function parseStripeError(parsed: unknown): StripeApiError['stripeError'] {
+  if (typeof parsed !== 'object' || parsed === null) return { type: 'unknown_error' };
+  const candidate = (parsed as { error?: unknown }).error;
+  if (typeof candidate !== 'object' || candidate === null) return { type: 'unknown_error' };
+  const fields = candidate as Record<string, unknown>;
+  return {
+    type: typeof fields.type === 'string' && fields.type.length > 0 ? fields.type : 'unknown_error',
+    ...(typeof fields.code === 'string' ? { code: fields.code } : {}),
+    ...(typeof fields.param === 'string' ? { param: fields.param } : {}),
+    ...(typeof fields.decline_code === 'string' ? { decline_code: fields.decline_code } : {}),
+  };
+}
 
 export class StripeApiClient {
   private readonly fetchImpl: typeof fetch;
@@ -206,7 +221,7 @@ export class StripeApiClient {
     const timer = setTimeout(() => ac.abort(), timeoutMs);
 
     // The timer is cleared in `finally` AFTER the response body is read — the
-    // abort signal must stay armed through `res.text()`, not just the
+    // abort signal must stay armed through the bounded body read, not just the
     // header-receiving `fetch()`. Otherwise a server that sends headers then
     // stalls the body holds this worker for up to undici's 300s body-timeout
     // (30× the intended deadline) instead of `timeoutMs`. (Bug-class shared by
@@ -226,23 +241,39 @@ export class StripeApiClient {
         signal: ac.signal,
       });
 
-      const text = await res.text();
+      let text: string;
+      try {
+        text = await readBoundedResponseBody(res, MAX_STRIPE_RESPONSE_BODY_BYTES);
+      } catch (err) {
+        if (!(err instanceof ResponseBodyLimitError)) throw err;
+        const stripeError = {
+          type: 'malformed_response',
+          message: `Stripe response exceeded ${MAX_STRIPE_RESPONSE_BODY_BYTES.toString()}-byte limit`,
+        };
+        const apiError: StripeApiError = Object.assign(new Error(stripeError.message), {
+          status: res.status,
+          stripeError,
+        });
+        apiError.name = 'StripeApiError';
+        throw apiError;
+      }
       let parsed: unknown;
       try {
         parsed = text.length === 0 ? {} : JSON.parse(text);
       } catch {
         const err: StripeApiError = Object.assign(new Error('Stripe response was not JSON'), {
           status: res.status,
-          stripeError: { type: 'malformed_response', message: text.slice(0, 200) },
+          stripeError: { type: 'malformed_response', message: 'Stripe response was not JSON' },
         });
         err.name = 'StripeApiError';
         throw err;
       }
 
       if (!res.ok) {
-        const stripeError = (parsed as { error?: StripeApiError['stripeError'] }).error ?? {
-          type: 'unknown_error',
-        };
+        // Retain only the provider's documented classification fields. The
+        // free-form upstream message/body must not be copied into an Error:
+        // the global 5xx handler logs escaping errors with their full stack.
+        const stripeError = parseStripeError(parsed);
         this.config.logger.warn(
           {
             component: 'stripe-api',
@@ -254,7 +285,9 @@ export class StripeApiClient {
           'Stripe API error',
         );
         const err: StripeApiError = Object.assign(
-          new Error(`Stripe ${path} failed: ${stripeError.message ?? stripeError.type}`),
+          new Error(
+            `Stripe ${path} failed: ${stripeError.type}${stripeError.code !== undefined ? ` (${stripeError.code})` : ''}`,
+          ),
           { status: res.status, stripeError },
         );
         err.name = 'StripeApiError';

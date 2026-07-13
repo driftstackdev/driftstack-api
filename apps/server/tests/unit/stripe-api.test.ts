@@ -213,6 +213,22 @@ describe('StripeApiClient — error handling', () => {
     expect(err.status).toBe(400);
     expect(err.stripeError.type).toBe('invalid_request_error');
     expect(err.stripeError.code).toBe('parameter_invalid_empty');
+    expect(err.stripeError.message).toBeUndefined();
+    expect(err.message).not.toContain('price is required');
+  });
+
+  it('normalizes a malformed Stripe error envelope without copying upstream content', async () => {
+    const { fetchImpl } = makeStubFetch([
+      { status: 502, body: { error: 'attacker-controlled body marker' } },
+    ]);
+    const client = makeClient(fetchImpl);
+
+    await expect(client.createCustomer({ email: 'x@y.com' })).rejects.toMatchObject({
+      name: 'StripeApiError',
+      status: 502,
+      message: 'Stripe /v1/customers failed: unknown_error',
+      stripeError: { type: 'unknown_error' },
+    });
   });
 
   it('throws StripeApiError when the response body is not JSON', async () => {
@@ -228,7 +244,62 @@ describe('StripeApiClient — error handling', () => {
     await expect(client.createCustomer({ email: 'x@y.com' })).rejects.toMatchObject({
       name: 'StripeApiError',
       status: 500,
+      stripeError: {
+        type: 'malformed_response',
+        message: 'Stripe response was not JSON',
+      },
     });
+  });
+
+  it('rejects an oversized declared response before reading its body', async () => {
+    const cancel = vi.fn();
+    const fetchImpl: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel,
+          }),
+          {
+            status: 200,
+            headers: { 'content-length': String(256 * 1024 + 1) },
+          },
+        ),
+      );
+    const client = makeClient(fetchImpl);
+
+    await expect(client.createCustomer({ email: 'x@y.com' })).rejects.toMatchObject({
+      name: 'StripeApiError',
+      status: 200,
+      stripeError: {
+        type: 'malformed_response',
+        message: 'Stripe response exceeded 262144-byte limit',
+      },
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('cancels an unknown-length response when streamed bytes cross the limit', async () => {
+    const cancel = vi.fn();
+    const fetchImpl: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(200 * 1024));
+              controller.enqueue(new Uint8Array(60 * 1024 + 1));
+            },
+            cancel,
+          }),
+          { status: 200 },
+        ),
+      );
+    const client = makeClient(fetchImpl);
+
+    await expect(client.createCustomer({ email: 'x@y.com' })).rejects.toMatchObject({
+      name: 'StripeApiError',
+      stripeError: { type: 'malformed_response' },
+    });
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('respects the per-request timeout', async () => {
@@ -243,21 +314,24 @@ describe('StripeApiClient — error handling', () => {
   });
 
   it('the timeout also bounds the RESPONSE-BODY read (headers arrive, then the body stalls) — regression for the clearTimeout-before-res.text() bug', async () => {
-    // fetch() resolves with headers immediately; res.text() only settles when
+    // fetch() resolves with headers immediately; the body read only settles when
     // the abort signal fires. With the timer cleared after fetch (the old bug)
     // this would hang past timeoutMs (up to undici's 300s body timeout); with
     // the timer armed through the body read it aborts at timeoutMs.
     const fetchImpl: typeof fetch = (_input, init) => {
       const signal = init?.signal as AbortSignal | undefined;
-      const res = {
-        ok: true,
-        status: 200,
-        text: (): Promise<string> =>
-          new Promise<string>((_resolve, reject) => {
-            signal?.addEventListener('abort', () => reject(new Error('body aborted')));
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              signal?.addEventListener('abort', () => {
+                controller.error(new Error('body aborted'));
+              });
+            },
           }),
-      };
-      return Promise.resolve(res as unknown as Response);
+          { status: 200 },
+        ),
+      );
     };
     const client = makeClient(fetchImpl, { timeoutMs: 50 });
     await expect(client.createCustomer({ email: 'x@y.com' })).rejects.toThrow();
