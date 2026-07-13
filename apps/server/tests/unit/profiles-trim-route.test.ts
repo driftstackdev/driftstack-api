@@ -110,6 +110,14 @@ function trim(app: FastifyInstance, id = PROFILE_ID) {
   });
 }
 
+async function waitFor(cond: () => boolean, label: string, budgetMs = 5_000): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  while (!cond()) {
+    if (Date.now() > deadline) throw new Error(`waitFor timed out: ${label}`);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
 interface TrimBody {
   status: 'ok' | 'unavailable' | 'timeout' | 'error';
   reason?: string;
@@ -308,6 +316,49 @@ describe('POST /v1/profiles/:id/trim', () => {
     expect(recordTrimCalls).toEqual([
       { profileId: PROFILE_UUID, accountId: ACCOUNT_ID, newSizeBytes: 4_000 },
     ]);
+  });
+
+  it('admits one expensive trim per owner account and releases the slot after settle', async () => {
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID });
+    const registry = new FleetControlRegistry();
+    const sentTrim: Array<Record<string, unknown>> = [];
+    const nodeId = 'node-trim-account-cap';
+    const hanging = registry.register(nodeId, (data) => {
+      const frame = JSON.parse(data) as { type?: string };
+      if (frame.type === 'trimProfile') sentTrim.push(frame);
+      // Keep the first request pending so the account reservation stays held.
+    });
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+    });
+
+    const first = trim(app);
+    await waitFor(() => sentTrim.length === 1, 'first profile trim relayed');
+
+    const second = await trim(app);
+    expect(second.statusCode).toBe(200);
+    expect(second.json<TrimBody>()).toMatchObject({
+      status: 'unavailable',
+      reason: expect.stringMatching(/another profile cache trim is already in progress/i),
+    });
+    expect(sentTrim).toHaveLength(1); // the second request never reached the worker
+
+    // Settling the first request must run the route's finally and release the
+    // account slot, regardless of the node-reported outcome.
+    hanging.close('test release');
+    await first;
+
+    registerEchoNode(registry, nodeId, (frame) => ({
+      profileId: frame.profileId,
+      ok: true,
+      newSizeBytes: 4_000,
+      bytesReclaimed: 6_000,
+    }));
+    const afterRelease = await trim(app);
+    expect(afterRelease.statusCode).toBe(200);
+    expect(afterRelease.json<TrimBody>().status).toBe('ok');
   });
 
   it('connected node reports an error → 200 { status:"error", reason } + does NOT persist', async () => {

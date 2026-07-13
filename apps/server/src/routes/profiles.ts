@@ -121,6 +121,18 @@ export interface ProfileRoutesDeps {
 export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesDeps): void {
   const { service, authRepo, fleetControlRegistry, r2, agentSessions } = deps;
 
+  // A profile trim is a large out-of-session transform on a shared Mac: the
+  // node may GET, decrypt/decompress, filter, re-seal, and PUT up to the 256 MiB
+  // per-blob backstop while the API waits for as long as 60 seconds. The generic
+  // request-rate bucket permits bursts, so bound expensive concurrent work per
+  // effective owner account independently of request frequency.
+  const profileTrimAccountsInFlight = new Set<string>();
+  function reserveProfileTrim(accountId: string): (() => void) | null {
+    if (profileTrimAccountsInFlight.has(accountId)) return null;
+    profileTrimAccountsInFlight.add(accountId);
+    return () => profileTrimAccountsInFlight.delete(accountId);
+  }
+
   // ── POST /v1/profiles ────────────────────────────────────────────────
   // V-326e4 — admin-only when targeting a team owner; profile cap +
   // accountId derive from the OWNER. Member role gets 403.
@@ -563,45 +575,56 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       if (conn === undefined) {
         return { status: 'unavailable' as const, reason: 'no fleet node is connected' };
       }
-      const outcome = await conn.requestTrim({
-        requestId: randomUUID(),
-        profileId: id,
-        dek: dekBase64,
-        sealedBlobURL: block.sealedBlobUrl,
-        sealedBlobPutURL: block.sealedBlobPutUrl,
-      });
-      if (outcome.status === 'ok') {
-        // Persist the new (smaller) sealed size so the storage meter + launch quota
-        // gate reflect the reclaimed bytes immediately. Only on a confirmed ok.
-        // The node already re-sealed + PUT the smaller blob — the trim SUCCEEDED.
-        // A failure to persist the new size must NOT surface as a 500 (the storage
-        // was reclaimed; only the meter row lags until the next size write). Swallow+warn.
-        try {
-          await service.recordTrim({
-            profileId: id,
-            accountId,
-            newSizeBytes: outcome.newSizeBytes,
-          });
-        } catch (err) {
-          req.log.warn(
-            { component: 'profile-trim', profileId: id, err },
-            'profile trim succeeded on the node but the size-meter DB update failed',
-          );
+      const releaseProfileTrim = reserveProfileTrim(accountId);
+      if (releaseProfileTrim === null) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'another profile cache trim is already in progress — retry when it finishes',
+        };
+      }
+      try {
+        const outcome = await conn.requestTrim({
+          requestId: randomUUID(),
+          profileId: id,
+          dek: dekBase64,
+          sealedBlobURL: block.sealedBlobUrl,
+          sealedBlobPutURL: block.sealedBlobPutUrl,
+        });
+        if (outcome.status === 'ok') {
+          // Persist the new (smaller) sealed size so the storage meter + launch quota
+          // gate reflect the reclaimed bytes immediately. Only on a confirmed ok.
+          // The node already re-sealed + PUT the smaller blob — the trim SUCCEEDED.
+          // A failure to persist the new size must NOT surface as a 500 (the storage
+          // was reclaimed; only the meter row lags until the next size write). Swallow+warn.
+          try {
+            await service.recordTrim({
+              profileId: id,
+              accountId,
+              newSizeBytes: outcome.newSizeBytes,
+            });
+          } catch (err) {
+            req.log.warn(
+              { component: 'profile-trim', profileId: id, err },
+              'profile trim succeeded on the node but the size-meter DB update failed',
+            );
+          }
+          return {
+            status: 'ok' as const,
+            size_bytes: outcome.newSizeBytes,
+            bytes_reclaimed: outcome.bytesReclaimed,
+          };
         }
-        return {
-          status: 'ok' as const,
-          size_bytes: outcome.newSizeBytes,
-          bytes_reclaimed: outcome.bytesReclaimed,
-        };
+        if (outcome.status === 'error') {
+          // Node reported a failure — do NOT update the row (the old blob is untouched).
+          return {
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
+        }
+        return { status: 'timeout' as const };
+      } finally {
+        releaseProfileTrim();
       }
-      if (outcome.status === 'error') {
-        // Node reported a failure — do NOT update the row (the old blob is untouched).
-        return {
-          status: 'error' as const,
-          reason: customerSafeNodeDiagnostic(outcome.message),
-        };
-      }
-      return { status: 'timeout' as const };
     },
   );
 }
