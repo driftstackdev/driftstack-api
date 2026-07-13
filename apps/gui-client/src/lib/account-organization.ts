@@ -10,6 +10,7 @@
 // ProfilesView reconciles (server wins on a successful load, pushes on mutate).
 
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 
 export interface OrgFolder {
   name: string;
@@ -54,7 +55,7 @@ export async function fetchOrganization(
     headers: orgHeaders(apiKey, effectiveAccount, { accept: 'application/json' }),
   });
   if (!res.ok) throw new Error(`organization fetch failed: ${res.status.toString()}`);
-  const body = (await res.json()) as Partial<AccountOrganization>;
+  const body = await readBoundedApiJson<Partial<AccountOrganization>>(res);
   return {
     folders: Array.isArray(body.folders)
       ? body.folders.filter((f) => typeof f?.name === 'string')

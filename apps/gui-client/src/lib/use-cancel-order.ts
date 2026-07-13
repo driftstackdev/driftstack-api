@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 import type { CryptoOrderData } from './use-crypto-order';
 
@@ -68,7 +69,7 @@ export function useCancelOrder(): UseCancelOrderResult {
           }
           return;
         }
-        const body = (await res.json()) as CryptoOrderData;
+        const body = await readBoundedApiJson<CryptoOrderData>(res);
         if (sequence === sequenceRef.current) setState({ kind: 'succeeded', order: body });
       } catch (err) {
         if (sequence === sequenceRef.current) {

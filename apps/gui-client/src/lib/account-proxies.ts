@@ -10,6 +10,7 @@
 // cache; ProfilesView/ProxiesView reconcile (server wins on a successful load).
 
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
@@ -80,7 +81,7 @@ export async function listProxies(baseUrl: string, apiKey: string): Promise<Acco
     headers: authHeaders(apiKey),
   });
   if (!res.ok) throw new Error(`proxies fetch failed: ${res.status.toString()}`);
-  const body = (await res.json()) as { data?: unknown };
+  const body = await readBoundedApiJson<{ data?: unknown }>(res);
   return Array.isArray(body.data) ? (body.data as AccountProxyMeta[]) : [];
 }
 
@@ -95,7 +96,7 @@ export async function createProxy(
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error(`proxy create failed: ${res.status.toString()}`);
-  return (await res.json()) as AccountProxyMeta;
+  return readBoundedApiJson<AccountProxyMeta>(res);
 }
 
 export async function updateProxy(
@@ -118,7 +119,7 @@ export async function updateProxy(
     err.status = res.status;
     throw err;
   }
-  return (await res.json()) as AccountProxyMeta;
+  return readBoundedApiJson<AccountProxyMeta>(res);
 }
 
 export async function deleteProxy(baseUrl: string, apiKey: string, id: string): Promise<void> {

@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { fetchWithDeadline } from '../lib/fetch-with-deadline';
+import { readBoundedApiJson } from '../lib/read-bounded-json';
 import { useSettings } from '../lib/SettingsContext';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
@@ -93,7 +94,7 @@ export function SettingsAccountCard(): JSX.Element | null {
           setState({ kind: 'error', message: errorMessageForStatus(res.status) });
           return;
         }
-        const body = (await res.json()) as AccountMeResponse;
+        const body = await readBoundedApiJson<AccountMeResponse>(res);
         if (controller.signal.aborted) return;
         setState({ kind: 'ready', account: body.account });
       } catch (err) {

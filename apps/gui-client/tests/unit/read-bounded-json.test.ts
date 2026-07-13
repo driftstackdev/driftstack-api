@@ -37,6 +37,28 @@ describe('readBoundedDiagnosticJson', () => {
     }
   });
 
+  it('guards every customer-facing GUI API JSON success path', () => {
+    for (const relative of [
+      '../../src/components/SettingsAccountCard.tsx',
+      '../../src/lib/use-sessions-list.ts',
+      '../../src/lib/use-crypto-order.ts',
+      '../../src/lib/use-account-me.ts',
+      '../../src/lib/use-crypto-quote.ts',
+      '../../src/lib/use-webhooks-list.ts',
+      '../../src/lib/use-crypto-checkout.ts',
+      '../../src/lib/use-crypto-receipt.ts',
+      '../../src/lib/use-account-cost.ts',
+      '../../src/lib/account-proxies.ts',
+      '../../src/lib/account-organization.ts',
+      '../../src/lib/use-cancel-order.ts',
+      '../../src/lib/use-crypto-orders-list.ts',
+    ]) {
+      const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
+      expect(source, relative).toContain('readBoundedApiJson');
+      expect(source, relative).not.toMatch(/\bres\.json\(/);
+    }
+  });
+
   it('decodes a normal streamed JSON response', async () => {
     const response = new Response(JSON.stringify({ driver: 'webkit', version: 'abc123' }), {
       headers: { 'content-type': 'application/json' },

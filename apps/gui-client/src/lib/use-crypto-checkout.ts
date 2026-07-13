@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 
 function newIdempotencyKey(): string {
@@ -101,7 +102,7 @@ export function useCryptoCheckout(): UseCryptoCheckoutResult {
           if (sequence === sequenceRef.current) setState({ kind: 'error', message });
           return;
         }
-        const order = (await res.json()) as CryptoCheckoutResponse;
+        const order = await readBoundedApiJson<CryptoCheckoutResponse>(res);
         const replayed = res.headers.get('idempotent-replayed') === '1';
         if (sequence === sequenceRef.current) setState({ kind: 'ready', order, replayed });
       } catch (err) {

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 
 export interface CryptoOrderEvent {
@@ -107,7 +108,7 @@ export function useCryptoOrder(
         }
         return;
       }
-      const body = (await res.json()) as CryptoOrderData;
+      const body = await readBoundedApiJson<CryptoOrderData>(res);
       if (sequence === sequenceRef.current) {
         failCountRef.current = 0;
         lastStatusRef.current = body.status;

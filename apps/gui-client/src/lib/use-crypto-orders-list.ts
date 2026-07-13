@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundedApiJson } from './read-bounded-json';
 import { useSettings } from './SettingsContext';
 import type { CryptoOrderData } from './use-crypto-order';
 
@@ -110,7 +111,7 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
         if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
-      const body = (await res.json()) as ListApiResponse;
+      const body = await readBoundedApiJson<ListApiResponse>(res);
       if (sequence === sequenceRef.current) {
         setState({
           kind: 'ready',
@@ -165,7 +166,7 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
         if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
-      const body = (await res.json()) as ListApiResponse;
+      const body = await readBoundedApiJson<ListApiResponse>(res);
       if (sequence === sequenceRef.current) {
         setState({
           kind: 'ready',
