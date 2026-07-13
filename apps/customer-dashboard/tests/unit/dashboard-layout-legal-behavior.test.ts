@@ -91,6 +91,38 @@ describe('DashboardLayout legal acceptance reconciliation', () => {
     win = null;
   });
 
+  it('reveals a failed initial check and retries with GET only before enabling acceptance', async () => {
+    let requiredReads = 0;
+    const { window, fetchCalls } = setUpDom((call) => {
+      if (!call.url.endsWith('/v1/legal/required')) {
+        throw new Error('acceptance POST must not run during check-only recovery');
+      }
+      requiredReads += 1;
+      if (requiredReads === 1) return Promise.reject(new TypeError('gateway unavailable'));
+      return json({ data: [TOS] });
+    });
+    win = window;
+    await flush();
+
+    const banner = window.document.querySelector('[data-legal-banner]') as HTMLElement;
+    const button = window.document.querySelector('[data-legal-accept-all]') as HTMLButtonElement;
+    expect(banner.classList.contains('hidden')).toBe(false);
+    expect(button.textContent).toBe('Retry agreement check');
+    expect(window.document.querySelector('[data-legal-status]')?.textContent).toMatch(
+      /Could not check whether updated agreements are required/,
+    );
+
+    button.click();
+    await flush();
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+    expect(fetchCalls.filter((call) => call.url.endsWith('/v1/legal/required'))).toHaveLength(2);
+    expect(button.textContent).toBe('Accept all and continue');
+    expect(window.document.querySelector('[data-legal-pending-list]')?.textContent).toContain(
+      'Terms of Service',
+    );
+  });
+
   it('re-renders and retries only the document still required after a partial timeout', async () => {
     let pending = [TOS, PRIVACY];
     let privacyAttempts = 0;

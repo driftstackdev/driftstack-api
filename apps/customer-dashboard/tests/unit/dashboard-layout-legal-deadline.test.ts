@@ -27,6 +27,17 @@ describe('DashboardLayout legal acceptance deadline', () => {
     expect(layout).toMatch(/if \(reloadOnly\) \{\s*window\.location\.reload\(\);\s*return;/);
     expect(layout).toMatch(/Acceptance outcome is unknown\. Reload to check what remains/);
   });
+
+  it('surfaces initial legal-check failures with a GET-only retry state', () => {
+    expect(layout).toMatch(/let checkOnly = false/);
+    expect(layout).toMatch(/function showLegalCheckFailure\(\)/);
+    expect(layout).toMatch(/Retry agreement check/);
+    expect(layout).toMatch(/if \(checkOnly\) \{/);
+    expect(layout).toMatch(
+      /if \(checkOnly\)[\s\S]*?fetchRequiredLegal\(\)\.then\(applyRequiredLegal\)\.catch\(showLegalCheckFailure\);/,
+    );
+    expect(layout).toMatch(/\.then\(applyRequiredLegal\)\s*\.catch\(showLegalCheckFailure\)/);
+  });
 });
 
 describe('DashboardLayout account shell reliability', () => {

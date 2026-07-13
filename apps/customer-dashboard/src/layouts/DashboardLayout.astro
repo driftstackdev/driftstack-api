@@ -1510,6 +1510,7 @@ const navSections: NavSection[] = [
           );
           let required = [];
           let reloadOnly = false;
+          let checkOnly = false;
           // 2026-05-20 — server's document_key for the
           // Terms-of-Service doc is 'tos' but the marketing-site
           // URL slug is /legal/terms/. Map the one mismatch.
@@ -1565,6 +1566,36 @@ const navSections: NavSection[] = [
             }, 400);
           }
 
+          function showLegalCheckFailure() {
+            required = [];
+            checkOnly = true;
+            reloadOnly = false;
+            list.textContent = '';
+            banner.classList.remove('hidden');
+            acceptAllBtn.disabled = false;
+            acceptAllBtn.textContent = 'Retry agreement check';
+            acceptAllBtn.title = 'Check required agreements without recording acceptance';
+            statusEl.textContent =
+              'Could not check whether updated agreements are required. Retry this check before creating API keys or sessions.';
+          }
+
+          function applyRequiredLegal(pending) {
+            required = pending;
+            checkOnly = false;
+            reloadOnly = false;
+            acceptAllBtn.removeAttribute('title');
+            if (required.length === 0) {
+              banner.classList.add('hidden');
+              statusEl.textContent = '';
+              return;
+            }
+            renderRequiredLegal(required);
+            banner.classList.remove('hidden');
+            acceptAllBtn.disabled = false;
+            acceptAllBtn.textContent = 'Accept all and continue';
+            statusEl.textContent = '';
+          }
+
           function requireLegalReload() {
             reloadOnly = true;
             acceptAllBtn.disabled = false;
@@ -1614,6 +1645,12 @@ const navSections: NavSection[] = [
               window.location.reload();
               return;
             }
+            if (checkOnly) {
+              acceptAllBtn.disabled = true;
+              statusEl.textContent = 'Checking required agreements…';
+              fetchRequiredLegal().then(applyRequiredLegal).catch(showLegalCheckFailure);
+              return;
+            }
             const attempted = required.slice();
             if (attempted.length === 0) return;
             acceptAllBtn.disabled = true;
@@ -1647,15 +1684,8 @@ const navSections: NavSection[] = [
           });
 
           fetchRequiredLegal()
-            .then(function (pending) {
-              required = pending;
-              if (required.length === 0) return;
-              banner.classList.remove('hidden');
-              renderRequiredLegal(required);
-            })
-            .catch(function () {
-              /* swallow — banner stays hidden on transient failures */
-            });
+            .then(applyRequiredLegal)
+            .catch(showLegalCheckFailure);
         })();
       </script>
       <footer class="border-t border-tk-border bg-tk-bg">
