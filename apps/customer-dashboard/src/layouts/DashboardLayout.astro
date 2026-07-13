@@ -1469,6 +1469,18 @@ const navSections: NavSection[] = [
         // "Operation requires acceptance of N document(s)…" when minting
         // an api-key / creating a session and has no path forward.
         (function () {
+          const LEGAL_REQUEST_TIMEOUT_MS = 15_000;
+          function fetchLegalWithDeadline(url, init) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(function () {
+              controller.abort();
+            }, LEGAL_REQUEST_TIMEOUT_MS);
+            return fetch(url, Object.assign({}, init, { signal: controller.signal })).finally(
+              function () {
+                clearTimeout(timeoutId);
+              },
+            );
+          }
           const banner = document.querySelector('[data-legal-banner]');
           if (!banner) return;
           const list = banner.querySelector('[data-legal-pending-list]');
@@ -1486,7 +1498,7 @@ const navSections: NavSection[] = [
             { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
             window.driftstackActAsHeaders ? window.driftstackActAsHeaders() : {},
           );
-          fetch(apiBaseUrl + '/v1/legal/required', { headers })
+          fetchLegalWithDeadline(apiBaseUrl + '/v1/legal/required', { headers })
             .then(function (res) {
               return res.ok ? res.json() : null;
             })
@@ -1532,7 +1544,7 @@ const navSections: NavSection[] = [
                 // includes it on each entry so pass it through.
                 Promise.all(
                   required.map(function (doc) {
-                    return fetch(apiBaseUrl + '/v1/legal/accept', {
+                    return fetchLegalWithDeadline(apiBaseUrl + '/v1/legal/accept', {
                       method: 'POST',
                       headers: headers,
                       body: JSON.stringify({
@@ -1557,8 +1569,11 @@ const navSections: NavSection[] = [
                       window.location.reload();
                     }, 400);
                   })
-                  .catch(function () {
-                    statusEl.textContent = 'Network error — please retry.';
+                  .catch(function (err) {
+                    statusEl.textContent =
+                      err && err.name === 'AbortError'
+                        ? 'Acceptance took too long — check your connection and retry.'
+                        : 'Network error — please retry.';
                     acceptAllBtn.disabled = false;
                   });
               });
