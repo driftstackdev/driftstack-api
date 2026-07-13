@@ -217,8 +217,12 @@ const apiBaseUrl = resolveApiBaseUrl();
     );
   }
 
-  function requestErrorMessage(err, fallback = 'network error') {
+  function requestErrorMessage(err, fallback) {
     return window.driftstackRequestErrorMessage(err, fallback);
+  }
+
+  function responseErrorMessage(response, fallback) {
+    return requestErrorMessage(new Error('HTTP ' + response.status), fallback);
   }
 
   function escapeHtml(s) {
@@ -333,7 +337,7 @@ const apiBaseUrl = resolveApiBaseUrl();
   // the tiles don't look perpetually "still loading" when the page is
   // actually erroring.
   function showConfigError(msg) {
-    const text = `<p class="text-sm text-red-600">Couldn't load (${escapeHtml(msg)}).</p>`;
+    const text = `<p class="text-sm text-red-600">${escapeHtml(msg)}</p>`;
     if (rateCard) rateCard.innerHTML = text;
     if (tierThresholds) tierThresholds.innerHTML = text;
   }
@@ -342,8 +346,12 @@ const apiBaseUrl = resolveApiBaseUrl();
     try {
       const res = await authedFetch('/v1/admin/cost/config');
       if (!res.ok) {
-        showBanner(`/v1/admin/cost/config returned ${res.status}`);
-        showConfigError(`HTTP ${res.status}`);
+        const msg = responseErrorMessage(
+          res,
+          'Could not load cost configuration. Try again.',
+        );
+        showBanner(msg);
+        showConfigError(msg);
         return;
       }
       const body = await res.json();
@@ -357,8 +365,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       // softWarningCents → softCents fix.
       renderTierThresholds(body.tierThresholds ?? body.tiers ?? {});
     } catch (err) {
-      const msg = requestErrorMessage(err);
-      showBanner('Could not load cost config (' + msg + ').');
+      const msg = requestErrorMessage(err, 'Could not load cost configuration. Try again.');
+      showBanner(msg);
       showConfigError(msg);
     }
   }
@@ -415,7 +423,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       // Step 1 — pull first 50 accounts.
       const accountsRes = await authedFetch('/v1/admin/accounts?limit=50');
       if (!accountsRes.ok) {
-        topResult.innerHTML = `<p class="text-sm text-red-600">/v1/admin/accounts returned ${accountsRes.status}</p>`;
+        const msg = responseErrorMessage(
+          accountsRes,
+          'Could not load the account list. Try again.',
+        );
+        topResult.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(msg)}</p>`;
         return;
       }
       const accountsBody = await accountsRes.json();
@@ -431,14 +443,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         '/v1/admin/cost/overview?account_ids=' + encodeURIComponent(ids.join(',')),
       );
       if (!overviewRes.ok) {
-        topResult.innerHTML = `<p class="text-sm text-red-600">/v1/admin/cost/overview returned ${overviewRes.status}</p>`;
+        const msg = responseErrorMessage(
+          overviewRes,
+          'Could not load cost totals. Try again.',
+        );
+        topResult.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(msg)}</p>`;
         return;
       }
       const overviewBody = await overviewRes.json();
       renderTopAccounts(overviewBody.summaries ?? []);
     } catch (err) {
-      const msg = requestErrorMessage(err);
-      topResult.innerHTML = `<p class="text-sm text-red-600">Could not load top accounts (${escapeHtml(msg)}).</p>`;
+      const msg = requestErrorMessage(err, 'Could not load top accounts. Try again.');
+      topResult.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(msg)}</p>`;
     } finally {
       topAccountsLoading = false;
       if (refreshTopBtn) {
@@ -534,26 +550,36 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             if (existsRes.status === 404) {
               showBanner(`Account acc_${accountId} not found — check the id.`);
-            } else {
+            } else if (existsRes.ok) {
               showBanner('Account exists but has no usage in the requested cycle.');
+            } else {
+              showBanner(
+                responseErrorMessage(
+                  existsRes,
+                  'Could not verify whether this account exists. Try again.',
+                ),
+              );
             }
-          } catch (_existErr) {
-            // Existence check itself failed (e.g. no token) — fall back to
-            // the old ambiguous-but-safe message rather than asserting
-            // either way.
-            showBanner('Account has no usage in the requested cycle (or the id does not exist).');
+          } catch (existErr) {
+            showBanner(
+              requestErrorMessage(
+                existErr,
+                'Could not verify whether this account exists. Try again.',
+              ),
+            );
           }
           return;
         }
         if (!res.ok) {
-          showBanner(`/v1/admin/cost/accounts/${accountId} returned ${res.status}`);
+          showBanner(responseErrorMessage(res, 'Could not load account cost. Try again.'));
           return;
         }
         const body = await res.json();
         renderAccountSummary(body);
       } catch (err) {
-        const msg = requestErrorMessage(err);
-        showBanner('Could not load account cost (' + msg + ').');
+        showBanner(
+          requestErrorMessage(err, 'Could not load account cost. Try again.'),
+        );
       } finally {
         accountQueryLoading = false;
         accountForm.setAttribute('aria-busy', 'false');

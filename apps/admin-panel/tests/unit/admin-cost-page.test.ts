@@ -218,14 +218,16 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     );
   });
 
-  it('config endpoint error: surfaces the status in a banner', async () => {
+  it('config endpoint error: uses staff-safe service copy without endpoint/status/body leakage', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
-      route: () => json({ detail: 'boom' }, 500),
+      route: () => json({ detail: 'database host db.internal:5432 secret=abc' }, 500),
     });
     win = window;
     await flush();
-    expect(text(window, '[data-banner]')).toContain('returned 500');
+    const banner = text(window, '[data-banner]');
+    expect(banner).toContain('admin service is temporarily unavailable');
+    expect(banner).not.toMatch(/\/v1\/|500|db\.internal|secret=abc/);
   });
 
   it('CRITICAL config endpoint error: Rate Card / Tier Thresholds tiles clear out of the perpetual loading-skeleton animation instead of pulsing forever (audit waefer6wu)', async () => {
@@ -239,8 +241,12 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     const tierThresholds = window.document.querySelector('[data-field="tier-thresholds"]');
     expect(rateCard?.querySelector('.animate-pulse')).toBeNull();
     expect(tierThresholds?.querySelector('.animate-pulse')).toBeNull();
-    expect(text(window, '[data-field="rate-card"]')).toContain("Couldn't load");
-    expect(text(window, '[data-field="tier-thresholds"]')).toContain("Couldn't load");
+    expect(text(window, '[data-field="rate-card"]')).toContain(
+      'admin service is temporarily unavailable',
+    );
+    expect(text(window, '[data-field="tier-thresholds"]')).toContain(
+      'admin service is temporarily unavailable',
+    );
   });
 
   it('no admin token: tiles also clear the skeleton (the authedFetch throw is the same failure path as a non-ok response)', async () => {
@@ -297,6 +303,28 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(result).toContain('$50.00'); // hard cap 5000c
   });
 
+  it('account query failure uses staff-safe copy without account id/status/body leakage', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/cost\/accounts\/private-account/.test(call.url)) {
+          return json({ detail: 'driver token=secret at node.internal' }, 503);
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value =
+      'acc_private-account';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const banner = text(window, '[data-banner]');
+    expect(banner).toContain('admin service is temporarily unavailable');
+    expect(banner).not.toMatch(/private-account|503|node\.internal|token=secret|\/v1\//);
+  });
+
   it('account query 404 + account DOES exist (admin-accounts lookup is 200): "exists but no usage" — distinct from "not found" (audit waefer6wu)', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
@@ -340,6 +368,28 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(text(window, '[data-banner]')).not.toContain('no usage');
   });
 
+  it('account query 404 + failed existence probe stays unknown instead of claiming zero usage', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/cost\/accounts\//.test(call.url)) return json({}, 404);
+        if (/\/v1\/admin\/accounts\/acc_uncertain/.test(call.url)) {
+          return json({ detail: 'database host db.internal:5432' }, 503);
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_uncertain';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const banner = text(window, '[data-banner]');
+    expect(banner).toContain('admin service is temporarily unavailable');
+    expect(banner).not.toMatch(/exists but has no usage|not found|503|db\.internal/);
+  });
+
   it('top accounts: two-step fetch (accounts → overview) renders the money table', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
@@ -373,6 +423,45 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(top).toContain('$21.00');
     expect(top).toContain('$15.50');
     expect(top).toContain('$50.00');
+  });
+
+  it('top-accounts failures use staff-safe copy without raw endpoint/status/body text', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/accounts\?/.test(call.url)) {
+          return json({ detail: 'redis://user:secret@cache.internal' }, 503);
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const btn = window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement;
+    btn.click();
+    await flush();
+    const top = text(window, '[data-field="top-result"]');
+    expect(top).toContain('admin service is temporarily unavailable');
+    expect(top).not.toMatch(/\/v1\/|503|redis:|cache\.internal|secret/);
+  });
+
+  it('top-accounts overview rate limit uses actionable copy without endpoint/status text', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/accounts\?/.test(call.url)) return json({ data: [{ id: 'acc_a1' }] });
+        if (/\/v1\/admin\/cost\/overview\?/.test(call.url)) return json({ detail: 'slow' }, 429);
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const btn = window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement;
+    btn.click();
+    await flush();
+    const top = text(window, '[data-field="top-result"]');
+    expect(top).toContain('Too many requests. Wait a moment and try again.');
+    expect(top).not.toMatch(/\/v1\/|429/);
   });
 
   it('top-accounts refresh is single-flight and exposes honest progress', async () => {
