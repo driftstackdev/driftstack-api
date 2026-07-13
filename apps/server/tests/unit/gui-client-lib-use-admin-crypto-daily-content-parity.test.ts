@@ -47,7 +47,7 @@ describe('W466.A apps/gui-client/src/lib/use-admin-crypto-daily.ts content parit
 
   it("AdminDailyStatus 6-value union ('pending'|'confirming'|'paid'|'failed'|'partial'|'cancelled') matches server payment-status surface", () => {
     expect(body).toMatch(
-      /export type AdminDailyStatus =\s*\n?\s*\| 'pending'\s*\n?\s*\| 'confirming'\s*\n?\s*\| 'paid'\s*\n?\s*\| 'failed'\s*\n?\s*\| 'partial'\s*\n?\s*\| 'cancelled';/,
+      /export type AdminDailyStatus =\s*\n?\s*'?pending'?\s*\| '?confirming'?\s*\| '?paid'?\s*\| '?failed'?\s*\| '?partial'?\s*\| '?cancelled'?;/,
     );
   });
 
@@ -71,15 +71,22 @@ describe('W466.A apps/gui-client/src/lib/use-admin-crypto-daily.ts content parit
       /const url = new URL\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/daily`\);\s*\n?\s*if \(days !== undefined\) url\.searchParams\.set\('days', days\.toString\(\)\);/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
     );
   });
 
-  it('Same state-machine pattern as V-534 hook family: manual?-aware initial state + no-apiKey error + readApiErrorMessage delegation + instance-of-Error catch + useEffect manual gate; useCallback deps [settings.apiKey, settings.baseUrl, days]', () => {
+  it('State-machine behavior remains while reads are single-flight, sequence-gated, and aborted on key/base/days changes or unmount', () => {
     expect(body).toMatch(
       /const \[state, setState\] = useState<AdminDailyState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
     );
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
+    expect(body).toMatch(
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
+    );
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl, days\]\);/);
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl, days\],/,
+    );
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
     );
