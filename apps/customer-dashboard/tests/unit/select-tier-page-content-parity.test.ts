@@ -104,8 +104,25 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
 
   it('V-501 withBusy double-checkout guard pinned (no double-Stripe-session)', () => {
     expect(body).toMatch(/V-501 — disable a button while its checkout-session call is in/);
-    expect(body).toMatch(/if \(btn\.disabled\) return Promise\.resolve\(\);/);
+    expect(body).toMatch(/if \(busyCheckoutButtons\.has\(btn\)\) return Promise\.resolve\(\);/);
+    expect(body).toContain('const CHECKOUT_TIMEOUT_MS = 15_000;');
+    expect(body).toMatch(/busyCheckoutButtons\.add\(btn\)/);
+    expect(body).toMatch(/work\(controller\.signal\)/);
+    expect(body).toMatch(/window\.clearTimeout\(timeout\)/);
     expect(body).toMatch(/btn\.textContent = 'Redirecting…';/);
+    expect(body).toContain(
+      'The billing request took too long. Check your connection and try again.',
+    );
+  });
+
+  it('bounds crypto address minting while preserving its explicit lease', () => {
+    expect(body).toContain('let cryptoRequestInFlight = false;');
+    expect(body).toContain('const CRYPTO_TIMEOUT_MS = 15_000;');
+    expect(body).toMatch(/if \(cryptoRequestInFlight\) return;/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toContain(
+      'Minting the payment address took too long. Check your connection and try again.',
+    );
   });
 
   it('"All tiers run the same engine — only caps + profile counts change" framing pinned', () => {

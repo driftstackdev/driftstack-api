@@ -254,17 +254,31 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       // V-501 — disable a button while its checkout-session call is in
       // flight so the customer can't double-click and create two Stripe
       // sessions. Original label restored on error so they can retry.
+      const CHECKOUT_TIMEOUT_MS = 15_000;
+      const busyCheckoutButtons = new WeakSet();
       function withBusy(btn, work) {
-        if (btn.disabled) return Promise.resolve();
+        if (busyCheckoutButtons.has(btn)) return Promise.resolve();
+        busyCheckoutButtons.add(btn);
         const original = btn.textContent;
         btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
         btn.textContent = 'Redirecting…';
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), CHECKOUT_TIMEOUT_MS);
         return Promise.resolve()
-          .then(work)
+          .then(() => work(controller.signal))
           .catch((err) => {
-            btn.disabled = false;
-            btn.textContent = original;
+            if (err && err.name === 'AbortError') {
+              throw new Error('The billing request took too long. Check your connection and try again.');
+            }
             throw err;
+          })
+          .finally(() => {
+            window.clearTimeout(timeout);
+            busyCheckoutButtons.delete(btn);
+            btn.disabled = false;
+            btn.setAttribute('aria-busy', 'false');
+            btn.textContent = original;
           });
       }
 
@@ -332,8 +346,8 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
 
           if (isActiveSubscription(currentSubscription)) {
             if (tier === currentSubscription.tier) return; // "Current plan" — disabled, no-op.
-            withBusy(btn, () =>
-              authedFetch('/v1/billing/portal-session', { method: 'POST', body: '{}' })
+            withBusy(btn, (signal) =>
+              authedFetch('/v1/billing/portal-session', { method: 'POST', body: '{}', signal })
                 .then((r) =>
                   r.ok
                     ? r.json()
@@ -359,9 +373,10 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             return;
           }
 
-          withBusy(btn, () =>
+          withBusy(btn, (signal) =>
             authedFetch('/v1/billing/checkout-session', {
               method: 'POST',
+              signal,
               body: JSON.stringify({
                 tier,
                 billing_period: 'monthly',
@@ -438,6 +453,7 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       // singleton, so only one mint can be meaningfully in progress).
       const cryptoOrderCache = new Map();
       let cryptoRequestInFlight = false;
+      const CRYPTO_TIMEOUT_MS = 15_000;
 
       function setCryptoText(key, value) {
         const el = root.querySelector('[data-field="' + key + '"]');
@@ -498,6 +514,9 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           showCryptoModal();
           cryptoRequestInFlight = true;
           btn.disabled = true;
+          btn.setAttribute('aria-busy', 'true');
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), CRYPTO_TIMEOUT_MS);
           try {
             // Persist the idempotency key per-tier so a RELOAD (which wipes the
             // in-page cryptoOrderCache) reuses the SAME key → the server returns
@@ -525,6 +544,7 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             }
             const res = await authedFetch('/v1/billing/crypto-checkout', {
               method: 'POST',
+              signal: controller.signal,
               headers: {
                 'content-type': 'application/json',
                 'idempotency-key': idempotencyKey,
@@ -562,10 +582,18 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             setCryptoText('crypto-order-id', body.order_id);
             cryptoReady.classList.remove('hidden');
           } catch (err) {
-            showCryptoError(err && err.message ? err.message : 'network error');
+            showCryptoError(
+              err && err.name === 'AbortError'
+                ? 'Minting the payment address took too long. Check your connection and try again.'
+                : err && err.message
+                  ? err.message
+                  : 'network error',
+            );
           } finally {
+            window.clearTimeout(timeout);
             cryptoRequestInFlight = false;
             btn.disabled = false;
+            btn.setAttribute('aria-busy', 'false');
           }
         });
       });

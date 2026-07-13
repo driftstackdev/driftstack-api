@@ -121,13 +121,17 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     });
     win = window;
     clickFirst(window, '[data-action="buy-tier"]');
+    clickFirst(window, '[data-action="buy-tier"]');
     await flush();
-    const call = fetchCalls.find(
+    const calls = fetchCalls.filter(
       (c) =>
         /\/v1\/billing\/checkout-session$/.test(c.url) &&
         (c.init?.method || '').toUpperCase() === 'POST',
     );
+    expect(calls).toHaveLength(1);
+    const call = calls[0];
     expect(call).toBeTruthy();
+    expect(call?.init?.signal).toBeDefined();
     const body = JSON.parse(String(call?.init?.body));
     expect(body.billing_period).toBe('monthly');
     expect(typeof body.tier).toBe('string');
@@ -135,7 +139,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
   });
 
   it('Stripe buy-tier 503 (billing unwired): shows the "setup in progress" soft message', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: () => json({ detail: 'unwired' }, 503),
     });
@@ -159,7 +163,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
   });
 
   it('crypto checkout success: renders the exact amount, currency, address, and order id from the API', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: () =>
         json({
@@ -172,7 +176,11 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     });
     win = window;
     clickFirst(window, '[data-action="buy-tier-crypto"]');
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
     await flush();
+    const cryptoCalls = fetchCalls.filter((c) => /\/v1\/billing\/crypto-checkout$/.test(c.url));
+    expect(cryptoCalls).toHaveLength(1);
+    expect(cryptoCalls[0]?.init?.signal).toBeDefined();
     expect(isHidden(window, '[data-crypto-modal-ready]')).toBe(false);
     expect(text(window, '[data-field="crypto-amount"]')).toBe('0.0123');
     expect(text(window, '[data-field="crypto-currency"]')).toBe('eth');
