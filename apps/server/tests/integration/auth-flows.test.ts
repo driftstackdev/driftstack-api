@@ -1320,6 +1320,51 @@ describe('AuthFlowsService.issueOAuthWebSession — active-account containment',
     ).resolves.toBeNull();
     expect(insertSession).not.toHaveBeenCalled();
   });
+
+  it('does not let a linked IDP bypass enrolled Driftstack MFA', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const logger = createTestLogger();
+    const email = createEmailService({ config: null, logger });
+    const getStatus = vi.fn().mockResolvedValue({
+      enrolled: true,
+      enrolledAt: new Date(),
+      lastUsedAt: null,
+      unusedRecoveryCodes: 10,
+    });
+    const mfa = { getStatus };
+    const service = new AuthFlowsService(
+      repo,
+      email,
+      logger,
+      {
+        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        exposeDebugToken: true,
+      },
+      null,
+      null,
+      mfa as never,
+      new InMemoryMfaChallengeStore(),
+    );
+    const signup = await service.signup({
+      email: 'mfa-oauth@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    await expect(
+      service.issueOAuthWebSession({
+        accountId: signup.account.id,
+        issuedFromIp: null,
+        userAgent: null,
+        provider: 'github',
+      }),
+    ).resolves.toBeNull();
+    expect(getStatus).toHaveBeenCalledWith(signup.account.id);
+    expect(insertSession).not.toHaveBeenCalled();
+  });
 });
 
 // Security fix (2026-06-30 audit, LOW): stepUpReauth (the already-

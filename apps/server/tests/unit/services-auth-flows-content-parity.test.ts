@@ -321,6 +321,12 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
+  it('issueOAuthWebSession fails closed when local MFA is enrolled', () => {
+    expect(body).toMatch(
+      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{[\s\S]+?return null;\s*\n?\s*\}/,
+    );
+  });
+
   it('imports: Logger + EmailService + AuthCache + AccountAuditService + MfaService + mfa-challenge-store helpers + auth-tokens helpers + AccountStatus + AccountTier', () => {
     expect(body).toMatch(/import type \{ Logger \} from '\.\.\/lib\/logger\.js';/);
     expect(body).toMatch(/import type \{ EmailService \} from '\.\/email\.js';/);

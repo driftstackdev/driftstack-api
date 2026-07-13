@@ -269,8 +269,10 @@ export function registerOAuthClientRoutes(
       // returned `{outcome, account_id, redirect_to}` only; the SPA
       // would then load the dashboard with no token and surface
       // "Sign in to see live account data" — same UX as if the
-      // user had never signed in. The OAuth IDP's attestation IS
-      // the auth event here; no password/MFA gate applies.
+      // user had never signed in. The OAuth IDP attestation is the
+      // primary auth event; AuthFlows still refuses a session when
+      // local MFA is enrolled, falling back to password + MFA until
+      // the dashboard has a dedicated OAuth→MFA challenge handoff.
       let sessionToken: string | undefined;
       if (result.kind === 'signed-in-existing-link' || result.kind === 'created-new-account') {
         const session = await deps.authFlows.issueOAuthWebSession({

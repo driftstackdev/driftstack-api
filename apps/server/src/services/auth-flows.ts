@@ -1424,8 +1424,8 @@ export class AuthFlowsService {
    * linkOrCreateAccount succeeds. Looks up the account, mints the
    * same 30-day web session the password/magic-link/MFA paths mint,
    * then emits an `account.login` audit row attributing the sign-in
-   * to the IDP provider. The IDP's trust attestation IS the auth
-   * event here; no password/MFA gate applies.
+   * to the IDP provider. The IDP attestation is the primary factor;
+   * an enrolled Driftstack second factor still applies below.
    *
    * Founder report 2026-05-19: prior to this method, the OAuth
    * callback returned `{outcome, account_id, redirect_to}` with NO
@@ -1433,9 +1433,9 @@ export class AuthFlowsService {
    * account data" because localStorage was empty. This closes the
    * gap.
    *
-   * Returns `null` if the account was deleted or became inactive between
-   * linkOrCreateAccount + this call. The callback keeps the same opaque
-   * no-session result rather than exposing suspension state.
+   * Returns `null` if the account was deleted, became inactive, or requires
+   * local MFA between linkOrCreateAccount + this call. The callback keeps the
+   * same opaque no-session result rather than exposing account security state.
    */
   async issueOAuthWebSession(args: {
     accountId: string;
@@ -1445,6 +1445,12 @@ export class AuthFlowsService {
   }): Promise<{ plaintext: string; row: WebSessionRow } | null> {
     const account = await this.repo.findAccountById(args.accountId);
     if (account === null || account.status !== 'active') return null;
+    if (this.mfa !== null && (await this.mfa.getStatus(account.id)).enrolled) {
+      // Until the dashboard has a dedicated OAuth→MFA challenge handoff,
+      // fail closed into its existing password-login fallback. An upstream IDP
+      // login must never silently bypass the second factor enabled here.
+      return null;
+    }
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
     await this.emitAuditBestEffort(args.accountId, 'account.login', {
       kind: 'oauth_callback',
