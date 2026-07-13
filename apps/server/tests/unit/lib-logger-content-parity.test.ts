@@ -108,6 +108,24 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
     expect(body).toMatch(/'refresh_token',/);
   });
 
+  it('redact paths: complete plaintext auth-material response and PKCE shapes', () => {
+    for (const path of [
+      'body.client_secret',
+      'body.code_verifier',
+      'token',
+      'session.token',
+      'livekit.token',
+      'session_token',
+      'debug_token',
+      'id_token',
+      'otpauth_uri',
+      'secret_base32',
+      'authorize_url',
+    ]) {
+      expect(body).toContain(`'${path}',`);
+    }
+  });
+
   it('formatters.level: object-form ({ level: label }) so level surfaces as a structured field', () => {
     expect(body).toMatch(
       /formatters: \{\s*\n?\s*level: \(label\) => \(\{ level: label \}\),\s*\n?\s*\},/,

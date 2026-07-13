@@ -156,6 +156,25 @@ describe('W968 V-494 logger redaction cross-source invariant', () => {
     expect(p).toMatch(/'challengetoken',/);
   });
 
+  it('CRITICAL auth-material taxonomy covers MFA seed, web/LiveKit sessions, OAuth PKCE and IDP state URL', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
+    for (const path of [
+      'body.client_secret',
+      'body.code_verifier',
+      'token',
+      'session.token',
+      'livekit.token',
+      'session_token',
+      'debug_token',
+      'id_token',
+      'otpauth_uri',
+      'secret_base32',
+      'authorize_url',
+    ]) {
+      expect(p).toContain(`'${path}',`);
+    }
+  });
+
   // ─── '[redacted]' censor token ───────────────────────────────
 
   it("CRITICAL censor token = '[redacted]'. The bracket-redacted convention matches the Sentry sanitizer + customer-facing log expectations.", () => {

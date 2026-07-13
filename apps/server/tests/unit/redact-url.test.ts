@@ -67,10 +67,13 @@ describe('redactUrlQueryTokens', () => {
     expect(out.toLowerCase()).toContain('ds_token=');
   });
 
-  it('redacts the OAuth single-use code but keeps state', () => {
-    const out = redactUrlQueryTokens('/v1/auth/oauth-client/callback?code=AUTHCODE123&state=xyz');
+  it('redacts the OAuth single-use code and signed state token', () => {
+    const out = redactUrlQueryTokens(
+      '/v1/auth/oauth-client/callback?code=AUTHCODE123&state=STATE_SECRET&keep=ok',
+    );
     expect(out).not.toContain('AUTHCODE123');
-    expect(out).toContain('state=xyz');
+    expect(out).not.toContain('STATE_SECRET');
+    expect(out).toContain('keep=ok');
   });
 
   it('leaves a token-free URL byte-for-byte unchanged (no needless re-encoding)', () => {
@@ -87,6 +90,16 @@ describe('redactUrlQueryTokens', () => {
     expect(out).not.toContain('AAA');
     expect(out).not.toContain('BBB');
     expect(out).toContain('keep=1');
+  });
+
+  it('redacts OAuth state and auth-material aliases while keeping public PKCE challenge', () => {
+    const out = redactUrlQueryTokens(
+      '/callback?state=STATE_SECRET&session_token=SESSION_SECRET&debug_token=DEBUG_SECRET&challenge_token=CHALLENGE_SECRET&code_verifier=VERIFIER_SECRET&code_challenge=PUBLIC_CHALLENGE',
+    );
+    expect(out).not.toMatch(
+      /STATE_SECRET|SESSION_SECRET|DEBUG_SECRET|CHALLENGE_SECRET|VERIFIER_SECRET/,
+    );
+    expect(out).toContain('code_challenge=PUBLIC_CHALLENGE');
   });
 
   it('matches sensitive keys case-insensitively', () => {
@@ -151,12 +164,15 @@ describe('redactText — free-text (exception/breadcrumb/message) credential red
   });
 
   it('redacts the OAuth ?code= and multiple params', () => {
-    const out = redactText('cb https://x/y?code=AUTHCODE&state=ok&access_token=TT done');
+    const out = redactText(
+      'cb https://x/y?code=AUTHCODE&state=STATE_SECRET&access_token=TT&keep=ok done',
+    );
     expect(out).not.toContain('AUTHCODE');
     expect(out).not.toContain('TT');
     expect(out).toContain('code=[redacted]');
     expect(out).toContain('access_token=[redacted]');
-    expect(out).toContain('state=ok'); // benign param kept
+    expect(out).not.toContain('STATE_SECRET');
+    expect(out).toContain('keep=ok'); // benign param kept
     expect(out).toContain('done');
   });
 
@@ -173,6 +189,15 @@ describe('redactText — free-text (exception/breadcrumb/message) credential red
     expect(out).toContain('access_token=[redacted]');
     expect(out).toContain('id_token=[redacted]');
     expect(out).toContain('navigate failed at'); // prose intact
+  });
+
+  it('redacts OAuth state and PKCE verifier embedded in free diagnostic text', () => {
+    const out = redactText(
+      'callback https://app.invalid/cb?state=STATE_SECRET&code_verifier=VERIFIER_SECRET&code_challenge=PUBLIC_CHALLENGE failed',
+    );
+    expect(out).not.toContain('STATE_SECRET');
+    expect(out).not.toContain('VERIFIER_SECRET');
+    expect(out).toContain('code_challenge=PUBLIC_CHALLENGE');
   });
 
   it('does not redact a non-secret fragment / anchor', () => {
@@ -223,12 +248,13 @@ describe('userinfo credential redaction (scheme://user:pass@host)', () => {
   });
 
   it('redactUrlQueryTokens redacts BOTH userinfo and a query token in one full URL', () => {
-    const out = redactUrlQueryTokens('https://u:p@host/cb?code=AUTH&state=ok');
+    const out = redactUrlQueryTokens('https://u:p@host/cb?code=AUTH&state=STATE_SECRET&keep=ok');
     expect(out).not.toContain('u:p@');
     expect(out).not.toContain('AUTH');
     expect(out).toContain('https://[redacted]@host/cb'); // userinfo: plain replace
     expect(out).toContain('code=%5Bredacted%5D'); // query value: URL-encoded by URLSearchParams
-    expect(out).toContain('state=ok');
+    expect(out).not.toContain('STATE_SECRET');
+    expect(out).toContain('keep=ok');
   });
 
   it('redactUrlQueryTokens redacts userinfo even with no query present', () => {

@@ -40,6 +40,8 @@ const SENSITIVE_ERR_KEYS = new Set([
   // Five-minute, single-use MFA challenge bearer returned by password auth
   // and presented on the TOTP/recovery exchange.
   'challengetoken',
+  'debugtoken',
+  'sessiontoken',
   'apikey',
   'xapikey',
   'apisecret',
@@ -49,6 +51,8 @@ const SENSITIVE_ERR_KEYS = new Set([
   'webhooksecret',
   'totpsecret',
   'mfasecret',
+  'otpauthuri',
+  'secretbase32',
   'clientsecret',
   'configblob',
   'privatekey',
@@ -60,6 +64,8 @@ const SENSITIVE_ERR_KEYS = new Set([
   'accesstoken',
   'refreshtoken',
   'idtoken',
+  'codeverifier',
+  'authorizeurl',
   'credential',
   'credentials',
 ]);
@@ -176,6 +182,8 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'body.recovery_codes',
         'body.challenge_token',
         'body.challengeToken',
+        'body.client_secret',
+        'body.code_verifier',
         'body.signing_secret',
         'body.secret',
         // Account-proxy VPN secrets (ARC A). The POST/PUT
@@ -209,6 +217,27 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'recoveryCodes',
         'challenge_token',
         'challengeToken',
+        // Plaintext web/OAuth/LiveKit bearer surfaces. `token` is repeated in
+        // common nested response shapes because Pino paths are not recursive.
+        'token',
+        'session.token',
+        'livekit.token',
+        'session_token',
+        'sessionToken',
+        'debug_token',
+        'debugToken',
+        'id_token',
+        'idToken',
+        'code_verifier',
+        'codeVerifier',
+        // MFA enrollment seed and the otpauth URI that embeds it.
+        'otpauth_uri',
+        'otpauthUri',
+        'secret_base32',
+        'secretBase32',
+        // OAuth start URL embeds the signed state handshake token.
+        'authorize_url',
+        'authorizeUrl',
         'totpSecret',
         'totp_secret',
         'mfaSecret',

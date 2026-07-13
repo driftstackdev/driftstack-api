@@ -21,6 +21,10 @@ const SENSITIVE_QUERY_KEYS = new Set<string>([
   'access_token',
   'refresh_token',
   'id_token',
+  'session_token',
+  'debug_token',
+  'challenge_token',
+  'code_verifier',
   'api_key',
   'apikey',
   'client_secret',
@@ -30,6 +34,9 @@ const SENSITIVE_QUERY_KEYS = new Set<string>([
   // OAuth authorization code (single-use, short-lived, but still a
   // credential that must not sit in logs).
   'code',
+  // Signed OAuth CSRF/redirect handshake token. Even though it is also bound
+  // to the HTTP-only PKCE cookie, it must not become durable telemetry.
+  'state',
 ]);
 
 /**
@@ -105,7 +112,7 @@ export function redactUrlQueryTokens(url: string): string {
 // carries a fragment — the client strips it — so redactUrlQueryTokens above
 // correctly omits `#`; this free-text path is the one that sees whole URLs.)
 const FREE_TEXT_TOKEN_RE =
-  /([?&#](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|secret|password|signature|code)=)[^&\s"'`]+/gi;
+  /([?&#](?:ds_token|access_token|refresh_token|id_token|session_token|debug_token|challenge_token|code_verifier|api_key|apikey|client_secret|token|secret|password|signature|code|state)=)[^&\s"'`]+/gi;
 // RFC 6750 b64token is ALPHA / DIGIT / "-" / "." / "_" / "~" / "+" /
 // "/" followed by optional "=" padding. The former narrower class stopped at
 // `+` or `/`, replacing only a prefix and leaking the remainder. Basic auth is

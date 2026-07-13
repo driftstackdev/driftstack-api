@@ -60,6 +60,31 @@ describe('V-494 — Sentry scrub: top-level keys', () => {
     expect(e.extra.outcome).toBe('invalid');
   });
 
+  it('redacts enrollment seeds, PKCE verifier, and web/OAuth bearer aliases', () => {
+    const e = {
+      request: {
+        data: {
+          code_verifier: 'verifier-secret',
+          client_secret: 'client-secret',
+        },
+      },
+      extra: {
+        debug_token: 'debug-secret',
+        sessionToken: 'session-secret',
+        id_token: 'id-secret',
+        otpauth_uri: 'otpauth://totp/x?secret=seed-secret',
+        secretBase32: 'seed-secret',
+        authorize_url: 'https://idp.invalid/auth?state=state-secret',
+        code_challenge: 'public-challenge',
+      },
+    };
+    scrubInPlace(e);
+    expect(JSON.stringify(e)).not.toMatch(
+      /verifier-secret|client-secret|debug-secret|session-secret|id-secret|seed-secret|state-secret/,
+    );
+    expect(e.extra.code_challenge).toBe('public-challenge');
+  });
+
   it('redacts secret + signing_secret + webhook_secret', () => {
     const e = { secret: 's', signing_secret: 'ss', webhook_secret: 'ws' };
     scrubInPlace(e);

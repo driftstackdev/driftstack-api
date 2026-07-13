@@ -83,6 +83,24 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
     expect(body).toMatch(/'totp_secret',/);
     expect(body).toMatch(/'mfasecret',/);
     expect(body).toMatch(/'client_secret',/);
+    for (const key of [
+      'debug_token',
+      'debugtoken',
+      'session_token',
+      'sessiontoken',
+      'id_token',
+      'idtoken',
+      'code_verifier',
+      'codeverifier',
+      'otpauth_uri',
+      'otpauthuri',
+      'secret_base32',
+      'secretbase32',
+      'authorize_url',
+      'authorizeurl',
+    ]) {
+      expect(body).toContain(`'${key}',`);
+    }
   });
 
   it('isSensitiveKey: SENTRY_SENSITIVE_KEYS.has(key.toLowerCase())', () => {

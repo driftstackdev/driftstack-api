@@ -49,6 +49,10 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   // isSensitiveKey lowercases but intentionally does not strip separators.
   'challenge_token',
   'challengetoken',
+  'debug_token',
+  'debugtoken',
+  'session_token',
+  'sessiontoken',
   'apikey',
   'api_key',
   'plaintext',
@@ -60,6 +64,10 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'totp_secret',
   'totpsecret',
   'mfasecret',
+  'otpauth_uri',
+  'otpauthuri',
+  'secret_base32',
+  'secretbase32',
   'client_secret',
   'clientsecret',
   // Account-proxy VPN secrets (ARC A) — mirror of the lib/logger.ts
@@ -93,6 +101,13 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'token',
   'access_token',
   'refresh_token',
+  'id_token',
+  'idtoken',
+  'code_verifier',
+  'codeverifier',
+  // OAuth start URL embeds the signed state handshake token.
+  'authorize_url',
+  'authorizeurl',
 ]);
 
 function isSensitiveKey(key: string): boolean {

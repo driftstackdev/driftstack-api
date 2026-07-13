@@ -37,12 +37,12 @@ describe('redactErrSerializer', () => {
   it('redacts a credential in a NON-message/stack property (e.g. ApiError.detail) — pino copies it but the old message+stack-only redaction missed it', () => {
     const e = new Error('request failed') as Error & { detail?: string };
     // ApiError sets `this.detail` (own-enumerable) → pino.stdSerializers.err copies it.
-    e.detail = 'upstream rejected https://api.x/cb?code=AUTH_SECRET&state=ok';
+    e.detail = 'upstream rejected https://api.x/cb?code=AUTH_SECRET&attempt=ok';
     const out = redactErrSerializer(e);
     const detail = out.detail as string;
     expect(detail).not.toContain('AUTH_SECRET');
     expect(detail).toContain('code=[redacted]');
-    expect(detail).toContain('state=ok'); // benign context kept
+    expect(detail).toContain('attempt=ok'); // benign context kept
   });
 
   it('redacts a credential in a NESTED property (e.g. an upstream error cause carrying a Bearer token)', () => {
@@ -93,6 +93,33 @@ describe('redactErrSerializer', () => {
     expect(serialized).not.toContain('ds_mfa_snake_secret');
     expect(serialized).not.toContain('ds_mfa_camel_secret');
     expect((out.cause as Record<string, unknown>).status).toBe(401);
+  });
+
+  it('redacts nested auth material aliases while preserving public PKCE metadata', () => {
+    const e = new Error('auth setup failed') as Error & { context?: unknown };
+    e.context = {
+      debug_token: 'debug-secret',
+      sessionToken: 'session-secret',
+      id_token: 'id-secret',
+      codeVerifier: 'verifier-secret',
+      otpauth_uri: 'otpauth://totp/Driftstack:user?secret=seed-secret',
+      secretBase32: 'seed-secret',
+      authorize_url: 'https://idp.invalid/auth?state=state-secret',
+      code_challenge: 'public-challenge',
+    };
+
+    const serialized = JSON.stringify(redactErrSerializer(e));
+    for (const secret of [
+      'debug-secret',
+      'session-secret',
+      'id-secret',
+      'verifier-secret',
+      'seed-secret',
+      'state-secret',
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(serialized).toContain('public-challenge');
   });
 
   it('preserves benign diagnostic keys including Error.code', () => {

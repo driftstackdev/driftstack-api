@@ -151,6 +151,28 @@ describe('W969 V-494 sentry scrub mirror cross-source invariant', () => {
     expect(p).toMatch(/'challengetoken',/);
   });
 
+  it('CRITICAL auth-material denylist covers enrollment, session, PKCE, and IDP response aliases', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/sentry.ts'));
+    for (const key of [
+      'debug_token',
+      'debugtoken',
+      'session_token',
+      'sessiontoken',
+      'id_token',
+      'idtoken',
+      'code_verifier',
+      'codeverifier',
+      'otpauth_uri',
+      'otpauthuri',
+      'secret_base32',
+      'secretbase32',
+      'authorize_url',
+      'authorizeurl',
+    ]) {
+      expect(p).toContain(`'${key}',`);
+    }
+  });
+
   // ─── 3-entry API/inline denylist ─────────────────────────────
 
   it("CRITICAL 3-entry API/inline denylist — 'apikey' + 'api_key' + 'plaintext'. The 3-key set covers inline-credential-bearing object logs.", () => {
