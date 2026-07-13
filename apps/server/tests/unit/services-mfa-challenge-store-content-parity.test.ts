@@ -9,7 +9,7 @@
 //   • Storage: Redis SET …EX 300 prod / in-memory Map tests.
 //   • One-shot consume via GETDEL (Redis 6.2+); failed challenges DO
 //     NOT consume (retry up to maxAttempts; caller rate-limits).
-//   • REDIS_KEY_PREFIX = 'mfa-challenge:'.
+//   • REDIS_KEY_PREFIX = 'mfa-challenge:' + SHA-256 token identifiers.
 //   • TTL_SECONDS = 5*60 (exported as MFA_CHALLENGE_TTL_SECONDS).
 //   • MfaChallengePayload: 5 snake_case fields (account_id, email,
 //     source_ip, issued_at, issued_user_agent).
@@ -155,7 +155,7 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
 
   it('generateChallengeToken: randomBytes(32).toString("base64url") — 43 url-safe chars, no scrypt', () => {
     expect(body).toMatch(
-      /V-353d — generate a fresh challenge token\. Caller stores under\s*\n?\s*\*\s*`mfa-challenge:<token>` \(per `redisKey`\)\./,
+      /V-353d — generate a fresh challenge token\. The plaintext crosses the wire\s*\n?\s*\*\s*once; Redis key helpers store only its fixed-length SHA-256 identifier\./,
     );
     expect(body).toMatch(
       /\/\/ 32 bytes → 43 url-safe chars \(base64url, no padding\)\. Plenty of\s*\n?\s*\/\/\s*entropy for a 5-minute single-use code; doesn't need scrypt\./,
@@ -165,15 +165,16 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
     );
   });
 
-  it('redisKey: prefix + token; MFA_CHALLENGE_TTL_SECONDS exported alias', () => {
+  it('redisKey: prefix + SHA-256 identifier; MFA_CHALLENGE_TTL_SECONDS exported alias', () => {
     expect(body).toMatch(
-      /export function redisKey\(token: string\): string \{\s*\n?\s*return `\$\{REDIS_KEY_PREFIX\}\$\{token\}`;\s*\n?\s*\}/,
+      /export function redisKey\(token: string\): string \{\s*\n?\s*return `\$\{REDIS_KEY_PREFIX\}\$\{challengeTokenDigest\(token\)\}`;\s*\n?\s*\}/,
     );
+    expect(body).toMatch(/return createHash\('sha256'\)\.update\(token\)\.digest\('hex'\);/);
     expect(body).toMatch(/export const MFA_CHALLENGE_TTL_SECONDS = TTL_SECONDS;/);
   });
 
-  it('imports: randomBytes from node:crypto + Redis type from ioredis', () => {
-    expect(body).toMatch(/import \{ randomBytes \} from 'node:crypto';/);
+  it('imports: createHash + randomBytes from node:crypto + Redis type from ioredis', () => {
+    expect(body).toMatch(/import \{ createHash, randomBytes \} from 'node:crypto';/);
     expect(body).toMatch(/import type \{ Redis \} from 'ioredis';/);
   });
 

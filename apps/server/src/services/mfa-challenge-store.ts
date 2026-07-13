@@ -19,7 +19,7 @@
 //     so the user-agent comes from the login attempt, not the
 //     challenge attempt — avoids "all sessions look like curl").
 
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 
 const REDIS_KEY_PREFIX = 'mfa-challenge:';
@@ -158,8 +158,8 @@ export class InMemoryMfaChallengeStore implements MfaChallengeStore {
   }
 }
 
-/** V-353d — generate a fresh challenge token. Caller stores under
- *  `mfa-challenge:<token>` (per `redisKey`). */
+/** V-353d — generate a fresh challenge token. The plaintext crosses the wire
+ * once; Redis key helpers store only its fixed-length SHA-256 identifier. */
 export function generateChallengeToken(): string {
   // 32 bytes → 43 url-safe chars (base64url, no padding). Plenty of
   // entropy for a 5-minute single-use code; doesn't need scrypt.
@@ -167,13 +167,21 @@ export function generateChallengeToken(): string {
 }
 
 export function redisKey(token: string): string {
-  return `${REDIS_KEY_PREFIX}${token}`;
+  return `${REDIS_KEY_PREFIX}${challengeTokenDigest(token)}`;
 }
 
 /** V-353d.A — key for the per-challenge failed-attempt counter, distinct
  *  from the payload key so the counter and payload don't collide. */
 export function attemptsKey(token: string): string {
-  return `${REDIS_KEY_PREFIX}attempts:${token}`;
+  return `${REDIS_KEY_PREFIX}attempts:${challengeTokenDigest(token)}`;
+}
+
+function challengeTokenDigest(token: string): string {
+  // Tokens carry 256 random bits, so an unsalted one-way lookup digest is
+  // sufficient (same posture as database auth-token lookup hashes). Keeping
+  // the plaintext out of the Redis keyspace protects MONITOR/slowlog/key scans
+  // and snapshots without adding a second secret or changing wire behavior.
+  return createHash('sha256').update(token).digest('hex');
 }
 
 export const MFA_CHALLENGE_TTL_SECONDS = TTL_SECONDS;

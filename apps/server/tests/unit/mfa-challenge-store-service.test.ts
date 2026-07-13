@@ -3,7 +3,7 @@
 // Surface under test:
 //   - generateChallengeToken: url-safe + sufficient length (>=40 chars)
 //     for the 5-minute TTL window
-//   - redisKey: prefix mfa-challenge: applied
+//   - redisKey: namespaced SHA-256 identifier; plaintext never enters keyspace
 //   - InMemoryMfaChallengeStore.set + peek: read without consuming
 //   - InMemoryMfaChallengeStore.consume: one-shot semantics — returns
 //     the value once, null on second call; null on missing key; null on
@@ -36,8 +36,10 @@ describe('V-553.B-24 generateChallengeToken', () => {
 });
 
 describe('V-553.B-24 redisKey', () => {
-  it('prefixes the token with mfa-challenge:', () => {
-    expect(redisKey('abc')).toBe('mfa-challenge:abc');
+  it('prefixes a fixed-length digest and excludes the plaintext token', () => {
+    const key = redisKey('abc');
+    expect(key).toMatch(/^mfa-challenge:[0-9a-f]{64}$/);
+    expect(key).not.toContain('abc');
   });
 });
 

@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  attemptsKey,
   generateChallengeToken,
   redisKey,
   MFA_CHALLENGE_TTL_SECONDS,
@@ -86,11 +87,17 @@ describe('W917 V-353d MFA challenge store cross-source invariant', () => {
 
   // ─── REDIS_KEY_PREFIX + redisKey() ───────────────────────────
 
-  it("CRITICAL REDIS_KEY_PREFIX = 'mfa-challenge:'. The namespaced prefix prevents collision with other Redis keyspace tenants (rate-limit:, idemp:, sessions:, etc).", () => {
+  it("CRITICAL REDIS_KEY_PREFIX = 'mfa-challenge:' and keys contain only a SHA-256 token identifier", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa-challenge-store.ts'));
     expect(p).toMatch(/const REDIS_KEY_PREFIX = 'mfa-challenge:';/);
-    expect(redisKey('abc')).toBe('mfa-challenge:abc');
-    expect(redisKey('')).toBe('mfa-challenge:');
+    const payloadKey = redisKey('live-challenge-bearer');
+    const attemptKey = attemptsKey('live-challenge-bearer');
+    expect(payloadKey).toMatch(/^mfa-challenge:[0-9a-f]{64}$/);
+    expect(attemptKey).toMatch(/^mfa-challenge:attempts:[0-9a-f]{64}$/);
+    expect(payloadKey).not.toContain('live-challenge-bearer');
+    expect(attemptKey).not.toContain('live-challenge-bearer');
+    expect(payloadKey).not.toBe(attemptKey);
+    expect(redisKey('live-challenge-bearer')).toBe(payloadKey);
   });
 
   // ─── 32-byte / base64url token format ────────────────────────

@@ -29,8 +29,12 @@ describe('V-553.B-4 generateChallengeToken', () => {
 });
 
 describe('V-553.B-4 redisKey', () => {
-  it('prefixes the token with the canonical namespace', () => {
-    expect(redisKey('abc123')).toBe('mfa-challenge:abc123');
+  it('uses a deterministic fixed-length digest without exposing the bearer', () => {
+    const key = redisKey('abc123');
+    expect(key).toMatch(/^mfa-challenge:[0-9a-f]{64}$/);
+    expect(key).not.toContain('abc123');
+    expect(redisKey('abc123')).toBe(key);
+    expect(redisKey('different')).not.toBe(key);
   });
 });
 
