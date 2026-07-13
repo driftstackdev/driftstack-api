@@ -1121,6 +1121,7 @@ export class AuthFlowsService {
     });
     if (!consumed) throw new AuthFlowError('invalid_auth_token');
     const account = await this.requireAccount(row.accountId);
+    if (account.status !== 'active') throw new AuthFlowError('account_suspended');
     const newHash = await hashPassword(args.newPassword);
     await this.repo.setPassword(account.id, newHash);
 
@@ -1402,6 +1403,10 @@ export class AuthFlowsService {
     issuedFromIp: string | null,
     userAgent: string | null,
   ): Promise<{ plaintext: string; row: WebSessionRow }> {
+    // Shared fail-closed invariant for every current/future session-mint path.
+    // Callers may retain earlier checks for clearer flow ordering, but none can
+    // accidentally create a latent 30-day row while an account is suspended.
+    if (account.status !== 'active') throw new AuthFlowError('account_suspended');
     const plaintext = generateAuthToken();
     const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS.webSession);
     const row = await this.repo.insertWebSession({
@@ -1428,8 +1433,9 @@ export class AuthFlowsService {
    * account data" because localStorage was empty. This closes the
    * gap.
    *
-   * Returns `null` if the account was deleted between
-   * linkOrCreateAccount + this call (extremely rare).
+   * Returns `null` if the account was deleted or became inactive between
+   * linkOrCreateAccount + this call. The callback keeps the same opaque
+   * no-session result rather than exposing suspension state.
    */
   async issueOAuthWebSession(args: {
     accountId: string;
@@ -1438,7 +1444,7 @@ export class AuthFlowsService {
     provider: string;
   }): Promise<{ plaintext: string; row: WebSessionRow } | null> {
     const account = await this.repo.findAccountById(args.accountId);
-    if (account === null) return null;
+    if (account === null || account.status !== 'active') return null;
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
     await this.emitAuditBestEffort(args.accountId, 'account.login', {
       kind: 'oauth_callback',

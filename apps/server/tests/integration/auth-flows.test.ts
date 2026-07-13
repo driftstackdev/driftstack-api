@@ -1008,6 +1008,33 @@ describe('POST /v1/auth/password-reset', () => {
     });
     expect(fresh.statusCode).toBe(200);
   });
+
+  it('a suspended account cannot use an outstanding reset link to change its password or mint a session', async () => {
+    const { service, repo } = makeDirectService();
+    const signup = await service.signup({
+      email: 'suspended-reset@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: signup.account.email,
+      requestedFromIp: null,
+    });
+    repo.seedAccount({ ...signup.account, status: 'suspended' });
+    const setPassword = vi.spyOn(repo, 'setPassword');
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    await expect(
+      service.confirmPasswordReset({
+        token: reset.debugToken as string,
+        newPassword: 'a replacement that must never land!!',
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'account_suspended' });
+    expect(setPassword).not.toHaveBeenCalled();
+    expect(insertSession).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
@@ -1106,6 +1133,34 @@ describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
 // (same pattern as the magic-link race-regression test in
 // auth-flows-email.test.ts) so both boundaries are deterministic.
 describe('AuthFlowsService.refreshSession — single-use under concurrency (security fix)', () => {
+  it('consumes but does not replace a suspended account refresh token', async () => {
+    const { repo, service } = makeDirectService();
+    const signup = await service.signup({
+      email: 'suspended-refresh@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const verify = await service.verifyEmail({
+      token: signup.debugToken!,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    repo.seedAccount({ ...verify.account, status: 'suspended' });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    await expect(
+      service.refreshSession({
+        token: verify.session.plaintext,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'account_suspended' });
+    expect(insertSession).not.toHaveBeenCalled();
+    expect(await repo.listActiveWebSessionsForAccount(verify.account.id, new Date())).toHaveLength(
+      0,
+    );
+  });
+
   it('two simultaneous refreshes of the same token: exactly one succeeds, one InvalidAuthToken', async () => {
     const { repo, service } = makeDirectService();
     const signup = await service.signup({
@@ -1241,6 +1296,29 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     ]);
     expect(resultA.account.id).toBe(verifyA.account.id);
     expect(resultB.account.id).toBe(verifyB.account.id);
+  });
+});
+
+describe('AuthFlowsService.issueOAuthWebSession — active-account containment', () => {
+  it('returns the opaque null result and inserts nothing for a suspended account', async () => {
+    const { repo, service } = makeDirectService();
+    const signup = await service.signup({
+      email: 'suspended-oauth@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    repo.seedAccount({ ...signup.account, status: 'suspended' });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    await expect(
+      service.issueOAuthWebSession({
+        accountId: signup.account.id,
+        issuedFromIp: null,
+        userAgent: null,
+        provider: 'google',
+      }),
+    ).resolves.toBeNull();
+    expect(insertSession).not.toHaveBeenCalled();
   });
 });
 

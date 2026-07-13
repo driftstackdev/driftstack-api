@@ -129,7 +129,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('password reset atomically consumes the presented token and all account siblings before changing credentials', () => {
     expect(body).toMatch(
-      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'password_reset',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);/,
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'password_reset',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);\s*\n?\s*if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const newHash = await hashPassword\(args\.newPassword\);/,
     );
   });
 
@@ -315,9 +315,9 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/'account-audit emit failed \(best-effort, swallowed\)',/);
   });
 
-  it('issueWebSession: 32-byte authToken + tokenHash sha256-at-rest + insertWebSession with TTL = AUTH_TOKEN_TTL_MS.webSession', () => {
+  it('issueWebSession: active-account invariant + 32-byte authToken + tokenHash sha256-at-rest + web-session TTL', () => {
     expect(body).toMatch(
-      /private async issueWebSession\(\s*\n?\s*account: AuthFlowAccountRow,\s*\n?\s*issuedFromIp: string \| null,\s*\n?\s*userAgent: string \| null,\s*\n?\s*\): Promise<\{ plaintext: string; row: WebSessionRow \}> \{\s*\n?\s*const plaintext = generateAuthToken\(\);\s*\n?\s*const expiresAt = new Date\(Date\.now\(\) \+ AUTH_TOKEN_TTL_MS\.webSession\);/,
+      /private async issueWebSession\(\s*\n?\s*account: AuthFlowAccountRow,\s*\n?\s*issuedFromIp: string \| null,\s*\n?\s*userAgent: string \| null,\s*\n?\s*\): Promise<\{ plaintext: string; row: WebSessionRow \}> \{[\s\S]+?if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const plaintext = generateAuthToken\(\);\s*\n?\s*const expiresAt = new Date\(Date\.now\(\) \+ AUTH_TOKEN_TTL_MS\.webSession\);/,
     );
   });
 
