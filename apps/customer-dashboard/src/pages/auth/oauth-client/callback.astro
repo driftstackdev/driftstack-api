@@ -32,6 +32,15 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
 
+      <div
+        data-callback-unknown
+        class="mb-5 hidden rounded-lg border border-tk-border bg-tk-surface px-4 py-4 text-sm text-tk-ink-2"
+      >
+        <a href="/login" class="btn-primary flex w-full items-center justify-center"
+          >Return to sign-in if no email arrives</a
+        >
+      </div>
+
       <div data-success-merge class="hidden rounded-lg border border-tk-ready/30 bg-tk-ready/10 p-4 backdrop-blur-sm">
         <h2 class="text-sm font-semibold text-tk-ready-text">Check your inbox</h2>
         <p class="mt-2 text-sm text-tk-ready-text">
@@ -79,6 +88,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       const banner = root.querySelector('[data-banner]');
       const intro = root.querySelector('[data-field="intro"]');
+      const unknownRecovery = root.querySelector('[data-callback-unknown]');
       const successMerge = root.querySelector('[data-success-merge]');
       const mergeProvider = root.querySelector('[data-merge-provider]');
       const mergeWindow = root.querySelector('[data-merge-window]');
@@ -164,12 +174,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Unexpected outcome: ' + (body.outcome || '<missing>'));
         })
         .catch((err) => {
+          if (err && err.name === 'AbortError') {
+            if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+            showBanner(
+              'OAuth sign-in outcome is unknown after the request timed out. The server may already have exchanged this one-time callback code, created a session whose credential did not reach this browser, or sent an account-link confirmation email. Do not reload or submit this callback URL again. Check your inbox first; if no confirmation email arrives, return to sign-in and start a fresh provider authorization.',
+            );
+            return;
+          }
           showBanner(
-            err && err.name === 'AbortError'
-              ? 'Sign-in is taking too long. Check your connection, then reload this page to try again.'
-              : err && err.message
-                ? err.message
-                : 'OAuth callback failed.',
+            err && err.message
+              ? err.message
+              : 'OAuth callback failed.',
           );
         })
         .finally(() => window.clearTimeout(timeout));

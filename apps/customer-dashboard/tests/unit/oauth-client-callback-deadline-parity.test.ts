@@ -31,9 +31,12 @@ describe('OAuth callback completion deadlines', () => {
     expect(CALLBACK).toContain(
       'window.location.href = safeNextPath(body.redirect_to, window.location.origin)',
     );
-    expect(CALLBACK).toContain(
-      'Sign-in is taking too long. Check your connection, then reload this page to try again.',
-    );
+    expect(CALLBACK).toContain('OAuth sign-in outcome is unknown after the request timed out.');
+    expect(CALLBACK).toContain('exchanged this one-time callback code');
+    expect(CALLBACK).toContain('session whose credential did not reach this browser');
+    expect(CALLBACK).toContain('account-link confirmation email');
+    expect(CALLBACK).toContain('Do not reload or submit this callback URL again.');
+    expect(CALLBACK).toContain('Return to sign-in if no email arrives');
   });
 
   it('bounds merge confirmation while preserving its one-shot token POST', () => {
