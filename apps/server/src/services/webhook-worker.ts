@@ -200,10 +200,14 @@ export class WebhookDeliveryWorker {
       // Inside the try the same AbortController.signal that bounds the fetch
       // also bounds the body read; readExcerpt swallows the resulting AbortError
       // → null excerpt, and the non-2xx response is still recorded as a failure.
-      // 2xx responses never read the body (status is enough), so the happy path
-      // is unchanged. See the fetch-body-read-timeout class fix (stripe/oauth).
+      // A 2xx body is irrelevant, but it still MUST be cancelled while the
+      // timer is armed. Leaving it unread lets a customer return success
+      // headers plus an endless body and retain a socket after we record the
+      // delivery as complete.
       if (!response.ok) {
         responseExcerpt = await readExcerpt(response);
+      } else {
+        await response.body?.cancel().catch(() => undefined);
       }
     } catch (err) {
       networkError = err instanceof Error ? err : new Error(String(err));
@@ -364,8 +368,12 @@ async function readExcerpt(response: Response): Promise<string | null> {
         const { done, value } = await reader.read();
         if (done) break;
         if (value && value.length > 0) {
-          chunks.push(value);
-          total += value.length;
+          const remaining = MAX_RESPONSE_READ_BYTES - total;
+          const bytesToKeep = Math.min(value.length, remaining);
+          // `slice`, not `subarray`: a view would retain the entire backing
+          // buffer when one decompressed chunk is much larger than the cap.
+          chunks.push(value.slice(0, bytesToKeep));
+          total += bytesToKeep;
         }
       }
     } finally {
@@ -373,10 +381,7 @@ async function readExcerpt(response: Response): Promise<string | null> {
       // body / decompression bomb early instead of buffering it all.
       await reader.cancel().catch(() => undefined);
     }
-    return Buffer.concat(chunks)
-      .subarray(0, MAX_RESPONSE_READ_BYTES)
-      .toString('utf8')
-      .slice(0, EXCERPT_MAX_CHARS);
+    return Buffer.concat(chunks, total).toString('utf8').slice(0, EXCERPT_MAX_CHARS);
   } catch {
     return null;
   }

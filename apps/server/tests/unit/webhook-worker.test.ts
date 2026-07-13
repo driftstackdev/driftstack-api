@@ -60,6 +60,39 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(deliveries[0]?.lastResponseStatus).toBe(200);
   });
 
+  it('cancels an unread 2xx body before recording delivery success', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    let cancelled = false;
+    let signalAtCancel: AbortSignal | undefined;
+    const fetchImpl = vi.fn((_url: string, init: RequestInit) => {
+      signalAtCancel = init.signal ?? undefined;
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            // Never enqueue or close: this models success headers followed by
+            // an endless body. Cancellation must finish the delivery promptly.
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    }) as unknown as typeof fetch;
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fetchImpl,
+      now: constNow,
+    });
+
+    const { outcomes } = await worker.tickOnce();
+
+    expect(outcomes[0]?.kind).toBe('delivered');
+    expect(cancelled).toBe(true);
+    expect(signalAtCancel?.aborted).toBe(false);
+  });
+
   it('5xx response → retry with attempts=1 and a future nextAttemptAt', async () => {
     const { repo } = await setupRepoWithEndpoint();
     const worker = new WebhookDeliveryWorker({
@@ -196,6 +229,34 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(bytesPulled).toBeLessThan(256 * 1024); // bounded read, NOT the 5 MiB
     const d = repo.getAllDeliveries()[0];
     expect((d?.lastResponseExcerpt ?? '').length).toBeLessThanOrEqual(4096);
+  });
+
+  it('copies only the bounded prefix when one decoded response chunk exceeds the entire cap', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    let cancelled = false;
+    const oversizedChunkStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(5 * 1024 * 1024).fill(121)); // 'y'
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve(new Response(oversizedChunkStream, { status: 500 })),
+    ) as unknown as typeof fetch;
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fetchImpl,
+      now: constNow,
+    });
+
+    const { outcomes } = await worker.tickOnce();
+
+    expect(outcomes[0]?.kind).toBe('retry');
+    expect(cancelled).toBe(true);
+    expect(repo.getAllDeliveries()[0]?.lastResponseExcerpt).toBe('y'.repeat(4096));
   });
 
   it('after MAX attempts, transitions to DLQ', async () => {

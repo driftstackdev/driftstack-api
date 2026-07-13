@@ -163,15 +163,24 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     );
     // Bounded stream read + cancel — the load-bearing size cap.
     expect(body).toMatch(/while \(total < MAX_RESPONSE_READ_BYTES\) \{/);
+    expect(body).toMatch(/const remaining = MAX_RESPONSE_READ_BYTES - total;/);
+    expect(body).toMatch(/const bytesToKeep = Math\.min\(value\.length, remaining\);/);
+    expect(body).toMatch(/chunks\.push\(value\.slice\(0, bytesToKeep\)\);/);
     expect(body).toMatch(/await reader\.cancel\(\)\.catch\(\(\) => undefined\);/);
     expect(body).toMatch(
-      /Buffer\.concat\(chunks\)\s*\n?\s*\.subarray\(0, MAX_RESPONSE_READ_BYTES\)\s*\n?\s*\.toString\('utf8'\)\s*\n?\s*\.slice\(0, EXCERPT_MAX_CHARS\);/,
+      /Buffer\.concat\(chunks, total\)\s*\n?\s*\.toString\('utf8'\)\s*\n?\s*\.slice\(0, EXCERPT_MAX_CHARS\);/,
     );
     // text() fallback only for bodyless test-double responses; null on throw.
     expect(body).toMatch(
       /if \(!body\) \{\s*\n?\s*const text = await response\.text\(\);\s*\n?\s*return text\.slice\(0, EXCERPT_MAX_CHARS\);/,
     );
     expect(body).toMatch(/\} catch \{\s*\n?\s*return null;\s*\n?\s*\}/);
+  });
+
+  it('2xx bodies are cancelled before the attempt timer is cleared', () => {
+    expect(body).toMatch(
+      /if \(!response\.ok\) \{\s*\n?\s*responseExcerpt = await readExcerpt\(response\);\s*\n?\s*\} else \{\s*\n?\s*await response\.body\?\.cancel\(\)\.catch\(\(\) => undefined\);/,
+    );
   });
 
   it('run(): while-loop on this.running; empty claim → sleep idleSleepMs; deliver batch via Promise.all', () => {
