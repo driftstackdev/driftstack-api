@@ -325,6 +325,11 @@ export class FetchProber implements Prober {
       });
       const latencyMs = Date.now() - start;
       const ok = res.ok;
+      // Probe decisions use headers only. Dispose the body before clearing the
+      // timeout so a target cannot retain one stream per poll by returning
+      // headers and then never completing its response. Cleanup failure does
+      // not change the observed HTTP status.
+      await res.body?.cancel().catch(() => undefined);
       return {
         ok,
         latencyMs,

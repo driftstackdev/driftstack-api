@@ -156,6 +156,12 @@ export class IncidentBroadcastService {
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+      // Broadcast responses are status-only. Dispose the body while the
+      // request deadline is still armed so an endpoint cannot retain a
+      // connection indefinitely by returning headers followed by an endless
+      // stream. Cancellation is best-effort: incident writes must remain
+      // isolated from broadcast transport cleanup failures.
+      await res.body?.cancel().catch(() => undefined);
       if (!res.ok) {
         this.logger.warn(
           { component: 'incident-broadcast', channel, status: res.status },
