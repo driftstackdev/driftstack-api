@@ -69,15 +69,15 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
     );
   });
 
-  it("Effect: !settings.apiKey → setState error 'No API key configured.' early return then setState loading; cancelled flag captures unmount; baseUrl trim trailing slashes + /v1/account/me GET with Bearer auth + 'application/json' Accept; !res.ok → errorMessageForStatus(res.status) (plain-English 401/403/network, not a raw 'HTTP ${status}'); cancelled-check before each setState (no setState on unmounted component); cleanup returns () => { cancelled = true; }; retryNonce added to the dep array so the Retry button re-runs the fetch", () => {
+  it('Effect: !settings.apiKey → actionable error; shared deadline with effect-owned abort; baseUrl trim + /v1/account/me Bearer/JSON; plain-English HTTP errors; abort guards before state writes; cleanup aborts; retryNonce re-runs fetch', () => {
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'loading' \}\);\s*\n?\s*let cancelled = false;/,
+      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'loading' \}\);\s*\n?\s*const controller = new AbortController\(\);/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*headers: \{ authorization: `Bearer \$\{settings\.apiKey \?\? ''\}`, accept: 'application\/json' \},\s*\n?\s*\}\);\s*\n?\s*if \(cancelled\) return;\s*\n?\s*if \(!res\.ok\) \{\s*\n?\s*setState\(\{ kind: 'error', message: errorMessageForStatus\(res\.status\) \}\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{ authorization: `Bearer \$\{settings\.apiKey \?\? ''\}`, accept: 'application\/json' \},\s*\n?\s*\}\);\s*\n?\s*if \(controller\.signal\.aborted\) return;\s*\n?\s*if \(!res\.ok\) \{\s*\n?\s*setState\(\{ kind: 'error', message: errorMessageForStatus\(res\.status\) \}\);/,
     );
     expect(body).toMatch(
-      /return \(\) => \{\s*\n?\s*cancelled = true;\s*\n?\s*\};\s*\n?\s*\}, \[settings\.apiKey, settings\.baseUrl, retryNonce\]\);/,
+      /return \(\) => \{\s*\n?\s*controller\.abort\(\);\s*\n?\s*\};\s*\n?\s*\}, \[settings\.apiKey, settings\.baseUrl, retryNonce\]\);/,
     );
     // errorMessageForStatus maps 401/403/other into actionable copy — no bare "HTTP 401".
     expect(body).toMatch(

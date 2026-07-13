@@ -1,7 +1,7 @@
 // V-534.L — unit tests for SettingsAccountCard.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 
 interface MockSettings {
   settings: { apiKey: string | null; baseUrl: string };
@@ -31,6 +31,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -134,5 +135,43 @@ describe('V-534.L SettingsAccountCard — failure paths', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/check your connection/i),
     );
     expect(screen.getByRole('alert')).not.toHaveTextContent(/offline/i);
+  });
+
+  it('replaces indefinite loading with actionable timeout feedback after 15 seconds', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      }),
+    );
+    render(<SettingsAccountCard />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/request took too long/i);
+    expect(screen.queryByText(/loading account/i)).toBeNull();
+  });
+
+  it('aborts its active account request on unmount', () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+
+    const { unmount } = render(<SettingsAccountCard />);
+    expect(signal).toBeInstanceOf(AbortSignal);
+    unmount();
+    expect(signal?.aborted).toBe(true);
   });
 });

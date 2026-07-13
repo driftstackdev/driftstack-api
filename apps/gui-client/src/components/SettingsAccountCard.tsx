@@ -12,6 +12,7 @@
 //   - ready: account id + tier rendered, billing link visible
 
 import { useCallback, useEffect, useState } from 'react';
+import { fetchWithDeadline } from '../lib/fetch-with-deadline';
 import { useSettings } from '../lib/SettingsContext';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
@@ -79,30 +80,35 @@ export function SettingsAccountCard(): JSX.Element | null {
       return;
     }
     setState({ kind: 'loading' });
-    let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
       try {
         const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-        const res = await fetch(`${baseUrl}/v1/account/me`, {
+        const res = await fetchWithDeadline(`${baseUrl}/v1/account/me`, {
+          signal: controller.signal,
           headers: { authorization: `Bearer ${settings.apiKey ?? ''}`, accept: 'application/json' },
         });
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (!res.ok) {
           setState({ kind: 'error', message: errorMessageForStatus(res.status) });
           return;
         }
         const body = (await res.json()) as AccountMeResponse;
+        if (controller.signal.aborted) return;
         setState({ kind: 'ready', account: body.account });
       } catch (err) {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setState({
           kind: 'error',
-          message: humanizeError(err, "Couldn't load account info. Try again."),
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'The request took too long. Check your connection and try again.'
+              : humanizeError(err, "Couldn't load account info. Try again."),
         });
       }
     })();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [settings.apiKey, settings.baseUrl, retryNonce]);
 
