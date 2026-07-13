@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'api-keys', 'index.html');
@@ -66,6 +67,7 @@ function setUpDom(
   const pr = opts.promptReturns === undefined ? 'suspected leak' : opts.promptReturns;
   // @ts-expect-error — driftstackPrompt is injected by AdminLayout
   window.driftstackPrompt = () => Promise.resolve(pr);
+  installAdminDeadline(window);
 
   // The admin api-keys script is the LAST inline script that references
   // the page marker (AdminLayout's SSO-bridge script runs first).

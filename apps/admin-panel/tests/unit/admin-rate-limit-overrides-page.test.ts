@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'rate-limit-overrides', 'index.html');
@@ -61,6 +62,7 @@ function setUpDom(
   const cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by AdminLayout
   window.driftstackConfirm = () => Promise.resolve(cr);
+  installAdminDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-overrides"'));
   if (!pageScript) throw new Error('admin rate-limit-overrides inline script not found');

@@ -118,7 +118,7 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
 
   it('bounds reads/writes, makes hydration latest-wins, and defers fresh-SSO loading', () => {
     expect(body).toMatch(/const INCIDENT_TIMEOUT_MS = 15_000;/);
-    expect(body).toMatch(/signal: activeController\.signal/);
+    expect(body).toMatch(/INCIDENT_TIMEOUT_MS,\s*activeController/);
     expect(body).toMatch(/if \(loadController\) loadController\.abort\(\)/);
     expect(body).toMatch(/const generation = \+\+loadGeneration;/);
     expect(body).toMatch(/if \(generation !== loadGeneration\) return;/);

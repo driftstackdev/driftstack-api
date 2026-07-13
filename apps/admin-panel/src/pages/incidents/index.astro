@@ -267,15 +267,12 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
 
       function boundedFetch(url, init, controller) {
         const activeController = controller || new AbortController();
-        const timeout = window.setTimeout(function () {
-          activeController.abort();
-        }, INCIDENT_TIMEOUT_MS);
-        return fetch(
+        return window.driftstackFetchWithDeadline(
           url,
-          Object.assign({}, init || {}, { signal: activeController.signal }),
-        ).finally(function () {
-          window.clearTimeout(timeout);
-        });
+          init,
+          INCIDENT_TIMEOUT_MS,
+          activeController,
+        );
       }
 
       function requestErrorMessage(err, fallback) {

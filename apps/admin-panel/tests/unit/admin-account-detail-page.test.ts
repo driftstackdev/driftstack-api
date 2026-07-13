@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -20,6 +21,11 @@ function scriptBody(): string {
   );
   if (!match?.[1]) throw new Error('account detail inline script not found');
   return match[1];
+}
+
+function evalPage(window: JSDOM['window']): void {
+  installAdminDeadline(window);
+  window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
 }
 
 function response(body: unknown, status = 200): Response {
@@ -112,7 +118,7 @@ describe('admin account detail mutation reconciliation', () => {
     dom.window.driftstackPrompt = (message: string) =>
       Promise.resolve(message.startsWith('New tier') ? 'api_scale' : 'incident response');
     dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
-    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    evalPage(dom.window);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 
@@ -252,7 +258,7 @@ describe('admin account detail mutation reconciliation', () => {
     // @ts-expect-error -- branded modal helpers are injected by AdminLayout.
     dom.window.driftstackPrompt = () => Promise.resolve(prompts.shift() ?? null);
     dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
-    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    evalPage(dom.window);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 
@@ -383,7 +389,7 @@ describe('admin account detail mutation reconciliation', () => {
       return Promise.resolve(response({}, 404));
     };
     dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
-    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    evalPage(dom.window);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 

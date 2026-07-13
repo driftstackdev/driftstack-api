@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -20,6 +21,11 @@ function scriptBody(): string {
   );
   if (!match?.[1]) throw new Error('incident detail inline script not found');
   return match[1];
+}
+
+function evalPage(window: JSDOM['window']): void {
+  installAdminDeadline(window);
+  window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
 }
 
 function response(body: unknown, status = 200): Response {
@@ -92,7 +98,7 @@ describe('admin incident detail mutation lifecycle', () => {
       );
     };
     dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    evalPage(dom.window);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 
@@ -176,7 +182,7 @@ describe('admin incident detail mutation lifecycle', () => {
       );
     };
     dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    evalPage(dom.window);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 
@@ -273,7 +279,7 @@ describe('admin incident detail mutation lifecycle', () => {
         );
       };
       dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-      dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+      evalPage(dom.window);
       dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
       await flush();
 
@@ -341,7 +347,7 @@ describe('admin incident detail mutation lifecycle', () => {
       );
     };
     dom.window.localStorage.setItem('ds_web_session_token', 'tok');
-    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    evalPage(dom.window);
     dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
     await flush();
 

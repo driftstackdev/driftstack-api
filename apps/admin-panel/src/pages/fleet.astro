@@ -79,10 +79,12 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function boundedFetch(url, init, controller) {
         const activeController = controller || new AbortController();
-        const timeout = window.setTimeout(() => activeController.abort(), FLEET_REQUEST_TIMEOUT_MS);
-        return fetch(url, { ...(init || {}), signal: activeController.signal }).finally(() => {
-          window.clearTimeout(timeout);
-        });
+        return window.driftstackFetchWithDeadline(
+          url,
+          init,
+          FLEET_REQUEST_TIMEOUT_MS,
+          activeController,
+        );
       }
 
       function requestErrorMessage(err, fallback = 'network error') {

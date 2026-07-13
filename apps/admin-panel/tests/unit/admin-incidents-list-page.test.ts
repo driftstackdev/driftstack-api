@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'incidents', 'index.html');
@@ -62,6 +63,7 @@ function setUpDom(
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
   // @ts-expect-error — injected by AdminLayout
   window.dashboardHydrated = () => {};
+  installAdminDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('fetchAndRender'));
   if (!pageScript) throw new Error('admin-incidents-list inline script not found');

@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
+import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'webhook-dlq', 'index.html');
@@ -66,6 +67,7 @@ function setUpDom(
     opts.confirmCalls?.push(confirmOpts);
     return Promise.resolve(cr);
   };
+  installAdminDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-dlq"'));
   if (!pageScript) throw new Error('admin webhook-dlq inline script not found');

@@ -211,10 +211,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       const destroysInFlight = new Set();
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
-        const timeout = window.setTimeout(() => controller.abort(), SESSION_TIMEOUT_MS);
-        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
-          window.clearTimeout(timeout);
-        });
+        return window.driftstackFetchWithDeadline(url, init, SESSION_TIMEOUT_MS, controller);
       }
 
       function requestErrorMessage(err, fallback) {

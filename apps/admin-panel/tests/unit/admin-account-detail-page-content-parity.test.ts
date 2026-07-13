@@ -153,10 +153,8 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
       /function authedFetch\(path, init = \{\}, controller = new AbortController\(\)\)/,
     );
     expect(body).toMatch(
-      /window\.setTimeout\([\s\S]*controller\.abort\(\)[\s\S]*ACCOUNT_DETAIL_TIMEOUT_MS/,
+      /window\.driftstackFetchWithDeadline\([\s\S]*ACCOUNT_DETAIL_TIMEOUT_MS,\s*controller/,
     );
-    expect(body).toMatch(/signal: controller\.signal/);
-    expect(body).toMatch(/\.finally\(\(\) => window\.clearTimeout\(timeout\)\)/);
     expect(body).toMatch(/if \(hydrationController\) hydrationController\.abort\(\)/);
     expect(body).toMatch(/const generation = \+\+hydrationGeneration;/);
     expect(body).toMatch(/const isCurrent = \(\) => generation === hydrationGeneration;/);

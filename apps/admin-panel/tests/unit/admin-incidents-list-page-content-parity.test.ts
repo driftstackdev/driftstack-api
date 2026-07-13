@@ -83,7 +83,7 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
 
   it('bounds reads/writes, aborts superseded retries, and defers SSO hydration', () => {
     expect(body).toMatch(/const INCIDENT_TIMEOUT_MS = 15_000;/);
-    expect(body).toMatch(/signal: activeController\.signal/);
+    expect(body).toMatch(/INCIDENT_TIMEOUT_MS,\s*activeController/);
     expect(body).toMatch(/if \(listController\) listController\.abort\(\)/);
     expect(body).toMatch(/const generation = \+\+listGeneration;/);
     expect(body).toMatch(/if \(generation !== listGeneration\) return;/);

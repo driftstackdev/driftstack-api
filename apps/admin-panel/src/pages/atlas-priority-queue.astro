@@ -244,10 +244,12 @@ const apiBaseUrl = resolveApiBaseUrl();
     let inFlight = 0;
 
     function boundedFetch(url, init, controller) {
-      const timeout = window.setTimeout(() => controller.abort(), QUEUE_REQUEST_TIMEOUT_MS);
-      return fetch(url, { ...(init || {}), signal: controller.signal }).finally(() => {
-        window.clearTimeout(timeout);
-      });
+      return window.driftstackFetchWithDeadline(
+        url,
+        init,
+        QUEUE_REQUEST_TIMEOUT_MS,
+        controller,
+      );
     }
 
     async function fetchQueue(manual = false) {

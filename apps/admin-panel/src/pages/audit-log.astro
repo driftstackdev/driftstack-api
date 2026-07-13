@@ -177,10 +177,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       let loadController = null;
 
       function boundedFetch(url, init, controller) {
-        const timeout = window.setTimeout(() => controller.abort(), AUDIT_REQUEST_TIMEOUT_MS);
-        return fetch(url, { ...(init || {}), signal: controller.signal }).finally(() => {
-          window.clearTimeout(timeout);
-        });
+        return window.driftstackFetchWithDeadline(
+          url,
+          init,
+          AUDIT_REQUEST_TIMEOUT_MS,
+          controller,
+        );
       }
 
       function requestErrorMessage(err, fallback = 'network error') {

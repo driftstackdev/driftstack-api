@@ -428,20 +428,20 @@ const accountId = account.id;
       }
 
       function authedFetch(path, init = {}, controller = new AbortController()) {
-        const timeout = window.setTimeout(
-          () => controller.abort(),
-          ACCOUNT_DETAIL_TIMEOUT_MS,
-        );
-        return fetch(apiBaseUrl + path, {
-          ...init,
-          headers: {
-            ...(init.headers || {}),
-            authorization: 'Bearer ' + token,
-            'content-type': 'application/json',
+        return window.driftstackFetchWithDeadline(
+          apiBaseUrl + path,
+          {
+            ...init,
+            headers: {
+              ...(init.headers || {}),
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+            },
+            credentials: 'include',
           },
-          credentials: 'include',
-          signal: controller.signal,
-        }).finally(() => window.clearTimeout(timeout));
+          ACCOUNT_DETAIL_TIMEOUT_MS,
+          controller,
+        );
       }
 
       function requestErrorMessage(err, fallback = 'network error') {

@@ -21,7 +21,8 @@ describe('admin Atlas priority queue manual refresh', () => {
     expect(body).toContain('const QUEUE_REQUEST_TIMEOUT_MS = 15000');
     expect(body).toContain('Request timed out. Try again.');
     expect(body).toContain('if (loadController) loadController.abort()');
-    expect(body).toContain('signal: controller.signal');
+    expect(body).toContain('window.driftstackFetchWithDeadline(');
+    expect(body).toContain('QUEUE_REQUEST_TIMEOUT_MS,');
     expect(body).toContain('if (myReq === inFlight)');
     expect(body).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,

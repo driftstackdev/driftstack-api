@@ -104,10 +104,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       let addOutcomeUnknown = false;
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
-        const timeout = window.setTimeout(() => controller.abort(), SUBSCRIBER_TIMEOUT_MS);
-        return fetch(url, { ...init, signal: controller.signal }).finally(function () {
-          window.clearTimeout(timeout);
-        });
+        return window.driftstackFetchWithDeadline(url, init, SUBSCRIBER_TIMEOUT_MS, controller);
       }
 
       function requestErrorMessage(err, fallback) {
