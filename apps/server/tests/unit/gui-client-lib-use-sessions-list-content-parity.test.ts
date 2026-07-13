@@ -63,28 +63,29 @@ describe('W472.B apps/gui-client/src/lib/use-sessions-list.ts content parity', (
   it('limit default 25 + URL `${baseUrl}/v1/sessions?limit=${limit.toString()}` exact (.toString() preserved for explicit number-to-string cast)', () => {
     expect(body).toMatch(/const limit = opts\.limit \?\? 25;/);
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/sessions\?limit=\$\{limit\.toString\(\)\}`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\.\.\.\(signal !== undefined \? \{ signal \} : \{\}\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/sessions\?limit=\$\{limit\.toString\(\)\}`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
     );
   });
 
-  it("Same V-534 polling state-machine pattern: SessionsListState 4-variant union + manual?-aware initial state + no-apiKey 'No API key configured.' + readApiErrorMessage delegation + instance-of-Error catch + useEffect manual gate; useCallback deps [settings.apiKey, settings.baseUrl, limit]; abort-in-flight audit fix adds abortRef + AbortController setup/cleanup + isActive-gated apply() + AbortError swallow + separate no-arg refetch useCallback", () => {
+  it('State machine retains manual behavior while reads are single-flight, sequence-gated, and dependency/unmount-aborted', () => {
     expect(body).toMatch(
       /export type SessionsListState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'loading' \}\s*\n?\s*\| \{ kind: 'ready'; data: SessionsListResponse \}\s*\n?\s*\| \{ kind: 'error'; message: string \};/,
     );
     expect(body).toMatch(
       /const \[state, setState\] = useState<SessionsListState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
     );
-    expect(body).toMatch(/const abortRef = useRef<AbortController \| null>\(null\);/);
+    expect(body).toMatch(/const requestRef = useRef<AbortController \| null>\(null\);/);
     expect(body).toMatch(
-      /const fetcher = useCallback\(\s*\n?\s*async \(signal\?: AbortSignal, isActive\?: \(\) => boolean\): Promise<void> => \{\s*\n?\s*const apply = \(next: SessionsListState\): void => \{\s*\n?\s*if \(isActive === undefined \|\| isActive\(\)\) setState\(next\);\s*\n?\s*\};/,
-    );
-    expect(body).toMatch(/if \(err instanceof Error && err\.name === 'AbortError'\) return;/);
-    expect(body).toMatch(/\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl, limit\],\s*\n?\s*\);/);
-    expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*let active = true;\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*abortRef\.current = controller;\s*\n?\s*void fetcher\(controller\.signal, \(\) => active\);\s*\n?\s*return \(\) => \{\s*\n?\s*active = false;\s*\n?\s*controller\.abort\(\);\s*\n?\s*\};\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
+      /const fetcher = useCallback\(async \(\): Promise<void> => \{\s*\n?\s*if \(inFlightRef\.current\) return;/,
     );
     expect(body).toMatch(
-      /const refetch = useCallback\(\(\): Promise<void> => fetcher\(\), \[fetcher\]\);\s*\n?\s*return \{ state, refetch \};/,
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
+    );
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl, limit\],/,
+    );
+    expect(body).toMatch(
+      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);\s*\n?\s*return \{ state, refetch: fetcher \};/,
     );
   });
 

@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
 export interface SessionListItem {
@@ -48,60 +49,72 @@ export function useSessionsList(opts: UseSessionsListOpts = {}): UseSessionsList
 
   const limit = opts.limit ?? 25;
 
-  // Abort the previous request on a key/baseUrl/limit change (or unmount) so a
-  // slow response after the change can't setState with data fetched under the
-  // OLD key (+ "setState on unmounted" churn). Mirrors use-connection-status.
-  const abortRef = useRef<AbortController | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
-  const fetcher = useCallback(
-    async (signal?: AbortSignal, isActive?: () => boolean): Promise<void> => {
-      const apply = (next: SessionsListState): void => {
-        if (isActive === undefined || isActive()) setState(next);
-      };
-      if (!settings.apiKey) {
-        apply({ kind: 'error', message: 'No API key configured.' });
+  const fetcher = useCallback(async (): Promise<void> => {
+    if (inFlightRef.current) return;
+    if (!settings.apiKey) {
+      setState({ kind: 'error', message: 'No API key configured.' });
+      return;
+    }
+    inFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setState({ kind: 'loading' });
+    try {
+      const baseUrl = settings.baseUrl.replace(/\/+$/, '');
+      const res = await fetchWithDeadline(`${baseUrl}/v1/sessions?limit=${limit.toString()}`, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          authorization: `Bearer ${settings.apiKey}`,
+          accept: 'application/json',
+        },
+      });
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
-      apply({ kind: 'loading' });
-      try {
-        const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-        const res = await fetch(`${baseUrl}/v1/sessions?limit=${limit.toString()}`, {
-          method: 'GET',
-          headers: {
-            authorization: `Bearer ${settings.apiKey}`,
-            accept: 'application/json',
-          },
-          ...(signal !== undefined ? { signal } : {}),
-        });
-        if (!res.ok) {
-          apply({ kind: 'error', message: await readApiErrorMessage(res) });
-          return;
-        }
-        const body = (await res.json()) as SessionsListResponse;
-        apply({ kind: 'ready', data: body });
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return;
-        apply({
+      const body = (await res.json()) as SessionsListResponse;
+      if (sequence === sequenceRef.current) setState({ kind: 'ready', data: body });
+    } catch (err) {
+      if (sequence === sequenceRef.current) {
+        setState({
           kind: 'error',
-          message: err instanceof Error ? err.message : String(err),
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Session history timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
         });
       }
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        inFlightRef.current = false;
+      }
+    }
+  }, [settings.apiKey, settings.baseUrl, limit]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      inFlightRef.current = false;
     },
     [settings.apiKey, settings.baseUrl, limit],
   );
 
   useEffect(() => {
     if (opts.manual === true) return;
-    let active = true;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    void fetcher(controller.signal, () => active);
-    return () => {
-      active = false;
-      controller.abort();
-    };
+    void fetcher();
   }, [fetcher, opts.manual]);
 
-  const refetch = useCallback((): Promise<void> => fetcher(), [fetcher]);
-  return { state, refetch };
+  return { state, refetch: fetcher };
 }
