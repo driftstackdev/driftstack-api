@@ -82,6 +82,53 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     }
   });
 
+  it('emits complete share-preview metadata only for indexable public pages', () => {
+    expect(body).toMatch(/!noindex && canonicalUrl && \(/);
+    expect(body).toContain('<meta property="og:type" content="website" />');
+    expect(body).toContain('<meta property="og:site_name" content="Driftstack status" />');
+    expect(body).toContain('<meta property="og:title" content={title} />');
+    expect(body).toContain('<meta property="og:description" content={description} />');
+    expect(body).toContain('<meta property="og:url" content={canonicalUrl} />');
+    expect(body).toContain('<meta name="twitter:card" content="summary" />');
+    expect(body).toContain('<meta name="twitter:title" content={title} />');
+    expect(body).toContain('<meta name="twitter:description" content={description} />');
+
+    for (const relativePath of [
+      'index.html',
+      'history/index.html',
+      'incident/index.html',
+      'subscribe/index.html',
+    ]) {
+      const rendered = read(resolve(DIST, relativePath));
+      const canonical = rendered.match(/<link rel="canonical" href="([^"]+)">/)?.[1];
+      const title = rendered.match(/<title>([^<]+)<\/title>/)?.[1];
+      const description = rendered.match(/<meta name="description" content="([^"]+)">/)?.[1];
+
+      expect(canonical, relativePath).toBeTruthy();
+      expect(title, relativePath).toBeTruthy();
+      expect(description, relativePath).toBeTruthy();
+      expect(rendered.match(/<meta property="og:type" content="website">/g)).toHaveLength(1);
+      expect(
+        rendered.match(/<meta property="og:site_name" content="Driftstack status">/g),
+      ).toHaveLength(1);
+      expect(rendered).toContain(`<meta property="og:title" content="${title}">`);
+      expect(rendered).toContain(`<meta property="og:description" content="${description}">`);
+      expect(rendered).toContain(`<meta property="og:url" content="${canonical}">`);
+      expect(rendered.match(/<meta name="twitter:card" content="summary">/g)).toHaveLength(1);
+      expect(rendered).toContain(`<meta name="twitter:title" content="${title}">`);
+      expect(rendered).toContain(`<meta name="twitter:description" content="${description}">`);
+    }
+
+    for (const relativePath of [
+      '404.html',
+      'subscribe/confirm/index.html',
+      'subscribe/unsubscribe/index.html',
+    ]) {
+      const rendered = read(resolve(DIST, relativePath));
+      expect(rendered, relativePath).not.toMatch(/(?:property="og:|name="twitter:)/);
+    }
+  });
+
   it('renders noindex on error/token utilities while keeping the public overview indexable', () => {
     const publicPage = readFileSync(resolve(DIST, 'index.html'), 'utf8');
     const utilities = [
