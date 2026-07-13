@@ -82,6 +82,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const successMerge = root.querySelector('[data-success-merge]');
       const mergeProvider = root.querySelector('[data-merge-provider]');
       const mergeWindow = root.querySelector('[data-merge-window]');
+      const CALLBACK_TIMEOUT_MS = 15_000;
 
       function showBanner(text) {
         if (intro) intro.textContent = '';
@@ -95,9 +96,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), CALLBACK_TIMEOUT_MS);
       fetch(apiBaseUrl + '/v1/auth/oauth-client/callback' + qs, {
         method: 'GET',
         credentials: 'include', // PKCE cookie round-trip
+        signal: controller.signal,
       })
         .then((r) =>
           r.ok
@@ -160,8 +164,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Unexpected outcome: ' + (body.outcome || '<missing>'));
         })
         .catch((err) => {
-          showBanner(err && err.message ? err.message : 'OAuth callback failed.');
-        });
+          showBanner(
+            err && err.name === 'AbortError'
+              ? 'Sign-in is taking too long. Check your connection, then reload this page to try again.'
+              : err && err.message
+                ? err.message
+                : 'OAuth callback failed.',
+          );
+        })
+        .finally(() => window.clearTimeout(timeout));
     })();
   </script>
 </DashboardLayout>

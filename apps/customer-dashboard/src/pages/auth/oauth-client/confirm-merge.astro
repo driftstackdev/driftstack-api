@@ -46,6 +46,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const intro = root.querySelector('[data-field="intro"]');
+      const CONFIRM_TIMEOUT_MS = 15_000;
 
       function showBanner(text) {
         if (intro) intro.textContent = '';
@@ -60,11 +61,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), CONFIRM_TIMEOUT_MS);
       fetch(apiBaseUrl + '/v1/auth/oauth-client/confirm-merge', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ token: token }),
+        signal: controller.signal,
       })
         .then((r) =>
           r.ok
@@ -78,8 +82,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           window.location.href = '/';
         })
         .catch((err) => {
-          showBanner(err && err.message ? err.message : 'Merge confirmation failed.');
-        });
+          showBanner(
+            err && err.name === 'AbortError'
+              ? 'Account linking is taking too long. Check your connection, then reload this page to try again.'
+              : err && err.message
+                ? err.message
+                : 'Merge confirmation failed.',
+          );
+        })
+        .finally(() => window.clearTimeout(timeout));
     })();
   </script>
 </DashboardLayout>
