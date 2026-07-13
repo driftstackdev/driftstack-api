@@ -16,9 +16,10 @@
 //   • State: idle | downloading | failed{message}.
 //   • UseReceiptPdfDownloadResult: download(orderId, format='pdf')
 //     + reset() with same V-534.AX-style action-hook reset pattern.
-//   • Download flow: trailing-slash strip + encodeURIComponent +
-//     accept FORMAT_ACCEPT[format] + blob + objectUrl + synthesized
-//     anchor click + revokeObjectURL + setState idle.
+//   • Download flow: single-flight + shared deadline + sequence gating,
+//     trailing-slash strip + encodeURIComponent + per-format Accept,
+//     blob + synthesized anchor click + unconditional resource cleanup.
+//   • reset/unmount abort and invalidate the active request.
 //   • Filename: `receipt-${orderId}.${format}`.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -63,28 +64,34 @@ describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content par
     );
   });
 
-  it("download signature: format default 'pdf'; no-apiKey → failed{message:'No API key configured.'}; setState downloading; URL with encodeURIComponent(orderId) + .${format} suffix + accept: FORMAT_ACCEPT[format] (per-format Accept header)", () => {
+  it("download signature: format default 'pdf'; single-flight; no-apiKey → failed; active request gets a controller and downloading state", () => {
     expect(body).toMatch(
-      /async \(orderId: string, format: ReceiptDownloadFormat = 'pdf'\): Promise<void> => \{\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'failed', format, message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'downloading', format \}\);/,
-    );
-    expect(body).toMatch(
-      /const res = await fetch\(\s*\n?\s*`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt\.\$\{format\}`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: FORMAT_ACCEPT\[format\],\s*\n?\s*\},\s*\n?\s*\},\s*\n?\s*\);/,
+      /async \(orderId: string, format: ReceiptDownloadFormat = 'pdf'\): Promise<void> => \{\s*\n?\s*if \(inFlightRef\.current\) return;\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'failed', format, message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*inFlightRef\.current = true;\s*\n?\s*const sequence = \+\+sequenceRef\.current;\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*requestRef\.current = controller;\s*\n?\s*setState\(\{ kind: 'downloading', format \}\);/,
     );
   });
 
-  it('Blob-download flow: !res.ok → failed{message: readApiErrorMessage}; res.ok → blob() + URL.createObjectURL + synthesized anchor with download attribute `receipt-${orderId}.${format}` + click + remove + URL.revokeObjectURL + setState idle; catch → failed{message: instance-of-Error fallback}', () => {
+  it('uses the shared deadline with abort signal, URL-safe order id, and per-format Accept header', () => {
     expect(body).toMatch(
-      /const blob = await res\.blob\(\);\s*\n?\s*const objectUrl = URL\.createObjectURL\(blob\);\s*\n?\s*const a = document\.createElement\('a'\);\s*\n?\s*a\.href = objectUrl;\s*\n?\s*a\.download = `receipt-\$\{orderId\}\.\$\{format\}`;\s*\n?\s*a\.style\.display = 'none';\s*\n?\s*document\.body\.appendChild\(a\);\s*\n?\s*a\.click\(\);\s*\n?\s*document\.body\.removeChild\(a\);\s*\n?\s*URL\.revokeObjectURL\(objectUrl\);\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
-    );
-    expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'failed',\s*\n?\s*format,\s*\n?\s*message: err instanceof Error \? err\.message : String\(err\),\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt\.\$\{format\}`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: FORMAT_ACCEPT\[format\],/,
     );
   });
 
-  it('reset useCallback empty deps + return { state, download, reset }; download useCallback deps [settings.apiKey, settings.baseUrl]', () => {
+  it('sequence-gates response side effects and always removes the anchor and revokes its object URL', () => {
+    expect(body).toMatch(
+      /const blob = await res\.blob\(\);\s*\n?\s*if \(sequence !== sequenceRef\.current\) return;\s*\n?\s*objectUrl = URL\.createObjectURL\(blob\);\s*\n?\s*anchor = document\.createElement\('a'\);[\s\S]*?anchor\.download = `receipt-\$\{orderId\}\.\$\{format\}`;[\s\S]*?anchor\.click\(\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'idle' \}\);/,
+    );
+    expect(body).toMatch(
+      /\} finally \{[\s\S]*?anchor\.parentNode\.removeChild\(anchor\);[\s\S]*?URL\.revokeObjectURL\(objectUrl\);[\s\S]*?if \(requestRef\.current === controller\) \{\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;/,
+    );
+  });
+
+  it('reset and unmount abort and invalidate active work; download dependencies stay complete', () => {
     expect(body).toMatch(/\[settings\.apiKey, settings\.baseUrl\],\s*\n?\s*\);/);
     expect(body).toMatch(
-      /const reset = useCallback\(\(\): void => \{\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*\}, \[\]\);\s*\n?\s*return \{ state, download, reset \};/,
+      /const reset = useCallback\(\(\): void => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
+    );
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);[\s\S]*?\},\s*\n?\s*\[\],\s*\n?\s*\);\s*\n?\s*return \{ state, download, reset \};/,
     );
   });
 

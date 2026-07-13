@@ -23,6 +23,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function pdfResponse(): Response {
@@ -34,6 +35,68 @@ function pdfResponse(): Response {
 }
 
 describe('V-534.BM useReceiptPdfDownload', () => {
+  it('single-flights overlapping receipt downloads', () => {
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>(() => {
+          // Intentionally pending until reset aborts the caller signal.
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useReceiptPdfDownload());
+    act(() => {
+      void result.current.download('ord_x');
+      void result.current.download('ord_x', 'txt');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    act(() => result.current.reset());
+  });
+
+  it('bounds a stalled download with actionable recovery', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useReceiptPdfDownload());
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.download('ord_x');
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await act(async () => pending);
+    expect(result.current.state).toEqual({
+      kind: 'failed',
+      format: 'pdf',
+      message: 'Receipt download timed out. Check your connection and try again.',
+    });
+  });
+
+  it('always removes the anchor and revokes the object URL when click throws', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(pdfResponse())),
+    );
+    URL.createObjectURL = vi.fn(() => 'blob:cleanup');
+    const revokeObjectUrl = vi.fn();
+    URL.revokeObjectURL = revokeObjectUrl;
+    HTMLAnchorElement.prototype.click = vi.fn(() => {
+      throw new Error('click blocked');
+    });
+    const { result } = renderHook(() => useReceiptPdfDownload());
+    await act(async () => result.current.download('ord_x'));
+    expect(document.querySelector('a[href="blob:cleanup"]')).toBeNull();
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:cleanup');
+    expect(result.current.state.kind).toBe('failed');
+  });
+
   it('starts idle and does not fetch on mount', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -56,6 +119,7 @@ describe('V-534.BM useReceiptPdfDownload', () => {
     expect(url).toContain('/v1/billing/crypto-orders/ord_abc/receipt.pdf');
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer sk_test');
     expect((init.headers as Record<string, string>).accept).toBe('application/pdf');
+    expect(init.signal).toBeTruthy();
     expect(result.current.state.kind).toBe('idle');
   });
 
