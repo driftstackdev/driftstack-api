@@ -339,9 +339,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
         if (loginInFlight) return;
+        if (oauthStartInFlight || mfaInFlight) return;
         banner.classList.add('hidden');
         loginInFlight = true;
         setSubmitting(true);
+        setOauthButtonsDisabled(true);
         const fd = new FormData(form);
         const payload = {
           email: fd.get('email'),
@@ -406,6 +408,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             clearTimeout(timeoutId);
             loginInFlight = false;
             setSubmitting(false);
+            setOauthButtonsDisabled(false);
           });
       });
 
@@ -526,6 +529,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         mfaForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
           if (mfaInFlight) return;
+          if (loginInFlight || oauthStartInFlight) return;
           banner.classList.add('hidden');
           const code = mfaCodeInput ? mfaCodeInput.value.trim() : '';
           const recovery = mfaRecoveryInput ? mfaRecoveryInput.value.trim() : '';
@@ -541,6 +545,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return;
           }
           mfaInFlight = true;
+          setOauthButtonsDisabled(true);
           if (mfaSubmit) {
             mfaSubmit.disabled = true;
             mfaSubmit.setAttribute('aria-busy', 'true');
@@ -576,6 +581,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             .finally(() => {
               clearTimeout(timeoutId);
               mfaInFlight = false;
+              setOauthButtonsDisabled(false);
               if (mfaSubmit) {
                 mfaSubmit.disabled = false;
                 mfaSubmit.setAttribute('aria-busy', 'false');
@@ -593,17 +599,27 @@ const apiBaseUrl = resolveApiBaseUrl();
       const oauthButtons = root.querySelectorAll('[data-oauth]');
       const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
       let oauthStartInFlight = false;
+      function setOauthButtonsDisabled(disabled, activeButton) {
+        oauthButtons.forEach((button) => {
+          button.disabled = disabled;
+          button.setAttribute(
+            'aria-busy',
+            disabled && button === activeButton ? 'true' : 'false',
+          );
+        });
+      }
       oauthButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
           banner.classList.add('hidden');
           const provider = btn.getAttribute('data-oauth');
           if (!provider) return;
           if (oauthStartInFlight) return;
+          if (loginInFlight || mfaInFlight) return;
           oauthStartInFlight = true;
-          oauthButtons.forEach((button) => {
-            button.disabled = true;
-            button.setAttribute('aria-busy', button === btn ? 'true' : 'false');
-          });
+          setOauthButtonsDisabled(true, btn);
+          if (submitBtn) submitBtn.disabled = true;
+          const mfaSubmit = mfaForm && mfaForm.querySelector('button[type="submit"]');
+          if (mfaSubmit) mfaSubmit.disabled = true;
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), OAUTH_REQUEST_TIMEOUT_MS);
           fetch(apiBaseUrl + '/v1/auth/oauth-client/start', {
@@ -644,10 +660,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             .finally(() => {
               clearTimeout(timeoutId);
               oauthStartInFlight = false;
-              oauthButtons.forEach((button) => {
-                button.disabled = false;
-                button.setAttribute('aria-busy', 'false');
-              });
+              setOauthButtonsDisabled(false);
+              if (submitBtn) submitBtn.disabled = false;
+              if (mfaSubmit) mfaSubmit.disabled = false;
             });
         });
       });

@@ -106,11 +106,18 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/let oauthStartInFlight = false/);
     expect(body).toMatch(/if \(oauthStartInFlight\) return/);
     expect(body).toMatch(/oauthStartInFlight = true/);
-    expect(body).toMatch(/button\.disabled = true/);
-    expect(body).toMatch(/button\.setAttribute\('aria-busy', button === btn \? 'true' : 'false'\)/);
+    expect(body).toMatch(/setOauthButtonsDisabled\(true, btn\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
     expect(body).toMatch(/Sign-in provider took too long/);
+  });
+
+  it('password, MFA, and OAuth share one mutually exclusive sign-in lane', () => {
+    expect(body).toMatch(/if \(oauthStartInFlight \|\| mfaInFlight\) return/);
+    expect(body).toMatch(/if \(loginInFlight \|\| oauthStartInFlight\) return/);
+    expect(body).toMatch(/if \(loginInFlight \|\| mfaInFlight\) return/);
+    expect(body).toMatch(/setOauthButtonsDisabled\(true\)/);
+    expect(body).toMatch(/if \(submitBtn\) submitBtn\.disabled = true/);
   });
 
   it("V-269 ?next= preserved on /signup cross-link (deep-link doesn't leak)", () => {

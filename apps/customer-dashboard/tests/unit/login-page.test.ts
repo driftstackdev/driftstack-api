@@ -353,6 +353,63 @@ describe('login page — local integration', () => {
     expect(bannerText(window)).toMatch(/sign-in provider took too long.*check your connection/i);
   });
 
+  it('password sign-in blocks a competing OAuth start until it settles', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => new Promise<Response>(() => {})],
+    });
+    win = window;
+    submitLogin(window, 'alice@example.com', 'secret-password');
+    const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
+    oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.url).toMatch(/\/v1\/auth\/login$/);
+    expect(oauth.disabled).toBe(true);
+    expect(oauth.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('OAuth start blocks a competing password submit until it settles', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => new Promise<Response>(() => {})],
+    });
+    win = window;
+    const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
+    oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    submitLogin(window, 'alice@example.com', 'secret-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.url).toMatch(/\/v1\/auth\/oauth-client\/start$/);
+    const submit = window.document.querySelector(
+      '[data-form="login"] button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it('MFA verification blocks a competing OAuth start until it settles', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () => json({ mfa_required: true, challenge_token: 'chal_x' }),
+        () => new Promise<Response>(() => {}),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'mfa@example.com', 'secret-password');
+    await flush();
+    const codeInput = window.document.querySelector('#login-mfa-code') as HTMLInputElement;
+    codeInput.value = '123456';
+    const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
+    oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[1]?.url).toMatch(/\/v1\/auth\/mfa\/challenge$/);
+    expect(oauth.disabled).toBe(true);
+  });
+
   it('V-269 ?next= round-trip: the "create one" signup link carries the next target', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       url: 'https://app.driftstack.dev/login/?next=' + encodeURIComponent('/profiles'),
