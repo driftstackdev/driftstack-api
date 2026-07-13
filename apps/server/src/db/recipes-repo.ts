@@ -4,8 +4,9 @@
 //
 // Key shape rules (matching the in-memory variant + migration 0044):
 //   - text PK `rec_<uuid>` minted at create.
-//   - jsonb intent_log + transcript_snapshot are atomic snapshots
-//     (insert-once; never edited).
+//   - jsonb intent_log + transcript_snapshot store versioned AES-GCM envelopes.
+//     Legacy plaintext arrays remain readable and are converted by a bounded
+//     compare-and-set bootstrap upgrader.
 //   - Label trim + length + description length validation lives in
 //     the service-layer `validateLabelAndDescription`; the DB CHECK
 //     constraint is the belt-and-suspenders backstop for that.
@@ -13,10 +14,19 @@
 //     orchestrator handoff #3 Q.5.
 
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { recipes } from './schema.js';
-import type { AgentIntent, TranscriptEntry } from '../services/agent-decomposer.js';
+import {
+  encryptAgentTranscript,
+  isEncryptedAgentTranscript,
+  readAgentTranscript,
+} from '../services/agent-transcript-encryption.js';
+import {
+  encryptRecipeIntentLog,
+  isEncryptedRecipeIntentLog,
+  readRecipeIntentLog,
+} from '../services/recipe-payload-encryption.js';
 import type {
   CreateRecipeArgs,
   ListRecipesArgs,
@@ -28,15 +38,18 @@ import type {
 const DEFAULT_RECIPE_PAGE = 50;
 const MAX_RECIPE_PAGE = 100;
 
-function rowToRecord(row: typeof recipes.$inferSelect): RecipeRecord {
+function rowToRecord(
+  row: typeof recipes.$inferSelect,
+  payloadEncryptionKeyBase64: string | undefined,
+): RecipeRecord {
   return {
     id: row.id,
     accountId: row.accountId,
     agentSessionId: row.agentSessionId,
     label: row.label,
     description: row.description,
-    intentLog: (row.intentLog as ReadonlyArray<AgentIntent>) ?? [],
-    transcriptSnapshot: (row.transcriptSnapshot as ReadonlyArray<TranscriptEntry>) ?? [],
+    intentLog: readRecipeIntentLog(row.intentLog, payloadEncryptionKeyBase64),
+    transcriptSnapshot: readAgentTranscript(row.transcriptSnapshot, payloadEncryptionKeyBase64),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -60,12 +73,106 @@ function validateLabelAndDescription(
 }
 
 export class DrizzleRecipesRepo implements RecipesRepo {
+  private readonly clock: () => Date;
+  private readonly payloadEncryptionKeyBase64: string | undefined;
+
   constructor(
     private readonly database: Database,
-    private readonly clock: () => Date = () => new Date(),
-  ) {}
+    options: {
+      payloadEncryptionKeyBase64?: string;
+      clock?: () => Date;
+    } = {},
+  ) {
+    this.clock = options.clock ?? (() => new Date());
+    this.payloadEncryptionKeyBase64 = options.payloadEncryptionKeyBase64;
+  }
+
+  private requireEncryptionKey(): string {
+    if (this.payloadEncryptionKeyBase64 === undefined) {
+      throw new Error('Recipe payload encryption key is unavailable.');
+    }
+    return this.payloadEncryptionKeyBase64;
+  }
+
+  private async encryptLegacyRow(row: {
+    id: string;
+    intentLog: unknown;
+    transcriptSnapshot: unknown;
+  }): Promise<boolean> {
+    const key = this.requireEncryptionKey();
+    const intentLog = isEncryptedRecipeIntentLog(row.intentLog)
+      ? row.intentLog
+      : encryptRecipeIntentLog(readRecipeIntentLog(row.intentLog, key), key);
+    const transcriptSnapshot = isEncryptedAgentTranscript(row.transcriptSnapshot)
+      ? row.transcriptSnapshot
+      : encryptAgentTranscript(readAgentTranscript(row.transcriptSnapshot, key), key);
+    if (intentLog === row.intentLog && transcriptSnapshot === row.transcriptSnapshot) return false;
+
+    // Both JSON snapshots must still match the selected bytes. Recipes are
+    // insert-once, but this CAS also makes delete/legacy-upgrade races harmless
+    // and prevents a future update surface from being clobbered.
+    const updated = await this.database.db
+      .update(recipes)
+      .set({ intentLog, transcriptSnapshot })
+      .where(
+        and(
+          eq(recipes.id, row.id),
+          sql`${recipes.intentLog} = ${JSON.stringify(row.intentLog)}::jsonb`,
+          sql`${recipes.transcriptSnapshot} = ${JSON.stringify(row.transcriptSnapshot)}::jsonb`,
+        ),
+      )
+      .returning({ id: recipes.id });
+    return updated.length === 1;
+  }
+
+  /**
+   * Bounded legacy plaintext converter. The encrypted probe authenticates at
+   * least one existing envelope before the app starts serving; a wrong key
+   * therefore fails boot instead of making saved recipes unreadable later.
+   */
+  async encryptLegacyPayloads(limit = 500): Promise<{ scanned: number; converted: number }> {
+    const key = this.requireEncryptionKey();
+    const [encryptedProbe] = await this.database.db
+      .select({
+        intentLog: recipes.intentLog,
+        transcriptSnapshot: recipes.transcriptSnapshot,
+      })
+      .from(recipes)
+      .where(
+        or(
+          sql`jsonb_typeof(${recipes.intentLog}) = 'object'`,
+          sql`jsonb_typeof(${recipes.transcriptSnapshot}) = 'object'`,
+        ),
+      )
+      .limit(1);
+    if (encryptedProbe !== undefined) {
+      readRecipeIntentLog(encryptedProbe.intentLog, key);
+      readAgentTranscript(encryptedProbe.transcriptSnapshot, key);
+    }
+
+    const rows = await this.database.db
+      .select({
+        id: recipes.id,
+        intentLog: recipes.intentLog,
+        transcriptSnapshot: recipes.transcriptSnapshot,
+      })
+      .from(recipes)
+      .where(
+        or(
+          sql`jsonb_typeof(${recipes.intentLog}) = 'array'`,
+          sql`jsonb_typeof(${recipes.transcriptSnapshot}) = 'array'`,
+        ),
+      )
+      .limit(limit);
+    let converted = 0;
+    for (const row of rows) {
+      if (await this.encryptLegacyRow(row)) converted += 1;
+    }
+    return { scanned: rows.length, converted };
+  }
 
   async create(args: CreateRecipeArgs): Promise<RecipeRecord> {
+    const key = this.requireEncryptionKey();
     const validated = validateLabelAndDescription(args.label, args.description);
     const id = `rec_${randomUUID()}`;
     const now = this.clock();
@@ -77,8 +184,8 @@ export class DrizzleRecipesRepo implements RecipesRepo {
         agentSessionId: args.agentSessionId,
         label: validated.label,
         description: validated.description,
-        intentLog: args.intentLog,
-        transcriptSnapshot: args.transcriptSnapshot,
+        intentLog: encryptRecipeIntentLog(args.intentLog, key),
+        transcriptSnapshot: encryptAgentTranscript(args.transcriptSnapshot, key),
         createdAt: now,
         updatedAt: now,
       })
@@ -87,7 +194,7 @@ export class DrizzleRecipesRepo implements RecipesRepo {
     if (!row) {
       throw new Error('Recipe insert returned no rows');
     }
-    return rowToRecord(row);
+    return rowToRecord(row, key);
   }
 
   async list(args: ListRecipesArgs): Promise<ListRecipesPage> {
@@ -122,7 +229,9 @@ export class DrizzleRecipesRepo implements RecipesRepo {
       .limit(limit + 1);
 
     const hasMore = rows.length > limit;
-    const data = rows.slice(0, limit).map(rowToRecord);
+    const data = rows
+      .slice(0, limit)
+      .map((row) => rowToRecord(row, this.payloadEncryptionKeyBase64));
     const nextCursor =
       hasMore && data.length > 0 ? (data[data.length - 1] as RecipeRecord).id : null;
     return { data, hasMore, nextCursor };
@@ -134,7 +243,7 @@ export class DrizzleRecipesRepo implements RecipesRepo {
       .from(recipes)
       .where(and(eq(recipes.id, args.id), eq(recipes.accountId, args.accountId)))
       .limit(1);
-    return row ? rowToRecord(row) : null;
+    return row ? rowToRecord(row, this.payloadEncryptionKeyBase64) : null;
   }
 
   async deleteById(args: { accountId: string; id: string }): Promise<boolean> {

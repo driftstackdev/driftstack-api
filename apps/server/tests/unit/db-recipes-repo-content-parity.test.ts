@@ -1,8 +1,8 @@
 // Drift guard for apps/server/src/db/recipes-repo.ts. Pins AI-B4
 // Drizzle implementation of RecipesRepo (migration 0044). Production
 // wires this; tests/dev use InMemoryRecipesRepo from services/recipes.ts.
-// Key shape rules: text PK rec_<uuid> + jsonb atomic snapshots
-// (insert-once, never edited) + service-layer label/description
+// Key shape rules: text PK rec_<uuid> + encrypted jsonb snapshots +
+// bounded legacy conversion + service-layer label/description
 // validation + no update/delete surface in v1.0 (write-only per
 // orchestrator handoff #3 Q.5).
 
@@ -32,9 +32,9 @@ describe('db/recipes-repo content parity', () => {
     );
   });
 
-  it("4-key-shape-rule framing pinned: 'text PK rec_<uuid> minted at create.' + 'jsonb intent_log + transcript_snapshot are atomic snapshots (insert-once; never edited).' + 'Label trim + length + description length validation lives in the service-layer validateLabelAndDescription; the DB CHECK constraint is the belt-and-suspenders backstop for that.' + 'No update/delete surface in v1.0 — write-only per the orchestrator handoff #3 Q.5.' — pinned so the 4-rule contract + insert-once-never-edited + CHECK-backstop + write-only v1.0 contract all stay documented", () => {
+  it('documents encrypted JSONB payloads and bounded compare-and-set legacy conversion', () => {
     expect(body).toMatch(
-      /\/\/\s+- text PK `rec_<uuid>` minted at create\.\s*\n?\s*\/\/\s+- jsonb intent_log \+ transcript_snapshot are atomic snapshots\s*\n?\s*\/\/\s+\(insert-once; never edited\)\./,
+      /\/\/\s+- text PK `rec_<uuid>` minted at create\.\s*\n?\s*\/\/\s+- jsonb intent_log \+ transcript_snapshot store versioned AES-GCM envelopes\.\s*\n?\s*\/\/\s+Legacy plaintext arrays remain readable and are converted by a bounded\s*\n?\s*\/\/\s+compare-and-set bootstrap upgrader\./,
     );
     expect(body).toMatch(
       /\/\/\s+- Label trim \+ length \+ description length validation lives in\s*\n?\s*\/\/\s+the service-layer `validateLabelAndDescription`; the DB CHECK\s*\n?\s*\/\/\s+constraint is the belt-and-suspenders backstop for that\./,
@@ -44,9 +44,30 @@ describe('db/recipes-repo content parity', () => {
     );
   });
 
-  it('rowToRecord 9-field mapper pinned: id + accountId + agentSessionId + label + description + intentLog ?? [] + transcriptSnapshot ?? [] + createdAt + updatedAt. + ReadonlyArray<AgentIntent> + ReadonlyArray<TranscriptEntry> type-casts. Drift to dropping the ?? [] defaults would let null values crash downstream consumers (jsonb columns can be NULL at the schema level)', () => {
+  it('rowToRecord decrypts and runtime-validates both JSONB payloads before returning a recipe', () => {
     expect(body).toMatch(
-      /function rowToRecord\(row: typeof recipes\.\$inferSelect\): RecipeRecord \{\s*\n?\s*return \{\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*agentSessionId: row\.agentSessionId,\s*\n?\s*label: row\.label,\s*\n?\s*description: row\.description,\s*\n?\s*intentLog: \(row\.intentLog as ReadonlyArray<AgentIntent>\) \?\? \[\],\s*\n?\s*transcriptSnapshot: \(row\.transcriptSnapshot as ReadonlyArray<TranscriptEntry>\) \?\? \[\],/,
+      /intentLog: readRecipeIntentLog\(row\.intentLog, payloadEncryptionKeyBase64\),\s*\n?\s*transcriptSnapshot: readAgentTranscript\(row\.transcriptSnapshot, payloadEncryptionKeyBase64\),/,
+    );
+  });
+
+  it('new writes fail closed without a key and persist only encrypted envelopes', () => {
+    expect(body).toMatch(/throw new Error\('Recipe payload encryption key is unavailable\.'\);/);
+    expect(body).toMatch(/intentLog: encryptRecipeIntentLog\(args\.intentLog, key\),/);
+    expect(body).toMatch(
+      /transcriptSnapshot: encryptAgentTranscript\(args\.transcriptSnapshot, key\),/,
+    );
+  });
+
+  it('legacy conversion authenticates an encrypted probe, finds arrays, and compare-and-sets both snapshots', () => {
+    expect(body).toMatch(/async encryptLegacyPayloads\(limit = 500\)/);
+    expect(body).toMatch(/readRecipeIntentLog\(encryptedProbe\.intentLog, key\);/);
+    expect(body).toMatch(/readAgentTranscript\(encryptedProbe\.transcriptSnapshot, key\);/);
+    expect(body).toMatch(/jsonb_typeof\(\$\{recipes\.intentLog\}\) = 'array'/);
+    expect(body).toMatch(
+      /\$\{recipes\.intentLog\} = \$\{JSON\.stringify\(row\.intentLog\)\}::jsonb/,
+    );
+    expect(body).toMatch(
+      /\$\{recipes\.transcriptSnapshot\} = \$\{JSON\.stringify\(row\.transcriptSnapshot\)\}::jsonb/,
     );
   });
 
@@ -63,9 +84,7 @@ describe('db/recipes-repo content parity', () => {
   });
 
   it("create rec_<uuid> minting + clock-injection framing pinned: const id = `rec_${randomUUID()}` + private readonly clock: () => Date = () => new Date() + .returning() + 'Recipe insert returned no rows' guard. Drift to dropping the no-rows guard would surface undefined-row crashes as opaque errors at the route layer", () => {
-    expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly database: Database,\s*\n?\s*private readonly clock: \(\) => Date = \(\) => new Date\(\),\s*\n?\s*\) \{\}/,
-    );
+    expect(body).toMatch(/this\.clock = options\.clock \?\? \(\(\) => new Date\(\)\);/);
     expect(body).toMatch(/const id = `rec_\$\{randomUUID\(\)\}`;/);
     expect(body).toMatch(/\.returning\(\);/);
     expect(body).toMatch(

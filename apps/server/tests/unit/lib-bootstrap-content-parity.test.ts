@@ -67,6 +67,19 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it('wires recipe payload encryption, runs a bounded boot conversion, and drains legacy rows without overlapping', () => {
+    expect(body).toMatch(
+      /const recipesRepo = new DrizzleRecipesRepo\(dbHandle, \{[\s\S]*?payloadEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\);/,
+    );
+    expect(body).toMatch(/const upgraded = await recipesRepo\.encryptLegacyPayloads\(500\);/);
+    expect(body).toMatch(/if \(recipePayloadUpgradeInFlight\) return;/);
+    expect(body).toMatch(/\.encryptLegacyPayloads\(500\)/);
+    expect(body).toMatch(
+      /if \(recipePayloadUpgradeTimer\) clearInterval\(recipePayloadUpgradeTimer\);/,
+    );
+    expect(body).toMatch(/new recipe writes fail closed/);
+  });
+
   it('wires and verifies webhook secret encryption, then runs a bounded legacy conversion batch before workers start', () => {
     expect(body).toMatch(
       /const webhooksRepo = new DrizzleWebhooksRepo\(dbHandle, \{[\s\S]*?secretEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\);/,

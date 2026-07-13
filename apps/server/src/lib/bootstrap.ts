@@ -902,7 +902,25 @@ export async function createProductionDeps(
   // AI-B4 — recipes repo (write-only at v1.0). Backed by Postgres
   // via migration 0044. Now activates because Q.1 wires
   // agentSessionsRepo below.
-  const recipesRepo = new DrizzleRecipesRepo(dbHandle);
+  const recipesRepo = new DrizzleRecipesRepo(dbHandle, {
+    ...(config.mfaEncryptionKey !== undefined
+      ? { payloadEncryptionKeyBase64: config.mfaEncryptionKey }
+      : {}),
+  });
+  if (config.mfaEncryptionKey !== undefined) {
+    const upgraded = await recipesRepo.encryptLegacyPayloads(500);
+    if (upgraded.scanned > 0) {
+      logger.info(
+        { component: 'recipe-payload-encryption', ...upgraded },
+        'legacy recipe payloads encrypted in bounded bootstrap batch',
+      );
+    }
+  } else {
+    logger.warn(
+      { component: 'recipe-payload-encryption' },
+      'MFA_ENCRYPTION_KEY not set — encrypted recipes are unreadable and new recipe writes fail closed',
+    );
+  }
 
   // Q.1 AI-B1.b — agent-runtime composition. All 6 design questions
   // verdicted by orchestrator 2026-05-17; this wire implements:
@@ -2433,6 +2451,42 @@ export async function createProductionDeps(
     webhookSecretUpgradeTimer.unref();
   }
 
+  // The synchronous batch above authenticates the key and converts the first
+  // bounded page before serving. Drain any remainder without a table rewrite or
+  // overlapping ticks, then stop once no plaintext arrays remain.
+  const RECIPE_PAYLOAD_UPGRADE_INTERVAL_MS = 60_000;
+  let recipePayloadUpgradeInFlight = false;
+  let recipePayloadUpgradeTimer: NodeJS.Timeout | null = null;
+  if (config.mfaEncryptionKey !== undefined) {
+    recipePayloadUpgradeTimer = setInterval(() => {
+      if (recipePayloadUpgradeInFlight) return;
+      recipePayloadUpgradeInFlight = true;
+      void recipesRepo
+        .encryptLegacyPayloads(500)
+        .then((result) => {
+          if (result.scanned > 0) {
+            logger.info(
+              { component: 'recipe-payload-encryption', ...result },
+              'legacy recipe payloads encrypted in bounded follow-up batch',
+            );
+          } else if (recipePayloadUpgradeTimer !== null) {
+            clearInterval(recipePayloadUpgradeTimer);
+            recipePayloadUpgradeTimer = null;
+          }
+        })
+        .catch((err: unknown) => {
+          logger.error(
+            { component: 'recipe-payload-encryption', err },
+            'legacy recipe payload conversion failed; interval will retry',
+          );
+        })
+        .finally(() => {
+          recipePayloadUpgradeInFlight = false;
+        });
+    }, RECIPE_PAYLOAD_UPGRADE_INTERVAL_MS);
+    recipePayloadUpgradeTimer.unref();
+  }
+
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
   // sweep. Tick every 5 seconds: walks tracker.findStaleSessions()
   // + fires heartbeat-timeout transition + agent_session.pair_mode.timeout
@@ -2601,6 +2655,7 @@ export async function createProductionDeps(
     if (webhookGraceExpiringNoticeTimer) clearInterval(webhookGraceExpiringNoticeTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     if (webhookSecretUpgradeTimer) clearInterval(webhookSecretUpgradeTimer);
+    if (recipePayloadUpgradeTimer) clearInterval(recipePayloadUpgradeTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
     clearInterval(webhookDeliveryTimer);
     try {

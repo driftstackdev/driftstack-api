@@ -2208,8 +2208,10 @@ export type NewFleetNodeRow = typeof fleetNodes.$inferInsert;
 
 // AI-B4 recipes (migration 0044). Mirrors agent_sessions PK pattern
 // (text 'rec_<uuid>'). intent_log + transcript_snapshot are jsonb
-// arrays; the service layer narrows them to ReadonlyArray<AgentIntent>
-// + ReadonlyArray<TranscriptEntry> respectively. agent_session_id is
+// AES-GCM envelopes; the repository decrypts and runtime-validates them as
+// ReadonlyArray<AgentIntent> + ReadonlyArray<TranscriptEntry> respectively.
+// Legacy plaintext arrays are converted in bounded bootstrap batches.
+// agent_session_id is
 // nullable + ON DELETE SET NULL so the recipe survives agent-session
 // cleanup. CHECK constraints on label (1..120) + description (<=2000)
 // match the SQL migration; the InMemoryRecipesRepo's
