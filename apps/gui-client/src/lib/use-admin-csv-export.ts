@@ -9,15 +9,14 @@
 // State machine: idle | downloading | failed. Successful downloads
 // snap back to idle so the button is immediately usable again.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 import type { AdminCryptoOrder } from './use-admin-crypto-orders-list';
 
 export type AdminCsvExportState =
-  | { kind: 'idle' }
-  | { kind: 'downloading' }
-  | { kind: 'failed'; message: string };
+  { kind: 'idle' } | { kind: 'downloading' } | { kind: 'failed'; message: string };
 
 export interface UseAdminCsvExportOpts {
   status?: AdminCryptoOrder['status'] | 'cancelled' | null;
@@ -38,6 +37,9 @@ export interface UseAdminCsvExportResult {
 export function useAdminCsvExport(opts: UseAdminCsvExportOpts = {}): UseAdminCsvExportResult {
   const { settings } = useSettings();
   const [state, setState] = useState<AdminCsvExportState>({ kind: 'idle' });
+  const requestRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
   const status = opts.status ?? null;
   const search = opts.search ?? null;
@@ -46,10 +48,15 @@ export function useAdminCsvExport(opts: UseAdminCsvExportOpts = {}): UseAdminCsv
   const createdBefore = opts.createdBefore ?? null;
 
   const download = useCallback(async (): Promise<void> => {
+    if (inFlightRef.current) return;
     if (!settings.apiKey) {
       setState({ kind: 'failed', message: 'No API key configured.' });
       return;
     }
+    inFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    requestRef.current = controller;
     const baseUrl = settings.baseUrl.replace(/\/+$/, '');
     const url = new URL(`${baseUrl}/v1/admin/crypto-orders.csv`);
     if (status !== null) url.searchParams.set('status', status);
@@ -67,41 +74,74 @@ export function useAdminCsvExport(opts: UseAdminCsvExportOpts = {}): UseAdminCsv
     }
 
     setState({ kind: 'downloading' });
+    let objectUrl: string | null = null;
+    let anchor: HTMLAnchorElement | null = null;
     try {
-      const res = await fetch(url.toString(), {
+      const res = await fetchWithDeadline(url.toString(), {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'text/csv',
         },
       });
       if (!res.ok) {
-        setState({ kind: 'failed', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'failed', message });
         return;
       }
       const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
+      if (sequence !== sequenceRef.current) return;
+      objectUrl = URL.createObjectURL(blob);
       const filename = buildFilename(new Date());
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = filename;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-      setState({ kind: 'idle' });
+      anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      if (sequence === sequenceRef.current) setState({ kind: 'idle' });
     } catch (err) {
-      setState({
-        kind: 'failed',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'failed',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'CSV export timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (anchor?.parentNode !== null && anchor?.parentNode !== undefined) {
+        anchor.parentNode.removeChild(anchor);
+      }
+      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        inFlightRef.current = false;
+      }
     }
   }, [settings.apiKey, settings.baseUrl, status, search, accountId, createdAfter, createdBefore]);
 
   const reset = useCallback((): void => {
+    sequenceRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    inFlightRef.current = false;
     setState({ kind: 'idle' });
   }, []);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      inFlightRef.current = false;
+    },
+    [settings.apiKey, settings.baseUrl, status, search, accountId, createdAfter, createdBefore],
+  );
 
   return { state, download, reset };
 }

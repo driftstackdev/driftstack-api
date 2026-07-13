@@ -23,6 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -59,6 +60,7 @@ describe('V-534.AX useAdminCsvExport', () => {
     expect(url).toContain('/v1/admin/crypto-orders.csv');
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer sk_admin');
     expect((init.headers as Record<string, string>).accept).toBe('text/csv');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
     expect(result.current.state.kind).toBe('idle');
   });
 
@@ -122,6 +124,86 @@ describe('V-534.AX useAdminCsvExport', () => {
     expect(createObjectUrl).toHaveBeenCalledTimes(1);
     expect(anchorClick).toHaveBeenCalledTimes(1);
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:mock-object-url');
+  });
+
+  it('single-flights overlapping exports', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>(() => {
+            // Intentionally pending until reset aborts the caller signal.
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useAdminCsvExport());
+    act(() => {
+      void result.current.download();
+      void result.current.download();
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    act(() => result.current.reset());
+  });
+
+  it('bounds a stalled export with actionable recovery', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useAdminCsvExport());
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.download();
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await act(async () => pending);
+    expect(result.current.state).toEqual({
+      kind: 'failed',
+      message: 'CSV export timed out. Check your connection and try again.',
+    });
+  });
+
+  it('always removes the anchor and revokes the object URL when click throws', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(csvResponse('order_id\n'))),
+    );
+    URL.createObjectURL = vi.fn(() => 'blob:cleanup');
+    const revokeObjectUrl = vi.fn();
+    URL.revokeObjectURL = revokeObjectUrl;
+    HTMLAnchorElement.prototype.click = vi.fn(() => {
+      throw new Error('click blocked');
+    });
+    const { result } = renderHook(() => useAdminCsvExport());
+    await act(async () => result.current.download());
+    expect(document.querySelector('a[href="blob:cleanup"]')).toBeNull();
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:cleanup');
+    expect(result.current.state).toEqual({ kind: 'failed', message: 'click blocked' });
+  });
+
+  it('reset aborts and invalidates an active export', () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const { result } = renderHook(() => useAdminCsvExport());
+    act(() => void result.current.download());
+    expect(signal?.aborted).toBe(false);
+    act(() => result.current.reset());
+    expect(signal?.aborted).toBe(true);
+    expect(result.current.state).toEqual({ kind: 'idle' });
   });
 
   it('reports HTTP errors via state.kind = failed', async () => {

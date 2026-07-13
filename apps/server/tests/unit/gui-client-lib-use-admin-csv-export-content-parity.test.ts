@@ -59,9 +59,10 @@ describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity'
   });
 
   it("AdminCsvExportState 3-variant (idle | downloading | failed{message}) + UseAdminCsvExportOpts 5-field with V-666.BY createdAfter 'ISO 8601 lower bound (inclusive)' + createdBefore 'ISO 8601 upper bound (exclusive)'", () => {
-    expect(body).toMatch(
-      /export type AdminCsvExportState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'downloading' \}\s*\n?\s*\| \{ kind: 'failed'; message: string \};/,
-    );
+    expect(body).toContain('export type AdminCsvExportState =');
+    expect(body).toContain("{ kind: 'idle' }");
+    expect(body).toContain("{ kind: 'downloading' }");
+    expect(body).toContain("{ kind: 'failed'; message: string }");
     expect(body).toMatch(
       /\/\*\* V-666\.BY — ISO 8601 lower bound \(inclusive\)\. \*\/\s*\n?\s*createdAfter\?: string \| null;\s*\n?\s*\/\*\* V-666\.BY — ISO 8601 upper bound \(exclusive\)\. \*\/\s*\n?\s*createdBefore\?: string \| null;/,
     );
@@ -82,14 +83,21 @@ describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity'
     );
   });
 
-  it('Download flow: setState downloading pre-fetch + fetch with Bearer auth + accept text/csv + !res.ok → failed{message: readApiErrorMessage} + res.ok → blob() + URL.createObjectURL + buildFilename(new Date()) + synthesized <a> click + URL.revokeObjectURL + setState idle', () => {
+  it('Download flow remains authenticated and filtered while transport is deadline-bounded and lifecycle-safe', () => {
     expect(body).toMatch(/setState\(\{ kind: 'downloading' \}\);/);
     expect(body).toMatch(
-      /const res = await fetch\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'text\/csv',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,/,
     );
-    expect(body).toMatch(
-      /const blob = await res\.blob\(\);\s*\n?\s*const objectUrl = URL\.createObjectURL\(blob\);\s*\n?\s*const filename = buildFilename\(new Date\(\)\);\s*\n?\s*const a = document\.createElement\('a'\);\s*\n?\s*a\.href = objectUrl;\s*\n?\s*a\.download = filename;\s*\n?\s*a\.style\.display = 'none';\s*\n?\s*document\.body\.appendChild\(a\);\s*\n?\s*a\.click\(\);\s*\n?\s*document\.body\.removeChild\(a\);\s*\n?\s*URL\.revokeObjectURL\(objectUrl\);\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
-    );
+    expect(body).toContain('authorization: `Bearer ${settings.apiKey}`');
+    expect(body).toContain("accept: 'text/csv',");
+    expect(body).toContain('if (inFlightRef.current) return;');
+    expect(body).toContain('if (sequence !== sequenceRef.current) return;');
+    expect(body).toContain('objectUrl = URL.createObjectURL(blob);');
+    expect(body).toContain("anchor = document.createElement('a');");
+    expect(body).toContain('anchor.click();');
+    expect(body).toContain('anchor.parentNode.removeChild(anchor);');
+    expect(body).toContain('if (objectUrl !== null) URL.revokeObjectURL(objectUrl);');
+    expect(body).toContain('requestRef.current?.abort();');
   });
 
   it('useCallback deps: [settings.apiKey, settings.baseUrl, status, search, accountId, createdAfter, createdBefore]; buildFilename: `crypto-orders-${y}-${m}-${d}.csv` UTC + getUTCFullYear padStart(4) + getUTCMonth()+1 padStart(2) + getUTCDate padStart(2)', () => {
