@@ -48,9 +48,10 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
     );
   });
 
-  it("Imports: useCallback + useState from 'react' (NO useEffect — action hook) + readApiErrorMessage + useSettings + type AdminCryptoOrder from './use-admin-crypto-orders-list'", () => {
-    expect(body).toMatch(/import \{ useCallback, useState \} from 'react';/);
+  it('Imports lifecycle primitives + shared deadline + readApiErrorMessage + useSettings + type AdminCryptoOrder', () => {
+    expect(body).toMatch(/import \{ useCallback, useEffect, useRef, useState \} from 'react';/);
     expect(body).toMatch(/import \{ readApiErrorMessage \} from '\.\/api-errors';/);
+    expect(body).toMatch(/import \{ fetchWithDeadline \} from '\.\/fetch-with-deadline';/);
     expect(body).toMatch(/import \{ useSettings \} from '\.\/SettingsContext';/);
     expect(body).toMatch(
       /import type \{ AdminCryptoOrder \} from '\.\/use-admin-crypto-orders-list';/,
@@ -69,9 +70,9 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
     );
   });
 
-  it('save fetch: PATCH `${baseUrl}/v1/admin/crypto-orders/${orderId}/internal-note` + Content-Type application/json (REQUIRED — PATCH carries JSON body) + Authorization Bearer + accept JSON + body JSON.stringify({internal_note: internalNote}) — snake_case server field name', () => {
+  it('save transport: deadline-bounded PATCH with encoded id, abort signal, JSON/auth headers, and exact snake_case nullable body', () => {
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{orderId\}\/internal-note`, \{\s*\n?\s*method: 'PATCH',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ internal_note: internalNote \}\),\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/internal-note`,\s*\n?\s*\{\s*\n?\s*method: 'PATCH',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ internal_note: internalNote \}\),/,
     );
   });
 
@@ -80,16 +81,23 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
       /const \[state, setState\] = useState<AdminInternalNoteState>\(\{ kind: 'idle' \}\);/,
     );
     expect(body).toMatch(
-      /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'failed',\s*\n?\s*orderId,\s*\n?\s*status: 0,\s*\n?\s*message: 'No API key configured\.',\s*\n?\s*\}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'submitting', orderId \}\);/,
+      /if \(!settings\.apiKey\) \{[\s\S]*?kind: 'failed',[\s\S]*?status: 0,[\s\S]*?message: 'No API key configured\.',[\s\S]*?return;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /const order = \(await res\.json\(\)\) as AdminCryptoOrder;\s*\n?\s*setState\(\{ kind: 'succeeded', orderId, order \}\);/,
+      /inFlightRef\.current = true;\s*\n?\s*const sequence = \+\+sequenceRef\.current;\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*requestRef\.current = controller;\s*\n?\s*setState\(\{ kind: 'submitting', orderId \}\);/,
+    );
+    expect(body).toMatch(
+      /const order = \(await res\.json\(\)\) as AdminCryptoOrder;\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'succeeded', orderId, order \}\);/,
     );
   });
 
-  it('reset useCallback empty deps; return { state, save, reset } at function bottom', () => {
+  it('save is single-flight; reset and unmount abort/invalidate active work; return contract remains', () => {
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(
-      /const reset = useCallback\(\(\): void => \{\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*\}, \[\]\);\s*\n?\s*return \{ state, save, reset \};/,
+      /const reset = useCallback\(\(\): void => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
+    );
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);[\s\S]*?\},\s*\n?\s*\[\],\s*\n?\s*\);\s*\n?\s*return \{ state, save, reset \};/,
     );
   });
 
