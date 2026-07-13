@@ -75,8 +75,8 @@ describe('Astro Pages toolchain parity', () => {
 
   it('admin arbitrary-id routes proxy to real static shell files without matching list routes', () => {
     const redirects = read('apps/admin-panel/public/_redirects');
-    expect(redirects).toMatch(/^\/accounts\/:id \/shells\/account-detail\/index\.html 200$/m);
-    expect(redirects).toMatch(/^\/incidents\/:id \/shells\/incident-detail\/index\.html 200$/m);
+    expect(redirects).toMatch(/^\/accounts\/:id \/shells\/account-detail\/ 200$/m);
+    expect(redirects).toMatch(/^\/incidents\/:id \/shells\/incident-detail\/ 200$/m);
     expect(redirects).not.toMatch(/^\/accounts\/:id \/shells\/account-detail 200$/m);
     expect(redirects).not.toMatch(/^\/incidents\/:id \/shells\/incident-detail 200$/m);
     expect(redirects).not.toMatch(/^\/accounts\/\*/m);
