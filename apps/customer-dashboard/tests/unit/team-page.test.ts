@@ -287,9 +287,66 @@ describe('team page — local integration', () => {
 
     expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
     expect(text(window, '[data-invites-list]')).toContain('carol@example.com');
-    expect(window.document.querySelector('[data-invite-error]')?.textContent).toMatch(
-      /outcome is unknown.*list was refreshed.*do not send it again.*replaces the first link.*another email/i,
+    expect(text(window, '[data-banner]')).toMatch(
+      /appears in pending invites.*not sent again.*emailed link remains valid/i,
     );
+    expect(
+      window.document.querySelector('[data-invite-form-wrap]')?.classList.contains('hidden'),
+    ).toBe(true);
+
+    (window.document.querySelector('[data-show-invite]') as HTMLButtonElement).click();
+    (form.querySelector('input[name="email"]') as HTMLInputElement).value = 'CAROL@example.com';
+    form
+      .querySelector('input[name="email"]')
+      ?.dispatchEvent(new window.Event('input', { bubbles: true }));
+    const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Already pending');
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('invite timeout blocks the unchanged retry when pending-list reconciliation also fails', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    let postStarted = false;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (method === 'POST' && /\/v1\/team\/invites$/.test(call.url)) {
+          postStarted = true;
+          return Promise.reject(timeout);
+        }
+        if (postStarted) return json({}, 503);
+        if (/\/v1\/team\/members$/.test(call.url)) return json({ data: [] });
+        if (/\/v1\/team\/invites$/.test(call.url)) return json({ data: [] });
+        return json({}, 500);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-invite]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-invite-form]') as HTMLFormElement;
+    const emailInput = form.querySelector('input[name="email"]') as HTMLInputElement;
+    emailInput.value = 'unknown@example.com';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+
+    const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(text(window, '[data-invite-error]')).toMatch(
+      /couldn't refresh pending invites.*reload and verify.*replace the first emailed link/i,
+    );
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Verify before retrying');
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
+
+    emailInput.value = 'different@example.com';
+    emailInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toBe('Send invite');
   });
 
   it('a delayed initial refresh cannot overwrite the newer post-invite list', async () => {

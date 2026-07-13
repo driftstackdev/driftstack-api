@@ -70,6 +70,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             id="invite-email"
             name="email"
             type="email"
+            autocomplete="email"
             required
             placeholder="teammate@example.com"
             class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
@@ -183,9 +184,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       const inviteCancel = root.querySelector('[data-invite-cancel]');
       const inviteSubmit = root.querySelector('[data-invite-submit]');
       const inviteError = root.querySelector('[data-invite-error]');
+      const inviteEmailInput = inviteForm && inviteForm.querySelector('input[name="email"]');
       const TEAM_TIMEOUT_MS = 15_000;
       const removalButtonsInFlight = new WeakSet();
       let inviteInFlight = false;
+      let inviteRetryBlockedEmail = '';
+      let inviteRetryBlockReason = '';
       let refreshGeneration = 0;
       let refreshControllers = [];
 
@@ -293,7 +297,9 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function inviteRow(inv) {
         return (
-          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<li data-invite-email="' +
+          escapeHtml(String(inv.invitee_email || '').trim().toLowerCase()) +
+          '" class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<p class="text-base font-medium text-tk-ink">' +
           escapeHtml(inv.invitee_email) +
@@ -497,9 +503,38 @@ const apiBaseUrl = resolveApiBaseUrl();
           return;
         }
         if (inviteFormWrap) inviteFormWrap.classList.remove('hidden');
-        const emailInput = inviteForm && inviteForm.querySelector('input[name="email"]');
-        if (emailInput) emailInput.focus();
+        updateInviteSubmitState();
+        if (inviteEmailInput) inviteEmailInput.focus();
       }
+
+      function isInviteRetryBlocked(email) {
+        return (
+          inviteRetryBlockedEmail &&
+          String(email || '').trim().toLowerCase() === inviteRetryBlockedEmail
+        );
+      }
+
+      function updateInviteSubmitState() {
+        if (!inviteSubmit) return;
+        const blocked = isInviteRetryBlocked(inviteEmailInput && inviteEmailInput.value);
+        inviteSubmit.disabled = inviteInFlight || blocked;
+        if (inviteInFlight) return;
+        inviteSubmit.setAttribute('aria-busy', 'false');
+        inviteSubmit.textContent = blocked
+          ? inviteRetryBlockReason === 'pending'
+            ? 'Already pending'
+            : 'Verify before retrying'
+          : 'Send invite';
+        if (blocked) {
+          inviteSubmit.title =
+            inviteRetryBlockReason === 'pending'
+              ? 'This email already has a pending invite. Do not replace its emailed link.'
+              : 'Reload and verify pending invites before retrying this email.';
+        } else {
+          inviteSubmit.removeAttribute('title');
+        }
+      }
+
       function hideInvite() {
         if (inviteFormWrap) inviteFormWrap.classList.add('hidden');
         if (inviteError) {
@@ -507,10 +542,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           inviteError.textContent = '';
         }
         if (inviteForm) inviteForm.reset();
+        updateInviteSubmitState();
       }
 
       if (showInviteBtn) showInviteBtn.addEventListener('click', showInvite);
       if (inviteCancel) inviteCancel.addEventListener('click', hideInvite);
+      if (inviteEmailInput) inviteEmailInput.addEventListener('input', updateInviteSubmitState);
       if (inviteForm) {
         inviteForm.addEventListener('submit', function (event) {
           event.preventDefault();
@@ -523,6 +560,17 @@ const apiBaseUrl = resolveApiBaseUrl();
               inviteError.textContent = 'Email is required.';
               inviteError.classList.remove('hidden');
             }
+            return;
+          }
+          if (isInviteRetryBlocked(email)) {
+            if (inviteError) {
+              inviteError.textContent =
+                inviteRetryBlockReason === 'pending'
+                  ? 'This email already has a pending invite. Do not resend it: that would replace the first emailed link.'
+                  : 'Reload and verify pending invites before retrying this email.';
+              inviteError.classList.remove('hidden');
+            }
+            updateInviteSubmitState();
             return;
           }
           inviteInFlight = true;
@@ -560,14 +608,37 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (inviteError) {
                 if (err && err.name === 'AbortError') {
                   const refreshed = await refresh(false);
-                  inviteError.textContent =
-                    'Invite outcome is unknown after the request timed out. ' +
-                    (refreshed
-                      ? 'The pending-invite list was refreshed. '
-                      : "We couldn't refresh pending invites. ") +
-                    'If ' +
-                    email +
-                    ' appears there, do not send it again: resending replaces the first link and sends another email.';
+                  const normalizedEmail = email.toLowerCase();
+                  const pending =
+                    refreshed &&
+                    invitesList &&
+                    Array.from(invitesList.querySelectorAll('[data-invite-email]')).some(
+                      function (row) {
+                        return row.getAttribute('data-invite-email') === normalizedEmail;
+                      },
+                    );
+                  if (pending) {
+                    inviteRetryBlockedEmail = normalizedEmail;
+                    inviteRetryBlockReason = 'pending';
+                    showBanner(
+                      'The request timed out, but ' +
+                        email +
+                        ' now appears in pending invites. The invite was not sent again, so the emailed link remains valid.',
+                    );
+                    hideInvite();
+                    return;
+                  }
+                  if (refreshed) {
+                    inviteError.textContent =
+                      'The request timed out, but ' +
+                      email +
+                      ' is not in the refreshed pending-invite list. You can retry if the invite is still needed.';
+                  } else {
+                    inviteRetryBlockedEmail = normalizedEmail;
+                    inviteRetryBlockReason = 'unverified';
+                    inviteError.textContent =
+                      "The request timed out and we couldn't refresh pending invites. Reload and verify the list before retrying this email; resending could replace the first emailed link.";
+                  }
                 } else {
                   inviteError.textContent = err && err.message ? err.message : 'Invite failed.';
                 }
@@ -576,11 +647,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             })
             .finally(function () {
               inviteInFlight = false;
-              if (inviteSubmit) {
-                inviteSubmit.disabled = false;
-                inviteSubmit.setAttribute('aria-busy', 'false');
-                inviteSubmit.textContent = 'Send invite';
-              }
+              updateInviteSubmitState();
             });
         });
       }

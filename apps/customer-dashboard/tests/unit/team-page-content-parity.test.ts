@@ -91,10 +91,19 @@ describe('W365.B customer-dashboard /team page content parity', () => {
 
   it('reconciles ambiguous invites before allowing a token-replacing resend', () => {
     expect(body).toContain("timeoutError.name = 'AbortError'");
-    expect(body).toContain('Invite outcome is unknown after the request timed out.');
-    expect(body).toContain('The pending-invite list was refreshed.');
-    expect(body).toContain('resending replaces the first link and sends another email');
+    expect(body).toContain('let inviteRetryBlockedEmail =');
+    expect(body).toContain('let inviteRetryBlockReason =');
+    expect(body).toContain("invitesList.querySelectorAll('[data-invite-email]')");
+    expect(body).toContain("inviteRetryBlockReason = 'pending'");
+    expect(body).toContain("inviteRetryBlockReason = 'unverified'");
+    expect(body).toContain('Reload and verify the list before retrying this email');
+    expect(body).toContain('Already pending');
+    expect(body).toContain('Verify before retrying');
     expect(body).toMatch(/const refreshed = await refresh\(false\)/);
+  });
+
+  it('provides the browser email autofill hint on the invite form', () => {
+    expect(body).toMatch(/id="invite-email"[\s\S]*?autocomplete="email"/);
   });
 
   it('reconciles ambiguous member removals against refreshed membership', () => {
