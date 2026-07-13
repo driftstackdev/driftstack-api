@@ -72,13 +72,16 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
     );
   });
 
-  it("GET /v1/usage + GET /v1/usage/series?days=30 contract: Promise.all parallel fetch with credentials:'include' + r.ok-or-reject pattern — pinned so the summary + series fetches stay parallel (drift to sequential would double the latency on cold loads) and the credentials-include enables the dual-cookie session pattern", () => {
+  it('GET /v1/usage + GET /v1/usage/series?days=30 contract: bounded Promise.all parallel reads with credentials and typed fixed-copy response classification', () => {
+    expect(body).toMatch(/function readJsonResponse\(response\) \{/);
+    expect(body).toMatch(/window\.driftstackResponseError\(response, body\)/);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/usage', \{ headers, credentials: 'include' \}\)\.then\(\(r\) =>\s*\n?\s*r\.ok \? r\.json\(\) : Promise\.reject\(new Error\('summary HTTP ' \+ r\.status\)\),\s*\n?\s*\),/,
+      /const summaryPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*\n?\s*headers,\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)\.then\(readJsonResponse\);/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/usage\/series\?days=30', \{ headers, credentials: 'include' \}\)\.then\(\s*\n?\s*\(r\) => \(r\.ok \? r\.json\(\) : Promise\.reject\(new Error\('series HTTP ' \+ r\.status\)\)\),\s*\n?\s*\),/,
+      /const initialSeriesPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage\/series\?days=30', \{\s*\n?\s*headers,\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)\.then\(readJsonResponse\);/,
     );
+    expect(body).toMatch(/Promise\.all\(\[summaryPromise, initialSeriesPromise\]\)/);
   });
 
   it("Empty-data state: allZero → 'Live usage loaded. No activity in the current period yet — counts will populate as you run sessions.' — pinned so customers with newly-onboarded accounts (zero usage) see a positive 'data is loaded' message rather than confused by all-zero tiles (drift to silent zero would leave customers uncertain whether the fetch failed or they really have no activity)", () => {
@@ -99,10 +102,11 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
     );
   });
 
-  it("Fetch-failure banner: \"Couldn't load live usage (\" + msg + ').' — pinned so a network/401/5xx error surfaces the failure reason while the neutral placeholders stay (drift to fabricating numbers would mislead customers)", () => {
+  it('Fetch-failure banner uses the shared fixed request mapper while neutral placeholders stay — remote diagnostics and raw HTTP jargon are never reflected', () => {
     expect(body).toMatch(
-      /showBanner\(\s*\n?\s*"Couldn't load live usage \(" \+\s*\n?\s*\(err && err\.message \? err\.message : 'network error'\) \+\s*\n?\s*'\)\.',\s*\n?\s*\);/,
+      /"Couldn't load live usage \(" \+\s*\n?\s*window\.driftstackRequestErrorMessage\(err, "Couldn't load live usage\. Try again\."\) \+\s*\n?\s*'\)\.',/,
     );
+    expect(body).not.toMatch(/summary HTTP|series HTTP/);
   });
 
   it('file exists at canonical path', () => {

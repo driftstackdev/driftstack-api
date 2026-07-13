@@ -124,8 +124,10 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
 
   it('Export contract: GET /v1/account/audit-log/export?format=<csv|json> + content-disposition filename parsing + URL.createObjectURL + a.download + URL.revokeObjectURL cleanup — pinned so the export download UX stays correct (drift to dropping revokeObjectURL would leak memory on bulk exports; drift to ignoring content-disposition would lose the server-provided filename)', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/account\/audit-log\/export\?format=' \+ encodeURIComponent\(format\), \{/,
+      /boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/account\/audit-log\/export\?format=' \+ encodeURIComponent\(format\),/,
     );
+    expect(body).toMatch(/throw window\.driftstackResponseError\(r, b\);/);
+    expect(body).toMatch(/fixed-copy boundary so remote diagnostics never reach the/);
     expect(body).toMatch(/const cd = r\.headers\.get\('content-disposition'\) \|\| '';/);
     expect(body).toMatch(/URL\.revokeObjectURL\(url\);/);
   });

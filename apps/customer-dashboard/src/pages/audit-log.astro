@@ -734,9 +734,9 @@ const FILTER_OPTIONS = [
           .then(function (r) {
             if (!r.ok) {
               // Error responses are problem+json, not the export blob —
-              // surface the server's `detail` (W151/W152) so a refused
-              // export explains why (e.g. an export rate-limit) instead
-              // of a bare "HTTP 429".
+              // classify the stable problem type/status through the shared
+              // fixed-copy boundary so remote diagnostics never reach the
+              // customer while actionable limits still explain the refusal.
               return r
                 .json()
                 .catch(function () {

@@ -124,7 +124,7 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     expect(body).toMatch(/AES-256-GCM, sealed/);
     expect(body).toMatch(/enforced by math, not policy\./);
     expect(body).toMatch(/Always audited/);
-    expect(body).toMatch(/href="\/audit-log"/);
-    expect(body).toMatch(/driftstack\.dev\/trust\/security-overview/);
+    expect(body).toMatch(/href="\/audit-log\/"/);
+    expect(body).toMatch(/driftstack\.dev\/trust\/security-overview\//);
   });
 });

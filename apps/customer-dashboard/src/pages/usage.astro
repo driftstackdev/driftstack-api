@@ -324,6 +324,14 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         return window.driftstackFetchWithDeadline(url, init, USAGE_TIMEOUT_MS, controller);
       }
 
+      function readJsonResponse(response) {
+        if (response.ok) return response.json();
+        return response
+          .json()
+          .catch(() => ({}))
+          .then((body) => Promise.reject(window.driftstackResponseError(response, body)));
+      }
+
       function showBanner(text) {
         if (!banner) return;
         banner.textContent = text;
@@ -443,7 +451,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           { headers, credentials: 'include' },
           controller,
         )
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('series HTTP ' + r.status))))
+          .then(readJsonResponse)
           .then((series) => {
             if (version === chartRequestVersion) renderDailyChart(series);
           })
@@ -468,18 +476,14 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       const summaryPromise = boundedFetch(apiBaseUrl + '/v1/usage', {
         headers,
         credentials: 'include',
-      }).then((r) =>
-        r.ok ? r.json() : Promise.reject(new Error('summary HTTP ' + r.status)),
-      );
+      }).then(readJsonResponse);
       const initialChartVersion = ++chartRequestVersion;
       const initialChartButton = root.querySelector('[data-usage-days="30"]');
       setChartBusy(initialChartButton);
       const initialSeriesPromise = boundedFetch(apiBaseUrl + '/v1/usage/series?days=30', {
         headers,
         credentials: 'include',
-      }).then((r) =>
-        r.ok ? r.json() : Promise.reject(new Error('series HTTP ' + r.status)),
-      );
+      }).then(readJsonResponse);
       initialSeriesPromise
         .then((series) => {
           if (initialChartVersion === chartRequestVersion) renderDailyChart(series);
@@ -603,7 +607,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           credentials: 'include',
         })
           .then(function (r) {
-            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+            return readJsonResponse(r);
           })
           .then(function (data) {
             const buckets = Array.isArray(data.buckets) ? data.buckets : [];

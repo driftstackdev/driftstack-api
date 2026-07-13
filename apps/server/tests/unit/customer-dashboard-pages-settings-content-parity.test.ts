@@ -107,10 +107,10 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     );
   });
 
-  it('moved-to-/security header cross-link pinned: \'Security, sign-ins & danger zone moved to <a href="/security">Privacy & security</a>.\' — pinned so customers hunting the old surfaces get the pointer instead of reading the split as a feature removal', () => {
+  it('moved-to-/security header cross-link pinned with canonical /security/ href — customers hunting the old surfaces get the pointer instead of reading the split as a feature removal', () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
+      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security\/" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
     );
   });
 
