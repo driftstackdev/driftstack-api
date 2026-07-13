@@ -98,12 +98,22 @@ describe('W474.B apps/gui-client/src/lib/use-admin-crypto-orders-list.ts content
     );
   });
 
-  it("loadMore: state.kind!=='ready' + nextCursor===null + apiKey guards + baseline = state.data + loading_more setState + APPEND orders [...baseline.orders, ...body.orders] + nextCursor refreshed from body.next_cursor ?? null", () => {
+  it('loadMore: ready/cursor/single-flight/apiKey guards + baseline loading_more + deadline transport + sequence-gated APPEND orders and refreshed nextCursor', () => {
     expect(body).toMatch(
-      /if \(state\.kind !== 'ready'\) return;\s*\n?\s*if \(state\.data\.nextCursor === null\) return;\s*\n?\s*if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*const baseline = state\.data;\s*\n?\s*setState\(\{ kind: 'loading_more', data: baseline \}\);/,
+      /if \(state\.kind !== 'ready'\) return;\s*\n?\s*if \(state\.data\.nextCursor === null\) return;\s*\n?\s*if \(refreshInFlightRef\.current \|\| pageInFlightRef\.current\) return;\s*\n?\s*if \(!settings\.apiKey\) \{[\s\S]*?const baseline = state\.data;\s*\n?\s*pageInFlightRef\.current = true;[\s\S]*?setState\(\{ kind: 'loading_more', data: baseline \}\);/,
     );
     expect(body).toMatch(
-      /setState\(\{\s*\n?\s*kind: 'ready',\s*\n?\s*data: \{\s*\n?\s*orders: \[\.\.\.baseline\.orders, \.\.\.body\.orders\],\s*\n?\s*nextCursor: body\.next_cursor \?\? null,\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(buildUrl\(baseline\.nextCursor\)\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,[\s\S]*?if \(sequence === sequenceRef\.current\) \{\s*\n?\s*setState\(\{\s*\n?\s*kind: 'ready',\s*\n?\s*data: \{\s*\n?\s*orders: \[\.\.\.baseline\.orders, \.\.\.body\.orders\],\s*\n?\s*nextCursor: body\.next_cursor \?\? null,/,
+    );
+  });
+
+  it('refresh and page lanes are lifecycle-safe: refresh is single-flight, supersedes pagination, and dependency/unmount cleanup aborts both + invalidates state writes', () => {
+    expect(body).toMatch(/if \(refreshInFlightRef\.current\) return;/);
+    expect(body).toMatch(
+      /pageRequestRef\.current\?\.abort\(\);\s*\n?\s*pageRequestRef\.current = null;\s*\n?\s*pageInFlightRef\.current = false;/,
+    );
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*refreshRequestRef\.current\?\.abort\(\);\s*\n?\s*pageRequestRef\.current\?\.abort\(\);[\s\S]*?\},\s*\n?\s*\[settings\.apiKey, buildUrl\],/,
     );
   });
 

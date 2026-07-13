@@ -22,6 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -43,6 +44,8 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toContain('/v1/admin/crypto-orders');
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('appends status + search + accountId + limit to the URL', async () => {
@@ -154,6 +157,51 @@ describe('V-534.AG useAdminCryptoOrdersList', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('fails with actionable copy after the shared 15 second refresh deadline', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      }),
+    );
+    const { result } = renderHook(() => useAdminCryptoOrdersList({ manual: true }));
+
+    await act(async () => {
+      const pending = result.current.refetch();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await pending;
+    });
+
+    expect(result.current.state).toEqual({
+      kind: 'error',
+      message: 'Order list timed out. Check your connection and try again.',
+    });
+  });
+
+  it('aborts the old first page when filters change', async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        if (init?.signal !== undefined) signals.push(init.signal);
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const { rerender } = renderHook(({ search }) => useAdminCryptoOrdersList({ search }), {
+      initialProps: { search: 'first' },
+    });
+    await waitFor(() => expect(signals).toHaveLength(1));
+    rerender({ search: 'second' });
+    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+  });
 });
 
 describe('V-534.AW useAdminCryptoOrdersList — cursor pagination', () => {
@@ -228,5 +276,73 @@ describe('V-534.AW useAdminCryptoOrdersList — cursor pagination', () => {
       await result.current.loadMore();
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('single-flights synchronous loadMore calls for the same cursor', async () => {
+    let resolvePage: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('cursor=CURSOR_TOKEN')) {
+        return new Promise<Response>((resolve) => {
+          resolvePage = resolve;
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ orders: [{ order_id: 'a' }], next_cursor: 'CURSOR_TOKEN' }),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useAdminCryptoOrdersList());
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'));
+
+    let first: Promise<void> | undefined;
+    await act(async () => {
+      first = result.current.loadMore();
+      await result.current.loadMore();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    resolvePage?.({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ orders: [{ order_id: 'b' }], next_cursor: null }),
+    } as unknown as Response);
+    await act(async () => first);
+    if (result.current.state.kind !== 'ready') return;
+    expect(result.current.state.data.orders.map((order) => order.order_id)).toEqual(['a', 'b']);
+  });
+
+  it('bounds a stalled cursor page and surfaces actionable feedback', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('cursor=CURSOR_TOKEN')) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ orders: [{ order_id: 'a' }], next_cursor: 'CURSOR_TOKEN' }),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useAdminCryptoOrdersList());
+    await act(async () => Promise.resolve());
+    expect(result.current.state.kind).toBe('ready');
+
+    await act(async () => {
+      const pending = result.current.loadMore();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await pending;
+    });
+
+    expect(result.current.state).toEqual({
+      kind: 'error',
+      message: 'More orders timed out. Check your connection and try again.',
+    });
   });
 });
