@@ -136,12 +136,12 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     );
   });
 
-  it('markWebSessionMfaSatisfied: 1-field set mfaSatisfiedAt where id; revokeWebSession: where and(eq(id), isNull(revokedAt)) — idempotent revoke', () => {
+  it('markWebSessionMfaSatisfied updates by id; revokeWebSession atomically reports the first winner', () => {
     expect(body).toMatch(
       /async markWebSessionMfaSatisfied\(id: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(webSessions\)\s*\n?\s*\.set\(\{ mfaSatisfiedAt: at \}\)\s*\n?\s*\.where\(eq\(webSessions\.id, id\)\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /async revokeWebSession\(id: string, at: Date\): Promise<void> \{[\s\S]*?\.set\(\{ revokedAt: at \}\)\s*\n?\s*\.where\(and\(eq\(webSessions\.id, id\), isNull\(webSessions\.revokedAt\)\)\);/,
+      /async revokeWebSession\(id: string, at: Date\): Promise<boolean> \{[\s\S]*?\.set\(\{ revokedAt: at \}\)\s*\n?\s*\.where\(and\(eq\(webSessions\.id, id\), isNull\(webSessions\.revokedAt\)\)\)\s*\n?\s*\.returning\(\{ id: webSessions\.id \}\);\s*\n?\s*return rows\.length === 1;/,
     );
   });
 

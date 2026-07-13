@@ -181,7 +181,9 @@ export interface AuthFlowsRepo {
   }): Promise<WebSessionRow>;
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionRow | null>;
   touchWebSession(id: string, at: Date): Promise<void>;
-  revokeWebSession(id: string, at: Date): Promise<void>;
+  /** Atomically revoke an active session. True iff this call changed the row;
+   *  false means another process already revoked it (refresh claim loser). */
+  revokeWebSession(id: string, at: Date): Promise<boolean>;
   /**
    * V-355 — list non-revoked, non-expired web sessions for the given
    * account. Sorted by lastUsedAt desc so the active one(s) sort
@@ -548,7 +550,10 @@ export class AuthFlowsService {
   private async emitAuditBestEffort(
     accountId: string,
     action:
-      'account.email_verified' | 'account.login' | 'account.logout' | 'account.password_changed',
+      | 'account.email_verified'
+      | 'account.login'
+      | 'account.logout'
+      | 'account.password_changed',
     payload: Record<string, unknown>,
     actorAccountId: string | null = null,
   ): Promise<void> {
@@ -1144,7 +1149,8 @@ export class AuthFlowsService {
 
       // Rotate: revoke the old row, issue a new one. The plaintext returned
       // is the new token; the old plaintext is now useless.
-      await this.repo.revokeWebSession(old.id, now);
+      const claimed = await this.repo.revokeWebSession(old.id, now);
+      if (!claimed) throw new AuthFlowError('invalid_auth_token');
       // Invalidate any cached web-session AccountContext for the rotated-out
       // token — mirrors every other revoke path here (logout / stepUpReauth /
       // revokeWebSessionForAccount / revokeAll*). Without this the DB-revoked

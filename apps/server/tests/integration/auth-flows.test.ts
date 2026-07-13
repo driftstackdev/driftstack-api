@@ -17,8 +17,10 @@ import {
 } from '../../src/services/mfa-challenge-store.js';
 import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
 
-function makeDirectService(): { repo: InMemoryAuthFlowsRepo; service: AuthFlowsService } {
-  const repo = new InMemoryAuthFlowsRepo();
+function makeDirectService(repo = new InMemoryAuthFlowsRepo()): {
+  repo: InMemoryAuthFlowsRepo;
+  service: AuthFlowsService;
+} {
   const logger = createTestLogger();
   const email = createEmailService({ config: null, logger });
   const service = new AuthFlowsService(repo, email, logger, {
@@ -1044,14 +1046,11 @@ describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
 // single-use-token flow in this file (verifyEmail / consumeMagicLink /
 // confirmPasswordReset), which reject a concurrent race-loser via
 // `consumeAuthToken`'s atomic UPDATE...RETURNING boolean.
-// `AuthFlowsRepo.revokeWebSession` has no equivalent boolean return, so
-// two requests racing the SAME refresh token could both pass the find
-// before either's revoke landed, and both mint an independent new
-// session — letting a stolen/leaked token race a legitimate client's own
-// refresh into TWO valid sessions instead of being caught. These tests
-// construct AuthFlowsService directly (same pattern as the magic-link
-// race-regression test in auth-flows-email.test.ts) so the race is
-// deterministic against the in-memory repo.
+// The service-local keyed lock prevents that within one instance. The repo's
+// conditional revoke also returns an atomic winner signal so separate API
+// processes cannot both mint. These tests construct AuthFlowsService directly
+// (same pattern as the magic-link race-regression test in
+// auth-flows-email.test.ts) so both boundaries are deterministic.
 describe('AuthFlowsService.refreshSession — single-use under concurrency (security fix)', () => {
   it('two simultaneous refreshes of the same token: exactly one succeeds, one InvalidAuthToken', async () => {
     const { repo, service } = makeDirectService();
@@ -1085,6 +1084,45 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     const active = await repo.listActiveWebSessionsForAccount(verify.account.id, new Date());
     expect(active).toHaveLength(1);
     expect(active[0]!.id).not.toBe(verify.session.row.id); // the NEW row; old one revoked
+  });
+
+  it('two service instances sharing one repository still mint exactly one replacement', async () => {
+    const sharedRepo = new InMemoryAuthFlowsRepo();
+    const serviceA = makeDirectService(sharedRepo).service;
+    const serviceB = makeDirectService(sharedRepo).service;
+    const signup = await serviceA.signup({
+      email: 'refresh-cross-process@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const verify = await serviceA.verifyEmail({
+      token: signup.debugToken!,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+
+    const results = await Promise.allSettled([
+      serviceA.refreshSession({
+        token: verify.session.plaintext,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+      serviceB.refreshSession({
+        token: verify.session.plaintext,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.filter((result) => result.status === 'rejected');
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+      code: 'invalid_auth_token',
+    });
+    expect(
+      await sharedRepo.listActiveWebSessionsForAccount(verify.account.id, new Date()),
+    ).toHaveLength(1);
   });
 
   it('sequential refreshes still both succeed (the lock is per-call, not a permanent hold)', async () => {

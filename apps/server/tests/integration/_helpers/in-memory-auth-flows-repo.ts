@@ -241,11 +241,11 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve();
   }
 
-  revokeWebSession(id: string, at: Date): Promise<void> {
+  revokeWebSession(id: string, at: Date): Promise<boolean> {
     const row = this.webSessions.get(id);
-    if (!row) return Promise.resolve();
+    if (!row || row.revokedAt !== null) return Promise.resolve(false);
     this.webSessions.set(id, { ...row, revokedAt: at });
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   // ── V-355 — list / lookup / bulk-revoke per account ───────────────

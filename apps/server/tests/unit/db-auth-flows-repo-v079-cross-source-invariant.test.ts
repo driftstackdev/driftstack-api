@@ -169,12 +169,14 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
 
   // ─── revokeWebSession isNull guard ──────────────────────────
 
-  it('CRITICAL revokeWebSession isNull(revokedAt) guard — and(eq(id), isNull(revokedAt)). The IS-NULL guard preserves the original revoke timestamp on re-revoke.', () => {
+  it('CRITICAL revokeWebSession isNull guard plus returning rowcount makes revocation an atomic first-winner claim.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-flows-repo.ts'));
     expect(p).toMatch(/\.set\(\{ revokedAt: at \}\)/);
     expect(p).toMatch(
-      /\.where\(and\(eq\(webSessions\.id, id\), isNull\(webSessions\.revokedAt\)\)\);/,
+      /\.where\(and\(eq\(webSessions\.id, id\), isNull\(webSessions\.revokedAt\)\)\)/,
     );
+    expect(p).toMatch(/\.returning\(\{ id: webSessions\.id \}\);/);
+    expect(p).toMatch(/return rows\.length === 1;/);
   });
 
   // ─── revokeAllWebSessionsExcept ──────────────────────────────

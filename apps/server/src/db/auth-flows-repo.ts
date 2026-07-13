@@ -296,11 +296,13 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
       .where(eq(webSessions.id, id));
   }
 
-  async revokeWebSession(id: string, at: Date): Promise<void> {
-    await this.database.db
+  async revokeWebSession(id: string, at: Date): Promise<boolean> {
+    const rows = await this.database.db
       .update(webSessions)
       .set({ revokedAt: at })
-      .where(and(eq(webSessions.id, id), isNull(webSessions.revokedAt)));
+      .where(and(eq(webSessions.id, id), isNull(webSessions.revokedAt)))
+      .returning({ id: webSessions.id });
+    return rows.length === 1;
   }
 
   async listActiveWebSessionsForAccount(accountId: string, now: Date): Promise<WebSessionRow[]> {

@@ -237,11 +237,13 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('refreshSession: rotate-on-refresh (revoke old + issue new + invalidateAccount so the rotated-out token cannot replay on the cache fast-path); old plaintext now useless', () => {
+  it('refreshSession: atomic revoke claim precedes replacement mint + cache invalidation', () => {
     expect(body).toMatch(
       /\/\/ Rotate: revoke the old row, issue a new one\. The plaintext returned\s*\n?\s*\/\/ is the new token; the old plaintext is now useless\./,
     );
-    expect(body).toMatch(/await this\.repo\.revokeWebSession\(old\.id, now\);/);
+    expect(body).toMatch(
+      /const claimed = await this\.repo\.revokeWebSession\(old\.id, now\);\s*\n?\s*if \(!claimed\) throw new AuthFlowError\('invalid_auth_token'\);/,
+    );
     // The rotated-out token must be evicted from the auth cache — the fast-path
     // re-checks only expiresAt (not revokedAt), so without this the DB-revoked
     // old token keeps authenticating for the 30s TTL. Same call every other
@@ -284,7 +286,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('emitAuditBestEffort: V-224 4-action union (email_verified/login/logout/password_changed) try/catch warn-log swallow', () => {
     expect(body).toMatch(
-      /action:\s*'account\.email_verified' \| 'account\.login' \| 'account\.logout' \| 'account\.password_changed',/,
+      /action:\s*\| 'account\.email_verified'\s*\| 'account\.login'\s*\| 'account\.logout'\s*\| 'account\.password_changed',/,
     );
     expect(body).toMatch(/'account-audit emit failed \(best-effort, swallowed\)',/);
   });
