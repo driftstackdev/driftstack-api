@@ -735,6 +735,71 @@ const accountId = account.id;
         );
       }
 
+      function fetchAccountOverrides() {
+        const params = new URLSearchParams({
+          limit: '100',
+          account_id: prefixedId,
+          include_expired: 'true',
+        });
+        return authedFetch('/v1/admin/rate-limit-overrides?' + params.toString()).then((r) =>
+          r.ok ? r.json().then((body) => body.data || []) : Promise.reject(new Error('HTTP ' + r.status)),
+        );
+      }
+
+      function overrideVersion(rows, bucketKey) {
+        return Array.isArray(rows) ? rows.find((row) => row.bucket_key === bucketKey) : null;
+      }
+
+      async function reconcileOverrideSet(payload, snapshot) {
+        let rows;
+        try {
+          rows = await fetchAccountOverrides();
+        } catch {
+          showBanner(
+            'Override outcome is unknown because the response timed out, and the authoritative override list could not be refreshed. Verify the account and bucket on Rate limits before retrying.',
+          );
+          return;
+        }
+        const before = overrideVersion(snapshot, payload.bucket_key);
+        const current = overrideVersion(rows, payload.bucket_key);
+        const advanced =
+          Array.isArray(snapshot) &&
+          current &&
+          (!before || current.id !== before.id || current.updated_at !== before.updated_at);
+        const ttlMs = current
+          ? Date.parse(current.expires_at) - Date.parse(current.updated_at)
+          : Number.NaN;
+        const ttlMatches =
+          Number.isFinite(ttlMs) &&
+          Math.abs(ttlMs - payload.duration_seconds * 1000) <= 60_000;
+        const exact =
+          current &&
+          Number(current.capacity) === payload.capacity &&
+          Number(current.refill_per_second) === payload.refill_per_second &&
+          String(current.reason || '') === payload.reason &&
+          ttlMatches;
+        if (advanced && exact) {
+          hideOverrideForm(true);
+          showBanner(
+            'Override outcome is unknown because the response timed out. The authoritative list now contains a new or updated ' +
+              payload.bucket_key +
+              ' override with the submitted capacity, refill rate, duration, and reason, so it was likely applied; do not submit it again.',
+          );
+        } else if (current) {
+          showBanner(
+            'Override outcome is unknown because the response timed out. The authoritative ' +
+              payload.bucket_key +
+              ' record could not be confirmed as a new exact version; review it on Rate limits before retrying.',
+          );
+        } else {
+          showBanner(
+            'Override outcome is unknown because the response timed out. No ' +
+              payload.bucket_key +
+              ' override is currently visible for this account; retry only if the capacity change is still required.',
+          );
+        }
+      }
+
       async function reconcileAuditOnlyWrite(kind, payload, auditIdsBefore) {
         const refreshed = await load();
         const action = kind === 'note' ? 'audit_note.added' : 'refund.recorded';
@@ -950,17 +1015,29 @@ const accountId = account.id;
         const submit = form.querySelector('button[type="submit"]');
         const submitText = submit ? submit.textContent : '';
         if (!beginAccountMutation(submit)) return;
+        const overrideSnapshot = fetchAccountOverrides().catch(() => null);
         if (submit) submit.textContent = 'Applying…';
         showBanner('Applying override…');
-        return authedFetch(
-          '/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/quota-override',
-          {
-            method: 'POST',
-            body: JSON.stringify(payload),
-          },
-        )
-          .then(mutationJson)
-          .then(() => {
+        return overrideSnapshot
+          .then((snapshot) =>
+            authedFetch(
+              '/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/quota-override',
+              {
+                method: 'POST',
+                body: JSON.stringify(payload),
+              },
+            )
+              .then(mutationJson)
+              .catch(async (err) => {
+                if (err && err.name === 'AbortError') {
+                  await reconcileOverrideSet(payload, snapshot);
+                  return null;
+                }
+                throw err;
+              }),
+          )
+          .then((body) => {
+            if (body === null) return;
             showBanner('Override applied for bucket "' + payload.bucket_key + '".');
             hideOverrideForm(true);
             load();

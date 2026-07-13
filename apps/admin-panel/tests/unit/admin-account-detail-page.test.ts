@@ -287,4 +287,116 @@ describe('admin account detail mutation reconciliation', () => {
       /support-note outcome is unknown.*refreshed audit slice has no new matching successful entry.*review the full audit log before retrying.*avoid a duplicate record/i,
     );
   });
+
+  it('requires an advanced exact override version before treating a timed-out upsert as applied', async () => {
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', () => {});
+    const dom = new JSDOM(
+      `<!doctype html><title>Account</title>
+       <main data-page="admin-account-detail">
+         <div data-banner class="hidden"></div>
+         <span data-field="title-name"></span><span data-field="title-email"></span>
+         <span data-field="tier"></span><span data-field="status">active</span>
+         <span data-field="created"></span><span data-field="updated"></span>
+         <span data-field="status-badge"></span>
+         <div data-field="action-row"></div>
+         <form data-field="override-form" class="hidden">
+           <select name="bucket_key"><option value="global">Global</option></select>
+           <input name="capacity" value="240" />
+           <input name="refill_per_second" value="8" />
+           <input name="duration_seconds" value="3600" />
+           <textarea name="reason">incident capacity</textarea>
+           <button type="submit">Apply override</button>
+         </form>
+         <ul data-list="account-audit"></ul>
+         <div data-account-cost-body></div>
+       </main>`,
+      {
+        url: 'https://admin.driftstack.dev/accounts/1234',
+        runScripts: 'dangerously',
+        virtualConsole,
+      },
+    );
+    windowRef = dom.window;
+    const calls: FetchCall[] = [];
+    let overrideRows: Array<Record<string, unknown>> = [];
+    let commitOverride = true;
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    // @ts-expect-error -- jsdom's fetch global is intentionally injected.
+    dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+      const call = { url: String(input), init };
+      calls.push(call);
+      if (call.init?.method === 'POST' && /\/quota-override$/.test(call.url)) {
+        const payload = JSON.parse(String(call.init.body));
+        if (commitOverride) {
+          overrideRows = [
+            {
+              id: 'rlo_test',
+              account_id: 'acc_1234',
+              bucket_key: payload.bucket_key,
+              capacity: payload.capacity,
+              refill_per_second: payload.refill_per_second,
+              reason: payload.reason,
+              expires_at: '2026-07-13T02:48:00.000Z',
+              updated_at: '2026-07-13T01:48:00.000Z',
+            },
+          ];
+        }
+        return Promise.reject(timeout);
+      }
+      if (/\/v1\/admin\/rate-limit-overrides\?/.test(call.url)) {
+        return Promise.resolve(response({ data: overrideRows }));
+      }
+      if (/\/v1\/admin\/accounts\/acc_1234$/.test(call.url)) {
+        return Promise.resolve(
+          response({
+            name: 'Test Account',
+            email: 'owner@example.test',
+            tier: 'api_builder',
+            status: 'active',
+            created_at: '2026-07-01T00:00:00.000Z',
+            updated_at: '2026-07-13T00:00:00.000Z',
+          }),
+        );
+      }
+      if (/\/v1\/admin\/audit-log\?/.test(call.url)) {
+        return Promise.resolve(response({ data: [] }));
+      }
+      return Promise.resolve(response({}, 404));
+    };
+    dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
+    dom.window.eval(`const apiBaseUrl = 'https://api.driftstack.dev';${scriptBody()}`);
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    await flush();
+
+    const form = dom.window.document.querySelector(
+      '[data-field="override-form"]',
+    ) as HTMLFormElement;
+    const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(100);
+
+    expect(calls.filter((call) => /\/quota-override$/.test(call.url))).toHaveLength(1);
+    expect(calls.filter((call) => /\/rate-limit-overrides\?/.test(call.url))).toHaveLength(2);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /override outcome is unknown.*authoritative list now contains a new or updated global override with the submitted capacity, refill rate, duration, and reason.*likely applied.*do not submit it again/i,
+    );
+    expect(form.classList.contains('hidden')).toBe(true);
+    expect(submit.disabled).toBe(false);
+
+    commitOverride = false;
+    form.classList.remove('hidden');
+    (form.elements.namedItem('capacity') as HTMLInputElement).value = '240';
+    (form.elements.namedItem('refill_per_second') as HTMLInputElement).value = '8';
+    (form.elements.namedItem('duration_seconds') as HTMLInputElement).value = '3600';
+    (form.elements.namedItem('reason') as HTMLTextAreaElement).value = 'incident capacity';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(100);
+
+    expect(calls.filter((call) => /\/quota-override$/.test(call.url))).toHaveLength(2);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /override outcome is unknown.*authoritative global record could not be confirmed as a new exact version.*review it on Rate limits before retrying/i,
+    );
+    expect(form.classList.contains('hidden')).toBe(false);
+  });
 });
