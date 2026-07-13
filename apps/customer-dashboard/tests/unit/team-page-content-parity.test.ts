@@ -89,6 +89,14 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     expect(body).toMatch(/setAttribute\('aria-busy', 'true'\)/);
   });
 
+  it('reconciles ambiguous invites before allowing a token-replacing resend', () => {
+    expect(body).toContain("timeoutError.name = 'AbortError'");
+    expect(body).toContain('Invite outcome is unknown after the request timed out.');
+    expect(body).toContain('The pending-invite list was refreshed.');
+    expect(body).toContain('resending replaces the first link and sends another email');
+    expect(body).toMatch(/const refreshed = await refresh\(false\)/);
+  });
+
   it('per-member-uses-own-login + per-member-dashboard-sessions framing pinned', () => {
     // Load-bearing privacy claim — members never share login
     // credentials. The team page is the only customer surface

@@ -193,7 +193,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         return fetch(url, { ...init, signal: controller.signal })
           .catch(function (err) {
             if (err && err.name === 'AbortError') {
-              throw new Error('Request took too long. Check your connection and try again.');
+              const timeoutError = new Error(
+                'Request took too long. Check your connection and try again.',
+              );
+              timeoutError.name = 'AbortError';
+              throw timeoutError;
             }
             throw err;
           })
@@ -327,7 +331,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
-      function refresh() {
+      function refresh(showLoadError = true) {
         const token = getToken();
         if (!token) {
           if (membersList)
@@ -336,9 +340,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (invitesList)
             invitesList.innerHTML =
               '<li class="px-6 py-4 text-sm text-tk-ink-3">Sign in to see pending invites.</li>';
-          return;
+          return Promise.resolve(false);
         }
-        Promise.all([
+        return Promise.all([
           boundedFetch(apiBaseUrl + '/v1/team/members', {
             headers: { authorization: 'Bearer ' + token },
           }).then(function (r) {
@@ -376,12 +380,16 @@ const apiBaseUrl = resolveApiBaseUrl();
                     )
                   : invites.map(inviteRow).join('');
             }
+            return true;
           })
           .catch(function (err) {
-            renderLoadError();
-            showBanner(
-              'Failed to load team: ' + (err && err.message ? err.message : 'network error'),
-            );
+            if (showLoadError) {
+              renderLoadError();
+              showBanner(
+                'Failed to load team: ' + (err && err.message ? err.message : 'network error'),
+              );
+            }
+            return false;
           })
           .finally(function () {
             // 2026-05-21 — signal the layout opacity-gate; same pattern
@@ -503,9 +511,21 @@ const apiBaseUrl = resolveApiBaseUrl();
             .then(function () {
               hideInvite();
             })
-            .catch(function (err) {
+            .catch(async function (err) {
               if (inviteError) {
-                inviteError.textContent = err && err.message ? err.message : 'Invite failed.';
+                if (err && err.name === 'AbortError') {
+                  const refreshed = await refresh(false);
+                  inviteError.textContent =
+                    'Invite outcome is unknown after the request timed out. ' +
+                    (refreshed
+                      ? 'The pending-invite list was refreshed. '
+                      : "We couldn't refresh pending invites. ") +
+                    'If ' +
+                    email +
+                    ' appears there, do not send it again: resending replaces the first link and sends another email.';
+                } else {
+                  inviteError.textContent = err && err.message ? err.message : 'Invite failed.';
+                }
                 inviteError.classList.remove('hidden');
               }
             })

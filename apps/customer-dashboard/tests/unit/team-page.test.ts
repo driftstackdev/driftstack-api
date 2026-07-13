@@ -32,7 +32,7 @@ interface SetUpOpts {
   token?: string;
   confirmReturns?: boolean;
   actAsAccount?: string;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -248,6 +248,40 @@ describe('team page — local integration', () => {
     expect(err?.classList.contains('hidden')).toBe(false);
     expect(err?.textContent).toMatch(/Email is required\./);
     expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
+  });
+
+  it('invite timeout reconciles a committed pending row without replacing its emailed link', async () => {
+    const invites: Invite[] = [];
+    const base = makeRouter([], invites);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/v1\/team\/invites$/.test(call.url)) {
+          invites.push({
+            id: 'inv_committed',
+            invitee_email: 'carol@example.com',
+            created_at: '2026-05-29T10:00:00.000Z',
+            expires_at: '2026-06-05T10:00:00.000Z',
+          });
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-invite]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-invite-form]') as HTMLFormElement;
+    (form.querySelector('input[name="email"]') as HTMLInputElement).value = 'carol@example.com';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+
+    expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
+    expect(text(window, '[data-invites-list]')).toContain('carol@example.com');
+    expect(window.document.querySelector('[data-invite-error]')?.textContent).toMatch(
+      /outcome is unknown.*list was refreshed.*do not send it again.*replaces the first link.*another email/i,
+    );
   });
 
   it('remove: confirm-gated DELETE /v1/team/members/:id then refresh drops the member', async () => {
