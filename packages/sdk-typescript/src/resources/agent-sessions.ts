@@ -337,6 +337,11 @@ export type AgentMessageResponse =
       session: AgentSession;
     };
 
+/** Agent turns may legally contain eight sequential five-minute harness intents.
+ * SSE heartbeats keep edge/read-idle timers alive; this absolute client backstop
+ * leaves headroom for decompose + optional read-back around that 42-minute plan. */
+export const AGENT_MESSAGE_STREAM_TIMEOUT_MS = 50 * 60_000;
+
 export class AgentSessionsResource {
   constructor(private readonly http: HttpClient) {}
 
@@ -425,6 +430,9 @@ export class AgentSessionsResource {
     userMessage: string,
     opts?: {
       byokApiKey?: string;
+      /** Absolute transport backstop for the heartbeat-backed turn stream.
+       * Defaults to 50 minutes; this is not an idle timeout. */
+      timeoutMs?: number;
       approveConsequentialActions?: ReadonlyArray<{
         category: ConsequentialActionCategory;
         matchedText: string;
@@ -432,9 +440,10 @@ export class AgentSessionsResource {
     },
   ): Promise<AgentMessageResponse> {
     const approvals = opts?.approveConsequentialActions;
-    return this.http.request<AgentMessageResponse>({
+    return this.http.requestEventStream<AgentMessageResponse>({
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/message`,
+      timeoutMs: opts?.timeoutMs ?? AGENT_MESSAGE_STREAM_TIMEOUT_MS,
       body: {
         user_message: userMessage,
         // W443/W445 — re-send approved consequential actions in the wire's
@@ -455,9 +464,12 @@ export class AgentSessionsResource {
       // server normalises that to absent (slice 105 fix), but skipping
       // client-side saves the round-trip header and matches the Go SDK's
       // `opts != nil && opts.ByokAPIKey != ""` shape.
-      ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
-        ? { headers: { 'x-byok-anthropic-api-key': opts.byokApiKey } }
-        : {}),
+      headers: {
+        accept: 'text/event-stream',
+        ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
+          ? { 'x-byok-anthropic-api-key': opts.byokApiKey }
+          : {}),
+      },
     });
   }
 

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
 
 from driftstack import AsyncDriftstack, Driftstack
+from driftstack.errors import RateLimitError, TransportError
 
 API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BASE = "https://api.test"
@@ -27,6 +30,18 @@ SESSION_ENVELOPE = {
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
 }
+
+
+def sse_response(status: int, body: object, *, heartbeat: bool = True) -> httpx.Response:
+    prefix = ": stream open\n\n"
+    if heartbeat:
+        prefix += ": heartbeat 2026-07-13T21:00:00.000Z\n\n"
+    terminal = json.dumps({"status": status, "body": body}, separators=(",", ":"))
+    return httpx.Response(
+        200,
+        text=f"{prefix}event: response\ndata: {terminal}\n\n",
+        headers={"content-type": "text/event-stream; charset=utf-8"},
+    )
 
 
 def test_sync_create_default_body() -> None:
@@ -76,13 +91,43 @@ def test_sync_message_plan_response() -> None:
     }
     with respx.mock(base_url=BASE) as mock:
         route = mock.post("/v1/agent-sessions/agt_1/message").mock(
-            return_value=httpx.Response(200, json=reply),
+            return_value=sse_response(200, reply),
         )
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
             out = client.agent_sessions.message("agt_1", "open https://example.com")
         assert out["kind"] == "plan-executed"
         assert out["ok"] is True
         assert route.called
+        assert route.calls.last.request.headers["accept"] == "text/event-stream"
+
+
+def test_sync_message_stream_maps_terminal_problem_and_rejects_missing_terminal() -> None:
+    problem = {
+        "type": "https://errors.driftstack.dev/rate-limited",
+        "title": "Too Many Requests",
+        "status": 429,
+        "retry_after_seconds": 7,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=sse_response(429, problem),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(RateLimitError) as caught:
+                client.agent_sessions.message("agt_1", "hi")
+        assert caught.value.retry_after_seconds == 7
+
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(
+                200,
+                text=": heartbeat only\n\n",
+                headers={"content-type": "text/event-stream"},
+            ),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError, match="without a terminal response"):
+                client.agent_sessions.message("agt_1", "hi")
 
 
 def test_sync_message_byok_api_key_sets_header() -> None:
@@ -284,13 +329,14 @@ async def test_async_message_clarify_response() -> None:
         "clarifying_question": "What action do you want me to take?",
     }
     with respx.mock(base_url=BASE) as mock:
-        mock.post("/v1/agent-sessions/agt_1/message").mock(
-            return_value=httpx.Response(200, json=reply),
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=sse_response(200, reply),
         )
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             out = await client.agent_sessions.message("agt_1", "do stuff")
         assert out["kind"] == "clarify"
         assert "clarifying_question" in out
+        assert route.calls.last.request.headers["accept"] == "text/event-stream"
 
 
 @pytest.mark.asyncio

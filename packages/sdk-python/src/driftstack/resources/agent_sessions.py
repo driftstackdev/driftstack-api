@@ -189,7 +189,7 @@ class AgentSessionsResource:
                 {"category": a["category"], "matched_text": a["matched_text"]}
                 for a in approve_consequential_actions
             ]
-        return self._http.request(
+        return self._http.request_event_stream(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body(body),
@@ -441,7 +441,7 @@ class AsyncAgentSessionsResource:
                 {"category": a["category"], "matched_text": a["matched_text"]}
                 for a in approve_consequential_actions
             ]
-        return await self._http.request(
+        return await self._http.request_event_stream(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body(body),

@@ -112,6 +112,8 @@ import {
   ProxyValidationFailedError,
   RateLimitedError,
   ValidationError,
+  ApiError,
+  InternalError,
 } from '../lib/errors.js';
 // S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate (create path).
 import { requireTierFeature } from '../lib/errors-helpers.js';
@@ -494,6 +496,9 @@ export interface AgentSessionsRoutesDeps {
   transcriptEventBus?: AgentSessionEventBus;
   /** Heartbeat interval for the SSE stream (ms). Defaults to 30s. */
   transcriptHeartbeatMs?: number;
+  /** Heartbeat interval for the long-running POST /message SSE representation.
+   *  Defaults to 15s (comfortably below SDK/edge idle deadlines). Test-injectable. */
+  agentMessageHeartbeatMs?: number;
   /**
    * Arc 2 sub-slice 8.4 (v2-#8) — base64-encoded AES-256 encryption
    * key for the gui_control_key plaintext. Shares MFA_ENCRYPTION_KEY
@@ -1465,6 +1470,7 @@ export function registerAgentSessionsRoutes(
     bundledTurnConcurrency,
     transcriptEventBus,
     transcriptHeartbeatMs = 30_000,
+    agentMessageHeartbeatMs = 15_000,
     guiControlKeyEncryptionKey,
     guiControlKeyTtlMs = 24 * 60 * 60 * 1000,
     pairModeLock,
@@ -3806,6 +3812,350 @@ export function registerAgentSessionsRoutes(
     );
   }
 
+  const handleAgentMessage = async (req: FastifyRequest<{ Params: { id: string } }>) => {
+    const parsed = RunTurnRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+    // Cross-account guard before runtime.runTurn — the runtime
+    // throws on unknown ids, but we want 403/404 distinction over
+    // "not found" generic.
+    const pre = await sessions.get(req.params.id);
+    if (pre === null) {
+      throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+    }
+    if (req.guiControlKeyAuthorized !== true) {
+      const ctx = requireCtx(req);
+      if (!callerCanAccessAgentSession(ctx, pre.accountId)) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+    }
+    // Account attribution for the BYOK / bundled-LLM resolution chain
+    // and cost telemetry: the session's owning account. Identical to
+    // ctx.account.id on the account path, and the only meaningful
+    // account on the control-key path (which has no request-account
+    // context — validateControlKey resolves it from the session row).
+    const turnAccountId = pre.accountId;
+    // Q.1.c + Q.1.d — BYOK Anthropic key resolution chain (founder
+    // verdicts 2026-05-17 layering onto BYOK Tier-3 LOCKED 2026-05-16
+    // — customer brings their own Anthropic key). Priority order:
+    //
+    //   1. Per-request header (`x-byok-anthropic-api-key`) — the
+    //      customer's explicit per-turn override. Header wins even
+    //      when a stored key is cached (matches the Stripe / Mailgun
+    //      "header overrides default" UX).
+    //   2. Session-cached stored key — decrypted once on session
+    //      create from `accounts.byok_anthropic_api_key_ciphertext`.
+    //      Hit on the cache means the customer has set their key via
+    //      PUT /v1/account/me/byok-anthropic-key.
+    //   3. Deployment fallback key — Q.1.d HARD-502 in prod
+    //      (`allowFallbackForUnconfiguredCustomers === false`); only
+    //      consumed on staging where the flag is opted in for demo
+    //      flows without BYOK setup.
+    //
+    // Arc 1 sub-slice 6.3 (v2-#6) extends the resolution chain with
+    // a bundled-LLM leg AFTER cached BYOK but BEFORE the staging-only
+    // fallback gate. Per founder verdict Q4=A, BYOK ALWAYS wins —
+    // bundled-LLM only resolves when both header AND cached are absent
+    // AND the customer ticked `bundled_llm_consent`. Soft-cap
+    // enforcement against the monthly cap lands as sub-slice 6.5.
+    //
+    // If nothing resolves AND fallback is gated, throw
+    // ByokAnthropicRequiredError so the customer sees the
+    // problem-type that points them at PUT /byok-anthropic-key.
+    // NEVER logged; the key plaintext is held in-memory only.
+    // Normalise empty-string to undefined. A request with the
+    // header present but empty (e.g. `x-byok-anthropic-api-key:`)
+    // would otherwise:
+    //   1. Skip the bundled-LLM fallback (`headerByokKey === ""` is
+    //      not `=== undefined`, so the fallback branch is skipped).
+    //   2. Pass `""` downstream to Anthropic, which 401s with a
+    //      cryptic "invalid API key" error far from the cause.
+    //   3. Mark the cost-tracking row as keySource='header' even
+    //      though no real header value was provided.
+    // Treating empty as absent is the only safe interpretation.
+    const rawHeaderByokKey = req.headers['x-byok-anthropic-api-key'];
+    const headerByokKey =
+      typeof rawHeaderByokKey === 'string' && rawHeaderByokKey.length > 0
+        ? rawHeaderByokKey
+        : undefined;
+    const cachedByokKey = byokKeyCache?.get(req.params.id);
+    let bundledLlmKey: string | undefined;
+    let bundledLlmConsentMissing = false;
+    // Billing-integrity hardening — set true when this turn reserved a
+    // bundled-LLM concurrency slot, so the finally below releases EXACTLY
+    // one slot on every exit path (the turn throwing, a downstream 502,
+    // or a normal return).
+    let bundledSlotAcquired = false;
+    if (
+      headerByokKey === undefined &&
+      cachedByokKey === undefined &&
+      bundledLlmService !== undefined &&
+      deploymentFallbackKey !== undefined
+    ) {
+      const settings = await bundledLlmService.findSettings(turnAccountId);
+      if (settings !== null && !settings.consent) {
+        // Arc 1 sub-slice 6.8 (v2-#6) — flag for the post-resolution
+        // gate. Deployment HAS bundled-LLM, customer just hasn't
+        // ticked consent yet. The route surfaces a typed 402 below
+        // so the dashboard can render a precise CTA.
+        bundledLlmConsentMissing = true;
+        // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
+        try {
+          metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'consent_missing' });
+        } catch {
+          /* swallow */
+        }
+      }
+      if (settings !== null && settings.consent) {
+        // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
+        // Sum bundled-LLM spend in the current calendar month and
+        // refuse the turn when it has reached the cap. The customer
+        // recovers by raising the cap (PATCH /v1/account/me/bundled-llm-settings),
+        // supplying a BYOK key (per-request header or stored), or
+        // waiting for next calendar month.
+        const now = new Date();
+        const spent = await bundledLlmService.sumMonthlySpendCents({
+          accountId: turnAccountId,
+          now,
+        });
+        if (spent >= settings.monthlyCapUsdCents) {
+          // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
+          try {
+            metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'budget_exhausted' });
+          } catch {
+            /* swallow */
+          }
+          throw new BundledLlmBudgetExhaustedError({
+            spentCents: spent,
+            capCents: settings.monthlyCapUsdCents,
+          });
+        }
+        // Billing-integrity hardening — reserve a per-account concurrency
+        // slot BEFORE handing out the bundled key. The soft-cap gate above
+        // is read-then-act (the cost row lands only after the turn), so
+        // without this bound N concurrent turns all read the same
+        // pre-increment spend, all pass, and all overspend the cap. The
+        // limiter caps in-flight bundled turns per account; over the
+        // ceiling we 429 (retry once an in-flight turn finishes) so the
+        // overshoot past the cap is bounded by `limit`, not unbounded.
+        if (bundledTurnConcurrency !== undefined) {
+          if (!bundledTurnConcurrency.tryAcquire(turnAccountId)) {
+            try {
+              metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, {
+                kind: 'concurrency_limit',
+              });
+            } catch {
+              /* swallow */
+            }
+            throw new ConcurrencyLimitError(
+              bundledTurnConcurrency.current(turnAccountId),
+              bundledTurnConcurrency.limit,
+            );
+          }
+          bundledSlotAcquired = true;
+        }
+        bundledLlmKey = deploymentFallbackKey;
+        // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — request counter
+        // fires when the bundled-LLM leg actually resolves a key
+        // (consent + under cap). Distinct from the error counters
+        // above so a single dashboard panel can ratio
+        // ok / consent_missing / budget_exhausted.
+        try {
+          metrics?.inc(METRIC_NAMES.bundledLlmRequestTotal, { outcome: 'ok' });
+        } catch {
+          /* swallow */
+        }
+      }
+    }
+    // Billing-integrity hardening — the try/finally guarantees the
+    // bundled-LLM concurrency slot reserved above is released on EVERY
+    // exit path from here on (the turn throwing, a downstream 502, or a
+    // normal return), so a thrown turn can't leak a slot.
+    try {
+      const resolvedByokKey =
+        headerByokKey ??
+        cachedByokKey ??
+        bundledLlmKey ??
+        (allowFallbackForUnconfiguredCustomers === true ? deploymentFallbackKey : undefined);
+      // Arc 1 sub-slice 6.4 (v2-#6) — derive the resolution leg so
+      // AgentRuntime can write the right record_type. Order mirrors
+      // the chain above; 'none' for the prod-default 502 path.
+      const keySource: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' =
+        headerByokKey !== undefined
+          ? 'header'
+          : cachedByokKey !== undefined
+            ? 'cached'
+            : bundledLlmKey !== undefined
+              ? 'bundled'
+              : resolvedByokKey !== undefined
+                ? 'fallback'
+                : 'none';
+      // Q.1 — the ByokAnthropicRequired 502 only fires when the
+      // deployment is wired for Claude. Deterministic ignores keys
+      // entirely (the decomposer never reads byokAnthropicApiKey)
+      // so gating would surface a false alarm to customers whose
+      // turn would have succeeded with a deterministic plan output.
+      if (resolvedByokKey === undefined && agentDecomposerKind === 'claude') {
+        // Arc 1 sub-slice 6.8 (v2-#6) — surface the typed consent-
+        // required error when bundled-LLM is wired but the customer
+        // hasn't opted in. Without this branch the customer would get
+        // the generic ByokAnthropicRequired 502, which doesn't hint at
+        // the simpler dashboard fix (flip consent).
+        if (bundledLlmConsentMissing) {
+          throw new BundledLlmConsentRequiredError();
+        }
+        throw new ByokAnthropicRequiredError(
+          'No Anthropic API key configured for this account. ' +
+            'PUT /v1/account/me/byok-anthropic-key to set a stored key, ' +
+            'or supply x-byok-anthropic-api-key on the request header.',
+        );
+      }
+      // W443/W445 — map approved {category, matched_text} pairs to executor
+      // signatures so a re-planned consequential action dispatches instead of
+      // re-halting for confirmation.
+      const approvedConsequentialActions =
+        parsed.data.approve_consequential_actions !== undefined
+          ? new Set(
+              parsed.data.approve_consequential_actions.map((a) =>
+                consequentialSignature(a.category, a.matched_text),
+              ),
+            )
+          : undefined;
+      const result = await runtime.runTurn({
+        agentSessionId: req.params.id,
+        userMessage: parsed.data.user_message,
+        ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
+        ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
+        keySource,
+      });
+      if (result.kind === 'turn-in-progress') {
+        throw new ConflictError(
+          'Another turn is already running for this agent session. Retry after it completes.',
+        );
+      }
+      if (result.kind === 'account-turn-limit') {
+        throw new RateLimitedError(
+          1,
+          `This account already has ${result.current.toString()} AI turns running; the current limit is ${result.limit.toString()}. Retry after one finishes.`,
+        );
+      }
+      if (result.kind === 'session-closed') {
+        throw new ConflictError(
+          `Agent session is ${result.session.status} (${result.reason}). Start a new agent session.`,
+        );
+      }
+      // Q.1.c — if this turn closed the session (e.g. the runtime's
+      // budget-exhausted close via closeWithReason), drop the cached BYOK
+      // plaintext now. The runtime layer has no handle on this route-owned
+      // cache, so without this the decrypted key would linger in process
+      // memory until restart (the customer DELETE route is the only other
+      // clear path). delete() is idempotent.
+      if (result.session.status === 'closed') {
+        byokKeyCache?.delete(req.params.id);
+      }
+      // Arc 2 sub-slice 8.6 (v2-#8) — manual-mode pass-through. No
+      // decompose/executor ran; transcript carries one extra operator
+      // entry. SDK consumers branch on kind:'logged-manual' to render
+      // the human-driven log line distinctly from AI turns.
+      if (result.kind === 'logged-manual') {
+        return {
+          kind: result.kind,
+          session: publicAgentSession(
+            result.session,
+            undefined,
+            sessionLivenessStore,
+            sessionCapabilityReportStore,
+          ),
+        };
+      }
+      // 2026-05-22 — V-666.AI cost telemetry per turn. The decomposer
+      // already attaches a `usage` block (input/output tokens + cost
+      // cents + model id) for Claude-backed runs; deterministic
+      // decomposers leave it undefined. Surface the block on every
+      // response shape so the customer-dashboard chat UI can render
+      // a per-turn "$0.0023 · 145 tokens" badge. Undefined-safe: the
+      // SDK + UI render '—' when usage is absent.
+      function publicUsage(u: DecomposeUsage | undefined):
+        | {
+            decomposer_kind: 'claude' | 'deterministic';
+            anthropic_input_tokens?: number;
+            anthropic_output_tokens?: number;
+            cost_usd_cents?: number;
+            model?: string;
+          }
+        | undefined {
+        if (!u) return undefined;
+        return {
+          decomposer_kind: u.decomposerKind,
+          ...(u.anthropicInputTokens !== undefined
+            ? { anthropic_input_tokens: u.anthropicInputTokens }
+            : {}),
+          ...(u.anthropicOutputTokens !== undefined
+            ? { anthropic_output_tokens: u.anthropicOutputTokens }
+            : {}),
+          ...(u.costUsdCents !== undefined ? { cost_usd_cents: u.costUsdCents } : {}),
+          ...(u.model !== undefined ? { model: u.model } : {}),
+        };
+      }
+
+      if (result.kind === 'plan-executed') {
+        // Narrow the decomposer to the plan variant — TS can't infer
+        // it across the runTurn discriminant without a manual branch.
+        const plan = result.decomposer;
+        if (plan.kind !== 'plan') {
+          throw new Error('runtime invariant: plan-executed without plan decomposer');
+        }
+        const usage = publicUsage(plan.usage);
+        return {
+          kind: result.kind,
+          session: publicAgentSession(
+            result.session,
+            undefined,
+            sessionLivenessStore,
+            sessionCapabilityReportStore,
+          ),
+          intents: plan.intents,
+          results: result.executor.results,
+          ok: result.executor.ok,
+          ...(usage !== undefined ? { usage } : {}),
+        };
+      }
+      if (result.kind === 'clarify') {
+        const usage = publicUsage(result.decomposer.usage);
+        return {
+          kind: result.kind,
+          session: publicAgentSession(
+            result.session,
+            undefined,
+            sessionLivenessStore,
+            sessionCapabilityReportStore,
+          ),
+          clarifying_question: result.decomposer.clarifyingQuestion,
+          ...(usage !== undefined ? { usage } : {}),
+        };
+      }
+      // refuse
+      const usage = publicUsage(result.decomposer.usage);
+      return {
+        kind: result.kind,
+        session: publicAgentSession(
+          result.session,
+          undefined,
+          sessionLivenessStore,
+          sessionCapabilityReportStore,
+        ),
+        refuse_reason: result.decomposer.refuseReason,
+        ...(usage !== undefined ? { usage } : {}),
+      };
+    } finally {
+      // Release the bundled-LLM concurrency slot (if reserved). ALWAYS
+      // runs — on a thrown turn, a downstream 502, or a normal return —
+      // so a slot can never leak.
+      if (bundledSlotAcquired && bundledTurnConcurrency !== undefined) {
+        bundledTurnConcurrency.release(turnAccountId);
+      }
+    }
+  };
+
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/message',
     // v2-#13 — dedicated bucket for AI chat turns (separate from
@@ -3821,348 +4171,88 @@ export function registerAgentSessionsRoutes(
         app.rateLimit('agent_sessions:message'),
       ],
     },
-    async (req) => {
-      const parsed = RunTurnRequestSchema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-      // Cross-account guard before runtime.runTurn — the runtime
-      // throws on unknown ids, but we want 403/404 distinction over
-      // "not found" generic.
-      const pre = await sessions.get(req.params.id);
-      if (pre === null) {
-        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
-      }
-      if (req.guiControlKeyAuthorized !== true) {
-        const ctx = requireCtx(req);
-        if (!callerCanAccessAgentSession(ctx, pre.accountId)) {
-          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
-        }
-      }
-      // Account attribution for the BYOK / bundled-LLM resolution chain
-      // and cost telemetry: the session's owning account. Identical to
-      // ctx.account.id on the account path, and the only meaningful
-      // account on the control-key path (which has no request-account
-      // context — validateControlKey resolves it from the session row).
-      const turnAccountId = pre.accountId;
-      // Q.1.c + Q.1.d — BYOK Anthropic key resolution chain (founder
-      // verdicts 2026-05-17 layering onto BYOK Tier-3 LOCKED 2026-05-16
-      // — customer brings their own Anthropic key). Priority order:
-      //
-      //   1. Per-request header (`x-byok-anthropic-api-key`) — the
-      //      customer's explicit per-turn override. Header wins even
-      //      when a stored key is cached (matches the Stripe / Mailgun
-      //      "header overrides default" UX).
-      //   2. Session-cached stored key — decrypted once on session
-      //      create from `accounts.byok_anthropic_api_key_ciphertext`.
-      //      Hit on the cache means the customer has set their key via
-      //      PUT /v1/account/me/byok-anthropic-key.
-      //   3. Deployment fallback key — Q.1.d HARD-502 in prod
-      //      (`allowFallbackForUnconfiguredCustomers === false`); only
-      //      consumed on staging where the flag is opted in for demo
-      //      flows without BYOK setup.
-      //
-      // Arc 1 sub-slice 6.3 (v2-#6) extends the resolution chain with
-      // a bundled-LLM leg AFTER cached BYOK but BEFORE the staging-only
-      // fallback gate. Per founder verdict Q4=A, BYOK ALWAYS wins —
-      // bundled-LLM only resolves when both header AND cached are absent
-      // AND the customer ticked `bundled_llm_consent`. Soft-cap
-      // enforcement against the monthly cap lands as sub-slice 6.5.
-      //
-      // If nothing resolves AND fallback is gated, throw
-      // ByokAnthropicRequiredError so the customer sees the
-      // problem-type that points them at PUT /byok-anthropic-key.
-      // NEVER logged; the key plaintext is held in-memory only.
-      // Normalise empty-string to undefined. A request with the
-      // header present but empty (e.g. `x-byok-anthropic-api-key:`)
-      // would otherwise:
-      //   1. Skip the bundled-LLM fallback (`headerByokKey === ""` is
-      //      not `=== undefined`, so the fallback branch is skipped).
-      //   2. Pass `""` downstream to Anthropic, which 401s with a
-      //      cryptic "invalid API key" error far from the cause.
-      //   3. Mark the cost-tracking row as keySource='header' even
-      //      though no real header value was provided.
-      // Treating empty as absent is the only safe interpretation.
-      const rawHeaderByokKey = req.headers['x-byok-anthropic-api-key'];
-      const headerByokKey =
-        typeof rawHeaderByokKey === 'string' && rawHeaderByokKey.length > 0
-          ? rawHeaderByokKey
-          : undefined;
-      const cachedByokKey = byokKeyCache?.get(req.params.id);
-      let bundledLlmKey: string | undefined;
-      let bundledLlmConsentMissing = false;
-      // Billing-integrity hardening — set true when this turn reserved a
-      // bundled-LLM concurrency slot, so the finally below releases EXACTLY
-      // one slot on every exit path (the turn throwing, a downstream 502,
-      // or a normal return).
-      let bundledSlotAcquired = false;
+    async (req, reply) => {
+      const accept = req.headers.accept ?? '';
       if (
-        headerByokKey === undefined &&
-        cachedByokKey === undefined &&
-        bundledLlmService !== undefined &&
-        deploymentFallbackKey !== undefined
+        !accept
+          .toLowerCase()
+          .split(',')
+          .some((value) => value.trim().split(';', 1)[0]?.trim() === 'text/event-stream')
       ) {
-        const settings = await bundledLlmService.findSettings(turnAccountId);
-        if (settings !== null && !settings.consent) {
-          // Arc 1 sub-slice 6.8 (v2-#6) — flag for the post-resolution
-          // gate. Deployment HAS bundled-LLM, customer just hasn't
-          // ticked consent yet. The route surfaces a typed 402 below
-          // so the dashboard can render a precise CTA.
-          bundledLlmConsentMissing = true;
-          // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
-          try {
-            metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'consent_missing' });
-          } catch {
-            /* swallow */
-          }
-        }
-        if (settings !== null && settings.consent) {
-          // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
-          // Sum bundled-LLM spend in the current calendar month and
-          // refuse the turn when it has reached the cap. The customer
-          // recovers by raising the cap (PATCH /v1/account/me/bundled-llm-settings),
-          // supplying a BYOK key (per-request header or stored), or
-          // waiting for next calendar month.
-          const now = new Date();
-          const spent = await bundledLlmService.sumMonthlySpendCents({
-            accountId: turnAccountId,
-            now,
-          });
-          if (spent >= settings.monthlyCapUsdCents) {
-            // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
-            try {
-              metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'budget_exhausted' });
-            } catch {
-              /* swallow */
-            }
-            throw new BundledLlmBudgetExhaustedError({
-              spentCents: spent,
-              capCents: settings.monthlyCapUsdCents,
-            });
-          }
-          // Billing-integrity hardening — reserve a per-account concurrency
-          // slot BEFORE handing out the bundled key. The soft-cap gate above
-          // is read-then-act (the cost row lands only after the turn), so
-          // without this bound N concurrent turns all read the same
-          // pre-increment spend, all pass, and all overspend the cap. The
-          // limiter caps in-flight bundled turns per account; over the
-          // ceiling we 429 (retry once an in-flight turn finishes) so the
-          // overshoot past the cap is bounded by `limit`, not unbounded.
-          if (bundledTurnConcurrency !== undefined) {
-            if (!bundledTurnConcurrency.tryAcquire(turnAccountId)) {
-              try {
-                metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, {
-                  kind: 'concurrency_limit',
-                });
-              } catch {
-                /* swallow */
-              }
-              throw new ConcurrencyLimitError(
-                bundledTurnConcurrency.current(turnAccountId),
-                bundledTurnConcurrency.limit,
-              );
-            }
-            bundledSlotAcquired = true;
-          }
-          bundledLlmKey = deploymentFallbackKey;
-          // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — request counter
-          // fires when the bundled-LLM leg actually resolves a key
-          // (consent + under cap). Distinct from the error counters
-          // above so a single dashboard panel can ratio
-          // ok / consent_missing / budget_exhausted.
-          try {
-            metrics?.inc(METRIC_NAMES.bundledLlmRequestTotal, { outcome: 'ok' });
-          } catch {
-            /* swallow */
-          }
-        }
+        return handleAgentMessage(req);
       }
-      // Billing-integrity hardening — the try/finally guarantees the
-      // bundled-LLM concurrency slot reserved above is released on EVERY
-      // exit path from here on (the turn throwing, a downstream 502, or a
-      // normal return), so a thrown turn can't leak a slot.
-      try {
-        const resolvedByokKey =
-          headerByokKey ??
-          cachedByokKey ??
-          bundledLlmKey ??
-          (allowFallbackForUnconfiguredCustomers === true ? deploymentFallbackKey : undefined);
-        // Arc 1 sub-slice 6.4 (v2-#6) — derive the resolution leg so
-        // AgentRuntime can write the right record_type. Order mirrors
-        // the chain above; 'none' for the prod-default 502 path.
-        const keySource: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' =
-          headerByokKey !== undefined
-            ? 'header'
-            : cachedByokKey !== undefined
-              ? 'cached'
-              : bundledLlmKey !== undefined
-                ? 'bundled'
-                : resolvedByokKey !== undefined
-                  ? 'fallback'
-                  : 'none';
-        // Q.1 — the ByokAnthropicRequired 502 only fires when the
-        // deployment is wired for Claude. Deterministic ignores keys
-        // entirely (the decomposer never reads byokAnthropicApiKey)
-        // so gating would surface a false alarm to customers whose
-        // turn would have succeeded with a deterministic plan output.
-        if (resolvedByokKey === undefined && agentDecomposerKind === 'claude') {
-          // Arc 1 sub-slice 6.8 (v2-#6) — surface the typed consent-
-          // required error when bundled-LLM is wired but the customer
-          // hasn't opted in. Without this branch the customer would get
-          // the generic ByokAnthropicRequired 502, which doesn't hint at
-          // the simpler dashboard fix (flip consent).
-          if (bundledLlmConsentMissing) {
-            throw new BundledLlmConsentRequiredError();
-          }
-          throw new ByokAnthropicRequiredError(
-            'No Anthropic API key configured for this account. ' +
-              'PUT /v1/account/me/byok-anthropic-key to set a stored key, ' +
-              'or supply x-byok-anthropic-api-key on the request header.',
-          );
-        }
-        // W443/W445 — map approved {category, matched_text} pairs to executor
-        // signatures so a re-planned consequential action dispatches instead of
-        // re-halting for confirmation.
-        const approvedConsequentialActions =
-          parsed.data.approve_consequential_actions !== undefined
-            ? new Set(
-                parsed.data.approve_consequential_actions.map((a) =>
-                  consequentialSignature(a.category, a.matched_text),
-                ),
-              )
-            : undefined;
-        const result = await runtime.runTurn({
-          agentSessionId: req.params.id,
-          userMessage: parsed.data.user_message,
-          ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
-          ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
-          keySource,
-        });
-        if (result.kind === 'turn-in-progress') {
-          throw new ConflictError(
-            'Another turn is already running for this agent session. Retry after it completes.',
-          );
-        }
-        if (result.kind === 'account-turn-limit') {
-          throw new RateLimitedError(
-            1,
-            `This account already has ${result.current.toString()} AI turns running; the current limit is ${result.limit.toString()}. Retry after one finishes.`,
-          );
-        }
-        if (result.kind === 'session-closed') {
-          throw new ConflictError(
-            `Agent session is ${result.session.status} (${result.reason}). Start a new agent session.`,
-          );
-        }
-        // Q.1.c — if this turn closed the session (e.g. the runtime's
-        // budget-exhausted close via closeWithReason), drop the cached BYOK
-        // plaintext now. The runtime layer has no handle on this route-owned
-        // cache, so without this the decrypted key would linger in process
-        // memory until restart (the customer DELETE route is the only other
-        // clear path). delete() is idempotent.
-        if (result.session.status === 'closed') {
-          byokKeyCache?.delete(req.params.id);
-        }
-        // Arc 2 sub-slice 8.6 (v2-#8) — manual-mode pass-through. No
-        // decompose/executor ran; transcript carries one extra operator
-        // entry. SDK consumers branch on kind:'logged-manual' to render
-        // the human-driven log line distinctly from AI turns.
-        if (result.kind === 'logged-manual') {
-          return {
-            kind: result.kind,
-            session: publicAgentSession(
-              result.session,
-              undefined,
-              sessionLivenessStore,
-              sessionCapabilityReportStore,
-            ),
-          };
-        }
-        // 2026-05-22 — V-666.AI cost telemetry per turn. The decomposer
-        // already attaches a `usage` block (input/output tokens + cost
-        // cents + model id) for Claude-backed runs; deterministic
-        // decomposers leave it undefined. Surface the block on every
-        // response shape so the customer-dashboard chat UI can render
-        // a per-turn "$0.0023 · 145 tokens" badge. Undefined-safe: the
-        // SDK + UI render '—' when usage is absent.
-        function publicUsage(u: DecomposeUsage | undefined):
-          | {
-              decomposer_kind: 'claude' | 'deterministic';
-              anthropic_input_tokens?: number;
-              anthropic_output_tokens?: number;
-              cost_usd_cents?: number;
-              model?: string;
-            }
-          | undefined {
-          if (!u) return undefined;
-          return {
-            decomposer_kind: u.decomposerKind,
-            ...(u.anthropicInputTokens !== undefined
-              ? { anthropic_input_tokens: u.anthropicInputTokens }
-              : {}),
-            ...(u.anthropicOutputTokens !== undefined
-              ? { anthropic_output_tokens: u.anthropicOutputTokens }
-              : {}),
-            ...(u.costUsdCents !== undefined ? { cost_usd_cents: u.costUsdCents } : {}),
-            ...(u.model !== undefined ? { model: u.model } : {}),
-          };
-        }
 
-        if (result.kind === 'plan-executed') {
-          // Narrow the decomposer to the plan variant — TS can't infer
-          // it across the runTurn discriminant without a manual branch.
-          const plan = result.decomposer;
-          if (plan.kind !== 'plan') {
-            throw new Error('runtime invariant: plan-executed without plan decomposer');
-          }
-          const usage = publicUsage(plan.usage);
-          return {
-            kind: result.kind,
-            session: publicAgentSession(
-              result.session,
-              undefined,
-              sessionLivenessStore,
-              sessionCapabilityReportStore,
-            ),
-            intents: plan.intents,
-            results: result.executor.results,
-            ok: result.executor.ok,
-            ...(usage !== undefined ? { usage } : {}),
-          };
-        }
-        if (result.kind === 'clarify') {
-          const usage = publicUsage(result.decomposer.usage);
-          return {
-            kind: result.kind,
-            session: publicAgentSession(
-              result.session,
-              undefined,
-              sessionLivenessStore,
-              sessionCapabilityReportStore,
-            ),
-            clarifying_question: result.decomposer.clarifyingQuestion,
-            ...(usage !== undefined ? { usage } : {}),
-          };
-        }
-        // refuse
-        const usage = publicUsage(result.decomposer.usage);
-        return {
-          kind: result.kind,
-          session: publicAgentSession(
-            result.session,
-            undefined,
-            sessionLivenessStore,
-            sessionCapabilityReportStore,
-          ),
-          refuse_reason: result.decomposer.refuseReason,
-          ...(usage !== undefined ? { usage } : {}),
-        };
-      } finally {
-        // Release the bundled-LLM concurrency slot (if reserved). ALWAYS
-        // runs — on a thrown turn, a downstream 502, or a normal return —
-        // so a slot can never leak.
-        if (bundledSlotAcquired && bundledTurnConcurrency !== undefined) {
-          bundledTurnConcurrency.release(turnAccountId);
-        }
+      // Long AI turns legitimately outlive both the SDK's generic 30-second
+      // request default and Cloudflare's headerless-origin read deadline. Send
+      // an SSE representation on explicit negotiation: headers open immediately,
+      // comments keep every hop alive, then ONE terminal response event carries
+      // the same JSON result or RFC 7807 problem the compatibility path returns.
+      // The underlying turn deliberately continues after a viewer disconnects:
+      // abandoning it halfway would leave already-dispatched browser actions,
+      // transcript, token debit, and cost recording in an ambiguous state.
+      const responseHeaders: Record<string, string | number | string[]> = {};
+      for (const [name, value] of Object.entries(reply.getHeaders())) {
+        if (name !== 'content-length' && value !== undefined) responseHeaders[name] = value;
       }
+      reply.raw.writeHead(200, {
+        ...responseHeaders,
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-store, no-transform',
+        connection: 'keep-alive',
+        'x-accel-buffering': 'no',
+      });
+      reply.raw.write(': stream open\n\n');
+
+      let viewerClosed = false;
+      const stopWriting = (): void => {
+        viewerClosed = true;
+      };
+      reply.raw.once('close', stopWriting);
+      reply.raw.once('error', stopWriting);
+      const heartbeat = setInterval(() => {
+        if (viewerClosed) return;
+        // A stalled viewer is not allowed to turn tiny heartbeats into an
+        // unbounded socket buffer. End only its representation; the turn keeps
+        // running and remains observable through the durable transcript.
+        if (reply.raw.writableLength > 64 * 1024) {
+          viewerClosed = true;
+          reply.raw.end();
+          return;
+        }
+        reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+      }, agentMessageHeartbeatMs);
+      heartbeat.unref();
+      reply.hijack();
+
+      let status = 200;
+      let body: unknown;
+      try {
+        body = await handleAgentMessage(req);
+      } catch (err) {
+        const apiError =
+          err instanceof ApiError ? err : new InternalError('An unexpected error occurred.', err);
+        status = apiError.status;
+        body = apiError.toProblem(req.id);
+        // Hijacked replies bypass Fastify's normal error handler/onError hook,
+        // so preserve its observability without exposing internals on the wire.
+        if (status >= 500) req.log.error({ err, problem: body }, 'streamed request failed: 5xx');
+        else req.log.warn({ err, problem: body }, 'streamed request rejected: 4xx');
+        sentry?.captureException(err, {
+          request_id: req.id,
+          method: req.method,
+          route: '/v1/agent-sessions/:id/message',
+        });
+      } finally {
+        clearInterval(heartbeat);
+        reply.raw.off('close', stopWriting);
+        reply.raw.off('error', stopWriting);
+      }
+
+      if (!viewerClosed) {
+        const terminal = JSON.stringify({ status, body });
+        reply.raw.end(`event: response\ndata: ${terminal}\n\n`);
+      }
+      return reply;
     },
   );
 

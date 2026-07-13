@@ -5,7 +5,10 @@
 // don't break route matching.
 
 import { describe, expect, it } from 'vitest';
-import { AgentSessionsResource } from '../../src/resources/agent-sessions.js';
+import {
+  AGENT_MESSAGE_STREAM_TIMEOUT_MS,
+  AgentSessionsResource,
+} from '../../src/resources/agent-sessions.js';
 import type { HttpClient } from '../../src/http.js';
 
 interface RecordedRequest {
@@ -13,23 +16,31 @@ interface RecordedRequest {
   path: string;
   body?: unknown;
   headers?: Record<string, string>;
+  timeoutMs?: number;
+  transport?: 'json' | 'event-stream';
 }
 
 function makeFakeHttp<T>(reply: T): { http: HttpClient; calls: RecordedRequest[] } {
   const calls: RecordedRequest[] = [];
+  type RecordedOptions = {
+    method: string;
+    path: string;
+    body?: unknown;
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+  };
+  const record = <R>(opts: RecordedOptions, transport: 'json' | 'event-stream') => {
+    const recorded: RecordedRequest = { method: opts.method, path: opts.path };
+    if (transport === 'event-stream') recorded.transport = transport;
+    if (opts.body !== undefined) recorded.body = opts.body;
+    if (opts.headers !== undefined) recorded.headers = opts.headers;
+    if (opts.timeoutMs !== undefined) recorded.timeoutMs = opts.timeoutMs;
+    calls.push(recorded);
+    return Promise.resolve(reply as unknown as R);
+  };
   const http = {
-    request: <R>(opts: {
-      method: string;
-      path: string;
-      body?: unknown;
-      headers?: Record<string, string>;
-    }) => {
-      const recorded: RecordedRequest = { method: opts.method, path: opts.path };
-      if (opts.body !== undefined) recorded.body = opts.body;
-      if (opts.headers !== undefined) recorded.headers = opts.headers;
-      calls.push(recorded);
-      return Promise.resolve(reply as unknown as R);
-    },
+    request: <R>(opts: RecordedOptions) => record<R>(opts, 'json'),
+    requestEventStream: <R>(opts: RecordedOptions) => record<R>(opts, 'event-stream'),
   } as unknown as HttpClient;
   return { http, calls };
 }
@@ -123,6 +134,9 @@ describe('AgentSessionsResource', () => {
         method: 'POST',
         path: '/v1/agent-sessions/agt_1/message',
         body: { user_message: 'open https://example.com' },
+        headers: { accept: 'text/event-stream' },
+        timeoutMs: AGENT_MESSAGE_STREAM_TIMEOUT_MS,
+        transport: 'event-stream',
       },
     ]);
     expect(out.kind).toBe('plan-executed');
@@ -149,14 +163,17 @@ describe('AgentSessionsResource', () => {
     const res = new AgentSessionsResource(http);
     await res.message('agt_1', 'hi', { byokApiKey: 'sk-ant-test-byok' });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.headers).toEqual({ 'x-byok-anthropic-api-key': 'sk-ant-test-byok' });
+    expect(calls[0]?.headers).toEqual({
+      accept: 'text/event-stream',
+      'x-byok-anthropic-api-key': 'sk-ant-test-byok',
+    });
   });
 
-  it('message without opts omits the byok header entirely (does NOT send an empty x-byok-anthropic-api-key — would mask "no key" vs "empty key" at the server)', async () => {
+  it('message without opts sends only the SSE accept header (never an empty BYOK header)', async () => {
     const { http, calls } = makeFakeHttp({});
     const res = new AgentSessionsResource(http);
     await res.message('agt_1', 'hi');
-    expect(calls[0]?.headers).toBeUndefined();
+    expect(calls[0]?.headers).toEqual({ accept: 'text/event-stream' });
   });
 
   it('message with opts.byokApiKey === "" (empty string) omits the byok header — cross-SDK parity with the Go SDK\'s `opts != nil && opts.ByokAPIKey != ""` shape and the Python SDK\'s same-shape guard (closes the slice 105/106 round-trip skip)', async () => {
@@ -168,7 +185,15 @@ describe('AgentSessionsResource', () => {
     const { http, calls } = makeFakeHttp({});
     const res = new AgentSessionsResource(http);
     await res.message('agt_1', 'hi', { byokApiKey: '' });
-    expect(calls[0]?.headers).toBeUndefined();
+    expect(calls[0]?.headers).toEqual({ accept: 'text/event-stream' });
+  });
+
+  it('message lets a caller override the 50-minute absolute stream backstop', async () => {
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'hi', { timeoutMs: 90_000 });
+    expect(calls[0]?.timeoutMs).toBe(90_000);
+    expect(calls[0]?.transport).toBe('event-stream');
   });
 
   it('message with opts.approveConsequentialActions maps each approval to the wire snake_case approve_consequential_actions (W443/W445 Approve/Deny round-trip: the consumer passes back the {category, matchedText} a prior confirmation_required result echoed)', async () => {

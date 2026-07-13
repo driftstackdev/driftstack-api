@@ -367,6 +367,48 @@ class HttpClient:
             return _do()
         return with_retry(_do, retry or self._retry)
 
+    def request_event_stream(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: Any | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> Any:
+        """Read one heartbeat-backed SSE response through the shared byte cap.
+
+        The stream must end with exactly one ``event: response`` envelope. It is
+        deliberately never auto-retried: a lost non-idempotent agent-turn stream
+        may have already dispatched browser actions.
+        """
+        url = self._base_url + path
+        headers = _build_headers(
+            self._api_key,
+            has_body=json_body is not None,
+            effective_account=self._effective_account,
+        )
+        if extra_headers:
+            headers.update(extra_headers)
+        headers["accept"] = "text/event-stream"
+        try:
+            # httpx's 30s default is a per-read idle deadline, not one absolute
+            # wall-clock deadline. The server's 15s comments keep it alive while
+            # this bounded reader waits for the terminal event.
+            with self._client.stream(
+                method,
+                url,
+                params=params,
+                json=json_body,
+                headers=headers,
+            ) as response:
+                content = _read_bounded_response(response)
+                return _decode_event_stream_or_raise(response, content)
+        except httpx.TimeoutException as err:
+            raise TransportError("request timed out", status=0) from err
+        except httpx.HTTPError as err:
+            raise TransportError(str(err), status=0) from err
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Async HTTP client (httpx.AsyncClient)
@@ -456,6 +498,40 @@ class AsyncHttpClient:
             return await _do()
         return await with_retry_async(_do, retry or self._retry)
 
+    async def request_event_stream(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: Any | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> Any:
+        """Async mirror of :meth:`HttpClient.request_event_stream`."""
+        url = self._base_url + path
+        headers = _build_headers(
+            self._api_key,
+            has_body=json_body is not None,
+            effective_account=self._effective_account,
+        )
+        if extra_headers:
+            headers.update(extra_headers)
+        headers["accept"] = "text/event-stream"
+        try:
+            async with self._client.stream(
+                method,
+                url,
+                params=params,
+                json=json_body,
+                headers=headers,
+            ) as response:
+                content = await _read_bounded_response_async(response)
+                return _decode_event_stream_or_raise(response, content)
+        except httpx.TimeoutException as err:
+            raise TransportError("request timed out", status=0) from err
+        except httpx.HTTPError as err:
+            raise TransportError(str(err), status=0) from err
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Shared response handling
@@ -542,4 +618,71 @@ def _decode_or_raise(response: httpx.Response, content: bytes) -> Any:
         status=response.status_code,
         text=content.decode("utf-8", errors="replace"),
         retry_after_header=response.headers.get("retry-after"),
+    )
+
+
+def _decode_event_stream_or_raise(response: httpx.Response, content: bytes) -> Any:
+    """Decode the one terminal response event, or fall back to ordinary JSON."""
+    content_type = response.headers.get("content-type", "").lower()
+    media_type = content_type.split(";", 1)[0].strip()
+    if not 200 <= response.status_code < 300 or media_type != "text/event-stream":
+        return _decode_or_raise(response, content)
+
+    text = content.decode("utf-8", errors="replace").replace("\r\n", "\n")
+    terminal: dict[str, Any] | None = None
+    for block in text.split("\n\n"):
+        event = "message"
+        data: list[str] = []
+        for line in block.split("\n"):
+            if line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                event = line[len("event:") :].strip()
+            elif line.startswith("data:"):
+                data.append(line[len("data:") :].lstrip())
+        if event != "response":
+            continue
+        if terminal is not None:
+            raise TransportError(
+                "agent turn stream contained multiple terminal responses",
+                status=response.status_code,
+            )
+        try:
+            decoded = json.loads("\n".join(data))
+        except (json.JSONDecodeError, ValueError) as err:
+            raise TransportError(
+                "failed to parse terminal agent turn event",
+                status=response.status_code,
+            ) from err
+        if not isinstance(decoded, dict):
+            raise TransportError(
+                "terminal agent turn event was not an object",
+                status=response.status_code,
+            )
+        status = decoded.get("status")
+        if (
+            isinstance(status, bool)
+            or not isinstance(status, int)
+            or not 100 <= status <= 599
+            or "body" not in decoded
+        ):
+            raise TransportError(
+                "terminal agent turn event had an invalid response envelope",
+                status=response.status_code,
+            )
+        terminal = decoded
+
+    if terminal is None:
+        raise TransportError(
+            "agent turn stream ended without a terminal response",
+            status=response.status_code,
+        )
+    status = terminal["status"]
+    body = terminal["body"]
+    if 200 <= status < 300:
+        return body
+    raise _error_from_response_data(
+        status=status,
+        text=json.dumps(body, separators=(",", ":")),
+        retry_after_header=None,
     )

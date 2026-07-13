@@ -3398,6 +3398,10 @@
         "type": "string",
         "description": "Server-sent event stream of transcript.entry frames; each frame carries an `id:` (the entry index) and a JSON `data:` payload of { index, entry }."
       },
+      "AgentMessageResponseStream": {
+        "type": "string",
+        "description": "Heartbeat-backed SSE representation selected by Accept: text/event-stream. Comments keep the connection active; exactly one terminal event named response carries JSON { status, body }, where body is the ordinary AgentMessageResponse or RFC 7807 Problem."
+      },
       "LiveKitInfo": {
         "type": "object",
         "properties": {
@@ -17373,6 +17377,15 @@
           {
             "schema": {
               "type": "string",
+              "enum": ["text/event-stream"]
+            },
+            "required": false,
+            "name": "accept",
+            "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
               "minLength": 1
             },
             "required": false,
@@ -18619,6 +18632,11 @@
                       "required": ["kind", "session", "refuse_reason"]
                     }
                   ]
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentMessageResponseStream"
                 }
               }
             }

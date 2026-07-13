@@ -917,6 +917,103 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(post.statusCode).toBe(409);
   });
 
+  it('message SSE representation opens immediately, emits bounded heartbeats, then one terminal success envelope', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+
+    // Trigger one interval callback immediately while preserving the real timer
+    // handle (`unref` + clearInterval semantics). This proves the representation
+    // can send a heartbeat while handleAgentMessage is still the awaited work.
+    const realSetInterval = globalThis.setInterval;
+    const intervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation(((
+      callback: (...callbackArgs: unknown[]) => void,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      if (timeout === 15_000) callback(...args);
+      return realSetInterval(callback, timeout, ...args);
+    }) as typeof globalThis.setInterval);
+    let response;
+    try {
+      response = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/message`,
+        headers: {
+          authorization: `Bearer ${fx.plaintext}`,
+          accept: 'text/event-stream',
+        },
+        payload: { user_message: 'open https://example.com and capture' },
+      });
+    } finally {
+      intervalSpy.mockRestore();
+    }
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/event-stream');
+    expect(response.headers['cache-control']).toContain('no-store');
+    expect(response.body).toContain(': stream open\n\n');
+    expect(response.body).toContain(': heartbeat ');
+    expect(response.body.match(/event: response/g)).toHaveLength(1);
+    const dataLine = response.body.split('\n').find((line) => line.startsWith('data: {'));
+    expect(dataLine).toBeDefined();
+    const terminal = JSON.parse(dataLine!.slice('data: '.length)) as {
+      status: number;
+      body: { kind?: string; ok?: boolean };
+    };
+    expect(terminal).toMatchObject({
+      status: 200,
+      body: { kind: 'plan-executed', ok: true },
+    });
+  });
+
+  it('message SSE negotiation rejects prefix-like media types and preserves JSON errors', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_inmem_99999999/message',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        accept: 'text/event-streaming',
+      },
+      payload: { user_message: 'anything' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.json()).toMatchObject({ type: PROBLEM_TYPES.NotFound, status: 404 });
+  });
+
+  it('message SSE representation carries the ordinary typed Problem as its terminal envelope', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_inmem_99999999/message',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        accept: 'text/event-stream',
+      },
+      payload: { user_message: 'anything' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/event-stream');
+    const dataLine = response.body.split('\n').find((line) => line.startsWith('data: {'));
+    const terminal = JSON.parse(dataLine!.slice('data: '.length)) as {
+      status: number;
+      body: { type?: string; status?: number };
+    };
+    expect(terminal).toEqual({
+      status: 404,
+      body: expect.objectContaining({ type: PROBLEM_TYPES.NotFound, status: 404 }),
+    });
+  });
+
   it('DELETE is idempotent — a second DELETE on an already-closed session → 204, no error (W2820 #1)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

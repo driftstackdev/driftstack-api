@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // CanonicalModifierNames — Slice 6 cross-SDK lock 2026-05-20 — mirrored
@@ -311,6 +312,9 @@ type ConsequentialActionApproval struct {
 type MessageOptions struct {
 	ByokAPIKey                  string
 	ApproveConsequentialActions []ConsequentialActionApproval
+	// Timeout is the absolute heartbeat-stream backstop. Zero uses
+	// AgentMessageStreamTimeout (50 minutes). An earlier caller context wins.
+	Timeout time.Duration
 }
 
 // Message runs one decompose→execute turn. Closed sessions return
@@ -328,15 +332,20 @@ func (r *AgentSessionsResource) Message(ctx context.Context, agentSessionID, use
 		body["approve_consequential_actions"] = opts.ApproveConsequentialActions
 	}
 	req := requestOptions{
-		method: "POST",
-		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/message",
-		body:   body,
-		out:    &out,
+		method:        "POST",
+		path:          "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/message",
+		body:          body,
+		out:           &out,
+		eventStream:   true,
+		streamTimeout: AgentMessageStreamTimeout,
+	}
+	if opts != nil && opts.Timeout > 0 {
+		req.streamTimeout = opts.Timeout
 	}
 	if opts != nil && opts.ByokAPIKey != "" {
 		req.headers = map[string]string{"x-byok-anthropic-api-key": opts.ByokAPIKey}
 	}
-	if err := r.client.do(ctx, req); err != nil {
+	if err := r.client.doEventStream(ctx, req); err != nil {
 		return nil, err
 	}
 	return &out, nil

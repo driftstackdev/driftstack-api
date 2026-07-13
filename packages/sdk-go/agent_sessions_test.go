@@ -3,8 +3,11 @@ package driftstack
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 )
 
 var agentSessionEnvelope = map[string]any{
@@ -21,6 +24,18 @@ var agentSessionEnvelope = map[string]any{
 	"mode":                   "ai",
 	"created_at":             "2026-05-16T00:00:00Z",
 	"updated_at":             "2026-05-16T00:00:00Z",
+}
+
+func writeAgentMessageSSE(t *testing.T, w http.ResponseWriter, status int, body any) {
+	t.Helper()
+	terminal, err := json.Marshal(map[string]any{"status": status, "body": body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Header().Set("content-type", "text/event-stream; charset=utf-8")
+	_, _ = w.Write([]byte(": stream open\n\n: heartbeat now\n\nevent: response\ndata: "))
+	_, _ = w.Write(terminal)
+	_, _ = w.Write([]byte("\n\n"))
 }
 
 func TestAgentSessions_Create(t *testing.T) {
@@ -116,8 +131,10 @@ func TestAgentSessions_Message_Plan(t *testing.T) {
 		if body["user_message"] != "open https://example.com" {
 			t.Errorf("user_message=%q", body["user_message"])
 		}
-		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if got := r.Header.Get("Accept"); got != "text/event-stream" {
+			t.Errorf("Accept=%q want text/event-stream", got)
+		}
+		writeAgentMessageSSE(t, w, http.StatusOK, map[string]any{
 			"kind":    "plan-executed",
 			"session": agentSessionEnvelope,
 			"intents": []any{map[string]any{"kind": "navigate", "url": "https://example.com"}},
@@ -134,6 +151,59 @@ func TestAgentSessions_Message_Plan(t *testing.T) {
 	}
 	if !got.OK {
 		t.Errorf("expected ok=true")
+	}
+}
+
+func TestAgentSessions_Message_StreamProblemAndMalformedTerminal(t *testing.T) {
+	t.Run("typed problem", func(t *testing.T) {
+		_, client := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			writeAgentMessageSSE(t, w, http.StatusTooManyRequests, map[string]any{
+				"type":                "https://errors.driftstack.dev/rate-limited",
+				"title":               "Too Many Requests",
+				"status":              http.StatusTooManyRequests,
+				"retry_after_seconds": 7,
+			})
+		})
+		_, err := client.AgentSessions.Message(context.Background(), "agt_1", "hi", nil)
+		var rateLimit *RateLimitError
+		if !errors.As(err, &rateLimit) {
+			t.Fatalf("error=%T %v, want *RateLimitError", err, err)
+		}
+		if rateLimit.RetryAfterSeconds != 7 {
+			t.Errorf("retry_after_seconds=%d want 7", rateLimit.RetryAfterSeconds)
+		}
+	})
+
+	t.Run("missing terminal", func(t *testing.T) {
+		_, client := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("content-type", "text/event-stream")
+			_, _ = w.Write([]byte(": heartbeat only\n\n"))
+		})
+		_, err := client.AgentSessions.Message(context.Background(), "agt_1", "hi", nil)
+		if err == nil || !strings.Contains(err.Error(), "without a terminal response") {
+			t.Fatalf("error=%v, want missing-terminal TransportError", err)
+		}
+	})
+}
+
+func TestAgentSessions_Message_StreamAbsoluteTimeout(t *testing.T) {
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(": stream open\n\n"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	})
+	_, err := client.AgentSessions.Message(
+		context.Background(),
+		"agt_1",
+		"hi",
+		&MessageOptions{Timeout: 25 * time.Millisecond},
+	)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error=%v, want context deadline exceeded", err)
 	}
 }
 

@@ -168,7 +168,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
       /NEVER logged by the SDK; the key\s*\n?\s*\*\s+arrives over TLS to the control plane\./,
     );
     expect(body).toMatch(
-      /\.\.\.\(opts\?\.byokApiKey !== undefined && opts\.byokApiKey\.length > 0\s*\n?\s*\? \{ headers: \{ 'x-byok-anthropic-api-key': opts\.byokApiKey \} \}\s*\n?\s*: \{\}\),/,
+      /\.\.\.\(opts\?\.byokApiKey !== undefined && opts\.byokApiKey\.length > 0\s*\n?\s*\? \{ 'x-byok-anthropic-api-key': opts\.byokApiKey \}\s*\n?\s*: \{\}\),/,
     );
   });
 

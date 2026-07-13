@@ -3335,6 +3335,9 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       headers: z.object({
+        // Official clients negotiate the heartbeat-backed representation so
+        // legal multi-minute turns do not sit headerless behind the API edge.
+        accept: z.literal('text/event-stream').optional(),
         // BYOK Anthropic key (Tier-3 LOCKED 2026-05-16). Optional;
         // when set, forwards to the decomposer's Anthropic API call.
         // Customer-stored keys (per-account) override the deployment
@@ -3387,6 +3390,12 @@ function buildRegistry(): OpenAPIRegistry {
                 refuse_reason: z.string(),
               }),
             ]),
+          },
+          'text/event-stream': {
+            schema: z.string().openapi('AgentMessageResponseStream', {
+              description:
+                'Heartbeat-backed SSE representation selected by Accept: text/event-stream. Comments keep the connection active; exactly one terminal event named response carries JSON { status, body }, where body is the ordinary AgentMessageResponse or RFC 7807 Problem.',
+            }),
           },
         },
       },

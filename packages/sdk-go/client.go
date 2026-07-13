@@ -26,6 +26,12 @@ const DefaultTimeout = 30 * time.Second
 // request the server would still honour. Mirrors the TS/Python SDKs.
 const bodyTimeoutHeadroom = 15 * time.Second
 
+// AgentMessageStreamTimeout is the absolute backstop for one heartbeat-backed
+// agent turn. Eight legal five-minute harness intents consume ~42 minutes; this
+// leaves headroom for decomposition + optional read-back while preventing a
+// permanently heartbeating but never-terminal stream from hanging forever.
+const AgentMessageStreamTimeout = 50 * time.Minute
+
 // bodyOperationTimeout extracts a long-running-operation deadline from a
 // request body. Recognises the two server contract fields: timeout_ms
 // (milliseconds — navigate / wait / interact) and timeout_seconds
@@ -227,6 +233,10 @@ type requestOptions struct {
 	// User-Agent + Content-Type defaults. Resource methods use this
 	// for one-shot needs like Idempotency-Key (V-666.AO).
 	headers map[string]string
+	// eventStream negotiates/decodes the heartbeat-backed terminal response
+	// representation. streamTimeout is its absolute SDK backstop.
+	eventStream   bool
+	streamTimeout time.Duration
 }
 
 // do executes a request with retry. Returns nil on success (with out
@@ -255,6 +265,25 @@ func (c *Client) do(ctx context.Context, opts requestOptions) error {
 	return withRetry(ctx, c.retry, func() error {
 		return c.doOnce(ctx, opts)
 	})
+}
+
+// doEventStream runs one non-idempotent SSE request exactly once. It uses a
+// long absolute backstop instead of the generic 30s request deadline; 15s server
+// heartbeat comments keep intermediary/read-idle timers alive. Never retry: a
+// dropped turn stream may have already dispatched browser actions.
+func (c *Client) doEventStream(ctx context.Context, opts requestOptions) error {
+	if c.timeout > 0 {
+		d := opts.streamTimeout
+		if d <= 0 {
+			d = AgentMessageStreamTimeout
+		}
+		if dl, ok := ctx.Deadline(); !ok || time.Until(dl) > d {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, d)
+			defer cancel()
+		}
+	}
+	return c.doOnce(ctx, opts)
 }
 
 // resolveTimeout returns the effective per-request transport timeout. It's the
@@ -325,13 +354,21 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 	if c.effectiveAccount != "" {
 		req.Header.Set("X-Driftstack-Account", c.effectiveAccount)
 	}
-	req.Header.Set("Accept", "application/json")
+	if opts.eventStream {
+		req.Header.Set("Accept", "text/event-stream")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 	req.Header.Set("User-Agent", c.userAgent())
 	if opts.body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	for k, v := range opts.headers {
 		req.Header.Set(k, v)
+	}
+	if opts.eventStream {
+		// Resource headers cannot accidentally downgrade the negotiated transport.
+		req.Header.Set("Accept", "text/event-stream")
 	}
 
 	resp, err := c.http.Do(req)
@@ -365,8 +402,19 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 		)
 	}
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if resp.StatusCode == http.StatusNoContent || len(body) == 0 || opts.out == nil {
+	statusCode := resp.StatusCode
+	retryAfter := resp.Header.Get("Retry-After")
+	if opts.eventStream && statusCode >= 200 && statusCode < 300 &&
+		strings.EqualFold(strings.TrimSpace(strings.SplitN(resp.Header.Get("Content-Type"), ";", 2)[0]), "text/event-stream") {
+		statusCode, body, err = parseTerminalEventStream(body)
+		if err != nil {
+			return err
+		}
+		retryAfter = ""
+	}
+
+	if statusCode >= 200 && statusCode < 300 {
+		if statusCode == http.StatusNoContent || len(body) == 0 || opts.out == nil {
 			return nil
 		}
 		if err := json.Unmarshal(body, opts.out); err != nil {
@@ -375,5 +423,49 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 		return nil
 	}
 
-	return errorFromResponse(resp.StatusCode, body, resp.Header.Get("Retry-After"))
+	return errorFromResponse(statusCode, body, retryAfter)
+}
+
+func parseTerminalEventStream(body []byte) (int, []byte, error) {
+	normalized := strings.ReplaceAll(string(body), "\r\n", "\n")
+	status := 0
+	var terminalBody []byte
+	found := false
+	for _, block := range strings.Split(normalized, "\n\n") {
+		event := "message"
+		data := make([]string, 0, 1)
+		for _, line := range strings.Split(block, "\n") {
+			if strings.HasPrefix(line, ":") {
+				continue
+			}
+			if strings.HasPrefix(line, "event:") {
+				event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			} else if strings.HasPrefix(line, "data:") {
+				data = append(data, strings.TrimLeft(strings.TrimPrefix(line, "data:"), " \t"))
+			}
+		}
+		if event != "response" {
+			continue
+		}
+		if found {
+			return 0, nil, transportErrorFromHTTP("agent turn stream contained multiple terminal responses", nil)
+		}
+		var envelope struct {
+			Status int             `json:"status"`
+			Body   json.RawMessage `json:"body"`
+		}
+		if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &envelope); err != nil {
+			return 0, nil, transportErrorFromHTTP("failed to parse terminal agent turn event", err)
+		}
+		if envelope.Status < 100 || envelope.Status > 599 || envelope.Body == nil {
+			return 0, nil, transportErrorFromHTTP("terminal agent turn event had an invalid response envelope", nil)
+		}
+		found = true
+		status = envelope.Status
+		terminalBody = append([]byte(nil), envelope.Body...)
+	}
+	if !found {
+		return 0, nil, transportErrorFromHTTP("agent turn stream ended without a terminal response", nil)
+	}
+	return status, terminalBody, nil
 }

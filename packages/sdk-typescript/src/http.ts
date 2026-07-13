@@ -158,6 +158,65 @@ export class HttpClient {
   }
 
   /**
+   * Send a request whose successful representation is a bounded SSE stream
+   * containing exactly one terminal `event: response` envelope. This is used by
+   * long-running agent turns: immediate SSE headers + comments keep proxies alive,
+   * while the final envelope preserves the ordinary JSON result / RFC 7807 error
+   * contract. Non-idempotent streams are never transparently retried — a dropped
+   * connection may have already dispatched browser actions.
+   */
+  async requestEventStream<T>(opts: RequestOptions): Promise<T> {
+    const fetchImpl = this.config.fetch ?? fetch;
+    const timeoutMs = this.resolveTimeoutMs(opts);
+    const url = this.buildUrl(opts.path, opts.query);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const isBrowserContext = typeof globalThis !== 'undefined' && 'window' in globalThis;
+      let response: Response;
+      try {
+        response = await fetchImpl(url, {
+          method: opts.method,
+          headers: {
+            authorization: `Bearer ${this.config.apiKey}`,
+            ...(this.config.effectiveAccount !== undefined
+              ? { 'x-driftstack-account': this.config.effectiveAccount }
+              : {}),
+            ...(isBrowserContext ? {} : { 'user-agent': 'driftstack-sdk-typescript/0.0.1' }),
+            ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
+            ...opts.headers,
+            // Stream negotiation cannot be downgraded by resource-supplied
+            // headers; the Python and Go clients enforce the same invariant.
+            accept: 'text/event-stream',
+          },
+          ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        throw new TransportError(transportMessage(err), 0, err);
+      }
+
+      const text = await readBoundedResponseText(response);
+      const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+      if (!response.ok || contentType.split(';', 1)[0]?.trim() !== 'text/event-stream') {
+        return decodeJsonResponse<T>(response.status, text, response.headers.get('retry-after'));
+      }
+
+      const terminal = parseTerminalSseResponse(text, response.status);
+      if (terminal.status >= 200 && terminal.status < 300) return terminal.body as T;
+      if (!isProblem(terminal.body)) {
+        throw new TransportError(
+          `streamed non-2xx response (${terminal.status.toString()}) but body is not a Problem`,
+          terminal.status,
+        );
+      }
+      throw errorFromProblem(terminal.body, null);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
    * Resolve the per-request transport (abort) timeout.
    *
    * Precedence:
@@ -197,6 +256,85 @@ export class HttpClient {
     }
     return url.toString();
   }
+}
+
+interface TerminalSseResponse {
+  status: number;
+  body: unknown;
+}
+
+function parseTerminalSseResponse(text: string, transportStatus: number): TerminalSseResponse {
+  let terminal: TerminalSseResponse | null = null;
+  for (const block of text.split(/\r?\n\r?\n/)) {
+    let event = 'message';
+    const data: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith(':')) continue;
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      if (line.startsWith('data:')) data.push(line.slice('data:'.length).trimStart());
+    }
+    if (event !== 'response') continue;
+    if (terminal !== null) {
+      throw new TransportError(
+        'agent turn stream contained multiple terminal responses',
+        transportStatus,
+      );
+    }
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(data.join('\n')) as unknown;
+    } catch (err) {
+      throw new TransportError('failed to parse terminal agent turn event', transportStatus, err);
+    }
+    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+      throw new TransportError('terminal agent turn event was not an object', transportStatus);
+    }
+    const record = decoded as Record<string, unknown>;
+    if (
+      typeof record.status !== 'number' ||
+      !Number.isInteger(record.status) ||
+      record.status < 100 ||
+      record.status > 599 ||
+      !Object.prototype.hasOwnProperty.call(record, 'body')
+    ) {
+      throw new TransportError(
+        'terminal agent turn event had an invalid response envelope',
+        transportStatus,
+      );
+    }
+    terminal = { status: record.status, body: record.body };
+  }
+  if (terminal === null) {
+    throw new TransportError(
+      'agent turn stream ended without a terminal response',
+      transportStatus,
+    );
+  }
+  return terminal;
+}
+
+function decodeJsonResponse<T>(status: number, text: string, retryAfter: string | null): T {
+  if (status >= 200 && status < 300) {
+    if (text.length === 0) return undefined as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch (err) {
+      throw new TransportError('failed to parse JSON response body', status, err);
+    }
+  }
+  let problem: unknown;
+  try {
+    problem = JSON.parse(text) as unknown;
+  } catch {
+    throw new TransportError(`non-2xx response (${status.toString()}) with non-JSON body`, status);
+  }
+  if (!isProblem(problem)) {
+    throw new TransportError(
+      `non-2xx response (${status.toString()}) but body is not a Problem`,
+      status,
+    );
+  }
+  throw errorFromProblem(problem, retryAfter);
 }
 
 /**
