@@ -289,6 +289,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       // error, and gives the user click feedback).
       const submitBtn = form.querySelector('button[type="submit"]');
       const submitLabel = submitBtn ? submitBtn.textContent : '';
+      const SIGNUP_REQUEST_TIMEOUT_MS = 15_000;
+      let signupInFlight = false;
       function setSubmitting(on) {
         if (!submitBtn) return;
         submitBtn.disabled = on;
@@ -298,7 +300,9 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
+        if (signupInFlight) return;
         banner.classList.add('hidden');
+        signupInFlight = true;
         setSubmitting(true);
         const fd = new FormData(form);
         const payload = {
@@ -307,12 +311,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         };
         const name = fd.get('name');
         if (name) payload.name = name;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), SIGNUP_REQUEST_TIMEOUT_MS);
 
         fetch(apiBaseUrl + '/v1/auth/signup', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
           credentials: 'include',
+          signal: controller.signal,
         })
           .then((r) =>
             r.ok
@@ -357,9 +364,19 @@ const apiBaseUrl = resolveApiBaseUrl();
               showAlreadyRegistered(payload.email);
               return;
             }
-            showBanner(err && err.message ? err.message : 'Signup failed.');
+            showBanner(
+              controller.signal.aborted
+                ? 'Account creation took too long. Check your connection and try again.'
+                : err && err.message
+                  ? err.message
+                  : 'Signup failed.',
+            );
           })
-          .finally(() => setSubmitting(false));
+          .finally(() => {
+            clearTimeout(timeoutId);
+            signupInFlight = false;
+            setSubmitting(false);
+          });
       });
 
       // V-667.C — OAuth signup. Mirror of /login click handler:

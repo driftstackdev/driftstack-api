@@ -28,7 +28,8 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   url?: string;
-  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+  requestTimeoutImmediately?: boolean;
+  fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
 function setUpDom(
@@ -70,6 +71,18 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  if (opts.requestTimeoutImmediately) {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 15_000) {
+        window.queueMicrotask(() => {
+          if (typeof handler === 'function') handler(...args);
+        });
+        return 42;
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+  }
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="signup"'));
   if (!pageScript) throw new Error('signup inline script not found');
@@ -171,6 +184,34 @@ describe('signup page — local integration', () => {
     expect(bannerHidden(window)).toBe(false);
     expect(bannerText(window)).toMatch(/Email already registered\./);
     expect(window.sessionStorage.getItem('ds_signup_email')).toBeNull();
+  });
+
+  it('serializes duplicate submits and recovers after the bounded signup request times out', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      requestTimeoutImmediately: true,
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    const submitBtn = window.document.querySelector(
+      '[data-form="signup"] button[type="submit"]',
+    ) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(false);
+    expect(submitBtn.getAttribute('aria-busy')).toBe('false');
+    expect(submitBtn.textContent).toBe('Create account');
+    expect(bannerText(window)).toMatch(/account creation took too long.*check your connection/i);
   });
 
   it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start', async () => {

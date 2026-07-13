@@ -47,6 +47,19 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/method: 'POST'/);
   });
 
+  it('account creation has a real single-flight lease and bounded network deadline', () => {
+    expect(body).toMatch(/const SIGNUP_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/let signupInFlight = false/);
+    expect(body).toMatch(/if \(signupInFlight\) return/);
+    expect(body).toMatch(/signupInFlight = true/);
+    expect(body).toMatch(/const controller = new AbortController\(\)/);
+    expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), SIGNUP_REQUEST_TIMEOUT_MS\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\)/);
+    expect(body).toMatch(/signupInFlight = false/);
+    expect(body).toMatch(/Account creation took too long/);
+  });
+
   it('password minlength=12 + passphrase guidance pinned', () => {
     expect(body).toMatch(/<input[^>]*id="signup-password"[\s\S]*?minlength="12"/);
     expect(body).toMatch(/12\+ characters\. Use a passphrase/);
