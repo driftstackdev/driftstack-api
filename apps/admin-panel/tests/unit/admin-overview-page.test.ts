@@ -24,6 +24,7 @@ interface SetUpOpts {
   token?: string;
   confirmCalls?: unknown[];
   confirmReturns?: boolean;
+  beforeEval?: (window: JSDOM['window']) => void;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
@@ -62,6 +63,7 @@ function setUpDom(
     opts.confirmCalls?.push(confirmOpts);
     return Promise.resolve(opts.confirmReturns ?? true);
   };
+  opts.beforeEval?.(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-overview"'));
   if (!pageScript) throw new Error('admin-overview inline script not found');
@@ -164,6 +166,67 @@ afterEach(() => {
 });
 
 describe('admin-panel Overview (index.astro) behaviour', () => {
+  it('keeps every deadline armed while response JSON is pending, then aborts the stalled bodies', async () => {
+    const deadlines: Array<() => void> = [];
+    const signals: AbortSignal[] = [];
+    let clearCalls = 0;
+    function stalledResponse(): Response {
+      const response = new Response('{"data":[]}');
+      Object.defineProperty(response, 'json', {
+        configurable: true,
+        value: () => new Promise<never>(() => undefined),
+      });
+      return response;
+    }
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: (call) => {
+        if (call.init?.signal) signals.push(call.init.signal);
+        return stalledResponse();
+      },
+      beforeEval: (target) => {
+        target.setTimeout = ((handler: TimerHandler) => {
+          deadlines.push(() => {
+            if (typeof handler === 'function') handler();
+          });
+          return deadlines.length;
+        }) as typeof target.setTimeout;
+        target.clearTimeout = (() => {
+          clearCalls += 1;
+        }) as typeof target.clearTimeout;
+      },
+    });
+    win = window;
+    await flush();
+
+    expect(signals).toHaveLength(8);
+    expect(clearCalls).toBe(0);
+    expect(signals.every((signal) => !signal.aborted)).toBe(true);
+    deadlines.forEach((fire) => fire());
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+
+  it('clears decoded deadlines while leaving unread owner-denial bodies bounded', async () => {
+    let clearCalls = 0;
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({ overview: {}, audit: [] }),
+      beforeEval: (target) => {
+        target.setTimeout = (() => 1) as typeof target.setTimeout;
+        target.clearTimeout = (() => {
+          clearCalls += 1;
+        }) as typeof target.clearTimeout;
+      },
+    });
+    win = window;
+    await flush();
+
+    // Five successful resources decode JSON and clear immediately. The three
+    // default owner-only 403 responses are intentionally status-only; their
+    // still-armed deadlines close any unread body at the boundary.
+    expect(clearCalls).toBe(5);
+  });
+
   it('no session token: shows the staff-admin banner and makes no API call', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       route: () => {

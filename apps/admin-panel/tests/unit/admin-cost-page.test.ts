@@ -29,6 +29,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   adminToken?: string;
+  beforeEval?: (window: JSDOM['window']) => void;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
@@ -64,6 +65,7 @@ function setUpDom(
   }
   // @ts-expect-error — injected by AdminLayout
   window.dashboardHydrated = () => {};
+  opts.beforeEval?.(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-cost"'));
   if (!pageScript) throw new Error('admin-cost inline script not found');
@@ -94,6 +96,60 @@ afterEach(() => {
 });
 
 describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
+  it('keeps the deadline armed while response JSON is pending, then aborts the stalled body', async () => {
+    let fireDeadline = () => undefined;
+    let clearCalls = 0;
+    let requestSignal: AbortSignal | null = null;
+    const stalled = new Response('{}');
+    Object.defineProperty(stalled, 'json', {
+      configurable: true,
+      value: () => new Promise<never>(() => undefined),
+    });
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        requestSignal = call.init?.signal ?? null;
+        return stalled;
+      },
+      beforeEval: (target) => {
+        target.setTimeout = ((handler: TimerHandler) => {
+          fireDeadline = () => {
+            if (typeof handler === 'function') handler();
+          };
+          return 1;
+        }) as typeof target.setTimeout;
+        target.clearTimeout = (() => {
+          clearCalls += 1;
+        }) as typeof target.clearTimeout;
+      },
+    });
+    win = window;
+    await flush();
+
+    expect(clearCalls).toBe(0);
+    expect(requestSignal?.aborted).toBe(false);
+    fireDeadline();
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it('clears the deadline after response JSON settles', async () => {
+    let clearCalls = 0;
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: () => json({ rates: {}, tierThresholds: {} }),
+      beforeEval: (target) => {
+        target.setTimeout = (() => 1) as typeof target.setTimeout;
+        target.clearTimeout = (() => {
+          clearCalls += 1;
+        }) as typeof target.clearTimeout;
+      },
+    });
+    win = window;
+    await flush();
+
+    expect(clearCalls).toBe(1);
+  });
+
   it('no admin token: surfaces a missing-admin-token message rather than silently failing', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       route: () => {
@@ -151,6 +207,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(built).toContain('COST_REQUEST_TIMEOUT_MS = 15_000');
     expect(built).toContain('Request timed out. Try again.');
     expect(built).toMatch(/signal: controller\.signal/);
+    expect(built).toContain('keepDeadlineThroughBody(response, timeout)');
     expect(built).toMatch(/window\.clearTimeout\(timeout\)/);
     expect(built).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,

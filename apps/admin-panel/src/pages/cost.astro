@@ -199,6 +199,29 @@ const apiBaseUrl = resolveApiBaseUrl();
     return globalThis.localStorage?.getItem('ds_web_session_token') ?? '';
   }
 
+  function keepDeadlineThroughBody(response, timeout) {
+    let cleared = false;
+    function clearDeadline() {
+      if (cleared) return;
+      cleared = true;
+      window.clearTimeout(timeout);
+    }
+    for (const method of ['arrayBuffer', 'blob', 'formData', 'json', 'text']) {
+      const read = response[method];
+      if (typeof read !== 'function') continue;
+      response[method] = function () {
+        try {
+          return Promise.resolve(read.apply(response, arguments)).finally(clearDeadline);
+        } catch (error) {
+          clearDeadline();
+          throw error;
+        }
+      };
+    }
+    if (!response.body) clearDeadline();
+    return response;
+  }
+
   async function authedFetch(path, init = {}) {
     const token = adminToken();
     if (!token) {
@@ -213,7 +236,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       ...init,
       headers: { ...(init.headers ?? {}), authorization: 'Bearer ' + token },
       signal: controller.signal,
-    }).finally(() => window.clearTimeout(timeout));
+    }).then(
+      (response) => keepDeadlineThroughBody(response, timeout),
+      (error) => {
+        window.clearTimeout(timeout);
+        throw error;
+      },
+    );
   }
 
   function requestErrorMessage(err, fallback = 'network error') {
