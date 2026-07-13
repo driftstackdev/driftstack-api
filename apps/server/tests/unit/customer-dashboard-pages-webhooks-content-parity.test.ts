@@ -98,26 +98,33 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it('Webhook API contracts: POST /v1/webhooks + PATCH /v1/webhooks/:id + DELETE /v1/webhooks/:id + POST /v1/webhooks/:id/rotate-secret + POST /v1/webhooks/:id/test + GET /v1/webhooks/:id/deliveries + POST /v1/webhook-deliveries/:id/replay — pinned so the 7-endpoint webhook lifecycle contract stays correct (drift to renaming any path would break the wired UI action)', () => {
     expect(body).toMatch(
-      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n?\s*method: 'POST',/,
     );
     expect(body).toMatch(
-      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpoint\.id\), \{\s*\n?\s*method: 'PATCH',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpointId\), \{\s*\n?\s*method: 'PATCH',/,
     );
     expect(body).toMatch(
-      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',/,
     );
     expect(body).toMatch(
-      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n?\s*method: 'POST',/,
     );
     expect(body).toMatch(
-      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test', \{\s*\n?\s*method: 'POST',/,
     );
     expect(body).toMatch(
       /apiBaseUrl \+\s*\n?\s*'\/v1\/webhooks\/' \+\s*\n?\s*encodeURIComponent\(endpointId\) \+\s*\n?\s*'\/deliveries\?'/,
     );
     expect(body).toMatch(
-      /(?:boundedFetch|fetch)\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay', \{\s*\n?\s*method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay', \{\s*\n?\s*method: 'POST',/,
     );
+    expect(body).toMatch(/const WEBHOOK_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(/window\.driftstackFetchWithDeadline\(url, init, WEBHOOK_TIMEOUT_MS\)/);
+    expect(body).toMatch(/const endpointMutationIdsInFlight = new Set\(\);/);
+    expect(body).toMatch(/const actionButtonsInFlight = new WeakSet\(\);/);
+    expect(body).toMatch(/const uncertainRotationIds = new Set\(\);/);
+    expect(body).toMatch(/const uncertainTestEndpointIds = new Set\(\);/);
+    expect(body).toMatch(/const uncertainReplayIds = new Set\(\);/);
   });
 
   it("V-356 send-test framing pinned: 'wire the per-row \"Send test\" buttons. POSTs to /v1/webhooks/:id/test which enqueues a synthetic test.ping delivery on the endpoint regardless of subscription.' + 202-or-r.ok success branch — pinned so the test-delivery 'bypasses subscription filter' semantic survives (drift to requiring subscription would block test-pings on production endpoints subscribed to only quota events). Re-enabled by slice 157 after verifying both sentinels exist at webhooks.astro:1296-1298 + :1318", () => {

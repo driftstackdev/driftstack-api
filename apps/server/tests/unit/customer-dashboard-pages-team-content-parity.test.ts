@@ -43,25 +43,39 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     );
   });
 
-  it("Members + invites Promise.all parallel fetch: GET /v1/team/members + GET /v1/team/invites with authorization Bearer header — pinned so the two reads stay parallel (drift to sequential would double the page-load latency for accounts with many members) + the Bearer-token pattern matches the rest of the dashboard's authedFetch convention", () => {
+  it('Members + invites stay parallel, deadline-bounded, and stale-refresh safe', () => {
     expect(body).toMatch(
-      /Promise\.all\(\[\s*\n?\s*fetch\(apiBaseUrl \+ '\/v1\/team\/members', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)\.then\(function \(r\) \{\s*\n?\s*if \(!r\.ok\) throw new Error\('members HTTP ' \+ r\.status\);\s*\n?\s*return r\.json\(\);\s*\n?\s*\}\),\s*\n?\s*fetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{/,
+      /Promise\.all\(\[\s*\n?\s*boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/team\/members',\s*\n?\s*\{ headers: \{ authorization: 'Bearer ' \+ token \} \},\s*\n?\s*membersController,\s*\n?\s*\)\.then\(function \(r\) \{\s*\n?\s*if \(!r\.ok\) throw new Error\('members HTTP ' \+ r\.status\);\s*\n?\s*return r\.json\(\);\s*\n?\s*\}\),\s*\n?\s*boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/team\/invites',/,
     );
+    expect(body).toMatch(/const TEAM_TIMEOUT_MS = 15_000;/);
+    expect(body).toMatch(
+      /window\.driftstackFetchWithDeadline\(url, init, TEAM_TIMEOUT_MS, controller\)/,
+    );
+    expect(body).toMatch(/if \(generation !== refreshGeneration\) return false;/);
   });
 
-  it("POST /v1/team/invites contract: body:{email, role} + 202-accepted-OR-r.ok success + r.status !== 202 error branch — pinned so the invite endpoint's 'accepted-but-pending-confirmation' 202 status maps to success (drift to requiring 200 would surface the 202 as an error to the customer when the invite was actually accepted)", () => {
+  it('POST /v1/team/invites stays bounded, serializes the role, maps API errors, and blocks ambiguous retries', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ email: email, role: role \}\),\s*\n?\s*\}\)/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(\{ email: email, role: role \}\),\s*\n?\s*\}\)/,
     );
     expect(body).toMatch(/if \(!r\.ok && r\.status !== 202\) \{/);
+    expect(body).toMatch(/throw window\.driftstackResponseError\(r, b\);/);
+    expect(body).toMatch(/if \(inviteInFlight\) return;/);
+    expect(body).toMatch(/if \(err && err\.name === 'AbortError'\) \{/);
+    expect(body).toMatch(/inviteRetryBlockedEmail = normalizedEmail;/);
   });
 
-  it("DELETE /v1/team/members/:id contract: encodeURIComponent on id + 204-or-r.ok success + branded driftstackConfirm before fire — pinned so customers can't accidentally remove a team-mate (confirm-required) + the server's 204 success path maps correctly (drift to requiring 200 would mark valid removals as failures)", () => {
+  it('DELETE /v1/team/members/:id stays bounded, encoded, confirmed, latched, and reconciles timeout outcomes', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/team\/members\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)\s*\n?\s*\.then\(function \(r\) \{\s*\n?\s*if \(!r\.ok && r\.status !== 204\) throw new Error\('HTTP ' \+ r\.status\);/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/members\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)\s*\n?\s*\.then\(function \(r\) \{\s*\n?\s*if \(!r\.ok && r\.status !== 204\) throw new Error\('HTTP ' \+ r\.status\);/,
     );
     expect(body).toMatch(
       /const ok = await window\.driftstackConfirm\(\s*\n?\s*'Remove ' \+\s*\n?\s*email \+\s*\n?\s*' from the team\? They keep their Driftstack account but lose team access\.',/,
+    );
+    expect(body).toMatch(/if \(removalButtonsInFlight\.has\(btn\)\) return;/);
+    expect(body).toMatch(/const refreshed = await refresh\(false\);/);
+    expect(body).toMatch(
+      /' is no longer present; removal likely completed, so do not submit it again\.'/,
     );
   });
 
@@ -89,9 +103,13 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     );
   });
 
-  it("Remove-button busy-state: btn.disabled = true + btn.textContent = 'Removing…' + restore to 'Remove' on error — pinned so accidental double-clicks don't fire two DELETE calls (which would 404 the second one + display a misleading error) and the button shows visual feedback during the network round-trip", () => {
-    expect(body).toMatch(/btn\.disabled = true;\s*\n?\s*btn\.textContent = 'Removing…';/);
-    expect(body).toMatch(/btn\.disabled = false;\s*\n?\s*btn\.textContent = 'Remove';/);
+  it('Remove-button busy state disables and exposes aria-busy while deleting, then restores in finally — pinned so accidental double-clicks cannot fire duplicate DELETE calls and assistive technology receives the in-flight state', () => {
+    expect(body).toMatch(
+      /btn\.disabled = true;\s*\n?\s*btn\.setAttribute\('aria-busy', 'true'\);\s*\n?\s*btn\.textContent = 'Removing…';/,
+    );
+    expect(body).toMatch(
+      /btn\.disabled = false;\s*\n?\s*btn\.setAttribute\('aria-busy', 'false'\);\s*\n?\s*btn\.textContent = 'Remove';/,
+    );
   });
 
   it("No-token member-list state: 'Sign in to see team members.' + 'Sign in to see pending invites.' — pinned so unauthenticated visitors see explicit sign-in prompts in BOTH lists rather than the static 'Loading…' placeholder which would never resolve (drift to silent bail would leave both lists stuck at 'Loading…' indefinitely)", () => {
