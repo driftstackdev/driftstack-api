@@ -324,6 +324,35 @@ describe('login page — local integration', () => {
     expect(typeof body.redirect_to).toBe('string');
   });
 
+  it('serializes OAuth starts across providers and restores the group after timeout', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      requestTimeoutImmediately: true,
+      fetchPlan: [
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    const buttons = Array.from(
+      window.document.querySelectorAll('[data-oauth]'),
+    ) as HTMLButtonElement[];
+    expect(buttons.length).toBeGreaterThan(1);
+    buttons[0]?.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    buttons[1]?.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const oauthCalls = fetchCalls.filter((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    expect(oauthCalls).toHaveLength(1);
+    expect(oauthCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(buttons.every((button) => !button.disabled)).toBe(true);
+    expect(buttons.every((button) => button.getAttribute('aria-busy') === 'false')).toBe(true);
+    expect(bannerText(window)).toMatch(/sign-in provider took too long.*check your connection/i);
+  });
+
   it('V-269 ?next= round-trip: the "create one" signup link carries the next target', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       url: 'https://app.driftstack.dev/login/?next=' + encodeURIComponent('/profiles'),

@@ -383,10 +383,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       // /v1/auth/oauth-client/start { provider, redirect_to } → take
       // the returned authorize_url and redirect the browser to it.
       const oauthButtons = root.querySelectorAll('[data-oauth]');
+      const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
+      let oauthStartInFlight = false;
       oauthButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
           banner.classList.add('hidden');
           const provider = btn.getAttribute('data-oauth');
+          if (!provider || oauthStartInFlight) return;
+          oauthStartInFlight = true;
+          oauthButtons.forEach((button) => {
+            button.disabled = true;
+            button.setAttribute('aria-busy', button === btn ? 'true' : 'false');
+          });
           // Preserve ?next= through the OAuth round-trip so deep links
           // resume after the IDP redirect.
           const params = new URLSearchParams(window.location.search);
@@ -395,11 +403,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           // /start z.string().url() (a bare relative path would 400).
           const redirectTo =
             window.location.origin + safeNextPath(params.get('next'), window.location.origin);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), OAUTH_REQUEST_TIMEOUT_MS);
           fetch(apiBaseUrl + '/v1/auth/oauth-client/start', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ provider, redirect_to: redirectTo }),
             credentials: 'include',
+            signal: controller.signal,
           })
             .then((r) =>
               r.ok
@@ -414,7 +425,21 @@ const apiBaseUrl = resolveApiBaseUrl();
               }
             })
             .catch((err) => {
-              showBanner(err && err.message ? err.message : 'OAuth start failed.');
+              showBanner(
+                controller.signal.aborted
+                  ? 'Signup provider took too long. Check your connection and try again.'
+                  : err && err.message
+                    ? err.message
+                    : 'OAuth start failed.',
+              );
+            })
+            .finally(() => {
+              clearTimeout(timeoutId);
+              oauthStartInFlight = false;
+              oauthButtons.forEach((button) => {
+                button.disabled = false;
+                button.setAttribute('aria-busy', 'false');
+              });
             });
         });
       });

@@ -101,6 +101,18 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/Resending took too long/);
   });
 
+  it('OAuth start is group-serialized, visibly busy, and bounded', () => {
+    expect(body).toMatch(/const OAUTH_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/let oauthStartInFlight = false/);
+    expect(body).toMatch(/if \(oauthStartInFlight\) return/);
+    expect(body).toMatch(/oauthStartInFlight = true/);
+    expect(body).toMatch(/button\.disabled = true/);
+    expect(body).toMatch(/button\.setAttribute\('aria-busy', button === btn \? 'true' : 'false'\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\)/);
+    expect(body).toMatch(/Sign-in provider took too long/);
+  });
+
   it("V-269 ?next= preserved on /signup cross-link (deep-link doesn't leak)", () => {
     expect(body).toMatch(/V-269 — preserve \?next= when bouncing the user to \/signup/);
     expect(body).toMatch(

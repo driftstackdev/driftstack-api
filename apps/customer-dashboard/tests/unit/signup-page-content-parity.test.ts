@@ -60,6 +60,18 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/Account creation took too long/);
   });
 
+  it('OAuth start is group-serialized, visibly busy, and bounded', () => {
+    expect(body).toMatch(/const OAUTH_REQUEST_TIMEOUT_MS = 15_000/);
+    expect(body).toMatch(/let oauthStartInFlight = false/);
+    expect(body).toMatch(/if \(!provider \|\| oauthStartInFlight\) return/);
+    expect(body).toMatch(/oauthStartInFlight = true/);
+    expect(body).toMatch(/button\.disabled = true/);
+    expect(body).toMatch(/button\.setAttribute\('aria-busy', button === btn \? 'true' : 'false'\)/);
+    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/clearTimeout\(timeoutId\)/);
+    expect(body).toMatch(/Signup provider took too long/);
+  });
+
   it('password minlength=12 + passphrase guidance pinned', () => {
     expect(body).toMatch(/<input[^>]*id="signup-password"[\s\S]*?minlength="12"/);
     expect(body).toMatch(/12\+ characters\. Use a passphrase/);
