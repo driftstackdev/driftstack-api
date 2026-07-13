@@ -83,7 +83,9 @@ function isActive(href: string): boolean {
         type="button"
         data-theme-toggle
         class="flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
-        aria-label="Toggle light and dark theme"
+        aria-label="Light theme"
+        aria-pressed="false"
+        title="Switch to light theme"
       >
         <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"></circle>
@@ -113,7 +115,9 @@ function isActive(href: string): boolean {
         type="button"
         data-theme-toggle
         class="flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
-        aria-label="Toggle light and dark theme"
+        aria-label="Light theme"
+        aria-pressed="false"
+        title="Switch to light theme"
       >
         <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"></circle>
@@ -123,10 +127,11 @@ function isActive(href: string): boolean {
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
       </button>
-      <details class="relative">
+      <details class="relative" data-mobile-nav>
         <summary
           class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-tk-border text-tk-ink-2 [&::-webkit-details-marker]:hidden"
           aria-label="Open navigation menu"
+          aria-expanded="false"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

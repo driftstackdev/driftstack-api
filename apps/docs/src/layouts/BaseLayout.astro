@@ -195,12 +195,22 @@ const canonical = new URL(pathname, Astro.site).toString();
          */
       }
       (function () {
+        function syncThemeControls(mode) {
+          var light = mode === 'light';
+          document.querySelectorAll('[data-theme-toggle]').forEach(function (control) {
+            control.setAttribute('aria-pressed', light ? 'true' : 'false');
+            control.setAttribute('title', light ? 'Switch to dark theme' : 'Switch to light theme');
+          });
+        }
+
+        syncThemeControls(document.documentElement.getAttribute('data-mode'));
         document.addEventListener('click', function (e) {
           var btn = e.target instanceof Element ? e.target.closest('[data-theme-toggle]') : null;
           if (!btn) return;
           var next =
             document.documentElement.getAttribute('data-mode') === 'dark' ? 'light' : 'dark';
           document.documentElement.setAttribute('data-mode', next);
+          syncThemeControls(next);
           var mt = document.querySelector('meta[name="theme-color"]');
           if (mt) mt.setAttribute('content', next === 'light' ? '#f2f3f6' : '#060608');
           try {
@@ -209,6 +219,44 @@ const canonical = new URL(pathname, Astro.site).toString();
             /* persistence unavailable — the toggle still works this visit */
           }
         });
+      })();
+    </script>
+    <script is:inline>
+      {
+        /*
+         * Keep the Header's native <details> menu stateful and dismissible.
+         * This is separate from DocLayout's documentation-tree hamburger,
+         * which already owns its own expanded/Escape contract.
+         */
+      }
+      (function () {
+        var menu = document.querySelector('[data-mobile-nav]');
+        if (!(menu instanceof HTMLDetailsElement)) return;
+        var trigger = menu.querySelector('summary');
+        if (!(trigger instanceof HTMLElement)) return;
+
+        function syncMobileMenu() {
+          var expanded = menu.open;
+          trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+          trigger.setAttribute(
+            'aria-label',
+            expanded ? 'Close navigation menu' : 'Open navigation menu',
+          );
+        }
+
+        menu.addEventListener('toggle', syncMobileMenu);
+        document.addEventListener('click', function (event) {
+          if (menu.open && event.target instanceof Node && !menu.contains(event.target)) {
+            menu.open = false;
+          }
+        });
+        document.addEventListener('keydown', function (event) {
+          if (event.key !== 'Escape' || !menu.open) return;
+          event.preventDefault();
+          menu.open = false;
+          trigger.focus();
+        });
+        syncMobileMenu();
       })();
     </script>
     <script is:inline>
