@@ -1,6 +1,6 @@
 // V-298c / V-309e — Team RBAC resource.
 //
-// All five /v1/team/* endpoints. The auth path itself does NOT yet
+// All six /v1/team/* endpoints. The auth path itself does NOT yet
 // honor team membership (V-298d); accepted members can sign in but
 // the membership grants no implicit permissions on the owner's
 // resources until V-298d ships.
@@ -31,12 +31,24 @@ export interface TeamInvite {
   created_at: string;
 }
 
+export interface TeamOwner {
+  owner_account_id: string;
+  owner_email: string;
+  owner_name: string | null;
+  role: TeamRole;
+  membership_id: string;
+}
+
 export interface TeamMembersList {
   data: TeamMember[];
 }
 
 export interface TeamInvitesList {
   data: TeamInvite[];
+}
+
+export interface TeamOwnersList {
+  data: TeamOwner[];
 }
 
 export interface AcceptInviteResponse {
@@ -74,6 +86,15 @@ export class TeamResource {
     return this.http.request<TeamInvitesList>({
       method: 'GET',
       path: '/v1/team/invites',
+    });
+  }
+
+  // Requires broad read or account_owner.
+  /** List owner workspaces the calling account has joined. */
+  listOwners(): Promise<TeamOwnersList> {
+    return this.http.request<TeamOwnersList>({
+      method: 'GET',
+      path: '/v1/team/owners',
     });
   }
 

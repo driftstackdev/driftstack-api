@@ -58,6 +58,20 @@ func (r *TeamResource) ListInvites(ctx context.Context) (*TeamInvitesList, error
 	return &out, nil
 }
 
+// ListOwners returns owner workspaces the calling account has joined.
+// Requires broad read or account_owner.
+func (r *TeamResource) ListOwners(ctx context.Context) (*TeamOwnersList, error) {
+	var out TeamOwnersList
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/team/owners",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // AcceptInvite consumes a token and creates the membership.
 // Requires account_owner.
 func (r *TeamResource) AcceptInvite(ctx context.Context, token string) (*TeamAcceptResponse, error) {

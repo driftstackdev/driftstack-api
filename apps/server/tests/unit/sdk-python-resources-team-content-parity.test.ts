@@ -43,7 +43,7 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
   it("file exists at canonical path + module docstring V-298c/V-309f framing + V-298d auth-path-integration-not-yet-permissioning contract. CRITICAL: accepted members can sign in but their membership grants no implicit permissions on the owner's resources until V-298d ships. Drift to dropping this framing would silently widen the auth surface.", () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^"""V-298c \/ V-309f — Team RBAC resource\.\n/);
-    expect(body).toMatch(/All five \/v1\/team\/\* endpoints\. Auth path integration is V-298d —/);
+    expect(body).toMatch(/All six \/v1\/team\/\* endpoints\. Auth path integration is V-298d —/);
     expect(body).toMatch(/accepted members can sign in but the membership grants no implicit/);
     expect(body).toMatch(/permissions on the owner's resources until V-298d ships\./);
   });
@@ -64,9 +64,16 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
     );
   });
 
-  it('Envelope models — TeamMembersList + TeamInvitesList + AcceptInviteResponse. All Pydantic-validated so server-side wire shape drift is caught at .model_validate() time, not deep in customer dashboard code.', () => {
+  it('TeamOwner pydantic model pins the five-field owner workspace shape', () => {
+    expect(body).toMatch(
+      /^class TeamOwner\(BaseModel\):\s*\n\s*owner_account_id: str\s*\n\s*owner_email: str\s*\n\s*owner_name: str \| None\s*\n\s*role: TeamRole\s*\n\s*membership_id: str$/m,
+    );
+  });
+
+  it('Envelope models include typed members, invites, and owner-workspace lists', () => {
     expect(body).toMatch(/^class TeamMembersList\(BaseModel\):\s*\n\s*data: list\[TeamMember\]$/m);
     expect(body).toMatch(/^class TeamInvitesList\(BaseModel\):\s*\n\s*data: list\[TeamInvite\]$/m);
+    expect(body).toMatch(/^class TeamOwnersList\(BaseModel\):\s*\n\s*data: list\[TeamOwner\]$/m);
     expect(body).toMatch(
       /^class AcceptInviteResponse\(BaseModel\):\s*\n\s*membership: TeamMember$/m,
     );
@@ -86,12 +93,15 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
     );
   });
 
-  it('list_members + list_invites (sync) — GET /v1/team/members + GET /v1/team/invites, both return pydantic-validated envelopes (TeamMembersList / TeamInvitesList). model_validate at the boundary so wire-shape drift is caught here, not deep in dashboard code.', () => {
+  it('list_members + list_invites + list_owners sync methods validate typed envelopes', () => {
     expect(body).toMatch(
       /def list_members\(self\) -> TeamMembersList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/team\/members"\)\s*\n\s*return parse_model\(TeamMembersList, data\)/,
     );
     expect(body).toMatch(
       /def list_invites\(self\) -> TeamInvitesList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/team\/invites"\)\s*\n\s*return parse_model\(TeamInvitesList, data\)/,
+    );
+    expect(body).toMatch(
+      /def list_owners\(self\) -> TeamOwnersList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/team\/owners"\)\s*\n\s*return parse_model\(TeamOwnersList, data\)/,
     );
   });
 
@@ -107,7 +117,7 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
     );
   });
 
-  it('AsyncTeamResource — class shell + AsyncHttpClient injection + 5 awaited verb twins (invite + list_members + list_invites + accept_invite + remove_member). model_validate stays SYNC even in async path (pure CPU; only the HTTP request is awaited). Same quote(..., safe="") escape on remove_member.', () => {
+  it('AsyncTeamResource provides all 6 awaited verb twins with typed list_owners', () => {
     expect(body).toMatch(/^class AsyncTeamResource:$/m);
     expect(body).toMatch(/"""Async team resource\."""/);
     expect(body).toMatch(
@@ -118,6 +128,9 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
     );
     expect(body).toMatch(
       /async def list_invites\(self\) -> TeamInvitesList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/team\/invites"\)\s*\n\s*return parse_model\(TeamInvitesList, data\)/,
+    );
+    expect(body).toMatch(
+      /async def list_owners\(self\) -> TeamOwnersList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/team\/owners"\)\s*\n\s*return parse_model\(TeamOwnersList, data\)/,
     );
     expect(body).toMatch(
       /async def accept_invite\(self, token: str\) -> AcceptInviteResponse:\s*\n\s*data = await self\._http\.request\(\s*\n\s*"POST", "\/v1\/team\/invites\/accept", json_body=\{"token": token\}\s*\n\s*\)\s*\n\s*return parse_model\(AcceptInviteResponse, data\)/,

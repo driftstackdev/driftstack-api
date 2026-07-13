@@ -8,6 +8,10 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.team.list_owners()`** plus the async mirror — typed access
+  to `GET /v1/team/owners` for owner workspaces the calling account has
+  joined. Returns `TeamOwnersList` / `TeamOwner` and requires broad
+  `read` (or `account_owner`).
 - `BadRequestError` — the generic `bad-request` problem-type (HTTP 400,
   no field-level issues) now maps to a dedicated `BadRequestError`
   (subclasses `DriftstackError` directly, a sibling of `ValidationError`),

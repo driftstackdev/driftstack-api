@@ -247,12 +247,24 @@ type TeamInvite struct {
 	CreatedAt          time.Time  `json:"created_at"`
 }
 
+type TeamOwner struct {
+	OwnerAccountID string   `json:"owner_account_id"`
+	OwnerEmail     string   `json:"owner_email"`
+	OwnerName      *string  `json:"owner_name"`
+	Role           TeamRole `json:"role"`
+	MembershipID   string   `json:"membership_id"`
+}
+
 type TeamMembersList struct {
 	Data []TeamMember `json:"data"`
 }
 
 type TeamInvitesList struct {
 	Data []TeamInvite `json:"data"`
+}
+
+type TeamOwnersList struct {
+	Data []TeamOwner `json:"data"`
 }
 
 type TeamInviteRequest struct {

@@ -62,7 +62,7 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | `client.APIKeys`          | `Create`, `List`, `Rotate` (V-296), `Revoke`                                                                                                        |
 | `client.Usage`            | `CurrentPeriod`                                                                                                                                     |
 | `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                       |
-| `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `AcceptInvite`, `RemoveMember` (V-298)                                                                      |
+| `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `ListOwners`, `AcceptInvite`, `RemoveMember` (V-298)                                                        |
 | `client.Billing`          | `GetState`, `CreateCheckoutSession`, `CreatePortalSession`                                                                                          |
 | `client.CryptoOrders`     | `Quote`, `CreateCheckout`, `List`, `Iterate`, `Get`, `UpdateNote`, `Cancel`, `Receipt` (V-666 — crypto checkout orders)                             |
 | `client.Auth`             | `Signup`, `VerifyEmail`, `Login`, `Refresh`, `Logout`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset`       |

@@ -118,6 +118,8 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     expect(body).toMatch(/\/\/ V-298c \/ V-309g — Team RBAC v1\./);
     expect(body).toMatch(/^type TeamMember struct \{/m);
     expect(body).toMatch(/^type TeamInvite struct \{/m);
+    expect(body).toMatch(/^type TeamOwner struct \{/m);
+    expect(body).toMatch(/^type TeamOwnersList struct \{/m);
     expect(body).toMatch(/\/\/ LoginResponse — V-425 \+ V-353d\. The server returns one of two/);
     expect(body).toMatch(
       /\/\/ {3}- MFA-required: `\{ "mfa_required": true, "challenge_token": "\.\.\.",/,

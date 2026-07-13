@@ -1,6 +1,6 @@
 """V-298c / V-309f — Team RBAC resource.
 
-All five /v1/team/* endpoints. Auth path integration is V-298d —
+All six /v1/team/* endpoints. Auth path integration is V-298d —
 accepted members can sign in but the membership grants no implicit
 permissions on the owner's resources until V-298d ships.
 """
@@ -39,12 +39,24 @@ class TeamInvite(BaseModel):
     created_at: str
 
 
+class TeamOwner(BaseModel):
+    owner_account_id: str
+    owner_email: str
+    owner_name: str | None
+    role: TeamRole
+    membership_id: str
+
+
 class TeamMembersList(BaseModel):
     data: list[TeamMember]
 
 
 class TeamInvitesList(BaseModel):
     data: list[TeamInvite]
+
+
+class TeamOwnersList(BaseModel):
+    data: list[TeamOwner]
 
 
 class AcceptInviteResponse(BaseModel):
@@ -73,6 +85,11 @@ class TeamResource:
     def list_invites(self) -> TeamInvitesList:
         data = self._http.request("GET", "/v1/team/invites")
         return parse_model(TeamInvitesList, data)
+
+    # Requires broad read or account_owner.
+    def list_owners(self) -> TeamOwnersList:
+        data = self._http.request("GET", "/v1/team/owners")
+        return parse_model(TeamOwnersList, data)
 
     # Requires account_owner.
     def accept_invite(self, token: str) -> AcceptInviteResponse:
@@ -105,6 +122,11 @@ class AsyncTeamResource:
     async def list_invites(self) -> TeamInvitesList:
         data = await self._http.request("GET", "/v1/team/invites")
         return parse_model(TeamInvitesList, data)
+
+    # Requires broad read or account_owner.
+    async def list_owners(self) -> TeamOwnersList:
+        data = await self._http.request("GET", "/v1/team/owners")
+        return parse_model(TeamOwnersList, data)
 
     # Requires account_owner.
     async def accept_invite(self, token: str) -> AcceptInviteResponse:

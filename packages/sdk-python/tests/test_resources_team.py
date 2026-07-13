@@ -6,8 +6,12 @@ import httpx
 import pytest
 import respx
 
-from driftstack import AsyncDriftstack, Driftstack
-from driftstack.resources.team import AcceptInviteResponse, TeamInvitesList, TeamMembersList
+from driftstack import AsyncDriftstack, Driftstack, TeamOwner, TeamOwnersList
+from driftstack.resources.team import (
+    AcceptInviteResponse,
+    TeamInvitesList,
+    TeamMembersList,
+)
 
 API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BASE = "https://api.test"
@@ -32,6 +36,14 @@ INVITE_ROW: dict = {
     "invited_by_account_id": "acc_00000000-0000-4000-8000-000000000010",
     "accepted_at": None,
     "created_at": "2026-05-08T10:00:00Z",
+}
+
+OWNER_ROW: dict = {
+    "owner_account_id": "acc_00000000-0000-4000-8000-000000000010",
+    "owner_email": "owner@example.test",
+    "owner_name": "Workspace owner",
+    "role": "admin",
+    "membership_id": "mem_00000000-0000-4000-8000-000000000001",
 }
 
 
@@ -67,6 +79,18 @@ def test_sync_list_invites() -> None:
             result = client.team.list_invites()
         assert isinstance(result, TeamInvitesList)
         assert result.data[0].invitee_email == "pending@example.test"
+
+
+def test_sync_list_owners() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.get("/v1/team/owners").mock(
+            return_value=httpx.Response(200, json={"data": [OWNER_ROW]}),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.team.list_owners()
+        assert isinstance(result, TeamOwnersList)
+        assert isinstance(result.data[0], TeamOwner)
+        assert result.data[0].owner_name == "Workspace owner"
 
 
 def test_sync_accept_invite() -> None:
@@ -110,3 +134,16 @@ async def test_async_accept_invite() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.team.accept_invite("token")
         assert result.membership.id == MEMBER_ROW["id"]
+
+
+@pytest.mark.asyncio
+async def test_async_list_owners() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/team/owners").mock(
+            return_value=httpx.Response(200, json={"data": [OWNER_ROW]}),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.team.list_owners()
+        assert route.called
+        assert isinstance(result, TeamOwnersList)
+        assert result.data[0].owner_email == "owner@example.test"

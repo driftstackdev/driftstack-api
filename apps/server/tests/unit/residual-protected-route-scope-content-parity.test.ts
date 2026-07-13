@@ -41,21 +41,21 @@ describe('residual protected-route API-key scope contract', () => {
 
   it('keeps handwritten SDK scope comments coherent', () => {
     const tsTeam = read('packages/sdk-typescript/src/resources/team.ts');
-    expect(tsTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(2);
+    expect(tsTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(3);
     expect(tsTeam).toContain('Requires account_owner (dashboard web sessions satisfy it).');
     expect(read('packages/sdk-typescript/src/resources/crypto-orders.ts')).toContain(
       'Requires read:billing (broad read/account_owner also satisfy it).',
     );
 
     const pythonTeam = read('packages/sdk-python/src/driftstack/resources/team.py');
-    expect(pythonTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(4);
+    expect(pythonTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(6);
     expect(pythonTeam.match(/Requires account_owner\./g)).toHaveLength(2);
     expect(read('packages/sdk-python/src/driftstack/resources/crypto_orders.py')).toContain(
       'Requires read:billing; broad read/account_owner also satisfy it.',
     );
 
     const goTeam = read('packages/sdk-go/team.go');
-    expect(goTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(2);
+    expect(goTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(3);
     expect(goTeam).toContain('// Requires account_owner.');
     expect(read('packages/sdk-go/crypto_orders.go')).toContain(
       '// minting an order (V-666.H). Requires read:billing; broad read or',

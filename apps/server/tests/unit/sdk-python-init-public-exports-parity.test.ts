@@ -1,9 +1,9 @@
 // Python SDK top-level __init__.py public-export parity.
 //
-// Mirrors the slice 112 TS SDK fix (re-exported 9 customer-facing
+// Mirrors the slice 112 TS SDK fix (re-exported customer-facing
 // types from packages/sdk-typescript/src/index.ts that were
 // previously deep-import-only). The Python SDK had the same gap:
-// 9 customer-facing pydantic models defined in
+// customer-facing pydantic models defined in
 // packages/sdk-python/src/driftstack/resources/*.py but NOT
 // re-exported from the top-level __init__.py — Python customers
 // had to deep-import via
@@ -36,6 +36,8 @@ const RE_EXPORTED_TYPES = [
   'TeamInvitesList',
   'TeamMember',
   'TeamMembersList',
+  'TeamOwner',
+  'TeamOwnersList',
   // From driftstack.resources.webhooks (2 types)
   'WebhookDeliveryListPage',
   'WebhookEndpointList',
@@ -52,10 +54,10 @@ describe('Python SDK __init__.py public-export parity', () => {
     expect(body).toMatch(/from driftstack\.resources\.sessions import SessionsListPage/);
   });
 
-  it('imports the 5 team types from driftstack.resources.team in a single grouped statement', () => {
+  it('imports the 7 team types from driftstack.resources.team in a single grouped statement', () => {
     // Grouped import keeps the public-surface footprint readable.
     expect(body).toMatch(
-      /from driftstack\.resources\.team import \(\s*\n?\s*AcceptInviteResponse,\s*\n?\s*TeamInvite,\s*\n?\s*TeamInvitesList,\s*\n?\s*TeamMember,\s*\n?\s*TeamMembersList,\s*\n?\s*\)/,
+      /from driftstack\.resources\.team import \(\s*\n?\s*AcceptInviteResponse,\s*\n?\s*TeamInvite,\s*\n?\s*TeamInvitesList,\s*\n?\s*TeamMember,\s*\n?\s*TeamMembersList,\s*\n?\s*TeamOwner,\s*\n?\s*TeamOwnersList,\s*\n?\s*\)/,
     );
   });
 
@@ -65,7 +67,7 @@ describe('Python SDK __init__.py public-export parity', () => {
     );
   });
 
-  it('all 9 re-exported types appear in __all__ so `from driftstack import X` works', () => {
+  it('all re-exported types appear in __all__ so `from driftstack import X` works', () => {
     // Pin every type by its quoted form inside the __all__ list.
     for (const t of RE_EXPORTED_TYPES) {
       expect(body, `__all__ missing "${t}"`).toMatch(new RegExp(`"${t}",`));

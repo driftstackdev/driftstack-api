@@ -62,6 +62,8 @@ from driftstack.resources.team import (
     TeamInvitesList,
     TeamMember,
     TeamMembersList,
+    TeamOwner,
+    TeamOwnersList,
 )
 from driftstack.resources.webhooks import WebhookDeliveryListPage, WebhookEndpointList
 from driftstack.webhook_signature import verify_webhook_signature
@@ -115,6 +117,8 @@ __all__ = [
     "TeamInvitesList",
     "TeamMember",
     "TeamMembersList",
+    "TeamOwner",
+    "TeamOwnersList",
     "WebhookDeliveryListPage",
     "WebhookEndpointList",
     "is_retryable",

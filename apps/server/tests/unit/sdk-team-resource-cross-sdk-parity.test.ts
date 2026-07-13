@@ -20,11 +20,12 @@ const TS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/team.ts');
 const PY = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/team.py');
 const GO = resolve(REPO_ROOT, 'packages/sdk-go/team.go');
 
-// 5 shared method names cross-SDK.
+// 6 shared method names cross-SDK.
 const REQUIRED_METHODS: Array<[string, string, string]> = [
   ['invite', 'invite', 'Invite'],
   ['listMembers', 'list_members', 'ListMembers'],
   ['listInvites', 'list_invites', 'ListInvites'],
+  ['listOwners', 'list_owners', 'ListOwners'],
   ['acceptInvite', 'accept_invite', 'AcceptInvite'],
   ['removeMember', 'remove_member', 'RemoveMember'],
 ];
@@ -36,9 +37,9 @@ describe('W830 cross-SDK TeamResource methods parity', () => {
     expect(existsSync(GO)).toBe(true);
   });
 
-  // ─── 5-required-method set ────────────────────────────────────
+  // ─── 6-required-method set ────────────────────────────────────
 
-  it('CRITICAL all 5 TeamResource methods exist in all 3 SDKs — invite + listMembers + listInvites + acceptInvite + removeMember. Drift would break customer-dashboard /team page + the team-mgmt flows admins depend on.', () => {
+  it('CRITICAL all 6 TeamResource methods exist in all 3 SDKs, including the inverse owner-workspace listing', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);
@@ -84,15 +85,18 @@ describe('W830 cross-SDK TeamResource methods parity', () => {
     expect(read(GO)).toMatch(/RemoveMember\(ctx context\.Context, membershipID string\) error/);
   });
 
-  // ─── listMembers + listInvites return typed envelopes ─────────
+  // ─── list methods return typed envelopes ─────────────────────
 
-  it('CRITICAL listMembers + listInvites return typed list responses cross-SDK. TS/Python: TeamMembersList + TeamInvitesList; Go: *TeamMembersList + *TeamInvitesList. The dual-list shape distinguishes accepted-members from pending-invites at the type level.', () => {
+  it('CRITICAL members, invites, and owner workspaces return typed list responses cross-SDK', () => {
     expect(read(TS)).toMatch(/listMembers\(\): Promise<TeamMembersList>/);
     expect(read(TS)).toMatch(/listInvites\(\): Promise<TeamInvitesList>/);
+    expect(read(TS)).toMatch(/listOwners\(\): Promise<TeamOwnersList>/);
     expect(read(PY)).toMatch(/def list_members\(self\) -> TeamMembersList:/);
     expect(read(PY)).toMatch(/def list_invites\(self\) -> TeamInvitesList:/);
+    expect(read(PY)).toMatch(/def list_owners\(self\) -> TeamOwnersList:/);
     expect(read(GO)).toMatch(/ListMembers\(ctx context\.Context\) \(\*TeamMembersList, error\)/);
     expect(read(GO)).toMatch(/ListInvites\(ctx context\.Context\) \(\*TeamInvitesList, error\)/);
+    expect(read(GO)).toMatch(/ListOwners\(ctx context\.Context\) \(\*TeamOwnersList, error\)/);
   });
 
   // ─── Python TeamRole typed enum import ────────────────────────

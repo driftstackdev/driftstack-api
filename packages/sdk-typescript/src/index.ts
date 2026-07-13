@@ -81,8 +81,10 @@ export type {
   TeamRole,
   TeamMember,
   TeamInvite,
+  TeamOwner,
   TeamMembersList,
   TeamInvitesList,
+  TeamOwnersList,
   AcceptInviteResponse,
   InviteOptions,
 } from './resources/team.js';

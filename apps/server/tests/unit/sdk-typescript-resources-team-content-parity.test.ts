@@ -49,15 +49,15 @@ function read(p: string): string {
 describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-298c/V-309e anchor + "All five /v1/team/* endpoints" scope', () => {
+  it('file exists at canonical path + module header + all six team endpoints scope', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ V-298c \/ V-309e — Team RBAC resource\./);
-    expect(body).toMatch(/\/\/ All five \/v1\/team\/\* endpoints\./);
+    expect(body).toMatch(/\/\/ All six \/v1\/team\/\* endpoints\./);
   });
 
   it('CRITICAL V-298d-pending caveat pinned per-line: "The auth path itself does NOT yet honor team membership (V-298d); accepted members can sign in but the membership grants no implicit permissions on the owner\'s resources until V-298d ships." Drift to dropping this caveat would let callers assume implicit permissions that don\'t yet exist — silently broken authorization across the whole product.', () => {
     expect(body).toMatch(
-      /\/\/ All five \/v1\/team\/\* endpoints\. The auth path itself does NOT yet\s*\n?\s*\/\/ honor team membership \(V-298d\); accepted members can sign in but\s*\n?\s*\/\/ the membership grants no implicit permissions on the owner's\s*\n?\s*\/\/ resources until V-298d ships\./,
+      /\/\/ All six \/v1\/team\/\* endpoints\. The auth path itself does NOT yet\s*\n?\s*\/\/ honor team membership \(V-298d\); accepted members can sign in but\s*\n?\s*\/\/ the membership grants no implicit permissions on the owner's\s*\n?\s*\/\/ resources until V-298d ships\./,
     );
   });
 
@@ -82,12 +82,21 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
-  it('TeamMembersList + TeamInvitesList envelopes — both single-field {data: ...[]}. No pagination because team sizes are small enough for one-call list. Drift to adding has_more / next_cursor would silently change the contract from "list all" to "paginated".', () => {
+  it('TeamOwner — five-field inverse workspace shape with nullable owner_name', () => {
+    expect(body).toMatch(
+      /export interface TeamOwner \{\s*\n?\s*owner_account_id: string;\s*\n?\s*owner_email: string;\s*\n?\s*owner_name: string \| null;\s*\n?\s*role: TeamRole;\s*\n?\s*membership_id: string;\s*\n?\s*\}/,
+    );
+  });
+
+  it('TeamMembersList + TeamInvitesList + TeamOwnersList envelopes are unpaginated typed arrays', () => {
     expect(body).toMatch(
       /export interface TeamMembersList \{\s*\n?\s*data: TeamMember\[\];\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /export interface TeamInvitesList \{\s*\n?\s*data: TeamInvite\[\];\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /export interface TeamOwnersList \{\s*\n?\s*data: TeamOwner\[\];\s*\n?\s*\}/,
     );
   });
 
@@ -131,6 +140,13 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
+  it('listOwners verb — GET /v1/team/owners → Promise<TeamOwnersList>', () => {
+    expect(body).toMatch(/\/\*\* List owner workspaces the calling account has joined\. \*\//);
+    expect(body).toMatch(
+      /listOwners\(\): Promise<TeamOwnersList> \{\s*\n?\s*return this\.http\.request<TeamOwnersList>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/team\/owners',\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
   it('acceptInvite verb — POST /v1/team/invites/accept with `body: { token }`. CRITICAL email-match-409 enforcement pinned per-line: "The accepting account\'s email MUST match the invitee email — server enforces; mismatched accept returns 409." Drift to dropping the 409 framing would lose the cross-account-leak guard. Without the email-match enforcement, anyone with a token (e.g. via shoulder-surf) could accept an invite into ANOTHER user\'s account.', () => {
     expect(body).toMatch(
       /\*\s*Accept a pending invite\. The accepting account's email MUST match\s*\n?\s*\*\s*the invitee email — server enforces; mismatched accept returns 409\./,
@@ -149,13 +165,13 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
-  it('5-verb inventory + verb-mix invariants — exactly 5 method declarations (invite + listMembers + listInvites + acceptInvite + removeMember). Verb mix: 2 POSTs (invite + acceptInvite) + 2 GETs (listMembers + listInvites) + 1 DELETE (removeMember) + ZERO PATCH/PUT. No "update member role" verb — drift to adding would break the "rotation via remove-then-reinvite" lifecycle invariant. Email-match enforcement appears EXACTLY once (on acceptInvite only).', () => {
+  it('6-verb inventory + verb-mix invariants — 2 POSTs + 3 GETs + 1 DELETE and no role-update mutation', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 5 verb declarations').toBe(5);
+    expect(methods.length, 'expected 6 verb declarations').toBe(6);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(posts, 'expected 2 POSTs (invite + acceptInvite)').toBe(2);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
-    expect(gets, 'expected 2 GETs (listMembers + listInvites)').toBe(2);
+    expect(gets, 'expected 3 GETs (members + invites + owners)').toBe(3);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
     expect(deletes, 'expected 1 DELETE (removeMember)').toBe(1);
     expect(body).not.toMatch(/method: 'PATCH'/);

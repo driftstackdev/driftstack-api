@@ -75,6 +75,16 @@ describe('W591.A packages/sdk-go/team.go content parity', () => {
     expect(body).toMatch(/method: "GET",\s*\n\s*path:\s+"\/v1\/team\/invites",/);
   });
 
+  it('ListOwners — GET /v1/team/owners returns a typed owner-workspace envelope', () => {
+    expect(body).toMatch(
+      /\/\/ ListOwners returns owner workspaces the calling account has joined\./,
+    );
+    expect(body).toMatch(
+      /func \(r \*TeamResource\) ListOwners\(ctx context\.Context\) \(\*TeamOwnersList, error\)/,
+    );
+    expect(body).toMatch(/method: "GET",\s*\n\s*path:\s+"\/v1\/team\/owners",/);
+  });
+
   it('AcceptInvite — POST /v1/team/invites/accept consumes a token and creates the membership. SDK ergonomic: takes a BARE STRING token (not a *TeamAcceptRequest), and wraps as &TeamAcceptRequest{Token: token} internally. Drift to forcing callers to construct the request struct themselves would break the "paste the magic-link token directly" UX.', () => {
     expect(body).toMatch(/\/\/ AcceptInvite consumes a token and creates the membership\./);
     expect(body).toMatch(

@@ -117,6 +117,7 @@ client.webhooks.replayDelivery(id)      // V-307 — re-fire a failed/DLQ delive
 client.team.invite(email, options?)     // V-298 — invite by email
 client.team.listMembers()
 client.team.listInvites()
+client.team.listOwners()                 // owner workspaces this account joined
 client.team.acceptInvite(token)
 client.team.removeMember(membershipId)
 

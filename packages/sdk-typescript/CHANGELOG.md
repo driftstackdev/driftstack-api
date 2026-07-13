@@ -30,6 +30,10 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.team.listOwners()`** — typed access to `GET /v1/team/owners`
+  for owner workspaces the calling account has joined. Returns
+  `TeamOwnersList` / `TeamOwner` and requires broad `read` (or
+  `account_owner`).
 - `proxy_id` on agent-session create (`CreateAgentSessionRequest`) — route
   the session's egress through one of your account proxies (manage them at
   `/v1/account/me/proxies`). Must reference a proxy your account owns

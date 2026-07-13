@@ -145,7 +145,7 @@ describe('W707 cross-SDK public-exports surface parity', () => {
     const ts = read(TS_INDEX);
     const py = read(PY_INIT);
 
-    // 9 customer-facing types added in slices 112 + 113 (team-5 +
+    // Customer-facing types added in slices 112 + 113 (team +
     // webhooks-2 + api-keys-1 + sessions-1, with the TS side also
     // re-exporting 2 crypto-orders option types).
     const sharedTypes = [
@@ -153,6 +153,8 @@ describe('W707 cross-SDK public-exports surface parity', () => {
       'TeamInvite',
       'TeamMembersList',
       'TeamInvitesList',
+      'TeamOwner',
+      'TeamOwnersList',
       'AcceptInviteResponse',
       'ApiKeyList',
       'SessionsListPage',

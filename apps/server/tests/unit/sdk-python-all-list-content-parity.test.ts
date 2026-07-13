@@ -74,6 +74,8 @@ const REQUIRED_ALL_ENTRIES = [
   'TeamInvitesList',
   'TeamMember',
   'TeamMembersList',
+  'TeamOwner',
+  'TeamOwnersList',
   'WebhookDeliveryListPage',
   'WebhookEndpointList',
   'is_retryable',
@@ -148,7 +150,7 @@ describe('W835 Python SDK __all__ list parity', () => {
 
   // ─── Total count matches expected ─────────────────────────────
 
-  it('CRITICAL Python __all__ contains exactly the REQUIRED_ALL_ENTRIES snapshot (currently 49 entries after Q.1.d ByokAnthropic + Arc 1 bundled-LLM + Arc 3 pair-mode + BadRequestError + customer-facing pydantic-model re-exports + doc-150 item 6 StorageQuotaExceededError + live pre-launch ProxyValidationFailedError + A3 finding #7 ProfileInUseError). Drift would either grow the public surface accidentally (broader test surface) or shrink it (break customer code). New additions must update both the SDK source AND this parity test.', () => {
+  it('CRITICAL Python __all__ exactly matches the required public-export snapshot, including typed team-owner returns', () => {
     const p = read(PY_INIT);
     const allMatch = p.match(/__all__ = \[([\s\S]+?)\]/);
     expect(allMatch).not.toBeNull();

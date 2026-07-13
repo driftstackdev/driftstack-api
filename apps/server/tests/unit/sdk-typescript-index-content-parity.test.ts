@@ -90,7 +90,7 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
     // Team types re-export (added in the slice that closed the
     // TS SDK type-surface gap for client.team.* method params + return types).
     expect(body).toMatch(
-      /export type \{\s*\n?\s*TeamRole,\s*\n?\s*TeamMember,\s*\n?\s*TeamInvite,\s*\n?\s*TeamMembersList,\s*\n?\s*TeamInvitesList,\s*\n?\s*AcceptInviteResponse,\s*\n?\s*InviteOptions,\s*\n?\s*\} from '\.\/resources\/team\.js';/,
+      /export type \{\s*\n?\s*TeamRole,\s*\n?\s*TeamMember,\s*\n?\s*TeamInvite,\s*\n?\s*TeamOwner,\s*\n?\s*TeamMembersList,\s*\n?\s*TeamInvitesList,\s*\n?\s*TeamOwnersList,\s*\n?\s*AcceptInviteResponse,\s*\n?\s*InviteOptions,\s*\n?\s*\} from '\.\/resources\/team\.js';/,
     );
     // Crypto-orders parameter-type re-exports.
     expect(body).toMatch(

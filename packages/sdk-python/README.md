@@ -57,7 +57,7 @@ Every public API endpoint is a typed method on a resource accessor:
 | `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                  |
 | `client.usage`             | `current_period`                                                                                                                                              |
 | `client.webhooks`          | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307)                                                         |
-| `client.team`              | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                                                                            |
+| `client.team`              | `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member` (V-298)                                                             |
 | `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                                               |
 | `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt` (V-666 — crypto checkout orders)                                     |
 | `client.auth`              | `signup`, `verify_email`, `login`, `refresh`, `logout`, `request_magic_link`, `consume_magic_link`, `request_password_reset`, `confirm_password_reset`        |

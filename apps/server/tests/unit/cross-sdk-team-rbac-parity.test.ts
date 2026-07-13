@@ -109,7 +109,7 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     expect(ts).toMatch(/mismatched accept returns 409/);
   });
 
-  it("5 verbs pinned across all 3 SDKs — invite + listMembers + listInvites + acceptInvite + removeMember. The 5-verb surface is the canonical team-RBAC API. Drift to dropping any verb would break the dashboard's team-management UX.", () => {
+  it('6 verbs pinned across all 3 SDKs, including listOwners/list_owners/ListOwners', () => {
     const ts = read(TS_TEAM);
     const go = read(GO_TEAM);
     const py = read(PY_TEAM);
@@ -118,6 +118,7 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     expect(ts).toMatch(/invite\(email: string/);
     expect(ts).toMatch(/listMembers\(\)/);
     expect(ts).toMatch(/listInvites\(\)/);
+    expect(ts).toMatch(/listOwners\(\)/);
     expect(ts).toMatch(/acceptInvite\(token: string/);
     expect(ts).toMatch(/removeMember\(membershipId: string/);
 
@@ -125,11 +126,13 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     expect(go).toMatch(/func \(r \*TeamResource\) Invite\(/);
     expect(go).toMatch(/func \(r \*TeamResource\) ListMembers\(/);
     expect(go).toMatch(/func \(r \*TeamResource\) ListInvites\(/);
+    expect(go).toMatch(/func \(r \*TeamResource\) ListOwners\(/);
 
     // sdk-python: snake_case methods.
     expect(py).toMatch(/def invite\(self/);
     expect(py).toMatch(/def list_members\(self/);
     expect(py).toMatch(/def list_invites\(self/);
+    expect(py).toMatch(/def list_owners\(self/);
     expect(py).toMatch(/def accept_invite\(self/);
     expect(py).toMatch(/def remove_member\(self/);
   });
@@ -149,7 +152,7 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     );
   });
 
-  it('5-wire-path inventory pinned: /v1/team/invites + /v1/team/members + /v1/team/invites/accept + /v1/team/members/:id (per-id DELETE). Drift to a different URL pattern would break server-side routing.', () => {
+  it('6-route inventory pins invites, members, owners, accept, and per-id deletion across SDKs', () => {
     const ts = read(TS_TEAM);
     const go = read(GO_TEAM);
     const py = read(PY_TEAM);
@@ -157,11 +160,12 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     for (const sdk of [ts, go, py]) {
       expect(sdk).toMatch(/\/v1\/team\/invites/);
       expect(sdk).toMatch(/\/v1\/team\/members/);
+      expect(sdk).toMatch(/\/v1\/team\/owners/);
       expect(sdk).toMatch(/\/v1\/team\/invites\/accept/);
     }
   });
 
-  it('Cross-SDK consistency — V-298c + V-298d + 5-verb surface. NOTE: TeamRole 2-value union is pinned in sdk-typescript + sdk-python (compile-time literal type); sdk-go uses string type without compile-time role enum. Drift on V-298c/V-298d framing would fragment the cross-language team-RBAC contract.', () => {
+  it('Cross-SDK consistency — V-298c + V-298d + complete 6-verb surface', () => {
     const sdks = {
       'sdk-typescript': read(TS_TEAM),
       'sdk-go': read(GO_TEAM),

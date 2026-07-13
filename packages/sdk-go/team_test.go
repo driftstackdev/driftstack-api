@@ -76,6 +76,32 @@ func TestTeam_AcceptInvite(t *testing.T) {
 	}
 }
 
+func TestTeam_ListOwners(t *testing.T) {
+	t.Parallel()
+	ownerName := "Workspace owner"
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/team/owners" || r.Method != "GET" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(TeamOwnersList{Data: []TeamOwner{{
+			OwnerAccountID: "acc_owner",
+			OwnerEmail:     "owner@example.test",
+			OwnerName:      &ownerName,
+			Role:           TeamRoleAdmin,
+			MembershipID:   "mem_test",
+		}}})
+	})
+
+	got, err := client.Team.ListOwners(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Data) != 1 || got.Data[0].OwnerName == nil || *got.Data[0].OwnerName != ownerName {
+		t.Fatalf("owners=%+v", got.Data)
+	}
+}
+
 func TestTeam_RemoveMember(t *testing.T) {
 	t.Parallel()
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {

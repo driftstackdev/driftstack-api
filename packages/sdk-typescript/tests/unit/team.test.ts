@@ -51,6 +51,26 @@ describe('TeamResource', () => {
     expect(request).toHaveBeenCalledWith({ method: 'GET', path: '/v1/team/invites' });
   });
 
+  it('listOwners GETs /v1/team/owners with a typed workspace envelope', async () => {
+    const request = vi.fn(() =>
+      Promise.resolve({
+        data: [
+          {
+            owner_account_id: 'acc_owner',
+            owner_email: 'owner@example.test',
+            owner_name: 'Owner',
+            role: 'admin',
+            membership_id: 'mem_test',
+          },
+        ],
+      }),
+    );
+    const team = new TeamResource({ request } as unknown as HttpClient);
+    const result = await team.listOwners();
+    expect(result.data[0]?.owner_email).toBe('owner@example.test');
+    expect(request).toHaveBeenCalledWith({ method: 'GET', path: '/v1/team/owners' });
+  });
+
   it('acceptInvite POSTs token in body', async () => {
     const calls: RequestOpts[] = [];
     const request = vi.fn((opts: RequestOpts) => {

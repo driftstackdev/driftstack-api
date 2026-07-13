@@ -85,6 +85,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(
       /client\.apiKeys\.rotate\(id, options\?\)\s+\/\/ V-296 — 24h grace, plaintext shown once/,
     );
+    expect(body).toMatch(/client\.team\.listOwners\(\)/);
     expect(existsSync(P('sdk-typescript/README.md'))).toBe(true);
   });
 
@@ -119,6 +120,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
       /`client\.ProfileSnapshots` \| `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` \(V-312\)/,
     );
     expect(body).toMatch(/`client\.APIKeys`\s+\| `Create`, `List`, `Rotate` \(V-296\), `Revoke`/);
+    expect(body).toMatch(/`client\.Team`\s+\|[^\n]*`ListOwners`/);
     expect(existsSync(P('sdk-go/README.md'))).toBe(true);
   });
 
@@ -150,7 +152,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     );
     expect(body).toMatch(/`client\.api_keys`\s+\| `create`, `list`, `rotate` \(V-296\), `revoke`/);
     expect(body).toMatch(
-      /`client\.team`\s+\| `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` \(V-298\)/,
+      /`client\.team`\s+\| `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member` \(V-298\)/,
     );
     expect(body).toMatch(/`client\.account`\s+\| `me` \(V-385/);
     expect(existsSync(P('sdk-python/README.md'))).toBe(true);
@@ -164,6 +166,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/\[SemVer\]\(https:\/\/semver\.org\/spec\/v2\.0\.0\.html\)/);
     expect(body).toMatch(/^## \[Unreleased\]$/m);
     expect(body).toMatch(/^### Added$/m);
+    expect(body).toMatch(/client\.Team\.ListOwners\(ctx\)/);
     expect(body).toMatch(/\*\*`client\.CryptoOrders\.\*`\*\* \(V-666 Go parity\)/);
     expect(body).toMatch(/`Quote`, `CreateCheckout`/);
     expect(body).toMatch(/V-666\.AO header/);
@@ -194,6 +197,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/\[Keep a Changelog\]\(https:\/\/keepachangelog\.com\/en\/1\.1\.0\/\)/);
     expect(body).toMatch(/\[SemVer\]\(https:\/\/semver\.org\/spec\/v2\.0\.0\.html\)/);
     expect(body).toMatch(/^## \[Unreleased\]$/m);
+    expect(body).toMatch(/client\.team\.listOwners\(\)/);
     expect(body).toMatch(/\*\*`client\.webhooks\.sendTest\(id\)`\*\* \(V-463 \/ V-356\)/);
     expect(body).toMatch(/synthetic `test\.ping` delivery/);
     expect(body).toMatch(/\*\*`client\.webhooks\.update\(id, body\)`\*\* \(V-464 \/ V-351\)/);
@@ -214,6 +218,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/\[Keep a Changelog\]\(https:\/\/keepachangelog\.com\/en\/1\.1\.0\/\)/);
     expect(body).toMatch(/\[SemVer\]\(https:\/\/semver\.org\/spec\/v2\.0\.0\.html\)/);
     expect(body).toMatch(/^## \[Unreleased\]$/m);
+    expect(body).toMatch(/client\.team\.list_owners\(\)/);
     expect(body).toMatch(
       /\*\*`client\.crypto_orders\.\*`\*\* \+ async mirror \(V-666 Python parity\)/,
     );
