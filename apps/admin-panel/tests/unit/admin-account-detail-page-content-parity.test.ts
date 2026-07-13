@@ -233,4 +233,20 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toContain('Verify its tier before retrying');
     expect(body).toMatch(/await reconcileAccountTier\(body\.tier\)/);
   });
+
+  it('fails closed after confirmed or unverifiable audit-only writes', () => {
+    expect(body).toMatch(/const blockedAuditActions = new Set\(\)/);
+    expect(body).toMatch(/blockedAuditActions\.add\(action\)/);
+    expect(body).toMatch(
+      /button\.disabled = blockedAuditActions\.has\(button\.getAttribute\('data-action'\)\)/,
+    );
+    expect(body).toMatch(/if \(blockedAuditActions\.has\(action\)\)/);
+    expect(body).toMatch(/if \(blockedAuditActions\.has\('add-note'\)\)/);
+    expect(body).toMatch(/if \(blockedAuditActions\.has\('record-refund'\)\)/);
+    expect(body).toContain(
+      'refreshed authoritative audit slice has no new matching successful entry',
+    );
+    expect(body).toContain('retry only if the record is still required');
+    expect(body).toContain('Reload and review the audit log before recording another');
+  });
 });

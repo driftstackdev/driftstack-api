@@ -800,6 +800,31 @@ const accountId = account.id;
         }
       }
 
+      const blockedAuditActions = new Set();
+      function auditActionForKind(kind) {
+        return kind === 'note' ? 'add-note' : 'record-refund';
+      }
+
+      function blockAuditAction(kind) {
+        const action = auditActionForKind(kind);
+        blockedAuditActions.add(action);
+        const button = root.querySelector('[data-action="' + action + '"]');
+        if (button) {
+          button.disabled = true;
+          button.setAttribute(
+            'title',
+            'Outcome unknown — reload and verify the audit log before recording another.',
+          );
+        }
+      }
+
+      function showBlockedAuditAction(kind) {
+        showBanner(
+          (kind === 'note' ? 'Support-note' : 'Refund-record') +
+            ' submission is locked for this page because the previous outcome was confirmed or could not be verified. Reload and review the audit log before recording another.',
+        );
+      }
+
       async function reconcileAuditOnlyWrite(kind, payload, auditIdsBefore) {
         const refreshed = await load();
         const action = kind === 'note' ? 'audit_note.added' : 'refund.recorded';
@@ -812,19 +837,22 @@ const accountId = account.id;
               auditPayloadMatches(entry, action, payload),
           );
         if (matched && kind === 'note') {
+          blockAuditAction(kind);
           showBanner(
             'Support-note outcome is unknown because the response timed out. The refreshed audit log contains a new successful entry with the same note, so it was likely recorded; do not submit it again.',
           );
         } else if (matched) {
+          blockAuditAction(kind);
           showBanner(
             'Refund-record outcome is unknown because the response timed out. The refreshed audit log contains a new successful entry with the same reference, amount, and reason, so the audit record was likely created; do not submit it again. The actual refund remains a separate Stripe dashboard action.',
           );
         } else if (refreshed) {
           showBanner(
             (kind === 'note' ? 'Support-note' : 'Refund-record') +
-              ' outcome is unknown because the response timed out. The refreshed audit slice has no new matching successful entry; review the full audit log before retrying to avoid a duplicate record.',
+              ' outcome is unknown because the response timed out. The refreshed authoritative audit slice has no new matching successful entry; retry only if the record is still required.',
           );
         } else {
+          blockAuditAction(kind);
           showBanner(
             (kind === 'note' ? 'Support-note' : 'Refund-record') +
               ' outcome is unknown because the response timed out, and the audit log could not be refreshed. Verify the full audit log before retrying to avoid a duplicate record.',
@@ -839,6 +867,8 @@ const accountId = account.id;
       let accountMutationInFlight = false;
       function beginAccountMutation(activeButton) {
         if (accountMutationInFlight) return false;
+        const activeAction = activeButton?.getAttribute?.('data-action');
+        if (activeAction && blockedAuditActions.has(activeAction)) return false;
         accountMutationInFlight = true;
         if (actionRow) actionRow.setAttribute('aria-busy', 'true');
         accountActionButtons.forEach((button) => {
@@ -851,7 +881,7 @@ const accountId = account.id;
         accountMutationInFlight = false;
         if (actionRow) actionRow.removeAttribute('aria-busy');
         accountActionButtons.forEach((button) => {
-          button.disabled = false;
+          button.disabled = blockedAuditActions.has(button.getAttribute('data-action'));
         });
         if (activeButton) activeButton.removeAttribute('aria-busy');
       }
@@ -1065,6 +1095,10 @@ const accountId = account.id;
         const action = btn.getAttribute('data-action');
         if (!action) return;
         ev.preventDefault();
+        if (blockedAuditActions.has(action)) {
+          showBlockedAuditAction(action === 'add-note' ? 'note' : 'refund');
+          return;
+        }
         if (
           !token &&
           (action === 'change-tier' ||
@@ -1098,6 +1132,10 @@ const accountId = account.id;
 
       // V-281 — audit-only support tooling.
       async function addSupportNote() {
+        if (blockedAuditActions.has('add-note')) {
+          showBlockedAuditAction('note');
+          return;
+        }
         const note = await window.driftstackPrompt(
           'Support note (free-form, max 2000 chars). Recorded on this customer\'s audit log + admin audit:',
           { placeholder: 'note…', confirmLabel: 'Record note' },
@@ -1126,6 +1164,10 @@ const accountId = account.id;
       }
 
       async function recordRefund() {
+        if (blockedAuditActions.has('record-refund')) {
+          showBlockedAuditAction('refund');
+          return;
+        }
         const externalRef = await window.driftstackPrompt(
           'Stripe charge / payment_intent / invoice id (the actual refund happens via Stripe dashboard):',
           { placeholder: 'ch_… / pi_… / in_…' },

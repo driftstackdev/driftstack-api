@@ -159,7 +159,7 @@ describe('admin account detail mutation reconciliation', () => {
     expect(tierButton.disabled).toBe(false);
   });
 
-  it('matches new audit rows before treating timed-out support writes as completed', async () => {
+  it('blocks confirmed or unverifiable audit writes and only retries an authoritative non-match', async () => {
     const virtualConsole = new VirtualConsole();
     virtualConsole.on('jsdomError', () => {});
     const dom = new JSDOM(
@@ -196,7 +196,8 @@ describe('admin account detail mutation reconciliation', () => {
         timestamp: '2026-07-13T00:00:00.000Z',
       },
     ];
-    let commitNotes = true;
+    let commitNotes = false;
+    let failAuditRefresh = false;
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
     // @ts-expect-error -- jsdom's fetch global is intentionally injected.
     dom.window.fetch = (input: string, init: RequestInit | undefined) => {
@@ -241,11 +242,12 @@ describe('admin account detail mutation reconciliation', () => {
         );
       }
       if (/\/v1\/admin\/audit-log\?/.test(call.url)) {
+        if (failAuditRefresh) return Promise.reject(new Error('audit unavailable'));
         return Promise.resolve(response({ data: auditRows }));
       }
       return Promise.resolve(response({}, 404));
     };
-    const prompts = ['investigated customer report', 'ch_test_123', '299', 'duplicate charge'];
+    const prompts = ['investigated customer report'];
     // @ts-expect-error -- branded modal helpers are injected by AdminLayout.
     dom.window.driftstackPrompt = () => Promise.resolve(prompts.shift() ?? null);
     dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
@@ -261,30 +263,45 @@ describe('admin account detail mutation reconciliation', () => {
 
     expect(calls.filter((call) => /\/audit-note$/.test(call.url))).toHaveLength(1);
     expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /support-note outcome is unknown.*refreshed audit log contains a new successful entry with the same note.*likely recorded.*do not submit it again/i,
+      /support-note outcome is unknown.*refreshed authoritative audit slice has no new matching successful entry.*retry only if the record is still required/i,
     );
     expect(noteButton.disabled).toBe(false);
 
-    const refundButton = dom.window.document.querySelector(
-      '[data-action="record-refund"]',
-    ) as HTMLButtonElement;
-    refundButton.click();
-    await flush(100);
-
-    expect(calls.filter((call) => /\/refund-record$/.test(call.url))).toHaveLength(1);
-    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /refund-record outcome is unknown.*new successful entry with the same reference, amount, and reason.*likely created.*do not submit it again.*actual refund remains a separate Stripe dashboard action/i,
-    );
-    expect(refundButton.disabled).toBe(false);
-
-    commitNotes = false;
-    prompts.push('older note');
+    commitNotes = true;
+    prompts.push('investigated customer report');
     noteButton.click();
     await flush(80);
 
     expect(calls.filter((call) => /\/audit-note$/.test(call.url))).toHaveLength(2);
     expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /support-note outcome is unknown.*refreshed audit slice has no new matching successful entry.*review the full audit log before retrying.*avoid a duplicate record/i,
+      /support-note outcome is unknown.*refreshed audit log contains a new successful entry with the same note.*likely recorded.*do not submit it again/i,
+    );
+    expect(noteButton.disabled).toBe(true);
+    noteButton.dispatchEvent(new dom.window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(calls.filter((call) => /\/audit-note$/.test(call.url))).toHaveLength(2);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /support-note submission is locked.*reload and review the audit log/i,
+    );
+
+    const refundButton = dom.window.document.querySelector(
+      '[data-action="record-refund"]',
+    ) as HTMLButtonElement;
+    prompts.push('ch_test_123', '299', 'duplicate charge');
+    failAuditRefresh = true;
+    refundButton.click();
+    await flush(100);
+
+    expect(calls.filter((call) => /\/refund-record$/.test(call.url))).toHaveLength(1);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /refund-record outcome is unknown.*audit log could not be refreshed.*verify the full audit log before retrying.*avoid a duplicate record/i,
+    );
+    expect(refundButton.disabled).toBe(true);
+    refundButton.dispatchEvent(new dom.window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(calls.filter((call) => /\/refund-record$/.test(call.url))).toHaveLength(1);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /refund-record submission is locked.*reload and review the audit log/i,
     );
   });
 
