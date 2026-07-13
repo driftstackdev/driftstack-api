@@ -35,6 +35,19 @@ function read(p: string): string {
 
 describe('W362.B customer-dashboard /webhooks page content parity', () => {
   const body = read(PAGE);
+
+  it('bounds every webhook request and serializes forms/actions before async work', () => {
+    expect(body).toContain('const WEBHOOK_TIMEOUT_MS = 15_000;');
+    expect(body).toContain('const actionButtonsInFlight = new WeakSet();');
+    expect(body).toContain('let createInFlight = false;');
+    expect(body).toContain('let editInFlight = false;');
+    expect(body).toMatch(/if \(createInFlight\) return;/);
+    expect(body).toMatch(/if \(editInFlight\) return;/);
+    expect(body).toMatch(/if \(actionButtonsInFlight\.has\(btn\)\) return;/);
+    expect(body.match(/boundedFetch\(/g)?.length).toBeGreaterThanOrEqual(11);
+    expect(body).toContain('Request took too long. Check your connection and try again.');
+    expect(body).toMatch(/setAttribute\('aria-busy', 'true'\)/);
+  });
   const subscribable = new Set<string>(
     (SubscribableWebhookEventTypeSchema._def as { values: readonly string[] }).values,
   );

@@ -483,6 +483,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       const ul = root.querySelector('[data-list]');
       const empty = root.querySelector('[data-empty]');
       const token = localStorage.getItem('ds_web_session_token');
+      const WEBHOOK_TIMEOUT_MS = 15_000;
+      const actionButtonsInFlight = new WeakSet();
+      let createInFlight = false;
+      let editInFlight = false;
+
+      function boundedFetch(url, init = {}) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal })
+          .catch((err) => {
+            if (err && err.name === 'AbortError') {
+              throw new Error('Request took too long. Check your connection and try again.');
+            }
+            throw err;
+          })
+          .finally(() => window.clearTimeout(timeout));
+      }
 
       // V-347 — wire the create form.
       // S32 2026-07-07 — querySelectorAll: both the header button and the
@@ -538,6 +555,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (createForm) {
         createForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
+          if (createInFlight) return;
           if (createError) {
             createError.classList.add('hidden');
             createError.textContent = '';
@@ -554,11 +572,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             showCreateError('Pick at least one event.');
             return;
           }
+          createInFlight = true;
           if (createSubmit) {
             createSubmit.disabled = true;
+            createSubmit.setAttribute('aria-busy', 'true');
             createSubmit.textContent = 'Creating…';
           }
-          fetch(apiBaseUrl + '/v1/webhooks', {
+          boundedFetch(apiBaseUrl + '/v1/webhooks', {
             method: 'POST',
             headers: {
               'content-type': 'application/json',
@@ -602,8 +622,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             })
             .catch((err) => {
               showCreateError(err && err.message ? err.message : 'Failed to create endpoint.');
+            })
+            .finally(() => {
+              createInFlight = false;
               if (createSubmit) {
                 createSubmit.disabled = false;
+                createSubmit.setAttribute('aria-busy', 'false');
                 createSubmit.textContent = 'Create endpoint';
               }
             });
@@ -897,7 +921,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             loadDeliveries(endpointId, container, sel.value);
           });
         }
-        fetch(
+        boundedFetch(
           apiBaseUrl +
             '/v1/webhooks/' +
             encodeURIComponent(endpointId) +
@@ -945,7 +969,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           btn.disabled = true;
           btn.textContent = 'Loading…';
         }
-        fetch(
+        boundedFetch(
           apiBaseUrl +
             '/v1/webhooks/' +
             encodeURIComponent(endpointId) +
@@ -990,10 +1014,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         const buttons = scope.querySelectorAll('[data-replay]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', () => {
+            if (actionButtonsInFlight.has(btn)) return;
+            actionButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-replay');
             btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Replaying…';
-            fetch(apiBaseUrl + '/v1/webhook-deliveries/' + encodeURIComponent(id) + '/replay', {
+            boundedFetch(apiBaseUrl + '/v1/webhook-deliveries/' + encodeURIComponent(id) + '/replay', {
               method: 'POST',
               headers: {
                 authorization: 'Bearer ' + token,
@@ -1013,6 +1040,10 @@ const apiBaseUrl = resolveApiBaseUrl();
                 btn.disabled = false;
                 btn.textContent = 'Replay';
                 showBanner('Replay failed: ' + (err && err.message ? err.message : 'network error'));
+              })
+              .finally(() => {
+                actionButtonsInFlight.delete(btn);
+                btn.setAttribute('aria-busy', 'false');
               });
           });
         });
@@ -1110,7 +1141,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             // last rendered. Cheap re-fetch keeps the form in sync
             // with current state in case it changed since the last
             // render.
-            fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id), {
+            boundedFetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id), {
               headers: {
                 authorization: 'Bearer ' + token,
                 ...(typeof window.driftstackActAsHeaders === 'function'
@@ -1135,6 +1166,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (editForm) {
         editForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
+          if (editInFlight) return;
           if (!editingEndpoint) return;
           if (editError) {
             editError.classList.add('hidden');
@@ -1153,11 +1185,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             showEditError('Pick at least one event.');
             return;
           }
+          editInFlight = true;
           if (editSubmit) {
             editSubmit.disabled = true;
+            editSubmit.setAttribute('aria-busy', 'true');
             editSubmit.textContent = 'Saving…';
           }
-          fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(editingEndpoint.id), {
+          boundedFetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(editingEndpoint.id), {
             method: 'PATCH',
             headers: {
               'content-type': 'application/json',
@@ -1187,8 +1221,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             })
             .catch((err) => {
               showEditError(err && err.message ? err.message : 'Failed to save changes.');
+            })
+            .finally(() => {
+              editInFlight = false;
               if (editSubmit) {
                 editSubmit.disabled = false;
+                editSubmit.setAttribute('aria-busy', 'false');
                 editSubmit.textContent = 'Save changes';
               }
             });
@@ -1202,18 +1240,25 @@ const apiBaseUrl = resolveApiBaseUrl();
         const buttons = ul.querySelectorAll('[data-delete]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
+            if (actionButtonsInFlight.has(btn)) return;
+            actionButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-delete');
-            if (!id) return;
+            if (!id) {
+              actionButtonsInFlight.delete(btn);
+              return;
+            }
             const confirmed = await window.driftstackConfirm(
               'Delete webhook endpoint ' + id + '? This cannot be undone.',
               { confirmLabel: 'Delete', destructive: true },
             );
             if (!confirmed) {
+              actionButtonsInFlight.delete(btn);
               return;
             }
             btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Deleting…';
-            fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id), {
+            boundedFetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id), {
               method: 'DELETE',
               headers: {
                 authorization: 'Bearer ' + token,
@@ -1233,7 +1278,11 @@ const apiBaseUrl = resolveApiBaseUrl();
               })
               .catch((err) => {
                 showBanner('Delete failed: ' + (err && err.message ? err.message : 'network error'));
+              })
+              .finally(() => {
+                actionButtonsInFlight.delete(btn);
                 btn.disabled = false;
+                btn.setAttribute('aria-busy', 'false');
                 btn.textContent = 'Delete';
               });
           });
@@ -1305,8 +1354,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
+            if (actionButtonsInFlight.has(btn)) return;
+            actionButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-rotate');
-            if (!id) return;
+            if (!id) {
+              actionButtonsInFlight.delete(btn);
+              return;
+            }
             if (
               !(await window.driftstackConfirm(
                 'Rotate signing secret for ' +
@@ -1315,12 +1369,14 @@ const apiBaseUrl = resolveApiBaseUrl();
                 { confirmLabel: 'Rotate secret', destructive: true },
               ))
             ) {
+              actionButtonsInFlight.delete(btn);
               return;
             }
             btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
             const original = btn.textContent;
             btn.textContent = 'Rotating…';
-            fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/rotate-secret', {
+            boundedFetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/rotate-secret', {
               method: 'POST',
               headers: {
                 authorization: 'Bearer ' + token,
@@ -1346,7 +1402,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                 );
               })
               .finally(() => {
+                actionButtonsInFlight.delete(btn);
                 btn.disabled = false;
+                btn.setAttribute('aria-busy', 'false');
                 btn.textContent = original;
               });
           });
@@ -1360,12 +1418,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         const buttons = ul.querySelectorAll('[data-test]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', () => {
+            if (actionButtonsInFlight.has(btn)) return;
+            actionButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-test');
-            if (!id) return;
+            if (!id) {
+              actionButtonsInFlight.delete(btn);
+              return;
+            }
             btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
             const original = btn.textContent;
             btn.textContent = 'Sending…';
-            fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/test', {
+            boundedFetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/test', {
               method: 'POST',
               headers: {
                 authorization: 'Bearer ' + token,
@@ -1392,7 +1456,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                 );
               })
               .finally(() => {
+                actionButtonsInFlight.delete(btn);
                 btn.disabled = false;
+                btn.setAttribute('aria-busy', 'false');
                 btn.textContent = original;
               });
           });
@@ -1408,7 +1474,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
-      fetch(apiBaseUrl + '/v1/webhooks', {
+      boundedFetch(apiBaseUrl + '/v1/webhooks', {
         // Every mutation (create/edit/delete/rotate/test) carries the act-as
         // team header; the LIST must too, or acting-as a team renders the
         // USER's own endpoints while mutations target the TEAM's — you'd edit

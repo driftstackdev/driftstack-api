@@ -179,9 +179,15 @@ describe('webhooks page — local integration', () => {
     (form.querySelector('input[name="url"]') as HTMLInputElement).value = 'https://hooks.test/x';
     (form.querySelector('input[name="event"]') as HTMLInputElement).checked = true;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
-    const post = fetchCalls.find((c) => c.init?.method === 'POST' && /\/v1\/webhooks$/.test(c.url));
+    const posts = fetchCalls.filter(
+      (c) => c.init?.method === 'POST' && /\/v1\/webhooks$/.test(c.url),
+    );
+    expect(posts).toHaveLength(1);
+    const post = posts[0];
     expect(post).toBeTruthy();
+    expect(post?.init?.signal).toBeDefined();
     const body = JSON.parse(String(post?.init?.body));
     expect(body.url).toBe('https://hooks.test/x');
     expect(Array.isArray(body.events)).toBe(true);
@@ -226,10 +232,19 @@ describe('webhooks page — local integration', () => {
     });
     win = window;
     await flush();
-    (window.document.querySelector('[data-rotate="wh_endpoint"]') as HTMLButtonElement).click();
+    const rotateBtn = window.document.querySelector(
+      '[data-rotate="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    rotateBtn.dispatchEvent(new window.Event('click'));
+    rotateBtn.dispatchEvent(new window.Event('click'));
     await flush();
-    const rot = fetchCalls.find((c) => /\/v1\/webhooks\/wh_endpoint\/rotate-secret$/.test(c.url));
+    const rotations = fetchCalls.filter((c) =>
+      /\/v1\/webhooks\/wh_endpoint\/rotate-secret$/.test(c.url),
+    );
+    expect(rotations).toHaveLength(1);
+    const rot = rotations[0];
     expect(rot?.init?.method).toBe('POST');
+    expect(rot?.init?.signal).toBeDefined();
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(false);
     expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe(
       'whsec_ROTATED',
@@ -244,10 +259,33 @@ describe('webhooks page — local integration', () => {
     });
     win = window;
     await flush();
-    (window.document.querySelector('[data-delete="wh_endpoint"]') as HTMLButtonElement).click();
+    const deleteBtn = window.document.querySelector(
+      '[data-delete="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    deleteBtn.dispatchEvent(new window.Event('click'));
+    deleteBtn.dispatchEvent(new window.Event('click'));
     await flush();
-    const del = fetchCalls.find((c) => c.init?.method === 'DELETE');
+    const deletes = fetchCalls.filter((c) => c.init?.method === 'DELETE');
+    expect(deletes).toHaveLength(1);
+    const del = deletes[0];
     expect(del?.url).toMatch(/\/v1\/webhooks\/wh_endpoint$/);
+    expect(del?.init?.signal).toBeDefined();
+  });
+
+  it('send-test coalesces forced duplicate clicks into one bounded POST', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ data: [ENDPOINT] }), () => json({ queued: true }, 202)],
+    });
+    win = window;
+    await flush();
+    const btn = window.document.querySelector('[data-test="wh_endpoint"]') as HTMLButtonElement;
+    btn.dispatchEvent(new window.Event('click'));
+    btn.dispatchEvent(new window.Event('click'));
+    await flush();
+    const sends = fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/test$/.test(c.url));
+    expect(sends).toHaveLength(1);
+    expect(sends[0]?.init?.signal).toBeDefined();
   });
 
   it('delete cancelled at confirm: no DELETE fetch fired', async () => {
