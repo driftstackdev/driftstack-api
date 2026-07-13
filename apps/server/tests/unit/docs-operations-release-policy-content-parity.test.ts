@@ -45,7 +45,7 @@ describe('W552.C /docs/operations/release-policy.md content parity', () => {
     expect(body).toMatch(/the policy is which to use per release, not which to delete\./);
   });
 
-  it("Staging-vs-production split framing pinned: '| Staging     | `.github/workflows/deploy.yml`        | push to `main`                               | Continuous delivery (auto)' + '| Production  | `.github/workflows/server-deploy.yml` | tag matching `server-v*` + workflow_dispatch | Explicit release (deliberate)' + '**Staging on main**: every commit to main is a candidate to live on `api.staging.driftstack.dev`.' + '**Production on tag**: production cuts are deliberate. The founder reviews + tags `server-vX.Y.Z`' — pinned so the deploy.yml-staging-push-to-main + server-deploy.yml-production-tag + api.staging.driftstack.dev + deliberate-server-vX.Y.Z commitment survives", () => {
+  it('Staging-vs-production split framing pinned: deploy.yml on main + server-deploy.yml on server-v* + live staging origin + deliberate production tags', () => {
     expect(body).toMatch(
       /\|\s*Staging\s*\|\s*`\.github\/workflows\/deploy\.yml`\s*\|\s*push to `main`\s*\|\s*Continuous delivery \(auto\)/,
     );
@@ -53,7 +53,7 @@ describe('W552.C /docs/operations/release-policy.md content parity', () => {
       /\|\s*Production\s*\|\s*`\.github\/workflows\/server-deploy\.yml`\s*\|\s*tag matching `server-v\*` \+ workflow_dispatch\s*\|\s*Explicit release \(deliberate\)/,
     );
     expect(body).toMatch(
-      /- \*\*Staging on main\*\*: every commit to main is a candidate to live on `api\.staging\.driftstack\.dev`\./,
+      /- \*\*Staging on main\*\*: every commit to main is a candidate to live on `staging\.driftstack\.dev`\./,
     );
     expect(body).toMatch(
       /- \*\*Production on tag\*\*: production cuts are deliberate\. The founder reviews \+ tags `server-vX\.Y\.Z`;/,

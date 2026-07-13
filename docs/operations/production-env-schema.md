@@ -49,10 +49,14 @@ DASHBOARD_ORIGIN=https://app.driftstack.dev
 For staging:
 
 ```
-AUTH_VERIFY_EMAIL_URL=https://app-staging.driftstack.dev/auth/verify-email
-…
-DASHBOARD_ORIGIN=https://app-staging.driftstack.dev
+DASHBOARD_ORIGIN=https://staging.driftstack-customer-dashboard.pages.dev
 ```
+
+Leave the three `AUTH_*_URL` overrides unset unless a route genuinely differs;
+the server derives the staging verify-email, magic-link, and password-reset URLs
+from `DASHBOARD_ORIGIN`. The former `app-staging.driftstack.dev` placeholder has
+no DNS record and must not be used unless that custom domain is deliberately
+provisioned and passes DNS, TLS, browser, and GUI capability acceptance first.
 
 `AUTH_EXPOSE_DEBUG_TOKEN` MUST stay unset / false in production. Local dev only.
 
@@ -144,7 +148,7 @@ When provisioning a fresh production environment from zero, the order:
 1. Hetzner VMs (V-278 founder runbook).
 2. Neon DB → `DATABASE_URL`.
 3. Upstash Redis → `REDIS_URL`.
-4. Cloudflare DNS for `api.driftstack.dev` + `api.staging.driftstack.dev` → CF Pages projects (V-259 founder runbook).
+4. Cloudflare DNS for `api.driftstack.dev` + `staging.driftstack.dev` → the production and staging API ingress.
 5. Cloudflare R2 buckets → `R2_*`.
 6. Postmark → `POSTMARK_*`.
 7. Sentry → `SENTRY_*`.

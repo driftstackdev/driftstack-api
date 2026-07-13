@@ -71,11 +71,17 @@ describe('W553.B /docs/operations/production-env-schema.md content parity', () =
     );
     expect(body).toMatch(/DASHBOARD_ORIGIN=https:\/\/app\.driftstack\.dev/);
     expect(body).toMatch(
+      /DASHBOARD_ORIGIN=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev/,
+    );
+    expect(body).toMatch(/Leave the three `AUTH_\*_URL` overrides unset/);
+    expect(body).toMatch(/former `app-staging\.driftstack\.dev` placeholder has/);
+    expect(body).toMatch(
       /`DASHBOARD_ORIGIN` is the V-266 browser-OAuth flow's launch surface — the GUI client opens `\$\{dashboardOrigin\}\/cli\/authorize\?code=…`\.|`DASHBOARD_ORIGIN` is the V-266 browser-OAuth flow's launch surface/,
     );
     expect(body).toMatch(
       /`AUTH_EXPOSE_DEBUG_TOKEN` MUST stay unset \/ false in production\. Local dev only\./,
     );
+    expect(body).not.toMatch(/^DASHBOARD_ORIGIN=https:\/\/app-staging\.driftstack\.dev$/m);
   });
 
   it("Stripe live-mode + BillingService wiring framing pinned: 'STRIPE_SECRET_KEY=sk_live_…' + 'STRIPE_WEBHOOK_SECRET=whsec_…' + 'DRIFTSTACK_TIER_PRICE_IDS=trial_pack:price_…|solo_manual:price_…' + '19 IDs per ADR-004' + 'STRIPE_TRIAL_PACK_PRICE_ID=price_…' + '**Live-mode keys**: per the `stripe_credential_handling` rule, live `sk_live_…` keys go via SSH-write to Hetzner only — never via `gh secret set` from a chat-readable terminal, never in a PR description.' + 'Test-mode keys (`sk_test_…`) for staging are fine in `DEPLOY_DOTENV_BASE64`.' + 'When `STRIPE_SECRET_KEY` + `DRIFTSTACK_TIER_PRICE_IDS` + `STRIPE_TRIAL_PACK_PRICE_ID` are all set, the BillingService wires' + 'When any is unset, the routes don't register (pre-launch state) and the bootstrap log emits a `BillingService NOT wired` warning.' — pinned so the sk_live_* + whsec_* + 19-ADR-004-price-IDs + SSH-write-only + sk_test_*-staging-OK + 3-var-BillingService-wire + BillingService-NOT-wired-warning commitment survives", () => {

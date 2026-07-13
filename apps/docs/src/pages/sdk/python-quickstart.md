@@ -36,7 +36,7 @@ import os
 from driftstack import Driftstack
 
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
-# Optional: base_url="https://api.staging.driftstack.dev"
+# Optional: base_url="https://staging.driftstack.dev"
 ```
 
 Async (FastAPI / Starlette / asyncio scripts):

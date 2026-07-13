@@ -52,7 +52,7 @@ describe('docs sdk/go-quickstart content parity', () => {
   });
 
   it('constructor options pinned: WithBaseURL (staging/self-hosted override) + WithHTTPClient (instrumented client for OTel/retries). Drift to dropping either would orphan customers from staging-vs-prod swaps and from instrumented-transport injection', () => {
-    expect(body).toMatch(/driftstack\.WithBaseURL\("https:\/\/api\.staging\.driftstack\.dev"\)/);
+    expect(body).toMatch(/driftstack\.WithBaseURL\("https:\/\/staging\.driftstack\.dev"\)/);
     expect(body).toMatch(/driftstack\.WithHTTPClient\(myInstrumentedHTTPClient\)/);
     expect(body).toMatch(/OpenTelemetry, retries, etc\./);
   });

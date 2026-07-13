@@ -78,7 +78,7 @@ describe('W513.A apps/marketing-site/src/pages/docs/cli-quickstart.astro content
     expect(body).toMatch(/driftstack login --profile team-prod/);
     expect(body).toMatch(/driftstack --profile team-prod sessions list/);
     expect(body).toMatch(/driftstack config use-profile team-prod/);
-    expect(body).toMatch(/--base-url https:\/\/staging-api\.driftstack\.dev/);
+    expect(body).toMatch(/--base-url https:\/\/staging\.driftstack\.dev/);
   });
 
   it("--json + exit-code framing pinned: 'Add --json to any command to get the raw API response. Errors go to stderr; exit code 0 on success, non-zero on any HTTP error.' — pinned so the --json + stderr-routing + 0/non-zero exit-code contract survives (drift to dropping the exit-code contract would break shell-script integrations)", () => {
@@ -121,8 +121,8 @@ describe('W513.A apps/marketing-site/src/pages/docs/cli-quickstart.astro content
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/">\/docs\/api-quickstart<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/api-keys">\/docs\/api-keys<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/sessions">\/docs\/sessions<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/api-keys\/">\/docs\/api-keys<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sessions\/">\/docs\/sessions<\/a>/);
   });
 
   it('Support 2-channel framing: github.com/driftstackdev/driftstack-api/issues for CLI bugs + developers@driftstack.dev for auth-flow — pinned so the 2-channel routing stays consistent (drift to a different repo URL would create marketing↔GitHub divergence)', () => {

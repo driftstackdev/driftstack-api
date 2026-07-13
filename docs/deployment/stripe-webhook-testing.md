@@ -68,7 +68,7 @@ Verify against your local server log:
 Once staging has a Hetzner host + a real public URL:
 
 1. Create a **test-mode** webhook endpoint in the Stripe Dashboard
-   pointed at `https://api.staging.driftstack.dev/v1/webhooks/stripe`.
+   pointed at `https://staging.driftstack.dev/v1/webhooks/stripe`.
 2. Copy the signing secret. SSH into the staging host and write it
    to the staging .env (`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_...`)
    per the locked stripe-credential-handling memory — never paste

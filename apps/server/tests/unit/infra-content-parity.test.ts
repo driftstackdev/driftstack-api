@@ -462,7 +462,7 @@ describe('W614 infra/ content parity', () => {
     expect(existsSync(I('env-templates/production.env.template'))).toBe(true);
   });
 
-  it('env-templates/staging.env.template: V-278.F mirror + isolated Neon + REDIS_KEY_PREFIX=stg: + driftstack-staging-* R2 + SENTRY_ENVIRONMENT=staging + SENTRY_TRACES_SAMPLE_RATE=1.0 + DIFFERENT-from-prod auth secrets + staging.driftstack.dev DASHBOARD_BASE_URL pinned', () => {
+  it('env-templates/staging.env.template: V-278.F mirror + isolated services + different auth secrets + live staging API/dashboard/CORS topology pinned', () => {
     const body = read(I('env-templates/staging.env.template'));
     expect(body).toMatch(/^# V-278\.F — staging \.env template\.$/m);
     expect(body).toMatch(/^# Mirrors production\.env\.template\. V-278\.K split Postgres into a$/m);
@@ -489,8 +489,16 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=1\.0$/m);
     expect(body).toMatch(/Stripe \(TEST keys; same as prod pre-launch\)/);
     expect(body).toMatch(/Auth secrets \(DIFFERENT from prod\)/);
-    expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.staging\.driftstack\.dev$/m);
-    expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+    expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+    expect(body).toMatch(
+      /^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
+    );
+    expect(body).toMatch(
+      /^DASHBOARD_ORIGIN=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
+    );
+    expect(body).toMatch(
+      /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+    );
     expect(existsSync(I('env-templates/staging.env.template'))).toBe(true);
   });
 
@@ -588,20 +596,24 @@ describe('W614 infra/ content parity', () => {
       // which crashed config.ts's boot-time zod validation).
       expect(body).toMatch(/^MFA_ENCRYPTION_KEY=[A-Za-z0-9+/]{43}=$/m);
       expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
-      expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.staging\.driftstack\.dev$/m);
-      expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+      expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+      expect(body).toMatch(
+        /^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
+      );
       // Required by config.ts's boot-time guard (NODE_ENV=production refuses
       // to boot without it) — missing here since 2026-05-12 crashed staging
       // in a restart loop until fixed 2026-07-01. See docs/internal/
-      // 2026-05-26-staging-hostname-inconsistency.md: app-staging.driftstack.dev
-      // doesn't resolve in DNS yet (separate, still-open external-config gap;
-      // this value at least satisfies the boot guard).
-      expect(body).toMatch(/^DASHBOARD_ORIGIN=https:\/\/app-staging\.driftstack\.dev$/m);
+      // The stable Pages branch alias is the verified staging launch surface.
+      // Do not seed the unresolved app-staging placeholder merely to satisfy
+      // the boot guard: activation URLs must also be DNS/TLS/browser reachable.
+      expect(body).toMatch(
+        /^DASHBOARD_ORIGIN=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
+      );
       expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
       expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
       expect(body).toMatch(/^TRUST_PROXY=1$/m);
       expect(body).toMatch(
-        /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+        /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
       );
       expect(existsSync(I('env-templates/staging.env'))).toBe(true);
     },

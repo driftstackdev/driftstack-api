@@ -149,7 +149,7 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
   it('CRITICAL Go WithBaseURL + WithHTTPClient option-pattern framing pinned. Drift to a different option name would break Go-SDK consumer customization.', () => {
     const p = read(GO_PAGE);
 
-    expect(p).toMatch(/driftstack\.WithBaseURL\("https:\/\/api\.staging\.driftstack\.dev"\)/);
+    expect(p).toMatch(/driftstack\.WithBaseURL\("https:\/\/staging\.driftstack\.dev"\)/);
     expect(p).toMatch(/driftstack\.WithHTTPClient\(myInstrumentedHTTPClient\)/);
   });
 

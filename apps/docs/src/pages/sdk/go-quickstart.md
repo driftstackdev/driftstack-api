@@ -53,7 +53,7 @@ func main() {
 ```go
 client := driftstack.New(
     os.Getenv("DRIFTSTACK_API_KEY"),
-    driftstack.WithBaseURL("https://api.staging.driftstack.dev"),
+    driftstack.WithBaseURL("https://staging.driftstack.dev"),
     driftstack.WithHTTPClient(myInstrumentedHTTPClient), // OpenTelemetry, retries, etc.
 )
 ```

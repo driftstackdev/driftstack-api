@@ -33,7 +33,9 @@
       "allow": [
         { "url": "http://localhost:5173/cli/authorize**" },
         { "url": "https://app.driftstack.dev/cli/authorize**" },
-        { "url": "https://app-staging.driftstack.dev/cli/authorize**" }
+        {
+          "url": "https://staging.driftstack-customer-dashboard.pages.dev/cli/authorize**"
+        }
       ]
     }
   ]

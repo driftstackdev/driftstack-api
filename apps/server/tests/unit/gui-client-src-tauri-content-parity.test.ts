@@ -150,8 +150,17 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('src/lib.rs'))).toBe(true);
   });
 
-  it('capabilities/default.json: identifier=default + windows=[main] + 9 core/store permissions (incl. core:window:allow-start-dragging for the custom title-bar drag region) + fs:scope $APPDATA/recordings/** + $DOWNLOAD/** + 7 fs allow-* + updater:default + shell:allow-open 3-URL allow-list (localhost:5173 + app + app-staging) pinned', () => {
+  it('capabilities/default.json: identifier=default + windows=[main] + 9 core/store permissions (incl. core:window:allow-start-dragging for the custom title-bar drag region) + fs:scope $APPDATA/recordings/** + $DOWNLOAD/** + 7 fs allow-* + updater:default + exact shell:allow-open activation URL allow-list pinned', () => {
     const body = read(T('capabilities/default.json'));
+    const capability = JSON.parse(body) as {
+      permissions: Array<
+        | string
+        | {
+            identifier: string;
+            allow?: Array<{ url?: string }>;
+          }
+      >;
+    };
     expect(body).toMatch(/"\$schema": "\.\.\/gen\/schemas\/desktop-schema\.json"/);
     expect(body).toMatch(/"identifier": "default"/);
     expect(body).toMatch(
@@ -187,9 +196,21 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"updater:default"/);
     expect(body).toMatch(/"process:default"/);
     expect(body).toMatch(/"identifier": "shell:allow-open"/);
-    expect(body).toMatch(/"url": "http:\/\/localhost:5173\/cli\/authorize\*\*"/);
-    expect(body).toMatch(/"url": "https:\/\/app\.driftstack\.dev\/cli\/authorize\*\*"/);
-    expect(body).toMatch(/"url": "https:\/\/app-staging\.driftstack\.dev\/cli\/authorize\*\*"/);
+    const shellOpen = capability.permissions.find(
+      (permission) =>
+        typeof permission !== 'string' && permission.identifier === 'shell:allow-open',
+    );
+    expect(shellOpen).toEqual({
+      identifier: 'shell:allow-open',
+      allow: [
+        { url: 'http://localhost:5173/cli/authorize**' },
+        { url: 'https://app.driftstack.dev/cli/authorize**' },
+        {
+          url: 'https://staging.driftstack-customer-dashboard.pages.dev/cli/authorize**',
+        },
+      ],
+    });
+    expect(body).not.toMatch(/app-staging\.driftstack\.dev/);
     expect(existsSync(T('capabilities/default.json'))).toBe(true);
   });
 

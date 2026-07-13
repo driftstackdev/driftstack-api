@@ -48,11 +48,11 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
     );
   });
 
-  it("T-24h pre-flight section framing pinned: '## T-24h: Pre-flight checks' + '### Backend / API' + '`https://api.staging.driftstack.dev/health` returns 200 with JSON.' + '`https://api.driftstack.dev/health` returns 200 with JSON.' + '### Marketing site / dashboard / docs' + '`https://app.driftstack.dev/signup` form posts; verification-email send works' + '### Stripe' + 'Stripe live-mode dashboard shows the 19 ADR-004 prices configured. (1 trial pack + 8 paid tiers × 2 periods = 17, plus 2 enterprise = 19. If a tier-period combo is missing, it can't be checkout-targeted.)' + '`STRIPE_SECRET_KEY` in production .env is `sk_live_…` (NOT `sk_test_…`).' + '### GUI client' + '### Smoke test (full happy path)' — pinned so the T-24h-Pre-flight + Backend/API + Marketing/Dashboard/Docs + Stripe-19-price-inventory + sk_live-not-sk_test + GUI-client + Smoke-test commitment survives", () => {
+  it('T-24h pre-flight section framing pinned: live staging/production APIs + marketing/dashboard/docs + Stripe inventory/live-key + GUI + full smoke', () => {
     expect(body).toMatch(/## T-24h: Pre-flight checks/);
     expect(body).toMatch(/### Backend \/ API/);
     expect(body).toMatch(
-      /- \[ \] `https:\/\/api\.staging\.driftstack\.dev\/health` returns 200 with JSON\./,
+      /- \[ \] `https:\/\/staging\.driftstack\.dev\/health` returns 200 with JSON\./,
     );
     expect(body).toMatch(
       /- \[ \] `https:\/\/api\.driftstack\.dev\/health` returns 200 with JSON\./,

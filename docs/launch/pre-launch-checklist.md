@@ -196,7 +196,7 @@ Remaining, in priority order:
 1. **Hetzner two-VM provisioning** (V-278 runbook, ~20-30 min) — unblocks everything backend.
 2. **Cloudflare Pages 4 projects + DNS** (V-259 runbook, ~20 min) — unblocks marketing / dashboard / docs / admin deploys.
 3. **Neon + Upstash + R2 + Postmark + server-side Sentry DSN populated in production .env** (V-278 production-env-schema, ~30-45 min) — unblocks first staging deploy. Server-side `SENTRY_DSN` is part of this batch (lands via SSH-write in `DEPLOY_DOTENV_BASE64`); GUI-client `VITE_SENTRY_DSN` already set above.
-4. **First push-to-main triggers staging deploy** — verify `https://api.staging.driftstack.dev/health` returns 200.
+4. **First push-to-main triggers staging deploy** — verify `https://staging.driftstack.dev/health` returns 200.
 5. **First `server-v0.1.0` tag** — verify production deploy via tag-pipeline (canonical per V-283 release policy).
 6. **Apple Developer cert + Tauri release setup** (~$99/yr ongoing + ~30 min one-time) — unblocks signed macOS builds.
 7. **First `gui-v0.1.0` tag** — produces signed binaries; can ship `.AppImage` first if Apple cert not yet set up.

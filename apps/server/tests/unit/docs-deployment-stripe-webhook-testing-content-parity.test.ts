@@ -74,7 +74,7 @@ describe('W554.C /docs/deployment/stripe-webhook-testing.md content parity', () 
     expect(body).toMatch(/from Stripe's network to our endpoint\./);
   });
 
-  it("Local + Staging procedure framing pinned: '## Local development — `stripe listen`' + 'stripe listen --forward-to http://localhost:3000/v1/webhooks/stripe' + 'Set this in your .env as STRIPE_WEBHOOK_SIGNING_SECRET, restart server.' + 'stripe trigger customer.subscription.created' + 'stripe trigger invoice.paid' + '## Staging environment' + 'Create a **test-mode** webhook endpoint in the Stripe Dashboard pointed at `https://api.staging.driftstack.dev/v1/webhooks/stripe`.' + 'SSH into the staging host and write it to the staging .env (`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_...`) per the locked stripe-credential-handling memory — never paste webhook secrets into chat or PR diffs.' — pinned so the stripe-listen-forward-to-localhost + 4-trigger-event-inventory + test-mode-api.staging-driftstack-dev + SSH-write-never-chat-or-PR commitment survives", () => {
+  it("Local + Staging procedure framing pinned: '## Local development — `stripe listen`' + 'stripe listen --forward-to http://localhost:3000/v1/webhooks/stripe' + 'Set this in your .env as STRIPE_WEBHOOK_SIGNING_SECRET, restart server.' + 'stripe trigger customer.subscription.created' + 'stripe trigger invoice.paid' + '## Staging environment' + 'Create a **test-mode** webhook endpoint in the Stripe Dashboard pointed at `https://staging.driftstack.dev/v1/webhooks/stripe`.' + 'SSH into the staging host and write it to the staging .env (`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_...`) per the locked stripe-credential-handling memory — never paste webhook secrets into chat or PR diffs.' — pinned so the live-staging-webhook + SSH-write-never-chat-or-PR commitment survives", () => {
     expect(body).toMatch(/## Local development — `stripe listen`/);
     expect(body).toMatch(
       /stripe listen --forward-to http:\/\/localhost:3000\/v1\/webhooks\/stripe/,
@@ -86,9 +86,7 @@ describe('W554.C /docs/deployment/stripe-webhook-testing.md content parity', () 
     expect(body).toMatch(/stripe trigger invoice\.paid/);
     expect(body).toMatch(/## Staging environment/);
     expect(body).toMatch(/Create a \*\*test-mode\*\* webhook endpoint in the Stripe Dashboard/);
-    expect(body).toMatch(
-      /pointed at `https:\/\/api\.staging\.driftstack\.dev\/v1\/webhooks\/stripe`/,
-    );
+    expect(body).toMatch(/pointed at `https:\/\/staging\.driftstack\.dev\/v1\/webhooks\/stripe`/);
     expect(body).toMatch(/SSH into the staging host and write it/);
     expect(body).toMatch(/to the staging \.env \(`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_\.\.\.`\)/);
     expect(body).toMatch(/per the locked stripe-credential-handling memory — never paste/);

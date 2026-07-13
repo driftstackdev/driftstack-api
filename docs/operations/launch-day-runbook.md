@@ -15,7 +15,7 @@ End-to-end choreography for "launch day" — the day you flip from pre-launch / 
 
 ### Backend / API
 
-- [ ] `https://api.staging.driftstack.dev/health` returns 200 with JSON.
+- [ ] `https://staging.driftstack.dev/health` returns 200 with JSON.
 - [ ] `https://api.driftstack.dev/health` returns 200 with JSON.
 - [ ] Sentry staging + production environments populated with at least one synthetic event.
 - [ ] `curl https://api.driftstack.dev/v1/status` returns the public-status JSON (sub-processor health roll-up).

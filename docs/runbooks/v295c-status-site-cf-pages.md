@@ -27,7 +27,7 @@ takes over; future commits to `main` redeploy the static bundle from
    - Root directory: leave empty (the project is a workspace)
 5. **Environment variables** (production + preview):
    - `PUBLIC_API_BASE_URL` = `https://api.driftstack.dev` (production)
-     and `https://api.staging.driftstack.dev` (preview, once staging
+     and `https://staging.driftstack.dev` (preview, once staging
      exists; for now leave preview = production).
    - `PUBLIC_STATUS_R2_URL` = the public-readable URL of the R2 status
      snapshot, e.g. `https://r2-public.driftstack.dev/status/incidents-public.json`.

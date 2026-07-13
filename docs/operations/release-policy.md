@@ -13,7 +13,7 @@ The repo has two server-side deploy workflows (V-278). Both exist on `main` and 
 
 ## Why split
 
-- **Staging on main**: every commit to main is a candidate to live on `api.staging.driftstack.dev`. Catches integration regressions immediately + gives the founder a place to smoke-test against real infra before any production cut. No approval gate; if main is green, staging gets it.
+- **Staging on main**: every commit to main is a candidate to live on `staging.driftstack.dev`. Catches integration regressions immediately + gives the founder a place to smoke-test against real infra before any production cut. No approval gate; if main is green, staging gets it.
 - **Production on tag**: production cuts are deliberate. The founder reviews + tags `server-vX.Y.Z`; the tag-triggered workflow builds the image at exactly the tagged commit + deploys to `api.driftstack.dev`. The production GitHub Environment's reviewer gate still applies as the final approval before the SSH-deploy step runs.
 
 ## What about the `deploy-production` job in `deploy.yml`?
