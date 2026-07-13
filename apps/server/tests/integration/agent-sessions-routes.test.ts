@@ -2624,3 +2624,51 @@ describe('#122 — read:sessions floor on GET /v1/agent-sessions (list)', () => 
     expect((await list(fx)).statusCode).toBe(200);
   });
 });
+
+// Transcript entries include customer/operator free text and structured plans.
+// Authentication alone is insufficient: a key scoped only to another resource
+// must not become an account-wide transcript reader. Use a missing id so an
+// authorized request terminates as a normal 404 before the SSE socket opens.
+describe('read:sessions floor on GET /v1/agent-sessions/:id/transcript', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  const missingTranscript = (fxArg: TestAppFixture, queryToken = false) =>
+    fxArg.app.inject({
+      method: 'GET',
+      url: queryToken
+        ? `/v1/agent-sessions/agt_inmem_99999999/transcript?ds_token=${encodeURIComponent(fxArg.plaintext)}`
+        : '/v1/agent-sessions/agt_inmem_99999999/transcript',
+      ...(queryToken ? {} : { headers: { authorization: `Bearer ${fxArg.plaintext}` } }),
+    });
+
+  it.each(['read:webhooks', 'write:sessions'] as const)(
+    '403 for unrelated/insufficient scope %s before opening SSE',
+    async (scope) => {
+      fx = await buildTestApp({ enableAgentRuntime: true, scopes: [scope] });
+      const res = await missingTranscript(fx);
+      expect(res.statusCode).toBe(403);
+      expect(res.headers['content-type'] ?? '').not.toContain('text/event-stream');
+      expect(res.json<{ detail: string }>().detail).toContain('read:sessions');
+    },
+  );
+
+  it('applies the same scope floor to the EventSource ds_token fallback', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read:webhooks'] });
+    const res = await missingTranscript(fx, true);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:sessions');
+  });
+
+  it.each(['read:sessions', 'read', 'account_owner'] as const)(
+    'allows scope %s through to the ownership/not-found gate',
+    async (scope) => {
+      fx = await buildTestApp({ enableAgentRuntime: true, scopes: [scope] });
+      const res = await missingTranscript(fx);
+      expect(res.statusCode).toBe(404);
+      expect(res.headers['content-type'] ?? '').not.toContain('text/event-stream');
+    },
+  );
+});

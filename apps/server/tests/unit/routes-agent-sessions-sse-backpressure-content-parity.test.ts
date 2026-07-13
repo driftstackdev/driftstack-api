@@ -43,4 +43,20 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
       /let closed = false;\s*\n?\s*const cleanup = \(\): void => \{[\s\S]*?if \(closed\) return;\s*\n?\s*closed = true;\s*\n?\s*clearInterval\(heartbeat\);\s*\n?\s*unsubscribe\(\);\s*\n?\s*reply\.raw\.end\(\);/,
     );
   });
+
+  it('requires the granular session-read scope after EventSource authentication', () => {
+    expect(body).toMatch(
+      /app\.requireAuthEventSource,\s*\n?\s*app\.requireScope\('read:sessions'\),\s*\n?\s*app\.rateLimit\('global'\)/,
+    );
+  });
+
+  it('projects both replayed and live entries through the shared secret redactor', () => {
+    expect(body).toMatch(/entry: publicTranscriptEntry\(entry\)/);
+    expect(body).toMatch(/entry: publicTranscriptEntry\(event\.entry\)/);
+  });
+
+  it('projects both plan and nested result intents in the message response', () => {
+    expect(body).toMatch(/intents: plan\.intents\.map\(publicAgentIntent\)/);
+    expect(body).toMatch(/results: result\.executor\.results\.map\(publicIntentResult\)/);
+  });
 });

@@ -17,7 +17,7 @@ import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/
 import { suggestRecipeMetadata, type RecipesRepo, type RecipeRecord } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { AgentIntent } from '../services/agent-decomposer.js';
-import { selectorImpliesSensitiveInput } from '../services/agent-sensitive-input.js';
+import { publicAgentIntent } from '../services/agent-public-redaction.js';
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -68,26 +68,8 @@ interface PublicRecipeDetail extends PublicRecipe {
   intent_log: ReadonlyArray<AgentIntent>;
 }
 
-function publicRecipeIntent(intent: AgentIntent): AgentIntent {
-  if (
-    intent.kind !== 'interact' ||
-    intent.action !== 'type' ||
-    (intent.sensitive !== true &&
-      (intent.selector === undefined || !selectorImpliesSensitiveInput(intent.selector)))
-  ) {
-    return intent;
-  }
-
-  // Work on a copy: the repository record retains the encrypted value used by
-  // the eventual server-side replay path. `value` is optional on the existing
-  // wire type, so omission is backward-compatible for every SDK.
-  const redacted = { ...intent, sensitive: true };
-  delete redacted.value;
-  return redacted;
-}
-
 function publicRecipeDetail(rec: RecipeRecord): PublicRecipeDetail {
-  return { ...publicRecipe(rec), intent_log: rec.intentLog.map(publicRecipeIntent) };
+  return { ...publicRecipe(rec), intent_log: rec.intentLog.map(publicAgentIntent) };
 }
 
 export interface RecipesRoutesDeps {

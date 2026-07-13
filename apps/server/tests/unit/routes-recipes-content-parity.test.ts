@@ -78,15 +78,10 @@ describe('routes/recipes content parity', () => {
   });
 
   it('public detail omits explicit and selector-inferred sensitive type values while preserving the encrypted repository record for server-side replay', () => {
-    expect(body).toMatch(/import \{ selectorImpliesSensitiveInput \}/);
-    expect(body).toMatch(/function publicRecipeIntent\(intent: AgentIntent\): AgentIntent/);
-    expect(body).toMatch(/intent\.kind !== 'interact'/);
-    expect(body).toMatch(/intent\.action !== 'type'/);
-    expect(body).toMatch(/intent\.sensitive !== true/);
-    expect(body).toMatch(/!selectorImpliesSensitiveInput\(intent\.selector\)/);
-    expect(body).toMatch(/const redacted = \{ \.\.\.intent, sensitive: true \};/);
-    expect(body).toMatch(/delete redacted\.value;/);
-    expect(body).toMatch(/rec\.intentLog\.map\(publicRecipeIntent\)/);
+    expect(body).toMatch(
+      /import \{ publicAgentIntent \} from '\.\.\/services\/agent-public-redaction\.js';/,
+    );
+    expect(body).toMatch(/rec\.intentLog\.map\(publicAgentIntent\)/);
   });
 
   it("Disabled-stub customer-facing detail framing pinned: 'Recipes are not yet enabled on this deployment. Once the operator configures the recipe library + agent layer, customers can snapshot a finished agent-session via POST /v1/recipes. See https://docs.driftstack.dev/api/recipes/ for the full flow.' — pinned so the customer-facing-docs-URL contract stays documented (drift to internal handoff/design-doc pointers would leak internal nomenclature to customers; slices 87+88 fix-shape comment is the explicit lock)", () => {

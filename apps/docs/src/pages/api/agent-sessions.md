@@ -328,7 +328,17 @@ desktop apps) can subscribe instead of polling.
 Auth: bearer token via `Authorization: Bearer <token>` header
 OR `?ds_token=<token>` query-string fallback (`EventSource` API
 in browsers doesn't support custom headers; the query-string
-fallback exists for that use case).
+fallback exists for that use case). Account API keys require the
+`read:sessions` scope; broad `read` and `account_owner` credentials
+satisfy that floor. A key scoped only to another resource cannot open
+the stream.
+
+Treat this as a sensitive session-history stream. Free-text user and
+operator `body` fields are returned verbatim to authorized readers.
+For structured `interact:type` intents, password/OTP/PIN/card/API-key
+values marked `sensitive: true` (or inferred from a sensitive selector)
+are omitted from SSE; the encrypted server-side copy remains available
+only to the runtime for exact plan resume.
 
 Event types emitted:
 
@@ -349,7 +359,8 @@ Event types emitted:
     executed (the [recipes route](/api/recipes/) flatMaps these
     into `intent_log` snapshots — see the recipe docs for how a
     snapshotted intent_log replays without re-running the
-    decomposer).
+    decomposer). Sensitive type intents retain their selector,
+    ordering, and `sensitive: true` marker but omit `value`.
 
 Resume semantics (RFC 6202 + EventSource spec):
 

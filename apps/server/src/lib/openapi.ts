@@ -3313,7 +3313,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'SSE stream of agent-session transcript events (text/event-stream). Supports Last-Event-ID resume: send the last entry index seen and the server replays subsequent entries before live-streaming new appends.',
+          'SSE stream of agent-session transcript events (text/event-stream). Requires read:sessions (broad read/account_owner credentials satisfy it). Supports Last-Event-ID resume: send the last entry index seen and the server replays subsequent entries before live-streaming new appends. Free-text bodies are returned verbatim to authorized readers; sensitive type intents omit value while retaining selector/order/sensitive metadata.',
         content: {
           'text/event-stream': {
             schema: z.string().openapi('AgentSessionTranscriptStream', {

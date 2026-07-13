@@ -156,6 +156,13 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/replay is exclusive/);
   });
 
+  it('documents the transcript scope floor and sensitive-intent projection honestly', () => {
+    expect(body).toMatch(/`read:sessions` scope/);
+    expect(body).toMatch(/Free-text user and\s*\n?\s*operator `body` fields are returned verbatim/);
+    expect(body).toMatch(/sensitive selector\)\s*\n?\s*are omitted from SSE/);
+    expect(body).toMatch(/Sensitive type intents retain their selector,[\s\S]*omit `value`/);
+  });
+
   // LK arc — Live video (LiveKit) surface documented.
   it('documents the LK.3 token-mint endpoint + 24h TTL + per-Mac signing flow', () => {
     expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/livekit-token/);

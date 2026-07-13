@@ -33,6 +33,11 @@ import {
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
+import {
+  publicAgentIntent,
+  publicIntentResult,
+  publicTranscriptEntry,
+} from '../services/agent-public-redaction.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { ProfilesService } from '../services/profiles.js';
 import type { AccountAuthRepo } from '../services/auth.js';
@@ -3083,7 +3088,13 @@ export function registerAgentSessionsRoutes(
       // route also accepts the bearer token via `?ds_token=` (documented
       // contract — apps/docs api/agent-sessions). requireAuthEventSource
       // reads the query fallback; the header still wins when present.
-      { preHandler: [app.requireAuthEventSource, app.rateLimit('global')] },
+      {
+        preHandler: [
+          app.requireAuthEventSource,
+          app.requireScope('read:sessions'),
+          app.rateLimit('global'),
+        ],
+      },
       async (req, reply) => {
         const ctx = requireCtx(req);
         const session = await sessions.get(req.params.id);
@@ -3112,7 +3123,9 @@ export function registerAgentSessionsRoutes(
           if (entry === undefined) continue;
           reply.raw.write(`id: ${i.toString()}\n`);
           reply.raw.write('event: transcript.entry\n');
-          reply.raw.write(`data: ${JSON.stringify({ index: i, entry })}\n\n`);
+          reply.raw.write(
+            `data: ${JSON.stringify({ index: i, entry: publicTranscriptEntry(entry) })}\n\n`,
+          );
         }
 
         const liveSent = new Set<number>();
@@ -3136,7 +3149,7 @@ export function registerAgentSessionsRoutes(
           reply.raw.write(`id: ${event.index.toString()}\n`);
           reply.raw.write('event: transcript.entry\n');
           reply.raw.write(
-            `data: ${JSON.stringify({ index: event.index, entry: event.entry })}\n\n`,
+            `data: ${JSON.stringify({ index: event.index, entry: publicTranscriptEntry(event.entry) })}\n\n`,
           );
           if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
         });
@@ -4113,8 +4126,8 @@ export function registerAgentSessionsRoutes(
             sessionLivenessStore,
             sessionCapabilityReportStore,
           ),
-          intents: plan.intents,
-          results: result.executor.results,
+          intents: plan.intents.map(publicAgentIntent),
+          results: result.executor.results.map(publicIntentResult),
           ok: result.executor.ok,
           ...(usage !== undefined ? { usage } : {}),
         };
