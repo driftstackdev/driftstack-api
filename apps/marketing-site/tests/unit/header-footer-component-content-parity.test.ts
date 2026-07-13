@@ -115,10 +115,17 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
   });
 
-  it('mobile hamburger: CSS-only <details>/<summary> (no client-side JS)', () => {
-    expect(body).toMatch(/<details class="relative">/);
+  it('mobile hamburger: native <details>/<summary> with an explicit initial accessibility state', () => {
+    expect(body).toMatch(/<details class="relative" data-mobile-nav>/);
     expect(body).toMatch(/<summary[\s\S]*?aria-label="Open navigation menu"/);
+    expect(body).toMatch(/<summary[\s\S]*?aria-expanded="false"/);
     expect(body).toMatch(/\[&::-webkit-details-marker\]:hidden/);
+  });
+
+  it('theme toggle exposes the initial dark-mode state as an unpressed Light theme toggle', () => {
+    expect(body).toMatch(/data-theme-toggle[\s\S]*?aria-label="Light theme"/);
+    expect(body).toMatch(/data-theme-toggle[\s\S]*?aria-pressed="false"/);
+    expect(body).toMatch(/data-theme-toggle[\s\S]*?title="Switch to light theme"/);
   });
 
   it('mobile CTA: "Start free" (shorter mobile label, same /pricing#free target)', () => {
@@ -234,7 +241,9 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
   it('S13 (2026-07-03): footer bottom row carries the "No trackers on this site." statement + a [data-theme-toggle] mode button (header has the primary one; wiring is BaseLayout-delegated)', () => {
     expect(body).toMatch(/No trackers on this site\./);
     expect(body).toMatch(/data-theme-toggle/);
-    expect(body).toMatch(/aria-label="Toggle light and dark theme"/);
+    expect(body).toMatch(/aria-label="Light theme"/);
+    expect(body).toMatch(/aria-pressed="false"/);
+    expect(body).toMatch(/title="Switch to light theme"/);
   });
 
   it('dynamic copyright: "© {year} Driftstack. All rights reserved."', () => {

@@ -131,7 +131,20 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/if \(m === 'light' \|\| m === 'dark'\) \{/);
     expect(body).toMatch(/e\.target\.closest\('\[data-theme-toggle\]'\)/);
     expect(body).toMatch(/localStorage\.setItem\('ds_theme_mode', next\);/);
+    expect(body).toMatch(/function syncThemeControls\(mode\)/);
+    expect(body).toMatch(/control\.setAttribute\('aria-pressed', light \? 'true' : 'false'\)/);
+    expect(body).toMatch(/light \? 'Switch to dark theme' : 'Switch to light theme'/);
     expect(body).not.toMatch(/<script is:inline>\s*\{`/);
+  });
+
+  it('progressively enhances the native mobile menu with state sync and expected dismissal paths', () => {
+    expect(body).toContain("document.querySelector('[data-mobile-nav]')");
+    expect(body).toMatch(/menu\.addEventListener\('toggle', syncMobileMenu\)/);
+    expect(body).toMatch(/trigger\.setAttribute\('aria-expanded', expanded \? 'true' : 'false'\)/);
+    expect(body).toMatch(/expanded \? 'Close navigation menu' : 'Open navigation menu'/);
+    expect(body).toMatch(/event\.key !== 'Escape' \|\| !menu\.open/);
+    expect(body).toMatch(/!menu\.contains\(event\.target\)/);
+    expect(body).toMatch(/trigger\.focus\(\)/);
   });
 
   it('self-hosted font preloads (Fleet v2 port 2026-07-03): GeistVF + JetBrainsMono-Regular woff2, as="font" + crossorigin, and both files ship in public/fonts/', () => {
