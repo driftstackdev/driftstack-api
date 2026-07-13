@@ -60,6 +60,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const intro = root.querySelector('[data-field="intro"]');
       const signinHint = root.querySelector('[data-field="signin-hint"]');
+      const ACCEPT_TIMEOUT_MS = 15_000;
 
       // Carry the current invite URL (/team/accept?token=…) through
       // sign-in / sign-up as ?next= so the invitee returns here and
@@ -112,6 +113,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), ACCEPT_TIMEOUT_MS);
       fetch(apiBaseUrl + '/v1/team/invites/accept', {
         method: 'POST',
         headers: {
@@ -120,6 +123,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         },
         credentials: 'include',
         body: JSON.stringify({ token: token }),
+        signal: controller.signal,
       })
         .then((r) => {
           if (r.ok) return r.json();
@@ -140,10 +144,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         })
         .catch((err) => {
           showBanner(
-            err && err.message ? err.message : 'Could not accept the invite.',
+            err && err.name === 'AbortError'
+              ? 'Accepting the invite took too long. Check your connection, then reload this page to try again.'
+              : err && err.message
+                ? err.message
+                : 'Could not accept the invite.',
             !!(err && err.needsSignin),
           );
-        });
+        })
+        .finally(() => window.clearTimeout(timeout));
     })();
   </script>
 </DashboardLayout>
