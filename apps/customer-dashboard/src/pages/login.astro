@@ -507,12 +507,30 @@ const apiBaseUrl = resolveApiBaseUrl();
       let mfaChallengeToken = null;
       let mfaUsingRecovery = false;
       let mfaInFlight = false;
+      let mfaOutcomeUnknown = false;
 
       function startMfaChallenge(challengeToken) {
         mfaChallengeToken = challengeToken;
+        mfaOutcomeUnknown = false;
         form.classList.add('hidden');
         mfaForm.classList.remove('hidden');
         if (mfaCodeInput) mfaCodeInput.focus();
+      }
+
+      function recoverFromUnknownMfaOutcome() {
+        mfaOutcomeUnknown = true;
+        mfaChallengeToken = null;
+        if (mfaCodeInput) mfaCodeInput.value = '';
+        if (mfaRecoveryInput) mfaRecoveryInput.value = '';
+        const passwordInput = form.querySelector('#login-password');
+        if (passwordInput) passwordInput.value = '';
+        mfaUsingRecovery = false;
+        if (mfaCodeRow) mfaCodeRow.classList.remove('hidden');
+        if (mfaRecoveryRow) mfaRecoveryRow.classList.add('hidden');
+        if (mfaToggle) mfaToggle.textContent = 'Use a recovery code instead';
+        mfaForm.classList.add('hidden');
+        form.classList.remove('hidden');
+        if (passwordInput) passwordInput.focus();
       }
 
       if (mfaToggle) {
@@ -534,7 +552,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         const MFA_REQUEST_TIMEOUT_MS = 15_000;
         mfaForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
-          if (mfaInFlight) return;
+          if (mfaInFlight || mfaOutcomeUnknown || !mfaChallengeToken) return;
           if (loginInFlight || oauthStartInFlight) return;
           banner.classList.add('hidden');
           const code = mfaCodeInput ? mfaCodeInput.value.trim() : '';
@@ -576,12 +594,17 @@ const apiBaseUrl = resolveApiBaseUrl();
             )
             .then((body) => completeSession(body))
             .catch((err) => {
+              if (controller.signal.aborted) {
+                recoverFromUnknownMfaOutcome();
+                showBanner(
+                  'MFA sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time challenge and created a session whose credential did not reach this browser. Do not submit this challenge or recovery code again. Enter your password below to start a fresh sign-in and MFA challenge.',
+                );
+                return;
+              }
               showBanner(
-                controller.signal.aborted
-                  ? 'Verification took too long. Check your connection and try again.'
-                  : err && err.message
-                    ? err.message
-                    : 'Verification failed. Try again.',
+                err && err.message
+                  ? err.message
+                  : 'Verification failed. Try again.',
               );
             })
             .finally(() => {

@@ -77,15 +77,20 @@ describe('W369.B customer-dashboard /login page content parity', () => {
 
   it('MFA verification has a real single-flight lease and bounded network deadline', () => {
     expect(body).toMatch(/let mfaInFlight = false/);
+    expect(body).toMatch(/let mfaOutcomeUnknown = false/);
     expect(body).toMatch(/const MFA_REQUEST_TIMEOUT_MS = 15_000/);
-    expect(body).toMatch(/if \(mfaInFlight\) return/);
+    expect(body).toMatch(
+      /if \(mfaInFlight \|\| mfaOutcomeUnknown \|\| !mfaChallengeToken\) return/,
+    );
     expect(body).toMatch(/mfaInFlight = true/);
     expect(body).toMatch(/mfaSubmit\.textContent = 'Verifying…'/);
     expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), MFA_REQUEST_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
     expect(body).toMatch(/mfaInFlight = false/);
-    expect(body).toMatch(/Verification took too long/);
+    expect(body).toMatch(/function recoverFromUnknownMfaOutcome\(\)/);
+    expect(body).toMatch(/mfaChallengeToken = null/);
+    expect(body).toMatch(/MFA sign-in outcome is unknown after the request timed out/);
   });
 
   it('verification resend has a real single-flight lease and bounded network deadline', () => {

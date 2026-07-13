@@ -187,7 +187,7 @@ describe('login page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MFA_TOKEN');
   });
 
-  it('serializes duplicate MFA submits and recovers after the bounded challenge times out', async () => {
+  it('makes an ambiguous MFA challenge timeout terminal and returns to fresh sign-in', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       requestTimeoutImmediately: true,
       requestTimeoutOnCall: 2,
@@ -210,15 +210,56 @@ describe('login page — local integration', () => {
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
 
     const challengeCalls = fetchCalls.filter((c) => /\/v1\/auth\/mfa\/challenge$/.test(c.url));
     expect(challengeCalls).toHaveLength(1);
     expect(challengeCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(mfaForm.classList.contains('hidden')).toBe(true);
+    const loginForm = window.document.querySelector('[data-form="login"]') as HTMLFormElement;
+    expect(loginForm.classList.contains('hidden')).toBe(false);
+    expect((loginForm.querySelector('#login-password') as HTMLInputElement).value).toBe('');
+    expect(codeInput.value).toBe('');
     const submitBtn = mfaForm.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(submitBtn.disabled).toBe(false);
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
     expect(submitBtn.textContent).toBe('Verify');
-    expect(bannerText(window)).toMatch(/verification took too long.*check your connection/i);
+    expect(bannerText(window)).toMatch(
+      /outcome is unknown.*consumed this one-time challenge.*credential did not reach.*do not submit.*start a fresh sign-in/i,
+    );
+  });
+
+  it('keeps the MFA challenge retryable after an authoritative invalid-code response', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () => json({ mfa_required: true, challenge_token: 'chal_retry' }),
+        () => json({ detail: 'Code is invalid. Try again or use a recovery code.' }, 401),
+        () => json({ session: { token: 'ds_web_MFA_RETRY' } }),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'mfa@example.com', 'secret-password');
+    await flush();
+    const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
+    const codeInput = window.document.querySelector('#login-mfa-code') as HTMLInputElement;
+    codeInput.value = '000000';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(mfaForm.classList.contains('hidden')).toBe(false);
+    expect(bannerText(window)).toMatch(/code is invalid.*try again/i);
+    codeInput.value = '123456';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const challengeCalls = fetchCalls.filter((c) => /\/v1\/auth\/mfa\/challenge$/.test(c.url));
+    expect(challengeCalls).toHaveLength(2);
+    expect(JSON.parse(String(challengeCalls[1]?.init?.body))).toEqual({
+      challenge_token: 'chal_retry',
+      code: '123456',
+    });
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MFA_RETRY');
   });
 
   it('invalid credentials: surfaces the server detail in the banner, stores no token', async () => {
