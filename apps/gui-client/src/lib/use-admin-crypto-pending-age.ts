@@ -4,8 +4,9 @@
 // — requires the `driftstack_internal_admin` scope. Returns the four
 // age buckets + total pending value by currency.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
 export interface AdminPendingAgeBuckets {
@@ -45,35 +46,67 @@ export function useAdminCryptoPendingAge(
   const [state, setState] = useState<AdminPendingAgeState>(
     opts.manual === true ? { kind: 'idle' } : { kind: 'loading' },
   );
+  const requestRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
   const fetcher = useCallback(async (): Promise<void> => {
+    if (inFlightRef.current) return;
     if (!settings.apiKey) {
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
+    inFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    requestRef.current = controller;
     setState({ kind: 'loading' });
     try {
       const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-      const res = await fetch(`${baseUrl}/v1/admin/crypto-orders/pending-age`, {
+      const res = await fetchWithDeadline(`${baseUrl}/v1/admin/crypto-orders/pending-age`, {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'application/json',
         },
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
       const body = (await res.json()) as AdminPendingAgeData;
-      setState({ kind: 'ready', data: body });
+      if (sequence === sequenceRef.current) setState({ kind: 'ready', data: body });
     } catch (err) {
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'error',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Pending-age metrics timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        inFlightRef.current = false;
+      }
     }
   }, [settings.apiKey, settings.baseUrl]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      inFlightRef.current = false;
+    },
+    [settings.apiKey, settings.baseUrl],
+  );
 
   useEffect(() => {
     if (opts.manual === true) return;

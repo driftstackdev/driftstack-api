@@ -70,15 +70,19 @@ describe('W465.C apps/gui-client/src/lib/use-admin-crypto-pending-age.ts content
       /const \[state, setState\] = useState<AdminPendingAgeState>\(\s*\n?\s*opts\.manual === true \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/pending-age`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\/pending-age`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
     );
   });
 
-  it('Tail: !res.ok readApiErrorMessage + ready spread + instance-of-Error catch + useEffect manual gate + useCallback deps [settings.apiKey, settings.baseUrl] (no extra opts deps unlike use-account-cost)', () => {
+  it('Tail: HTTP/ready writes are sequence-gated, active work is dependency/unmount-aborted, and manual gate/dependencies remain exact', () => {
     expect(body).toMatch(
-      /if \(!res\.ok\) \{\s*\n?\s*setState\(\{ kind: 'error', message: await readApiErrorMessage\(res\) \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*const body = \(await res\.json\(\)\) as AdminPendingAgeData;\s*\n?\s*setState\(\{ kind: 'ready', data: body \}\);/,
+      /const message = await readApiErrorMessage\(res\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'error', message \}\);[\s\S]*?if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
     expect(body).toMatch(/\}, \[settings\.apiKey, settings\.baseUrl\]\);/);
+    expect(body).toMatch(
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[settings\.apiKey, settings\.baseUrl\],/,
+    );
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual\]\);/,
     );
