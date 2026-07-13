@@ -65,10 +65,19 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
     );
   });
 
-  it("POST /v1/auth/verify-email contract: body:{token} + credentials:'include' — pinned so the verify endpoint gets just the token (server returns {session, debug_token?} discriminated union) + the credentials-include enables cookie-set on the dual-cookie session pattern", () => {
+  it('POST /v1/auth/verify-email contract: body:{token}, credentials, 15s timeout signal, fixed response mapper, and outcome-unknown recovery — pinned so cookie handoff remains correct without encouraging reuse of an ambiguously consumed one-time token', () => {
+    expect(body).toMatch(/const VERIFY_REQUEST_TIMEOUT_MS = 15_000;/);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ token \}\),\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)/,
+      /const controller = new AbortController\(\);\s*\n?\s*const timeoutId = setTimeout\(\(\) => controller\.abort\(\), VERIFY_REQUEST_TIMEOUT_MS\);/,
     );
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ token \}\),\s*\n?\s*credentials: 'include',\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
+    );
+    expect(body).toMatch(/window\.driftstackResponseError\(r, b\)/);
+    expect(body).toMatch(
+      /if \(controller\.signal\.aborted\) \{\s*\n?\s*verifyOutcomeUnknown = true;/,
+    );
+    expect(body).toMatch(/\.finally\(\(\) => \{\s*\n?\s*clearTimeout\(timeoutId\);/);
   });
 
   it("Post-verify cleanup: sessionStorage.removeItem ds_signup_email + ds_debug_verify_token — pinned so the signup-stage state doesn't bleed into subsequent flows (drift to leaving them would surface stale 'Code sent to old@email' on a returning user who later does a separate signup attempt in the same browser)", () => {
@@ -97,7 +106,7 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
 
   it("60s resend cooldown framing pinned: 'Re-enable after 60s so accidental double-clicks don't burn through the per-IP 3/min cap on the server side.' + setTimeout 60_000 — pinned so the client-side cooldown matches the server's per-IP rate-limit (drift to a shorter cooldown would trip the server 429; drift to no cooldown would burn the budget on a single mis-click)", () => {
     expect(body).toMatch(
-      /\/\/ Re-enable after 60s so accidental double-clicks don't\s*\n?\s*\/\/ burn through the per-IP 3\/min cap on the server side\.\s*\n?\s*window\.setTimeout\(\(\) => \{\s*\n?\s*resendBtn\.disabled = false;\s*\n?\s*\}, 60_000\);/,
+      /\/\/ Re-enable after 60s so accidental double-clicks don't\s*\n?\s*\/\/ burn through the per-IP 3\/min cap on the server side\.\s*\n?\s*resendBtn\.setAttribute\('aria-busy', 'false'\);\s*\n?\s*window\.setTimeout\(\(\) => \{\s*\n?\s*resendInFlight = false;\s*\n?\s*resendBtn\.disabled = false;\s*\n?\s*\}, 60_000\);/,
     );
   });
 
@@ -111,7 +120,7 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
     expect(body).toMatch(/let resendEmail = sessionStorage\.getItem\('ds_signup_email'\);/);
     expect(body).toMatch(/\(await window\.driftstackPrompt\('Email address used at signup:', \{/);
     expect(body).toMatch(
-      /resendEmail = resendEmail\.trim\(\);\s*\n?\s*if \(!resendEmail\) return;/,
+      /resendEmail = resendEmail\.trim\(\);\s*\n?\s*if \(!resendEmail\) \{\s*\n?\s*resendInFlight = false;\s*\n?\s*resendBtn\.disabled = false;\s*\n?\s*resendBtn\.setAttribute\('aria-busy', 'false'\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 

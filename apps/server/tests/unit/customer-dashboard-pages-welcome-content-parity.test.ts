@@ -53,7 +53,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /Upgrade to a paid plan for more concurrency, more profiles, and API\s*\n?\s*access — Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
     );
     expect(body).toMatch(
-      /<a href="\/select-tier" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
+      /<a href="\/select-tier\/" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
     );
   });
 

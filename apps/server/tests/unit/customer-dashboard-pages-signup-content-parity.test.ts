@@ -65,7 +65,7 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
     );
   });
 
-  it("V-267 next= preservation through signup → verify-email redirect: params.get('next') → safeNextPath → verifyUrl = rawNext ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email' — pinned so deep-links from /cli/authorize (and other entry points) preserve their (sanitized, same-origin) continuation target across the 5-step onboarding flow (drift to dropping ?next= would orphan the customer at /verify-email with no path back to their intended destination)", () => {
+  it("V-267 next= preservation through signup → verify-email redirect: params.get('next') → safeNextPath → verificationUrl() — pinned so deep-links from /cli/authorize (and other entry points) preserve their sanitized same-origin continuation target across the onboarding flow", () => {
     expect(body).toMatch(
       /\/\/ V-267 — pass through the \?next= deep link so flows that\s*\n?\s*\/\/ brought the user to signup \(e\.g\. GUI activation at\s*\n?\s*\/\/ \/cli\/authorize\) can resume after verify-email completes\./,
     );
@@ -73,10 +73,11 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
     // (same-origin, unit-tested in safe-next.test.ts) before being forwarded;
     // gated on the RAW presence so /verify-email (no next) stays the default.
     expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
-    expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
+    expect(body).toMatch(/const nextRaw = params\.get\('next'\);/);
     expect(body).toMatch(
-      /const verifyUrl = rawNext\s*\n?\s*\? '\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n?\s*: '\/verify-email';/,
+      /function verificationUrl\(\) \{\s*\n?\s*const next = safeNextPath\(nextRaw, window\.location\.origin\);\s*\n?\s*return nextRaw \? '\/verify-email\?next=' \+ encodeURIComponent\(next\) : '\/verify-email';\s*\n?\s*\}/,
     );
+    expect(body).toMatch(/window\.location\.href = verificationUrl\(\);/);
   });
 
   it("V-269 next= preservation on /login fallback link: nextRaw → loginLink href becomes '/login?next=' + encodeURIComponent(safeNextPath(nextRaw, …)) — pinned so customers who click 'Already have an account? Sign in' from a deep-linked signup still hit their intended (same-origin) destination after sign-in (drift would lose the next= or reopen the open-redirect)", () => {
@@ -87,17 +88,26 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
     );
   });
 
-  it("POST /v1/auth/signup contract: payload {email, password, name?} + credentials:'include' (for V-269 dual-cookie session handoff) — pinned so the post-signup cookie comes back set on the right domain + the optional name shape matches server schema", () => {
+  it('POST /v1/auth/signup contract: payload {email, password, name?}, credentials, 15s timeout signal, fixed response mapper, and outcome-unknown recovery — pinned so cookie handoff remains correct without making an ambiguous timed-out signup safe to repeat', () => {
+    expect(body).toMatch(/const SIGNUP_REQUEST_TIMEOUT_MS = 15_000;/);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/signup', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)/,
+      /const controller = new AbortController\(\);\s*\n?\s*const timeoutId = setTimeout\(\(\) => controller\.abort\(\), SIGNUP_REQUEST_TIMEOUT_MS\);/,
     );
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/signup', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*credentials: 'include',\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\)/,
+    );
+    expect(body).toMatch(/window\.driftstackResponseError\(r, b\)/);
+    expect(body).toMatch(
+      /if \(controller\.signal\.aborted\) \{\s*\n?\s*showSignupOutcomeUnknown\(payload\.email\);\s*\n?\s*return;/,
+    );
+    expect(body).toMatch(/\.finally\(\(\) => \{\s*\n?\s*clearTimeout\(timeoutId\);/);
   });
 
   it("Page chrome: withSidebar={false} + 'Already have an account? Sign in' fallback link — pinned so the no-sidebar auth-page convention stays consistent + the sign-in escape hatch survives for customers who realize they already have an account mid-flow", () => {
     expect(body).toMatch(/<DashboardLayout title="Sign up" withSidebar=\{false\}>/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Already have an account\? <a\s*\n?\s*data-login-link\s*\n?\s*href="\/login"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
+      /Already have an account\? <a\s*\n?\s*data-login-link\s*\n?\s*href="\/login\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
     );
   });
 
