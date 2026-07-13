@@ -60,6 +60,14 @@ const DEFAULT_FETCH: typeof fetch = globalThis.fetch;
 // (token/userinfo) or falls through the /user/emails path to
 // unverified-email — both already-handled results, no new variant.
 const DEFAULT_OAUTH_FETCH_TIMEOUT_MS = 10_000;
+const MAX_OAUTH_RESPONSE_BODY_BYTES = 256 * 1024;
+
+class OAuthResponseTooLargeError extends Error {
+  constructor(readonly status: number) {
+    super(`IDP response exceeded ${MAX_OAUTH_RESPONSE_BODY_BYTES}-byte limit`);
+    this.name = 'OAuthResponseTooLargeError';
+  }
+}
 
 /** Status + ok + the fully-read body text. We return the read body (not the
  *  Response) so the abort timer can stay armed THROUGH the body read — clearing
@@ -70,6 +78,40 @@ interface TimedResponse {
   status: number;
   ok: boolean;
   text: string;
+}
+
+async function readBoundedResponseBody(res: Response): Promise<string> {
+  const declaredLength = res.headers.get('content-length');
+  if (declaredLength !== null && /^\d+$/.test(declaredLength)) {
+    const bytes = Number(declaredLength);
+    if (bytes > MAX_OAUTH_RESPONSE_BODY_BYTES) {
+      await res.body?.cancel().catch(() => {});
+      throw new OAuthResponseTooLargeError(res.status);
+    }
+  }
+
+  if (res.body === null) return '';
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_OAUTH_RESPONSE_BODY_BYTES) {
+        throw new OAuthResponseTooLargeError(res.status);
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } catch (err) {
+    await reader.cancel().catch(() => {});
+    throw err;
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 async function fetchWithTimeout(
@@ -83,7 +125,9 @@ async function fetchWithTimeout(
   try {
     const res = await fetchImpl(url, { ...init, signal: ac.signal });
     // Read the body inside the timer scope so a stalled body aborts at timeoutMs.
-    const text = await res.text();
+    // Stream with a raw-byte ceiling so a fast, oversized IDP response cannot
+    // exhaust memory before the caller's bounded error-body slice runs.
+    const text = await readBoundedResponseBody(res);
     return { status: res.status, ok: res.ok, text };
   } finally {
     clearTimeout(timer);
@@ -126,6 +170,9 @@ export async function exchangeCodeForTokens(opts: ExchangeCodeOpts): Promise<Exc
       timeoutMs,
     );
   } catch (err) {
+    if (err instanceof OAuthResponseTooLargeError) {
+      return { kind: 'idp-error', status: err.status, body: err.message };
+    }
     return {
       kind: 'network-error',
       message: err instanceof Error ? err.message : String(err),
@@ -216,6 +263,9 @@ export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserI
       timeoutMs,
     );
   } catch (err) {
+    if (err instanceof OAuthResponseTooLargeError) {
+      return { kind: 'idp-error', status: err.status, body: err.message };
+    }
     return {
       kind: 'network-error',
       message: err instanceof Error ? err.message : String(err),

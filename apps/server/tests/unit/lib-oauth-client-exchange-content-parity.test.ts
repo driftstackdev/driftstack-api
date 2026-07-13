@@ -123,15 +123,24 @@ describe('lib/oauth-client-exchange content parity', () => {
     expect(body).toMatch(
       /const res = await fetchImpl\(url, \{ \.\.\.init, signal: ac\.signal \}\);/,
     );
-    // The body read is INSIDE the timer scope (bug-class fix bc72ff48 —
-    // clearTimeout-after-fetch left res.text() unbounded). Helper returns text.
-    expect(body).toMatch(/const text = await res\.text\(\);/);
+    // The bounded body read is INSIDE the timer scope (bug-class fix bc72ff48 —
+    // clearTimeout-after-fetch left body reads unbounded). Helper returns text.
+    expect(body).toMatch(/const text = await readBoundedResponseBody\(res\);/);
     expect(body).toMatch(/return \{ status: res\.status, ok: res\.ok, text \};/);
     expect(body).toMatch(/clearTimeout\(timer\);/);
     expect(body).toMatch(/fetchWithTimeout\(\s*\n?\s*fetchImpl,\s*\n?\s*provider\.tokenUrl,/);
     expect(body).toMatch(/timeoutMs\?: number;/);
     // No bare unbounded IDP fetch remains — all routed through the helper.
     expect(body).not.toMatch(/await fetchImpl\(provider\./);
+  });
+
+  it('IDP body size is bounded before parse for declared and chunked responses', () => {
+    expect(body).toMatch(/const MAX_OAUTH_RESPONSE_BODY_BYTES = 256 \* 1024;/);
+    expect(body).toMatch(/res\.headers\.get\('content-length'\)/);
+    expect(body).toMatch(/bytesRead \+= value\.byteLength;/);
+    expect(body).toMatch(/if \(bytesRead > MAX_OAUTH_RESPONSE_BODY_BYTES\)/);
+    expect(body).toMatch(/await reader\.cancel\(\)\.catch\(\(\) => \{\}\);/);
+    expect(body).not.toMatch(/await res\.text\(\)/);
   });
 
   it('Google parse pinned: { sub, email, email_verified, name, picture } + Google sub/email-missing → idp-error + emailVerified-false → unverified-email + Verdict-3-avatar from picture. Drift to dropping email_verified check would let unverified Google emails reach the Verdict-1 collision flow', () => {

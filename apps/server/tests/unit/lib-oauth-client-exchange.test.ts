@@ -266,4 +266,83 @@ describe('IDP fetch timeout (V-667.C resilience — bounds the login request pat
       vi.useRealTimers();
     }
   });
+
+  it('keeps the deadline armed after headers while the response body is stalled', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchWithHungBody = ((_url: string, init?: RequestInit) => {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            init?.signal?.addEventListener('abort', () => {
+              controller.error(new DOMException('The operation was aborted.', 'AbortError'));
+            });
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200 }));
+      }) as unknown as typeof fetch;
+      const pending = exchangeCodeForTokens({
+        ...EXCHANGE_OPTS_BASE,
+        provider: 'google',
+        fetch: fetchWithHungBody,
+        timeoutMs: 5_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(pending).resolves.toMatchObject({ kind: 'network-error' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('IDP response body bounds', () => {
+  it('rejects an oversized declared Content-Length before reading the body', async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'google',
+      fetch: mockFetch([
+        {
+          status: 200,
+          body: { access_token: 'must-not-be-read' },
+          headers: { 'content-length': String(256 * 1024 + 1) },
+        },
+      ]),
+    });
+
+    expect(res).toEqual({
+      kind: 'idp-error',
+      status: 200,
+      body: 'IDP response exceeded 262144-byte limit',
+    });
+  });
+
+  it('cancels a chunked response as soon as accumulated bytes cross the cap', async () => {
+    let cancelled = false;
+    const chunks = [new Uint8Array(200 * 1024), new Uint8Array(64 * 1024), new Uint8Array(1)];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk) controller.enqueue(chunk);
+        else controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetchChunked = (() =>
+      Promise.resolve(new Response(body, { status: 200 }))) as unknown as typeof fetch;
+
+    const res = await fetchUserInfo({
+      provider: 'google',
+      accessToken: 'token',
+      fetch: fetchChunked,
+    });
+
+    expect(res).toEqual({
+      kind: 'idp-error',
+      status: 200,
+      body: 'IDP response exceeded 262144-byte limit',
+    });
+    expect(cancelled).toBe(true);
+  });
 });
