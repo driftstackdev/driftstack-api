@@ -28,4 +28,11 @@ describe('admin Atlas priority queue manual refresh', () => {
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
     );
   });
+
+  it('keeps thrown transport internals out of the visible error banner', () => {
+    const body = readFileSync(SOURCE, 'utf8');
+    expect(body).toContain('Could not load the queue. Check your connection and try again.');
+    expect(body).not.toMatch(/Fetch failed:\s*['"]?\s*\+/);
+    expect(body).not.toContain('err.message || String(err)');
+  });
 });

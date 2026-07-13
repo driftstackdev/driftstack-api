@@ -313,7 +313,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         showError(
           err && err.name === 'AbortError'
             ? 'Request timed out. Try again.'
-            : 'Fetch failed: ' + (err.message || String(err)),
+            : 'Could not load the queue. Check your connection and try again.',
         );
       } finally {
         if (manual) {
