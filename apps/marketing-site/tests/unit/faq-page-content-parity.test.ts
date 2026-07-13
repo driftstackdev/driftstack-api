@@ -185,7 +185,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
     // double-quoted data-file literal (it now contains apostrophes),
     // so the href quotes appear escaped (href=\"...\") in source —
     // accept both quote styles, same as the apostrophe note below.
-    expect(body).toMatch(/href=\\?"\/legal\/aup\\?"/);
+    expect(body).toMatch(/href=\\?"\/legal\/aup\/\\?"/);
     // Note: the data-file literal may or may not escape the apostrophe
     // (`don\'t`) depending on the string's quote style — accept both.
     expect(body).toMatch(/We don\\?'t allow attacks on third-party systems/);
