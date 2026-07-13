@@ -1,7 +1,7 @@
 // V-534.AA — unit tests for useCryptoReceipt + formatReceiptForClipboard.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { CryptoReceiptData } from '../../src/lib/use-crypto-receipt';
 
 interface MockSettings {
@@ -37,6 +37,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -62,7 +63,7 @@ describe('V-534.AA useCryptoReceipt — fetch', () => {
     }
   });
 
-  it('hits the /receipt subpath with bearer auth', async () => {
+  it('hits the encoded /receipt subpath with bearer auth and an abort signal', async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -71,13 +72,87 @@ describe('V-534.AA useCryptoReceipt — fetch', () => {
       } as unknown as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
-    renderHook(() => useCryptoReceipt('ord_x'));
+    renderHook(() => useCryptoReceipt('ord/x'));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      'https://api.driftstack.dev/v1/billing/crypto-orders/ord_x/receipt',
+      'https://api.driftstack.dev/v1/billing/crypto-orders/ord%2Fx/receipt',
     );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_test');
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('single-flights overlapping manual refetches', async () => {
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCryptoReceipt('ord_42', { manual: true }));
+
+    let first: Promise<void> | undefined;
+    await act(async () => {
+      first = result.current.refetch();
+      await result.current.refetch();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFetch?.({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(sample()),
+    } as unknown as Response);
+    await act(async () => first);
+    expect(result.current.state.kind).toBe('ready');
+  });
+
+  it('fails with actionable copy after the shared 15 second deadline', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      }),
+    );
+    const { result } = renderHook(() => useCryptoReceipt('ord_42', { manual: true }));
+
+    await act(async () => {
+      const pending = result.current.refetch();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await pending;
+    });
+
+    expect(result.current.state).toEqual({
+      kind: 'error',
+      message: 'Receipt request timed out. Check your connection and try again.',
+    });
+  });
+
+  it('aborts the active request when the selected order changes', async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        if (init?.signal !== undefined) signals.push(init.signal);
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const { rerender } = renderHook(({ orderId }) => useCryptoReceipt(orderId), {
+      initialProps: { orderId: 'ord_a' },
+    });
+    await waitFor(() => expect(signals).toHaveLength(1));
+
+    rerender({ orderId: 'ord_b' });
+    await waitFor(() => expect(signals).toHaveLength(2));
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
   });
 
   it('stays idle when orderId is null', () => {

@@ -17,9 +17,8 @@
 //     confirming | paid | failed | partial | cancelled).
 //   • orderId === null short-circuit on initial state + fetcher
 //     early-return + useEffect skip.
-//   • URL `/v1/billing/crypto-orders/${orderId}/receipt` exact
-//     (no encodeURIComponent — V-534.BM/.BN have it on the download
-//     path; this read-path passes orderId through unmodified).
+//   • Receipt reads are single-flight, deadline-bounded, sequence-gated,
+//     dependency/unmount-aborted, and URL-encode the order id.
 //   • formatReceiptForClipboard: vendor default 'Driftstack' + 7
 //     base lines + paid_at !== null conditional 'Paid at' line +
 //     payment_id !== null conditional 'Payment id' line + always
@@ -68,7 +67,7 @@ describe('W473.B apps/gui-client/src/lib/use-crypto-receipt.ts content parity', 
     );
   });
 
-  it('orderId===null short-circuit: initial state guards on manual||orderId===null + fetcher early-return setState idle + useEffect skip; URL `/v1/billing/crypto-orders/${orderId}/receipt` exact (read-path passes orderId through unmodified — no encodeURIComponent)', () => {
+  it('orderId===null short-circuit: initial state guards on manual||orderId===null + fetcher early-return setState idle + useEffect skip', () => {
     expect(body).toMatch(
       /const \[state, setState\] = useState<CryptoReceiptState>\(\s*\n?\s*opts\.manual === true \|\| orderId === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
     );
@@ -76,10 +75,23 @@ describe('W473.B apps/gui-client/src/lib/use-crypto-receipt.ts content parity', 
       /if \(orderId === null\) \{\s*\n?\s*setState\(\{ kind: 'idle' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{orderId\}\/receipt`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*if \(orderId === null\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual, orderId\]\);/,
+    );
+  });
+
+  it('single-flights reads and uses the shared deadline, abort signal, encoded order id, auth, and JSON Accept header', () => {
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
+    expect(body).toMatch(
+      /const res = await fetchWithDeadline\(\s*\n?\s*`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt`,\s*\n?\s*\{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
+    );
+  });
+
+  it('sequence-gates response state and aborts/invalidate active work on dependency change or unmount', () => {
+    expect(body).toMatch(
+      /if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', data: body \}\);/,
     );
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*if \(orderId === null\) return;\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, \[fetcher, opts\.manual, orderId\]\);/,
+      /useEffect\(\s*\n?\s*\(\) => \(\) => \{\s*\n?\s*sequenceRef\.current \+= 1;\s*\n?\s*requestRef\.current\?\.abort\(\);\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;\s*\n?\s*\},\s*\n?\s*\[orderId, settings\.apiKey, settings\.baseUrl\],/,
     );
   });
 
