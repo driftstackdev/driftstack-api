@@ -84,6 +84,16 @@ describe('status-site /subscribe/confirm + /subscribe/unsubscribe parity', () =>
     expect(confirm).toMatch(/res\.status === 429/);
   });
 
+  it('makes an ambiguous confirmation timeout terminal for the one-time link', () => {
+    expect(confirm).toMatch(/id="confirm-unknown"/);
+    expect(confirm).toMatch(/let confirmOutcomeUnknown = false/);
+    expect(confirm).toMatch(/if \(confirmInFlight \|\| confirmOutcomeUnknown\) return/);
+    expect(confirm).toMatch(/error && error\.name === 'AbortError'/);
+    expect(confirm).toMatch(/confirmOutcomeUnknown = true/);
+    expect(confirm).toMatch(/Do not reload or open this\s+confirmation link again/);
+    expect(confirm).toMatch(/welcome\s+email with your unsubscribe link/);
+  });
+
   it('unsubscribe page handles 200 success + 400 / 404 / 429 errors', () => {
     expect(unsub).toMatch(/res\.status === 200/);
     expect(unsub).toMatch(/res\.status === 400/);

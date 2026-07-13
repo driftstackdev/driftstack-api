@@ -105,6 +105,20 @@ describe('W369.C status-site /subscribe page content parity', () => {
     );
   });
 
+  it('makes an ambiguous subscribe timeout terminal and inbox-first', () => {
+    expect(body).toMatch(/id="subscribe-unknown"/);
+    expect(body).toMatch(/let subscribeOutcomeUnknown = false/);
+    expect(body).toMatch(/if \(subscribeInFlight \|\| subscribeOutcomeUnknown\) return/);
+    expect(body).toMatch(/error && error\.name === 'AbortError'/);
+    expect(body).toMatch(/subscribeOutcomeUnknown = true/);
+    expect(body).toMatch(/Do not subscribe this address\s+again on this page/);
+    expect(body).toMatch(/inbox and spam folder first/);
+    expect(body).toMatch(/use the newest one/);
+    expect(body).toMatch(
+      /if \(!subscribeOutcomeUnknown\) submitBtn\.removeAttribute\('disabled'\)/,
+    );
+  });
+
   it('V-540.B double-opt-in framing pinned (confirmation email before list-add)', () => {
     expect(body).toMatch(
       /Double-opt-in: we send a confirmation email to verify the address\s+before adding it to the notification list/,

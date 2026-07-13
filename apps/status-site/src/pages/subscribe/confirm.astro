@@ -69,6 +69,23 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         to get a fresh confirmation link.
       </p>
     </div>
+
+    <div
+      id="confirm-unknown"
+      class="hidden rounded-lg border border-amber-400/30 bg-amber-400/5 p-6 shadow-xs"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="text-sm font-medium text-amber-200">Confirmation outcome is unknown.</p>
+      <p class="mt-3 text-sm text-ink-secondary">
+        The request timed out after the one-time link was sent. The server
+        may already have confirmed your subscription and sent its welcome
+        email with your unsubscribe link. Do not reload or open this
+        confirmation link again. Check your inbox and spam folder first; if
+        no welcome message arrives, return to Subscribe later for a fresh
+        confirmation email.
+      </p>
+    </div>
   </section>
 
   <section class="text-xs text-ink-muted">
@@ -90,6 +107,9 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const success = document.getElementById('confirm-success');
   const errorPane = document.getElementById('confirm-error');
   const errorMessage = document.getElementById('confirm-error-message');
+  const unknownPane = document.getElementById('confirm-unknown');
+  let confirmInFlight = false;
+  let confirmOutcomeUnknown = false;
 
   function showError(message) {
     if (pending) pending.classList.add('hidden');
@@ -104,12 +124,21 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     if (success) success.classList.remove('hidden');
   }
 
+  function showUnknown() {
+    if (pending) pending.classList.add('hidden');
+    if (success) success.classList.add('hidden');
+    if (errorPane) errorPane.classList.add('hidden');
+    if (unknownPane) unknownPane.classList.remove('hidden');
+  }
+
   async function confirmSubscription() {
+    if (confirmInFlight || confirmOutcomeUnknown) return;
     const token = new URLSearchParams(window.location.search).get('token');
     if (!token) {
       showError('This confirmation link is missing its token. Open the link directly from your email.');
       return;
     }
+    confirmInFlight = true;
     try {
       const res = await fetchWithDeadline(
         `${API_BASE}/v1/status/subscribe/confirm?token=${encodeURIComponent(token)}`,
@@ -137,8 +166,15 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       } else {
         showError(detail || `Couldn't confirm your subscription (HTTP ${res.status}).`);
       }
-    } catch {
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        confirmOutcomeUnknown = true;
+        showUnknown();
+        return;
+      }
       showError("Couldn't reach the status API. Your network may be blocking the request.");
+    } finally {
+      confirmInFlight = false;
     }
   }
 

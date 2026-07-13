@@ -93,6 +93,25 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         Subscribe another address
       </button>
     </div>
+
+    <div
+      id="subscribe-unknown"
+      class="mt-6 hidden rounded-lg border border-amber-400/30 bg-amber-400/5 p-6 shadow-xs"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="text-sm font-medium text-amber-200">
+        Confirmation-email delivery is unknown for
+        <span id="unknown-email" class="font-mono"></span>.
+      </p>
+      <p class="mt-3 text-sm text-ink-secondary">
+        The request timed out after it was sent, so the server may already
+        have emailed a confirmation link. Do not subscribe this address
+        again on this page. Check your inbox and spam folder first; if
+        multiple confirmation messages arrive, use the newest one. Reload
+        and try again only if nothing arrives within 5 minutes.
+      </p>
+    </div>
   </section>
 
   <section class="text-xs text-ink-muted">
@@ -118,6 +137,10 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const confirmPane = document.getElementById('subscribe-confirm');
   const confirmEmail = document.getElementById('confirm-email');
   const subscribeAnotherBtn = document.getElementById('subscribe-another-btn');
+  const unknownPane = document.getElementById('subscribe-unknown');
+  const unknownEmail = document.getElementById('unknown-email');
+  let subscribeInFlight = false;
+  let subscribeOutcomeUnknown = false;
 
   function setStatus(message, kind) {
     if (!status) return;
@@ -139,13 +162,17 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (subscribeInFlight || subscribeOutcomeUnknown) return;
     const fd = new FormData(form);
     const email = (fd.get('email') || '').toString().trim();
     if (!email || !/^.+@.+\..+$/.test(email)) {
       setStatus('Please enter a valid email address.', 'error');
       return;
     }
+    subscribeInFlight = true;
     submitBtn.setAttribute('disabled', 'true');
+    submitBtn.setAttribute('aria-busy', 'true');
+    submitBtn.textContent = 'Sending…';
     setStatus('Sending confirmation email…', 'pending');
     try {
       const res = await fetchWithDeadline(`${API_BASE}/v1/status/subscribe`, {
@@ -171,13 +198,24 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       } else {
         setStatus(`Subscribe failed (HTTP ${res.status}). Try again in a moment.`, 'error');
       }
-    } catch {
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        subscribeOutcomeUnknown = true;
+        if (unknownEmail) unknownEmail.textContent = email;
+        if (unknownPane) unknownPane.classList.remove('hidden');
+        if (form) form.classList.add('hidden');
+        if (status) status.classList.add('hidden');
+        return;
+      }
       setStatus(
         "Couldn't reach the status API. Your network may be blocking the request.",
         'error',
       );
     } finally {
-      submitBtn.removeAttribute('disabled');
+      subscribeInFlight = false;
+      submitBtn.setAttribute('aria-busy', 'false');
+      submitBtn.textContent = 'Subscribe';
+      if (!subscribeOutcomeUnknown) submitBtn.removeAttribute('disabled');
     }
   });
 
@@ -187,6 +225,8 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   subscribeAnotherBtn?.addEventListener('click', () => {
     if (confirmPane) confirmPane.classList.add('hidden');
     if (form) form.classList.remove('hidden');
+    subscribeOutcomeUnknown = false;
+    submitBtn.removeAttribute('disabled');
     const input = document.getElementById('email-input');
     if (input) input.focus();
   });
