@@ -159,12 +159,17 @@ describe('ProfilesView list-load retry', () => {
   it('recovers in place after a failed list fetch and exposes honest retry progress', async () => {
     const retry = deferred<ProfileFixture[]>();
     loadProfiles
-      .mockRejectedValueOnce(new Error('Profiles are temporarily unavailable.'))
+      .mockRejectedValueOnce(
+        new Error('SQLite permission denied at /Users/customer/Library/Application Support'),
+      )
       .mockImplementationOnce(() => retry.promise);
 
     render(<ProfilesView onGoToSettings={vi.fn()} />);
 
-    expect(await screen.findByText('Profiles are temporarily unavailable.')).toBeInTheDocument();
+    expect(
+      await screen.findByText("Couldn't load profiles. Check your connection and try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/SQLite|\/Users\/customer|Application Support/i)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     const retrying = screen.getByRole('button', { name: 'Retrying…' });
@@ -178,15 +183,34 @@ describe('ProfilesView list-load retry', () => {
 
     expect(await screen.findByText('Demo')).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.queryByText('Profiles are temporarily unavailable.')).toBeNull();
+      expect(
+        screen.queryByText("Couldn't load profiles. Check your connection and try again."),
+      ).toBeNull();
       expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
     });
     expect(loadProfiles).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the configured API target but removes raw network diagnostics', async () => {
+    loadProfiles.mockRejectedValueOnce(
+      new Error('Load failed: getaddrinfo ENOTFOUND private-api.internal token=secret'),
+    );
+
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+
+    expect(
+      await screen.findByText(
+        "Couldn't reach http://localhost:3000. Check the URL, connection, firewall, or VPN, then try again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/private-api\.internal|token=secret|Underlying error/i)).toBeNull();
+  });
+
   it('keeps a user-action error dismiss-only across a successful list refresh', async () => {
     loadProfiles.mockResolvedValue([demoProfile]);
-    deleteProfile.mockRejectedValueOnce(new Error('Could not delete Demo.'));
+    deleteProfile.mockRejectedValueOnce(
+      new Error('SQLite delete failed at /Users/customer/Library/Application Support'),
+    );
 
     render(
       <ConfirmProvider>
@@ -198,15 +222,20 @@ describe('ProfilesView list-load retry', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete Demo' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
 
-    expect(await screen.findByText('Could not delete Demo.')).toBeInTheDocument();
+    expect(
+      await screen.findByText("Couldn't complete this profile action. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/SQLite|\/Users\/customer|Application Support/i)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
 
     fireEvent.click(screen.getByTitle('Refresh now'));
     await waitFor(() => expect(loadProfiles).toHaveBeenCalledTimes(2));
-    expect(screen.getByText('Could not delete Demo.')).toBeInTheDocument();
+    expect(
+      screen.getByText("Couldn't complete this profile action. Try again."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.queryByText('Could not delete Demo.')).toBeNull();
+    expect(screen.queryByText("Couldn't complete this profile action. Try again.")).toBeNull();
   });
 });

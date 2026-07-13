@@ -198,7 +198,11 @@ export function ProxiesView(): JSX.Element {
       setExitResults(er);
       setTestedAt(ta);
     } catch (err) {
-      setState((s) => ({ ...s, loading: false, error: friendlyError(err) }));
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: friendlyError(err, "Couldn't load proxies. Try again."),
+      }));
     }
   }, []);
 
@@ -235,7 +239,10 @@ export function ProxiesView(): JSX.Element {
       setEditor({ kind: 'idle' });
       await refresh();
     } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err) }));
+      setState((s) => ({
+        ...s,
+        error: friendlyError(err, "Couldn't save this proxy. Check the details and try again."),
+      }));
     }
   }
 
@@ -300,7 +307,10 @@ export function ProxiesView(): JSX.Element {
         }));
       }
     } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err) }));
+      setState((s) => ({
+        ...s,
+        error: friendlyError(err, "Couldn't remove this proxy. Try again."),
+      }));
     } finally {
       setBusyId(null);
     }
@@ -1538,9 +1548,8 @@ function toDraft(p: ProxyConfig): ProxyDraft {
   };
 }
 
-function friendlyError(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return 'unknown error';
+function friendlyError(err: unknown, fallback: string): string {
+  return humanizeError(err, fallback);
 }
 
 /** Return a copy of `rec` without `key` (same reference if absent, so React

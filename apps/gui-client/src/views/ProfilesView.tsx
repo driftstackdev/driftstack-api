@@ -907,7 +907,11 @@ export function ProfilesView({
         setState((s) => ({
           ...s,
           loading: false,
-          loadError: friendlyError(err, settings.baseUrl),
+          loadError: friendlyError(
+            err,
+            settings.baseUrl,
+            "Couldn't load profiles. Check your connection and try again.",
+          ),
         }));
       }
     },
@@ -5740,20 +5744,25 @@ function regionName(cc: string): string {
   }
 }
 
-function friendlyError(err: unknown, baseUrl?: string): string {
+function friendlyError(
+  err: unknown,
+  baseUrl?: string,
+  fallback = "Couldn't complete this profile action. Try again.",
+): string {
   // 2026-05-20 — network-failure preflight (catches Tauri WebKit
-  // "Load failed" before falling through to per-view formatting).
+  // "Load failed" before falling through to per-view formatting). Keep the
+  // configured target/actionable guidance, but never include the raw native
+  // exception appended by the shared diagnostic helper.
   if (baseUrl !== undefined) {
     const diag = diagnosticFetchError(err, baseUrl);
-    if (diag !== null) return diag;
+    if (diag !== null) {
+      return `Couldn't reach ${baseUrl}. Check the URL, connection, firewall, or VPN, then try again.`;
+    }
   }
   if (err instanceof DriftstackError) {
     return `${err.title} (${err.kind}): ${err.detail ?? err.message}`;
   }
-  if (err instanceof Error) {
-    return err.message;
-  }
-  return String(err);
+  return humanizeError(err, fallback);
 }
 
 // L4b recycle bin — the Trash view. Lists soft-deleted profiles with a Restore

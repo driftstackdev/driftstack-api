@@ -15,23 +15,23 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import type { ProxyTestResult } from '../../src/lib/proxies';
+import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 
 const testProxy = vi.fn<(input: unknown) => Promise<ProxyTestResult>>();
+const listProxies = vi.fn<() => Promise<ProxyConfig[]>>();
+
+const savedProxy: ProxyConfig = {
+  id: 'p1',
+  label: 'london-socks',
+  host: 'proxy.example.com',
+  port: 1080,
+  username: 'u',
+  password: 'p',
+  createdAt: '2026-05-20T00:00:00.000Z',
+};
 
 vi.mock('../../src/lib/proxies', () => ({
-  listProxies: () =>
-    Promise.resolve([
-      {
-        id: 'p1',
-        label: 'london-socks',
-        host: 'proxy.example.com',
-        port: 1080,
-        username: 'u',
-        password: 'p',
-        createdAt: '2026-05-20T00:00:00.000Z',
-      },
-    ]),
+  listProxies: () => listProxies(),
   addProxy: vi.fn(() => Promise.resolve({})),
   removeProxy: vi.fn(() => Promise.resolve()),
   updateProxy: vi.fn(() => Promise.resolve({})),
@@ -46,6 +46,11 @@ const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000
 vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStub }));
 
 const { ProxiesView } = await import('../../src/views/ProxiesView');
+
+beforeEach(() => {
+  listProxies.mockReset();
+  listProxies.mockResolvedValue([savedProxy]);
+});
 
 async function clickTestAndSettle(): Promise<void> {
   // The proxy row loads async; wait for the Test button to appear.
@@ -65,6 +70,17 @@ describe('ProxiesView first-load silhouette', () => {
     // The silhouette is first-load-only and yields to the real card topology.
     expect(await screen.findByRole('button', { name: 'Test' })).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Loading proxies' })).not.toBeInTheDocument();
+  });
+
+  it('hides native storage details when the saved proxy list cannot load', async () => {
+    listProxies.mockRejectedValue(
+      new Error('SQLite permission denied at /Users/customer/Library/Application Support/proxies'),
+    );
+
+    render(<ProxiesView />);
+
+    expect(await screen.findByText("Couldn't load proxies. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/SQLite|\/Users\/customer|Application Support/i)).toBeNull();
   });
 });
 
