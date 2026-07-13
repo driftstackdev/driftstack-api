@@ -31,7 +31,7 @@ interface MfaState {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -301,6 +301,67 @@ describe('security page — MFA recovery-codes regenerate (enrolled)', () => {
     expect(fetchCalls.some((c) => /recovery-codes\/regenerate$/.test(c.url))).toBe(false);
     expect(isHidden(window, '[data-section="mfa-recovery"]')).toBe(true);
   });
+
+  it('regenerate timeout refreshes status and warns that committed replacement codes are unrecoverable', async () => {
+    const mfa = newMfa({ enrolled: true });
+    const base = makeRouter(mfa);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (
+          call.init?.method === 'POST' &&
+          /\/v1\/account\/mfa\/recovery-codes\/regenerate$/.test(call.url)
+        ) {
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-regenerate"]') as HTMLButtonElement).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((c) => /\/v1\/account\/mfa$/.test(c.url)).length).toBeGreaterThan(1);
+    expect(isHidden(window, '[data-section="mfa-recovery"]')).toBe(true);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*status was refreshed.*old recovery code is invalid.*cannot be recovered.*intentionally want another replacement/i,
+    );
+  });
+
+  it('regenerate is single-flight while the one-shot response is pending', async () => {
+    const mfa = newMfa({ enrolled: true });
+    const base = makeRouter(mfa);
+    let resolveRegenerate!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveRegenerate = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) =>
+        call.init?.method === 'POST' &&
+        /\/v1\/account\/mfa\/recovery-codes\/regenerate$/.test(call.url)
+          ? pending
+          : base(call),
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-button="mfa-regenerate"]',
+    ) as HTMLButtonElement;
+    button.click();
+    button.click();
+    await flush(2);
+
+    expect(
+      fetchCalls.filter((c) => /\/v1\/account\/mfa\/recovery-codes\/regenerate$/.test(c.url)),
+    ).toHaveLength(1);
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+
+    resolveRegenerate(json({ recovery_codes: ['fresh-0001'] }));
+    await flush();
+    expect(button.disabled).toBe(false);
+  });
 });
 
 describe('security page — MFA (2FA) enrollment verify', () => {
@@ -336,6 +397,38 @@ describe('security page — MFA (2FA) enrollment verify', () => {
     expect(verifyPosts.length).toBe(1);
     // Re-enabled once the (successful) request settles.
     expect(verifyBtn.disabled).toBe(false);
+  });
+
+  it('verify timeout refreshes committed enrollment state and directs recovery-code regeneration', async () => {
+    const mfa = newMfa({ enrolled: false });
+    const base = makeRouter(mfa);
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/v1\/account\/mfa\/verify$/.test(call.url)) {
+          mfa.enrolled = true;
+          return Promise.reject(timeout);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-start"]') as HTMLButtonElement).click();
+    await flush();
+    (window.document.querySelector('[data-field="mfa-verify-code"]') as HTMLInputElement).value =
+      '123456';
+    (window.document.querySelector('[data-button="mfa-verify"]') as HTMLButtonElement).click();
+    await flush(12);
+
+    expect(fetchCalls.filter((c) => /\/v1\/account\/mfa$/.test(c.url)).length).toBeGreaterThan(1);
+    expect(window.document.querySelector('[data-field="mfa-status-badge"]')?.textContent).toBe(
+      'enrolled',
+    );
+    expect(isHidden(window, '[data-section="mfa-recovery"]')).toBe(true);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*status was refreshed.*recovery codes cannot be recovered.*regenerate.*authenticator access/i,
+    );
   });
 });
 

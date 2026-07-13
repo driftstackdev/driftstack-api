@@ -97,6 +97,16 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     );
   });
 
+  it('reconciles ambiguous one-shot recovery-code responses and serializes regeneration', () => {
+    expect(body).toContain("timeoutError.name = 'AbortError'");
+    expect(body).toContain('let mfaRegenerateInFlight = false;');
+    expect(body).toContain('Enrollment outcome is unknown after the request timed out.');
+    expect(body).toContain(
+      'Recovery-code regeneration outcome is unknown after the request timed out.',
+    );
+    expect(body).toContain('replacement codes cannot be recovered');
+  });
+
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     expect(body).toContain('ds_web_session_token');
   });

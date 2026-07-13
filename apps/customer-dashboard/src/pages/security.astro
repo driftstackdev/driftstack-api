@@ -475,7 +475,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         return fetch(url, { ...init, signal: controller.signal })
           .catch((err) => {
             if (err && err.name === 'AbortError') {
-              throw new Error('Request took too long. Check your connection and try again.');
+              const timeoutError = new Error(
+                'Request took too long. Check your connection and try again.',
+              );
+              timeoutError.name = 'AbortError';
+              throw timeoutError;
             }
             throw err;
           })
@@ -972,6 +976,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaStepUpError = root.querySelector('[data-field="mfa-step-up-error"]');
 
       let pendingStepUpAction = null; // 'disable' | 'regenerate' | null
+      let mfaRegenerateInFlight = false;
 
       function showHidden(el, hidden) {
         if (!el) return;
@@ -1381,14 +1386,20 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
       }
 
-      function loadMfa() {
-        if (!token) return;
-        authedFetch('/v1/account/mfa', { method: 'GET' })
+      function loadMfa(showLoadError = true) {
+        if (!token) return Promise.resolve(false);
+        return authedFetch('/v1/account/mfa', { method: 'GET' })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then(setMfaState)
+          .then((status) => {
+            setMfaState(status);
+            return true;
+          })
           .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't load MFA status (" + msg + ').');
+            if (showLoadError) {
+              const msg = err && err.message ? err.message : 'network error';
+              showBanner("Couldn't load MFA status (" + msg + ').');
+            }
+            return false;
           });
       }
 
@@ -1478,7 +1489,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             showHidden(mfaRecoverySection, false);
             showHidden(mfaEnrollStep, true);
           })
-          .catch((err) => showMfaError(err.message || 'Verify failed.'))
+          .catch(async (err) => {
+            if (err && err.name === 'AbortError') {
+              const refreshed = await loadMfa(false);
+              showBanner(
+                'Enrollment outcome is unknown after the request timed out. ' +
+                  (refreshed ? 'MFA status was refreshed. ' : "We couldn't refresh MFA status. ") +
+                  'If MFA now shows enrolled, the returned recovery codes cannot be recovered; regenerate them while you still have authenticator access. If it remains not enrolled, start enrollment again.',
+              );
+              return;
+            }
+            showMfaError(err.message || 'Verify failed.');
+          })
           .finally(() => {
             if (mfaVerifyBtn) {
               mfaVerifyBtn.disabled = false;
@@ -1598,6 +1620,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function performRegenerate() {
+        if (mfaRegenerateInFlight) return;
+        mfaRegenerateInFlight = true;
+        if (mfaRegen) {
+          mfaRegen.disabled = true;
+          mfaRegen.setAttribute('aria-busy', 'true');
+          mfaRegen.textContent = 'Regenerating…';
+        }
         authedFetch('/v1/account/mfa/recovery-codes/regenerate', { method: 'POST' })
           .then((r) =>
             r.ok
@@ -1636,9 +1665,26 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
             loadMfa();
           })
-          .catch((err) => {
+          .catch(async (err) => {
             if (err && err.message === '__step_up__') return;
+            if (err && err.name === 'AbortError') {
+              const refreshed = await loadMfa(false);
+              showBanner(
+                'Recovery-code regeneration outcome is unknown after the request timed out. ' +
+                  (refreshed ? 'MFA status was refreshed. ' : "We couldn't refresh MFA status. ") +
+                  'If the server accepted the request, every old recovery code is invalid and the replacement codes cannot be recovered. Regenerate once more only when you intentionally want another replacement set, and keep authenticator access available.',
+              );
+              return;
+            }
             showBanner('Regenerate failed: ' + (err && err.message ? err.message : 'network'));
+          })
+          .finally(() => {
+            mfaRegenerateInFlight = false;
+            if (mfaRegen) {
+              mfaRegen.disabled = false;
+              mfaRegen.setAttribute('aria-busy', 'false');
+              mfaRegen.textContent = 'Regenerate recovery codes';
+            }
           });
       }
 
