@@ -159,6 +159,11 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     );
   });
 
+  it('keeps mobile browser chrome aligned with the dark-only status surface', () => {
+    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
+    expect(body).toMatch(/<meta name="theme-color" content="#0f172a" \/>/);
+  });
+
   it('R13 header: "Driftstack" wordmark + middot + "status" subtitle — using dark-theme ink tokens (text-ink-primary / text-ink-muted) after the status-site dark migration', () => {
     expect(body).toMatch(
       /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-glow-red">STACK<\/span><\/span>/,
