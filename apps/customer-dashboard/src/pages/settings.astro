@@ -111,6 +111,7 @@ const EMAIL_EVENTS = [
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-2">
               <label
+                data-field="avatar-upload-label"
                 class="btn-secondary inline-flex cursor-pointer text-sm"
                 for="profile-avatar-input"
               >
@@ -480,6 +481,7 @@ const EMAIL_EVENTS = [
       // V-352b — avatar elements + helpers.
       const avatarPreview = root.querySelector('[data-field="avatar-preview"]');
       const avatarInput = root.querySelector('[data-field="avatar-input"]');
+      const avatarUploadLabel = root.querySelector('[data-field="avatar-upload-label"]');
       const avatarRemoveBtn = root.querySelector('[data-button="avatar-remove"]');
       const avatarSourceLabel = root.querySelector('[data-field="avatar-source"]');
       const avatarStatus = root.querySelector('[data-field="avatar-status"]');
@@ -488,6 +490,42 @@ const EMAIL_EVENTS = [
       let avatarRemoveInFlight = false;
       let currentAvatarSource = 'none';
       let avatarSnapshotKnown = false;
+
+      function setAvatarMutationBusy(kind) {
+        if (avatarInput) avatarInput.disabled = true;
+        if (avatarUploadLabel) {
+          avatarUploadLabel.setAttribute('aria-disabled', 'true');
+          avatarUploadLabel.classList.remove('cursor-pointer');
+          avatarUploadLabel.classList.add('cursor-not-allowed', 'opacity-60');
+          if (kind === 'upload') {
+            avatarUploadLabel.setAttribute('aria-busy', 'true');
+            avatarUploadLabel.textContent = 'Uploading…';
+          }
+        }
+        if (avatarRemoveBtn) {
+          avatarRemoveBtn.disabled = true;
+          if (kind === 'remove') {
+            avatarRemoveBtn.setAttribute('aria-busy', 'true');
+            avatarRemoveBtn.textContent = 'Removing…';
+          }
+        }
+      }
+
+      function clearAvatarMutationBusy() {
+        if (avatarInput) avatarInput.disabled = false;
+        if (avatarUploadLabel) {
+          avatarUploadLabel.removeAttribute('aria-disabled');
+          avatarUploadLabel.removeAttribute('aria-busy');
+          avatarUploadLabel.classList.add('cursor-pointer');
+          avatarUploadLabel.classList.remove('cursor-not-allowed', 'opacity-60');
+          avatarUploadLabel.textContent = 'Upload image';
+        }
+        if (avatarRemoveBtn) {
+          avatarRemoveBtn.disabled = false;
+          avatarRemoveBtn.removeAttribute('aria-busy');
+          avatarRemoveBtn.textContent = 'Remove';
+        }
+      }
 
       function showAvatarError(msg) {
         if (!avatarError) return;
@@ -612,7 +650,7 @@ const EMAIL_EVENTS = [
       // V-352b — avatar upload handler.
       if (avatarInput) {
         avatarInput.addEventListener('change', (ev) => {
-          if (avatarUploadInFlight) return;
+          if (avatarUploadInFlight || avatarRemoveInFlight) return;
           clearAvatarError();
           clearAvatarStatus();
           const target = ev.target;
@@ -637,8 +675,7 @@ const EMAIL_EVENTS = [
           avatarUploadInFlight = true;
           const sourceBeforeUpload = currentAvatarSource;
           const snapshotKnownBeforeUpload = avatarSnapshotKnown;
-          target.disabled = true;
-          target.setAttribute('aria-busy', 'true');
+          setAvatarMutationBusy('upload');
           fileToBase64(file)
             .then((b64) =>
               boundedFetch(apiBaseUrl + '/v1/account/me/avatar', {
@@ -700,8 +737,7 @@ const EMAIL_EVENTS = [
             })
             .finally(() => {
               avatarUploadInFlight = false;
-              target.disabled = false;
-              target.removeAttribute('aria-busy');
+              clearAvatarMutationBusy();
               target.value = '';
             });
         });
@@ -710,7 +746,7 @@ const EMAIL_EVENTS = [
       // V-352b — avatar remove handler.
       if (avatarRemoveBtn) {
         avatarRemoveBtn.addEventListener('click', () => {
-          if (avatarRemoveInFlight) return;
+          if (avatarRemoveInFlight || avatarUploadInFlight) return;
           clearAvatarError();
           clearAvatarStatus();
           if (!token) {
@@ -718,8 +754,7 @@ const EMAIL_EVENTS = [
             return;
           }
           avatarRemoveInFlight = true;
-          avatarRemoveBtn.disabled = true;
-          avatarRemoveBtn.setAttribute('aria-busy', 'true');
+          setAvatarMutationBusy('remove');
           boundedFetch(apiBaseUrl + '/v1/account/me/avatar', {
             method: 'DELETE',
             headers: { authorization: 'Bearer ' + token },
@@ -779,8 +814,7 @@ const EMAIL_EVENTS = [
             })
             .finally(() => {
               avatarRemoveInFlight = false;
-              avatarRemoveBtn.disabled = false;
-              avatarRemoveBtn.removeAttribute('aria-busy');
+              clearAvatarMutationBusy();
             });
         });
       }

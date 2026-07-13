@@ -124,6 +124,81 @@ describe('settings page — avatar source and ambiguous outcomes', () => {
     ).toBe(state.avatar_url);
   });
 
+  it('serializes upload and removal in both directions with visible progress', async () => {
+    const state: AccountAvatarState = {
+      avatar_url: 'https://r2.example.test/avatars/account.png?sig=old',
+      avatar_source: 'user',
+    };
+    const base = baseRoute(state);
+    let releaseUpload: (response: Response) => void = () => {};
+    let releaseDelete: (response: Response) => void = () => {};
+    const pendingUpload = new Promise<Response>((resolve) => {
+      releaseUpload = resolve;
+    });
+    const pendingDelete = new Promise<Response>((resolve) => {
+      releaseDelete = resolve;
+    });
+    const { window, fetchCalls } = setUpDom((call) => {
+      if (call.init?.method === 'POST' && /\/v1\/account\/me\/avatar$/.test(call.url)) {
+        return pendingUpload;
+      }
+      if (call.init?.method === 'DELETE' && /\/v1\/account\/me\/avatar$/.test(call.url)) {
+        return pendingDelete;
+      }
+      return base(call);
+    });
+    win = window;
+    await flush();
+
+    const input = window.document.querySelector('[data-field="avatar-input"]') as HTMLInputElement;
+    const uploadLabel = window.document.querySelector(
+      '[data-field="avatar-upload-label"]',
+    ) as HTMLLabelElement;
+    const remove = window.document.querySelector(
+      '[data-button="avatar-remove"]',
+    ) as HTMLButtonElement;
+    const file = new window.File([new Uint8Array([137, 80, 78, 71])], 'avatar.png', {
+      type: 'image/png',
+    });
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush();
+
+    expect(input.disabled).toBe(true);
+    expect(uploadLabel.getAttribute('aria-disabled')).toBe('true');
+    expect(uploadLabel.getAttribute('aria-busy')).toBe('true');
+    expect(uploadLabel.textContent?.trim()).toBe('Uploading…');
+    expect(remove.disabled).toBe(true);
+    remove.click();
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(0);
+
+    releaseUpload(json({ avatar_url: 'https://r2.example.test/avatars/account.png?sig=new' }));
+    await flush();
+    expect(input.disabled).toBe(false);
+    expect(uploadLabel.hasAttribute('aria-disabled')).toBe(false);
+    expect(uploadLabel.textContent?.trim()).toBe('Upload image');
+    expect(remove.disabled).toBe(false);
+
+    remove.click();
+    await flush();
+    expect(remove.disabled).toBe(true);
+    expect(remove.getAttribute('aria-busy')).toBe('true');
+    expect(remove.textContent?.trim()).toBe('Removing…');
+    expect(input.disabled).toBe(true);
+    expect(uploadLabel.getAttribute('aria-disabled')).toBe('true');
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+
+    state.avatar_url = null;
+    state.avatar_source = 'none';
+    releaseDelete(new Response(null, { status: 204 }));
+    await flush();
+    expect(input.disabled).toBe(false);
+    expect(uploadLabel.hasAttribute('aria-disabled')).toBe(false);
+    expect(remove.textContent?.trim()).toBe('Remove');
+    expect(remove.hidden).toBe(true);
+  });
+
   it('reconciles a committed first upload whose response times out', async () => {
     const state: AccountAvatarState = {
       avatar_url: 'https://images.example.test/idp.png',

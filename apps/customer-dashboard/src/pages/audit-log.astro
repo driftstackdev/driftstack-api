@@ -185,7 +185,7 @@ const FILTER_OPTIONS = [
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          Export CSV
+          <span data-export-label>Export CSV</span>
         </button>
         <button
           type="button"
@@ -197,7 +197,7 @@ const FILTER_OPTIONS = [
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          Export JSON
+          <span data-export-label>Export JSON</span>
         </button>
       </div>
     </header>
@@ -713,11 +713,17 @@ const FILTER_OPTIONS = [
         }
         if (exportInFlight) return;
         exportInFlight = true;
+        const activeExportBtn = format === 'csv' ? exportCsvBtn : exportJsonBtn;
         [exportCsvBtn, exportJsonBtn].forEach(function (btn) {
           if (!btn) return;
           btn.disabled = true;
-          btn.setAttribute('aria-busy', 'true');
+          btn.removeAttribute('aria-busy');
         });
+        if (activeExportBtn) {
+          activeExportBtn.setAttribute('aria-busy', 'true');
+          const label = activeExportBtn.querySelector('[data-export-label]');
+          if (label) label.textContent = 'Exporting ' + format.toUpperCase() + '…';
+        }
         // Direct fetch + blob download — keeps the auth header out of
         // the URL (a window.location.assign would leak the bearer in
         // browser history if any redirect chain were involved).
@@ -770,6 +776,8 @@ const FILTER_OPTIONS = [
               if (!btn) return;
               btn.disabled = false;
               btn.removeAttribute('aria-busy');
+              const label = btn.querySelector('[data-export-label]');
+              if (label) label.textContent = btn === exportCsvBtn ? 'Export CSV' : 'Export JSON';
             });
           });
       }

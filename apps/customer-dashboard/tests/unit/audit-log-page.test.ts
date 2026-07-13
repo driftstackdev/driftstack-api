@@ -284,12 +284,14 @@ describe('customer-dashboard Audit Log (audit-log.astro) behaviour', () => {
   });
 
   it('serializes CSV/JSON export attempts and restores both controls', async () => {
+    let releaseExport: (response: Response) => void = () => {};
+    const pendingExport = new Promise<Response>((resolve) => {
+      releaseExport = resolve;
+    });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: (call) =>
-        /\/export\?format=/.test(call.url)
-          ? json({ detail: 'Export temporarily unavailable' }, 503)
-          : json({ data: [], next_cursor: null }),
+        /\/export\?format=/.test(call.url) ? pendingExport : json({ data: [], next_cursor: null }),
     });
     win = window;
     await flush();
@@ -301,9 +303,20 @@ describe('customer-dashboard Audit Log (audit-log.astro) behaviour', () => {
     const exports = fetchCalls.filter((call) => /\/export\?format=/.test(call.url));
     expect(exports).toHaveLength(1);
     expect(exports[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
+    expect(csv.disabled).toBe(true);
+    expect(csv.getAttribute('aria-busy')).toBe('true');
+    expect(csv.textContent?.trim()).toBe('Exporting CSV…');
+    expect(jsonBtn.disabled).toBe(true);
+    expect(jsonBtn.hasAttribute('aria-busy')).toBe(false);
+    expect(jsonBtn.textContent?.trim()).toBe('Export JSON');
+
+    releaseExport(json({ detail: 'Export temporarily unavailable' }, 503));
+    await flush();
     expect(csv.disabled).toBe(false);
     expect(jsonBtn.disabled).toBe(false);
     expect(csv.hasAttribute('aria-busy')).toBe(false);
     expect(jsonBtn.hasAttribute('aria-busy')).toBe(false);
+    expect(csv.textContent?.trim()).toBe('Export CSV');
+    expect(jsonBtn.textContent?.trim()).toBe('Export JSON');
   });
 });
