@@ -27,7 +27,7 @@
 //     reject); exact-match redirect_uri check; pendingAuthorizations
 //     in-memory staging.
 //   • approveAuthorization: pending pop + 5-min TTL recheck +
-//     fresh code mint with oac_ prefix.
+//     canonical hierarchical scope reduction + fresh code mint.
 //   • exchangeCode: client_secret_hash timing-safe equality;
 //     consumed_at !== null → invalid_grant; client_id-mismatch
 //     guard; redirect_uri-mismatch guard; verifyS256Challenge call;
@@ -173,13 +173,17 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     );
   });
 
-  it('approveAuthorization: pending pop + 5-min TTL recheck + fresh code mint with oac_ prefix', () => {
+  it('approveAuthorization: pending pop + 5-min TTL recheck + canonical hierarchical scope reduction + fresh code mint', () => {
     expect(body).toMatch(
       /if \(pending === undefined\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'unknown or expired authorization_id'\);/,
     );
     expect(body).toMatch(/this\.pendingAuthorizations\.delete\(args\.authorization_id\);/);
     expect(body).toMatch(
       /if \(this\.nowFn\(\) - pending\.created_at > CODE_TTL_SECONDS \* 1000\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'authorization expired before approval'\);/,
+    );
+    expect(body).toMatch(/import \{ scopesSatisfy \} from '\.\.\/lib\/errors-helpers\.js';/);
+    expect(body).toMatch(
+      /!OAUTH_DENY_SCOPES\.has\(s\) &&\s*\n?\s*\(approverScopes === undefined \|\| scopesSatisfy\(approverScopes, s\)\)/,
     );
     expect(body).toMatch(/const code = `oac_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
   });

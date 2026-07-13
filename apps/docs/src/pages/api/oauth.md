@@ -115,7 +115,7 @@ the customer's behalf once they approve.
 
 ## 2 — Customer approves (dashboard-internal)
 
-`POST /v1/oauth/authorize/complete` (dashboard auth required)
+`POST /v1/oauth/authorize/complete` (interactive dashboard session required)
 
 Body:
 
@@ -126,7 +126,15 @@ Body:
 The approving account is derived from the authenticated dashboard
 session — `account_id` is intentionally **not** accepted from the
 body (a body-supplied `account_id` is rejected to prevent
-cross-account takeover).
+cross-account takeover). General API keys cannot call this endpoint,
+even if they have broad scopes: consent must be a human action from an
+interactive dashboard session.
+
+The granted scopes are reduced against the dashboard session's
+effective authority. Broad `read` and `write` authority can approve
+their matching granular scopes (for example, `read:sessions`), while a
+granular scope cannot approve a broad or sibling scope. Privileged
+internal and account-owner scopes are never minted into OAuth tokens.
 
 Response:
 

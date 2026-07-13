@@ -10,12 +10,14 @@
 //     GET    /v1/admin/oauth/clients         — list
 //     DELETE /v1/admin/oauth/clients/:id     — revoke
 //
-//   Public OAuth dance (no auth — PKCE + client_secret + code IS the
-//   auth):
+//   Public OAuth dance (no account auth — PKCE + client_secret + code
+//   are the auth):
 //     GET    /v1/oauth/authorize             — stage authorization
-//     POST   /v1/oauth/authorize/complete    — dashboard approval
 //     POST   /v1/oauth/token                 — code → access_token
 //     POST   /v1/oauth/introspect            — token validation
+//
+//   Interactive dashboard consent (web session + account limiter):
+//     POST   /v1/oauth/authorize/complete    — approval
 //
 //   V-667.C RFC 7009 revoke — accepts token_type_hint informationally.
 //
@@ -61,14 +63,19 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
     expect(p).toMatch(/'\/v1\/admin\/oauth\/clients\/:id\/rotate-secret'/);
   });
 
-  it("CRITICAL public OAuth dance roster (no auth) — /v1/oauth/{authorize,authorize/complete,token,introspect} + /v1/oauth/revoke (V-667.C). The header comment is the canonical contract: 'no auth — PKCE + client_secret + code IS the auth'.", () => {
+  it('CRITICAL public provider roster and separately web-session-gated consent completion', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
-    expect(p).toMatch(/Public OAuth dance \(no auth — PKCE \+ client_secret \+ code IS the auth\)/);
+    expect(p).toMatch(
+      /Public OAuth dance \(no account auth — PKCE \+ client_secret \+ code are auth\)/,
+    );
     expect(p).toMatch(/GET\s+\/v1\/oauth\/authorize\s+— stage authorization/);
-    expect(p).toMatch(/POST\s+\/v1\/oauth\/authorize\/complete\s+— dashboard approval/);
     expect(p).toMatch(/POST\s+\/v1\/oauth\/token\s+— code → access_token/);
     expect(p).toMatch(/POST\s+\/v1\/oauth\/introspect\s+— token validation/);
     expect(p).toMatch(/'\/v1\/oauth\/revoke'/);
+    expect(p).toMatch(/Interactive dashboard consent \(web-session \+ account-rate-limit gated\)/);
+    expect(p).toMatch(
+      /'\/v1\/oauth\/authorize\/complete',[\s\S]{0,100}preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/,
+    );
   });
 
   // ─── Admin scope on every admin route ────────────────────────
@@ -167,10 +174,10 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
 
   // ─── /authorize/complete account-context note ────────────────
 
-  it("CRITICAL /authorize/complete account-context comment — 'Account context for /authorize/complete comes from the bearer-auth gate that gates the dashboard — the dashboard signs the customer in, then POSTs to /v1/oauth/authorize/complete on the customer's behalf'. The dashboard-as-proxy design is what lets the public dance survive without per-request customer auth.", () => {
+  it('CRITICAL /authorize/complete rejects general API keys and requires interactive dashboard context', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
-    expect(p).toMatch(/Account context for \/authorize\/complete comes from the bearer-auth/);
-    expect(p).toMatch(/gate that gates the dashboard — the dashboard signs the customer in,/);
-    expect(p).toMatch(/then POSTs to \/v1\/oauth\/authorize\/complete on the customer's behalf\./);
+    expect(p).toMatch(/Account context for \/authorize\/complete comes only from the dashboard's/);
+    expect(p).toMatch(/interactive web session\. General API keys are rejected/);
+    expect(p).toMatch(/if \(ctx\.webSession === null\)/);
   });
 });

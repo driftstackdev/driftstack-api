@@ -4,11 +4,11 @@
 // 'plain' opens prefix-attack class) or breaks the RFC 7009 always-
 // 200 revoke contract (probe-style enumeration risk).
 //
-//   • V-667.B framing pinned: two surfaces (admin auth-gated + public
-//     OAuth dance no-auth — PKCE + client_secret + code IS the auth).
+//   • V-667.B framing pinned: admin, public provider, and interactive
+//     dashboard-consent surfaces have distinct authentication gates.
 //   • Admin: register/list/get-one/delete/V-667.E rotate-secret.
-//   • Public dance: authorize / authorize/complete (bearer-auth) /
-//     token / introspect / V-667.C RFC 7009 revoke.
+//   • Public dance: authorize / token / introspect / V-667.C RFC 7009
+//     revoke. Consent completion requires an interactive web session.
 //   • PKCE: code_challenge 43..128 + code_challenge_method literal
 //     S256; code_verifier 43..128.
 //   • state 8..256 (CSRF token min length).
@@ -41,20 +41,23 @@ function read(p: string): string {
 describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-667.B framing pinned: two route surfaces (Admin auth-gated + Public OAuth dance no-auth — PKCE + client_secret + code IS the auth); 4 admin endpoints + 4 public dance endpoints listed; bearer-auth gates dashboard which signs customer in then POSTs to /authorize/complete on customer behalf', () => {
+  it('V-667.B framing pins separate admin, public provider, and interactive dashboard-consent surfaces', () => {
     expect(body).toMatch(/\/\/ V-667\.B — OAuth 2\.0 Fastify route layer\./);
     expect(body).toMatch(
       /\/\/\s*\* Admin \(auth-gated\):\s*\n?\s*\/\/\s*- POST\s+\/v1\/admin\/oauth\/clients\s+— register\s*\n?\s*\/\/\s*- GET\s+\/v1\/admin\/oauth\/clients\s+— list\s*\n?\s*\/\/\s*- DELETE \/v1\/admin\/oauth\/clients\/:id\s+— revoke/,
     );
     expect(body).toMatch(
-      /\/\/\s*\* Public OAuth dance \(no auth — PKCE \+ client_secret \+ code IS the auth\):\s*\n?\s*\/\/\s*- GET\s+\/v1\/oauth\/authorize\s+— stage authorization\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/authorize\/complete\s+— dashboard approval\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/token\s+— code → access_token\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/introspect\s+— token validation/,
+      /\/\/\s*\* Public OAuth dance \(no account auth — PKCE \+ client_secret \+ code are auth\):\s*\n?\s*\/\/\s*- GET\s+\/v1\/oauth\/authorize\s+— stage authorization\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/token\s+— code → access_token\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/introspect\s+— token validation/,
     );
     expect(body).toMatch(
-      /\/\/ Account context for \/authorize\/complete comes from the bearer-auth\s*\n?\s*\/\/ gate that gates the dashboard — the dashboard signs the customer in,\s*\n?\s*\/\/ then POSTs to \/v1\/oauth\/authorize\/complete on the customer's behalf\./,
+      /\/\/\s*\* Interactive dashboard consent \(web-session \+ account-rate-limit gated\):\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/authorize\/complete\s+— approve staged authorization/,
+    );
+    expect(body).toMatch(
+      /\/\/ Account context for \/authorize\/complete comes only from the dashboard's\s*\n?\s*\/\/ interactive web session\. General API keys are rejected so they cannot mint\s*\n?\s*\/\/ independently-lived OAuth tokens or outlive their own revocation\./,
     );
   });
 
-  it('imports: FastifyInstance/Request + zod + ApiKeyScopeSchema from api-types + OAuthError/OAuthService + BadRequest/NotFound/Unauthorized errors', () => {
+  it('imports: FastifyInstance/Request + zod + ApiKeyScopeSchema from api-types + OAuthError/OAuthService + typed request errors', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(/import \{ ApiKeyScopeSchema \} from '@driftstack\/api-types';/);
@@ -62,7 +65,7 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
       /import \{ OAuthError, type OAuthService \} from '\.\.\/services\/oauth\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, NotFoundError, UnauthorizedError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*ForbiddenError,\s*NotFoundError,\s*UnauthorizedError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 
@@ -139,9 +142,12 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('POST /authorize/complete: app.requireAuth gate; account bound to the AUTHENTICATED caller (ctx.account.id) NOT a body account_id (cross-account-takeover guard) + scope restricted to ctx.apiKey.scopes; POST /token: exchangeCode (code + verifier + client_id + client_secret + redirect_uri)', () => {
+  it('POST /authorize/complete: web-session + account-rate-limit gated before parsing; account bound to the authenticated caller and scope restricted to their effective scopes', () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/oauth\/authorize\/complete',\s*\n?\s*\{ preHandler: \[app\.requireAuth\] \},/,
+      /app\.post\(\s*\n?\s*'\/v1\/oauth\/authorize\/complete',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+    );
+    expect(body).toMatch(
+      /if \(ctx\.webSession === null\) \{\s*\n?\s*throw new ForbiddenError\('OAuth authorization requires an interactive dashboard session\.'\);\s*\n?\s*\}\s*\n?\s*const body = parseOrThrow\(ApproveAuthorizationBody, req\.body\);/,
     );
     // SECURITY (cross-account-takeover guard): the approving account is derived from the
     // authenticated caller, NEVER the request body; the granted scope is the approver's own.
@@ -176,7 +182,7 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('2026-06-01 — IP rate-limit gates on the 4 UNAUTH public-dance routes (authorize/token/introspect/revoke) at AUTH_IP_LIMITS.oauthProvider; /authorize/complete omitted (requireAuth-gated). Pins the imports + per-route buckets + each route carrying its preHandler so a drift that drops the brute-force/oracle protection fails CI', () => {
+  it('rate-limit gates cover the 4 unauthenticated provider routes and the account-authenticated consent mutation', () => {
     // Imports for the gate wiring.
     expect(body).toMatch(
       /import \{ ipRateLimit, AUTH_IP_LIMITS \} from '\.\.\/middleware\/ip-rate-limit\.js';/,
@@ -202,6 +208,9 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
     expect(body).toMatch(
       /app\.post\(\s*\n?\s*'\/v1\/oauth\/revoke',\s*\n?\s*\{ preHandler: \[revokeGate\] \}/,
+    );
+    expect(body).toMatch(
+      /app\.post\(\s*\n?\s*'\/v1\/oauth\/authorize\/complete',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \}/,
     );
   });
 

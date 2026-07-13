@@ -32,6 +32,7 @@ async function buildHarness(): Promise<FastifyInstance> {
   // so registration binds (we only exercise the public unauth routes).
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
   app.decorate('requireAuth', () => Promise.resolve());
+  app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
   registerOAuthRoutes(app, {
     service: new OAuthService(new InMemoryOAuthStore()),
     rateLimitStore: new MemoryRateLimitStore(),

@@ -25,6 +25,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import { verifyS256Challenge } from '../lib/oauth-pkce.js';
+import { scopesSatisfy } from '../lib/errors-helpers.js';
 
 const CODE_TTL_SECONDS = 5 * 60;
 
@@ -385,13 +386,14 @@ export class OAuthService {
     if (this.nowFn() - pending.created_at > CODE_TTL_SECONDS * 1000) {
       throw new OAuthError('invalid_request', 'authorization expired before approval');
     }
-    // SECURITY: restrict the granted scope — always drop the privileged deny-set, and (when
-    // the approver's scopes are supplied) intersect with them, so the OAuth token never
-    // exceeds the approver's own authority.
+    // SECURITY: restrict the granted scope — always drop the privileged deny-set, then
+    // reduce through the canonical hierarchy so broad authority can grant matching granular
+    // scopes without ever letting granular authority broaden or cross into a sibling scope.
     const approverScopes = args.approverScopes;
     const grantedScope = pending.scope.filter(
       (s) =>
-        !OAUTH_DENY_SCOPES.has(s) && (approverScopes === undefined || approverScopes.includes(s)),
+        !OAUTH_DENY_SCOPES.has(s) &&
+        (approverScopes === undefined || scopesSatisfy(approverScopes, s)),
     );
     const code = `oac_${randomBytes(32).toString('base64url')}`;
     await this.store.insertCode({

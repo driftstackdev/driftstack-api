@@ -217,6 +217,22 @@ describe('V-667 OAuthService — granted scope restriction (the cross-account/es
     expect(scope).toEqual(['read:sessions']);
   });
 
+  it('uses the canonical broad-satisfies-granular hierarchy for dashboard consent', async () => {
+    const scope = await grantedScopeFor(
+      ['read:sessions', 'write:sessions', 'read:billing'],
+      ['read', 'write', 'account_owner'],
+    );
+    expect(scope).toEqual(['read:sessions', 'write:sessions', 'read:billing']);
+  });
+
+  it('does not let a granular approver grant a broad or sibling scope', async () => {
+    const scope = await grantedScopeFor(
+      ['read', 'read:sessions', 'read:billing'],
+      ['read:sessions'],
+    );
+    expect(scope).toEqual(['read:sessions']);
+  });
+
   it('strips deny-set scopes (account_owner) even when requested AND the approver holds them', async () => {
     // The escalation guard: account_owner can never be minted via the OAuth flow.
     const scope = await grantedScopeFor(

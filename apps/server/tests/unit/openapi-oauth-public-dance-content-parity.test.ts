@@ -43,6 +43,15 @@ describe('OpenAPI — OAuth 2.0 public dance endpoints', () => {
     expect(src).toMatch(/state:\s*z\.string\(\)\.min\(8\)\.max\(256\)/);
   });
 
+  it('keeps dashboard consent internal and documents its interactive-session boundary', () => {
+    expect(src).toMatch(/requires an interactive web session and rejects API keys/);
+    const slice = src.slice(
+      src.indexOf('OAuth 2.0 public dance'),
+      src.indexOf('RateLimitBucketOpenApi'),
+    );
+    expect(slice).not.toMatch(/path:\s*'\/v1\/oauth\/authorize\/complete'/);
+  });
+
   it('token response declares Bearer + expires_in + scope array (RFC 6749 §5.1)', () => {
     expect(src).toMatch(
       /OAuthTokenResponseOpenApi[\s\S]{0,500}access_token[\s\S]{0,100}token_type:\s*z\.literal\('Bearer'\)[\s\S]{0,100}expires_in[\s\S]{0,100}scope:\s*z\.array/,

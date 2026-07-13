@@ -20,14 +20,9 @@
 //                     returns 503 FeatureUnavailable immediately, so it
 //                     is not an abuse surface (the LIVE branch's real
 //                     route carries a limiter, and is checked here).
-//   4. exempt       — an explicit, justified allowlist, in two groups:
-//                     (4a) EXEMPT_BY_DESIGN — the HMAC-signature-verified
-//                     webhook-ingress routes + the V-266 "public, no
-//                     preHandler" cli-authorize routes; and
-//                     (4b) SURFACED_PENDING_LIMITER — a small set of unauth
-//                     token-consume / session auth routes that THIS guard
-//                     surfaced (queue §4.12): pinned so the current reality
-//                     is explicit, decision pending (see that block's note).
+//   4. exempt       — an explicit, justified allowlist: the HMAC-signature-
+//                     verified webhook-ingress routes + the V-266 public
+//                     cli-authorize routes with their dedicated IP gates.
 //
 // A mutation route in none of these classes is a wide-open abuse surface.
 // Before this guard the property was only manually verified each audit
@@ -54,7 +49,7 @@ const ROUTES_DIR = resolve(REPO_ROOT, 'apps/server/src/routes');
 
 const MUTATION_METHODS = new Set(['post', 'put', 'patch', 'delete']);
 
-// Protection class 4a — BY DESIGN: routes that intentionally carry no
+// Protection class 4 — BY DESIGN: routes that intentionally carry no
 // limiter for a sound, settled reason.
 const EXEMPT_BY_DESIGN: ReadonlyArray<{ file: string; path: string; reason: string }> = [
   {
@@ -68,51 +63,9 @@ const EXEMPT_BY_DESIGN: ReadonlyArray<{ file: string; path: string; reason: stri
     path: '/v1/webhooks/nowpayments',
     reason: 'NowPayments IPN — same signature-verified-ingress rationale as the Stripe webhook.',
   },
-  {
-    file: 'auth-cli.ts',
-    path: '/v1/auth/cli-authorize/initiate',
-    reason:
-      'V-266 deliberate "public, no preHandler" (pinned by routes-auth-cli-content-parity); bounded by 256-bit code / 5-min TTL / one-shot. A possible IP gate is surfaced as queue §4.10.',
-  },
-  {
-    file: 'auth-cli.ts',
-    path: '/v1/auth/cli-authorize/exchange',
-    reason: 'V-266 deliberate "public, no preHandler" (same as initiate).',
-  },
 ];
 
-// Protection class 4b — SURFACED, decision pending (NOT settled-by-design).
-// Discovered 2026-06-03 by this very guard: the 2026-05-15/19/20 unauth-gate
-// sweep added ipRateLimit gates to the email-SENDING auth endpoints
-// (signup / login / verify / resend / magic-link-REQUEST / password-reset-
-// REQUEST) but not to these token-CONSUMING / session siblings. Pinned here
-// (so the guard is green + the current reality is explicit) and SURFACED as
-// queue §4.12 — NOT auto-fixed because adding an ipRateLimit gate is an
-// outward-facing auth-flow behavior change that interacts with the
-// founder-LOCKED trustProxy "one global bucket" behavior (req.ip resolves to
-// the proxy in prod), most risky on the higher-frequency /v1/auth/refresh.
-// Severity is LOW defense-in-depth: the tokens these endpoints consume are
-// cryptographically sound — high-entropy, single-use, TTL'd (auto-memory
-// project_auth_flow_token_audit_2026_05_31) — so token brute-force is already
-// infeasible; the residual is only unbounded-request DoS (cheap fast-fail,
-// bounded by bodyLimit). A future founder/maintainer decision either gates
-// them (move the entry to a real ipRateLimit gate + delete it here) or
-// promotes it to EXEMPT_BY_DESIGN.
-// W484 — the four auth.ts entries were CLOSED (the §4.12 blockers cleared:
-// TRUST_PROXY=1 live since W424 means per-IP gates key on the real client IP).
-// magic-link/consume + password-reset/confirm + logout are gated at 10/min/IP,
-// refresh at a generous 60/min/IP (highest-frequency legit traffic; corporate
-// NAT). Only the deliberate oauth omission remains pinned.
-const SURFACED_PENDING_LIMITER: ReadonlyArray<{ file: string; path: string; reason: string }> = [
-  {
-    file: 'oauth.ts',
-    path: '/v1/oauth/authorize/complete',
-    reason:
-      'Authenticated (requireAuth, dashboard-proxied) but omits rateLimit(global) unlike sibling authed routes. NOT a public abuse vector (signed-in only → self-inflicted). LOWEST. §4.12.',
-  },
-];
-
-const EXEMPT = [...EXEMPT_BY_DESIGN, ...SURFACED_PENDING_LIMITER];
+const EXEMPT = EXEMPT_BY_DESIGN;
 
 // Bespoke preHandler that authenticates AND self-rate-limits
 // (rateLimitStore.consume) — treated as a limiter (project_internal_fleet_auth_audit_clean).

@@ -1,27 +1,34 @@
 // V-667.B — OAuth 2.0 Fastify route layer.
 //
-// Wires the V-667 OAuthService onto two public route surfaces:
+// Wires the V-667 OAuthService onto the provider and dashboard surfaces:
 //
 //   * Admin (auth-gated):
 //     - POST   /v1/admin/oauth/clients         — register
 //     - GET    /v1/admin/oauth/clients         — list
 //     - DELETE /v1/admin/oauth/clients/:id     — revoke
 //
-//   * Public OAuth dance (no auth — PKCE + client_secret + code IS the auth):
+//   * Public OAuth dance (no account auth — PKCE + client_secret + code are auth):
 //     - GET    /v1/oauth/authorize             — stage authorization
-//     - POST   /v1/oauth/authorize/complete    — dashboard approval
 //     - POST   /v1/oauth/token                 — code → access_token
 //     - POST   /v1/oauth/introspect            — token validation
 //
-// Account context for /authorize/complete comes from the bearer-auth
-// gate that gates the dashboard — the dashboard signs the customer in,
-// then POSTs to /v1/oauth/authorize/complete on the customer's behalf.
+//   * Interactive dashboard consent (web-session + account-rate-limit gated):
+//     - POST   /v1/oauth/authorize/complete    — approve staged authorization
+//
+// Account context for /authorize/complete comes only from the dashboard's
+// interactive web session. General API keys are rejected so they cannot mint
+// independently-lived OAuth tokens or outlive their own revocation.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ApiKeyScopeSchema } from '@driftstack/api-types';
 import { OAuthError, type OAuthService } from '../services/oauth.js';
-import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from '../lib/errors.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import { ipRateLimit, AUTH_IP_LIMITS } from '../middleware/ip-rate-limit.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
@@ -244,10 +251,16 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
 
   app.post(
     '/v1/oauth/authorize/complete',
-    { preHandler: [app.requireAuth] },
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (req: FastifyRequest, reply) => {
       const ctx = req.account;
       if (!ctx) throw new UnauthorizedError('authentication required');
+      // Consent is a human dashboard action, not a general API-key mutation.
+      // Accepting an API key here lets a stolen limited credential launder its
+      // authority into an independent OAuth token that survives key revocation.
+      if (ctx.webSession === null) {
+        throw new ForbiddenError('OAuth authorization requires an interactive dashboard session.');
+      }
       const body = parseOrThrow(ApproveAuthorizationBody, req.body);
       try {
         // SECURITY: bind the issued code to the AUTHENTICATED caller's account — never a

@@ -44,7 +44,16 @@ export function requireScope(ctx: AccountContext, required: ApiKeyScope): void {
  * alias, or V-481 broad-satisfies-granular).
  */
 export function hasScope(ctx: AccountContext, required: ApiKeyScope): boolean {
-  const scopes = ctx.apiKey.scopes;
+  return scopesSatisfy(ctx.apiKey.scopes, required);
+}
+
+/**
+ * Pure scope-set predicate for authorization flows that do not carry a full
+ * AccountContext (for example OAuth consent scope reduction). This is the
+ * canonical hierarchy: exact match, legacy admin alias, account_owner broad
+ * verbs, then broad-satisfies-granular on the same verb.
+ */
+export function scopesSatisfy(scopes: readonly ApiKeyScope[], required: ApiKeyScope): boolean {
   if (scopes.includes(required)) return true;
 
   // V-174 admin alias.

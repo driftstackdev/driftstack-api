@@ -1971,7 +1971,8 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Authorization staged. authorization_id is consumed by /authorize/complete.',
+        description:
+          'Authorization staged. authorization_id is consumed only by the dashboard-internal /authorize/complete endpoint, which requires an interactive web session and rejects API keys.',
         content: { 'application/json': { schema: OAuthAuthorizeResponseOpenApi } },
       },
       400: { description: 'Invalid request / scope / client.', content: problemContent },

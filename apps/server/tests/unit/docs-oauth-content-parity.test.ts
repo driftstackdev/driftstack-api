@@ -76,6 +76,14 @@ describe('Arc 6 docs.oauth — apps/docs/src/pages/api/oauth.md parity', () => {
     }
   });
 
+  it('documents that consent is human web-session-only and applies hierarchical scope reduction', () => {
+    expect(body).toMatch(/interactive dashboard session required/i);
+    expect(body).toMatch(/General API keys cannot call this endpoint/);
+    expect(body).toMatch(/Broad `read` and `write` authority can approve/);
+    expect(body).toMatch(/granular scope cannot approve a broad or sibling scope/);
+    expect(body).toMatch(/account-owner scopes are never minted/);
+  });
+
   it('access-token TTL claim matches TOKEN_TTL_SECONDS in services/oauth.ts (1 hour)', () => {
     expect(serviceSource).toMatch(/TOKEN_TTL_SECONDS\s*=\s*60\s*\*\s*60/);
     expect(body).toMatch(/expires_in.+3600/);

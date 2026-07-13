@@ -48,6 +48,7 @@ async function buildApp(args: BuildArgs) {
   // the admin routes registered alongside don't fail at register time.
   app.decorate('requireScope', () => async () => {});
   app.decorate('requireAuth', async () => {});
+  app.decorate('rateLimit', () => async () => {});
   registerOAuthRoutes(app, {
     service: buildService(args.exchangeBehaviour),
     rateLimitStore: new MemoryRateLimitStore(),

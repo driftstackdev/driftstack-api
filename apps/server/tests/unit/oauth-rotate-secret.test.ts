@@ -26,6 +26,7 @@ async function buildHarness(svc: OAuthService): Promise<FastifyInstance> {
   registerErrorHandler(app);
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
   app.decorate('requireAuth', () => Promise.resolve());
+  app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
   registerOAuthRoutes(app, { service: svc, rateLimitStore: new MemoryRateLimitStore() });
   await app.ready();
   return app;
