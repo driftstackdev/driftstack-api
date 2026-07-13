@@ -16,7 +16,7 @@
 //   • withAudit wrapper: targetResourceId is PUBLIC-prefixed id
 //     (audit captures what admin sees, not raw uuid); dual-write on
 //     success + error with err.name lowercase /error$/ strip.
-//   • clientIp helper: X-Forwarded-For first-element split fallback
+//   • clientIp helper: shared Fastify trustProxy-resolved request.ip
 //     to request.ip.
 //   • V-512 endpoint_id prefix strip: `webhook_endpoint_` removed
 //     before passing to repo.

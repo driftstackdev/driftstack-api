@@ -14,7 +14,7 @@
 //     in-handler requireScope helper.
 //   • ForceActionBodySchema: zod reason 1..500 optional; whole body
 //     optional.
-//   • clientIp helper: X-Forwarded-For first-element OR request.ip
+//   • clientIp helper: shared Fastify trustProxy-resolved request.ip
 //     ?? null.
 //   • withAudit wrapper: takes args object with targetAccountId +
 //     targetResourceId + inputPayload + perform thunk; dual-write
@@ -70,7 +70,7 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     );
   });
 
-  it('readClientIp imported from shared lib/client-ip.ts (extracted to collapse drift across admin-* routes; inline clientIp + X-Forwarded-For first-element handler now lives there)', () => {
+  it('readClientIp imported from shared trustProxy-aware lib/client-ip.ts', () => {
     expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     expect(body).toMatch(/ipAddress: readClientIp\(request\),/);
   });

@@ -1,10 +1,9 @@
-// Shared `X-Forwarded-For` first-hop parser tests + drift-guard.
+// Shared trusted-proxy-aware client-IP reader tests + drift-guard.
 //
 // 3 admin routes (admin-webhooks / admin-force-actions / admin-accounts)
-// each hand-rolled the same XFF first-hop parser to populate the
-// `actor_ip` column on their admin_audit_log rows. The shared lib at
-// apps/server/src/lib/client-ip.ts is now the single source of truth;
-// every consumer imports it.
+// originally hand-rolled raw XFF parsing to populate `actor_ip`. The shared
+// lib is now the single source of truth and delegates the trust boundary to
+// Fastify's `request.ip`; every consumer imports it.
 //
 // Drift-guard: all 3 consumer routes import from the shared lib and
 // the legacy hand-rolled `function clientIp(...)` MUST NOT come back.
@@ -18,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 import type { FastifyRequest } from 'fastify';
+import Fastify from 'fastify';
 
 import { readClientIp } from '../../src/lib/client-ip.js';
 
@@ -55,51 +55,53 @@ function fakeRequest(opts: {
   } as unknown as FastifyRequest;
 }
 
-describe('readClientIp — happy paths', () => {
-  it('returns the first comma-separated XFF entry, trimmed', () => {
-    expect(readClientIp(fakeRequest({ xff: '203.0.113.5, 198.51.100.7, 10.0.0.1' }))).toBe(
-      '203.0.113.5',
-    );
-  });
-
-  it('trims surrounding whitespace on the first entry', () => {
-    expect(readClientIp(fakeRequest({ xff: '   203.0.113.5   , 198.51.100.7' }))).toBe(
-      '203.0.113.5',
-    );
-  });
-
-  it('handles a single-entry XFF with no commas', () => {
-    expect(readClientIp(fakeRequest({ xff: '203.0.113.42' }))).toBe('203.0.113.42');
-  });
-
-  it('handles an IPv6 first hop', () => {
-    expect(readClientIp(fakeRequest({ xff: '2001:db8::1, 198.51.100.7' }))).toBe('2001:db8::1');
-  });
-});
-
-describe('readClientIp — fallback to request.ip', () => {
-  it('falls back to request.ip when XFF is absent', () => {
+describe('readClientIp — request.ip is the only authority', () => {
+  it('returns request.ip when forwarding headers are absent', () => {
     expect(readClientIp(fakeRequest({ ip: '127.0.0.1' }))).toBe('127.0.0.1');
   });
 
-  it('falls back to request.ip when XFF is an empty string', () => {
-    expect(readClientIp(fakeRequest({ xff: '', ip: '127.0.0.1' }))).toBe('127.0.0.1');
-  });
-
-  it("falls back to request.ip when XFF's first entry is whitespace-only", () => {
-    expect(readClientIp(fakeRequest({ xff: '   , 198.51.100.7', ip: '127.0.0.1' }))).toBe(
-      '127.0.0.1',
+  it('ignores a caller-spoofed leftmost XFF value', () => {
+    expect(readClientIp(fakeRequest({ xff: '66.66.66.66, 203.0.113.7', ip: '203.0.113.7' }))).toBe(
+      '203.0.113.7',
     );
   });
 
-  it('returns null when XFF is absent AND request.ip is undefined', () => {
-    expect(readClientIp(fakeRequest({}))).toBeNull();
+  it('preserves a Fastify-resolved IPv6 address', () => {
+    expect(readClientIp(fakeRequest({ xff: '66.66.66.66', ip: '2001:db8::1' }))).toBe(
+      '2001:db8::1',
+    );
   });
 
-  it('returns null when XFF is an array (Fastify multi-value form — XFF should be string-only on a normalised proxy)', () => {
-    // The legacy hand-rolled parsers all guarded `typeof xff === 'string'`
-    // and ignored the array shape, falling through to request.ip.
-    expect(readClientIp(fakeRequest({ xff: ['203.0.113.5'], ip: undefined }))).toBeNull();
+  it('returns null instead of trusting XFF when request.ip is unavailable', () => {
+    expect(readClientIp(fakeRequest({ xff: '203.0.113.5' }))).toBeNull();
+  });
+});
+
+describe('readClientIp — Fastify trustProxy integration', () => {
+  async function resolvedIp(
+    trustProxy: boolean | number | string,
+    xff: string,
+  ): Promise<string | null> {
+    const app = Fastify({ trustProxy });
+    app.get('/ip', (request) => ({ ip: readClientIp(request) }));
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/ip',
+        headers: { 'x-forwarded-for': xff },
+      });
+      return response.json<{ ip: string | null }>().ip;
+    } finally {
+      await app.close();
+    }
+  }
+
+  it('trustProxy=1 selects nginx-appended rightmost peer, not spoofed leftmost input', async () => {
+    await expect(resolvedIp(1, '66.66.66.66, 203.0.113.7')).resolves.toBe('203.0.113.7');
+  });
+
+  it('trustProxy=false ignores the forwarding header', async () => {
+    await expect(resolvedIp(false, '66.66.66.66')).resolves.not.toBe('66.66.66.66');
   });
 });
 

@@ -30,7 +30,7 @@
 //   surfaces as 'error: <code>'. Same pattern as admin-incidents,
 //   admin-webhooks, admin-force-actions.
 //
-//   x-forwarded-for first-hop for D-025 IP capture.
+//   trustProxy-resolved request.ip for D-025 IP capture.
 //
 //   V-281 optional accountAudit dep — when omitted, the audit-note +
 //   record-refund endpoints stay unregistered.
@@ -181,15 +181,14 @@ describe('W1053 routes/admin-accounts D-025 + V-281 cross-source invariant', () 
     expect(p).toMatch(/are not registered\./);
   });
 
-  // ─── x-forwarded-for first-hop ───────────────────────────────
+  // ─── trusted-proxy-aware client IP ───────────────────────────
 
-  it('CRITICAL clientIp x-forwarded-for first-hop — extracted to shared lib/client-ip.ts; admin-accounts imports readClientIp from there. Same pattern as admin-incidents + admin-webhooks + admin-force-actions for D-025 audit-IP capture.', () => {
+  it('CRITICAL clientIp uses shared trustProxy-resolved request.ip for D-025 audit-IP capture.', () => {
     const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts'));
     expect(route).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/client-ip.ts'));
-    expect(lib).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
-    expect(lib).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
     expect(lib).toMatch(/return request\.ip \?\? null;/);
+    expect(lib).not.toMatch(/request\.headers\['x-forwarded-for'\]/);
   });
 
   // ─── List response envelope ──────────────────────────────────

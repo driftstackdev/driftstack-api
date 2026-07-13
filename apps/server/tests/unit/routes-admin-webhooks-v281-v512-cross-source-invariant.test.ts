@@ -30,7 +30,7 @@
 //   V-512 endpoint_id filter — strips 'webhook_endpoint_' public
 //   prefix before calling the repo.
 //
-//   x-forwarded-for first-hop client IP derivation (per D-025
+//   trustProxy-resolved request.ip derivation (per D-025
 //   admin-audit IP capture).
 //
 // stays in lockstep across apps/server/src/routes/admin-webhooks.ts.
@@ -142,14 +142,14 @@ describe('W1043 routes/admin-webhooks V-281 + V-512 cross-source invariant', () 
     expect(p).toMatch(/next_cursor: page\.nextCursor,/);
   });
 
-  // ─── clientIp x-forwarded-for first-hop ──────────────────────
+  // ─── trusted-proxy-aware client IP ───────────────────────────
 
-  it('CRITICAL clientIp x-forwarded-for first-hop — extracted to shared lib/client-ip.ts; admin-webhooks imports readClientIp from there. The first-hop convention is the D-025 audit-IP-capture contract.', () => {
+  it('CRITICAL clientIp uses shared trustProxy-resolved request.ip for D-025 audit-IP capture.', () => {
     const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-webhooks.ts'));
     expect(route).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/client-ip.ts'));
-    expect(lib).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
-    expect(lib).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
+    expect(lib).toMatch(/return request\.ip \?\? null;/);
+    expect(lib).not.toMatch(/request\.headers\['x-forwarded-for'\]/);
   });
 
   // ─── id-format error message ─────────────────────────────────

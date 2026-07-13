@@ -167,14 +167,13 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
     expect(p).toMatch(/reason: z\.string\(\)\.min\(1\)\.max\(500\)\.optional\(\),/);
   });
 
-  // ─── x-forwarded-for first-hop ───────────────────────────────
+  // ─── trusted-proxy-aware client IP ───────────────────────────
 
-  it('CRITICAL clientIp x-forwarded-for first-hop — extracted to shared lib/client-ip.ts; admin-force-actions imports readClientIp from there. Same first-hop convention as admin-incidents + admin-webhooks for D-025 audit-IP capture.', () => {
+  it('CRITICAL clientIp uses shared trustProxy-resolved request.ip for D-025 audit-IP capture.', () => {
     const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(route).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/client-ip.ts'));
-    expect(lib).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
-    expect(lib).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
     expect(lib).toMatch(/return request\.ip \?\? null;/);
+    expect(lib).not.toMatch(/request\.headers\['x-forwarded-for'\]/);
   });
 });
