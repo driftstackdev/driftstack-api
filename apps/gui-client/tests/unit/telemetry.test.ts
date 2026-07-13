@@ -113,12 +113,18 @@ describe('scrubEvent — beforeSend PII scrubber', () => {
   it('scrubs Authorization / Cookie headers, preserves the rest', () => {
     const ev = {
       request: {
-        headers: { Authorization: 'Bearer ds_live_secret', Cookie: 'sid=abc', 'X-Other': 'ok' },
+        headers: {
+          Authorization: 'Bearer ds_live_secret',
+          Cookie: 'sid=abc',
+          'x-api-key': 'raw-api-secret',
+          'X-Other': 'ok',
+        },
       },
     } as unknown as ErrorEvent;
     const h = scrubEvent(ev, hint)!.request!.headers as Record<string, string>;
     expect(h.Authorization).toBe('[scrubbed]');
     expect(h.Cookie).toBe('[scrubbed]');
+    expect(h['x-api-key']).toBe('[scrubbed]');
     expect(h['X-Other']).toBe('ok');
   });
 
@@ -132,6 +138,18 @@ describe('scrubEvent — beforeSend PII scrubber', () => {
     expect(url).not.toContain('ds_live_SECRET');
     expect(url).toContain('ds_token=%5Bscrubbed%5D'); // URL-encoded "[scrubbed]"
     expect(url).toContain('foo=bar'); // non-sensitive param preserved
+  });
+
+  it('scrubs credential params from a relative request URL', () => {
+    const ev = {
+      request: { url: '/v1/events?ds_token=RELATIVE_SECRET&code=OAUTH_SECRET&ok=1' },
+    } as unknown as ErrorEvent;
+    const url = scrubEvent(ev, hint)!.request!.url!;
+    expect(url).not.toContain('RELATIVE_SECRET');
+    expect(url).not.toContain('OAUTH_SECRET');
+    expect(url).toContain('ds_token=%5Bscrubbed%5D');
+    expect(url).toContain('code=%5Bscrubbed%5D');
+    expect(url).toContain('ok=1');
   });
 
   it('scrubs credential-shaped breadcrumb data (field names + nested url query)', () => {
@@ -167,6 +185,36 @@ describe('scrubEvent — beforeSend PII scrubber', () => {
     expect(app.name).toBe('gui');
   });
 
+  it('recursively scrubs nested request data/extra credentials and cuts cycles', () => {
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    const ev = {
+      request: { data: { account: { credentials: { api_key: 'NESTED_KEY' } } } },
+      extra: { nested: { password: 'NESTED_PASSWORD' }, cycle },
+    } as unknown as ErrorEvent;
+    const out = scrubEvent(ev, hint)!;
+    expect(out.request?.data).toBe('[scrubbed: request body]');
+    const serialized = JSON.stringify(out);
+    expect(serialized).not.toContain('NESTED_KEY');
+    expect(serialized).not.toContain('NESTED_PASSWORD');
+    expect(serialized).toContain('[scrubbed: structure limit]');
+  });
+
+  it('fails closed on over-depth extra data', () => {
+    const data: Record<string, unknown> = {};
+    let cursor = data;
+    for (let depth = 0; depth < 12; depth += 1) {
+      const next: Record<string, unknown> = {};
+      cursor.nested = next;
+      cursor = next;
+    }
+    cursor.api_key = 'TOO_DEEP_SECRET';
+    const ev = { extra: { data } } as unknown as ErrorEvent;
+    const serialized = JSON.stringify(scrubEvent(ev, hint));
+    expect(serialized).not.toContain('TOO_DEEP_SECRET');
+    expect(serialized).toContain('[scrubbed: structure limit]');
+  });
+
   it('scrubs a credential-bearing URL interpolated into the EXCEPTION MESSAGE (fetch/EventSource error citing ?ds_token=<apiKey>)', () => {
     const ev = {
       exception: {
@@ -197,6 +245,21 @@ describe('scrubEvent — beforeSend PII scrubber', () => {
     expect(String(out[0]!.message)).toContain('Bearer [scrubbed]');
     expect(String(out[1]!.message)).not.toContain('SECRET2');
     expect(String(out[1]!.message)).toContain('access_token=[scrubbed]');
+  });
+
+  it('scrubs full RFC bearer, Basic, fragment tokens, and URL userinfo in free text', () => {
+    const ev = {
+      message:
+        'Bearer abc.DEF~ghi+DEEP/== Basic YWxpY2U6aHVudGVyMg== https://u:p@host/cb#id_token=FRAGMENT',
+    } as unknown as ErrorEvent;
+    const message = scrubEvent(ev, hint)!.message!;
+    for (const secret of ['DEEP', 'YWxpY2U6aHVudGVyMg==', 'u:p@', 'FRAGMENT']) {
+      expect(message).not.toContain(secret);
+    }
+    expect(message).toContain('Bearer [scrubbed]');
+    expect(message).toContain('Basic [scrubbed]');
+    expect(message).toContain('https://[scrubbed]@host');
+    expect(message).toContain('id_token=[scrubbed]');
   });
 
   it('scrubs a top-level captureMessage event.message', () => {

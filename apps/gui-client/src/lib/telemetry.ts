@@ -117,9 +117,9 @@ export function initTelemetry(cfg: TelemetryConfig): void {
 }
 
 /**
- * Strip credential-shaped fields before sending. Recurses one level
- * into the request data; deeper nesting falls to Sentry's own size
- * limits. Returns the scrubbed event or null to drop entirely.
+ * Strip credential-shaped fields before sending. Recurses through request
+ * data, extras, contexts, and breadcrumbs with a fail-closed depth/cycle cap;
+ * Sentry size limits are not a confidentiality boundary.
  *
  * Exported for unit testing — `Sentry.init` wires it as `beforeSend`.
  */
@@ -131,7 +131,8 @@ export function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | nu
       if (
         k.toLowerCase().includes('auth') ||
         k.toLowerCase() === 'cookie' ||
-        k.toLowerCase() === 'set-cookie'
+        k.toLowerCase() === 'set-cookie' ||
+        isSensitiveKey(k)
       ) {
         h[k] = '[scrubbed]';
       }
@@ -141,6 +142,11 @@ export function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | nu
   // (e.g. the notification stream's `?ds_token=<apiKey>`).
   if (typeof event.request?.url === 'string') {
     event.request.url = scrubUrl(event.request.url);
+  }
+  // Privacy contract is stronger than field-level filtering: request bodies are
+  // never telemetry. Drop the entire payload regardless of scalar/object shape.
+  if (event.request?.data !== undefined) {
+    event.request.data = '[scrubbed: request body]';
   }
   // Scrub common credential field names from extra/contexts data.
   if (event.extra) event.extra = scrubObject(event.extra);
@@ -179,25 +185,65 @@ export function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | nu
   return event;
 }
 
-const SENSITIVE_KEY_PATTERNS = [
-  /^api[_-]?key$/i,
-  /^password$/i,
-  /^secret$/i,
-  /^token$/i,
-  /^bearer$/i,
-  /authorization/i,
-];
+const SENSITIVE_KEYS = new Set([
+  'authorization',
+  'cookie',
+  'setcookie',
+  'password',
+  'newpassword',
+  'currentpassword',
+  'recoverycode',
+  'recoverycodes',
+  'apikey',
+  'xapikey',
+  'xbyokanthropicapikey',
+  'xdriftstackguicontrolkey',
+  'stripesignature',
+  'plaintext',
+  'secret',
+  'signingsecret',
+  'webhooksecret',
+  'totpsecret',
+  'mfasecret',
+  'clientsecret',
+  'configblob',
+  'privatekey',
+  'guicontrolkey',
+  'token',
+  'accesstoken',
+  'refreshtoken',
+  'idtoken',
+  'credential',
+  'credentials',
+  'bearer',
+]);
+
+function isSensitiveKey(key: string): boolean {
+  return SENSITIVE_KEYS.has(key.toLowerCase().replaceAll(/[^a-z0-9]/g, ''));
+}
+
+const MAX_SCRUB_DEPTH = 8;
+const SCRUBBED_STRUCTURE = '[scrubbed: structure limit]';
+
+function scrubValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth >= MAX_SCRUB_DEPTH || seen.has(value)) return SCRUBBED_STRUCTURE;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const out = value.map((item) => scrubValue(item, depth + 1, seen));
+    seen.delete(value);
+    return out;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = isSensitiveKey(key) ? '[scrubbed]' : scrubValue(nested, depth + 1, seen);
+  }
+  seen.delete(value);
+  return out;
+}
 
 function scrubObject(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (SENSITIVE_KEY_PATTERNS.some((p) => p.test(k))) {
-      out[k] = '[scrubbed]';
-    } else {
-      out[k] = v;
-    }
-  }
-  return out;
+  return scrubValue(obj, 0, new WeakSet<object>()) as Record<string, unknown>;
 }
 
 /** Credential-shaped query-param names whose VALUES must never leave the host. */
@@ -206,10 +252,14 @@ const SENSITIVE_QUERY_PARAMS = new Set([
   'token',
   'access_token',
   'refresh_token',
+  'id_token',
   'api_key',
   'apikey',
+  'client_secret',
   'password',
   'secret',
+  'signature',
+  'code',
 ]);
 
 /**
@@ -219,18 +269,21 @@ const SENSITIVE_QUERY_PARAMS = new Set([
  */
 function scrubUrl(url: string): string {
   try {
-    const u = new URL(url);
+    const absolute = /^[a-z][a-z0-9+.-]*:/i.test(url);
+    const protocolRelative = url.startsWith('//');
+    const u = new URL(url, 'https://scrub.invalid');
     let changed = false;
     for (const key of [...u.searchParams.keys()]) {
-      if (
-        SENSITIVE_QUERY_PARAMS.has(key.toLowerCase()) ||
-        SENSITIVE_KEY_PATTERNS.some((p) => p.test(key))
-      ) {
+      if (SENSITIVE_QUERY_PARAMS.has(key.toLowerCase()) || isSensitiveKey(key)) {
         u.searchParams.set(key, '[scrubbed]');
         changed = true;
       }
     }
-    return changed ? u.toString() : url;
+    if (!changed) return url;
+    if (absolute) return u.toString();
+    const path = `${u.pathname}${u.search}${u.hash}`;
+    if (protocolRelative) return `//${u.host}${path}`;
+    return url.startsWith('/') ? path : path.replace(/^\//, '');
   } catch {
     return url;
   }
@@ -247,10 +300,12 @@ function scrubUrl(url: string): string {
 function scrubText(s: string): string {
   return s
     .replace(
-      /([?&](?:ds_token|access_token|refresh_token|api_key|apikey|token|password|secret)=)[^&\s"'`]+/gi,
+      /([?&#](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|password|secret|signature|code)=)[^&\s"'`]+/gi,
       '$1[scrubbed]',
     )
-    .replace(/(bearer\s+)[A-Za-z0-9._-]+/gi, '$1[scrubbed]');
+    .replace(/(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[scrubbed]')
+    .replace(/(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi, '$1[scrubbed]')
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^/?#\s@]+@/gi, '$1[scrubbed]@');
 }
 
 /**

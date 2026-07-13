@@ -140,19 +140,21 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
     expect(body).toMatch(/sendDefaultPii: false,\s*\n?\s*beforeSend: scrubEvent,/);
   });
 
-  it("scrubEvent: Authorization-style headers (toLowerCase().includes('auth') OR cookie OR set-cookie) → '[scrubbed]' + extra/contexts spread scrub via scrubObject; SENSITIVE_KEY_PATTERNS 6 regexes (api_key + password + secret + token + bearer + authorization)", () => {
-    expect(body).toMatch(
-      /if \(\s*\n?\s*k\.toLowerCase\(\)\.includes\('auth'\) \|\|\s*\n?\s*k\.toLowerCase\(\) === 'cookie' \|\|\s*\n?\s*k\.toLowerCase\(\) === 'set-cookie'\s*\n?\s*\) \{\s*\n?\s*h\[k\] = '\[scrubbed\]';\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /const SENSITIVE_KEY_PATTERNS = \[\s*\n?\s*\/\^api\[_-\]\?key\$\/i,\s*\n?\s*\/\^password\$\/i,\s*\n?\s*\/\^secret\$\/i,\s*\n?\s*\/\^token\$\/i,\s*\n?\s*\/\^bearer\$\/i,\s*\n?\s*\/authorization\/i,\s*\n?\s*\];/,
-    );
+  it('scrubEvent covers headers and drops request bodies before recursively scrubbing extra/contexts', () => {
+    expect(body).toMatch(/k\.toLowerCase\(\) === 'set-cookie' \|\|\s*\n?\s*isSensitiveKey\(k\)/);
+    expect(body).toMatch(/const SENSITIVE_KEYS = new Set\(\[/);
+    expect(body).toMatch(/function isSensitiveKey\(key: string\): boolean/);
+    expect(body).toMatch(/event\.request\.data = '\[scrubbed: request body\]';/);
   });
 
-  it("scrubObject: iterates Object.entries; if SENSITIVE_KEY_PATTERNS.some(p.test(k)) → '[scrubbed]' else passes value through unchanged", () => {
+  it('scrubObject fails closed on depth/cycles and recursively classifies keys', () => {
+    expect(body).toMatch(/const MAX_SCRUB_DEPTH = 8;/);
+    expect(body).toMatch(/const SCRUBBED_STRUCTURE = '\[scrubbed: structure limit\]';/);
     expect(body).toMatch(
-      /function scrubObject\(obj: Record<string, unknown>\): Record<string, unknown> \{\s*\n?\s*const out: Record<string, unknown> = \{\};\s*\n?\s*for \(const \[k, v\] of Object\.entries\(obj\)\) \{\s*\n?\s*if \(SENSITIVE_KEY_PATTERNS\.some\(\(p\) => p\.test\(k\)\)\) \{\s*\n?\s*out\[k\] = '\[scrubbed\]';\s*\n?\s*\} else \{\s*\n?\s*out\[k\] = v;\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*return out;\s*\n?\s*\}/,
+      /if \(depth >= MAX_SCRUB_DEPTH \|\| seen\.has\(value\)\) return SCRUBBED_STRUCTURE;/,
     );
+    expect(body).toMatch(/out\[key\] = isSensitiveKey\(key\)/);
+    expect(body).toMatch(/new WeakSet<object>\(\)/);
   });
 
   it("URL + breadcrumb PII hardening: scrubEvent strips credential-shaped query params from request.url (the `?ds_token=<apiKey>` notification-stream vector) + scrubs breadcrumb data; SENSITIVE_QUERY_PARAMS includes 'ds_token'; scrubUrl uses new URL + searchParams.set('[scrubbed]') with try/catch passthrough", () => {
@@ -168,9 +170,16 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
     // notification stream URL) MUST be present.
     expect(body).toMatch(/const SENSITIVE_QUERY_PARAMS = new Set\(\[/);
     expect(body).toMatch(/'ds_token',/);
-    // scrubUrl: parse → scrub matching params → toString, passthrough on throw.
+    expect(body).toMatch(/'id_token',/);
+    expect(body).toMatch(/'client_secret',/);
+    expect(body).toMatch(/'signature',/);
+    expect(body).toMatch(/'code',/);
+    // scrubUrl: base URL supports relative inputs; matching params are replaced.
     expect(body).toMatch(/function scrubUrl\(url: string\): string \{/);
+    expect(body).toMatch(/new URL\(url, 'https:\/\/scrub\.invalid'\)/);
     expect(body).toMatch(/u\.searchParams\.set\(key, '\[scrubbed\]'\);/);
+    expect(body).toMatch(/\(bearer\\s\+\)\[A-Za-z0-9\._~\+\/-\]\+=\*/);
+    expect(body).toMatch(/\(basic\\s\+\)\[A-Za-z0-9\+\/\]\{8,\}=\{0,2\}/);
   });
 
   it('file exists at canonical path', () => {
