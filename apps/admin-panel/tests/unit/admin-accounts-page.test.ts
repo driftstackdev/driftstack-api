@@ -110,7 +110,7 @@ describe('admin-panel Accounts (accounts.astro) behaviour', () => {
   });
 
   it('renders an account row with identity, tier, status, dates, and an acc_-stripped Open link', async () => {
-    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: () => json({ data: [ACCOUNT], has_more: false }),
     });
@@ -127,6 +127,8 @@ describe('admin-panel Accounts (accounts.astro) behaviour', () => {
     expect(window.document.querySelector('a[href="/accounts/abc123"]')).toBeTruthy();
     expect(window.document.querySelector('a[href="/accounts/acc_abc123"]')).toBeFalsy();
     expect(text(window, '[data-field="footnote"]')).toContain('Showing 1 account');
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
   });
 
   it('empty result: shows the no-match row and a zero-count footnote', async () => {
@@ -205,10 +207,14 @@ describe('admin-panel Accounts (accounts.astro) behaviour', () => {
     expect(text(window, '[data-field="footnote"]')).toContain('more available');
 
     loadMoreBtn.click();
+    loadMoreBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     await flush();
 
-    const cursorCall = fetchCalls.find((c) => /cursor=acc_def456/.test(c.url));
+    const cursorCalls = fetchCalls.filter((c) => /cursor=acc_def456/.test(c.url));
+    const cursorCall = cursorCalls[0];
     expect(cursorCall).toBeTruthy();
+    expect(cursorCalls).toHaveLength(1);
+    expect(cursorCall?.init?.signal).toBeInstanceOf(window.AbortSignal);
     const list = text(window, '[data-list="accounts"]');
     // Both pages' rows are present — the second page was appended, not
     // swapped in, so the first page's row stays visible.
@@ -217,6 +223,7 @@ describe('admin-panel Accounts (accounts.astro) behaviour', () => {
     // has_more is now false, so the button hides again.
     expect(loadMoreBtn.classList.contains('hidden')).toBe(true);
     expect(text(window, '[data-field="footnote"]')).toContain('Showing 2 accounts');
+    expect(loadMoreBtn.hasAttribute('aria-busy')).toBe(false);
   });
 
   it('pagination: has_more=false keeps "Load more" hidden', async () => {

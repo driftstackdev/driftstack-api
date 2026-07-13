@@ -200,6 +200,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       // <script> in the document (including the SSO bridge) has already
       // executed and the real token is in localStorage by the time it's read.
       let token = null;
+      const ACCOUNTS_TIMEOUT_MS = 15_000;
+      let loadController = null;
+      let loadMoreInFlight = false;
+
+      function boundedFetch(url, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(() => controller.abort(), ACCOUNTS_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       const STATUS_BADGE = {
         active: 'bg-emerald-50 text-emerald-700',
@@ -311,10 +329,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         const myReq = ++inFlight;
         const params = buildQuery(append ? nextCursor : undefined);
         if (loadMoreBtn) loadMoreBtn.disabled = true;
-        return fetch(apiBaseUrl + '/v1/admin/accounts?' + params.toString(), {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        })
+        if (loadController) loadController.abort();
+        const controller = new AbortController();
+        loadController = controller;
+        root.setAttribute('aria-busy', 'true');
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/accounts?' + params.toString(),
+          {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
@@ -353,7 +379,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
             if (loadMoreBtn) loadMoreBtn.disabled = false;
             // W604 — clear the SSG mock rows on ANY load failure so operators
             // never triage a fabricated customer list (3 fake accounts with
@@ -376,6 +402,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           })
           .finally(() => {
+            if (append) loadMoreInFlight = false;
+            if (myReq === inFlight) {
+              loadController = null;
+              root.removeAttribute('aria-busy');
+            }
             // 2026-05-21 — AdminLayout opacity-gate signal (same pattern
             // as the customer-dashboard pages).
             if (typeof window.dashboardHydrated === 'function') {
@@ -418,8 +449,13 @@ const apiBaseUrl = resolveApiBaseUrl();
 
         if (loadMoreBtn) {
           loadMoreBtn.addEventListener('click', () => {
+            if (loadMoreInFlight) return;
+            loadMoreInFlight = true;
             loadMoreBtn.textContent = 'Loading…';
-            load({ append: true });
+            loadMoreBtn.setAttribute('aria-busy', 'true');
+            load({ append: true }).finally(() => {
+              loadMoreBtn.removeAttribute('aria-busy');
+            });
           });
         }
 
