@@ -29,6 +29,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/billing.astro');
+const LAYOUT = resolve(REPO_ROOT, 'apps/customer-dashboard/src/layouts/DashboardLayout.astro');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -36,6 +37,7 @@ function read(p: string): string {
 
 describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity', () => {
   const body = read(LIB);
+  const layout = read(LAYOUT);
 
   it("V-183 framing pinned: 'progressive-enhancement wiring against /v1/billing. SSG renders mock for instant paint; inline <script> fetches live state + replaces card values. The portal action button POSTs to the billing endpoint + redirects to the returned Stripe URL.' (Trial-pack flow retired 2026-05-27.) — pinned so the dual SSG-mock + live-replace pattern + the action→Stripe-redirect contract stays documented", () => {
     expect(body).toMatch(
@@ -51,14 +53,19 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     );
   });
 
-  it("V-331b act-as header in authedFetch: '...(typeof window.driftstackActAsHeaders === 'function' ? window.driftstackActAsHeaders() : {})' — pinned so the team-scoped 'view as another account' flow propagates to billing fetches AND to the portal-session POST (drift would let team managers accidentally open their OWN Stripe portal when trying to manage a team-mate's)", () => {
+  it('billing authedFetch preserves act-as headers and delegates its exact 15s deadline to the shared layout transport', () => {
     expect(body).toMatch(
       /\/\/ V-331b — act-as header for team-scoped requests\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
     );
     expect(body).toContain('const BILLING_REQUEST_TIMEOUT_MS = 15_000;');
-    expect(body).toContain('signal: controller.signal,');
-    expect(body).toContain("callerSignal.addEventListener('abort', forwardAbort, { once: true })");
-    expect(body).toContain("callerSignal.removeEventListener('abort', forwardAbort)");
+    expect(body).toMatch(
+      /window\.driftstackFetchWithDeadline\(\s*\n?\s*apiBaseUrl \+ path,[\s\S]*?credentials: 'include',[\s\S]*?BILLING_REQUEST_TIMEOUT_MS,\s*\n?\s*\);/,
+    );
+    expect(layout).toContain('var callerSignal = init && init.signal;');
+    expect(layout).toContain(
+      "callerSignal.addEventListener('abort', forwardAbort, { once: true })",
+    );
+    expect(layout).toContain("callerSignal.removeEventListener('abort', forwardAbort)");
   });
 
   it('receipt downloads are single-flight, honest while busy, and finally-clean temporary resources', () => {
