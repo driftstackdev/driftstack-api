@@ -78,6 +78,7 @@ describe('V-534.T useCryptoOrder — initial fetch', () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     const headers = init?.headers as Record<string, string> | undefined;
     expect(headers?.authorization).toBe('Bearer sk_test');
+    expect(init?.signal).toBeTruthy();
   });
 
   it('idle when orderId is null and does not fetch', () => {
@@ -90,6 +91,34 @@ describe('V-534.T useCryptoOrder — initial fetch', () => {
 });
 
 describe('V-534.T useCryptoOrder — error paths', () => {
+  it('bounds a stalled manual order read with an actionable error', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      ),
+    );
+    const { result } = renderHook(() =>
+      useCryptoOrder('ord_abc', { manual: true, pollIntervalMs: 0 }),
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.refetch();
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await act(async () => pending);
+    expect(result.current.state).toEqual({
+      kind: 'error',
+      message: 'Order status timed out. Check your connection and try again.',
+    });
+  });
+
   it('errors when no API key configured', async () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },
@@ -118,6 +147,40 @@ describe('V-534.T useCryptoOrder — error paths', () => {
 });
 
 describe('V-534.T useCryptoOrder — polling', () => {
+  it('keeps stalled polling single-flight and aborts it when the order changes', async () => {
+    let firstSignal: AbortSignal | undefined;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            firstSignal = init?.signal ?? undefined;
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('aborted', 'AbortError'));
+            });
+          }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(sample({ order_id: 'ord_new' })), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result, rerender } = renderHook(
+      ({ orderId }) => useCryptoOrder(orderId, { pollIntervalMs: 5 }),
+      { initialProps: { orderId: 'ord_old' } },
+    );
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    rerender({ orderId: 'ord_new' });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(firstSignal?.aborted).toBe(true);
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'));
+    if (result.current.state.kind === 'ready') {
+      expect(result.current.state.data.order_id).toBe('ord_new');
+    }
+  });
+
   it('polls until terminal status is reached', async () => {
     vi.useFakeTimers();
     const responses = [

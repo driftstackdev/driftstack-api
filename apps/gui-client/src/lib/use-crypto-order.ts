@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 
 export interface CryptoOrderEvent {
@@ -70,8 +71,12 @@ export function useCryptoOrder(
   );
   const lastStatusRef = useRef<string | null>(null);
   const failCountRef = useRef(0);
+  const requestRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
   const fetcher = useCallback(async (): Promise<void> => {
+    if (inFlightRef.current) return;
     if (orderId === null) {
       setState({ kind: 'idle' });
       return;
@@ -80,32 +85,66 @@ export function useCryptoOrder(
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
+    inFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
       const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-      const res = await fetch(`${baseUrl}/v1/billing/crypto-orders/${orderId}`, {
+      const res = await fetchWithDeadline(`${baseUrl}/v1/billing/crypto-orders/${orderId}`, {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'application/json',
         },
       });
       if (!res.ok) {
-        failCountRef.current += 1;
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) {
+          failCountRef.current += 1;
+          setState({ kind: 'error', message });
+        }
         return;
       }
       const body = (await res.json()) as CryptoOrderData;
-      failCountRef.current = 0;
-      lastStatusRef.current = body.status;
-      setState({ kind: 'ready', data: body });
+      if (sequence === sequenceRef.current) {
+        failCountRef.current = 0;
+        lastStatusRef.current = body.status;
+        setState({ kind: 'ready', data: body });
+      }
     } catch (err) {
-      failCountRef.current += 1;
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        failCountRef.current += 1;
+        setState({
+          kind: 'error',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Order status timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        inFlightRef.current = false;
+      }
     }
   }, [orderId, settings.apiKey, settings.baseUrl]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      inFlightRef.current = false;
+      lastStatusRef.current = null;
+      failCountRef.current = 0;
+    },
+    [orderId, settings.apiKey, settings.baseUrl],
+  );
 
   useEffect(() => {
     if (opts.manual === true) return;

@@ -106,8 +106,13 @@ describe('W473.C apps/gui-client/src/lib/use-crypto-order.ts content parity', ()
       /const \[state, setState\] = useState<CryptoOrderState>\(\s*\n?\s*opts\.manual === true \|\| orderId === null \? \{ kind: 'idle' \} : \{ kind: 'loading' \},\s*\n?\s*\);/,
     );
     expect(body).toMatch(
-      /const res = await fetch\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{orderId\}`, \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-orders\/\$\{orderId\}`, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\},\s*\n?\s*\}\);/,
     );
+    expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
+    expect(body).toMatch(
+      /if \(sequence === sequenceRef\.current\) \{[\s\S]*?setState\(\{ kind: 'ready', data: body \}\);/,
+    );
+    expect(body).toMatch(/requestRef\.current\?\.abort\(\);/);
     expect(body).toMatch(/\}, \[orderId, settings\.apiKey, settings\.baseUrl\]\);/);
   });
 
