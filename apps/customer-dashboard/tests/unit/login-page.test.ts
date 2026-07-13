@@ -233,6 +233,46 @@ describe('login page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
   });
 
+  it('serializes duplicate verification resends and recovers after the bounded request times out', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      requestTimeoutImmediately: true,
+      requestTimeoutOnCall: 2,
+      fetchPlan: [
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/email-not-verified',
+              detail: 'Verify your email before signing in.',
+            },
+            403,
+          ),
+        (call) =>
+          new Promise<Response>((_resolve, reject) => {
+            call.init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'pending@example.com', 'secret-password');
+    await flush();
+    const resendBtn = window.document.querySelector(
+      '[data-resend-verification]',
+    ) as HTMLButtonElement;
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const resendCalls = fetchCalls.filter((c) => /\/v1\/auth\/resend-verification$/.test(c.url));
+    expect(resendCalls).toHaveLength(1);
+    expect(resendCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(resendBtn.disabled).toBe(false);
+    expect(resendBtn.getAttribute('aria-busy')).toBe('false');
+    const status = window.document.querySelector('[data-resend-status]')?.textContent ?? '';
+    expect(status).toMatch(/resending took too long.*check your connection/i);
+  });
+
   it('serializes duplicate password submits and recovers after the bounded request times out', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       requestTimeoutImmediately: true,

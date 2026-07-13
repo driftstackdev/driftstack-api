@@ -287,6 +287,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const verifyLink = root.querySelector('[data-verify-link]');
       const resendBtn = root.querySelector('[data-resend-verification]');
       const resendStatus = root.querySelector('[data-resend-status]');
+      const RESEND_REQUEST_TIMEOUT_MS = 15_000;
+      let resendInFlight = false;
 
       // Problem-type URI the server returns when login is refused because
       // the account's email isn't verified (403). Matched on the body
@@ -428,17 +430,23 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       if (resendBtn) {
         resendBtn.addEventListener('click', () => {
+          if (resendInFlight) return;
           const email = (form.querySelector('#login-email') || {}).value || '';
           if (!email.trim()) {
             if (resendStatus) resendStatus.textContent = 'Enter your email above first.';
             return;
           }
+          resendInFlight = true;
           resendBtn.disabled = true;
+          resendBtn.setAttribute('aria-busy', 'true');
           if (resendStatus) resendStatus.textContent = 'Sending…';
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), RESEND_REQUEST_TIMEOUT_MS);
           fetch(apiBaseUrl + '/v1/auth/resend-verification', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ email: email.trim() }),
+            signal: controller.signal,
           })
             .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
             .then(() => {
@@ -448,10 +456,15 @@ const apiBaseUrl = resolveApiBaseUrl();
             })
             .catch(() => {
               if (resendStatus)
-                resendStatus.textContent = "Couldn't resend right now — try again shortly.";
+                resendStatus.textContent = controller.signal.aborted
+                  ? 'Resending took too long. Check your connection and try again.'
+                  : "Couldn't resend right now — try again shortly.";
             })
             .finally(() => {
+              clearTimeout(timeoutId);
+              resendInFlight = false;
               resendBtn.disabled = false;
+              resendBtn.setAttribute('aria-busy', 'false');
             });
         });
       }
