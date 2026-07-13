@@ -12,6 +12,7 @@ import { registerRecipesRoutes } from '../../src/routes/recipes.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import type { RecipesRepo, RecipeRecord } from '../../src/services/recipes.js';
 import type { AgentSessionsRepo } from '../../src/services/agent-sessions.js';
+import type { AgentIntent } from '../../src/services/agent-decomposer.js';
 
 const ACC = '11111111-2222-3333-4444-555555555555';
 const RECIPE = {
@@ -20,7 +21,25 @@ const RECIPE = {
   agentSessionId: 'agt_x',
   label: 'checkout flow',
   description: null,
-  intentLog: [{ kind: 'navigate', url: 'https://example.com' }],
+  intentLog: [
+    { kind: 'navigate', url: 'https://example.com' },
+    {
+      kind: 'interact',
+      action: 'type',
+      selector: '#password',
+      value: 'correct horse battery staple',
+      sensitive: true,
+    },
+    {
+      kind: 'interact',
+      action: 'type',
+      selector: '[autocomplete=one-time-code]',
+      value: '839201',
+      sensitive: false,
+    },
+    { kind: 'interact', action: 'type', selector: '#username', value: 'alice@example.com' },
+    { kind: 'interact', action: 'tap', selector: '#submit', value: 'Submit' },
+  ],
   transcriptSnapshot: [],
   createdAt: new Date('2026-05-20T10:00:00.000Z'),
   updatedAt: new Date('2026-05-20T10:00:00.000Z'),
@@ -80,14 +99,30 @@ describe('recipes route — read/management wiring (app.inject)', () => {
     await app.close();
   });
 
-  it('GET /v1/recipes/:id returns the detail (with intent_log), scoped by the authed account', async () => {
+  it('GET /v1/recipes/:id omits sensitive type values without mutating the encrypted replay record', async () => {
     const { app, getByIdAccounts } = await harness();
     const res = await app.inject({ method: 'GET', url: `/v1/recipes/${RECIPE.id}` });
     expect(res.statusCode).toBe(200);
-    // Detail view serializes intent_log (the list view omits it); assert on the
-    // raw payload string (res.json() is any-typed).
-    expect(res.payload).toContain(RECIPE.id);
-    expect(res.payload).toContain('intent_log');
+    const body = res.json<{ id: string; intent_log: AgentIntent[] }>();
+    expect(body.id).toBe(RECIPE.id);
+    expect(body.intent_log).toEqual([
+      { kind: 'navigate', url: 'https://example.com' },
+      { kind: 'interact', action: 'type', selector: '#password', sensitive: true },
+      {
+        kind: 'interact',
+        action: 'type',
+        selector: '[autocomplete=one-time-code]',
+        sensitive: true,
+      },
+      { kind: 'interact', action: 'type', selector: '#username', value: 'alice@example.com' },
+      { kind: 'interact', action: 'tap', selector: '#submit', value: 'Submit' },
+    ]);
+    expect(res.payload).not.toContain('correct horse battery staple');
+    expect(res.payload).not.toContain('839201');
+    // Public serialization works on copies; future server-side replay still
+    // has the original values inside the encrypted repository boundary.
+    expect(RECIPE.intentLog[1]).toMatchObject({ value: 'correct horse battery staple' });
+    expect(RECIPE.intentLog[2]).toMatchObject({ value: '839201', sensitive: false });
     expect(getByIdAccounts).toEqual([ACC]); // never a client-supplied account
     await app.close();
   });

@@ -33,9 +33,10 @@ type Recipe struct {
 	UpdatedAt      string  `json:"updated_at"`
 }
 
-// RecipeDetail is the full recipe returned by Get — it embeds the list
-// metadata and adds the replayable IntentLog (raw JSON, matching the
-// agent-session transcript intent representation).
+// RecipeDetail is the public recipe returned by Get. It embeds the list
+// metadata and adds the ordered IntentLog. Sensitive type steps retain their
+// selector and sensitive marker but omit the optional value; exact replay
+// values stay encrypted server-side.
 type RecipeDetail struct {
 	Recipe
 	IntentLog []json.RawMessage `json:"intent_log"`
@@ -138,9 +139,8 @@ func (r *RecipesResource) Iterate(ctx context.Context, query *ListRecipesQuery, 
 	}
 }
 
-// Get fetches a single recipe in full, including the replayable
-// IntentLog. A missing or cross-account id returns 404 (existence not
-// leaked) — propagated as an error.
+// Get fetches a single recipe with its public IntentLog. A missing or
+// cross-account id returns 404 (existence not leaked) — propagated as an error.
 func (r *RecipesResource) Get(ctx context.Context, recipeID string) (*RecipeDetail, error) {
 	var out RecipeDetail
 	if err := r.client.do(ctx, requestOptions{

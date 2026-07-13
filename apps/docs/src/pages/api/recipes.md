@@ -38,7 +38,11 @@ has been deleted (ON DELETE SET NULL — the recipe survives the
 source session's lifecycle). `intent_count` is the length of the
 flattened intent_log. The list endpoint omits the intent array for
 payload weight; fetch a single recipe with `GET /v1/recipes/{id}`
-to get the full replayable `intent_log`.
+to get its public `intent_log`. Sensitive `type` steps retain their
+selector, order, and `sensitive: true` marker but omit `value`. The
+exact value remains inside the server's encrypted recipe payload for
+future server-side execution; it is never exposed to an ordinary
+`read`-scope caller.
 
 ## Create
 
@@ -82,8 +86,8 @@ Response `200 OK`:
 
 Each `data` entry is the resource shape above **without** the
 `intent_log` array — list items carry only `intent_count` for
-payload weight. Fetch a single recipe to get the replayable
-intents. `next_cursor` is `null` on the last page.
+payload weight. Fetch a single recipe to get the public replay
+steps. `next_cursor` is `null` on the last page.
 
 ## Suggest a label/description
 
@@ -115,11 +119,14 @@ generic suggestion rather than an error. `id` uses the same cross-account
 
 `GET /v1/recipes/{id}`
 
-Returns a single recipe in full, including the replayable
-`intent_log` array (the list endpoint omits it). A non-existent id
-— or one belonging to another account — returns 404; the server
-doesn't distinguish missing from forbidden, to avoid leaking
-existence.
+Returns a single recipe including its public `intent_log` array (the
+list endpoint omits it). Sensitive `type` intents omit `value`, even
+when sensitivity is inferred from a password, OTP, PIN, card, or API
+key selector; these steps still carry `sensitive: true` so clients can
+render them accurately. Other intent fields are unchanged. A
+non-existent id — or one belonging to another account — returns 404;
+the server doesn't distinguish missing from forbidden, to avoid
+leaking existence.
 
 ## Delete
 
@@ -138,6 +145,12 @@ transcript and flatMaps every `plan-executed` agent turn's
 structured `intents` array into a single `intent_log`. The result
 is captured atomically (insert-once; never edited) so the
 historical snapshot survives any later session activity.
+
+Recipe payloads are encrypted at rest. Public detail serialization
+works from a copy and removes sensitive type values without changing
+the stored intent log, preserving exact server-side replay while
+preventing a read-only API key or device key from retrieving saved
+credentials.
 
 Operator + user transcript entries don't carry intents — only
 agent turns from a successful decompose+execute step contribute.

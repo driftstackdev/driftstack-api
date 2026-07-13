@@ -57,6 +57,12 @@ describe('sdk-python resources/recipes content parity', () => {
     expect(body).toMatch(/async def delete\(self, recipe_id: str\) -> None:/);
   });
 
+  it('get() documents public intent-log sensitive-value omission and encrypted server-side replay', () => {
+    expect(body).toMatch(
+      /Fetch one recipe with its public ``intent_log``\.\s*\n\s*Sensitive type steps retain their selector and ``sensitive`` marker but\s*\n\s*omit the optional value\. Exact replay values stay encrypted server-side\./,
+    );
+  });
+
   it("Recipe return-shape framing pinned: 'Returns the inserted Recipe payload (id + account_id + agent_session_id + label + description + intent_count + timestamps).' — pinned so the 7-field returned-shape stays documented (matches TS RecipesResource + the server's recipe-row projection)", () => {
     expect(body).toMatch(
       /Returns the inserted ``Recipe`` payload \(id \+ account_id \+\s*\n?\s*agent_session_id \+ label \+ description \+ intent_count \+\s*\n?\s*timestamps\)\./,

@@ -17,6 +17,7 @@ import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/
 import { suggestRecipeMetadata, type RecipesRepo, type RecipeRecord } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { AgentIntent } from '../services/agent-decomposer.js';
+import { selectorImpliesSensitiveInput } from '../services/agent-sensitive-input.js';
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -58,15 +59,35 @@ function publicRecipe(rec: RecipeRecord): PublicRecipe {
   };
 }
 
-// Detail view (GET /:id) carries the full intent_log — the replayable
-// automation steps — on top of the list metadata. The transcript
-// snapshot stays internal (heavy; not needed for recipe management).
+// Detail view (GET /:id) carries the public intent_log on top of the list
+// metadata. Secret type values stay in the encrypted repository record for
+// future server-side replay, but are never returned to ordinary `read` scope.
+// The transcript snapshot also stays internal (heavy; not needed for recipe
+// management).
 interface PublicRecipeDetail extends PublicRecipe {
   intent_log: ReadonlyArray<AgentIntent>;
 }
 
+function publicRecipeIntent(intent: AgentIntent): AgentIntent {
+  if (
+    intent.kind !== 'interact' ||
+    intent.action !== 'type' ||
+    (intent.sensitive !== true &&
+      (intent.selector === undefined || !selectorImpliesSensitiveInput(intent.selector)))
+  ) {
+    return intent;
+  }
+
+  // Work on a copy: the repository record retains the encrypted value used by
+  // the eventual server-side replay path. `value` is optional on the existing
+  // wire type, so omission is backward-compatible for every SDK.
+  const redacted = { ...intent, sensitive: true };
+  delete redacted.value;
+  return redacted;
+}
+
 function publicRecipeDetail(rec: RecipeRecord): PublicRecipeDetail {
-  return { ...publicRecipe(rec), intent_log: rec.intentLog };
+  return { ...publicRecipe(rec), intent_log: rec.intentLog.map(publicRecipeIntent) };
 }
 
 export interface RecipesRoutesDeps {
@@ -163,8 +184,9 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
     },
   );
 
-  // V-530.J (D2) — fetch one recipe in full (includes the intent_log).
-  // `read` scope. Cross-account / missing → 404 (existence not leaked).
+  // V-530.J (D2) — fetch one recipe in full (includes the public intent_log;
+  // sensitive type values are omitted). `read` scope. Cross-account / missing
+  // → 404 (existence not leaked).
   app.get<{ Params: { id: string } }>(
     '/v1/recipes/:id',
     { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },

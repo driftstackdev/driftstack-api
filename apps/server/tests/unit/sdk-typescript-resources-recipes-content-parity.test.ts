@@ -101,7 +101,10 @@ describe('sdk-typescript resources/recipes content parity', () => {
     expect(body).not.toMatch(/execute\(/);
   });
 
-  it('RecipeDetail + RecipesListPage shapes pinned: get() returns the full recipe incl. intent_log; list() returns { data, has_more, next_cursor }', () => {
+  it('RecipeDetail + RecipesListPage shapes and public sensitive-value omission contract pinned', () => {
+    expect(body).toMatch(
+      /The public recipe returned by get\(\) — adds the ordered intent_log to the\s*\n?\s*\*\s+list metadata\. Sensitive type steps retain `sensitive:true` and their\s*\n?\s*\*\s+selector but omit the optional value\./,
+    );
     expect(body).toMatch(
       /export interface RecipeDetail extends Recipe \{\s*\n?\s*intent_log: AgentIntent\[\];/,
     );

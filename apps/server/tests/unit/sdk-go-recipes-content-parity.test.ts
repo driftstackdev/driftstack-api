@@ -85,7 +85,10 @@ describe('sdk-go recipes content parity', () => {
     expect(body).not.toMatch(/func \(r \*RecipesResource\) Execute\(/);
   });
 
-  it('RecipeDetail + RecipesListPage shapes pinned: Get returns the full recipe incl. IntentLog ([]json.RawMessage); List returns { Data, HasMore, NextCursor }', () => {
+  it('RecipeDetail + RecipesListPage shapes and public sensitive-value omission contract pinned', () => {
+    expect(body).toMatch(
+      /\/\/ RecipeDetail is the public recipe returned by Get\. It embeds the list\s*\n?\s*\/\/ metadata and adds the ordered IntentLog\. Sensitive type steps retain their\s*\n?\s*\/\/ selector and sensitive marker but omit the optional value; exact replay\s*\n?\s*\/\/ values stay encrypted server-side\./,
+    );
     expect(body).toMatch(
       /type RecipeDetail struct \{\s+Recipe\s+IntentLog\s+\[\]json\.RawMessage\s+`json:"intent_log"`/,
     );

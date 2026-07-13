@@ -75,7 +75,10 @@ class RecipesResource:
         return iterate_paginated(fetch_page)
 
     def get(self, recipe_id: str) -> dict[str, Any]:
-        """Fetch a single recipe in full (includes ``intent_log``).
+        """Fetch one recipe with its public ``intent_log``.
+
+        Sensitive type steps retain their selector and ``sensitive`` marker but
+        omit the optional value. Exact replay values stay encrypted server-side.
 
         404 if missing or owned by another account (existence not leaked).
         """

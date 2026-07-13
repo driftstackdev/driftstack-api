@@ -38,7 +38,7 @@ describe('docs/api/recipes content parity', () => {
     );
   });
 
-  it("Resource shape 7-field pinned: id (rec_<uuid>) + account_id + agent_session_id (nullable) + label + description + intent_count + created_at + updated_at. + 'agent_session_id is null when the originating agent-session has been deleted (ON DELETE SET NULL — the recipe survives the source session's lifecycle).' + 'intent_count is the length of the flattened intent_log; the actual intent array is captured but not surfaced at v1.0 (it lands with the read/list endpoints at v1.1).' — pinned so the ON-DELETE-SET-NULL relationship + intent-array-captured-but-not-surfaced contract all stay documented", () => {
+  it('Resource shape and public-detail redaction pinned: list metadata stays compact; detail retains sensitive selectors/order/marker but never returns saved type values to read scope', () => {
     expect(body).toMatch(
       /"id": "rec_<uuid>",\s*\n?\s*"account_id": "<account-uuid>",\s*\n?\s*"agent_session_id": "agt_<uuid> \| null",\s*\n?\s*"label": "my checkout flow",/,
     );
@@ -46,8 +46,12 @@ describe('docs/api/recipes content parity', () => {
       /`agent_session_id` is `null` when the originating agent-session\s*\n?\s*has been deleted \(ON DELETE SET NULL — the recipe survives the\s*\n?\s*source session's lifecycle\)\./,
     );
     expect(body).toMatch(
-      /`intent_count` is the length of the\s*\n?\s*flattened intent_log\. The list endpoint omits the intent array for\s*\n?\s*payload weight; fetch a single recipe with `GET \/v1\/recipes\/\{id\}`\s*\n?\s*to get the full replayable `intent_log`\./,
+      /`intent_count` is the length of the\s*\n?\s*flattened intent_log\. The list endpoint omits the intent array for\s*\n?\s*payload weight; fetch a single recipe with `GET \/v1\/recipes\/\{id\}`\s*\n?\s*to get its public `intent_log`\./,
     );
+    expect(body).toMatch(
+      /to get its public `intent_log`\. Sensitive `type` steps retain their\s*\n?\s*selector, order, and `sensitive: true` marker but omit `value`\./,
+    );
+    expect(body).toMatch(/never exposed to an ordinary\s*\n?\s*`read`-scope caller\./);
   });
 
   it('Create body 3-field validation framing pinned: agent_session_id required + cross-account 404 + label 1-120 chars after trim + description optional up to 2000 chars + 201 Created response. Drift to dropping the cross-account-404 anti-enumeration would leak agent-session-id existence to attackers', () => {
@@ -90,13 +94,23 @@ describe('docs/api/recipes content parity', () => {
     expect(body).toMatch(/"has_more": true,\s*\n\s*"next_cursor": "<opaque> \| null"/);
   });
 
-  it('Get-one endpoint documented as shipped: GET /v1/recipes/{id} returns the full recipe incl. the replayable intent_log + cross-account 404 anti-enumeration — pinned so the detail path is documented as live and the existence-leak-prevention contract stays explicit', () => {
+  it('Get-one endpoint documents the public intent log, sensitive-value omission, and cross-account 404 anti-enumeration', () => {
     expect(body).toMatch(/## Get one\s*\n\s*\n`GET \/v1\/recipes\/\{id\}`/);
     expect(body).toMatch(
-      /including the replayable\s*\n?\s*`intent_log` array \(the list endpoint omits it\)\./,
+      /including its public `intent_log` array \(the\s*\n?\s*list endpoint omits it\)\./,
     );
     expect(body).toMatch(
-      /doesn't distinguish missing from forbidden, to avoid leaking\s*\n?\s*existence\./,
+      /Sensitive `type` intents omit `value`, even\s*\n?\s*when sensitivity is inferred from a password, OTP, PIN, card, or API\s*\n?\s*key selector; these steps still carry `sensitive: true`/,
+    );
+    expect(body).toMatch(
+      /doesn't distinguish missing from forbidden, to avoid\s*\n?\s*leaking existence\./,
+    );
+  });
+
+  it('intent-log storage docs pin encryption plus copy-on-serialize redaction', () => {
+    expect(body).toMatch(/Recipe payloads are encrypted at rest\./);
+    expect(body).toMatch(
+      /Public detail serialization\s*\n?\s*works from a copy and removes sensitive type values without changing\s*\n?\s*the stored intent log/,
     );
   });
 

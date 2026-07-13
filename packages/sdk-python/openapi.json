@@ -20727,7 +20727,7 @@
     },
     "/v1/recipes/{id}": {
       "get": {
-        "summary": "Fetch a saved recipe in full (includes intent_log)",
+        "summary": "Fetch a saved recipe with its public intent_log",
         "tags": ["agent-chat"],
         "security": [
           {
@@ -20746,7 +20746,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The recipe, including the `intent_log` (ordered AgentIntent array) on top of the list metadata.",
+            "description": "The recipe plus its ordered `intent_log`. Sensitive type steps retain `sensitive: true`, selector, and order but omit the optional `value`; exact replay values stay encrypted server-side.",
             "content": {
               "application/json": {
                 "schema": {

@@ -372,7 +372,7 @@ describe('V-530.J GET + DELETE /v1/recipes/:id (wired)', () => {
     return res.json<{ id: string }>().id;
   }
 
-  it('GET /:id returns the full recipe including intent_log', async () => {
+  it('GET /:id returns the public recipe including intent_log', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const id = await createRecipe('detail me');
     const res = await fx.app.inject({
@@ -385,6 +385,69 @@ describe('V-530.J GET + DELETE /v1/recipes/:id (wired)', () => {
     expect(body.id).toBe(id);
     expect(body.label).toBe('detail me');
     expect(Array.isArray(body.intent_log)).toBe(true);
+  });
+
+  it('GET /:id redacts sensitive type values for an ordinary read-only key', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'api_builder' });
+    const session = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const agentSessionId = session.json<{ id: string }>().id;
+    const agentSessionsRepo = fx.agentSessionsRepo;
+    if (agentSessionsRepo === undefined) throw new Error('agent sessions repo was not wired');
+    await agentSessionsRepo.appendTranscript(agentSessionId, {
+      at: '2026-07-13T14:30:00.000Z',
+      role: 'agent',
+      body: 'plan executed',
+      intents: [
+        {
+          kind: 'interact',
+          action: 'type',
+          selector: '#password',
+          value: 'integration-password-secret',
+          sensitive: true,
+        },
+        {
+          kind: 'interact',
+          action: 'type',
+          selector: '[name=otp]',
+          value: '681204',
+          sensitive: false,
+        },
+        { kind: 'interact', action: 'type', selector: '#username', value: 'public-user' },
+      ],
+    });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { agent_session_id: agentSessionId, label: 'sensitive detail' },
+    });
+    const id = created.json<{ id: string }>().id;
+    const readOnlyKey = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'recipe-reader', scopes: ['read'] },
+    });
+    expect(readOnlyKey.statusCode).toBe(201);
+    const readOnlyPlaintext = readOnlyKey.json<{ plaintext: string }>().plaintext;
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/recipes/${id}`,
+      headers: { authorization: `Bearer ${readOnlyPlaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ intent_log: unknown[] }>().intent_log).toEqual([
+      { kind: 'interact', action: 'type', selector: '#password', sensitive: true },
+      { kind: 'interact', action: 'type', selector: '[name=otp]', sensitive: true },
+      { kind: 'interact', action: 'type', selector: '#username', value: 'public-user' },
+    ]);
+    expect(res.payload).not.toContain('integration-password-secret');
+    expect(res.payload).not.toContain('681204');
   });
 
   it('GET /:id → 404 for an unknown id', async () => {

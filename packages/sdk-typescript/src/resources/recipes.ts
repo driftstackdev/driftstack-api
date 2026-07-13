@@ -32,8 +32,9 @@ export interface Recipe {
   updated_at: string;
 }
 
-/** The full recipe returned by get() — adds the replayable intent_log
- *  to the list metadata. (list() items omit it for payload weight.) */
+/** The public recipe returned by get() — adds the ordered intent_log to the
+ *  list metadata. Sensitive type steps retain `sensitive:true` and their
+ *  selector but omit the optional value. (list() items omit the entire log.) */
 export interface RecipeDetail extends Recipe {
   intent_log: AgentIntent[];
 }
@@ -114,7 +115,7 @@ export class RecipesResource {
     );
   }
 
-  /** Get a single recipe in full, including the replayable intent_log. */
+  /** Get one recipe with its public intent_log. Sensitive type values are omitted. */
   get(id: string): Promise<RecipeDetail> {
     return this.http.request<RecipeDetail>({
       method: 'GET',

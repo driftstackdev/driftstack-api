@@ -27,9 +27,12 @@ export const RecipeSchema = z.object({
 export type Recipe = z.infer<typeof RecipeSchema>;
 
 /**
- * Full recipe (the `GET /v1/recipes/{id}` detail view) — the list
- * metadata plus the replayable `intent_log` (ordered {@link
- * AgentIntentSchema} array). Mirrors the route's `PublicRecipeDetail`.
+ * Public recipe detail (`GET /v1/recipes/{id}`) — list metadata plus the
+ * ordered `intent_log`. For sensitive `type` intents the server omits the
+ * optional `value` while retaining `sensitive:true`, selector, and step order;
+ * the encrypted internal record keeps the exact value for server-side replay.
+ * Mirrors the route's `PublicRecipeDetail` without changing the existing
+ * {@link AgentIntentSchema} wire type.
  */
 export const RecipeDetailSchema = RecipeSchema.extend({
   intent_log: z.array(AgentIntentSchema),

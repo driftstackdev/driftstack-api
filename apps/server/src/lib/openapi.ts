@@ -4115,20 +4115,20 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
-  // GET /v1/recipes/:id — fetch one recipe in full, including the
-  // intent_log (the replayable automation). V-530.J / D2. 404 on
-  // missing/cross-account (existence not leaked).
+  // GET /v1/recipes/:id — fetch one recipe with its public intent_log.
+  // Sensitive type values stay encrypted server-side and are omitted from the
+  // response. V-530.J / D2. 404 on missing/cross-account (existence not leaked).
   registerRoute(r, {
     method: 'get',
     path: '/v1/recipes/{id}',
-    summary: 'Fetch a saved recipe in full (includes intent_log)',
+    summary: 'Fetch a saved recipe with its public intent_log',
     tags: ['agent-chat'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
     responses: {
       200: {
         description:
-          'The recipe, including the `intent_log` (ordered AgentIntent array) on top of the list metadata.',
+          'The recipe plus its ordered `intent_log`. Sensitive type steps retain `sensitive: true`, selector, and order but omit the optional `value`; exact replay values stay encrypted server-side.',
         content: { 'application/json': { schema: RecipeDetailSchema } },
       },
       404: {
