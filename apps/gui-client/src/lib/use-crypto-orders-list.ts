@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
+import { fetchWithDeadline } from './fetch-with-deadline';
 import { useSettings } from './SettingsContext';
 import type { CryptoOrderData } from './use-crypto-order';
 
@@ -57,11 +58,11 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
     opts.manual === true ? { kind: 'idle' } : { kind: 'loading' },
   );
 
-  // Race guard: monotonically-increasing request generation. Every fetch/loadMore
-  // captures the generation it started at and bumps this ref; a slow older response
-  // that resolves after a newer request has begun is stale and must not setState,
-  // else out-of-order responses clobber the newer (e.g. filtered) data.
-  const requestGenRef = useRef(0);
+  const refreshRequestRef = useRef<AbortController | null>(null);
+  const pageRequestRef = useRef<AbortController | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const pageInFlightRef = useRef(false);
+  const sequenceRef = useRef(0);
 
   const buildUrl = useCallback(
     (cursor: string | null): URL => {
@@ -82,82 +83,130 @@ export function useCryptoOrdersList(opts: UseCryptoOrdersListOpts = {}): UseCryp
   );
 
   const fetcher = useCallback(async (): Promise<void> => {
+    if (refreshInFlightRef.current) return;
     if (!settings.apiKey) {
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
-    // Claim a fresh generation; any earlier in-flight response is now stale.
-    const gen = ++requestGenRef.current;
+    pageRequestRef.current?.abort();
+    pageRequestRef.current = null;
+    pageInFlightRef.current = false;
+    refreshInFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    refreshRequestRef.current = controller;
     setState({ kind: 'loading' });
     try {
-      const res = await fetch(buildUrl(null).toString(), {
+      const res = await fetchWithDeadline(buildUrl(null).toString(), {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'application/json',
         },
       });
-      if (gen !== requestGenRef.current) return; // superseded by a newer request
       if (!res.ok) {
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
       const body = (await res.json()) as ListApiResponse;
-      if (gen !== requestGenRef.current) return; // superseded by a newer request
-      setState({
-        kind: 'ready',
-        data: { orders: body.orders, nextCursor: body.next_cursor ?? null },
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'ready',
+          data: { orders: body.orders, nextCursor: body.next_cursor ?? null },
+        });
+      }
     } catch (err) {
-      if (gen !== requestGenRef.current) return; // superseded by a newer request
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'error',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Order history timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (refreshRequestRef.current === controller) {
+        refreshRequestRef.current = null;
+        refreshInFlightRef.current = false;
+      }
     }
   }, [settings.apiKey, buildUrl]);
 
   const loadMore = useCallback(async (): Promise<void> => {
     if (state.kind !== 'ready') return;
     if (state.data.nextCursor === null) return;
+    if (refreshInFlightRef.current || pageInFlightRef.current) return;
     if (!settings.apiKey) {
       setState({ kind: 'error', message: 'No API key configured.' });
       return;
     }
     const baseline = state.data;
-    // Claim a fresh generation; a subsequent filter refetch (or this call) supersedes.
-    const gen = ++requestGenRef.current;
+    pageInFlightRef.current = true;
+    const sequence = ++sequenceRef.current;
+    const controller = new AbortController();
+    pageRequestRef.current = controller;
     setState({ kind: 'loading_more', data: baseline });
     try {
-      const res = await fetch(buildUrl(baseline.nextCursor).toString(), {
+      const res = await fetchWithDeadline(buildUrl(baseline.nextCursor).toString(), {
         method: 'GET',
+        signal: controller.signal,
         headers: {
           authorization: `Bearer ${settings.apiKey}`,
           accept: 'application/json',
         },
       });
-      if (gen !== requestGenRef.current) return; // superseded by a newer request
       if (!res.ok) {
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+        const message = await readApiErrorMessage(res);
+        if (sequence === sequenceRef.current) setState({ kind: 'error', message });
         return;
       }
       const body = (await res.json()) as ListApiResponse;
-      if (gen !== requestGenRef.current) return; // superseded by a newer request
-      setState({
-        kind: 'ready',
-        data: {
-          orders: [...baseline.orders, ...body.orders],
-          nextCursor: body.next_cursor ?? null,
-        },
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'ready',
+          data: {
+            orders: [...baseline.orders, ...body.orders],
+            nextCursor: body.next_cursor ?? null,
+          },
+        });
+      }
     } catch (err) {
-      if (gen !== requestGenRef.current) return; // superseded by a newer request
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
+      if (sequence === sequenceRef.current) {
+        setState({
+          kind: 'error',
+          message:
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'More orders timed out. Check your connection and try again.'
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
+      }
+    } finally {
+      if (pageRequestRef.current === controller) {
+        pageRequestRef.current = null;
+        pageInFlightRef.current = false;
+      }
     }
   }, [state, settings.apiKey, buildUrl]);
+
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+      refreshRequestRef.current?.abort();
+      pageRequestRef.current?.abort();
+      refreshRequestRef.current = null;
+      pageRequestRef.current = null;
+      refreshInFlightRef.current = false;
+      pageInFlightRef.current = false;
+    },
+    [settings.apiKey, buildUrl],
+  );
 
   useEffect(() => {
     if (opts.manual === true) return;
