@@ -29,7 +29,7 @@ interface MockFetchCall {
 interface SetUpOpts {
   token?: string;
   confirmReturns?: boolean;
-  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+  fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
 function setUpDom(
@@ -221,6 +221,35 @@ describe('webhooks page — local integration', () => {
     expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
   });
 
+  it('create timeout reconciles a committed endpoint without pretending its secret is recoverable', async () => {
+    const committed = { ...ENDPOINT, id: 'wh_committed', url: 'https://hooks.test/ambiguous' };
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => Promise.reject(timeout),
+        () => json({ data: [committed] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="url"]') as HTMLInputElement).value = committed.url;
+    (form.querySelector('input[name="event"]') as HTMLInputElement).checked = true;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    expect(fetchCalls.filter((c) => /\/v1\/webhooks$/.test(c.url))).toHaveLength(3);
+    expect(window.document.querySelector('[data-list]')?.textContent).toContain(committed.url);
+    expect(isHidden(window, '[data-create-reveal]')).toBe(true);
+    expect(window.document.querySelector('[data-reveal-secret]')?.textContent).toBe('');
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
+      /outcome is unknown.*list was refreshed.*secret cannot be recovered.*delete.*before creating another/i,
+    );
+  });
+
   it('rotate-secret: confirm-gated POST /:id/rotate-secret reveals the new secret', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
@@ -248,6 +277,36 @@ describe('webhooks page — local integration', () => {
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(false);
     expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe(
       'whsec_ROTATED',
+    );
+  });
+
+  it('rotate timeout reconciles committed grace state without a false secret reveal', async () => {
+    const rotating = {
+      ...ENDPOINT,
+      rotation_grace_expires_at: '2026-05-21T10:00:00.000Z',
+    };
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [ENDPOINT] }),
+        () => Promise.reject(timeout),
+        () => json({ data: [rotating] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-rotate="wh_endpoint"]') as HTMLButtonElement).click();
+    await flush(10);
+
+    expect(
+      fetchCalls.filter((c) => /\/v1\/webhooks(?:\/wh_endpoint\/rotate-secret)?$/.test(c.url)),
+    ).toHaveLength(3);
+    expect(window.document.querySelector('[data-list]')?.textContent).toContain('rotating');
+    expect(isHidden(window, '[data-rotate-reveal]')).toBe(true);
+    expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe('');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /outcome is unknown.*list was refreshed.*secret cannot be recovered.*intentionally want to replace/i,
     );
   });
 

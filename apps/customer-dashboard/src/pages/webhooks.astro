@@ -494,7 +494,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         return fetch(url, { ...init, signal: controller.signal })
           .catch((err) => {
             if (err && err.name === 'AbortError') {
-              throw new Error('Request took too long. Check your connection and try again.');
+              const timeoutError = new Error(
+                'Request took too long. Check your connection and try again.',
+              );
+              timeoutError.name = 'AbortError';
+              throw timeoutError;
             }
             throw err;
           })
@@ -620,7 +624,18 @@ const apiBaseUrl = resolveApiBaseUrl();
               // secret exactly once; a timed reload would wipe it before a slow
               // copy (password manager / interruption) → permanent loss.
             })
-            .catch((err) => {
+            .catch(async (err) => {
+              if (err && err.name === 'AbortError') {
+                const refreshed = await refreshEndpointList(false);
+                showCreateError(
+                  'Create outcome is unknown after the request timed out. ' +
+                    (refreshed
+                      ? 'The endpoint list was refreshed. '
+                      : "We couldn't refresh the endpoint list. ") +
+                    'If a new endpoint for this URL appears, its signing secret cannot be recovered; delete that endpoint before creating another.',
+                );
+                return;
+              }
               showCreateError(err && err.message ? err.message : 'Failed to create endpoint.');
             })
             .finally(() => {
@@ -1396,7 +1411,18 @@ const apiBaseUrl = resolveApiBaseUrl();
               .then((body) => {
                 showRotateReveal(id, body.secret, body.grace_expires_at);
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                if (err && err.name === 'AbortError') {
+                  const refreshed = await refreshEndpointList(false);
+                  showBanner(
+                    'Rotation outcome is unknown after the request timed out. ' +
+                      (refreshed
+                        ? 'The endpoint list was refreshed. '
+                        : "We couldn't refresh the endpoint list. ") +
+                      'If the endpoint now shows rotating, its new signing secret cannot be recovered. Rotate again only if you intentionally want to replace it with another new secret.',
+                  );
+                  return;
+                }
                 showBanner(
                   'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
                 );
@@ -1474,54 +1500,62 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
-      boundedFetch(apiBaseUrl + '/v1/webhooks', {
-        // Every mutation (create/edit/delete/rotate/test) carries the act-as
-        // team header; the LIST must too, or acting-as a team renders the
-        // USER's own endpoints while mutations target the TEAM's — you'd edit
-        // what you can't see.
-        headers: {
-          authorization: 'Bearer ' + token,
-          ...(typeof window.driftstackActAsHeaders === 'function'
-            ? window.driftstackActAsHeaders()
-            : {}),
-        },
-        credentials: 'include',
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-        .then((body) => {
-          const endpoints = body.data || [];
-          if (endpoints.length === 0) {
-            ul.classList.add('hidden');
-            empty.classList.remove('hidden');
-          } else {
-            empty.classList.add('hidden');
-            ul.classList.remove('hidden');
-            ul.innerHTML = endpoints.map(endpointCard).join('');
-            wireDeliveryToggles();
-            wireDeleteButtons();
-            wireEditButtons();
-            wireTestButtons();
-            wireRotateButtons();
-          }
-          // S32 2026-07-07 (fable-frontend-audit) — the old success banner
-          // claimed delivery counts are "not exposed via /v1/webhooks",
-          // but V-185 added delivery_counts and the cards render them; the
-          // banner contradicted the page. No banner on a clean load.
+      function refreshEndpointList(showLoadError = true) {
+        return boundedFetch(apiBaseUrl + '/v1/webhooks', {
+          // Every mutation (create/edit/delete/rotate/test) carries the act-as
+          // team header; the LIST must too, or acting-as a team renders the
+          // USER's own endpoints while mutations target the TEAM's — you'd edit
+          // what you can't see.
+          headers: {
+            authorization: 'Bearer ' + token,
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
+          },
+          credentials: 'include',
         })
-        .catch((err) => {
-          // S32 2026-07-07 (fable-frontend-audit) — the old copy said
-          // "Showing preview data below", but no preview data is ever
-          // rendered (MOCK_WEBHOOKS was dead code) — the customer was left
-          // staring at loading skeletons forever. Show an honest error
-          // state instead.
-          ul.classList.add('hidden');
-          empty.classList.add('hidden');
-          showBanner(
-            "Couldn't load your webhook endpoints (" +
-              (err && err.message ? err.message : 'network error') +
-              '). Refresh to try again.',
-          );
-        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            const endpoints = body.data || [];
+            if (endpoints.length === 0) {
+              ul.classList.add('hidden');
+              empty.classList.remove('hidden');
+            } else {
+              empty.classList.add('hidden');
+              ul.classList.remove('hidden');
+              ul.innerHTML = endpoints.map(endpointCard).join('');
+              wireDeliveryToggles();
+              wireDeleteButtons();
+              wireEditButtons();
+              wireTestButtons();
+              wireRotateButtons();
+            }
+            // S32 2026-07-07 (fable-frontend-audit) — the old success banner
+            // claimed delivery counts are "not exposed via /v1/webhooks",
+            // but V-185 added delivery_counts and the cards render them; the
+            // banner contradicted the page. No banner on a clean load.
+            return true;
+          })
+          .catch((err) => {
+            // S32 2026-07-07 (fable-frontend-audit) — the old copy said
+            // "Showing preview data below", but no preview data is ever
+            // rendered (MOCK_WEBHOOKS was dead code) — the customer was left
+            // staring at loading skeletons forever. Show an honest error
+            // state instead.
+            if (showLoadError) {
+              ul.classList.add('hidden');
+              empty.classList.add('hidden');
+              showBanner(
+                "Couldn't load your webhook endpoints (" +
+                  (err && err.message ? err.message : 'network error') +
+                  '). Refresh to try again.',
+              );
+            }
+            return false;
+          });
+      }
+
+      refreshEndpointList()
         .finally(function () {
           // 2026-05-21 — signal the layout's opacity-gate that the
           // primary /v1/webhooks fetch resolved (success or failure).

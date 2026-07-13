@@ -48,6 +48,14 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toContain('Request took too long. Check your connection and try again.');
     expect(body).toMatch(/setAttribute\('aria-busy', 'true'\)/);
   });
+
+  it('reconciles ambiguous one-shot-secret mutations before suggesting recovery', () => {
+    expect(body).toContain("timeoutError.name = 'AbortError'");
+    expect(body).toContain('refreshEndpointList(false)');
+    expect(body).toContain('Create outcome is unknown after the request timed out.');
+    expect(body).toContain('Rotation outcome is unknown after the request timed out.');
+    expect(body).toContain('signing secret cannot be recovered');
+  });
   const subscribable = new Set<string>(
     (SubscribableWebhookEventTypeSchema._def as { values: readonly string[] }).values,
   );
