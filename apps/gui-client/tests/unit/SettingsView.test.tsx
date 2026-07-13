@@ -53,8 +53,8 @@ vi.mock('../../src/lib/browser-sign-in', () => ({
 const { SettingsView } = await import('../../src/views/SettingsView');
 const { ToastProvider } = await import('../../src/lib/toasts');
 
-function renderWithToasts(): void {
-  render(
+function renderWithToasts(): ReturnType<typeof render> {
+  return render(
     <ToastProvider>
       <SettingsView />
     </ToastProvider>,
@@ -69,7 +69,12 @@ afterEach(() => {
 describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
   it('renders without crashing in the no-API-key-yet state', () => {
     useSettingsMock.mockReturnValue({
-      settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev', telemetryOptIn: null },
+      settings: {
+        apiKey: null,
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+        startUrl: 'https://driftstack.dev',
+      },
       loading: false,
       client: null,
       accountMe: null,
@@ -225,5 +230,81 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     // the "Cloud"/"Self-hosted" deployment toggles confuse a fuzzy name regex.
     fireEvent.click(screen.getByText('Reset to default'));
     expect(urlField.value).toBe('http://localhost:3000');
+  });
+
+  it('aborts and invalidates a stale connection test when deployment changes', async () => {
+    useSettingsMock.mockReturnValue({
+      settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev', telemetryOptIn: null },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    let resolveProbe!: (response: Response) => void;
+    let probeSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        probeSignal = init?.signal ?? undefined;
+        return new Promise<Response>((resolve) => {
+          resolveProbe = resolve;
+        });
+      }),
+    );
+    renderWithToasts();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    await waitFor(() => expect(probeSignal).toBeInstanceOf(AbortSignal));
+    expect(screen.getByRole('button', { name: 'Testing…' })).toBeDisabled();
+
+    fireEvent.click(screen.getByText('Self-hosted'));
+    expect(probeSignal?.aborted).toBe(true);
+    expect(screen.getByRole('button', { name: 'Test connection' })).not.toBeDisabled();
+
+    resolveProbe(
+      new Response(JSON.stringify({ git_sha: 'stale123' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await Promise.resolve();
+    expect(screen.queryByText(/Reachable/)).toBeNull();
+    expect(screen.queryByText(/stale123/)).toBeNull();
+  });
+
+  it('aborts post-save key validation on unmount', async () => {
+    const update = vi.fn(() => Promise.resolve());
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: null,
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+        startUrl: 'https://driftstack.dev',
+      },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update,
+    });
+    let validationSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        validationSignal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const view = renderWithToasts();
+    fireEvent.change(screen.getByPlaceholderText('ds_live_…'), {
+      target: { value: 'ds_live_new_key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(validationSignal).toBeInstanceOf(AbortSignal));
+    expect(screen.getByText('Saved. Validating key…')).toBeInTheDocument();
+    view.unmount();
+    expect(validationSignal?.aborted).toBe(true);
   });
 });

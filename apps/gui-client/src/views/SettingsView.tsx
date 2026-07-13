@@ -236,7 +236,39 @@ export function SettingsView(): JSX.Element {
   // Monotonic token for the post-save key validation (see handleSave) — a newer
   // Save supersedes an older in-flight validation so a stale verdict can't land.
   const validateTokenRef = useRef(0);
+  const validateControllerRef = useRef<AbortController | null>(null);
+  const connectionTestTokenRef = useRef(0);
+  const connectionTestControllerRef = useRef<AbortController | null>(null);
+
+  function invalidateConnectionTest(): void {
+    connectionTestTokenRef.current += 1;
+    connectionTestControllerRef.current?.abort();
+    connectionTestControllerRef.current = null;
+    setTestState({ kind: 'idle' });
+  }
+
+  function invalidateKeyValidation(): void {
+    validateTokenRef.current += 1;
+    validateControllerRef.current?.abort();
+    validateControllerRef.current = null;
+    setKeyCheck({ kind: 'idle' });
+  }
+
+  useEffect(
+    () => () => {
+      connectionTestTokenRef.current += 1;
+      validateTokenRef.current += 1;
+      connectionTestControllerRef.current?.abort();
+      validateControllerRef.current?.abort();
+      connectionTestControllerRef.current = null;
+      validateControllerRef.current = null;
+    },
+    [],
+  );
+
   function switchMode(next: 'cloud' | 'self-hosted'): void {
+    invalidateConnectionTest();
+    invalidateKeyValidation();
     const token = ++keyRestoreTokenRef.current;
     setDraftMode(next);
     let target: string;
@@ -249,8 +281,6 @@ export function SettingsView(): JSX.Element {
     } else {
       target = draftUrl;
     }
-    setTestState({ kind: 'idle' });
-    setKeyCheck({ kind: 'idle' });
     void rememberedKeyFor(target).then((remembered) => {
       // Only apply if this is still the latest switch and the user hasn't typed.
       if (keyRestoreTokenRef.current === token) setDraftKey(remembered ?? '');
@@ -259,28 +289,37 @@ export function SettingsView(): JSX.Element {
 
   async function runConnectionTest(): Promise<void> {
     const target = draftUrl.trim().replace(/\/+$/, '');
-    setTestState({ kind: 'testing' });
+    connectionTestControllerRef.current?.abort();
+    const token = ++connectionTestTokenRef.current;
     const controller = new AbortController();
+    connectionTestControllerRef.current = controller;
+    setTestState({ kind: 'testing' });
     const timer = window.setTimeout(() => controller.abort(), 8_000);
     try {
       const res = await fetch(`${target}/version`, {
         signal: controller.signal,
         cache: 'no-store',
       });
-      window.clearTimeout(timer);
+      if (connectionTestTokenRef.current !== token) return;
       if (!res.ok) {
         setTestState({ kind: 'fail', message: `HTTP ${res.status.toString()}` });
         return;
       }
       const body = (await res.json().catch(() => ({}))) as { git_sha?: string };
+      if (connectionTestTokenRef.current !== token) return;
       setTestState({ kind: 'ok', version: body.git_sha ?? 'unknown' });
     } catch (err) {
-      window.clearTimeout(timer);
+      if (connectionTestTokenRef.current !== token) return;
       const diag = diagnosticFetchError(err, target);
       setTestState({
         kind: 'fail',
         message: diag ?? (err instanceof Error ? err.message : String(err)),
       });
+    } finally {
+      window.clearTimeout(timer);
+      if (connectionTestControllerRef.current === controller) {
+        connectionTestControllerRef.current = null;
+      }
     }
   }
 
@@ -382,7 +421,7 @@ export function SettingsView(): JSX.Element {
     // were minted on), so the failure message is mode-aware like the
     // first-run wizard's (W566).
     if (draftKey.length === 0) {
-      setKeyCheck({ kind: 'idle' });
+      invalidateKeyValidation();
       return;
     }
     setKeyCheck({ kind: 'checking' });
@@ -393,14 +432,15 @@ export function SettingsView(): JSX.Element {
     // Bound the validation like runConnectionTest — without an abort, a server
     // that hangs (rather than refusing) leaves keyCheck stuck on 'checking'
     // ("Validating key…") forever with no resolution.
+    validateControllerRef.current?.abort();
     const controller = new AbortController();
+    validateControllerRef.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 8_000);
     try {
       const res = await fetch(`${url}/v1/account/me`, {
         headers: { authorization: `Bearer ${draftKey}` },
         signal: controller.signal,
       });
-      window.clearTimeout(timer);
       if (validateTokenRef.current !== token) return; // superseded by a newer Save
       if (res.ok) {
         setKeyCheck({ kind: 'ok' });
@@ -418,7 +458,6 @@ export function SettingsView(): JSX.Element {
         });
       }
     } catch (err) {
-      window.clearTimeout(timer);
       if (validateTokenRef.current !== token) return; // superseded by a newer Save
       setKeyCheck({
         kind: 'fail',
@@ -426,6 +465,11 @@ export function SettingsView(): JSX.Element {
           diagnosticFetchError(err, url) ??
           `Saved, but ${url} is unreachable — the key couldn't be validated.`,
       });
+    } finally {
+      window.clearTimeout(timer);
+      if (validateControllerRef.current === controller) {
+        validateControllerRef.current = null;
+      }
     }
   }
 
@@ -720,8 +764,8 @@ export function SettingsView(): JSX.Element {
                   // so the next key isn't typed into a revealed field beside a
                   // prior account's "reachable"/"check failed" lines. (audit wja3dfl5t)
                   setReveal(false);
-                  setKeyCheck({ kind: 'idle' });
-                  setTestState({ kind: 'idle' });
+                  invalidateKeyValidation();
+                  invalidateConnectionTest();
                   setSavedAt(null);
                 }
               })();
@@ -750,7 +794,7 @@ export function SettingsView(): JSX.Element {
                   // doesn't show "check failed" for a key that's since been
                   // changed) AND any pending mode-switch key restore (so it can't
                   // overwrite what the user just typed). (audit wja3dfl5t)
-                  setKeyCheck({ kind: 'idle' });
+                  invalidateKeyValidation();
                   keyRestoreTokenRef.current += 1;
                 }}
                 placeholder="ds_live_…"
@@ -800,7 +844,11 @@ export function SettingsView(): JSX.Element {
             <input
               type="url"
               value={draftUrl}
-              onChange={(e) => setDraftUrl(e.target.value)}
+              onChange={(e) => {
+                setDraftUrl(e.target.value);
+                invalidateConnectionTest();
+                invalidateKeyValidation();
+              }}
               placeholder="http://localhost:3000"
               disabled={draftMode === 'cloud'}
               className="form-input mono mt-3 disabled:cursor-not-allowed disabled:opacity-60"
@@ -819,7 +867,11 @@ export function SettingsView(): JSX.Element {
               {draftMode === 'self-hosted' && draftUrl !== SELF_HOSTED_DEFAULT && (
                 <button
                   type="button"
-                  onClick={() => setDraftUrl(SELF_HOSTED_DEFAULT)}
+                  onClick={() => {
+                    setDraftUrl(SELF_HOSTED_DEFAULT);
+                    invalidateConnectionTest();
+                    invalidateKeyValidation();
+                  }}
                   className="btn-secondary text-xs"
                 >
                   Reset to default

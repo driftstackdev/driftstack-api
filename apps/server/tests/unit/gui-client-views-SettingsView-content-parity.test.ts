@@ -46,6 +46,16 @@ function read(p: string): string {
 describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () => {
   const body = read(LIB);
 
+  it('connection and key checks are controller-owned, sequence-gated, and invalidated on lifecycle changes', () => {
+    expect(body).toContain('const validateControllerRef = useRef<AbortController | null>(null);');
+    expect(body).toContain('const connectionTestTokenRef = useRef(0);');
+    expect(body).toContain('connectionTestControllerRef.current?.abort();');
+    expect(body).toContain('if (connectionTestTokenRef.current !== token) return;');
+    expect(body).toContain('validateControllerRef.current?.abort();');
+    expect(body).toContain('invalidateConnectionTest();');
+    expect(body).toContain('invalidateKeyValidation();');
+  });
+
   it("V-241 + V-242 + V-272 framing pinned: 'V-241: API key now stored in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service); the masked input edits the keychain entry transparently via Tauri commands.' + 'V-242: telemetry toggle — Sentry crash-only opt-in. Defaults ON for cloud customers, OFF for self-hosted. Customer can override either direction.' + 'V-272: account info block + sign-out button. First-run hint rewritten to point at the V-268 browser sign-in flow instead of the stale \"npm run admin:create-key\" instruction.'", () => {
     expect(body).toMatch(
       /\/\/ V-241: API key now stored in OS keychain \(macOS Keychain \/ Windows\s*\n?\s*\/\/ Credential Manager \/ Linux Secret Service\); the masked input edits\s*\n?\s*\/\/ the keychain entry transparently via Tauri commands\./,
