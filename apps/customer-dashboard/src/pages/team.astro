@@ -183,6 +183,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       const inviteCancel = root.querySelector('[data-invite-cancel]');
       const inviteSubmit = root.querySelector('[data-invite-submit]');
       const inviteError = root.querySelector('[data-invite-error]');
+      const TEAM_TIMEOUT_MS = 15_000;
+      const removalButtonsInFlight = new WeakSet();
+      let inviteInFlight = false;
+
+      function boundedFetch(url, init = {}) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), TEAM_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal })
+          .catch(function (err) {
+            if (err && err.name === 'AbortError') {
+              throw new Error('Request took too long. Check your connection and try again.');
+            }
+            throw err;
+          })
+          .finally(function () {
+            window.clearTimeout(timeout);
+          });
+      }
 
       function getToken() {
         try {
@@ -321,13 +339,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           return;
         }
         Promise.all([
-          fetch(apiBaseUrl + '/v1/team/members', {
+          boundedFetch(apiBaseUrl + '/v1/team/members', {
             headers: { authorization: 'Bearer ' + token },
           }).then(function (r) {
             if (!r.ok) throw new Error('members HTTP ' + r.status);
             return r.json();
           }),
-          fetch(apiBaseUrl + '/v1/team/invites', {
+          boundedFetch(apiBaseUrl + '/v1/team/invites', {
             headers: { authorization: 'Bearer ' + token },
           }).then(function (r) {
             if (!r.ok) throw new Error('invites HTTP ' + r.status);
@@ -379,6 +397,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         const buttons = membersList.querySelectorAll('[data-remove]');
         buttons.forEach(function (btn) {
           btn.addEventListener('click', async function () {
+            if (removalButtonsInFlight.has(btn)) return;
+            removalButtonsInFlight.add(btn);
             const id = btn.getAttribute('data-remove');
             const email = btn.getAttribute('data-remove-email') || '(unknown)';
             const ok = await window.driftstackConfirm(
@@ -387,11 +407,15 @@ const apiBaseUrl = resolveApiBaseUrl();
                 ' from the team? They keep their Driftstack account but lose team access.',
               { confirmLabel: 'Remove', destructive: true },
             );
-            if (!ok) return;
+            if (!ok) {
+              removalButtonsInFlight.delete(btn);
+              return;
+            }
             const token = getToken();
             btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
             btn.textContent = 'Removing…';
-            fetch(apiBaseUrl + '/v1/team/members/' + encodeURIComponent(id), {
+            boundedFetch(apiBaseUrl + '/v1/team/members/' + encodeURIComponent(id), {
               method: 'DELETE',
               headers: { authorization: 'Bearer ' + token },
             })
@@ -403,7 +427,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                 showBanner(
                   'Remove failed: ' + (err && err.message ? err.message : 'network error'),
                 );
+              })
+              .finally(function () {
+                removalButtonsInFlight.delete(btn);
                 btn.disabled = false;
+                btn.setAttribute('aria-busy', 'false');
                 btn.textContent = 'Remove';
               });
           });
@@ -433,6 +461,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (inviteForm) {
         inviteForm.addEventListener('submit', function (event) {
           event.preventDefault();
+          if (inviteInFlight) return;
           const formData = new FormData(inviteForm);
           const email = String(formData.get('email') || '').trim();
           const role = String(formData.get('role') || 'member');
@@ -443,12 +472,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
             return;
           }
+          inviteInFlight = true;
           const token = getToken();
           if (inviteSubmit) {
             inviteSubmit.disabled = true;
+            inviteSubmit.setAttribute('aria-busy', 'true');
             inviteSubmit.textContent = 'Sending…';
           }
-          fetch(apiBaseUrl + '/v1/team/invites', {
+          boundedFetch(apiBaseUrl + '/v1/team/invites', {
             method: 'POST',
             headers: {
               authorization: 'Bearer ' + token,
@@ -479,8 +510,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               }
             })
             .finally(function () {
+              inviteInFlight = false;
               if (inviteSubmit) {
                 inviteSubmit.disabled = false;
+                inviteSubmit.setAttribute('aria-busy', 'false');
                 inviteSubmit.textContent = 'Send invite';
               }
             });

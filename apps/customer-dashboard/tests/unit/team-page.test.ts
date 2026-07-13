@@ -217,11 +217,15 @@ describe('team page — local integration', () => {
     const form = window.document.querySelector('[data-invite-form]') as HTMLFormElement;
     (form.querySelector('input[name="email"]') as HTMLInputElement).value = 'carol@example.com';
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
-    const post = fetchCalls.find(
+    const posts = fetchCalls.filter(
       (c) => c.init?.method === 'POST' && /\/v1\/team\/invites$/.test(c.url),
     );
+    expect(posts).toHaveLength(1);
+    const post = posts[0];
     expect(post).toBeTruthy();
+    expect(post?.init?.signal).toBeDefined();
     const body = JSON.parse(String(post?.init?.body));
     expect(body.email).toBe('carol@example.com');
     expect(typeof body.role).toBe('string');
@@ -255,10 +259,15 @@ describe('team page — local integration', () => {
     win = window;
     await flush();
     expect(text(window, '[data-members-list]')).toContain('alice@example.com');
-    (window.document.querySelector('[data-remove="mem_a"]') as HTMLButtonElement).click();
+    const removeBtn = window.document.querySelector('[data-remove="mem_a"]') as HTMLButtonElement;
+    removeBtn.dispatchEvent(new window.Event('click'));
+    removeBtn.dispatchEvent(new window.Event('click'));
     await flush();
-    const del = fetchCalls.find((c) => c.init?.method === 'DELETE');
+    const deletes = fetchCalls.filter((c) => c.init?.method === 'DELETE');
+    expect(deletes).toHaveLength(1);
+    const del = deletes[0];
     expect(del?.url).toMatch(/\/v1\/team\/members\/mem_a$/);
+    expect(del?.init?.signal).toBeDefined();
     expect(text(window, '[data-members-list]')).toMatch(/No team members yet/);
   });
 

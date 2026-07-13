@@ -78,6 +78,17 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
+  it('bounds hydration and serializes invite/remove mutations', () => {
+    expect(body).toContain('const TEAM_TIMEOUT_MS = 15_000;');
+    expect(body).toContain('const removalButtonsInFlight = new WeakSet();');
+    expect(body).toContain('let inviteInFlight = false;');
+    expect(body).toMatch(/if \(inviteInFlight\) return;/);
+    expect(body).toMatch(/if \(removalButtonsInFlight\.has\(btn\)\) return;/);
+    expect(body.match(/boundedFetch\(/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(body).toContain('Request took too long. Check your connection and try again.');
+    expect(body).toMatch(/setAttribute\('aria-busy', 'true'\)/);
+  });
+
   it('per-member-uses-own-login + per-member-dashboard-sessions framing pinned', () => {
     // Load-bearing privacy claim — members never share login
     // credentials. The team page is the only customer surface
