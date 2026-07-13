@@ -63,6 +63,10 @@ export function registerAccountNotificationsRoutes(
   if (bus === undefined) return; // opt-in wire-up; absent → no route
   const heartbeatMs = opts.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
   const maxStreamsPerAccount = opts.maxStreamsPerAccount ?? DEFAULT_MAX_SSE_PER_ACCOUNT;
+  // This stream deliberately mixes billing, audit, incident, and session
+  // events. A resource-granular key must not gain cross-resource visibility,
+  // so require the broad read capability (account_owner also satisfies it).
+  const requireNotificationRead = app.requireScope('read');
   // L1 — active SSE count per account (this app instance), bounded by the ceiling
   // above. Incremented when a stream is accepted, decremented in its cleanup.
   const activeByAccount = new Map<string, number>();
@@ -72,7 +76,9 @@ export function registerAccountNotificationsRoutes(
     // SSE: EventSource can't set an Authorization header, so this route
     // also accepts the bearer token via `?ds_token=` (requireAuthEventSource).
     // The header still wins when present.
-    { preHandler: [app.requireAuthEventSource, app.rateLimit('global')] },
+    {
+      preHandler: [app.requireAuthEventSource, requireNotificationRead, app.rateLimit('global')],
+    },
     (req, reply) => {
       const ctx = requireCtx(req);
       const accountId = ctx.account.id;
@@ -136,10 +142,14 @@ export function registerAccountNotificationsRoutes(
       // lingering until the client's TCP drops; a transient auth blip just closes
       // and the client reconnects (self-healing).
       const heartbeat = setInterval(() => {
-        void app.requireAuthEventSource(req, reply).then(
-          () => reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`),
-          () => reply.raw.destroy(),
-        );
+        void (async () => {
+          await app.requireAuthEventSource(req, reply);
+          // Re-check authorization after authenticate refreshes request.account.
+          // If a future key-management flow narrows scopes in place, an already-
+          // open mixed-resource stream closes within one heartbeat as well.
+          await requireNotificationRead(req, reply);
+          reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+        })().catch(() => reply.raw.destroy());
       }, heartbeatMs);
       heartbeat.unref();
 

@@ -37,12 +37,15 @@ describe('routes/account-notifications.ts content parity', () => {
     expect(body).toMatch(/if \(bus === undefined\) return;/);
   });
 
-  it("route at GET /v1/account/me/notifications + requireAuthEventSource (SSE ds_token fallback) + rateLimit('global')", () => {
+  it("route at GET /v1/account/me/notifications + EventSource auth + broad read scope + rateLimit('global')", () => {
     expect(body).toMatch(/'\/v1\/account\/me\/notifications',/);
     // SSE route: EventSource can't set headers, so auth accepts the
     // bearer token via ?ds_token= (requireAuthEventSource). Drift back
     // to plain requireAuth would 401 every browser EventSource connect.
-    expect(body).toMatch(/preHandler: \[app\.requireAuthEventSource, app\.rateLimit\('global'\)\]/);
+    expect(body).toMatch(/const requireNotificationRead = app\.requireScope\('read'\);/);
+    expect(body).toMatch(
+      /preHandler: \[app\.requireAuthEventSource, requireNotificationRead, app\.rateLimit\('global'\)\]/,
+    );
   });
 
   it('per-accountId scope: ctx.account.id from requireCtx drives bus.subscribe key', () => {
@@ -68,12 +71,13 @@ describe('routes/account-notifications.ts content parity', () => {
     expect(body).toMatch(/const DEFAULT_HEARTBEAT_MS = 25_000;/);
     expect(body).toMatch(/const heartbeatMs = opts\.heartbeatMs \?\? DEFAULT_HEARTBEAT_MS;/);
     expect(body).toMatch(/const heartbeat = setInterval\(\(\) => \{/);
-    // The revoke-teardown fix: re-auth each tick, write on success, destroy on failure.
-    expect(body).toMatch(/void app\.requireAuthEventSource\(req, reply\)\.then\(/);
+    // Re-auth + re-authorize each tick, write on success, destroy on failure.
+    expect(body).toMatch(/await app\.requireAuthEventSource\(req, reply\);/);
+    expect(body).toMatch(/await requireNotificationRead\(req, reply\);/);
     expect(body).toMatch(
       /reply\.raw\.write\(`: heartbeat \$\{new Date\(\)\.toISOString\(\)\}\\n\\n`\)/,
     );
-    expect(body).toMatch(/\(\) => reply\.raw\.destroy\(\)/);
+    expect(body).toMatch(/\.catch\(\(\) => reply\.raw\.destroy\(\)\)/);
     expect(body).toMatch(/heartbeat\.unref\(\);/);
   });
 

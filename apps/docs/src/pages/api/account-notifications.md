@@ -26,6 +26,12 @@ the header still wins when both are supplied. Server-side runtimes that
 can set headers (Tauri's invoke bridge, Node's `eventsource` package,
 etc.) should prefer the header.
 
+The token must carry the broad `read` scope; `account_owner` also
+satisfies the gate. Resource-granular scopes such as `read:sessions`,
+`read:webhooks`, or `read:audit` deliberately do not, because this one
+stream mixes billing, audit, incident, and session events. Treat both
+the token and the resulting stream as sensitive account-wide data.
+
 ## Frame shape
 
 Each event in the stream uses the SSE `event:` header as a
@@ -133,11 +139,11 @@ for one. For the durable trail of any event covered by
 
 ## Quotas + rate-limit
 
-One concurrent subscriber per account is plenty in v0; the SSE
-route shares the same `global` rate-limit bucket as every other
-authenticated read. Opening additional subscribers on the same
-account works but offers no benefit (every subscriber sees every
-event).
+The SSE route permits up to 10 concurrent subscribers per account and
+shares the same `global` rate-limit bucket as every other authenticated
+read. An additional connection receives `429` with `Retry-After: 30`.
+One stream per running app instance is normally sufficient because
+every subscriber sees every event.
 
 ## Customer example (TypeScript)
 

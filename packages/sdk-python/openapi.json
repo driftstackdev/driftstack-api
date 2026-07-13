@@ -11907,7 +11907,7 @@
         ],
         "responses": {
           "200": {
-            "description": "SSE stream of per-account notification events (text/event-stream). Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.",
+            "description": "SSE stream of mixed billing, audit, incident, and session events for the calling account (text/event-stream). Requires broad `read` or `account_owner`; resource-granular read scopes do not authorize this cross-resource stream. Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.",
             "content": {
               "text/event-stream": {
                 "schema": {
