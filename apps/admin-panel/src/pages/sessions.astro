@@ -204,6 +204,24 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       const statusEl = root.querySelector('[data-field="status"]');
       const accountIdEl = root.querySelector('[data-field="account-id"]');
       const token = localStorage.getItem('ds_web_session_token');
+      const SESSION_TIMEOUT_MS = 15_000;
+      let loadController = null;
+      const destroysInFlight = new Set();
+
+      function boundedFetch(url, init = {}, controller = new AbortController()) {
+        const timeout = window.setTimeout(() => controller.abort(), SESSION_TIMEOUT_MS);
+        return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+          window.clearTimeout(timeout);
+        });
+      }
+
+      function requestErrorMessage(err, fallback) {
+        return err && err.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err && err.message
+            ? err.message
+            : fallback;
+      }
 
       const STATUS_BADGE = {
         creating: 'bg-amber-50 text-amber-700',
@@ -325,10 +343,18 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         if (!token) return Promise.resolve();
         const myReq = ++inFlight;
         const params = buildQuery();
-        return fetch(apiBaseUrl + '/v1/admin/sessions?' + params.toString(), {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        })
+        if (loadController) loadController.abort();
+        const controller = new AbortController();
+        loadController = controller;
+        root.setAttribute('aria-busy', 'true');
+        return boundedFetch(
+          apiBaseUrl + '/v1/admin/sessions?' + params.toString(),
+          {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+          controller,
+        )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
@@ -356,7 +382,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
-            const msg = err && err.message ? err.message : 'network error';
+            const msg = requestErrorMessage(err, 'network error');
             // W604 — clear the SSG mock table on ANY load failure. Leaving the
             // mock rows on screen is dangerous here: each row renders a live
             // force-destroy button wired to a FAKE session id, so an admin
@@ -376,6 +402,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             }
           })
           .finally(() => {
+            if (myReq === inFlight) {
+              loadController = null;
+              root.removeAttribute('aria-busy');
+            }
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
@@ -387,53 +417,62 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // a reference to the exact element clicked + restore it on
       // success/error.
       async function destroy(id, btn) {
-        if (!token) return;
+        if (!token || destroysInFlight.has(id)) return;
+        destroysInFlight.add(id);
+        const originalText = btn ? btn.textContent : '';
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Confirming…';
+          btn.setAttribute('aria-busy', 'true');
+        }
         // Force-destroy ends a live customer browser session immediately —
         // gate it behind an explicit yes/no confirm first (destructive: true
         // means a stray Enter can't fire it; the operator must click OK),
         // matching every other destructive admin action (suspend / drain /
         // restart). Without this, OK/Enter on the optional-reason prompt
         // alone destroyed the session.
-        const confirmed = await window.driftstackConfirm(
-          'Force-destroy session ' + id + "? This ends the customer's live browser session immediately.",
-          { confirmLabel: 'Force-destroy', destructive: true },
-        );
-        if (!confirmed) return;
-        const reason =
-          (await window.driftstackPrompt('Reason for force-destroying ' + id + ' (optional):', {
-            placeholder: 'optional',
-            confirmLabel: 'Force-destroy',
-          })) || '';
-        const body = {};
-        if (reason.trim()) body.reason = reason.trim();
-        const originalText = btn ? btn.textContent : '';
-        if (btn) {
-          btn.disabled = true;
-          btn.textContent = 'Destroying…';
+        try {
+          const confirmed = await window.driftstackConfirm(
+            'Force-destroy session ' + id + "? This ends the customer's live browser session immediately.",
+            { confirmLabel: 'Force-destroy', destructive: true },
+          );
+          if (!confirmed) return;
+          if (btn) btn.textContent = 'Reason…';
+          const reason =
+            (await window.driftstackPrompt('Reason for force-destroying ' + id + ' (optional):', {
+              placeholder: 'optional',
+              confirmLabel: 'Force-destroy',
+            })) || '';
+          const body = {};
+          if (reason.trim()) body.reason = reason.trim();
+          if (btn) btn.textContent = 'Destroying…';
+          showBanner('Destroying ' + id + '…');
+          const response = await boundedFetch(
+            apiBaseUrl + '/v1/admin/sessions/' + encodeURIComponent(id) + '/destroy',
+            {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify(body),
+            },
+          );
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          await response.json();
+          showBanner('Destroyed ' + id + '. Refreshing…');
+          await load();
+        } catch (err) {
+          showBanner("Couldn't destroy (" + requestErrorMessage(err, 'network error') + ').');
+        } finally {
+          destroysInFlight.delete(id);
+          if (btn && btn.isConnected) {
+            btn.disabled = false;
+            btn.textContent = originalText;
+            btn.removeAttribute('aria-busy');
+          }
         }
-        showBanner('Destroying ' + id + '…');
-        fetch(apiBaseUrl + '/v1/admin/sessions/' + encodeURIComponent(id) + '/destroy', {
-          method: 'POST',
-          headers: {
-            authorization: 'Bearer ' + token,
-            'content-type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify(body),
-        })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then(() => {
-            showBanner('Destroyed ' + id + '. Refreshing…');
-            load();
-          })
-          .catch((err) => {
-            const msg = err && err.message ? err.message : 'network error';
-            showBanner("Couldn't destroy (" + msg + ').');
-            if (btn) {
-              btn.disabled = false;
-              btn.textContent = originalText;
-            }
-          });
       }
 
       root.addEventListener('click', (ev) => {

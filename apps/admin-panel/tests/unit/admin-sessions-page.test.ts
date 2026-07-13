@@ -34,7 +34,7 @@ interface AdminSession {
 interface SetUpOpts {
   promptReturns?: string | null;
   confirmReturns?: boolean;
-  route: (call: MockFetchCall) => Response;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -122,7 +122,7 @@ describe('admin sessions page — force-destroy (operator)', () => {
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
   it('renders sessions: a running session gets Force-destroy; a destroyed one does not', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       route: makeRouter([
         mkSession({ id: 'agt_live', status: 'running' }),
         mkSession({ id: 'agt_done', status: 'destroyed' }),
@@ -139,6 +139,8 @@ describe('admin sessions page — force-destroy (operator)', () => {
     const pageText = window.document.body.textContent ?? '';
     expect(pageText).toContain('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
     expect(pageText).not.toContain('iphone16pro_ios18_7_safari26_4');
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.init?.signal).toBeInstanceOf(window.AbortSignal);
   });
 
   it('W604: a failed live-load CLEARS the SSG mock rows (no fake force-destroy buttons) + shows an honest error', async () => {
@@ -164,16 +166,21 @@ describe('admin sessions page — force-destroy (operator)', () => {
     });
     win = window;
     await flush();
-    (
-      window.document.querySelector(
-        '[data-action="destroy"][data-id="agt_live"]',
-      ) as HTMLButtonElement
-    ).click();
+    const button = window.document.querySelector(
+      '[data-action="destroy"][data-id="agt_live"]',
+    ) as HTMLButtonElement;
+    button.click();
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
     await flush();
-    const post = fetchCalls.find(
+    const posts = fetchCalls.filter(
       (c) => c.init?.method === 'POST' && /\/v1\/admin\/sessions\/agt_live\/destroy$/.test(c.url),
     );
+    const post = posts[0];
     expect(post).toBeTruthy();
+    expect(posts).toHaveLength(1);
+    expect(post?.init?.signal).toBeInstanceOf(window.AbortSignal);
     expect(JSON.parse(String(post?.init?.body))).toEqual({ reason: 'abuse — ToS violation' });
     expect(window.document.querySelector('[data-action="destroy"][data-id="agt_live"]')).toBeNull();
   });
@@ -196,5 +203,23 @@ describe('admin sessions page — force-destroy (operator)', () => {
     );
     expect(post).toBeTruthy();
     expect(JSON.parse(String(post?.init?.body))).toEqual({});
+  });
+
+  it('cancelled force-destroy restores the control and fires no POST', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: false,
+      route: makeRouter([mkSession({ id: 'agt_live', status: 'running' })]),
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-action="destroy"][data-id="agt_live"]',
+    ) as HTMLButtonElement;
+    button.click();
+    await flush();
+    expect(fetchCalls.some((call) => call.init?.method === 'POST')).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Force destroy');
+    expect(button.hasAttribute('aria-busy')).toBe(false);
   });
 });
