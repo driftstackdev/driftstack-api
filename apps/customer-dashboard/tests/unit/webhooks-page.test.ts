@@ -359,6 +359,54 @@ describe('webhooks page — local integration', () => {
     );
   });
 
+  it('serializes every row action while one endpoint mutation is pending', async () => {
+    let releaseRotation: (response: Response) => void = () => {};
+    const pendingRotation = new Promise<Response>((resolve) => {
+      releaseRotation = resolve;
+    });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      fetchPlan: [() => json({ data: [ENDPOINT] }), () => pendingRotation],
+    });
+    win = window;
+    await flush();
+    const rotateBtn = window.document.querySelector(
+      '[data-rotate="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    const deleteBtn = window.document.querySelector(
+      '[data-delete="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    const testBtn = window.document.querySelector('[data-test="wh_endpoint"]') as HTMLButtonElement;
+    const editBtn = window.document.querySelector('[data-edit="wh_endpoint"]') as HTMLButtonElement;
+
+    rotateBtn.click();
+    await flush(1);
+    for (const button of [rotateBtn, deleteBtn, testBtn, editBtn]) {
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Wait for the active webhook action to finish.');
+    }
+
+    deleteBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    testBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    editBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush(1);
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(0);
+    expect(fetchCalls.filter((call) => /\/test$/.test(call.url))).toHaveLength(0);
+
+    releaseRotation(
+      json({
+        secret: 'whsec_SERIALIZED_ROTATION',
+        grace_expires_at: '2026-05-21T10:00:00.000Z',
+      }),
+    );
+    await flush();
+    expect(deleteBtn.disabled).toBe(false);
+    expect(testBtn.disabled).toBe(false);
+    expect(editBtn.disabled).toBe(false);
+  });
+
   it('rotate timeout reconciles committed grace state without a false secret reveal', async () => {
     const rotating = {
       ...ENDPOINT,
