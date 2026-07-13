@@ -127,6 +127,12 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
+  it('password reset atomically consumes the presented token and all account siblings before changing credentials', () => {
+    expect(body).toMatch(
+      /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*\n?\s*kind: 'password_reset',\s*\n?\s*id: row\.id,\s*\n?\s*accountId: row\.accountId,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*const account = await this\.requireAccount\(row\.accountId\);/,
+    );
+  });
+
   it('login: 4-failure-mode cascade (invalid_credentials × 2 + account_suspended + email_not_verified) + V-353d branch returns mfa_required with challenge_token', () => {
     expect(body).toMatch(
       /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
@@ -275,7 +281,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('emitAuditBestEffort: V-224 4-action union (email_verified/login/logout/password_changed) try/catch warn-log swallow', () => {
     expect(body).toMatch(
-      /action:\s*\n?\s*\| 'account\.email_verified'\s*\n?\s*\| 'account\.login'\s*\n?\s*\| 'account\.logout'\s*\n?\s*\| 'account\.password_changed',/,
+      /action:\s*'account\.email_verified' \| 'account\.login' \| 'account\.logout' \| 'account\.password_changed',/,
     );
     expect(body).toMatch(/'account-audit emit failed \(best-effort, swallowed\)',/);
   });

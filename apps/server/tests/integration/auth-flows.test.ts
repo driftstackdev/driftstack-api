@@ -732,6 +732,75 @@ describe('POST /v1/auth/password-reset', () => {
     // though, so this round-trip uses the issued session token instead.)
   });
 
+  it('successful confirm invalidates every older outstanding reset link', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: {
+        email: 'reset-siblings@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    const firstRequest = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/request',
+      payload: { email: 'reset-siblings@driftstack.local' },
+    });
+    const secondRequest = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/request',
+      payload: { email: 'reset-siblings@driftstack.local' },
+    });
+    const firstToken = firstRequest.json<{ debug_token: string }>().debug_token;
+    const secondToken = secondRequest.json<{ debug_token: string }>().debug_token;
+
+    const winner = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/confirm',
+      payload: { token: secondToken, new_password: 'the winning replacement password!!' },
+    });
+    expect(winner.statusCode).toBe(200);
+
+    const stale = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/confirm',
+      payload: { token: firstToken, new_password: 'stale reset must never land!!' },
+    });
+    expect(stale.statusCode).not.toBe(200);
+  });
+
+  it('two different reset links racing can change the password only once', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'reset-race@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const requests = await Promise.all(
+      [0, 1].map(() =>
+        fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/password-reset/request',
+          payload: { email: 'reset-race@driftstack.local' },
+        }),
+      ),
+    );
+    const tokens = requests.map((response) => response.json<{ debug_token: string }>().debug_token);
+
+    const confirms = await Promise.all(
+      tokens.map((token, index) =>
+        fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/password-reset/confirm',
+          payload: { token, new_password: `concurrent replacement password ${index}!!` },
+        }),
+      ),
+    );
+    expect(confirms.filter((response) => response.statusCode === 200)).toHaveLength(1);
+    expect(confirms.filter((response) => response.statusCode !== 200)).toHaveLength(1);
+  });
+
   // Audit fix 2026-07-01: same canonical-fallback closing the Gmail
   // dot-variant lockout gap as login (see that describe block).
   it('issues a usable reset token when requested with a Gmail dot-variant of the signup address', async () => {

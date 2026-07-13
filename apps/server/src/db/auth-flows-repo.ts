@@ -212,6 +212,21 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     return rows.length > 0;
   }
 
+  async consumeAuthTokenFamily(args: {
+    kind: AuthFlowKind;
+    id: string;
+    accountId: string;
+    at: Date;
+  }): Promise<boolean> {
+    const t = tableForKind(args.kind);
+    const rows = await this.database.db
+      .update(t)
+      .set({ consumedAt: args.at })
+      .where(and(eq(t.accountId, args.accountId), isNull(t.consumedAt)))
+      .returning({ id: t.id });
+    return rows.some((row) => row.id === args.id);
+  }
+
   async deleteStaleAuthTokens(args: {
     kind: AuthFlowKind;
     consumedBefore: Date;

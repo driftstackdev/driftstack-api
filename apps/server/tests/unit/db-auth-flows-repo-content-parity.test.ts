@@ -115,6 +115,12 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     );
   });
 
+  it('consumeAuthTokenFamily atomically consumes all account siblings and succeeds only when this call claimed the presented id', () => {
+    expect(body).toMatch(
+      /async consumeAuthTokenFamily\(args: \{[\s\S]*?\.set\(\{ consumedAt: args\.at \}\)\s*\n?\s*\.where\(and\(eq\(t\.accountId, args\.accountId\), isNull\(t\.consumedAt\)\)\)\s*\n?\s*\.returning\(\{ id: t\.id \}\);\s*\n?\s*return rows\.some\(\(row\) => row\.id === args\.id\);/,
+    );
+  });
+
   it('findActiveWebSession: triple and(tokenHash, gt(expiresAt, now), isNull(revokedAt)) + limit 1; listActiveWebSessionsForAccount: 3-cond filter + orderBy desc(lastUsedAt)', () => {
     expect(body).toMatch(
       /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(webSessions\.tokenHash, args\.tokenHash\),\s*\n?\s*gt\(webSessions\.expiresAt, args\.now\),\s*\n?\s*isNull\(webSessions\.revokedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);/,

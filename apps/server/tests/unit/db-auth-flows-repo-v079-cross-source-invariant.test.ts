@@ -141,6 +141,13 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
     );
   });
 
+  it('CRITICAL reset-family claim is one account-scoped conditional UPDATE and returns true only when the presented id was claimed', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-flows-repo.ts'));
+    expect(p).toMatch(
+      /async consumeAuthTokenFamily\(args: \{[\s\S]*?\.where\(and\(eq\(t\.accountId, args\.accountId\), isNull\(t\.consumedAt\)\)\)[\s\S]*?return rows\.some\(\(row\) => row\.id === args\.id\);/,
+    );
+  });
+
   // ─── findActiveWebSession 3-cond ─────────────────────────────
 
   it('CRITICAL findActiveWebSession 3-cond — eq(tokenHash) + gt(expiresAt, now) + isNull(revokedAt). The 3-cond AND matches the W993 (auth-repo) same-shape contract.', () => {

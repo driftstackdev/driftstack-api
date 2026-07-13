@@ -145,6 +145,18 @@ export interface AuthFlowsRepo {
    */
   consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<boolean>;
   /**
+   * Atomically consume the presented token and every still-unconsumed sibling
+   * of the same kind/account. Returns true only when the presented id was part
+   * of this call's UPDATE, so two different reset links racing for one account
+   * cannot both perform credential-changing side effects.
+   */
+  consumeAuthTokenFamily(args: {
+    kind: AuthFlowKind;
+    id: string;
+    accountId: string;
+    at: Date;
+  }): Promise<boolean>;
+  /**
    * 2026-05-20 — sweeper-driven bulk delete of stale token rows.
    * `consumedBefore` deletes rows whose `consumedAt` is non-null
    * and older than the cutoff (keeps a forensic window for support
@@ -536,10 +548,7 @@ export class AuthFlowsService {
   private async emitAuditBestEffort(
     accountId: string,
     action:
-      | 'account.email_verified'
-      | 'account.login'
-      | 'account.logout'
-      | 'account.password_changed',
+      'account.email_verified' | 'account.login' | 'account.logout' | 'account.password_changed',
     payload: Record<string, unknown>,
     actorAccountId: string | null = null,
   ): Promise<void> {
@@ -1083,9 +1092,15 @@ export class AuthFlowsService {
     // the same token would each issue a session AND each call
     // revokeAllWebSessionsExceptCurrent, mutually revoking each other (lockout).
     // Reject the loser so exactly one reset+session survives.
-    const consumed = await this.repo.consumeAuthToken({
+    // A successful password reset must invalidate every other reset link for
+    // the account. Claiming the whole unconsumed family in one conditional
+    // UPDATE also serializes two DIFFERENT valid tokens: exactly one UPDATE
+    // returns its presented id, so only one password write/session issuance
+    // can proceed.
+    const consumed = await this.repo.consumeAuthTokenFamily({
       kind: 'password_reset',
       id: row.id,
+      accountId: row.accountId,
       at: now,
     });
     if (!consumed) throw new AuthFlowError('invalid_auth_token');

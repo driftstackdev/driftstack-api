@@ -164,6 +164,24 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve(true);
   }
 
+  consumeAuthTokenFamily(args: {
+    kind: AuthFlowKind;
+    id: string;
+    accountId: string;
+    at: Date;
+  }): Promise<boolean> {
+    const rows = this.tokensByKind[args.kind];
+    const target = rows.get(args.id);
+    const claimedTarget =
+      target !== undefined && target.accountId === args.accountId && target.consumedAt === null;
+    if (!claimedTarget) return Promise.resolve(false);
+    for (const [id, row] of rows.entries()) {
+      if (row.accountId !== args.accountId || row.consumedAt !== null) continue;
+      rows.set(id, { ...row, consumedAt: args.at });
+    }
+    return Promise.resolve(true);
+  }
+
   deleteStaleAuthTokens(args: {
     kind: AuthFlowKind;
     consumedBefore: Date;
