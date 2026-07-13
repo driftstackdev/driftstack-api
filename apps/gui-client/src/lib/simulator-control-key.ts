@@ -53,16 +53,23 @@ export async function persistControlKey(sessionId: string, key: string): Promise
   await invoke('secret_save', { key: controlSecretName(sessionId), value: key });
 }
 
-export async function migrateLegacyControlKeys(): Promise<Map<string, string>> {
+export async function migrateLegacyControlKeys(
+  activeSessionId: string,
+): Promise<Map<string, string>> {
   const legacy = takeLegacyControlKeys();
-  for (const [sessionId, value] of legacy) {
-    try {
-      const protectedValue = await loadProtectedControlKey(sessionId);
-      if (protectedValue === '') await persistControlKey(sessionId, value);
-    } catch {
-      // Plaintext was already purged. The current session may use the returned
-      // map in memory for this launch; stale sessions require a fresh reopen.
-    }
+  // Historical builds accumulated one plaintext entry per session. Purge all
+  // of them, but migrate only the session actually being reopened; copying
+  // dozens of expired credentials into Keychain would create a new stale-secret
+  // inventory. A sessionless upgrade therefore scrubs plaintext with zero new
+  // protected entries.
+  const activeValue = legacy.get(activeSessionId);
+  if (activeValue === undefined) return legacy;
+  try {
+    const protectedValue = await loadProtectedControlKey(activeSessionId);
+    if (protectedValue === '') await persistControlKey(activeSessionId, activeValue);
+  } catch {
+    // Plaintext was already purged. The current session may use the returned
+    // map in memory for this launch; stale sessions require a fresh reopen.
   }
   return legacy;
 }

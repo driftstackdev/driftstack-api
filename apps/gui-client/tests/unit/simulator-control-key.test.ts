@@ -69,13 +69,13 @@ describe('simulator control-key protected storage', () => {
     await expect(loadProtectedControlKey('agt_safe-1')).resolves.toBe('gck_secret');
   });
 
-  it('migrates every valid legacy value and synchronously purges all legacy plaintext', async () => {
+  it('purges every legacy value but migrates only the active session', async () => {
     storage.setItem('ds-gck-agt_first', 'gck_first');
     storage.setItem('ds-gck-agt_second', 'gck_second');
     storage.setItem('ds-gck-../../invalid', 'gck_invalid');
     storage.setItem('unrelated-preference', 'keep');
 
-    const legacy = await migrateLegacyControlKeys();
+    const legacy = await migrateLegacyControlKeys('agt_second');
 
     expect(legacy).toEqual(
       new Map([
@@ -83,7 +83,7 @@ describe('simulator control-key protected storage', () => {
         ['agt_second', 'gck_second'],
       ]),
     );
-    expect(keychain.get('gui_control:agt_first')).toBe('gck_first');
+    expect(keychain.has('gui_control:agt_first')).toBe(false);
     expect(keychain.get('gui_control:agt_second')).toBe('gck_second');
     expect([...storage.values.keys()]).toEqual(['unrelated-preference']);
   });
@@ -92,17 +92,29 @@ describe('simulator control-key protected storage', () => {
     keychain.set('gui_control:agt_same', 'gck_current');
     storage.setItem('ds-gck-agt_same', 'gck_stale');
 
-    await migrateLegacyControlKeys();
+    await migrateLegacyControlKeys('agt_same');
 
     expect(keychain.get('gui_control:agt_same')).toBe('gck_current');
     expect(storage.getItem('ds-gck-agt_same')).toBeNull();
+  });
+
+  it('a sessionless upgrade purges historical plaintext without creating stale Keychain entries', async () => {
+    storage.setItem('ds-gck-agt_expired_1', 'gck_expired_1');
+    storage.setItem('ds-gck-agt_expired_2', 'gck_expired_2');
+
+    const legacy = await migrateLegacyControlKeys('');
+
+    expect(legacy.size).toBe(2);
+    expect(storage.length).toBe(0);
+    expect(keychain.size).toBe(0);
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it('purges plaintext while Keychain is locked and returns only an in-memory launch fallback', async () => {
     storage.setItem('ds-gck-agt_locked', 'gck_memory_only');
     credentialStoreLocked = true;
 
-    const legacy = await migrateLegacyControlKeys();
+    const legacy = await migrateLegacyControlKeys('agt_locked');
 
     expect(legacy.get('agt_locked')).toBe('gck_memory_only');
     expect(storage.getItem('ds-gck-agt_locked')).toBeNull();

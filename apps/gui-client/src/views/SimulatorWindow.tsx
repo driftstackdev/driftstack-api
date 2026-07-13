@@ -2505,7 +2505,7 @@ export function SimulatorWindow(): JSX.Element {
       // This deliberately runs even for a sessionless companion-app launch so
       // upgrading/installing can scrub historical plaintext without waiting for
       // the customer to start another session.
-      const legacy = await migrateLegacyControlKeys();
+      const legacy = await migrateLegacyControlKeys(sessionId);
       if (cancelled) return;
       if (sessionId === '') {
         setControlAuth(null);
