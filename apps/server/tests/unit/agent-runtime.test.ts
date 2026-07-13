@@ -766,6 +766,7 @@ describe('Q.1.b classifyDecomposerError', () => {
       'Anthropic response content was not an array',
       'Anthropic response usage was missing or invalid',
       'Anthropic plan.intents exceeded 8 entries',
+      'Anthropic response field plan.intents[0].value exceeded 10000 characters',
     ]) {
       expect(classifyDecomposerError(new Error(message)), message).toBe('fatal');
     }

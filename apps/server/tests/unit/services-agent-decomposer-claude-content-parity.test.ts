@@ -79,6 +79,16 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toContain('Anthropic response usage was missing or invalid');
   });
 
+  it('runtime-enforces downstream field limits and keeps the Anthropic body below the transcript turn reserve', () => {
+    expect(body).toContain('const MAX_ANTHROPIC_RESPONSE_BYTES = 64 * 1024;');
+    expect(body).toContain('const MAX_AGENT_URL_CHARS = 8192;');
+    expect(body).toContain('const MAX_AGENT_SELECTOR_CHARS = 4096;');
+    expect(body).toContain('const MAX_AGENT_TYPED_TEXT_CHARS = 10_000;');
+    expect(body).toContain('const MAX_AGENT_TAP_LABEL_CHARS = 512;');
+    expect(body).toContain('const MAX_AGENT_CUSTOMER_COPY_CHARS = 4096;');
+    expect(body).toContain('Anthropic response field ${field} exceeded ${maxChars} characters');
+  });
+
   it("6.c / #15 per-model rate sourcing pinned: imports CLAUDE_MODELS + DEFAULT_AGENT_MODEL from @driftstack/api-types; makeClaudeUsage looks up CLAUDE_MODELS[model] for the per-call cost (replacing the hardcoded Opus PER_MTOK consts). + 'If a rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the registry-sourced-rate + no-recompute-on-drift contract stay documented", () => {
     expect(body).toMatch(
       /import \{ CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel \} from '@driftstack\/api-types';/,
@@ -145,6 +155,12 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/' {2}\{ "kind": "refuse", "refuseReason": "\.\.\." \}',/);
   });
 
+  it('SYSTEM_PROMPT field limits match the runtime parser and forbid semantic truncation', () => {
+    expect(body).toMatch(
+      /'FIELD LIMITS: url <= 8192 chars; selector <= 4096 chars; type value <=',\s*\n?\s*'10000 chars; tap visible-text value <= 512 chars; clarify\/refuse copy <=',\s*\n?\s*'4096 chars\. Never split or truncate a field to evade these limits\.',/,
+    );
+  });
+
   it("SYSTEM_PROMPT WHEN-TO-REFUSE AUP-cite framing pinned: 'bypass captchas, brute-force credentials, stalk a specific person, generate CSAM, create non-consensual deepfakes, swat / make false emergency calls, or do anything else categorically prohibited by the AUP at https://driftstack.dev/legal/aup/. Refuse politely; cite the AUP.' — pinned so the 6-abuse-category catalog + AUP-URL + refuse-politely-cite-AUP contract all stay documented (URL updated 2026-05-20 — broken `docs.driftstack.dev/aup` retargeted to the live marketing-site `driftstack.dev/legal/aup/` path)", () => {
     expect(body).toMatch(
       /'WHEN TO REFUSE: the task asks you to bypass captchas, brute-force',\s*\n?\s*'credentials, stalk a specific person, generate CSAM, create',\s*\n?\s*'non-consensual deepfakes, swat \/ make false emergency calls, or do',\s*\n?\s*'anything else categorically prohibited by the AUP at',\s*\n?\s*'https:\/\/driftstack\.dev\/legal\/aup\/\. Refuse politely; cite the AUP\.',/,
@@ -203,7 +219,7 @@ describe('services/agent-decomposer-claude content parity', () => {
     // and its errors propagate into retry. Parse stays OUTSIDE so a malformed
     // success body still throws (not retried).
     expect(body).toMatch(/bodyText = await readBoundedBody\(res\);/);
-    expect(body).toMatch(/const MAX_ANTHROPIC_RESPONSE_BYTES = 256 \* 1024;/);
+    expect(body).toMatch(/const MAX_ANTHROPIC_RESPONSE_BYTES = 64 \* 1024;/);
     expect(body).toMatch(/const reader = res\.body\.getReader\(\);/);
     expect(body).toMatch(/bytesRead \+= value\.byteLength;/);
     expect(body).toMatch(/if \(bytesRead > MAX_ANTHROPIC_RESPONSE_BYTES\) \{/);

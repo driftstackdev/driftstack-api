@@ -42,6 +42,14 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION_HEADER = '2023-06-01';
 const MAX_OUTPUT_TOKENS = 2048;
 const MAX_PLAN_INTENTS = 8;
+// Keep every model-authored field within the contract of the next sink. These
+// are rejected, never truncated: truncating a URL, selector, or value can turn
+// a requested action into a different action.
+const MAX_AGENT_URL_CHARS = 8192;
+const MAX_AGENT_SELECTOR_CHARS = 4096;
+const MAX_AGENT_TYPED_TEXT_CHARS = 10_000;
+const MAX_AGENT_TAP_LABEL_CHARS = 512;
+const MAX_AGENT_CUSTOMER_COPY_CHARS = 4096;
 const MAX_RETRIES_5XX = 1;
 const DEFAULT_RETRY_BACKOFF_MS = 1000;
 // Per-request timeout for the Anthropic call. Without it a hung upstream
@@ -55,9 +63,11 @@ const DEFAULT_RETRY_BACKOFF_MS = 1000;
 // webhook-delivery, health-probe, incident-broadcast).
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 // Anthropic's legitimate 2,048-token planning response is only a few KiB.
-// Keep a generous ceiling while preventing a broken/compromised upstream from
-// making Response.text() allocate an arbitrary body before JSON parsing.
-const MAX_ANTHROPIC_RESPONSE_BYTES = 256 * 1024;
+// 64 KiB remains generous while also fitting, with the bounded eight-result
+// summary and read-back answer, inside AgentRuntime's 128 KiB AI-turn transcript
+// reserve. A broken/compromised upstream therefore cannot make Response.text()
+// allocate arbitrarily or cross the transcript limit after turn preflight.
+const MAX_ANTHROPIC_RESPONSE_BYTES = 64 * 1024;
 
 class AnthropicResponseTooLargeError extends Error {
   constructor() {
@@ -145,6 +155,10 @@ const SYSTEM_PROMPT = [
   '  - capture { capture: "screenshot"|"dom_snapshot" } (PDF is not executable on the live harness)',
   '  - scroll { direction: "up"|"down", amount_px?: number }',
   '  - behavioral_pause { duration_ms?: number, reading_word_count?: number }',
+  '',
+  'FIELD LIMITS: url <= 8192 chars; selector <= 4096 chars; type value <=',
+  '10000 chars; tap visible-text value <= 512 chars; clarify/refuse copy <=',
+  '4096 chars. Never split or truncate a field to evade these limits.',
   '',
   'OUTPUT FORMAT: respond with EXACTLY ONE JSON object, no prose, no',
   'markdown fences. The object MUST be one of these three shapes:',
@@ -481,6 +495,11 @@ function parseAnthropicResponse(json: unknown, model: AgentModel): DecomposeResu
     if (typeof obj.clarifyingQuestion !== 'string') {
       throw new Error('Anthropic clarify response missing clarifyingQuestion');
     }
+    assertStringWithinLimit(
+      obj.clarifyingQuestion,
+      'clarifyingQuestion',
+      MAX_AGENT_CUSTOMER_COPY_CHARS,
+    );
     return {
       kind: 'clarify',
       clarifyingQuestion: obj.clarifyingQuestion,
@@ -492,6 +511,7 @@ function parseAnthropicResponse(json: unknown, model: AgentModel): DecomposeResu
     if (typeof obj.refuseReason !== 'string') {
       throw new Error('Anthropic refuse response missing refuseReason');
     }
+    assertStringWithinLimit(obj.refuseReason, 'refuseReason', MAX_AGENT_CUSTOMER_COPY_CHARS);
     return { kind: 'refuse', refuseReason: obj.refuseReason, tokensConsumed, usage };
   }
   throw new Error(`Anthropic response has unknown kind: ${String(kind)}`);
@@ -617,6 +637,12 @@ function isSafeIntegerAtLeast(value: unknown, minimum: number): value is number 
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
 }
 
+function assertStringWithinLimit(value: unknown, field: string, maxChars: number): void {
+  if (typeof value === 'string' && value.length > maxChars) {
+    throw new Error(`Anthropic response field ${field} exceeded ${maxChars} characters`);
+  }
+}
+
 function isAbsoluteHttpUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   try {
@@ -635,15 +661,24 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
     throw new Error(`Anthropic plan.intents exceeded ${MAX_PLAN_INTENTS} entries`);
   }
   const out: AgentIntent[] = [];
-  for (const item of raw) {
+  for (const [index, item] of raw.entries()) {
     if (typeof item !== 'object' || item === null) continue;
     const i = normalizeIntentShape(item as Record<string, unknown>);
+    const field = (name: string) => `plan.intents[${index}].${name}`;
     switch (i.kind) {
       case 'navigate':
+        assertStringWithinLimit(i.url, field('url'), MAX_AGENT_URL_CHARS);
         if (isAbsoluteHttpUrl(i.url)) out.push({ kind: 'navigate', url: i.url });
         break;
       case 'interact': {
         const action = i.action;
+        if (action === 'tap') {
+          assertStringWithinLimit(i.selector, field('selector'), MAX_AGENT_SELECTOR_CHARS);
+          assertStringWithinLimit(i.value, field('value'), MAX_AGENT_TAP_LABEL_CHARS);
+        } else if (action === 'type') {
+          assertStringWithinLimit(i.selector, field('selector'), MAX_AGENT_SELECTOR_CHARS);
+          assertStringWithinLimit(i.value, field('value'), MAX_AGENT_TYPED_TEXT_CHARS);
+        }
         if (action === 'tap' && typeof i.selector === 'string' && i.selector.length > 0) {
           out.push({
             kind: 'interact',
@@ -693,6 +728,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
           typeof i.selector === 'string' &&
           i.selector.length > 0
         ) {
+          assertStringWithinLimit(i.selector, field('selector'), MAX_AGENT_SELECTOR_CHARS);
           out.push({
             kind: 'wait',
             condition: cond,
@@ -811,5 +847,10 @@ export const __TEST_ONLY__ = {
   ANTHROPIC_VERSION_HEADER,
   MAX_ANTHROPIC_RESPONSE_BYTES,
   MAX_PLAN_INTENTS,
+  MAX_AGENT_URL_CHARS,
+  MAX_AGENT_SELECTOR_CHARS,
+  MAX_AGENT_TYPED_TEXT_CHARS,
+  MAX_AGENT_TAP_LABEL_CHARS,
+  MAX_AGENT_CUSTOMER_COPY_CHARS,
   makeClaudeUsage,
 };

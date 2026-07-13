@@ -355,6 +355,151 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       );
     });
 
+    it('rejects every recognized over-limit executable field instead of returning a partial plan', async () => {
+      const cases: ReadonlyArray<{
+        label: string;
+        intent: Record<string, unknown>;
+        field: string;
+        limit: number;
+      }> = [
+        {
+          label: 'navigate URL',
+          intent: {
+            kind: 'navigate',
+            url: `https://x.test/${'x'.repeat(__TEST_ONLY__.MAX_AGENT_URL_CHARS)}`,
+          },
+          field: 'plan.intents[1].url',
+          limit: __TEST_ONLY__.MAX_AGENT_URL_CHARS,
+        },
+        {
+          label: 'tap selector',
+          intent: {
+            kind: 'interact',
+            action: 'tap',
+            selector: 'x'.repeat(__TEST_ONLY__.MAX_AGENT_SELECTOR_CHARS + 1),
+          },
+          field: 'plan.intents[1].selector',
+          limit: __TEST_ONLY__.MAX_AGENT_SELECTOR_CHARS,
+        },
+        {
+          label: 'tap visible-text label',
+          intent: {
+            kind: 'interact',
+            action: 'tap',
+            selector: '#go',
+            value: 'x'.repeat(__TEST_ONLY__.MAX_AGENT_TAP_LABEL_CHARS + 1),
+          },
+          field: 'plan.intents[1].value',
+          limit: __TEST_ONLY__.MAX_AGENT_TAP_LABEL_CHARS,
+        },
+        {
+          label: 'type selector',
+          intent: {
+            kind: 'interact',
+            action: 'type',
+            selector: 'x'.repeat(__TEST_ONLY__.MAX_AGENT_SELECTOR_CHARS + 1),
+            value: 'ok',
+          },
+          field: 'plan.intents[1].selector',
+          limit: __TEST_ONLY__.MAX_AGENT_SELECTOR_CHARS,
+        },
+        {
+          label: 'type text',
+          intent: {
+            kind: 'interact',
+            action: 'type',
+            selector: '#field',
+            value: 'x'.repeat(__TEST_ONLY__.MAX_AGENT_TYPED_TEXT_CHARS + 1),
+          },
+          field: 'plan.intents[1].value',
+          limit: __TEST_ONLY__.MAX_AGENT_TYPED_TEXT_CHARS,
+        },
+        {
+          label: 'wait selector',
+          intent: {
+            kind: 'wait',
+            condition: 'selector_visible',
+            selector: 'x'.repeat(__TEST_ONLY__.MAX_AGENT_SELECTOR_CHARS + 1),
+          },
+          field: 'plan.intents[1].selector',
+          limit: __TEST_ONLY__.MAX_AGENT_SELECTOR_CHARS,
+        },
+      ];
+
+      for (const sample of cases) {
+        const { fetch } = sequenceFetch([
+          jsonResponse({
+            kind: 'plan',
+            intents: [{ kind: 'capture', capture: 'screenshot' }, sample.intent],
+          }),
+        ]);
+        await expect(
+          new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs()),
+          sample.label,
+        ).rejects.toThrow(
+          `Anthropic response field ${sample.field} exceeded ${sample.limit} characters`,
+        );
+      }
+    });
+
+    it('accepts executable fields exactly at their limits', async () => {
+      const urlPrefix = 'https://x.test/';
+      const url = `${urlPrefix}${'x'.repeat(__TEST_ONLY__.MAX_AGENT_URL_CHARS - urlPrefix.length)}`;
+      const selector = 'x'.repeat(__TEST_ONLY__.MAX_AGENT_SELECTOR_CHARS);
+      const typedText = 'x'.repeat(__TEST_ONLY__.MAX_AGENT_TYPED_TEXT_CHARS);
+      const tapLabel = 'x'.repeat(__TEST_ONLY__.MAX_AGENT_TAP_LABEL_CHARS);
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'navigate', url },
+            { kind: 'interact', action: 'tap', selector, value: tapLabel },
+            { kind: 'interact', action: 'type', selector, value: typedText },
+            { kind: 'wait', condition: 'selector_visible', selector },
+          ],
+        }),
+      ]);
+
+      const result = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      expect(result.kind).toBe('plan');
+      if (result.kind !== 'plan') throw new Error('type narrow');
+      expect(result.intents).toHaveLength(4);
+      expect(result.intents[0]).toEqual({ kind: 'navigate', url });
+      expect(result.intents[2]).toEqual({
+        kind: 'interact',
+        action: 'type',
+        selector,
+        value: typedText,
+      });
+    });
+
+    it('bounds customer-visible clarify/refuse copy without truncating it', async () => {
+      for (const sample of [
+        { kind: 'clarify', key: 'clarifyingQuestion' },
+        { kind: 'refuse', key: 'refuseReason' },
+      ] as const) {
+        const atLimit = 'x'.repeat(__TEST_ONLY__.MAX_AGENT_CUSTOMER_COPY_CHARS);
+        const accepted = sequenceFetch([
+          jsonResponse({ kind: sample.kind, [sample.key]: atLimit }),
+        ]);
+        const result = await new ClaudeAgentDecomposer({ fetch: accepted.fetch }).decompose(
+          defaultArgs({ task: 'ambiguous but safe' }),
+        );
+        expect(result.kind).toBe(sample.kind);
+
+        const rejected = sequenceFetch([
+          jsonResponse({ kind: sample.kind, [sample.key]: `${atLimit}x` }),
+        ]);
+        await expect(
+          new ClaudeAgentDecomposer({ fetch: rejected.fetch }).decompose(
+            defaultArgs({ task: 'ambiguous but safe' }),
+          ),
+        ).rejects.toThrow(
+          `Anthropic response field ${sample.key} exceeded ${__TEST_ONLY__.MAX_AGENT_CUSTOMER_COPY_CHARS} characters`,
+        );
+      }
+    });
+
     it('preserves boolean sensitive typing and drops spoof string values', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({
@@ -651,6 +796,7 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
     });
 
     it('rejects oversized Content-Length before reading and without retry', async () => {
+      expect(__TEST_ONLY__.MAX_ANTHROPIC_RESPONSE_BYTES).toBe(64 * 1024);
       const response = new Response('tiny', {
         status: 200,
         headers: {
