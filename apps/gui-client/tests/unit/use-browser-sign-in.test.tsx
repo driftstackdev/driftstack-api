@@ -134,6 +134,32 @@ describe('useBrowserSignIn — error paths', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the initiate deadline active while a response body is stalled', async () => {
+    fetchSpy.mockImplementation((_url: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal;
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              signal?.addEventListener('abort', () => controller.error(signal.reason), {
+                once: true,
+              });
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+    });
+
+    const { result } = renderHook(() =>
+      useBrowserSignIn({ ...defaultOpts(), __requestTimeoutMs: 15 }),
+    );
+    act(() => result.current.start());
+
+    await waitFor(() => expect(result.current.state.kind).toBe('error'), { timeout: 200 });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('initiate rejection → error state with the server-supplied detail', async () => {
     fetchSpy.mockResolvedValueOnce(makeResponse({ detail: 'rate limited' }, 429));
 

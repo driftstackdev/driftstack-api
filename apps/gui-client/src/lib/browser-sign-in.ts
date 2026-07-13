@@ -98,15 +98,25 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
   const fetchWithDeadline = async (url: string, init: RequestInit): Promise<Response> => {
     const controller = new AbortController();
     activeControllersRef.current.add(controller);
-    const timeout = window.setTimeout(
+    let timeout: number | null = null;
+    const cleanup = (): void => {
+      if (timeout !== null) {
+        window.clearTimeout(timeout);
+        timeout = null;
+      }
+      activeControllersRef.current.delete(controller);
+      controller.signal.removeEventListener('abort', cleanup);
+    };
+    controller.signal.addEventListener('abort', cleanup, { once: true });
+    timeout = window.setTimeout(
       () => controller.abort(),
       opts.__requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
     );
     try {
       return await fetch(url, { ...init, signal: controller.signal });
-    } finally {
-      window.clearTimeout(timeout);
-      activeControllersRef.current.delete(controller);
+    } catch (error) {
+      cleanup();
+      throw error;
     }
   };
 
