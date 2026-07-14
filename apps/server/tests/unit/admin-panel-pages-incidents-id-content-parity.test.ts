@@ -49,9 +49,10 @@ describe('admin-panel incident-detail static shell content parity', () => {
     expect(body).toMatch(/resolved:\s+'bg-emerald-50 text-emerald-700'/);
   });
 
-  it('Back-to-list link pinned: /incidents. Drift to a different path would orphan the navigation breadcrumb', () => {
+  it('Back-to-list link pins the canonical /incidents/ directory URL', () => {
     expect(body).toMatch(
-      /<a href="\/incidents" class="text-sm text-tk-accent hover:underline">← Back to incidents<\/a>/,
+      /<a href="\/incidents\/" class="text-sm text-tk-accent hover:underline">← Back to incidents<\/a>/,
     );
+    expect(body).not.toMatch(/href="\/incidents"/);
   });
 });
