@@ -108,10 +108,18 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     );
   });
 
-  it("CRITICAL confirm-cancel dialog: the Cancel button now opens a confirm dialog (setConfirmOpen(true)) instead of calling onCancel() directly — a customer misclick no longer immediately fires a non-refundable on-chain cancellation. Dialog: role='dialog' aria-modal='true' aria-label='Confirm order cancellation', 'Keep order' closes without cancelling, 'Confirm cancel' closes THEN calls onCancel(). Drift back to a direct one-click onCancel would reopen the misclick-triggers-a-non-refundable-action risk this fix closed.", () => {
+  it('CRITICAL confirm-cancel dialog is ref-backed and focus-trapped; Keep order closes without authority and Confirm cancel closes before dispatch', () => {
     expect(body).toMatch(/const \[confirmOpen, setConfirmOpen\] = useState\(false\);/);
+    expect(body).toMatch(/import \{ useFocusTrap \} from '\.\.\/lib\/use-focus-trap';/);
+    expect(body).toMatch(/const confirmDialogRef = useRef<HTMLDivElement>\(null\);/);
     expect(body).toMatch(
-      /\{confirmOpen && \(\s*\n?\s*<div\s*\n?\s*role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Confirm order cancellation"/,
+      /useFocusTrap\(confirmOpen, confirmDialogRef, \(\) => setConfirmOpen\(false\)\);/,
+    );
+    expect(body).toMatch(
+      /\{confirmOpen && \(\s*\n?\s*<div\s*\n?\s*ref=\{confirmDialogRef\}\s*\n?\s*role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Confirm order cancellation"/,
+    );
+    expect(body).toMatch(
+      /onClick=\{\(e\) => \{\s*\n?\s*if \(e\.target === e\.currentTarget\) setConfirmOpen\(false\);\s*\n?\s*\}\}/,
     );
     expect(body).toMatch(
       /onClick=\{\(\) => setConfirmOpen\(false\)\}\s*\n?\s*className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"\s*\n?\s*>\s*\n?\s*Keep order/,
