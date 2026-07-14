@@ -27126,3 +27126,27 @@ pre-insert rejection, malformed-object preflight, concurrent append retention,
 and a blocked-update CAS race that preserves a newer transcript. Strict server
 source/test TypeScript, targeted lint/format, diff and whitespace checks are
 green.
+
+## V-645 — Durable agent-turn responses are bound to their replay identity
+
+**Date:** 2026-07-14
+
+The durable turn-receipt table encrypts terminal customer/model response bodies,
+but its original envelope authenticated only the bytes. A valid ciphertext could
+therefore be moved to a different completed receipt and replayed under that
+row's account, idempotency key, session, request hash or HTTP status.
+
+Production and staging were both confirmed to contain zero receipt rows before
+this cutover, so no compatibility reader or data rewrite was required. New
+writes and replays now use one canonical JSON-array authenticated context that
+binds a dedicated store purpose, version, account ID, idempotency key, agent
+session ID, request hash and response status. Punctuation in caller-generated
+keys cannot create delimiter ambiguity, and a shared-key ciphertext from another
+store cannot cross the purpose boundary.
+
+The real-PostgreSQL regression preserves atomic reservation, ciphertext-at-rest,
+exact replay and idempotent identical completion. It independently changes every
+bound identity field, corrupts the ciphertext and uses a wrong key; each read
+fails closed, while restoration of the exact row replays the original terminal
+response and a different second completion remains rejected. The direct content
+guard pins the complete context on both encryption and decryption.

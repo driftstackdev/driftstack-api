@@ -21,9 +21,22 @@ describe('agent-turn durable receipt persistence', () => {
     );
   });
 
-  it('encrypts every terminal body and completes only the matching in-progress reservation', () => {
+  it('encrypts every terminal body under its complete replay identity and completes only the matching reservation', () => {
+    expect(REPO).toContain(
+      "const AGENT_TURN_RECEIPT_AAD_PURPOSE = 'driftstack.agent-turn-receipt';",
+    );
+    expect(REPO).toMatch(
+      /return JSON\.stringify\(\[\s*AGENT_TURN_RECEIPT_AAD_PURPOSE,\s*1,\s*args\.accountId,\s*args\.idempotencyKey,\s*args\.agentSessionId,\s*args\.requestHash,\s*args\.responseStatus,\s*\]\);/,
+    );
     expect(REPO).toContain('encryptPlatformSecret(');
     expect(REPO).toContain('decryptPlatformSecret(');
+    expect(REPO.match(/agentTurnReceiptAuthenticatedContext\(\{/g)).toHaveLength(2);
+    expect(REPO).toMatch(
+      /decryptPlatformSecret\([\s\S]*?agentTurnReceiptAuthenticatedContext\(\{[\s\S]*?accountId: row\.accountId,[\s\S]*?idempotencyKey: row\.idempotencyKey,[\s\S]*?agentSessionId: row\.agentSessionId,[\s\S]*?requestHash: row\.requestHash,[\s\S]*?responseStatus: row\.responseStatus,/,
+    );
+    expect(REPO).toMatch(
+      /encryptPlatformSecret\([\s\S]*?agentTurnReceiptAuthenticatedContext\(\{[\s\S]*?accountId: args\.accountId,[\s\S]*?idempotencyKey: args\.idempotencyKey,[\s\S]*?agentSessionId: args\.agentSessionId,[\s\S]*?requestHash: args\.requestHash,[\s\S]*?responseStatus: terminal\.status,/,
+    );
     expect(REPO).toMatch(/eq\(agentTurnReceipts\.state, 'in_progress'\)/);
     expect(MIGRATION).toContain('"response_ciphertext" bytea');
     expect(MIGRATION).toMatch(/"state" = 'completed'[\s\S]*"response_ciphertext" IS NOT NULL/);

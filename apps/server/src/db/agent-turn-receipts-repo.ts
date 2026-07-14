@@ -11,6 +11,29 @@ import {
   type ReserveAgentTurnReceiptArgs,
 } from '../services/agent-turn-receipts.js';
 
+const AGENT_TURN_RECEIPT_AAD_PURPOSE = 'driftstack.agent-turn-receipt';
+
+function agentTurnReceiptAuthenticatedContext(args: {
+  accountId: string;
+  idempotencyKey: string;
+  agentSessionId: string;
+  requestHash: string;
+  responseStatus: number;
+}): string {
+  // A JSON array is unambiguous even when an idempotency key contains
+  // punctuation. The dedicated purpose prevents a valid shared-key envelope
+  // from another store being accepted as a durable turn response.
+  return JSON.stringify([
+    AGENT_TURN_RECEIPT_AAD_PURPOSE,
+    1,
+    args.accountId,
+    args.idempotencyKey,
+    args.agentSessionId,
+    args.requestHash,
+    args.responseStatus,
+  ]);
+}
+
 function readTerminal(
   row: typeof agentTurnReceipts.$inferSelect,
   encryptionKeyBase64: string,
@@ -18,7 +41,17 @@ function readTerminal(
   if (row.state !== 'completed' || row.responseStatus === null || row.responseCiphertext === null) {
     throw new Error('completed agent-turn receipt is malformed');
   }
-  const plaintext = decryptPlatformSecret(row.responseCiphertext, encryptionKeyBase64);
+  const plaintext = decryptPlatformSecret(
+    row.responseCiphertext,
+    encryptionKeyBase64,
+    agentTurnReceiptAuthenticatedContext({
+      accountId: row.accountId,
+      idempotencyKey: row.idempotencyKey,
+      agentSessionId: row.agentSessionId,
+      requestHash: row.requestHash,
+      responseStatus: row.responseStatus,
+    }),
+  );
   return canonicalAgentTurnTerminal({
     status: row.responseStatus,
     body: JSON.parse(plaintext) as unknown,
@@ -79,6 +112,13 @@ export class DrizzleAgentTurnReceiptsRepo implements AgentTurnReceiptsRepo {
     const responseCiphertext = encryptPlatformSecret(
       JSON.stringify(terminal.body),
       this.encryptionKeyBase64,
+      agentTurnReceiptAuthenticatedContext({
+        accountId: args.accountId,
+        idempotencyKey: args.idempotencyKey,
+        agentSessionId: args.agentSessionId,
+        requestHash: args.requestHash,
+        responseStatus: terminal.status,
+      }),
     );
     const updated = await this.database.db
       .update(agentTurnReceipts)

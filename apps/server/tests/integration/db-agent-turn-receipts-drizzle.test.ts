@@ -85,5 +85,100 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         receipts.reserve({ ...args, agentSessionId: secondSession.id }),
       ).resolves.toEqual({ kind: 'mismatch' });
     });
+
+    it('binds ciphertext to every replay identity field and rejects tamper or a wrong key', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const handle = { client, db, close: async () => {} };
+      const sessions = new DrizzleAgentSessionsRepo(handle, {
+        transcriptEncryptionKeyBase64: ENCRYPTION_KEY,
+      });
+      const receipts = new DrizzleAgentTurnReceiptsRepo(handle, ENCRYPTION_KEY);
+      const wrongKeyReceipts = new DrizzleAgentTurnReceiptsRepo(
+        handle,
+        Buffer.alloc(32, 24).toString('base64'),
+      );
+      const accountId = randomUUID();
+      const otherAccountId = randomUUID();
+      seeded.push(accountId, otherAccountId);
+      await client`INSERT INTO accounts (id, email) VALUES
+        (${accountId}, ${`turn-receipt-aad-${accountId}@test.local`}),
+        (${otherAccountId}, ${`turn-receipt-aad-${otherAccountId}@test.local`})`;
+      const firstSession = await sessions.create({ accountId, tokenBudgetTotal: 1000 });
+      const secondSession = await sessions.create({ accountId, tokenBudgetTotal: 1000 });
+      const args = {
+        accountId,
+        agentSessionId: firstSession.id,
+        idempotencyKey: 'drizzle-turn-aad',
+        requestHash: 'b'.repeat(64),
+      };
+      const terminal = {
+        status: 201,
+        body: { kind: 'plan-executed', marker: 'record-bound-body' },
+      };
+
+      await expect(receipts.reserve(args)).resolves.toEqual({ kind: 'reserved' });
+      await receipts.complete({ ...args, terminal });
+      const [stored] = await client<
+        Array<{ response_ciphertext: Buffer }>
+      >`SELECT response_ciphertext FROM agent_turn_receipts
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      expect(stored?.response_ciphertext).toBeInstanceOf(Buffer);
+      const originalCiphertext = Buffer.from(stored!.response_ciphertext);
+
+      await expect(wrongKeyReceipts.reserve(args)).rejects.toThrow();
+
+      await client`UPDATE agent_turn_receipts SET response_status = 202
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      await expect(receipts.reserve(args)).rejects.toThrow();
+      await client`UPDATE agent_turn_receipts SET response_status = 201
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+
+      const movedHash = 'c'.repeat(64);
+      await client`UPDATE agent_turn_receipts SET request_hash = ${movedHash}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      await expect(receipts.reserve({ ...args, requestHash: movedHash })).rejects.toThrow();
+      await client`UPDATE agent_turn_receipts SET request_hash = ${args.requestHash}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+
+      await client`UPDATE agent_turn_receipts SET agent_session_id = ${secondSession.id}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      await expect(
+        receipts.reserve({ ...args, agentSessionId: secondSession.id }),
+      ).rejects.toThrow();
+      await client`UPDATE agent_turn_receipts SET agent_session_id = ${firstSession.id}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+
+      const movedKey = 'drizzle-turn-aad-moved';
+      await client`UPDATE agent_turn_receipts SET idempotency_key = ${movedKey}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      await expect(receipts.reserve({ ...args, idempotencyKey: movedKey })).rejects.toThrow();
+      await client`UPDATE agent_turn_receipts SET idempotency_key = ${args.idempotencyKey}
+        WHERE account_id = ${accountId} AND idempotency_key = ${movedKey}`;
+
+      await client`UPDATE agent_turn_receipts SET account_id = ${otherAccountId}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      await expect(receipts.reserve({ ...args, accountId: otherAccountId })).rejects.toThrow();
+      await client`UPDATE agent_turn_receipts SET account_id = ${accountId}
+        WHERE account_id = ${otherAccountId} AND idempotency_key = ${args.idempotencyKey}`;
+
+      const tamperedCiphertext = Buffer.from(originalCiphertext);
+      const lastCiphertextByte = tamperedCiphertext.length - 1;
+      tamperedCiphertext[lastCiphertextByte] = tamperedCiphertext[lastCiphertextByte]! ^ 1;
+      await client`UPDATE agent_turn_receipts SET response_ciphertext = ${tamperedCiphertext}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      await expect(receipts.reserve(args)).rejects.toThrow();
+      await client`UPDATE agent_turn_receipts SET response_ciphertext = ${originalCiphertext}
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+
+      await expect(receipts.reserve(args)).resolves.toEqual({ kind: 'replay', terminal });
+      await expect(receipts.complete({ ...args, terminal })).resolves.toBeUndefined();
+      await expect(
+        receipts.complete({
+          ...args,
+          terminal: { status: 201, body: { kind: 'plan-executed', marker: 'different' } },
+        }),
+      ).rejects.toThrow('agent-turn receipt could not be completed atomically');
+    });
   },
 );
