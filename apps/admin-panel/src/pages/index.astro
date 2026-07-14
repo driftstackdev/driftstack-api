@@ -323,7 +323,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             class="w-48 rounded border border-tk-border px-2 py-1 text-xs text-tk-ink" />
         </label>
         <button type="submit" class="rounded bg-tk-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-tk-accent-hover">Save secret</button>
-        <span class="text-[11px]" data-field="secret-set-status"></span>
+        <span
+          class="text-[11px]"
+          data-field="secret-set-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        ></span>
       </form>
       <p class="mt-3 text-[11px] text-tk-ink-3">
         AES-256-GCM at rest; list shows metadata only. Reveal decrypts ONCE and is audited
@@ -1180,6 +1186,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const secretsList = root.querySelector('[data-list="owner-secrets"]');
       async function revealSecret(name, button) {
         if (!name) return;
+        const status = root.querySelector('[data-field="secret-set-status"]');
         const out = Array.from(root.querySelectorAll('[data-secret-value]')).find(
           (candidate) => candidate.getAttribute('data-secret-value') === name,
         );
@@ -1188,12 +1195,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           out.textContent = '';
           out.classList.add('hidden');
           button.textContent = 'Reveal';
+          if (status) {
+            status.textContent = 'Hidden "' + name + '".';
+            status.className = 'text-[11px] text-tk-ink-3';
+          }
           return;
         }
         if (!beginSecretAction(name, 'reveal', 'Revealing…')) return;
         button.disabled = true;
         button.textContent = 'Revealing…';
         button.setAttribute('aria-busy', 'true');
+        if (status) {
+          status.textContent = 'revealing…';
+          status.className = 'text-[11px] text-tk-ink-3';
+        }
         try {
           const response = await authedFetch(
             '/v1/admin/owner/secrets/' + encodeURIComponent(name) + '/reveal',
@@ -1201,11 +1216,28 @@ const apiBaseUrl = resolveApiBaseUrl();
           );
           if (!response.ok) throw new Error('HTTP ' + response.status);
           const body = await response.json();
-          out.textContent = String(body.value);
+          if (!body || typeof body.value !== 'string') {
+            throw new Error('Malformed reveal response');
+          }
+          out.textContent = body.value;
           out.classList.remove('hidden');
-        } catch {
+          if (status) {
+            status.textContent = 'Revealed "' + name + '". Hide it when finished.';
+            status.className = 'text-[11px] text-emerald-600';
+          }
+        } catch (err) {
           out.textContent = '';
           out.classList.add('hidden');
+          if (status) {
+            status.textContent =
+              'Reveal failed (' +
+              window.driftstackRequestErrorMessage(
+                err,
+                'The secret could not be revealed. Try again.',
+              ) +
+              ').';
+            status.className = 'text-[11px] text-red-600';
+          }
         } finally {
           endSecretAction('reveal');
           if (button.isConnected) {

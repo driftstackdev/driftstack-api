@@ -142,10 +142,18 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toContain('a new metadata version could not be confirmed');
   });
 
-  it('owner-secret reveal is single-flight and clears plaintext on hide/failure', () => {
+  it('owner-secret reveal is single-flight, announces outcomes, and clears plaintext on hide/failure', () => {
+    expect(body).toMatch(/data-field="secret-set-status"\s+role="status"\s+aria-live="polite"/);
     expect(body).toMatch(/beginSecretAction\(name, 'reveal', 'Revealing…'\)/);
     expect(body).toMatch(/button\.textContent = 'Revealing…'/);
     expect(body).toMatch(/button\.setAttribute\('aria-busy', 'true'\)/);
+    expect(body).toContain("status.textContent = 'revealing…'");
+    expect(body).toContain(
+      "status.textContent = 'Revealed \"' + name + '\". Hide it when finished.'",
+    );
+    expect(body).toContain("'Reveal failed (' +");
+    expect(body).toContain("'The secret could not be revealed. Try again.'");
+    expect(body).toMatch(/typeof body\.value !== 'string'/);
     expect(body).toMatch(/out\.textContent = '';/);
     expect(body).toMatch(/endSecretAction\('reveal'\)/);
     expect(body).toMatch(/out\.classList\.contains\('hidden'\) \? 'Reveal' : 'Hide'/);

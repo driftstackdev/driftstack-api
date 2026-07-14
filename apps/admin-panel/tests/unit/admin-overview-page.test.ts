@@ -1039,11 +1039,80 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(button.disabled).toBe(false);
     expect(button.textContent).toBe('Hide');
     expect(button.getAttribute('aria-busy')).toBeNull();
+    expect(text(window, '[data-field="secret-set-status"]')).toBe(
+      'Revealed "stripe_key". Hide it when finished.',
+    );
 
     button.click();
     expect(output.textContent).toBe('');
     expect(output.classList.contains('hidden')).toBe(true);
     expect(button.textContent).toBe('Reveal');
+    expect(text(window, '[data-field="secret-set-status"]')).toBe('Hidden "stripe_key".');
+  });
+
+  it('owner-secret reveal announces a stable failure, clears plaintext, and can recover', async () => {
+    let revealAttempts = 0;
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({ enabled: true, secrets: [{ name: 'stripe_key' }] });
+        }
+        if (
+          /\/v1\/admin\/owner\/secrets\/stripe_key\/reveal$/.test(call.url) &&
+          method === 'POST'
+        ) {
+          revealAttempts += 1;
+          if (revealAttempts === 1) return json({ detail: 'remote-private-detail' }, 503);
+          if (revealAttempts === 2) return json({ name: 'stripe_key' });
+          return json({ value: 'sk_recovered' });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+    const button = window.document.querySelector(
+      '[data-reveal-secret="stripe_key"]',
+    ) as HTMLButtonElement;
+    const output = window.document.querySelector(
+      '[data-secret-value="stripe_key"]',
+    ) as HTMLOutputElement;
+    const status = window.document.querySelector('[data-field="secret-set-status"]') as HTMLElement;
+
+    expect(status.getAttribute('role')).toBe('status');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(status.getAttribute('aria-atomic')).toBe('true');
+
+    button.click();
+    await flush();
+    expect(output.textContent).toBe('');
+    expect(output.classList.contains('hidden')).toBe(true);
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Reveal');
+    expect(status.textContent).toContain('Reveal failed');
+    expect(status.textContent).toContain('temporarily unavailable');
+    expect(status.textContent).not.toContain('remote-private-detail');
+
+    button.click();
+    await flush();
+    expect(output.textContent).toBe('');
+    expect(output.classList.contains('hidden')).toBe(true);
+    expect(button.textContent).toBe('Reveal');
+    expect(status.textContent).toBe(
+      'Reveal failed (The secret could not be revealed. Try again.).',
+    );
+
+    button.click();
+    await flush();
+    expect(output.textContent).toBe('sk_recovered');
+    expect(output.classList.contains('hidden')).toBe(false);
+    expect(button.textContent).toBe('Hide');
+    expect(status.textContent).toBe('Revealed "stripe_key". Hide it when finished.');
   });
 
   it('owner-secret delete is destructive-confirmed, single-flight, and visibly busy', async () => {
