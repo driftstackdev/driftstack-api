@@ -1,218 +1,284 @@
-// Mutation-route rate-limit coverage invariant (drift-guard).
+// Every customer-facing mutation route must carry an abuse limiter or an
+// exact, reviewable exemption.
 //
-// Pins the security property verified manually in the 2026-06-02
-// per-route abuse-coverage audit (auto-memory
-// project_ratelimit_route_coverage_clean): EVERY customer-facing
-// mutation route (POST/PUT/PATCH/DELETE in apps/server/src/routes)
-// carries an abuse limiter, via one of four protection classes:
-//
-//   1. limiter      — `app.rateLimit(...)` (authed customer routes) OR
-//                     `ipRateLimit(...)` / a file-local `ipRateLimit`
-//                     gate const (the unauth auth/oauth/status gates) OR
-//                     the internal `requireInternalAuth` preHandler,
-//                     which bearer-auths AND self-rate-limits via
-//                     rateLimitStore.consume() (internal-fleet-auth audit).
-//   2. admin        — `requireScope('driftstack_internal_admin')`
-//                     (internal-staff-only; flooding one's own admin API
-//                     is self-inflicted, not a public abuse vector).
-//   3. gated stub   — a 2-arg `app.method('/path', stubHandler)` form
-//                     registered by the activation-gate OFF branch; it
-//                     returns 503 FeatureUnavailable immediately, so it
-//                     is not an abuse surface (the LIVE branch's real
-//                     route carries a limiter, and is checked here).
-//   4. exempt       — an explicit, justified allowlist: the HMAC-signature-
-//                     verified webhook-ingress routes + the V-266 public
-//                     cli-authorize routes with their dedicated IP gates.
-//
-// A mutation route in none of these classes is a wide-open abuse surface.
-// Before this guard the property was only manually verified each audit
-// wave; now a newly-added unprotected route fails CI with a precise
-// message telling the author to add a limiter or justify an exemption.
-//
-// Surfaced as backlog item §4.3 in
-// docs/internal/2026-06-02-resilience-arc-and-founder-decision-queue.md.
-//
-// The scanner never descends into handler bodies (which contain arbitrary
-// strings/comments/regex): each declaration's analysis is bounded to the
-// text between its own `app.method(` and the next route declaration, and
-// the "guard region" ends at the handler boundary (`=>` / `function`), so
-// only the path + options object is ever inspected.
+// Discover registrations with the TypeScript AST before checking their
+// options. A textual `app.post(` scanner skips generic Fastify calls such as
+// `app.post<{ Params: ... }>(...)`; handler-body mentions must not satisfy the
+// options-only security check.
 
-import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const ROUTES_DIR = resolve(REPO_ROOT, 'apps/server/src/routes');
-
+const ROUTES_DIR = resolve(HERE, '..', '..', 'src', 'routes');
 const MUTATION_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+const INTERNAL_LIMITER_IDENTIFIERS = new Set(['requireInternalAuth']);
 
-// Protection class 4 — BY DESIGN: routes that intentionally carry no
-// limiter for a sound, settled reason.
-const EXEMPT_BY_DESIGN: ReadonlyArray<{ file: string; path: string; reason: string }> = [
-  {
-    file: 'webhooks-stripe.ts',
-    path: '/v1/webhooks/stripe',
-    reason:
-      'HMAC signature-verified in-handler + Cloudflare-fronted; no IP limiter so legit Stripe deliveries (varying source IPs) are not blocked, bogus payloads cheap-rejected by the sig check + bodyLimit.',
-  },
-  {
-    file: 'webhooks-nowpayments.ts',
-    path: '/v1/webhooks/nowpayments',
-    reason: 'NowPayments IPN — same signature-verified-ingress rationale as the Stripe webhook.',
-  },
-];
-
-const EXEMPT = EXEMPT_BY_DESIGN;
-
-// Bespoke preHandler that authenticates AND self-rate-limits
-// (rateLimitStore.consume) — treated as a limiter (project_internal_fleet_auth_audit_clean).
-const INTERNAL_LIMITER_IDENTS = ['requireInternalAuth'];
-
-interface RouteDecl {
+interface MutationRouteDecl {
   file: string;
   method: string;
   path: string;
-  guardRegion: string;
-  isStub: boolean;
+  optionsText: string;
+  handlerIdentifier: string | null;
+  ipGateIdentifiers: ReadonlySet<string>;
+  hasTypeArguments: boolean;
 }
 
-const DECL_RE = /\bapp\.(get|post|put|patch|delete|head|options)\s*\(/g;
+interface RouteExemption {
+  file: string;
+  method: string;
+  path: string;
+  reason: string;
+}
 
-/** Read the first single/double/backtick string literal starting at `from`. */
-function readLeadingString(s: string, from: number): { value: string; end: number } | null {
-  let i = from;
-  while (i < s.length && /\s/.test(s[i]!)) i++;
-  const q = s[i];
-  if (q !== "'" && q !== '"' && q !== '`') return null;
-  let out = '';
-  i++;
-  for (; i < s.length; i++) {
-    const c = s[i]!;
-    if (c === '\\') {
-      i++;
-      continue;
+interface StubExemption extends RouteExemption {
+  handler: string;
+}
+
+// Signature-verified provider ingress cannot use an IP gate without risking
+// rejection of legitimate deliveries from provider address changes.
+const SIGNED_INGRESS_EXEMPTIONS: readonly RouteExemption[] = [
+  {
+    file: 'webhooks-stripe.ts',
+    method: 'post',
+    path: '/v1/webhooks/stripe',
+    reason: 'Stripe HMAC verification and bounded body replace a source-IP limiter.',
+  },
+  {
+    file: 'webhooks-nowpayments.ts',
+    method: 'post',
+    path: '/v1/webhooks/nowpayments',
+    reason: 'NowPayments HMAC verification and bounded body replace a source-IP limiter.',
+  },
+];
+
+const DISABLED_503 =
+  'Activation-off route returns a fixed FeatureUnavailable response and performs no work.';
+const STUB_EXEMPTIONS: readonly StubExemption[] = [
+  ...['/v1/billing/checkout-session', '/v1/billing/portal-session'].map((path) => ({
+    file: 'billing.ts',
+    method: 'post',
+    path,
+    handler: 'stub',
+    reason: DISABLED_503,
+  })),
+  ...[
+    ['put', '/v1/account/me/byok-anthropic-key'],
+    ['delete', '/v1/account/me/byok-anthropic-key'],
+    ['post', '/v1/account/me/byok-anthropic-key/test'],
+  ].map(([method, path]) => ({
+    file: 'account-byok-anthropic.ts',
+    method: method!,
+    path: path!,
+    handler: 'stub',
+    reason: DISABLED_503,
+  })),
+  ...[
+    ['post', '/v1/recipes'],
+    ['delete', '/v1/recipes/:id'],
+  ].map(([method, path]) => ({
+    file: 'recipes.ts',
+    method: method!,
+    path: path!,
+    handler: 'stub',
+    reason: DISABLED_503,
+  })),
+  ...[
+    ['post', '/v1/agent-sessions'],
+    ['post', '/v1/agent-sessions/:id/cookies/set'],
+    ['post', '/v1/agent-sessions/:id/history'],
+    ['post', '/v1/agent-sessions/:id/files'],
+    ['post', '/v1/agent-sessions/:id/message'],
+    ['delete', '/v1/agent-sessions/:id'],
+    ['post', '/v1/agent-sessions/:id/takeover'],
+    ['post', '/v1/agent-sessions/:id/handback'],
+    ['post', '/v1/agent-sessions/:id/mode'],
+    ['post', '/v1/agent-sessions/:id/input-event'],
+    ['post', '/v1/agent-sessions/:id/resume'],
+  ].map(([method, path]) => ({
+    file: 'agent-sessions.ts',
+    method: method!,
+    path: path!,
+    handler: 'stub',
+    reason: DISABLED_503,
+  })),
+  ...[
+    '/v1/internal/atlas-priority/probe-signature',
+    '/v1/internal/atlas-priority/event-status',
+  ].map((path) => ({
+    file: 'internal-atlas-priority.ts',
+    method: 'post',
+    path,
+    handler: 'reject',
+    reason: DISABLED_503,
+  })),
+];
+
+function collectIpGateIdentifiers(sourceFile: ts.SourceFile): ReadonlySet<string> {
+  const identifiers = new Set<string>();
+  function visit(node: ts.Node): void {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      const initializer = node.initializer;
+      if (
+        ts.isCallExpression(initializer) &&
+        ts.isIdentifier(initializer.expression) &&
+        initializer.expression.text === 'ipRateLimit'
+      ) {
+        identifiers.add(node.name.text);
+      }
     }
-    if (c === q) return { value: out, end: i + 1 };
-    out += c;
+    ts.forEachChild(node, visit);
   }
-  return null;
+  visit(sourceFile);
+  return identifiers;
 }
 
-function scanFile(file: string, src: string): RouteDecl[] {
-  // File-local `const X = ipRateLimit(...)` gate identifiers.
-  const gateIdents = new Set<string>(INTERNAL_LIMITER_IDENTS);
-  for (const m of src.matchAll(
-    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*ipRateLimit\s*\(/g,
-  )) {
-    gateIdents.add(m[1]!);
+function scanMutationRoutes(file: string, source: string): MutationRouteDecl[] {
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const ipGateIdentifiers = collectIpGateIdentifiers(sourceFile);
+  const routes: MutationRouteDecl[] = [];
+
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === 'app' &&
+      MUTATION_METHODS.has(node.expression.name.text)
+    ) {
+      const pathArg = node.arguments[0];
+      if (
+        pathArg !== undefined &&
+        (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) &&
+        pathArg.text.startsWith('/')
+      ) {
+        const secondArg = node.arguments[1];
+        const hasSeparateHandler = node.arguments.length >= 3;
+        const optionsArg =
+          hasSeparateHandler || (secondArg !== undefined && ts.isObjectLiteralExpression(secondArg))
+            ? secondArg
+            : undefined;
+        const handlerArg = hasSeparateHandler ? node.arguments[2] : secondArg;
+        routes.push({
+          file,
+          method: node.expression.name.text,
+          path: pathArg.text,
+          optionsText: optionsArg?.getText(sourceFile) ?? '',
+          handlerIdentifier:
+            handlerArg !== undefined && ts.isIdentifier(handlerArg) ? handlerArg.text : null,
+          ipGateIdentifiers,
+          hasTypeArguments: (node.typeArguments?.length ?? 0) > 0,
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
   }
 
-  // Locate every route declaration so each one's region can be bounded by
-  // the next declaration (never bleeding into a handler body).
-  const decls: Array<{ method: string; openParen: number }> = [];
-  DECL_RE.lastIndex = 0;
-  for (let m = DECL_RE.exec(src); m !== null; m = DECL_RE.exec(src)) {
-    decls.push({ method: m[1]!.toLowerCase(), openParen: DECL_RE.lastIndex });
-  }
-
-  const out: RouteDecl[] = [];
-  for (let k = 0; k < decls.length; k++) {
-    const { method, openParen } = decls[k]!;
-    if (!MUTATION_METHODS.has(method)) continue;
-    const regionEnd = k + 1 < decls.length ? decls[k + 1]!.openParen : src.length;
-
-    const pathLit = readLeadingString(src, openParen);
-    if (!pathLit || !pathLit.value.startsWith('/')) continue; // not a route registration
-    const afterPath = pathLit.end;
-
-    // Guard region = text from after the path up to the handler boundary
-    // (`=>` for arrow handlers, `function` for function handlers), bounded
-    // by the next declaration. Options/preHandler live entirely in here;
-    // the handler body never does.
-    const regionText = src.slice(afterPath, regionEnd);
-    const arrowIdx = regionText.indexOf('=>');
-    const funcIdx = regionText.search(/\bfunction\b/);
-    const bounds = [arrowIdx, funcIdx].filter((x) => x >= 0);
-    const handlerStart = bounds.length ? Math.min(...bounds) : -1;
-
-    const guardRegion = handlerStart >= 0 ? regionText.slice(0, handlerStart) : regionText;
-    // Stub = 2-arg form, bare-identifier handler, no inline function.
-    const isStub = handlerStart < 0 && /^\s*,\s*[A-Za-z_$][\w$]*\s*\)/.test(regionText);
-
-    out.push({ file, method, path: pathLit.value, guardRegion, isStub });
-  }
-  return out;
+  visit(sourceFile);
+  return routes;
 }
 
-function hasLimiter(guard: string, gateIdents: Set<string>): boolean {
-  if (/\b(?:rateLimit|ipRateLimit)\s*\(/.test(guard)) return true;
-  for (const id of gateIdents) {
-    if (new RegExp(`\\b${id}\\b`).test(guard)) return true;
+function routeMatches(exemption: RouteExemption, route: MutationRouteDecl): boolean {
+  return (
+    exemption.file === route.file &&
+    exemption.method === route.method &&
+    exemption.path === route.path
+  );
+}
+
+function isExempt(route: MutationRouteDecl): boolean {
+  if (SIGNED_INGRESS_EXEMPTIONS.some((exemption) => routeMatches(exemption, route))) return true;
+  return STUB_EXEMPTIONS.some(
+    (exemption) => routeMatches(exemption, route) && exemption.handler === route.handlerIdentifier,
+  );
+}
+
+function hasProtection(route: MutationRouteDecl): boolean {
+  if (/\b(?:rateLimit|ipRateLimit)\s*\(/.test(route.optionsText)) return true;
+  if (/requireScope\s*\(\s*['"]driftstack_internal_admin['"]\s*\)/.test(route.optionsText)) {
+    return true;
+  }
+  if (/\brequireOwner\b/.test(route.optionsText)) return true;
+  for (const identifier of INTERNAL_LIMITER_IDENTIFIERS) {
+    if (new RegExp(`\\b${identifier}\\b`).test(route.optionsText)) return true;
+  }
+  for (const identifier of route.ipGateIdentifiers) {
+    if (new RegExp(`\\b${identifier}\\b`).test(route.optionsText)) return true;
   }
   return false;
 }
 
-function hasAdminScope(guard: string): boolean {
-  return /requireScope\s*\(\s*['"]driftstack_internal_admin['"]\s*\)/.test(guard);
+function violations(routes: readonly MutationRouteDecl[]): string[] {
+  return routes
+    .filter((route) => !hasProtection(route) && !isExempt(route))
+    .map((route) => `${route.method.toUpperCase()} ${route.path} (${route.file})`)
+    .sort();
 }
 
 describe('mutation-route rate-limit coverage invariant', () => {
-  const files = readdirSync(ROUTES_DIR).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+  const files = readdirSync(ROUTES_DIR).filter((file) => file.endsWith('.ts'));
+  const routes = files.flatMap((file) =>
+    scanMutationRoutes(file, readFileSync(resolve(ROUTES_DIR, file), 'utf8')),
+  );
 
-  const allRoutes: RouteDecl[] = [];
-  const fileGateIdents = new Map<string, Set<string>>();
-  for (const f of files) {
-    const src = readFileSync(resolve(ROUTES_DIR, f), 'utf8');
-    const gateIdents = new Set<string>(INTERNAL_LIMITER_IDENTS);
-    for (const m of src.matchAll(
-      /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*ipRateLimit\s*\(/g,
-    )) {
-      gateIdents.add(m[1]!);
-    }
-    fileGateIdents.set(f, gateIdents);
-    allRoutes.push(...scanFile(f, src));
-  }
-
-  const isExempt = (r: RouteDecl): boolean =>
-    EXEMPT.some((e) => e.file === r.file && e.path === r.path);
-
-  it('finds the mutation-route surface (scanner non-vacuity)', () => {
-    // Guards against a registration-style refactor silently making the
-    // scanner match ~0 routes (a vacuous pass). The 2026-06-02 audit
-    // counted 79; allow generous drift but catch "found nothing".
-    expect(allRoutes.length).toBeGreaterThan(50);
+  it('discovers the complete current mutation registration surface', () => {
+    expect(routes).toHaveLength(160);
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(74);
   });
 
-  it('every mutation route carries an abuse limiter, admin scope, is a gated stub, or is explicitly exempt', () => {
-    const violations = allRoutes
-      .filter((r) => {
-        if (r.isStub) return false;
-        if (isExempt(r)) return false;
-        const gateIdents = fileGateIdents.get(r.file)!;
-        if (hasLimiter(r.guardRegion, gateIdents)) return false;
-        if (hasAdminScope(r.guardRegion)) return false;
-        return true;
-      })
-      .map((r) => `${r.method.toUpperCase()} ${r.path} (${r.file})`);
-
+  it('every mutation route has a limiter, privileged gate, or exact exemption', () => {
+    const unprotected = violations(routes);
     expect(
-      violations,
-      `Unprotected mutation route(s) found — add app.rateLimit('global') / an ipRateLimit gate ` +
-        `to the preHandler, or (if intentionally public) add a justified entry to EXEMPT in this ` +
-        `test in the same commit:\n  ${violations.join('\n  ')}`,
+      unprotected,
+      `Unprotected mutation route(s) found — add a limiter or exact reviewed exemption:\n${unprotected.join('\n')}`,
     ).toEqual([]);
   });
 
-  it('every EXEMPT allowlist entry still resolves to a real route (no rot)', () => {
-    const stale = EXEMPT.filter(
-      (e) => !allRoutes.some((r) => r.file === e.file && r.path === e.path),
-    ).map((e) => `${e.path} (${e.file})`);
-    expect(
-      stale,
-      `Stale EXEMPT entries (route no longer exists) — remove them:\n  ${stale.join('\n  ')}`,
-    ).toEqual([]);
+  it('every exact exemption resolves to a current registration', () => {
+    const allExemptions = [...SIGNED_INGRESS_EXEMPTIONS, ...STUB_EXEMPTIONS];
+    const stale = allExemptions.filter(
+      (exemption) =>
+        !routes.some(
+          (route) =>
+            routeMatches(exemption, route) &&
+            (!('handler' in exemption) || exemption.handler === route.handlerIdentifier),
+        ),
+    );
+    expect(stale).toEqual([]);
+  });
+
+  it('detects an unprotected generic route despite misleading handler text', () => {
+    const synthetic = scanMutationRoutes(
+      'synthetic.ts',
+      `app.post<{ Body: { value: string } }>(
+        '/v1/admin/leak',
+        async () => {
+          const misleading = "app.rateLimit('global')";
+          return { misleading };
+        },
+      );`,
+    );
+    expect(violations(synthetic)).toEqual(['POST /v1/admin/leak (synthetic.ts)']);
+  });
+
+  it('accepts a generic route limiter only from the options argument', () => {
+    const synthetic = scanMutationRoutes(
+      'synthetic.ts',
+      `app.post<{ Body: { value: string } }>(
+        '/v1/safe',
+        { preHandler: [app.requireAuth, app.rateLimit('global')] },
+        async () => ({ ok: true }),
+      );`,
+    );
+    expect(violations(synthetic)).toEqual([]);
   });
 });

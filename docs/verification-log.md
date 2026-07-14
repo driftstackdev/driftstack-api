@@ -26545,3 +26545,29 @@ reported even when its handler contains a misleading scope string, while a
 gate in the route options is accepted. Focused evidence passes 1 file and 5/5
 tests; strict server test TypeScript, targeted lint/format, diff and whitespace
 checks are green.
+
+## V-623 — Mutation abuse-limit guard covers generic Fastify registrations
+
+**Date:** 2026-07-14
+
+The mutation-route abuse-control invariant had the same discovery-before-check
+failure in a different form. Its declaration matcher recognized only calls
+spelled `app.post(`, `app.put(`, `app.patch(` or `app.delete(`. Generic Fastify
+registrations place type arguments between the method and parenthesis, so 74 of
+160 current mutation call sites were invisible while the test still passed its
+loose greater-than-50 floor.
+
+The invariant now uses the TypeScript AST to inventory every literal mutation
+registration before inspecting only its route-options argument. It recognizes
+direct global/IP limiters, file-local named IP gates, the rate-limiting internal
+fleet authority gate, and internal-admin/owner gates. Provider webhook ingress
+and activation-off routes remain exempt only through exact file/method/path
+entries; a bare identifier handler no longer gains an automatic exemption, and
+all 22 current exemptions are checked for rot.
+
+Verification proves all 160 mutations are visible, including the 74 generic
+registrations, and finds no latent unprotected live route. Synthetic regression
+cases prove an unprotected generic route is detected even when its handler body
+contains misleading limiter text, while a limiter in the options argument is
+accepted. Focused evidence passes 1 file and 5/5 tests; strict server test
+TypeScript, targeted lint/format, diff and whitespace checks are green.
