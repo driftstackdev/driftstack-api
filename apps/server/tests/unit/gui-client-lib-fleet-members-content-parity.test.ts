@@ -99,17 +99,23 @@ describe('W469.B apps/gui-client/src/lib/fleet-members.ts content parity', () =>
       /\*\s*V-346 — fetch \/version on the member; resolves with shape suitable\s*\n?\s*\*\s*for the FleetView\. Uses fetch with a 5s timeout via AbortController\./,
     );
     expect(body).toMatch(
-      /const start = performance\.now\(\);\s*\n?\s*const ctrl = new AbortController\(\);\s*\n?\s*const timer = setTimeout\(\(\) => ctrl\.abort\(\), 5000\);\s*\n?\s*try \{\s*\n?\s*const res = await fetch\(`\$\{member\.baseUrl\}\/version`, \{ signal: ctrl\.signal \}\);\s*\n?\s*const dur = Math\.round\(performance\.now\(\) - start\);\s*\n?\s*if \(!res\.ok\) \{\s*\n?\s*return \{ ok: false, durationMs: dur, error: `HTTP \$\{res\.status\.toString\(\)\}` \};\s*\n?\s*\}/,
+      /const start = performance\.now\(\);\s*const ctrl = new AbortController\(\);\s*const timer = setTimeout\(\(\) => ctrl\.abort\(\), 5000\);\s*try \{\s*const res = await fetch\(`\$\{member\.baseUrl\}\/version`, \{ signal: ctrl\.signal \}\);\s*const dur = Math\.round\(performance\.now\(\) - start\);\s*if \(!res\.ok\) \{\s*await disposeResponseBody\(res\);\s*return \{ ok: false, durationMs: dur, error: `HTTP \$\{res\.status\.toString\(\)\}` \};\s*\}/,
     );
   });
 
-  it('pingFleetMember body parsing: 3-field shape {version + driver + playwright_browser} all unknown + driver 3-value narrow + playwright_browser 3-value narrow + catch err instance-of-Error message fallback + finally clearTimeout(timer)', () => {
+  it('pingFleetMember bounds diagnostic JSON, narrows enums, humanizes local failures, and always clears its deadline', () => {
+    expect(body).toMatch(/import \{ readBoundedDiagnosticJson \} from '\.\/read-bounded-json';/);
+    expect(body).toMatch(/import \{ humanizeError \} from '\.\/humanize-error';/);
+    expect(body).toMatch(
+      /const body = await readBoundedDiagnosticJson<\{\s*version\?: unknown;\s*driver\?: unknown;\s*playwright_browser\?: unknown;\s*\}>\(res\);/,
+    );
     expect(body).toMatch(
       /if \(body\.driver === 'mock' \|\| body\.driver === 'webkit' \|\| body\.driver === 'playwright'\) \{\s*\n?\s*out\.driver = body\.driver;\s*\n?\s*\}\s*\n?\s*if \(\s*\n?\s*body\.playwright_browser === 'webkit' \|\|\s*\n?\s*body\.playwright_browser === 'chromium' \|\|\s*\n?\s*body\.playwright_browser === 'firefox'\s*\n?\s*\) \{\s*\n?\s*out\.playwrightBrowser = body\.playwright_browser;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*const dur = Math\.round\(performance\.now\(\) - start\);\s*\n?\s*const message = err instanceof Error \? err\.message : 'unknown error';\s*\n?\s*return \{ ok: false, durationMs: dur, error: message \};\s*\n?\s*\} finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}/,
+      /\} catch \(err\) \{\s*const dur = Math\.round\(performance\.now\(\) - start\);\s*const message = humanizeError\(\s*err,\s*"Couldn't reach this fleet member\. Check its URL and try again\.",\s*\);\s*return \{ ok: false, durationMs: dur, error: message \};\s*\} finally \{\s*clearTimeout\(timer\);\s*\}/,
     );
+    expect(body).not.toMatch(/err instanceof Error \? err\.message/);
   });
 
   it('file exists at canonical path', () => {
