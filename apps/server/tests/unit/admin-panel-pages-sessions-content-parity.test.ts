@@ -8,7 +8,8 @@
 //   • V-192 framing pinned + 'Force-destroy is the only mutation
 //     surfaced here; everything else (replay, view recording)
 //     flows through the per-account detail surface.'
-//   • STATUS_BADGE 5-tone duplicated frontmatter + inline:
+//   • Inert first paint with no sample session or destructive control.
+//   • STATUS_BADGE 5-tone in the live renderer:
 //     creating (amber) / ready (emerald) / busy (blue) /
 //     destroyed (slate) / errored (red).
 //   • Force-destroy button hidden when status === 'destroyed'.
@@ -34,9 +35,9 @@ function read(p: string): string {
 describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-192 framing pinned: 'progressive-enhancement against /v1/admin/sessions (new in V-192). SSG renders mock; an inline <script> reads ds_web_session_token from localStorage, fetches with bearer auth, and replaces the table. Filter bar wired (status select + account_id text input). Force-destroy button wired against POST /v1/admin/sessions/:id/destroy.'", () => {
+  it('V-192 framing pins an inert SSG shell replaced only after authenticated live loading', () => {
     expect(body).toMatch(
-      /\/\/ V-192 — progressive-enhancement against \/v1\/admin\/sessions \(new in\s*\n?\s*\/\/ V-192\)\. SSG renders mock; an inline <script> reads ds_web_session_token\s*\n?\s*\/\/ from localStorage, fetches with bearer auth, and replaces the table\.\s*\n?\s*\/\/ Filter bar wired \(status select \+ account_id text input\)\. Force-\s*\n?\s*\/\/ destroy button wired against POST \/v1\/admin\/sessions\/:id\/destroy\./,
+      /\/\/ V-192 — progressive-enhancement against \/v1\/admin\/sessions \(new in\s*\n?\s*\/\/ V-192\)\. SSG renders an inert shell; an inline <script> reads\s*\n?\s*\/\/ ds_web_session_token from localStorage, fetches with bearer auth, and\s*\n?\s*\/\/ replaces the table\./,
     );
   });
 
@@ -46,13 +47,21 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     );
   });
 
-  it("STATUS_BADGE 5-tone duplicated frontmatter + inline-script: creating (amber-50) / ready (emerald-50) / busy (blue-50) / destroyed (slate-100) / errored (red-50) — pinned so the session lifecycle 5-state vocabulary stays in sync with the type union AND with the inline-script's badge colors (drift between SSG + inline would cause a hydrate flash)", () => {
-    expect(body).toMatch(
-      /const STATUS_BADGE: Record<string, string> = \{\s*\n?\s*creating: 'bg-amber-50 text-amber-700',\s*\n?\s*ready: 'bg-emerald-50 text-emerald-700',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
-    );
+  it('STATUS_BADGE 5-tone remains in the authoritative live-row renderer only', () => {
     expect(body).toMatch(
       /const STATUS_BADGE = \{\s*\n?\s*creating: 'bg-amber-50 text-amber-700',\s*\n?\s*ready: 'bg-emerald-50 text-emerald-700',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
     );
+    expect(body).not.toContain('const STATUS_BADGE: Record<string, string>');
+  });
+
+  it('ships no sample session identity, count, destructive control, or green live claim', () => {
+    expect(body).not.toContain('MOCK_SESSIONS');
+    expect(body).toContain('Live sessions are unavailable until loaded.');
+    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toContain('<span data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).not.toMatch(/data-action="destroy"\s*\n?\s*data-id=\{session\.id\}/);
+    expect(body).not.toMatch(/Showing \{MOCK_SESSIONS\.length\} sessions/);
   });
 
   it('Status filter 5-option dropdown matches lifecycle states: All statuses / creating / ready / busy / destroyed / errored — pinned so every state in the type union has a filter option (drift to dropping a state would hide sessions in that state from operators filtering by status)', () => {
@@ -64,10 +73,7 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     expect(body).toMatch(/<option value="errored">errored<\/option>/);
   });
 
-  it("Force-destroy button visibility: hidden when status === 'destroyed' in both SSG render + inline rowHtml — pinned so already-destroyed sessions don't show a button that would 404/no-op on click (drift to always-show would create operator confusion when clicks silently fail)", () => {
-    expect(body).toMatch(
-      /\{session\.status !== 'destroyed' && \(\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*data-action="destroy"\s*\n?\s*data-id=\{session\.id\}/,
-    );
+  it("Force-destroy is emitted only by live rowHtml and stays hidden when status === 'destroyed'", () => {
     expect(body).toMatch(
       /const destroyBtn =\s*\n?\s*s\.status !== 'destroyed'\s*\n?\s*\? '<button type="button" data-action="destroy" data-id="' \+/,
     );
@@ -117,11 +123,27 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     );
   });
 
-  it('Signed-out state removes fabricated SSG sessions and their destructive controls', () => {
-    expect(body).toMatch(
-      /if \(!token\) \{[\s\S]*?tbody\.innerHTML =\s*\n?\s*'<tr><td colspan="5"[^']*>Sign in with a staff admin account to see live sessions\.<\/td><\/tr>';[\s\S]*?if \(footnote\) footnote\.textContent = '';[\s\S]*?showBanner\('Sign in with a staff admin account to see live data\.'\);[\s\S]*?return;/,
+  it('signed-out/failed reads reapply unavailable state, while success alone turns live state green', () => {
+    expect(body).toContain('function renderSessionsUnavailable(message)');
+    expect(body).toContain(
+      "renderSessionsUnavailable('Sign in with a staff admin account to see live sessions.')",
     );
-    expect(body).not.toMatch(/Showing preview below/);
+    expect(body).toContain(
+      "'Could not load live sessions — nothing to act on. Resolve the error above and retry.'",
+    );
+    expect(body).toMatch(/if \(loaded\) \{[\s\S]*?setLiveState\('ready'\);/);
+    expect(body).toMatch(/if \(expectedReq !== inFlight\) return loaded;/);
+    expect(body).toMatch(/setLiveState\('failed', 'Sign in for live data'\);/);
+  });
+
+  it('defers token authority until DOMContentLoaded so the AdminLayout SSO bridge lands first', () => {
+    expect(body).toMatch(/let token = null;/);
+    expect(body).toMatch(
+      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+    );
+    expect(body).toMatch(
+      /if \(document\.readyState === 'loading'\) \{\s*\n?\s*document\.addEventListener\('DOMContentLoaded', start\);\s*\n?\s*\} else \{\s*\n?\s*start\(\);/,
+    );
   });
 
   it('file exists at canonical path', () => {

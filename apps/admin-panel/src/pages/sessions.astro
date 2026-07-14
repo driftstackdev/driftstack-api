@@ -3,69 +3,17 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 import { ARCHETYPE_REGISTRY, archetypeDisplayLabel } from '@driftstack/api-types';
 
 // V-192 — progressive-enhancement against /v1/admin/sessions (new in
-// V-192). SSG renders mock; an inline <script> reads ds_web_session_token
-// from localStorage, fetches with bearer auth, and replaces the table.
+// V-192). SSG renders an inert shell; an inline <script> reads
+// ds_web_session_token from localStorage, fetches with bearer auth, and
+// replaces the table.
 // Filter bar wired (status select + account_id text input). Force-
 // destroy button wired against POST /v1/admin/sessions/:id/destroy.
-
-interface MockAdminSession {
-  id: string;
-  accountId: string;
-  accountEmail: string;
-  status: 'creating' | 'ready' | 'busy' | 'destroyed' | 'errored';
-  archetype: string;
-  createdAt: string;
-  destroyedAt: string | null;
-}
-
-const MOCK_SESSIONS: MockAdminSession[] = [
-  {
-    id: 'ses_00000000-0000-4000-8000-0000000000c1',
-    accountId: 'acc_00000000-0000-4000-8000-000000000001',
-    accountEmail: 'tester@driftstack.local',
-    status: 'ready',
-    archetype: 'iphone17_ios18_7_safari26_4',
-    createdAt: '2026-05-04T11:30:00Z',
-    destroyedAt: null,
-  },
-  {
-    id: 'ses_00000000-0000-4000-8000-0000000000c2',
-    accountId: 'acc_00000000-0000-4000-8000-000000000002',
-    accountEmail: 'agency@driftstack.local',
-    status: 'busy',
-    archetype: 'iphone17_ios18_7_safari26_4',
-    createdAt: '2026-05-04T10:15:00Z',
-    destroyedAt: null,
-  },
-  {
-    id: 'ses_00000000-0000-4000-8000-0000000000c3',
-    accountId: 'acc_00000000-0000-4000-8000-000000000001',
-    accountEmail: 'tester@driftstack.local',
-    status: 'errored',
-    archetype: 'iphone17_ios18_7_safari26_4',
-    createdAt: '2026-05-04T08:00:00Z',
-    destroyedAt: null,
-  },
-];
-
-const STATUS_BADGE: Record<string, string> = {
-  creating: 'bg-amber-50 text-amber-700',
-  ready: 'bg-emerald-50 text-emerald-700',
-  busy: 'bg-blue-50 text-blue-700',
-  destroyed: 'bg-tk-hover text-tk-ink-2',
-  errored: 'bg-red-50 text-red-700',
-};
-
-function fmtIso(iso: string | null): string {
-  if (iso === null) return '—';
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-}
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 // Friendly archetype labels (slug → "iPhone 17 / iOS 18.7 / Safari 26.4")
 // for the operator's session list — injected into the client script + used for
-// the SSG mock render, so the device shows readable, not a raw slug.
+// live row renderer, so the device shows readable, not a raw slug.
 const ARCHETYPE_LABELS = Object.fromEntries(
   ARCHETYPE_REGISTRY.map((a) => [a.id, archetypeDisplayLabel(a.id)]),
 );
@@ -96,14 +44,18 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           <span
             aria-hidden="true"
             data-live-dot
-            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+            class="inline-block h-2 w-2 rounded-full bg-amber-500"
           ></span>
-          <span>Live · updated <span data-live-age>just now</span></span>
+          <span data-live-status>Waiting for live data</span>
+          <span data-live-age class="hidden"></span>
         </span>
         <button
           type="button"
           data-live-refresh
-          class="text-tk-accent hover:underline"
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in"
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           Refresh now
         </button>
@@ -145,54 +97,16 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="sessions">
-          {
-            MOCK_SESSIONS.map((session) => (
-              <tr class="hover:bg-tk-bg">
-                <td class="px-4 py-3">
-                  <p class="font-mono text-xs text-tk-ink">{session.id}</p>
-                  <p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">
-                    {archetypeDisplayLabel(session.archetype)}
-                  </p>
-                </td>
-                <td class="px-4 py-3">
-                  <p class="text-sm text-tk-ink">{session.accountEmail}</p>
-                  <p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">
-                    {session.accountId}
-                  </p>
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    class:list={[
-                      'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
-                      STATUS_BADGE[session.status],
-                    ]}
-                  >
-                    {session.status}
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-tk-ink-2">{fmtIso(session.createdAt)}</td>
-                <td class="px-4 py-3 text-right">
-                  {session.status !== 'destroyed' && (
-                    <button
-                      type="button"
-                      data-action="destroy"
-                      data-id={session.id}
-                      class="text-sm text-red-700 hover:underline"
-                    >
-                      Force destroy
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))
-          }
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">
+              Live sessions are unavailable until loaded.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
 
     <p class="mt-4 text-xs text-tk-ink-3" data-field="footnote">
-      Showing {MOCK_SESSIONS.length} sessions. Force-destroy fires
-      <code class="font-mono">POST /v1/admin/sessions/:id/destroy</code> with audit log.
     </p>
   </div>
 
@@ -205,7 +119,11 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       const footnote = root.querySelector('[data-field="footnote"]');
       const statusEl = root.querySelector('[data-field="status"]');
       const accountIdEl = root.querySelector('[data-field="account-id"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveStatus = root.querySelector('[data-live-status]');
+      const liveAge = root.querySelector('[data-live-age]');
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      let token = null;
       const SESSION_TIMEOUT_MS = 15_000;
       let loadController = null;
       const destroysInFlight = new Set();
@@ -256,6 +174,38 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       function archetypeLabel(slug) {
         if (!slug) return '—';
         return (archetypeLabels && archetypeLabels[slug]) || slug;
+      }
+
+      function renderSessionsUnavailable(message) {
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+            escapeHtml(message) +
+            '</td></tr>';
+        }
+        if (footnote) footnote.textContent = '';
+      }
+
+      function setLiveState(state, message) {
+        if (liveDot) {
+          const color =
+            state === 'ready'
+              ? 'bg-emerald-500'
+              : state === 'failed'
+                ? 'bg-red-500'
+                : 'bg-amber-500';
+          liveDot.className = 'inline-block h-2 w-2 rounded-full ' + color;
+        }
+        if (liveStatus) {
+          liveStatus.textContent = message
+            ? message
+            : state === 'ready'
+              ? 'Live · updated'
+              : state === 'failed'
+                ? 'Live refresh failed'
+                : 'Loading live data';
+        }
+        if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
       }
 
       function destroyControlState(id) {
@@ -413,16 +363,9 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           .catch((err) => {
             if (myReq !== inFlight) return false;
             const msg = requestErrorMessage(err, 'network error');
-            // W604 — clear the SSG mock table on ANY load failure. Leaving the
-            // mock rows on screen is dangerous here: each row renders a live
-            // force-destroy button wired to a FAKE session id, so an admin
-            // could fire POST /admin/sessions/<mock-id>/destroy on a session
-            // that doesn't exist. Replace with an honest empty/error state.
-            if (tbody) {
-              tbody.innerHTML =
-                '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load live sessions — nothing to act on. Resolve the error above and retry.</td></tr>';
-            }
-            if (footnote) footnote.textContent = '';
+            renderSessionsUnavailable(
+              'Could not load live sessions — nothing to act on. Resolve the error above and retry.',
+            );
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -539,50 +482,48 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       let debounce = 0;
       function scheduleLoad() {
         clearTimeout(debounce);
-        debounce = setTimeout(load, 200);
+        debounce = setTimeout(loadWithLive, 200);
       }
       if (statusEl) statusEl.addEventListener('change', scheduleLoad);
       if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
-
-      if (!token) {
-        // Never leave the SSG mock on a live-operations surface. Even though
-        // destroy() fails closed without a token, fabricated session ids and
-        // statuses look authoritative and can send an operator investigating
-        // customers that do not exist.
-        if (tbody) {
-          tbody.innerHTML =
-            '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in with a staff admin account to see live sessions.</td></tr>';
-        }
-        if (footnote) footnote.textContent = '';
-        showBanner('Sign in with a staff admin account to see live data.');
-        return;
-      }
 
       // 2026-05-22 — live auto-poll. Same pattern as 580b30a7 /
       // 2d358ce7. Session-list reflects newly-spawned customer
       // sessions + status transitions every 30s.
       let lastFetch = Date.now();
       function loadWithLive() {
-        const liveDot = root.querySelector('[data-live-dot]');
-        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        setLiveState('loading');
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-disabled', 'true');
+        }
+        const expectedReq = inFlight + 1;
         const p = load();
         if (p && typeof p.then === 'function') {
-          p.then(
-            () => {
+          return p.then((loaded) => {
+            if (expectedReq !== inFlight) return loaded;
+            if (loaded) {
               lastFetch = Date.now();
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
-            },
-            () => {
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
-            },
-          );
+              if (liveAge) liveAge.textContent = 'just now';
+              setLiveState('ready');
+            } else {
+              setLiveState('failed');
+            }
+            if (refreshBtn) {
+              refreshBtn.disabled = false;
+              refreshBtn.removeAttribute('aria-disabled');
+            }
+            return loaded;
+          });
         } else {
-          lastFetch = Date.now();
+          setLiveState('failed');
+          if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.removeAttribute('aria-disabled');
+          }
+          return Promise.resolve(false);
         }
       }
-      const refreshBtn = root.querySelector('[data-live-refresh]');
-      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
-      setInterval(loadWithLive, 30_000);
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -590,12 +531,33 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
-      const ageEl = root.querySelector('[data-live-age]');
-      setInterval(() => {
-        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
-      }, 5_000);
+      function start() {
+        token = localStorage.getItem('ds_web_session_token');
+        if (!token) {
+          renderSessionsUnavailable('Sign in with a staff admin account to see live sessions.');
+          setLiveState('failed', 'Sign in for live data');
+          showBanner('Sign in with a staff admin account to see live data.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return;
+        }
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.removeAttribute('aria-disabled');
+          refreshBtn.removeAttribute('title');
+          refreshBtn.addEventListener('click', loadWithLive);
+        }
+        setInterval(loadWithLive, 30_000);
+        setInterval(() => {
+          if (liveAge) liveAge.textContent = fmtAge(lastFetch);
+        }, 5_000);
+        loadWithLive();
+      }
 
-      load();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>
