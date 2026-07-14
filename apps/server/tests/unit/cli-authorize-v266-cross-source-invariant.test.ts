@@ -271,12 +271,13 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     expect(p).toMatch(/user_code: string;/);
     expect(p).toMatch(/account_id: string;/);
     expect(p).toMatch(/api_key_plaintext: string;/);
-    expect(p).toMatch(/scopes: readonly ApiKeyScope\[\];/);
+    expect(p).not.toMatch(/scopes: readonly ApiKeyScope\[\];/);
   });
 
-  it("CRITICAL BindInput.scopes framing — 'Recorded for observability; the actual scopes live on the minted key'. The observability-only framing prevents the bind path from being treated as a scope-storage path.", () => {
+  it('CRITICAL BindInput has no false scopes sink; scope persistence belongs to the minted API-key row and audit.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
-    expect(p).toMatch(/Recorded for observability; the actual scopes live on the minted key/);
+    expect(p).not.toMatch(/Recorded for observability; the actual scopes live on the minted key/);
+    expect(p).not.toMatch(/import type \{ ApiKeyScope \}/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

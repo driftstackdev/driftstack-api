@@ -16,7 +16,6 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Redis } from 'ioredis';
-import type { ApiKeyScope } from '@driftstack/api-types';
 import { decryptPlatformSecret, encryptPlatformSecret } from '../lib/platform-secret-encryption.js';
 
 const REDIS_KEY_PREFIX = 'cli-auth:code:';
@@ -308,8 +307,6 @@ export interface BindInput {
   user_code: string;
   account_id: string;
   api_key_plaintext: string;
-  /** Recorded for observability; the actual scopes live on the minted key. */
-  scopes: readonly ApiKeyScope[];
 }
 
 export interface BindResult {

@@ -27042,3 +27042,26 @@ profile/type/mock matrix passes 7 files and 68/68 tests; the full behavioural
 package plus all duplicate guards and the cross-source persona invariant passes
 29 files and 362/362 tests. Package build, strict affected-source/test
 TypeScript, targeted lint/format, diff and whitespace checks are green.
+
+## V-642 — CLI credential delivery has no false scope sink
+
+**Date:** 2026-07-14
+
+The CLI authorization service accepted a `scopes` bind parameter documented as
+being recorded for observability, but never read or stored it. The selected
+scopes were already persisted on the authoritative API-key row and included in
+the customer-facing `api_key.minted` audit before the short-lived credential was
+bound. The extra parameter therefore described ownership the delivery service
+did not have and could mislead future authorization changes.
+
+Scope selection remains validated by the authenticated bind route and flows
+unchanged into API-key creation, provenance and the permanent audit record. It
+is no longer forwarded into the two-minute credential-delivery service, whose
+record remains limited to the identity-bound material needed for one-shot key
+exchange. No request, response, encrypted record or API-key behavior changed.
+
+Negative invariants keep scopes out of `BindInput` and its route call, while
+positive invariants pin API-key row and audit ownership. The expanded crypto,
+service, route and integration matrix passes 12 files and 184/184 tests. Strict
+affected-source/test TypeScript, targeted lint/format, diff and whitespace
+checks are green.

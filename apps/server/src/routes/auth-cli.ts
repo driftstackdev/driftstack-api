@@ -105,7 +105,6 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
           user_code: parsed.data.user_code,
           account_id: `acc_${ctx.account.id}`,
           api_key_plaintext: created.plaintext,
-          scopes,
         });
         return {
           ok: true as const,

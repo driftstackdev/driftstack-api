@@ -86,7 +86,6 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
       user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_test_plain_v553',
-      scopes: ['write:sessions'],
     });
     expect(r.account_id).toBe('acc_1');
     // Exchange should now return the plaintext.
@@ -103,7 +102,6 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
         user_code: 'ABCD-EFGH',
         account_id: 'acc_1',
         api_key_plaintext: 'sk_test',
-        scopes: [],
       }),
     ).rejects.toBeInstanceOf(CliAuthorizeError);
   });
@@ -118,7 +116,6 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
         user_code: init.user_code,
         account_id: 'acc_1',
         api_key_plaintext: 'sk',
-        scopes: [],
       }),
     ).rejects.toMatchObject({ code: 'state_mismatch' });
   });
@@ -132,7 +129,6 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
       user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_first',
-      scopes: [],
     });
     await expect(
       svc.bind({
@@ -141,7 +137,6 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
         user_code: init.user_code,
         account_id: 'acc_2',
         api_key_plaintext: 'sk_second',
-        scopes: [],
       }),
     ).rejects.toMatchObject({ code: 'already_bound' });
   });
@@ -165,7 +160,6 @@ describe('V-553.B-2 CliAuthorizeService — exchange', () => {
       user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_one',
-      scopes: [],
     });
     const first = await svc.exchange({ code: init.code, state: 'st_' + 'a'.repeat(20) });
     expect(first.status).toBe('bound');
@@ -219,7 +213,6 @@ describe('V-553.B-2 CliAuthorizeService — TTL eviction', () => {
       user_code: init.user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'sk_refresh',
-      scopes: [],
     });
     // 5:30 past initiate — would be expired without bind-time refresh.
     vi.setSystemTime(new Date('2026-05-11T12:05:30Z'));

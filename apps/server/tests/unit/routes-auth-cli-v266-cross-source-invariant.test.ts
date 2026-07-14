@@ -22,8 +22,8 @@
 //
 //   initiate returns { code, user_code, browser_url, expires_at (ISO) }.
 //
-//   bind 6-arg cli-authorize call — code + state + user_code + account_id (acc_
-//     prefix) + api_key_plaintext + scopes.
+//   bind 5-field cli-authorize call — code + state + user_code + account_id (acc_
+//     prefix) + api_key_plaintext. Scope persistence stays on the API-key row.
 //
 //   bind revoke-on-failure framing — 'Revoke the just-minted key —
 //   the bind failed, so the plaintext we created above can't reach a
@@ -93,7 +93,17 @@ describe('W1034 routes/auth-cli V-266 cross-source invariant', () => {
     expect(p).toMatch(/user_code: parsed\.data\.user_code,/);
     expect(p).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
     expect(p).toMatch(/api_key_plaintext: created\.plaintext,/);
-    expect(p).toMatch(/scopes,/);
+    expect(p).not.toMatch(/cliAuthorizeService\.bind\(\{[\s\S]*?scopes,[\s\S]*?\}\);/);
+  });
+
+  it('CRITICAL selected scopes remain owned by the permanent API-key row and customer audit.', () => {
+    const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts'));
+    expect(route).toMatch(
+      /const created = await apiKeysService\.create\(ctx, \{[\s\S]*?scopes,[\s\S]*?provenance: 'cli_device'/,
+    );
+    const apiKeys = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(apiKeys).toMatch(/scopes: input\.scopes,/);
+    expect(apiKeys).toMatch(/payload: \{ name: input\.name, scopes: input\.scopes \},/);
   });
 
   it('CRITICAL bind compensation covers every thrown bind failure, logs a secondary revoke failure, and preserves/maps the original error.', () => {

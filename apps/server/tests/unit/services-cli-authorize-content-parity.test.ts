@@ -248,12 +248,12 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
   });
 
-  it('imports: createHash+randomBytes+timingSafeEqual from node:crypto + Redis type + ApiKeyScope from api-types', () => {
+  it('imports: createHash+randomBytes+timingSafeEqual from node:crypto + Redis type; no dead scope dependency', () => {
     expect(body).toMatch(
       /import \{ createHash, randomBytes, timingSafeEqual \} from 'node:crypto';/,
     );
     expect(body).toMatch(/import type \{ Redis \} from 'ioredis';/);
-    expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
+    expect(body).not.toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
     // D1 — at-rest encryption of the minted key uses the shared platform-secret envelope.
     expect(body).toMatch(
       /import \{[\s\S]*?decryptPlatformSecret,[\s\S]*?encryptPlatformSecret,?[\s\S]*?\} from '\.\.\/lib\/platform-secret-encryption\.js';/,

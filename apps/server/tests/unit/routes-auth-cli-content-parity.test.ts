@@ -101,6 +101,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     expect(body).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
     expect(body).toMatch(/user_code: parsed\.data\.user_code,/);
     expect(body).toMatch(/api_key_plaintext: created\.plaintext,/);
+    expect(body).not.toMatch(/cliAuthorizeService\.bind\(\{[\s\S]*?scopes,[\s\S]*?\}\);/);
   });
 
   it('Bind compensation pinned: every bind failure revokes the just-minted key, logs secondary revoke failure, and preserves/maps the original error', () => {

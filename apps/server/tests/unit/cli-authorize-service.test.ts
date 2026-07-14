@@ -97,7 +97,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
         user_code: 'ABCD-EFGH',
         account_id: 'acc',
         api_key_plaintext: 'ds_live_x',
-        scopes: ['read'],
       }),
     ).rejects.toThrow(CliAuthorizeError);
   });
@@ -112,7 +111,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
         user_code,
         account_id: 'acc',
         api_key_plaintext: 'ds_live_x',
-        scopes: ['read'],
       }),
     ).rejects.toThrow(/state/i);
   });
@@ -126,7 +124,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
       user_code,
       account_id: 'acc_1',
       api_key_plaintext: 'ds_live_x',
-      scopes: ['read'],
     });
     await expect(
       svc.bind({
@@ -135,7 +132,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
         user_code,
         account_id: 'acc_1',
         api_key_plaintext: 'ds_live_y',
-        scopes: ['read'],
       }),
     ).rejects.toThrow(/already/i);
   });
@@ -149,7 +145,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
       user_code,
       account_id: 'acc_99',
       api_key_plaintext: 'ds_live_secret',
-      scopes: ['account_owner'],
     });
     expect(result.account_id).toBe('acc_99');
     expect(result.expires_at).toBeInstanceOf(Date);
@@ -165,7 +160,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
         user_code,
         account_id: `acc_${suffix}`,
         api_key_plaintext: `ds_live_${suffix}`,
-        scopes: ['read'],
       });
 
     const results = await Promise.allSettled([bind('first'), bind('second')]);
@@ -196,7 +190,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
         user_code: wrongUserCode,
         account_id: 'acc_wrong',
         api_key_plaintext: 'ds_live_wrong',
-        scopes: ['read'],
       }),
     ).rejects.toMatchObject({ code: 'user_code_mismatch' });
 
@@ -207,7 +200,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
         user_code: initiated.user_code.toLowerCase(),
         account_id: 'acc_right',
         api_key_plaintext: 'ds_live_right',
-        scopes: ['read'],
       }),
     ).resolves.toMatchObject({ account_id: 'acc_right' });
   });
@@ -225,7 +217,6 @@ describe('V-553.B-22 CliAuthorizeService.bind', () => {
         user_code,
         account_id: 'acc_bad',
         api_key_plaintext: 'ds_live_never_stored',
-        scopes: ['read'],
       }),
     ).rejects.toMatchObject({ code: 'invalid_code' });
     expect(await store.get(key)).toBeNull();
@@ -269,7 +260,6 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
       user_code,
       account_id: 'acc_42',
       api_key_plaintext: 'ds_live_one_shot',
-      scopes: ['read'],
     });
     const first = await svc.exchange({ code, state: 's' });
     expect(first.status).toBe('bound');
@@ -318,7 +308,6 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
       user_code: first.user_code,
       account_id: 'acc_first',
       api_key_plaintext: 'ds_live_first',
-      scopes: ['read'],
     });
     const second = await svc.initiate({ state: STATE });
     await svc.bind({
@@ -327,7 +316,6 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
       user_code: second.user_code,
       account_id: 'acc_second',
       api_key_plaintext: 'ds_live_second',
-      scopes: ['read'],
     });
     store.claimedOverride = await store.get(cliAuthorizeRedisKey(second.code));
     expect(store.claimedOverride).not.toBeNull();
@@ -350,7 +338,6 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
       user_code: first.user_code,
       account_id: 'acc_first',
       api_key_plaintext: 'ds_test_first',
-      scopes: ['read'],
     });
     await svc.bind({
       code: second.code,
@@ -358,7 +345,6 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
       user_code: second.user_code,
       account_id: 'acc_second',
       api_key_plaintext: 'ds_test_second',
-      scopes: ['read'],
     });
 
     const firstKey = cliAuthorizeRedisKey(first.code);
@@ -388,7 +374,6 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
       user_code: initiated.user_code,
       account_id: 'acc_state_bound',
       api_key_plaintext: 'ds_test_state_bound',
-      scopes: ['read'],
     });
 
     const key = cliAuthorizeRedisKey(initiated.code);
@@ -419,7 +404,6 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
       user_code,
       account_id: 'acc_enc',
       api_key_plaintext: 'ds_live_secret_at_rest',
-      scopes: ['read'],
     });
     // The blob that actually sits in Redis must not contain the plaintext.
     const rawStored = await store.get(cliAuthorizeRedisKey(code));
@@ -498,7 +482,6 @@ describe('V-266 C2 — atomic one-shot exchange (no double-delivery under concur
       user_code,
       account_id: 'acc_race',
       api_key_plaintext: 'ds_live_race',
-      scopes: ['read'],
     });
     const [a, b] = await Promise.all([
       svc.exchange({ code, state: STATE }),
