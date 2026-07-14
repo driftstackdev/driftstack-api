@@ -149,11 +149,20 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).not.toMatch(/>\s*\n?\s*View\s*\n?\s*<\/button>/);
   });
 
-  it("friendlyError: DriftstackError instanceof → .message / Error instanceof → .message / fallback 'unknown error' — pinned so client-thrown DriftstackErrors surface their server-friendly message and unrecognized throws don't render as '[object Object]'; 2026-05-20 — signature widened to (err, baseUrl?) for Couldn't-reach-<url> network-error hint", () => {
+  it('friendlyError preserves connection diagnostics and otherwise uses shared safe actionable copy', () => {
+    expect(body).toMatch(
+      /import \{ diagnosticFetchError \} from '\.\.\/lib\/diagnostic-fetch-error';/,
+    );
+    expect(body).toMatch(/import \{ humanizeError \} from '\.\.\/lib\/humanize-error';/);
     expect(body).toMatch(/function friendlyError\(err: unknown, baseUrl\?: string\): string/);
-    expect(body).toMatch(/if \(err instanceof DriftstackError\)/);
-    expect(body).toMatch(/if \(err instanceof Error\)/);
-    expect(body).toMatch(/return 'unknown error';/);
+    expect(body).toMatch(
+      /if \(baseUrl !== undefined\) \{\s*const diag = diagnosticFetchError\(err, baseUrl\);\s*if \(diag !== null\) return diag;\s*\}/,
+    );
+    expect(body).toMatch(
+      /return humanizeError\(err, "Couldn't complete the session request\. Try again\."\);/,
+    );
+    const bypassMutation = body.replace('return humanizeError(err,', 'return String(err) || (');
+    expect(bypassMutation).not.toMatch(/return humanizeError\(err,/);
   });
 
   it("Header session count: concurrentCap !== null && concurrentActive !== null → `${active} / ${cap}` cap-display else state.sessions.length (no cap data yet); the live-refresh footer 'Refreshed <mono>{formatTime(refreshedAt)}</mono> · auto-refresh {REFRESH_MS/1000}s' (with an auto-refresh-only fallback before the first refresh) — pinned so the displayed cadence stays in sync with the REFRESH_MS constant (Console restyle: 'Last refreshed' → 'Refreshed' + the live ping pill, 'auto-refresh every Ns' → 'auto-refresh Ns')", () => {
