@@ -35,10 +35,13 @@ describe('docs components/Footer content parity', () => {
     expect(body).toMatch(/width="24"/);
   });
 
-  it('S22.1 (2026-07-06) — tk chrome + meta-row theme toggle pinned: tk-border/tk-surface footer shell + a [data-theme-toggle] button in the copyright row (marketing Footer parity; the wiring lives in BaseLayout)', () => {
+  it('S22.1 — token chrome + meta-row theme toggle pins its truthful initial action, pressed state, and paired icons', () => {
     expect(body).toMatch(/<footer class="border-t border-tk-border bg-tk-surface">/);
     expect(body).toMatch(/data-theme-toggle/);
-    expect(body).toMatch(/aria-label="Toggle light and dark theme"/);
+    expect(body).toMatch(/aria-label="Switch to light theme"/);
+    expect(body).toMatch(/aria-pressed="false"/);
+    expect(body).toMatch(/title="Switch to light theme"/);
+    expect(body).not.toMatch(/aria-label="Toggle light and dark theme"/);
     expect(body).toMatch(/class="hidden dark:block"/);
     expect(body).toMatch(/class="block dark:hidden"/);
   });
@@ -51,8 +54,9 @@ describe('docs components/Footer content parity', () => {
 
   it('4-link cross-nav pinned: Marketing site + Pricing + Security + mailto:support. Drift to dropping any would break a real customer-navigation path back to the marketing surface', () => {
     expect(body).toMatch(/href="https:\/\/driftstack\.dev"[\s\S]{0,200}Marketing site/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing"[\s\S]{0,200}Pricing/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security"[\s\S]{0,200}Security/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing\/"[\s\S]{0,200}Pricing/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security\/"[\s\S]{0,200}Security/);
+    expect(body).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security)"/);
     expect(body).toMatch(
       /href="mailto:support@driftstack\.dev"[\s\S]{0,200}support@driftstack\.dev/,
     );
