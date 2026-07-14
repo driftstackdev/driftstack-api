@@ -84,10 +84,19 @@ describe('cross-SDK BYOK Anthropic header invariant', () => {
     const go = read(GO);
     // TS: `opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0`
     expect(ts).toMatch(/opts\?\.byokApiKey !== undefined && opts\.byokApiKey\.length > 0/);
-    // Python: truthy check (None + '' both fall to None header path)
-    expect(py).toMatch(/\{"x-byok-anthropic-api-key": byok_api_key\} if byok_api_key else None/);
-    // Go: explicit non-nil + non-empty
-    expect(go).toMatch(/opts != nil && opts\.ByokAPIKey != ""/);
+    // Python: sync + async each use a truthy check (None + '' both skip
+    // insertion) while sharing one map with the optional idempotency header.
+    expect(
+      py.match(
+        /if byok_api_key:\s*\n\s*extra_headers\["x-byok-anthropic-api-key"\] = byok_api_key/g,
+      ),
+    ).toHaveLength(2);
+    expect(py.match(/extra_headers=extra_headers or None/g)).toHaveLength(2);
+    // Go: the option envelope is checked once, then the shared header map
+    // receives BYOK only when nonempty (alongside optional idempotency).
+    expect(go).toMatch(
+      /if opts != nil \{[\s\S]*?headers := map\[string\]string\{\}[\s\S]*?if opts\.ByokAPIKey != "" \{\s*headers\["x-byok-anthropic-api-key"\] = opts\.ByokAPIKey/,
+    );
     // Drift-guards on the previous laxer forms (TS undefined-only check + Python None-only check).
     expect(ts).not.toMatch(/^\s*\.\.\.\(opts\?\.byokApiKey !== undefined$\s*\?/m);
     expect(py).not.toMatch(/if byok_api_key is not None else None/);
