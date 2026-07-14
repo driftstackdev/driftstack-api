@@ -54,15 +54,19 @@ Role gating:
 - **Read endpoints** (GET) accept both `member` and `admin` roles.
 - **Write endpoints** (POST / PATCH / DELETE / api-keys rotate)
   require `admin` role on the team. `member` role gets `403`.
+- **Agent-session exception.** `/v1/agent-sessions` contains AI
+  transcripts and live-control state, so its collection and `:id`
+  surface require `admin` for both reads and writes.
 
 Endpoints that honor the header :
 
 - `/v1/sessions` (GET / POST / DELETE) + `/:id/{navigate,interact,
 wait,capture,gui-input,state}`
-- `/v1/agent-sessions` (POST create) — an **admin** member can launch
-  the owner's profile; the run scopes to the owner (counts against the
-  owner's cap, ships the owner's per-profile DEK). `member` role gets
-  `403`.
+- `/v1/agent-sessions` (GET collection / POST create / `:id`
+  reads and controls) — an **admin** member can list and operate the
+  owner's runs or launch the owner's profile; each run scopes to the
+  owner (counts against the owner's cap, ships the owner's per-profile
+  DEK). `member` role gets `403` on this whole surface.
 - `/v1/profiles` (GET / POST / PATCH / DELETE)
 - `/v1/api-keys` (GET / POST / DELETE / `:id/rotate`)
 - `/v1/webhooks` (GET / POST / DELETE) + `/:id/deliveries` +

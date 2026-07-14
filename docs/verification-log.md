@@ -25686,3 +25686,33 @@ Verification:
   and 251 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-599 — agent-session history honors the selected team workspace
+
+**Date:** 2026-07-14
+
+Closed an asymmetric team-workspace path on `GET /v1/agent-sessions`. An admin
+could launch an agent session under an owner's `X-Driftstack-Account` context
+and could subsequently read or control that exact session, but the collection
+route ignored the header and always paginated the caller's personal account.
+The owner-scoped run consequently disappeared from workspace history while
+unrelated personal rows could appear in its place.
+
+The collection now resolves the same live effective-account context used by
+creation, filters pagination to that selected account, and retains the existing
+admin-only agent-session boundary. Ordinary team members receive 403 because
+the surface contains AI transcripts and live-control state; non-members and
+stale memberships continue to fail in the canonical resolver. Personal requests
+without the header remain unchanged.
+
+Verification:
+
+- a team admin lists three owner sessions across two cursor pages while a
+  personal session remains absent;
+- presenting that valid personal-session id as a cursor in the owner workspace
+  cannot cross the repository's account filter;
+- removing the header returns only the caller's personal history, and a
+  read-only team member receives a typed 403;
+- focused route and team-contract coverage passes 3 files and 144 tests;
+- strict server source/test typechecking, targeted linting and formatting,
+  Docs typecheck/build (61 pages, 60 indexed), and diff checks pass.

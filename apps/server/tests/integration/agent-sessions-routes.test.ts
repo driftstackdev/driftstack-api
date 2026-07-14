@@ -704,6 +704,106 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     });
   }
 
+  it('Teams collection: an ADMIN lists only the selected owner workspace, paginates it, and cannot use a personal cursor to cross scope', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    seedTeamOwnerAccount(fx);
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
+    ]);
+    const repo = fx.agentSessionsRepo;
+    expect(repo).toBeDefined();
+    const personal = await repo!.create({ accountId: fx.accountId, tokenBudgetTotal: 50_000 });
+    const ownerRows = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        repo!.create({ accountId: TEAM_OWNER_ID, tokenBudgetTotal: 50_000 }),
+      ),
+    );
+    const auth = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+    };
+
+    const first = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions?limit=2',
+      headers: auth,
+    });
+    expect(first.statusCode).toBe(200);
+    const firstBody = first.json<{
+      data: Array<{ id: string; account_id: string }>;
+      has_more: boolean;
+      next_cursor: string | null;
+    }>();
+    expect(firstBody.data).toHaveLength(2);
+    expect(firstBody.data.every((row) => row.account_id === TEAM_OWNER_ID)).toBe(true);
+    expect(firstBody.data.some((row) => row.id === personal.id)).toBe(false);
+    expect(firstBody.has_more).toBe(true);
+
+    const second = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions?limit=2&cursor=${encodeURIComponent(firstBody.next_cursor ?? '')}`,
+      headers: auth,
+    });
+    expect(second.statusCode).toBe(200);
+    const secondBody = second.json<{
+      data: Array<{ id: string; account_id: string }>;
+      has_more: boolean;
+    }>();
+    expect(secondBody.data).toHaveLength(1);
+    expect(secondBody.has_more).toBe(false);
+    const seenOwnerIds = new Set([...firstBody.data, ...secondBody.data].map((row) => row.id));
+    expect(seenOwnerIds).toEqual(new Set(ownerRows.map((row) => row.id)));
+
+    // A cursor is only an anchor inside the selected account's filtered list.
+    // Supplying a valid cursor from the caller's personal workspace restarts
+    // the owner's first page; it never admits the personal row.
+    const foreignCursor = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions?limit=10&cursor=${encodeURIComponent(personal.id)}`,
+      headers: auth,
+    });
+    expect(foreignCursor.statusCode).toBe(200);
+    const foreignCursorRows = foreignCursor.json<{
+      data: Array<{ id: string; account_id: string }>;
+    }>().data;
+    expect(foreignCursorRows).toHaveLength(3);
+    expect(foreignCursorRows.every((row) => row.account_id === TEAM_OWNER_ID)).toBe(true);
+    expect(foreignCursorRows.some((row) => row.id === personal.id)).toBe(false);
+
+    const self = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(self.statusCode).toBe(200);
+    expect(self.json<{ data: Array<{ id: string }> }>().data.map((row) => row.id)).toEqual([
+      personal.id,
+    ]);
+  });
+
+  it('Teams collection: a read-only member cannot list transcript/control-bearing owner agent sessions', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    seedTeamOwnerAccount(fx);
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'member' },
+    ]);
+    await fx.agentSessionsRepo!.create({
+      accountId: TEAM_OWNER_ID,
+      tokenBudgetTotal: 50_000,
+    });
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+      },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('requires admin role');
+  });
+
   it('Teams member-launch: an ADMIN team member launching under the owner (X-Driftstack-Account=owner) → 201 (session scoped to the owner)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     seedTeamOwnerAccount(fx);

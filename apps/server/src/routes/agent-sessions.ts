@@ -2228,13 +2228,25 @@ export function registerAgentSessionsRoutes(
   // :id-scoped), so it uses the plain account-auth chain. Broad `read` /
   // `account_owner` bearers satisfy the granular scope (V-481), so the
   // dashboard /agent-sessions page + existing broad keys are unaffected.
+  // Team-workspace parity: create and every :id route already authorize an
+  // owner-scoped agent session for an admin membership. Resolve the collection
+  // through the same X-Driftstack-Account context so that admin can also find
+  // those sessions in history. Agent sessions contain transcripts + live
+  // control state, so retain the established admin-only boundary here rather
+  // than widening collection reads to ordinary read-only team members.
   app.get(
     '/v1/agent-sessions',
     { preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      if (effective.kind === 'team' && effective.role !== 'admin') {
+        throw new ForbiddenError(
+          'Reading agent sessions on a team owner requires admin role on that team.',
+        );
+      }
       const query = PaginationQuerySchema.parse(req.query ?? {});
-      const page = await sessions.listPageByAccount(ctx.account.id, {
+      const page = await sessions.listPageByAccount(effective.accountId, {
         limit: query.limit,
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
       });

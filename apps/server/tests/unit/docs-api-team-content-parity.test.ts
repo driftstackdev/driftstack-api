@@ -1,6 +1,6 @@
 // Drift guard for apps/docs/src/pages/api/team.md. Pins the
 // customer-facing Team RBAC docs — 2-role split (member RO / admin
-// RW) + X-Driftstack-Account scoping pattern + 7-honored endpoints
+// RW) + X-Driftstack-Account scoping pattern + honored endpoints
 // + 3-NOT-honored + email-match-on-accept 409 anti-misroute + 7-day
 // invite expiry + sha256 token-hashed at rest.
 
@@ -49,6 +49,9 @@ describe('docs/api/team content parity', () => {
     expect(body).toMatch(
       /- \*\*Write endpoints\*\* \(POST \/ PATCH \/ DELETE \/ api-keys rotate\)\s*\n?\s*require `admin` role on the team\. `member` role gets `403`\./,
     );
+    expect(body).toMatch(
+      /- \*\*Agent-session exception\.\*\* `\/v1\/agent-sessions` contains AI\s*\n?\s*transcripts and live-control state, so its collection and `:id`\s*\n?\s*surface require `admin` for both reads and writes\./,
+    );
   });
 
   it('X-Driftstack-Account-honored endpoint roster pinned: /v1/sessions (full surface) + /v1/profiles (full surface) + /v1/api-keys (full + rotate) + /v1/webhooks (full + deliveries + replay) + /v1/account/audit-log + /export + /v1/account/email-preferences (GET/PUT admin-only) + /v1/usage + /usage/series. Drift to dropping any honored endpoint would break team-owner-scoping consistency across the customer surface', () => {
@@ -59,12 +62,13 @@ describe('docs/api/team content parity', () => {
     expect(body).toMatch(/- `\/v1\/account\/audit-log` \(GET\) \+ `\/audit-log\/export` \(GET\)/);
     expect(body).toMatch(/- `\/v1\/account\/email-preferences` \(GET \/ PUT — PUT admin-only\)/);
     expect(body).toMatch(/- `\/v1\/usage` \+ `\/v1\/usage\/series` \(GET\)/);
-    // Teams member-launch (898cb5f): agent-session create honors the header so an
-    // admin launches the owner's profile (owner-scoped run + owner DEK).
+    // Agent-session collection/create/:id all honor the header for admins while
+    // preserving the narrower transcript/live-control role boundary.
     expect(body).toMatch(
-      /- `\/v1\/agent-sessions` \(POST create\) — an \*\*admin\*\* member can launch/,
+      /- `\/v1\/agent-sessions` \(GET collection \/ POST create \/ `:id`\s*\n?\s*reads and controls\) — an \*\*admin\*\* member can list and operate/,
     );
-    expect(body).toMatch(/ships the owner's per-profile DEK/);
+    expect(body).toMatch(/`member` role gets `403` on this whole surface/);
+    expect(body).toMatch(/ships\s+the owner's per-profile\s+DEK/);
   });
 
   it("3-NOT-honored endpoint roster pinned: /v1/team/* (managing own team) + /v1/account/me (always own profile) + /v1/auth/* (per-caller authentication). + 'Endpoints that do not honor the header (operate on the caller's own account regardless)' framing — pinned so the 3-NOT-honored exception list + caller's-own-account semantics contract all stay documented", () => {

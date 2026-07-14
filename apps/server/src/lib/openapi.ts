@@ -6150,6 +6150,7 @@ export function generateOpenApiSpec(): OpenAPIObject {
         '  `member` role gets 403.',
         '',
         'Endpoints honoring the header: /v1/sessions (+ all session sub-paths), /v1/profiles,',
+        '/v1/agent-sessions (+ all sub-paths; team admin role required for reads and writes),',
         '/v1/api-keys (+ /:id/rotate), /v1/webhooks (+ /:id/deliveries + replay),',
         '/v1/account/audit-log (+ export), /v1/account/email-preferences, /v1/usage,',
         '/v1/usage/series.',
