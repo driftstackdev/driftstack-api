@@ -9,8 +9,8 @@
 // the home must only NAVIGATE there, never duplicate that path).
 //
 //   • Four independent gracefully-degrading loads pinned (recent profiles,
-//     session health, recent activity, proxy count) — each idle/loading/ready/
-//     error, never blocking the landing.
+//     session health, recent activity, proxy count). Recent profiles retain a
+//     bounded, workspace-scoped cache while refreshing and surface staleness.
 //   • Exported pure helpers pinned: computeCapAlerts / summarizeSessions /
 //     formatAuditAction / sortRecentProfiles / profileMonogram.
 //   • sortRecentProfiles: last_used_at desc, nulls (never-used) last, stable
@@ -87,12 +87,21 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
     );
   });
 
-  it('"Jump back in" loads client.profiles.list() under the independent-load contract (idle/loading/ready/error, cancelled-guard) and sorts via sortRecentProfiles', () => {
+  it('"Jump back in" keeps bounded workspace-scoped cached profiles visible while refreshing, then marks fresh or stale truthfully', () => {
     expect(body).toContain('client.profiles');
     expect(body).toContain('.list()');
-    expect(body).toMatch(/setRecentProfiles\(\{ kind: 'loading' \}\)/);
-    expect(body).toMatch(/setRecentProfiles\(\{ kind: 'ready', profiles \}\)/);
-    expect(body).toMatch(/setRecentProfiles\(\{ kind: 'error' \}\)/);
+    expect(body).toContain('const RECENT_PROFILES_CACHE_TTL_MS = 5 * 60 * 1000;');
+    expect(body).toContain('const RECENT_PROFILES_CACHE_MAX_SCOPES = 16;');
+    expect(body).toContain('const recentProfilesScope = activeWorkspace ?? accountMe?.id ?? null;');
+    expect(body).toMatch(
+      /cached !== null\s*\n?\s*\? \{ kind: 'ready', profiles: cached, freshness: 'refreshing' \}\s*\n?\s*: \{ kind: 'loading' \}/,
+    );
+    expect(body).toMatch(/setRecentProfiles\(\{ kind: 'ready', profiles, freshness: 'fresh' \}\)/);
+    expect(body).toMatch(
+      /cached !== null\s*\n?\s*\? \{ kind: 'ready', profiles: cached, freshness: 'stale' \}\s*\n?\s*: \{ kind: 'error' \}/,
+    );
+    expect(body).toContain("? 'Refreshing recent profiles…'");
+    expect(body).toContain(": 'Couldn’t refresh — showing your recent profiles.'");
     expect(body).toMatch(
       /sortRecentProfiles\(\s*\n?\s*page\.data\.map\(\(p\) => \(\{ id: p\.id, name: p\.name, last_used_at: p\.last_used_at \}\)\),\s*\n?\s*RECENT_PROFILES_LIMIT,\s*\n?\s*\)/,
     );
