@@ -214,6 +214,9 @@ export interface GenerateRegionAwareTouchOpts {
   seed?: string;
 }
 
+/** Custom affordance maps are small; bound validation and selection work. */
+export const MAX_CLICK_REGIONS = 64;
+
 /** Result of the region-aware touch generator. */
 export interface RegionAwareTouchEvent extends TouchEvent {
   /**
@@ -264,6 +267,12 @@ export function generateRegionAwareTouchEvent(
       `generateRegionAwareTouchEvent: at least one region required for ${opts.elementClass}`,
     );
   }
+  if (regions.length > MAX_CLICK_REGIONS) {
+    throw new Error(
+      `generateRegionAwareTouchEvent: regions must contain <= ${MAX_CLICK_REGIONS} entries ` +
+        `(got ${regions.length})`,
+    );
+  }
 
   // Each region must lie fully within the element (center ± radius in 0..1)
   // with a positive radius. A region spilling past the element edge would
@@ -305,6 +314,7 @@ export function generateRegionAwareTouchEvent(
 
   // Pick a region weighted by `weight`.
   const totalWeight = regions.reduce((acc, r) => acc + r.weight, 0);
+  requirePositiveFinite('generateRegionAwareTouchEvent: total region weight', totalWeight);
   let pick = rng() * totalWeight;
   let regionIndex = regions.length - 1;
   for (let i = 0; i < regions.length; i += 1) {

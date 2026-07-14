@@ -46,7 +46,12 @@ export type {
   GenerateRegionAwareTouchOpts,
   RegionAwareTouchEvent,
 } from './dwell.js';
-export { CLICK_REGIONS, DWELL_SHAPES, generateRegionAwareTouchEvent } from './dwell.js';
+export {
+  CLICK_REGIONS,
+  DWELL_SHAPES,
+  generateRegionAwareTouchEvent,
+  MAX_CLICK_REGIONS,
+} from './dwell.js';
 
 // V-530.D — idle-period jitter generator.
 export type {
@@ -58,7 +63,12 @@ export type {
   IdleSequence,
   IdleSequenceEntry,
 } from './idle.js';
-export { generateIdlePeriod, generateIdleSequence, IDLE_DEFAULTS } from './idle.js';
+export {
+  generateIdlePeriod,
+  generateIdleSequence,
+  IDLE_DEFAULTS,
+  MAX_IDLE_SEQUENCE_ENTRIES,
+} from './idle.js';
 
 // V-530.F — keyboard cadence generator (human-realistic typing rhythm).
 export type { KeyboardCadenceDefaults } from './keyboard.js';
@@ -95,5 +105,7 @@ export {
   generateTwoFingerScrollGesture,
   generateThreeFingerSwipeGesture,
   interleaveGestureStream,
+  MAX_INTERLEAVED_SAMPLES,
+  MAX_INTERLEAVE_FINGERS,
   MAX_SAMPLES_PER_FINGER,
 } from './multi-touch.js';

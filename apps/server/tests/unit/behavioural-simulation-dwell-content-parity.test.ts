@@ -127,6 +127,11 @@ describe('W597.A packages/behavioural-simulation/src/dwell.ts content parity', (
     expect(body).toMatch(
       /const totalWeight = regions\.reduce\(\(acc, r\) => acc \+ r\.weight, 0\);/,
     );
+    expect(body).toContain('export const MAX_CLICK_REGIONS = 64;');
+    expect(body).toContain('if (regions.length > MAX_CLICK_REGIONS) {');
+    expect(body).toContain(
+      "requirePositiveFinite('generateRegionAwareTouchEvent: total region weight', totalWeight);",
+    );
     expect(body).toMatch(/\/\/ Compute region-local bounds within the element\./);
     expect(body).toMatch(
       /const regionLeft = opts\.bounds\.x \+ opts\.bounds\.width \* \(region\.center\.x - region\.radius\.x\);/,

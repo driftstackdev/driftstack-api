@@ -144,6 +144,9 @@ export interface GenerateIdleSequenceOpts {
   seed?: string;
 }
 
+/** Generous ceiling on caller-supplied sequence entries before allocation. */
+export const MAX_IDLE_SEQUENCE_ENTRIES = 1000;
+
 function mulberry32(seedNum: number): () => number {
   let state = seedNum >>> 0;
   return () => {
@@ -246,6 +249,12 @@ export function generateIdlePeriod(opts: GenerateIdlePeriodOpts): IdlePeriod {
  * recomputing offsets.
  */
 export function generateIdleSequence(opts: GenerateIdleSequenceOpts): IdleSequence {
+  if (opts.classes.length > MAX_IDLE_SEQUENCE_ENTRIES) {
+    throw new Error(
+      `generateIdleSequence: classes must contain <= ${MAX_IDLE_SEQUENCE_ENTRIES} entries ` +
+        `(got ${opts.classes.length})`,
+    );
+  }
   const seed = opts.seed ?? defaultSequenceSeed(opts);
   const entries: IdleSequenceEntry[] = [];
   let cursor = 0;

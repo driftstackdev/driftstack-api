@@ -5,6 +5,8 @@ import {
   generateThreeFingerSwipeGesture,
   interleaveGestureStream,
   MAX_ABS_CENTIPIXEL_COORDINATE,
+  MAX_INTERLEAVED_SAMPLES,
+  MAX_INTERLEAVE_FINGERS,
   MAX_SAMPLES_PER_FINGER,
 } from '../src/multi-touch.js';
 
@@ -428,6 +430,14 @@ describe('BSIM-5 — fail-closed multi-touch input domain', () => {
 });
 
 describe('V-530.E interleaveGestureStream', () => {
+  const sample = { tMs: 0, x: 0, y: 0, pressure: 1 };
+  const finger = (fingerId: number, sampleCount: number) => ({
+    fingerId,
+    start: { x: 0, y: 0 },
+    end: { x: 0, y: 0 },
+    samples: Array.from({ length: sampleCount }, () => sample),
+  });
+
   it('returns a time-sorted stream with fingerId tagged', () => {
     const g = generatePinchGesture({
       startCentre: { x: 0, y: 0 },
@@ -481,5 +491,46 @@ describe('V-530.E interleaveGestureStream', () => {
     expect(f2Start).toBeGreaterThan(0);
     // start/end coordinates are unchanged by the timeline stagger.
     expect(g.fingers[1]?.start.x).toBe((g.fingers[0]?.start.x ?? 0) + 80);
+  });
+
+  it('bounds external finger and per-finger sample collections before copying', () => {
+    expect(() =>
+      interleaveGestureStream({
+        kind: 'three-finger-swipe',
+        fingers: Array.from({ length: MAX_INTERLEAVE_FINGERS + 1 }, (_, i) => finger(i + 1, 1)),
+        durationMs: 0,
+        seed: 'too-many-fingers',
+      }),
+    ).toThrow(/fingers must contain <= 10 entries/);
+
+    expect(() =>
+      interleaveGestureStream({
+        kind: 'pinch',
+        fingers: [finger(1, MAX_SAMPLES_PER_FINGER + 1)],
+        durationMs: 0,
+        seed: 'too-many-finger-samples',
+      }),
+    ).toThrow(/finger samples must contain <= 1000 entries/);
+  });
+
+  it('bounds the aggregate copy and sort while accepting the exact ceiling', () => {
+    const atLimit = Array.from({ length: 5 }, (_, i) => finger(i + 1, 1000));
+    expect(
+      interleaveGestureStream({
+        kind: 'three-finger-swipe',
+        fingers: atLimit,
+        durationMs: 0,
+        seed: 'total-at-limit',
+      }),
+    ).toHaveLength(MAX_INTERLEAVED_SAMPLES);
+
+    expect(() =>
+      interleaveGestureStream({
+        kind: 'three-finger-swipe',
+        fingers: [...atLimit, finger(6, 1)],
+        durationMs: 0,
+        seed: 'total-over-limit',
+      }),
+    ).toThrow(/total samples must be <= 5000/);
   });
 });

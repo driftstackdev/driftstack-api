@@ -17,7 +17,7 @@ function read(p: string): string {
 describe('W595.C packages/behavioural-simulation/src/index.ts content parity', () => {
   const body = read(LIB);
 
-  it('Public surface re-exports: types (9) + interfaces (6) + scroll (3 + 2 values) + dwell (4 + 3 values) + V-530.D idle (7 + 3 values) + V-530.E multi-touch (7 + 4 values) pinned', () => {
+  it('Public surface re-exports types, generators, defaults and allocation caps', () => {
     expect(body).toMatch(/\/\/ @driftstack\/behavioural-simulation public surface\./);
     expect(body).toMatch(
       /^export type \{\s*\n\s*BehaviouralProfile,\s*\n\s*ElementBounds,\s*\n\s*ElementClass,\s*\n\s*KeyboardCadence,\s*\n\s*MouseTrajectory,\s*\n\s*ScrollPattern,\s*\n\s*TouchDistribution,\s*\n\s*TouchEvent,\s*\n\s*TouchSample,\s*\n\} from '\.\/types\.js';/m,
@@ -48,16 +48,20 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toMatch(
       /^export type \{\s*\n\s*ClickRegion,\s*\n\s*DwellShape,\s*\n\s*GenerateRegionAwareTouchOpts,\s*\n\s*RegionAwareTouchEvent,\s*\n\} from '\.\/dwell\.js';/m,
     );
-    expect(body).toMatch(
-      /^export \{ CLICK_REGIONS, DWELL_SHAPES, generateRegionAwareTouchEvent \} from '\.\/dwell\.js';$/m,
-    );
+    expect(body).toContain('CLICK_REGIONS,');
+    expect(body).toContain('DWELL_SHAPES,');
+    expect(body).toContain('generateRegionAwareTouchEvent,');
+    expect(body).toContain('MAX_CLICK_REGIONS,');
+    expect(body).toContain("} from './dwell.js';");
     expect(body).toMatch(/\/\/ V-530\.D — idle-period jitter generator\./);
     expect(body).toMatch(
       /^export type \{\s*\n\s*GenerateIdlePeriodOpts,\s*\n\s*GenerateIdleSequenceOpts,\s*\n\s*IdleClass,\s*\n\s*IdleClassDefaults,\s*\n\s*IdlePeriod,\s*\n\s*IdleSequence,\s*\n\s*IdleSequenceEntry,\s*\n\} from '\.\/idle\.js';/m,
     );
-    expect(body).toMatch(
-      /^export \{ generateIdlePeriod, generateIdleSequence, IDLE_DEFAULTS \} from '\.\/idle\.js';$/m,
-    );
+    expect(body).toContain('generateIdlePeriod,');
+    expect(body).toContain('generateIdleSequence,');
+    expect(body).toContain('IDLE_DEFAULTS,');
+    expect(body).toContain('MAX_IDLE_SEQUENCE_ENTRIES,');
+    expect(body).toContain("} from './idle.js';");
     expect(body).toMatch(/\/\/ V-530\.E — multi-touch gesture sequencing\./);
     expect(body).toMatch(
       /^export type \{\s*\n\s*FingerSample,\s*\n\s*FingerTrack,\s*\n\s*GestureKind,\s*\n\s*GeneratePinchOpts,\s*\n\s*GenerateTwoFingerScrollOpts,\s*\n\s*GenerateThreeFingerSwipeOpts,\s*\n\s*MultiTouchGesture,\s*\n\} from '\.\/multi-touch\.js';/m,
@@ -68,6 +72,8 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toContain('generateTwoFingerScrollGesture,');
     expect(body).toContain('generateThreeFingerSwipeGesture,');
     expect(body).toContain('interleaveGestureStream,');
+    expect(body).toContain('MAX_INTERLEAVED_SAMPLES,');
+    expect(body).toContain('MAX_INTERLEAVE_FINGERS,');
     expect(body).toContain('MAX_SAMPLES_PER_FINGER,');
     expect(body).toContain("} from './multi-touch.js';");
     // V-530.F — keyboard cadence generator (human-realistic typing rhythm).

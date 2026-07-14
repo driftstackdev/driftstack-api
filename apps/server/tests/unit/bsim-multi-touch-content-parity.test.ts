@@ -203,6 +203,14 @@ describe('W454.A packages/behavioural-simulation/src/multi-touch.ts content pari
     expect(body).toContain('must be within the centipixel coordinate envelope');
   });
 
+  it('external interleave collections are capped before copy and sort', () => {
+    expect(body).toContain('export const MAX_INTERLEAVE_FINGERS = 10;');
+    expect(body).toContain('export const MAX_INTERLEAVED_SAMPLES = 5000;');
+    expect(body).toContain('if (gesture.fingers.length > MAX_INTERLEAVE_FINGERS) {');
+    expect(body).toContain('if (finger.samples.length > MAX_SAMPLES_PER_FINGER) {');
+    expect(body).toContain('if (totalSamples > MAX_INTERLEAVED_SAMPLES) {');
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

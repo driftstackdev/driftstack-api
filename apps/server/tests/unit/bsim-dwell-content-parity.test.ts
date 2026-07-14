@@ -144,7 +144,15 @@ describe('W453.C packages/behavioural-simulation/src/dwell.ts content parity', (
 
   it('Weighted region selection: totalWeight reduce sum; rng() * totalWeight; subtract weights; first non-positive subtracts wins; init regionIndex to last (defensive)', () => {
     expect(body).toMatch(
-      /const totalWeight = regions\.reduce\(\(acc, r\) => acc \+ r\.weight, 0\);\s*\n?\s*let pick = rng\(\) \* totalWeight;\s*\n?\s*let regionIndex = regions\.length - 1;\s*\n?\s*for \(let i = 0; i < regions\.length; i \+= 1\) \{[\s\S]*?pick -= r\.weight;\s*\n?\s*if \(pick <= 0\) \{\s*\n?\s*regionIndex = i;\s*\n?\s*break;\s*\n?\s*\}/,
+      /const totalWeight = regions\.reduce\(\(acc, r\) => acc \+ r\.weight, 0\);\s*\n?\s*requirePositiveFinite\('generateRegionAwareTouchEvent: total region weight', totalWeight\);\s*\n?\s*let pick = rng\(\) \* totalWeight;\s*\n?\s*let regionIndex = regions\.length - 1;\s*\n?\s*for \(let i = 0; i < regions\.length; i \+= 1\) \{[\s\S]*?pick -= r\.weight;\s*\n?\s*if \(pick <= 0\) \{\s*\n?\s*regionIndex = i;\s*\n?\s*break;\s*\n?\s*\}/,
+    );
+  });
+
+  it('custom region maps are capped before iteration and their aggregate weight stays finite', () => {
+    expect(body).toContain('export const MAX_CLICK_REGIONS = 64;');
+    expect(body).toContain('if (regions.length > MAX_CLICK_REGIONS) {');
+    expect(body).toContain(
+      "requirePositiveFinite('generateRegionAwareTouchEvent: total region weight', totalWeight);",
     );
   });
 

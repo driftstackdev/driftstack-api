@@ -26943,3 +26943,29 @@ behavioural package passes 9 files and 186/186 tests; package plus duplicate
 source-parity evidence passes 15 files and 244/244 tests. Package/server strict
 TypeScript, package build, targeted lint/format, diff and whitespace checks are
 green.
+
+## V-638 — Composite behavioural streams have allocation envelopes
+
+**Date:** 2026-07-14
+
+Three exported helpers accepted caller-controlled collections with no resource
+ceiling. Idle sequences allocated one entry per supplied class, custom touch
+maps validated and reduced every supplied region, and the generic multi-touch
+interleaver copied then sorted every supplied finger sample. Separately finite
+region weights could also overflow their aggregate and make weighted selection
+fall through to the final region.
+
+Idle sequences now accept at most 1,000 entries before default-seed joining or
+allocation. Custom region maps accept at most 64 entries and require a finite,
+positive aggregate weight. Interleaving accepts at most 10 fingers, 1,000
+samples per finger and 5,000 samples total before copy or sort. The caps are
+exported through the package barrel so callers can validate ahead of time. All
+built-in defaults and ordinary seeded output remain unchanged.
+
+Boundary tests cover each exact ceiling and one-over rejection, including the
+two-maximum-finite-weight overflow and independent finger, per-finger and total
+interleave limits. The three focused package files pass 82/82 tests; the full
+behavioural package passes 9 files and 191/191 tests; package plus eight exact
+source/index guards passes 17 files and 265/265 tests. Package/server strict
+TypeScript, package build, targeted lint/format, diff and whitespace checks are
+green.

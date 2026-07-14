@@ -3,6 +3,7 @@ import {
   CLICK_REGIONS,
   DWELL_SHAPES,
   generateRegionAwareTouchEvent,
+  MAX_CLICK_REGIONS,
   type ClickRegion,
   type ElementBounds,
   type ElementClass,
@@ -267,6 +268,46 @@ describe('V-530.C region-aware touch generator — properties', () => {
         regions: [],
       }),
     ).toThrow(/at least one region/);
+  });
+
+  it('bounds custom region maps before validating or selecting them', () => {
+    const region: ClickRegion = {
+      center: { x: 0.5, y: 0.5 },
+      radius: { x: 0.2, y: 0.2 },
+      weight: 1,
+    };
+    const atLimit = Array.from({ length: MAX_CLICK_REGIONS }, () => region);
+    expect(() =>
+      generateRegionAwareTouchEvent({
+        elementClass: 'button',
+        bounds: SAMPLE_BOUNDS,
+        regions: atLimit,
+        seed: 'regions-at-limit',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      generateRegionAwareTouchEvent({
+        elementClass: 'button',
+        bounds: SAMPLE_BOUNDS,
+        regions: [...atLimit, region],
+      }),
+    ).toThrow(/regions must contain <= 64 entries/);
+  });
+
+  it('rejects an infinite aggregate even when every region weight is finite', () => {
+    const region: ClickRegion = {
+      center: { x: 0.5, y: 0.5 },
+      radius: { x: 0.2, y: 0.2 },
+      weight: Number.MAX_VALUE,
+    };
+    expect(() =>
+      generateRegionAwareTouchEvent({
+        elementClass: 'button',
+        bounds: SAMPLE_BOUNDS,
+        regions: [region, region],
+        seed: 'weight-total-overflow',
+      }),
+    ).toThrow(/total region weight must be finite/);
   });
 
   it('rejects zero-area bounds', () => {

@@ -155,6 +155,14 @@ describe('W453.B packages/behavioural-simulation/src/idle.ts content parity', ()
     );
   });
 
+  it('idle-sequence allocation is capped before default-seed construction', () => {
+    expect(body).toContain('export const MAX_IDLE_SEQUENCE_ENTRIES = 1000;');
+    expect(body).toContain('if (opts.classes.length > MAX_IDLE_SEQUENCE_ENTRIES) {');
+    expect(body.indexOf('if (opts.classes.length > MAX_IDLE_SEQUENCE_ENTRIES) {')).toBeLessThan(
+      body.indexOf('const seed = opts.seed ?? defaultSequenceSeed(opts);'),
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

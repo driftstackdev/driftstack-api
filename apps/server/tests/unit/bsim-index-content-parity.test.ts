@@ -20,15 +20,12 @@
 //     SCROLL_VELOCITY_DEFAULTS.
 //   • V-530.C dwell+region-aware click: 4 type re-exports
 //     (ClickRegion + DwellShape + GenerateRegionAwareTouchOpts +
-//     RegionAwareTouchEvent) + 3 value exports (CLICK_REGIONS +
-//     DWELL_SHAPES + generateRegionAwareTouchEvent).
+//     RegionAwareTouchEvent) + defaults/generator/MAX_CLICK_REGIONS.
 //   • V-530.D idle-period jitter: comment framing pinned + 7 idle
 //     type re-exports + generateIdlePeriod + generateIdleSequence +
-//     IDLE_DEFAULTS.
+//     IDLE_DEFAULTS + MAX_IDLE_SEQUENCE_ENTRIES.
 //   • V-530.E multi-touch gesture: comment framing pinned + 7
-//     multi-touch type re-exports + 4 multi-touch generator value
-//     exports (generatePinchGesture + generateTwoFingerScrollGesture
-//     + generateThreeFingerSwipeGesture + interleaveGestureStream).
+//     multi-touch type re-exports + generators and allocation caps.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -85,23 +82,27 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toContain("} from './scroll.js';");
   });
 
-  it('V-530.C dwell+region-aware: 4 type re-exports (ClickRegion + DwellShape + GenerateRegionAwareTouchOpts + RegionAwareTouchEvent) + 3 value exports (CLICK_REGIONS + DWELL_SHAPES + generateRegionAwareTouchEvent)', () => {
+  it('V-530.C dwell+region-aware types, generator, defaults and region cap are exported', () => {
     expect(body).toMatch(
       /export type \{\s*\n?\s*ClickRegion,\s*\n?\s*DwellShape,\s*\n?\s*GenerateRegionAwareTouchOpts,\s*\n?\s*RegionAwareTouchEvent,\s*\n?\s*\} from '\.\/dwell\.js';/,
     );
-    expect(body).toMatch(
-      /export \{ CLICK_REGIONS, DWELL_SHAPES, generateRegionAwareTouchEvent \} from '\.\/dwell\.js';/,
-    );
+    expect(body).toContain('CLICK_REGIONS,');
+    expect(body).toContain('DWELL_SHAPES,');
+    expect(body).toContain('generateRegionAwareTouchEvent,');
+    expect(body).toContain('MAX_CLICK_REGIONS,');
+    expect(body).toContain("} from './dwell.js';");
   });
 
-  it("V-530.D framing pinned: 'idle-period jitter generator.' + 7 idle type re-exports + 3 value exports (generateIdlePeriod + generateIdleSequence + IDLE_DEFAULTS)", () => {
+  it('V-530.D framing, types, generators, defaults and sequence cap are exported', () => {
     expect(body).toMatch(/\/\/ V-530\.D — idle-period jitter generator\./);
     expect(body).toMatch(
       /export type \{\s*\n?\s*GenerateIdlePeriodOpts,\s*\n?\s*GenerateIdleSequenceOpts,\s*\n?\s*IdleClass,\s*\n?\s*IdleClassDefaults,\s*\n?\s*IdlePeriod,\s*\n?\s*IdleSequence,\s*\n?\s*IdleSequenceEntry,\s*\n?\s*\} from '\.\/idle\.js';/,
     );
-    expect(body).toMatch(
-      /export \{ generateIdlePeriod, generateIdleSequence, IDLE_DEFAULTS \} from '\.\/idle\.js';/,
-    );
+    expect(body).toContain('generateIdlePeriod,');
+    expect(body).toContain('generateIdleSequence,');
+    expect(body).toContain('IDLE_DEFAULTS,');
+    expect(body).toContain('MAX_IDLE_SEQUENCE_ENTRIES,');
+    expect(body).toContain("} from './idle.js';");
   });
 
   it("V-530.E framing pinned: 'multi-touch gesture sequencing.' + 7 multi-touch type re-exports + 4 multi-touch generator value exports", () => {
@@ -115,6 +116,8 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toContain('generateTwoFingerScrollGesture,');
     expect(body).toContain('generateThreeFingerSwipeGesture,');
     expect(body).toContain('interleaveGestureStream,');
+    expect(body).toContain('MAX_INTERLEAVED_SAMPLES,');
+    expect(body).toContain('MAX_INTERLEAVE_FINGERS,');
     expect(body).toContain('MAX_SAMPLES_PER_FINGER,');
     expect(body).toContain("} from './multi-touch.js';");
   });

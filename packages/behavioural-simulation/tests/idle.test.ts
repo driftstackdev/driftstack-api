@@ -3,6 +3,7 @@ import {
   generateIdlePeriod,
   generateIdleSequence,
   IDLE_DEFAULTS,
+  MAX_IDLE_SEQUENCE_ENTRIES,
   type IdleClass,
 } from '../src/idle.js';
 
@@ -130,5 +131,15 @@ describe('V-530.D generateIdleSequence', () => {
     const seq2 = generateIdleSequence({ classes: ['reading', 'reading'], seed: 'seqseed' });
     expect(seq1.entries[0]?.idle).toEqual(seq2.entries[0]?.idle);
     expect(seq1.entries[1]?.idle).toEqual(seq2.entries[1]?.idle);
+  });
+
+  it('bounds the caller-supplied sequence before default-seed construction or allocation', () => {
+    const atLimit = Array.from({ length: MAX_IDLE_SEQUENCE_ENTRIES }, () => 'transition' as const);
+    expect(generateIdleSequence({ classes: atLimit, seed: 'at-limit' }).entries).toHaveLength(
+      MAX_IDLE_SEQUENCE_ENTRIES,
+    );
+    expect(() => generateIdleSequence({ classes: [...atLimit, 'transition'] })).toThrow(
+      /classes must contain <= 1000 entries/,
+    );
   });
 });

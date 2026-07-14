@@ -157,6 +157,10 @@ function fingerStartLagMs(rng: () => number): number {
  * allocation to a low thousands-element array per finger.
  */
 export const MAX_SAMPLES_PER_FINGER = 1000;
+/** Upper bound for externally constructed gestures passed to the interleaver. */
+export const MAX_INTERLEAVE_FINGERS = 10;
+/** Bounds the copy + O(n log n) sort while covering every built-in gesture. */
+export const MAX_INTERLEAVED_SAMPLES = 5000;
 
 /**
  * Tracks are serialized at centipixel precision below. Keep coordinates in an
@@ -440,6 +444,28 @@ export function generateThreeFingerSwipeGesture(
 export function interleaveGestureStream(
   gesture: MultiTouchGesture,
 ): ReadonlyArray<FingerSample & { fingerId: number }> {
+  if (gesture.fingers.length > MAX_INTERLEAVE_FINGERS) {
+    throw new Error(
+      `interleaveGestureStream: fingers must contain <= ${MAX_INTERLEAVE_FINGERS} entries ` +
+        `(got ${gesture.fingers.length})`,
+    );
+  }
+  let totalSamples = 0;
+  for (const finger of gesture.fingers) {
+    if (finger.samples.length > MAX_SAMPLES_PER_FINGER) {
+      throw new Error(
+        `interleaveGestureStream: finger samples must contain <= ` +
+          `${MAX_SAMPLES_PER_FINGER} entries (got ${finger.samples.length})`,
+      );
+    }
+    totalSamples += finger.samples.length;
+    if (totalSamples > MAX_INTERLEAVED_SAMPLES) {
+      throw new Error(
+        `interleaveGestureStream: total samples must be <= ${MAX_INTERLEAVED_SAMPLES} ` +
+          `(got ${totalSamples})`,
+      );
+    }
+  }
   const stream: Array<FingerSample & { fingerId: number }> = [];
   for (const finger of gesture.fingers) {
     for (const sample of finger.samples) {
