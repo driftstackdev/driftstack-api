@@ -413,7 +413,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function start() {
-        token = localStorage.getItem('ds_web_session_token');
+        try {
+          token = localStorage.getItem('ds_web_session_token');
+        } catch {
+          token = null;
+        }
         if (!token) {
           renderUnavailable('Sign in with a staff admin account to see audit entries.');
           setLiveState('failed', 'Sign in for live data');

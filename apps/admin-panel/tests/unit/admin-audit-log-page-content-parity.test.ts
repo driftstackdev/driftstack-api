@@ -70,6 +70,15 @@ describe('W350.C admin /audit-log page content parity', () => {
     expect(body).not.toMatch(/format=jsonl/);
   });
 
+  it('reads the delayed staff bearer through a storage-denial-safe boundary', () => {
+    expect(body).toMatch(
+      /function start\(\) \{\s*try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
+    );
+    expect(body).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
+    );
+  });
+
   it('footnote pins the 90-day retention + ADR-006 reference', () => {
     expect(body).toMatch(/Retention 90 days hot in Postgres/);
     expect(body).toContain('ADR-006');
