@@ -189,12 +189,24 @@ describe('W755 dashboard /audit-log page V-216 + V-297 + V-354 + V-484 parity', 
     expect(p).toMatch(/\/\/ browser history if any redirect chain were involved\)\./);
   });
 
-  it('CRITICAL Export GET /v1/account/audit-log/export?format=<csv|json> pinned. Drift to a different path would break the V-297 GDPR-Article-20 download flow.', () => {
+  it('CRITICAL bounded Export GET /v1/account/audit-log/export?format=<csv|json> with one cross-format busy lease and stable error copy pinned', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/account\/audit-log\/export\?format=' \+ encodeURIComponent\(format\), \{/,
+      /boundedFetch\(\s*\n\s+apiBaseUrl \+ '\/v1\/account\/audit-log\/export\?format=' \+ encodeURIComponent\(format\),/,
     );
+    expect(p).toMatch(/const AUDIT_TIMEOUT_MS = 15_000;/);
+    expect(p).toMatch(
+      /return window\.driftstackFetchWithDeadline\(url, init, AUDIT_TIMEOUT_MS, controller\);/,
+    );
+    expect(p).toMatch(/let exportInFlight = false;/);
+    expect(p).toMatch(/if \(exportInFlight\) return;\s*\n\s+exportInFlight = true;/);
+    expect(p).toContain("activeExportBtn.setAttribute('aria-busy', 'true')");
+    expect(p).toContain("label.textContent = 'Exporting ' + format.toUpperCase() + '…'");
+    expect(p).toContain('throw window.driftstackResponseError(r, b)');
+    expect(p).toContain("requestErrorMessage(err, 'Could not export the audit log. Try again.')");
+    expect(p).toMatch(/\.finally\(function \(\) \{\s*\n\s+exportInFlight = false;/);
+    expect(p).toContain("btn === exportCsvBtn ? 'Export CSV' : 'Export JSON'");
   });
 
   it('CRITICAL Export content-disposition filename extraction pinned — `/filename="([^"]+)"/`. Drift to dropping would let downloads get random Blob URLs; the server-suggested filename is what gives the file a sensible default name.', () => {
