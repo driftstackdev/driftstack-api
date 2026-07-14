@@ -46,8 +46,9 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
   it('Version 1.0 effective 2026-05-07 + incorporates Privacy + DPA + AUP by reference pinned — pinned so the 3-doc incorporation stays consistent (drift to dropping any incorporation would orphan that downstream doc from the master agreement; drift to changing the version would silently desynchronise from the legal-acceptance machinery)', () => {
     expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
     expect(body).toMatch(
-      /The\s*\n?\s*\[Privacy Policy\]\(privacy\.md\), the\s*\n?\s*\[Data Processing Agreement\]\(dpa\.md\), and the\s*\n?\s*\[Acceptable Use Policy\]\(aup\.md\) are incorporated\s*\n?\s*by reference and form part of the agreement between the Parties\./,
+      /The\s*\n?\s*\[Privacy Policy\]\(\/legal\/privacy\/\), the\s*\n?\s*\[Data Processing Agreement\]\(\/legal\/dpa\/\), and the\s*\n?\s*\[Acceptable Use Policy\]\(\/legal\/aup\/\) are incorporated\s*\n?\s*by reference and form part of the agreement between the Parties\./,
     );
+    expect(body).not.toMatch(/\]\((?:privacy|dpa|aup)\.md\)/);
   });
 
   it("B2B-only-not-consumer framing pinned: 'The Service is provided to **business customers** only. The Service is not intended for, and is not offered to, consumers within the meaning of Article 7:5 of the Dutch Civil Code (_Burgerlijk Wetboek_) or Article 2(1) of Directive 2011/83/EU.' — pinned so the Dutch BW 7:5 + EU Directive 2011/83/EU anti-consumer-regime anchors survive (drift to dropping the BW 7:5 anchor would lose the Dutch-statute citation; drift to dropping Directive 2011/83/EU would let the EU consumer-rights regime accidentally apply)", () => {
@@ -58,8 +59,9 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
 
   it("Section 8.1 fee-tier ladder: perpetual Free tier + Manual ladder (Personal, Team, Agency) + API ladder (API Starter, API Builder, API Scale) + custom-priced Enterprise, with current prices published at driftstack.dev/pricing — pinned so the two-ladder ToS framing stays consistent (drift to dropping the published-at-pricing-page reference would re-introduce hardcoded marketing↔Stripe-invoice divergence at the contractual level; drift to dropping 'custom-priced Enterprise' would lose the Enterprise commitment)", () => {
     expect(body).toMatch(
-      /Customer pays the Fees for the Subscription tier\s*\n?\s*selected at signup\. Driftstack offers a perpetual Free tier, a\s*\n?\s*Manual ladder \(Personal, Team, Agency\), and an API ladder \(API\s*\n?\s*Starter, API Builder, API Scale\), with a custom-priced Enterprise\s*\n?\s*tier\. The current tiers and prices are published at\s*\n?\s*<https:\/\/driftstack\.dev\/pricing>\./,
+      /Customer pays the Fees for the Subscription tier\s*\n?\s*selected at signup\. Driftstack offers a perpetual Free tier, a\s*\n?\s*Manual ladder \(Personal, Team, Agency\), and an API ladder \(API\s*\n?\s*Starter, API Builder, API Scale\), with a custom-priced Enterprise\s*\n?\s*tier\. The current tiers and prices are published at\s*\n?\s*<https:\/\/driftstack\.dev\/pricing\/>\./,
     );
+    expect(body).not.toMatch(/<https:\/\/driftstack\.dev\/pricing>/);
     // The contract must NOT hardcode tier prices — those live on the
     // pricing page (single source of truth). Drift back to baked-in
     // dollar figures would desync from Stripe at the contractual level.
