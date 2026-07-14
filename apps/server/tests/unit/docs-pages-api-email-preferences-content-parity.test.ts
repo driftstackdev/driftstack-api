@@ -49,8 +49,9 @@ describe('W771 docs /api/email-preferences content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Per-event opt-in is the unit;\s*\n?there's no "opt out of everything optional" shorthand because\s*\n?the legal posture \(per the \[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\)\) requires that we\s*\n?deliver each opt-out as an affirmative customer choice\./,
+      /Per-event opt-in is the unit;\s*\n?there's no "opt out of everything optional" shorthand because\s*\n?the legal posture \(per the \[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\/\)\) requires that we\s*\n?deliver each opt-out as an affirmative customer choice\./,
     );
+    expect(p).not.toMatch(/\[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\)/);
   });
 
   it('CRITICAL 6-event opt-outable catalog pinned. Drift to dropping any would let SDK consumers misjudge which events can be silenced. (The trial-pack pair was removed with the dead trial_pack lifecycle.)', () => {
