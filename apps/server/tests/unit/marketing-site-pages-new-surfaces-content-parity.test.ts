@@ -45,6 +45,16 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+function slashlessOwnedLinks(source: string): string[] {
+  return [...source.matchAll(/(?:href|primaryHref|secondaryHref)\s*(?::|=)\s*['"]([^'"]+)['"]/g)]
+    .map((match) => match[1] ?? '')
+    .filter((href) => href.startsWith('/'))
+    .filter((href) => {
+      const pathname = href.split(/[?#]/, 1)[0] ?? '';
+      return pathname !== '/' && !pathname.endsWith('/');
+    });
+}
+
 const ALL_NEW = [HUB, MULTI, QA, SCRAPING, HOW, GLOSSARY];
 
 describe('W599.B S14 new-surface routes exist', () => {
@@ -52,6 +62,19 @@ describe('W599.B S14 new-surface routes exist', () => {
     for (const p of ALL_NEW) {
       expect(existsSync(p), `missing route file: ${p}`).toBe(true);
     }
+  });
+
+  it('all six surfaces link directly to canonical owned routes without a 308 hop', () => {
+    for (const page of ALL_NEW) {
+      expect(slashlessOwnedLinks(read(page)), page).toEqual([]);
+    }
+
+    const slashlessMutant = read(HUB).replace(
+      '/use-cases/multi-account/',
+      '/use-cases/multi-account',
+    );
+    expect(slashlessMutant).not.toBe(read(HUB));
+    expect(slashlessOwnedLinks(slashlessMutant)).toContain('/use-cases/multi-account');
   });
 });
 
@@ -63,22 +86,22 @@ describe('W599.B /use-cases hub', () => {
   });
 
   it('fans out to all three persona pages, operators first (homepage §4 order)', () => {
-    const a = body.indexOf("href: '/use-cases/multi-account'");
-    const b = body.indexOf("href: '/use-cases/qa-testing'");
-    const c = body.indexOf("href: '/use-cases/web-scraping'");
+    const a = body.indexOf("href: '/use-cases/multi-account/'");
+    const b = body.indexOf("href: '/use-cases/qa-testing/'");
+    const c = body.indexOf("href: '/use-cases/web-scraping/'");
     expect(a).toBeGreaterThan(-1);
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
   });
 
   it('cross-links /how-it-works as the zero-jargon on-ramp', () => {
-    expect(body).toMatch(/href="\/how-it-works"/);
+    expect(body).toMatch(/href="\/how-it-works\/"/);
   });
 
   it('CtaBand: primary /pricing#free "Start free" + secondary /pricing "See pricing"', () => {
-    expect(body).toMatch(/primaryHref="\/pricing#free"/);
+    expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/primaryLabel="Start free"/);
-    expect(body).toMatch(/secondaryHref="\/pricing"/);
+    expect(body).toMatch(/secondaryHref="\/pricing\/"/);
   });
 });
 
@@ -109,12 +132,12 @@ describe('W599.B /use-cases/multi-account (operators + account teams)', () => {
   it('plan pointer: Manual ladder → /pricing#manual ("A person clicking → Manual." mapping)', () => {
     expect(body).toMatch(/A person clicking → Manual\./);
     expect(body).toMatch(
-      /<a href="\/pricing#manual" class="btn-secondary">See Manual pricing →<\/a>/,
+      /<a href="\/pricing\/#manual" class="btn-secondary">See Manual pricing →<\/a>/,
     );
   });
 
   it('AUP boundary named, capability-not-encouragement: /legal/aup linked with the read-before-you-sign-up framing', () => {
-    expect(body).toMatch(/href="\/legal\/aup"/);
+    expect(body).toMatch(/href="\/legal\/aup\/"/);
     expect(body).toMatch(/staying inside each service's rules stays your call/);
   });
 
@@ -125,8 +148,8 @@ describe('W599.B /use-cases/multi-account (operators + account teams)', () => {
   });
 
   it('CtaBand: primary /pricing#free + secondary /pricing#manual', () => {
-    expect(body).toMatch(/primaryHref="\/pricing#free"/);
-    expect(body).toMatch(/secondaryHref="\/pricing#manual"/);
+    expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
+    expect(body).toMatch(/secondaryHref="\/pricing\/#manual"/);
   });
 });
 
@@ -153,7 +176,7 @@ describe('W599.B /use-cases/qa-testing (QA + engineering teams)', () => {
   });
 
   it('plan pointer: API ladder → /pricing#api', () => {
-    expect(body).toMatch(/<a href="\/pricing#api" class="btn-secondary">See API pricing →<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing\/#api" class="btn-secondary">See API pricing →<\/a>/);
   });
 
   it('free-tier honesty stays explicit: free is manual-only, programmatic access starts on the API ladder (faq.ts claim — never buried)', () => {
@@ -161,7 +184,7 @@ describe('W599.B /use-cases/qa-testing (QA + engineering teams)', () => {
   });
 
   it('CtaBand: primary /pricing#free + secondary docs.driftstack.dev', () => {
-    expect(body).toMatch(/primaryHref="\/pricing#free"/);
+    expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.dev"/);
   });
 });
@@ -186,12 +209,12 @@ describe('W599.B /use-cases/web-scraping (data teams)', () => {
   });
 
   it('plan pointer: API ladder → /pricing#api + comparison cross-link for the signal detail', () => {
-    expect(body).toMatch(/<a href="\/pricing#api" class="btn-secondary">See API pricing →<\/a>/);
-    expect(body).toMatch(/href="\/comparison"/);
+    expect(body).toMatch(/<a href="\/pricing\/#api" class="btn-secondary">See API pricing →<\/a>/);
+    expect(body).toMatch(/href="\/comparison\/"/);
   });
 
   it('AUP boundary named for scraping specifically: auth-bypassing / rate-limit-abusing collection is out (capability description, never encouragement; S20b plain words, prohibition at full strength)', () => {
-    expect(body).toMatch(/href="\/legal\/aup"/);
+    expect(body).toMatch(/href="\/legal\/aup\/"/);
     expect(body).toMatch(
       /gets around logins\s*\n?\s*\(authentication\) or past a site's reasonable rate limits is not\s*\n?\s*allowed/,
     );
@@ -205,8 +228,8 @@ describe('W599.B /use-cases/web-scraping (data teams)', () => {
   });
 
   it('CtaBand: primary /pricing#free + secondary /pricing#api; the side-by-side-on-the-free-tier framing (the honest evaluation path)', () => {
-    expect(body).toMatch(/primaryHref="\/pricing#free"/);
-    expect(body).toMatch(/secondaryHref="\/pricing#api"/);
+    expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
+    expect(body).toMatch(/secondaryHref="\/pricing\/#api"/);
     expect(body).toMatch(/next to your current vendor/);
   });
 });
@@ -245,12 +268,12 @@ describe('W599.B /how-it-works (zero-code explainer)', () => {
   });
 
   it('links the glossary as the where-the-rest-of-the-words-live page', () => {
-    expect(body).toMatch(/href="\/glossary"/);
+    expect(body).toMatch(/href="\/glossary\/"/);
   });
 
   it('CtaBand: primary /pricing#free "Start free" + secondary /pricing "See pricing"', () => {
-    expect(body).toMatch(/primaryHref="\/pricing#free"/);
-    expect(body).toMatch(/secondaryHref="\/pricing"/);
+    expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
+    expect(body).toMatch(/secondaryHref="\/pricing\/"/);
     expect(body).toMatch(/secondaryLabel="See pricing"/);
   });
 
@@ -306,7 +329,7 @@ describe('W599.B /glossary (quiet reference page)', () => {
   });
 
   it('egress entry cross-links /trust/security-overview (the canonical impl-state disclosure surface for egress claims, per W247.A)', () => {
-    expect(body).toMatch(/href="\/trust\/security-overview"/);
+    expect(body).toMatch(/href="\/trust\/security-overview\/"/);
   });
 
   it('quiet reference page: no CtaBand (deliberate — the page is a dictionary, not a funnel step)', () => {
