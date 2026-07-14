@@ -25853,3 +25853,22 @@ Verification:
   exact DNS-error forwarding;
 - both webhook worker defaults/redirect fences, strict server source/test
   TypeScript, targeted lint/format, diff, and hooks pass.
+
+## V-605 — IETF IPv6 parent fails closed with routed exceptions
+
+**Date:** 2026-07-14
+
+Reconciled the literal-host classifier against IANA's IPv6 Special-Purpose
+Address Registry. The `2001::/23` IETF Protocol Assignments parent is not
+globally reachable except for explicit more-specific allocations. Blocking only
+known children such as Teredo and benchmarking left unallocated or deprecated
+parent literals (for example `2001:100::1` and `2001:10::1`) able to bypass DNS
+and reach the outbound socket path.
+
+The classifier now fails closed across the parent while preserving IANA's
+current globally reachable exceptions: PCP/TURN/DNS-SD anycast, AMT, AS112-v6,
+ORCHIDv2, and Drone Remote ID DET space. Focused URL/raw-host and guarded-fetch
+tests reject unallocated/deprecated parent addresses, retain every earlier
+non-global/NAT64 boundary, and prove each routed exception remains allowed.
+Removing the parent block produces two focused failures (URL and raw-host paths),
+confirming the new coverage depends on the production rule rather than fixtures.

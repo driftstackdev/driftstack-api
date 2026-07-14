@@ -25,6 +25,17 @@
 import { BlockList, isIP } from 'node:net';
 
 const BLOCK = new BlockList();
+// More-specific globally reachable allocations inside the otherwise non-global
+// 2001::/23 IETF Protocol Assignments parent. Check these before BLOCK so the
+// parent range can fail closed without rejecting IANA's routed exceptions.
+const PUBLIC_SPECIAL = new BlockList();
+PUBLIC_SPECIAL.addAddress('2001:1::1', 'ipv6'); // PCP anycast
+PUBLIC_SPECIAL.addAddress('2001:1::2', 'ipv6'); // TURN anycast
+PUBLIC_SPECIAL.addAddress('2001:1::3', 'ipv6'); // DNS-SD registration anycast
+PUBLIC_SPECIAL.addSubnet('2001:3::', 32, 'ipv6'); // AMT
+PUBLIC_SPECIAL.addSubnet('2001:4:112::', 48, 'ipv6'); // AS112-v6
+PUBLIC_SPECIAL.addSubnet('2001:20::', 28, 'ipv6'); // ORCHIDv2
+PUBLIC_SPECIAL.addSubnet('2001:30::', 28, 'ipv6'); // Drone Remote ID DETs
 // IPv4 — internal-reachable / non-public-unicast ranges.
 BLOCK.addSubnet('0.0.0.0', 8, 'ipv4'); // "this host"
 BLOCK.addSubnet('10.0.0.0', 8, 'ipv4'); // RFC1918 private
@@ -59,6 +70,7 @@ BLOCK.addSubnet('2002::', 16, 'ipv6'); // 6to4 (embeds IPv4 in 2nd/3rd hextets)
 // administrative domain, so accepting their literals recreates the SSRF class.
 BLOCK.addSubnet('100::', 64, 'ipv6'); // discard-only (RFC6666)
 BLOCK.addSubnet('100:0:0:1::', 64, 'ipv6'); // dummy prefix (RFC9780)
+BLOCK.addSubnet('2001::', 23, 'ipv6'); // IETF assignments, except PUBLIC_SPECIAL
 BLOCK.addSubnet('2001::', 32, 'ipv6'); // Teredo tunnel (RFC4380)
 BLOCK.addSubnet('2001:2::', 48, 'ipv6'); // benchmarking (RFC5180)
 BLOCK.addSubnet('2001:db8::', 32, 'ipv6'); // documentation (RFC3849)
@@ -137,6 +149,7 @@ export function classifyUnsafeHost(
   // address downstream — reject outright.
   if (family === 0 && NUMERIC_IP_ENCODING.test(host)) return 'numeric-encoding';
   if (family === 4 && BLOCK.check(host, 'ipv4')) return 'private';
+  if (family === 6 && PUBLIC_SPECIAL.check(host, 'ipv6')) return null;
   if (family === 6 && BLOCK.check(host, 'ipv6')) return 'private';
   return null;
 }

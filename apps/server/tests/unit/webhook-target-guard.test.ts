@@ -70,6 +70,9 @@ describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () =
       'https://[100:0:0:1::1]/h', // dummy prefix
       'https://[2001::1]/h', // Teredo
       'https://[2001:2::1]/h', // benchmark
+      'https://[2001:10::1]/h', // deprecated ORCHID inside IETF assignments
+      'https://[2001:100::1]/h', // unallocated/non-global IETF assignment space
+      'https://[2001:1::4]/h', // adjacent to, but not one of, the exact anycast exceptions
       'https://[2001:db8::1]/h', // documentation
       'https://[3fff::1]/h', // documentation
       'https://[5f00::1]/h', // non-global SRv6 SID
@@ -188,6 +191,9 @@ describe('classifyUnsafeHost — raw-host SSRF (proxy/egress path, no URL normal
       '100:0:0:1::1',
       '2001::1',
       '2001:2::1',
+      '2001:10::1',
+      '2001:100::1',
+      '2001:1::4',
       '2001:db8::1',
       '3fff::1',
       '5f00::1',
@@ -215,7 +221,22 @@ describe('classifyUnsafeHost — raw-host SSRF (proxy/egress path, no URL normal
     expect(classifyUnsafeHost('198.17.255.255')).toBeNull(); // before benchmark /15
     expect(classifyUnsafeHost('198.20.0.0')).toBeNull(); // after benchmark /15
     expect(classifyUnsafeHost('2001:4860:4860::8888')).toBeNull(); // Google public IPv6
+    expect(classifyUnsafeHost('2001:200::1')).toBeNull(); // first /32 outside IETF /23 parent
     expect(classifyUnsafeHost('hooks.example.com')).toBeNull();
+  });
+
+  it('preserves IANA globally reachable exceptions inside 2001::/23', () => {
+    for (const host of [
+      '2001:1::1', // PCP anycast
+      '2001:1::2', // TURN anycast
+      '2001:1::3', // DNS-SD registration anycast
+      '2001:3::1', // AMT
+      '2001:4:112::1', // AS112-v6
+      '2001:20::1', // ORCHIDv2
+      '2001:30::1', // Drone Remote ID DET
+    ]) {
+      expect(classifyUnsafeHost(host), host).toBeNull();
+    }
   });
 });
 
