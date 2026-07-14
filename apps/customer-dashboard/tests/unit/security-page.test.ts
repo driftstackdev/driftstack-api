@@ -539,6 +539,41 @@ describe('security page — web-session management (security)', () => {
     );
   });
 
+  it('treats malformed accepted bulk sign-out JSON as committed and refreshes live sessions', async () => {
+    const sessions = [
+      mkSession({ id: 'sess_current', current: true }),
+      mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
+    ];
+    const base = makeRouter(sessions);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'DELETE' && /\/web-sessions\?keep=current$/.test(call.url)) {
+          sessions.splice(1, 1);
+          return new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    const revokeAll = window.document.querySelector(
+      '[data-button="web-sessions-revoke-all"]',
+    ) as HTMLButtonElement;
+    revokeAll.click();
+    revokeAll.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+    expect(window.document.querySelector('[data-revoke-id]')).toBeNull();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toBe(
+      'Signed out of other sessions.',
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toContain("Couldn't");
+  });
+
   it('does not let an older success timer hide a newer refresh failure', async () => {
     vi.useFakeTimers();
     const sessions = [

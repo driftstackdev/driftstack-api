@@ -124,6 +124,14 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toMatch(/const refreshed = await loadWebSessions\(\)/);
   });
 
+  it('treats accepted bulk sign-out as authoritative when the cosmetic count is malformed', () => {
+    expect(body).toContain('The count is cosmetic. Accepted status is authoritative');
+    expect(body).toMatch(/return r\.json\(\)\.catch\(\(\) => \(\{\}\)\)/);
+    expect(body).toContain("? 'Signed out of other sessions.'");
+    expect(body).toMatch(/setTimeout\(\(\) => hideBanner\(noticeGeneration\), 3000\)/);
+    expect(body).toMatch(/return loadWebSessions\(\)/);
+  });
+
   it('V-353h TOTP enrollment: SHA-1 / 30s / 6-digit (RFC 6238 defaults) pinned', () => {
     expect(body).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults/);
   });

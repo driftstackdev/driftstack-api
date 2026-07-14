@@ -983,12 +983,19 @@ const apiBaseUrl = resolveApiBaseUrl();
               return;
             showWebSessionMutationProgress(webSessionsRevokeAllBtn, 'Signing out…');
             await authedFetch('/v1/account/web-sessions?keep=current', { method: 'DELETE' })
-              .then((r) =>
-                r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)),
-              )
+              .then((r) => {
+                if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
+                // The count is cosmetic. Accepted status is authoritative, so
+                // malformed JSON must not skip the live-session refresh or
+                // manufacture retry guidance after revocation committed.
+                return r.json().catch(() => ({}));
+              })
               .then((body) => {
+                const revoked = typeof body.revoked === 'number' ? body.revoked : null;
                 const noticeGeneration = showBanner(
-                  'Signed out of ' + (body.revoked || 0) + ' other sessions.',
+                  revoked === null
+                    ? 'Signed out of other sessions.'
+                    : 'Signed out of ' + revoked + ' other sessions.',
                 );
                 setTimeout(() => hideBanner(noticeGeneration), 3000);
                 return loadWebSessions();
