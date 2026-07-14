@@ -84,7 +84,7 @@ describe('W507.B apps/marketing-site/src/pages/docs/status-subscriptions.astro c
       /<strong>Incident resolved<\/strong> — when ops moves the\s*\n?\s*incident to resolved\./,
     );
     expect(body).toMatch(
-      /<strong>Post-mortem published<\/strong> — for incidents\s*\n?\s*meeting our\s*\n?\s*<a href="\/docs\/incident-policy">incident policy<\/a>/,
+      /<strong>Post-mortem published<\/strong> — for incidents\s*\n?\s*meeting our\s*\n?\s*<a href="\/docs\/incident-policy\/">incident policy<\/a>/,
     );
   });
 
@@ -92,10 +92,11 @@ describe('W507.B apps/marketing-site/src/pages/docs/status-subscriptions.astro c
     expect(body).toMatch(/We do not send marketing email to status subscribers\.\s*\n?\s*Period\./);
   });
 
-  it('Related-docs cross-link 3-set: /docs/incident-policy + /docs/sla-policy + /api-reference — pinned so the 3-doc related-references cluster stays complete (drift to dropping /docs/sla-policy would orphan the SLA cross-reference; drift to dropping /api-reference would orphan the programmatic-API discovery path)', () => {
-    expect(body).toMatch(/<li><a href="\/docs\/incident-policy">Incident policy<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/docs\/sla-policy">SLA policy<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/api-reference">API reference<\/a><\/li>/);
+  it('Related-docs cross-link 3-set pins canonical incident-policy, SLA-policy and API-reference routes so all discovery paths stay complete', () => {
+    expect(body).toMatch(/<li><a href="\/docs\/incident-policy\/">Incident policy<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/docs\/sla-policy\/">SLA policy<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/api-reference\/">API reference<\/a><\/li>/);
+    expect(body).not.toMatch(/href="\/(?:docs\/incident-policy|docs\/sla-policy|api-reference)"/);
   });
 
   it('file exists at canonical path', () => {
