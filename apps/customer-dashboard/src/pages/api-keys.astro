@@ -318,7 +318,7 @@ npm i @driftstack/sdk</code></pre>
           aria-live="polite"
           aria-atomic="true"
           class="hidden text-xs text-tk-ready-text"
-        >Copied.</span>
+        ></span>
       </div>
     </div>
 
@@ -374,8 +374,7 @@ npm i @driftstack/sdk</code></pre>
           aria-live="polite"
           aria-atomic="true"
           class="hidden text-xs text-tk-accent-text"
-          >Copied.</span
-        >
+        ></span>
       </div>
     </div>
 
@@ -473,6 +472,28 @@ npm i @driftstack/sdk</code></pre>
       const revealCopyFb = root.querySelector('[data-created-copy-feedback]');
       const revealDismiss = root.querySelector('[data-created-dismiss]');
       const showCreateBtns = root.querySelectorAll('[data-show-create]');
+      const copyFeedbackTimers = new WeakMap();
+
+      function clearCopyFeedback(element) {
+        if (!element) return;
+        const timer = copyFeedbackTimers.get(element);
+        if (timer !== undefined) window.clearTimeout(timer);
+        copyFeedbackTimers.delete(element);
+        element.textContent = '';
+        element.classList.add('hidden');
+      }
+
+      function showCopyFeedback(element, message, autoHide) {
+        if (!element) return;
+        clearCopyFeedback(element);
+        element.classList.remove('hidden');
+        // Clear + repopulate on every attempt so repeated identical success
+        // messages still create a live-region text mutation.
+        element.textContent = message;
+        if (!autoHide) return;
+        const timer = window.setTimeout(() => clearCopyFeedback(element), 2000);
+        copyFeedbackTimers.set(element, timer);
+      }
       const token = (() => {
         try {
           return localStorage.getItem('ds_web_session_token');
@@ -967,13 +988,14 @@ npm i @driftstack/sdk</code></pre>
             ? new Date(graceExpiresAt).toLocaleString()
             : '—';
         }
-        if (rotateCopyFb) rotateCopyFb.classList.add('hidden');
+        clearCopyFeedback(rotateCopyFb);
         rotateReveal.classList.remove('hidden');
         rotateReveal.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
       function hideRotateReveal() {
         if (!rotateReveal || !rotatePlaintext) return;
+        clearCopyFeedback(rotateCopyFb);
         rotateReveal.classList.add('hidden');
         // Wipe plaintext from DOM so it isn't recoverable post-dismiss.
         rotatePlaintext.textContent = '';
@@ -990,10 +1012,7 @@ npm i @driftstack/sdk</code></pre>
           navigator.clipboard
             .writeText(plaintext)
             .then(() => {
-              if (rotateCopyFb) rotateCopyFb.classList.remove('hidden');
-              window.setTimeout(() => {
-                if (rotateCopyFb) rotateCopyFb.classList.add('hidden');
-              }, 2000);
+              showCopyFeedback(rotateCopyFb, 'Copied.', true);
             })
             .catch(() => {
               showBanner('Copy failed. Select the plaintext manually.');
@@ -1103,6 +1122,7 @@ npm i @driftstack/sdk</code></pre>
         }
         formWrap.classList.remove('hidden');
         reveal.classList.add('hidden');
+        clearCopyFeedback(revealCopyFb);
         // WIPE the previously-minted plaintext key from the DOM — hiding the
         // reveal pane left the full secret recoverable via devtools/extensions
         // until navigation, defeating the show-once guarantee.
@@ -1208,6 +1228,7 @@ npm i @driftstack/sdk</code></pre>
           )
           .then((body) => {
             // Show the plaintext one-shot reveal.
+            clearCopyFeedback(revealCopyFb);
             revealPre.textContent = body.plaintext || '';
             reveal.classList.remove('hidden');
             hideCreate();
@@ -1252,16 +1273,19 @@ npm i @driftstack/sdk</code></pre>
         navigator.clipboard
           .writeText(value)
           .then(() => {
-            revealCopyFb.classList.remove('hidden');
-            window.setTimeout(() => revealCopyFb.classList.add('hidden'), 2000);
+            showCopyFeedback(revealCopyFb, 'Copied.', true);
           })
           .catch(() => {
-            revealCopyFb.textContent = 'Copy failed — select + copy manually.';
-            revealCopyFb.classList.remove('hidden');
+            showCopyFeedback(
+              revealCopyFb,
+              'Copy failed — select + copy manually.',
+              false,
+            );
           });
       });
 
       revealDismiss.addEventListener('click', () => {
+        clearCopyFeedback(revealCopyFb);
         revealPre.textContent = '';
         reveal.classList.add('hidden');
       });

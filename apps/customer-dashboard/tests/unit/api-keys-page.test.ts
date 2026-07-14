@@ -30,6 +30,7 @@ interface SetUpOpts {
   storageDenied?: boolean;
   confirmReturns?: boolean;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
+  clipboardPlan?: Array<(text: string) => Promise<void>>;
 }
 
 function setUpDom(
@@ -38,6 +39,7 @@ function setUpDom(
 ): {
   window: JSDOM['window'];
   fetchCalls: MockFetchCall[];
+  clipboardWrites: string[];
   hydratedCount: () => number;
 } {
   const scriptBodies: string[] = [];
@@ -53,6 +55,8 @@ function setUpDom(
   const { window } = dom;
   const fetchCalls: MockFetchCall[] = [];
   const plan = [...(opts.fetchPlan ?? [])];
+  const clipboardWrites: string[] = [];
+  const clipboardPlan = [...(opts.clipboardPlan ?? [])];
   // @ts-expect-error — jsdom global is loose
   if (typeof window.Response !== 'function') window.Response = Response;
   // @ts-expect-error — jsdom global is loose
@@ -86,8 +90,16 @@ function setUpDom(
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
   window.driftstackConfirm = () => Promise.resolve(__cr);
   window.confirm = () => __cr;
-  // jsdom doesn't implement these; the reveal panes call scrollIntoView,
-  // and copy buttons (not exercised here) touch navigator.clipboard.
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: (text: string) => {
+        clipboardWrites.push(text);
+        return clipboardPlan.shift()?.(text) ?? Promise.resolve();
+      },
+    },
+  });
+  // jsdom doesn't implement scrollIntoView; reveal panes use it.
   window.HTMLElement.prototype.scrollIntoView = () => {};
   installDashboardDeadline(window);
 
@@ -98,6 +110,7 @@ function setUpDom(
   return {
     window: window as JSDOM['window'],
     fetchCalls,
+    clipboardWrites,
     hydratedCount: () => hydrated,
   };
 }
@@ -337,6 +350,58 @@ describe('api-keys page — local integration', () => {
     expect(window.document.querySelector('[data-created-plaintext]')?.textContent).toBe(
       'ds_live_THE_ONE_SHOT_SECRET',
     );
+  });
+
+  it('copy feedback recovers from denial and mutates on repeated success', async () => {
+    const secret = 'ds_live_COPY_RECOVERY_SECRET';
+    const { window, clipboardWrites } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => json({ id: 'key_copy', plaintext: secret }, 201),
+        () => json({ data: [ACTIVE_KEY] }),
+      ],
+      clipboardPlan: [
+        () => Promise.reject(new Error('clipboard denied')),
+        () => Promise.resolve(),
+        () => Promise.resolve(),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Copy recovery';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    const copy = window.document.querySelector('[data-created-copy]') as HTMLButtonElement;
+    const feedback = window.document.querySelector('[data-created-copy-feedback]') as HTMLElement;
+    copy.click();
+    await flushMicrotasks();
+    expect(feedback.textContent).toMatch(/copy failed/i);
+    expect(feedback.classList.contains('hidden')).toBe(false);
+
+    copy.click();
+    await flushMicrotasks();
+    expect(feedback.textContent).toBe('Copied.');
+    expect(feedback.classList.contains('hidden')).toBe(false);
+
+    let textMutations = 0;
+    const observer = new window.MutationObserver((records) => {
+      textMutations += records.filter((record) => record.type === 'childList').length;
+    });
+    observer.observe(feedback, { childList: true });
+    copy.click();
+    await flushMicrotasks();
+    observer.disconnect();
+    expect(feedback.textContent).toBe('Copied.');
+    expect(textMutations).toBeGreaterThanOrEqual(2);
+    expect(clipboardWrites).toEqual([secret, secret, secret]);
+
+    (window.document.querySelector('[data-created-dismiss]') as HTMLButtonElement).click();
+    expect(feedback.textContent).toBe('');
+    expect(feedback.classList.contains('hidden')).toBe(true);
   });
 
   it('create timeout reconciles the list and warns that a committed key plaintext is unrecoverable', async () => {
