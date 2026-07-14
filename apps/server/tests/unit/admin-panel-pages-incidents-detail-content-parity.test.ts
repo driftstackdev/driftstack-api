@@ -27,6 +27,14 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+function hasSafeMutationErrorBoundary(source: string): boolean {
+  return (
+    /return r\s*\n?\s*\.json\(\)\s*\n?\s*\.catch\(function \(\) \{\s*\n?\s*return \{\};\s*\n?\s*\}\)\s*\n?\s*\.then\(function \(b\) \{\s*\n?\s*return Promise\.reject\(window\.driftstackResponseError\(r, b\)\);\s*\n?\s*\}\);/.test(
+      source,
+    ) && !/new Error\(b\.(?:detail|title)/.test(source)
+  );
+}
+
 describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity', () => {
   const body = read(LIB);
 
@@ -114,10 +122,15 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
     );
   });
 
-  it("Error-detail surfacing: r.json().catch(() => {}).then((b) => Promise.reject(new Error(b.detail || 'HTTP N'))) — pinned so server-returned problem+json detail messages reach the operator's alert (drift to raw 'HTTP 400' would hide the specific validation error like 'message must be at least 10 chars')", () => {
-    expect(body).toMatch(
-      /return r\s*\n?\s*\.json\(\)\s*\n?\s*\.catch\(function \(\) \{\s*\n?\s*return \{\};\s*\n?\s*\}\)\s*\n?\s*\.then\(function \(b\) \{\s*\n?\s*return Promise\.reject\(new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)\);\s*\n?\s*\}\);/,
+  it('maps bounded problem bodies through the fixed admin error boundary without reflecting server detail', () => {
+    expect(hasSafeMutationErrorBoundary(body)).toBe(true);
+
+    const detailReflectingMutant = body.replace(
+      'window.driftstackResponseError(r, b)',
+      "new Error(b.detail || 'HTTP ' + r.status)",
     );
+    expect(detailReflectingMutant).not.toBe(body);
+    expect(hasSafeMutationErrorBoundary(detailReflectingMutant)).toBe(false);
   });
 
   it('file exists at canonical path', () => {
