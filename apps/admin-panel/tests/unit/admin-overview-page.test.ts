@@ -884,6 +884,58 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(submit.textContent).toBe('Save secret');
   });
 
+  it('treats a malformed accepted owner-secret body as saved and refreshes metadata once', async () => {
+    let saved = false;
+    const fallback = makeRouter({
+      overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+    });
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route(call) {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/admin\/owner\/secrets$/.test(call.url) && method === 'GET') {
+          return json({
+            enabled: true,
+            secrets: saved
+              ? [
+                  {
+                    name: 'stripe_key',
+                    description: 'billing',
+                    updated_at: '2026-07-13T02:00:00.000Z',
+                  },
+                ]
+              : [],
+          });
+        }
+        if (/\/v1\/admin\/owner\/secrets\/stripe_key$/.test(call.url) && method === 'PUT') {
+          saved = true;
+          return new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-form="secret-set"]') as HTMLFormElement;
+    const name = form.querySelector('[name="name"]') as HTMLInputElement;
+    const value = form.querySelector('[name="value"]') as HTMLInputElement;
+    name.value = 'stripe_key';
+    value.value = 'sk_secret_must_never_appear';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
+    expect(text(window, '[data-field="secret-set-status"]')).toBe('saved ✓');
+    expect(value.value).toBe('');
+    expect(window.document.querySelector('[data-secret-row="stripe_key"]')).toBeTruthy();
+    expect(text(window, '[data-field="secret-set-status"]')).not.toContain('failed');
+  });
+
   it('owner-secret save timeout refreshes metadata before another blind overwrite', async () => {
     let saved = false;
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });

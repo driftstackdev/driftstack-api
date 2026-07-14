@@ -1275,9 +1275,17 @@ const apiBaseUrl = resolveApiBaseUrl();
             },
           );
           if (!response.ok) throw new Error('HTTP ' + response.status);
-          const body = await response.json();
+          // Accepted status is the secret-save boundary. The response body is
+          // cosmetic only, so malformed JSON must not turn a committed secret
+          // into failure/retry guidance or leave its plaintext in the form.
+          const body = await response.json().catch(() => ({}));
           if (status) {
-            status.textContent = body.status === 'created' ? 'created ✓' : 'updated ✓';
+            status.textContent =
+              body.status === 'created'
+                ? 'created ✓'
+                : body.status === 'updated'
+                  ? 'updated ✓'
+                  : 'saved ✓';
             status.className = 'text-[11px] text-emerald-600';
           }
           form.reset();

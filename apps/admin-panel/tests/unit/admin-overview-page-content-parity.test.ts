@@ -123,6 +123,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toMatch(/endSecretAction\('save'\);\s*form\.removeAttribute\('aria-busy'\)/);
   });
 
+  it('treats accepted owner-secret status as authoritative when cosmetic JSON is malformed', () => {
+    expect(body).toContain('Accepted status is the secret-save boundary');
+    const start = body.indexOf('async function saveSecret(form)');
+    const end = body.indexOf('if (secretForm)', start);
+    const handler = body.slice(start, end);
+    expect(handler).toMatch(/response\.json\(\)\.catch\(\(\) => \(\{\}\)\)/);
+    expect(handler).toContain(": 'saved ✓'");
+    expect(handler).toMatch(/form\.reset\(\);\s*await fetchSecrets\(\)/);
+  });
+
   it('reconciles ambiguous owner-secret saves against versioned metadata', () => {
     expect(body).toMatch(/let secretMetadataByName = new Map\(\)/);
     expect(body).toMatch(/const previouslyPresent = secretMetadataByName\.has\(name\)/);
