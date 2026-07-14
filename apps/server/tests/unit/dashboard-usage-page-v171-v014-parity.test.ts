@@ -79,16 +79,24 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(p).toMatch(/prod builds fail fast when the env var is unset \(W192\)/);
   });
 
-  it('CRITICAL parallel-fetch Promise.all([/v1/usage, /v1/usage/series?days=30]) pinned. The 30-day series window is the live request that populates the sparklines (the fabricated SSG SERIES_LENGTH generator was removed).', () => {
+  it('CRITICAL deadline-bound parallel Promise.all([/v1/usage, /v1/usage/series?days=30]) with stale-chart refusal pinned', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/usage', \{ headers, credentials: 'include' \}\)/,
+      /const summaryPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*\n\s+headers,\s*\n\s+credentials: 'include',\s*\n\s+\}\)\.then\(readJsonResponse\);/,
     );
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/usage\/series\?days=30', \{ headers, credentials: 'include' \}\)/,
+      /const initialSeriesPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage\/series\?days=30', \{\s*\n\s+headers,\s*\n\s+credentials: 'include',\s*\n\s+\}\)\.then\(readJsonResponse\);/,
     );
-    expect(p).toMatch(/Promise\.all\(\[/);
+    expect(p).toMatch(/const USAGE_TIMEOUT_MS = 15_000;/);
+    expect(p).toMatch(
+      /return window\.driftstackFetchWithDeadline\(url, init, USAGE_TIMEOUT_MS, controller\);/,
+    );
+    expect(p).toMatch(/Promise\.all\(\[summaryPromise, initialSeriesPromise\]\)/);
+    expect(p).toMatch(/if \(chartRequestController\) chartRequestController\.abort\(\);/);
+    expect(p).toMatch(/const version = \+\+chartRequestVersion;/);
+    expect(p).toMatch(/if \(version === chartRequestVersion\) renderDailyChart\(series\);/);
+    expect(p).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/usage/);
   });
 
   it('CRITICAL 4-tile metric set pinned — session_minute / navigate / interact / captures_total. The data-stat attributes are how the inline script targets each tile.', () => {
@@ -162,23 +170,32 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
 
   it("CRITICAL no-token banner pinned — 'Sign in to see live usage.' (No 'preview data below' claim: the SSG shell shows neutral placeholders, not fabricated numbers.)", () => {
     const p = read(PAGE);
-    expect(p).toMatch(/showBanner\('Sign in to see live usage\.'\);\s*\n\s+return;/);
+    expect(p).toMatch(/showBanner\('Sign in to see live usage\.'\);/);
+    expect(p).toMatch(
+      /if \(typeof window\.dashboardHydrated === 'function'\) window\.dashboardHydrated\(\);\s*\n\s+return;/,
+    );
     expect(p).not.toMatch(/Showing preview data below/);
   });
 
-  it("CRITICAL fetch-error banner with HTTP-status surfacing pinned — `Couldn't load live usage (<HTTP <status>>).` Drift to silent-fail would lose debugging visibility. (No 'preview data below' claim — placeholders, not fabricated numbers.)", () => {
+  it("CRITICAL fetch-error banner uses the shared stable request classifier with actionable fallback. Drift to silent-fail would lose debugging visibility. (No 'preview data below' claim — placeholders, not fabricated numbers.)", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/"Couldn't load live usage \(" \+/);
-    expect(p).toMatch(/\(err && err\.message \? err\.message : 'network error'\)/);
+    expect(p).toMatch(
+      /window\.driftstackRequestErrorMessage\(err, "Couldn't load live usage\. Try again\."\)/,
+    );
     expect(p).toMatch(/'\)\.',/);
   });
 
-  it("CRITICAL summary/series rejection messages distinguish source — 'summary HTTP <status>' vs 'series HTTP <status>'. Drift to a generic message would hide WHICH of the two parallel fetches failed.", () => {
+  it('CRITICAL non-OK summary/series responses become shared structured errors, while chart failures retain their own user-facing path.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Promise\.reject\(new Error\('summary HTTP ' \+ r\.status\)\)/);
-    expect(p).toMatch(/Promise\.reject\(new Error\('series HTTP ' \+ r\.status\)\)/);
+    expect(p).toMatch(/Promise\.reject\(window\.driftstackResponseError\(response, body\)\)/);
+    expect(p).toMatch(
+      /if \(initialChartVersion === chartRequestVersion\) showChartLoadFailure\(\);/,
+    );
+    expect(p).toMatch(/showBanner\("Couldn't load daily activity\. Try again\."\);/);
+    expect(p).not.toMatch(/new Error\('(?:summary|series) HTTP /);
   });
 
   it('CRITICAL series buckets default to [] when undefined — `series.buckets || []`. Drift to bare access would NPE on missing buckets.', () => {
