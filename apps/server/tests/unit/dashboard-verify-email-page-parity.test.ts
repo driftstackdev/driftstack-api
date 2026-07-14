@@ -58,24 +58,36 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
   it('ds_debug_verify_token sessionStorage back-compat pinned — URL token wins when both present (the dev-mode debug-token path is kept for back-compat; URL token has priority).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/const debugToken = sessionStorage\.getItem\('ds_debug_verify_token'\)/);
+    expect(p).toMatch(
+      /function readSignupState\(key\) \{\s*try \{\s*return sessionStorage\.getItem\(key\);\s*\} catch \{\s*return null;\s*\}\s*\}/,
+    );
+    expect(p).toMatch(/const debugToken = readSignupState\('ds_debug_verify_token'\)/);
     expect(p).toMatch(/const prefill = linkToken \?\? debugToken/);
+    expect(p.replace("readSignupState('ds_debug_verify_token')", 'null')).not.toMatch(
+      /const debugToken = readSignupState\('ds_debug_verify_token'\)/,
+    );
   });
 
   it('CRITICAL POST /v1/auth/verify-email submit-handler shape pinned. The fetch contract is: POST + content-type:application/json + body {token} + credentials: include. Drift to GET or missing credentials would break the cookie/session round-trip.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{ 'content-type': 'application\/json' \},\s*\n\s+body: JSON\.stringify\(\{ token \}\),\s*\n\s+credentials: 'include',\s*\n\s+\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{ token \}\),\s*credentials: 'include',\s*signal: controller\.signal,\s*\}\)/,
     );
   });
 
   it('CRITICAL on-success: stash session.token in localStorage as `ds_web_session_token` + cleanup ds_signup_email + ds_debug_verify_token sessionStorage keys. Drift to dropping the cleanup would let stale signup-stage state persist across logins.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
-    expect(p).toMatch(/sessionStorage\.removeItem\('ds_signup_email'\)/);
-    expect(p).toMatch(/sessionStorage\.removeItem\('ds_debug_verify_token'\)/);
+    expect(p).toMatch(
+      /function persistVerifiedSession\(session\) \{[\s\S]*?localStorage\.removeItem\(key\);[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.getItem\('ds_web_session_token'\) !== session\.token[\s\S]*?\}/,
+    );
+    expect(p).toMatch(/persistVerifiedSession\(session\)/);
+    expect(p).toMatch(/removeSignupState\('ds_signup_email'\)/);
+    expect(p).toMatch(/removeSignupState\('ds_debug_verify_token'\)/);
+    expect(p.replace("removeSignupState('ds_debug_verify_token');", '')).not.toMatch(
+      /removeSignupState\('ds_debug_verify_token'\)/,
+    );
   });
 
   it('CRITICAL V-267 ?next= deep-link round-trip pinned. The `next` query-param honors deep-link entry from /cli/authorize + any other surface. Falls back to /welcome for the first-time onboarding flow.', () => {
@@ -109,14 +121,14 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
       /Re-enable after 60s so accidental double-clicks don't\s*\n\s+\/\/ burn through the per-IP 3\/min cap on the server side/,
     );
     expect(p).toMatch(
-      /window\.setTimeout\(\(\) => \{\s*\n\s+resendBtn\.disabled = false;\s*\n\s+\}, 60_000\)/,
+      /window\.setTimeout\(\(\) => \{\s*resendInFlight = false;\s*resendBtn\.disabled = false;\s*\}, 60_000\)/,
     );
   });
 
   it('CRITICAL resend-email fallback prompt — if ds_signup_email is absent, prompt the user. "Server is shape-stable, so the success message is identical regardless of whether the email matched." Drift to revealing whether email matched would let attackers enumerate accounts.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/let resendEmail = sessionStorage\.getItem\('ds_signup_email'\)/);
+    expect(p).toMatch(/let resendEmail = readSignupState\('ds_signup_email'\)/);
     expect(p).toMatch(/await window\.driftstackPrompt\('Email address used at signup:', \{/);
     expect(p).toMatch(
       /Server is shape-stable, so the success message\s*\n\s+\/\/ is identical regardless of whether the email matched/,
