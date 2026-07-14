@@ -67,12 +67,12 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
     );
   });
 
-  it("onStart: quote.state.kind !== 'ready' early-return guard + checkout.start({product, price_cents from quote, price_currency from quote}); onReset → checkout.reset() — pinned so checkout doesn't fire without a fresh quote (would post stale prices to server)", () => {
+  it("onStart: quote.state.kind !== 'ready' early-return guard + checkout.start({product, price_cents from quote, price_currency from quote}); onReset invalidates copy work before checkout.reset() — pinned so checkout doesn't fire without a fresh quote or inherit stale address feedback", () => {
     expect(body).toMatch(
       /const onStart = \(\): void => \{\s*\n?\s*if \(quote\.state\.kind !== 'ready'\) return;\s*\n?\s*void checkout\.start\(\{\s*\n?\s*product,\s*\n?\s*price_cents: quote\.state\.data\.price_cents,\s*\n?\s*price_currency: quote\.state\.data\.price_currency,\s*\n?\s*\}\);\s*\n?\s*\};/,
     );
     expect(body).toMatch(
-      /const onReset = \(\): void => \{\s*\n?\s*checkout\.reset\(\);\s*\n?\s*\};/,
+      /const onReset = \(\): void => \{\s*\n?\s*copyGenerationRef\.current \+= 1;\s*\n?\s*if \(copiedTimerRef\.current !== null\) window\.clearTimeout\(copiedTimerRef\.current\);\s*\n?\s*copiedTimerRef\.current = null;\s*\n?\s*setCopyState\('idle'\);\s*\n?\s*checkout\.reset\(\);\s*\n?\s*\};/,
     );
   });
 
