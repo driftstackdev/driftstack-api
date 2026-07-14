@@ -2,37 +2,13 @@
 import AdminLayout from '../layouts/AdminLayout.astro';
 
 // V-189 — progressive-enhancement against /v1/admin/webhook-dlq. SSG
-// renders a single mock entry; an inline <script> fetches the live
+// renders an inert unavailable shell; an inline <script> fetches the live
 // list, replaces the body, and wires Requeue (POST
 // /v1/admin/webhook-dlq/:id/requeue). Account email + webhook URL
 // aren't part of the DLQ delivery shape today (would need a join in
 // WebhooksAdminService.listDlq), so the live view shows webhook id +
 // event id; enriched display lands as a separate slice once the
 // endpoint exposes owner+url.
-
-interface MockDlqEntry {
-  id: string;
-  webhookId: string;
-  webhookUrl: string;
-  accountEmail: string;
-  eventType: string;
-  attempts: number;
-  lastError: string;
-  ageHours: number;
-}
-
-const MOCK_DLQ: MockDlqEntry[] = [
-  {
-    id: 'wdl_00000000-0000-4000-8000-0000000000d1',
-    webhookId: 'whk_00000000-0000-4000-8000-0000000000a1',
-    webhookUrl: 'https://hooks.example.test/driftstack',
-    accountEmail: 'tester@driftstack.local',
-    eventType: 'session.completed',
-    attempts: 6,
-    lastError: 'connect ECONNREFUSED — endpoint unreachable',
-    ageHours: 14,
-  },
-];
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -64,14 +40,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           <span
             aria-hidden="true"
             data-live-dot
-            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+            class="inline-block h-2 w-2 rounded-full bg-amber-500"
           ></span>
-          <span>Live · updated <span data-live-age>just now</span></span>
+          <span data-live-status>Waiting for live data</span>
+          <span data-live-age class="hidden"></span>
         </span>
         <button
           type="button"
           data-live-refresh
-          class="text-tk-accent hover:underline"
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in"
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           Refresh now
         </button>
@@ -99,61 +79,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       <div class="mb-6 flex items-center justify-between gap-4">
         <p class="text-sm text-tk-ink-2">
           <strong class="font-medium text-red-700" data-field="summary">
-            {MOCK_DLQ.length.toString()} entr{MOCK_DLQ.length === 1 ? 'y' : 'ies'}
           </strong>
         </p>
       </div>
 
       <ul class="space-y-3" data-list="dlq">
-        {
-          MOCK_DLQ.map((entry) => (
-            <li class="rounded-lg border border-red-200 bg-red-50 p-5">
-              <div class="flex items-start justify-between gap-6">
-                <div class="min-w-0">
-                  <p class="font-mono text-xs text-tk-ink-2">{entry.id}</p>
-                  <p class="mt-2 truncate font-mono text-sm text-tk-ink">
-                    {entry.webhookUrl}
-                  </p>
-                  <p class="mt-1 text-xs text-tk-ink-2">Customer: {entry.accountEmail}</p>
-                  <p class="mt-2">
-                    <code class="font-mono text-xs text-tk-accent">{entry.eventType}</code>
-                  </p>
-                </div>
-                <div class="flex shrink-0 flex-col items-end gap-2">
-                  <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-red-800">
-                    DLQ · {entry.attempts}× tried
-                  </span>
-                  <p class="text-xs text-red-800">{entry.ageHours}h ago</p>
-                </div>
-              </div>
-
-              <div class="mt-4 rounded border border-red-200 bg-tk-surface px-3 py-2">
-                <p class="font-mono text-xs text-red-900">{entry.lastError}</p>
-              </div>
-
-              <div class="mt-4 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  data-action="requeue"
-                  data-id={entry.id}
-                  class="text-sm font-medium text-tk-accent hover:underline"
-                >
-                  Requeue
-                </button>
-                {/* 2026-05-22 — hard-delete; payload irrecoverable. Confirm()
-                    in the handler protects against fat-fingered clicks. */}
-                <button
-                  type="button"
-                  data-action="discard"
-                  data-id={entry.id}
-                  class="text-sm font-medium text-rose-700 hover:underline"
-                >
-                  Discard
-                </button>
-              </div>
-            </li>
-          ))
-        }
+        <li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">
+          Live DLQ entries are unavailable until loaded.
+        </li>
       </ul>
     </div>
 
@@ -174,7 +107,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       const summary = root.querySelector('[data-field="summary"]');
       const listRegion = root.querySelector('[data-region="list"]');
       const emptyRegion = root.querySelector('[data-region="empty"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveStatus = root.querySelector('[data-live-status]');
+      const liveAge = root.querySelector('[data-live-age]');
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      let token = null;
       const DLQ_TIMEOUT_MS = 15_000;
       let loadController = null;
 
@@ -337,6 +274,40 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (list) list.innerHTML = entries.map(rowHtml).join('');
       }
 
+      function renderUnavailable(message) {
+        if (emptyRegion) emptyRegion.classList.add('hidden');
+        if (listRegion) listRegion.classList.remove('hidden');
+        if (list) {
+          list.innerHTML =
+            '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">' +
+            escapeHtml(message) +
+            '</li>';
+        }
+        if (summary) summary.textContent = '';
+      }
+
+      function setLiveState(state, message) {
+        if (liveDot) {
+          const color =
+            state === 'ready'
+              ? 'bg-emerald-500'
+              : state === 'failed'
+                ? 'bg-red-500'
+                : 'bg-amber-500';
+          liveDot.className = 'inline-block h-2 w-2 rounded-full ' + color;
+        }
+        if (liveStatus) {
+          liveStatus.textContent = message
+            ? message
+            : state === 'ready'
+              ? 'Live · updated'
+              : state === 'failed'
+                ? 'Live refresh failed'
+                : 'Loading live data';
+        }
+        if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
+      }
+
       let inFlight = 0;
       function load() {
         if (!token) return Promise.resolve(false);
@@ -364,21 +335,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const msg = requestErrorMessage(err, 'network error');
-            // W604 — clear the SSG mock entry on ANY load failure. Leaving the
-            // mock row on screen is dangerous: it renders live Requeue +
-            // (irrecoverable) Discard buttons wired to a FAKE delivery id, so
-            // an admin during a transient API error could fire
-            // POST /admin/webhook-dlq/<mock-id>/discard on an entry that
-            // doesn't exist. Replace with an honest error state.
-            if (emptyRegion) emptyRegion.classList.add('hidden');
-            if (listRegion) listRegion.classList.remove('hidden');
-            if (list) {
-              list.innerHTML =
-                '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">Could not load the DLQ — nothing to act on. Resolve the error above and retry.</li>';
-            }
-            if (summary) summary.textContent = '';
+            renderUnavailable(
+              'Could not load the DLQ — nothing to act on. Resolve the error above and retry.',
+            );
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -514,44 +475,41 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
-      if (!token) {
-        // W604 — clear the SSG mock so the unauthenticated state never shows a
-        // fabricated DLQ entry with live Requeue/Discard buttons wired to a
-        // FAKE delivery id.
-        if (emptyRegion) emptyRegion.classList.add('hidden');
-        if (listRegion) listRegion.classList.remove('hidden');
-        if (list) {
-          list.innerHTML =
-            '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">Sign in with a staff admin account to see the DLQ.</li>';
-        }
-        if (summary) summary.textContent = '';
-        showBanner('Sign in with a staff admin account to see live data.');
-        return;
-      }
-
       // 2026-05-22 — live auto-poll. Same pattern as 580b30a7.
       let lastFetch = Date.now();
       function loadWithLive() {
-        const liveDot = root.querySelector('[data-live-dot]');
-        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        setLiveState('loading');
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-disabled', 'true');
+        }
+        const expectedReq = inFlight + 1;
         const p = load();
         if (p && typeof p.then === 'function') {
-          p.then(
-            () => {
+          return p.then((loaded) => {
+            if (expectedReq !== inFlight) return loaded;
+            if (loaded) {
               lastFetch = Date.now();
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
-            },
-            () => {
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
-            },
-          );
+              if (liveAge) liveAge.textContent = 'just now';
+              setLiveState('ready');
+            } else {
+              setLiveState('failed');
+            }
+            if (refreshBtn) {
+              refreshBtn.disabled = false;
+              refreshBtn.removeAttribute('aria-disabled');
+            }
+            return loaded;
+          });
         } else {
-          lastFetch = Date.now();
+          setLiveState('failed');
+          if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.removeAttribute('aria-disabled');
+          }
+          return Promise.resolve(false);
         }
       }
-      const refreshBtn = root.querySelector('[data-live-refresh]');
-      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
-      setInterval(loadWithLive, 30_000);
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -559,12 +517,33 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
-      const ageEl = root.querySelector('[data-live-age]');
-      setInterval(() => {
-        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
-      }, 5_000);
+      function start() {
+        token = localStorage.getItem('ds_web_session_token');
+        if (!token) {
+          renderUnavailable('Sign in with a staff admin account to see the DLQ.');
+          setLiveState('failed', 'Sign in for live data');
+          showBanner('Sign in with a staff admin account to see live data.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return;
+        }
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.removeAttribute('aria-disabled');
+          refreshBtn.removeAttribute('title');
+          refreshBtn.addEventListener('click', loadWithLive);
+        }
+        setInterval(loadWithLive, 30_000);
+        setInterval(() => {
+          if (liveAge) liveAge.textContent = fmtAge(lastFetch);
+        }, 5_000);
+        loadWithLive();
+      }
 
-      load();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>

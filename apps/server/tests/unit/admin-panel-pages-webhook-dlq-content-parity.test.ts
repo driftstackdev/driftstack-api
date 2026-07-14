@@ -33,10 +33,19 @@ function read(p: string): string {
 describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-189 framing pinned: 'progressive-enhancement against /v1/admin/webhook-dlq. SSG renders a single mock entry; an inline <script> fetches the live list, replaces the body, and wires Requeue (POST /v1/admin/webhook-dlq/:id/requeue). Account email + webhook URL aren't part of the DLQ delivery shape today (would need a join in WebhooksAdminService.listDlq), so the live view shows webhook id + event id; enriched display lands as a separate slice once the endpoint exposes owner+url.' — pinned so the deferred-enrichment framing stays explicit", () => {
+  it('V-189 framing pins an inert SSG shell and the deferred live enrichment contract', () => {
     expect(body).toMatch(
-      /\/\/ V-189 — progressive-enhancement against \/v1\/admin\/webhook-dlq\. SSG\s*\n?\s*\/\/ renders a single mock entry; an inline <script> fetches the live\s*\n?\s*\/\/ list, replaces the body, and wires Requeue \(POST\s*\n?\s*\/\/ \/v1\/admin\/webhook-dlq\/:id\/requeue\)\. Account email \+ webhook URL\s*\n?\s*\/\/ aren't part of the DLQ delivery shape today \(would need a join in\s*\n?\s*\/\/ WebhooksAdminService\.listDlq\), so the live view shows webhook id \+\s*\n?\s*\/\/ event id; enriched display lands as a separate slice once the\s*\n?\s*\/\/ endpoint exposes owner\+url\./,
+      /\/\/ V-189 — progressive-enhancement against \/v1\/admin\/webhook-dlq\. SSG\s*\n?\s*\/\/ renders an inert unavailable shell; an inline <script> fetches the live\s*\n?\s*\/\/ list, replaces the body, and wires Requeue \(POST/,
     );
+  });
+
+  it('ships no sample delivery, count, mutation control, or green live claim before authority', () => {
+    expect(body).not.toContain('MOCK_DLQ');
+    expect(body).toContain('Live DLQ entries are unavailable until loaded.');
+    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toContain('<span data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).not.toMatch(/data-action="(?:requeue|discard)"\s*\n?\s*data-id=\{entry\.id\}/);
   });
 
   it("Retry-budget framing pinned: 'Deliveries that exhausted the retry budget (5×). Manual intervention only — auto-retry past the initial attempts is intentionally absent to avoid storm-on-recovery patterns.' — pinned so the storm-on-recovery anti-pattern documentation survives (operators reading this page understand WHY auto-retry isn't reintroduced even when DLQ looks 'just stuck')", () => {
@@ -51,10 +60,11 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
     );
   });
 
-  it("Requeue fetch: POST /v1/admin/webhook-dlq/{encodeURIComponent(id)}/requeue + Bearer auth + content-type:application/json + credentials:'include' + empty {} body — pinned so the URL encoding handles delivery-IDs with special chars + the cookie-included flag carries the session cookie alongside the Bearer token (V-269 dual-cookie pattern)", () => {
+  it('Requeue bounded fetch: POST /v1/admin/webhook-dlq/{encodeURIComponent(id)}/requeue + Bearer/JSON/cookie auth + empty {} body', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/webhook-dlq\/' \+ encodeURIComponent\(id\) \+ '\/requeue', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/admin\/webhook-dlq\/' \+ encodeURIComponent\(id\) \+ '\/requeue', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
     );
+    expect(body).toMatch(/const DLQ_TIMEOUT_MS = 15_000;/);
   });
 
   it("ageStr 4-tier helper: null/empty → '—' / <60min → 'Nm ago' / <48hr → 'Nh ago' / else 'Nd ago' (Math.floor on each tier boundary) — pinned so the age-display stays human-readable (drift to 'X minutes' would overflow the badge slot; drift to dropping the days tier would render '72h ago' for 3-day-old entries instead of '3d ago')", () => {
@@ -72,9 +82,11 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
   });
 
   it("renderEntries region-swap: entries.length === 0 → listRegion.classList.add('hidden') + emptyRegion.classList.remove('hidden') else inverse — pinned so the empty + list regions are mutually exclusive (drift to showing both at once would render the empty-state ABOVE actual entries)", () => {
-    expect(body).toMatch(
-      /if \(entries\.length === 0\) \{\s*\n?\s*if \(listRegion\) listRegion\.classList\.add\('hidden'\);\s*\n?\s*if \(emptyRegion\) emptyRegion\.classList\.remove\('hidden'\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(listRegion\) listRegion\.classList\.remove\('hidden'\);\s*\n?\s*if \(emptyRegion\) emptyRegion\.classList\.add\('hidden'\);/,
-    );
+    expect(body).toMatch(/if \(entries\.length === 0\) \{/);
+    expect(body).toMatch(/if \(listRegion\) listRegion\.classList\.add\('hidden'\);/);
+    expect(body).toMatch(/if \(emptyRegion\) emptyRegion\.classList\.remove\('hidden'\);/);
+    expect(body).toMatch(/if \(listRegion\) listRegion\.classList\.remove\('hidden'\);/);
+    expect(body).toMatch(/if \(emptyRegion\) emptyRegion\.classList\.add\('hidden'\);/);
   });
 
   it('Event delegation pattern: root.addEventListener(\'click\', …) branches on [data-action="requeue"] + [data-action="discard"]. 2026-05-22 — Discard branch added alongside Requeue (17126865). Single delegated listener prevents per-row leaks on live-replacement; the handler dispatches to requeue(id) or discard(id) based on which button was clicked.', () => {
@@ -103,6 +115,26 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
     expect(body).toMatch(/showBanner\('Requeueing ' \+ id \+ '…'\);/);
     expect(body).toMatch(/showBanner\('Requeued ' \+ id \+ '\. Refreshing list…'\);/);
     expect(body).toMatch(/showBanner\("Couldn't requeue " \+ id \+ ' \(' \+ msg \+ '\)\.'\);/);
+  });
+
+  it('signed-out/failed reads reapply unavailable state and success alone turns freshness green', () => {
+    expect(body).toContain('function renderUnavailable(message)');
+    expect(body).toContain(
+      "renderUnavailable('Sign in with a staff admin account to see the DLQ.')",
+    );
+    expect(body).toContain(
+      "'Could not load the DLQ — nothing to act on. Resolve the error above and retry.'",
+    );
+    expect(body).toMatch(/if \(loaded\) \{[\s\S]*?setLiveState\('ready'\);/);
+    expect(body).toMatch(/if \(expectedReq !== inFlight\) return loaded;/);
+  });
+
+  it('defers token authority until DOMContentLoaded so the AdminLayout SSO bridge lands first', () => {
+    expect(body).toMatch(/let token = null;/);
+    expect(body).toMatch(
+      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+    );
+    expect(body).toMatch(/document\.addEventListener\('DOMContentLoaded', start\);/);
   });
 
   it('file exists at canonical path', () => {
