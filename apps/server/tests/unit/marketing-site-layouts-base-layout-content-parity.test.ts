@@ -7,7 +7,7 @@
 //   • V-255 noindex flag doc-comment + default-indexable framing.
 //   • Default description: the fleet-register tagline ("Real iPhone
 //     Safari in the cloud — ... just people on phones.", S15 2026-07-03).
-//   • fullTitle: 'Driftstack' → 'Driftstack' (no suffix);
+//   • fullTitle: any already-branded title stays verbatim;
 //     otherwise '<title> · Driftstack' (middle-dot separator).
 //   • canonical = new URL(pathname, Astro.site).toString().
 //   • ogImageUrl absolute-resolution via new URL(...) + /og-default.png
@@ -64,7 +64,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/scripts\/gen-og-image\.mjs/);
   });
 
-  it("default-description tagline + fullTitle separator + canonical framing pinned: 'iPhone Safari sessions, on demand. Premium fidelity for the device that matters.' default description + 'const fullTitle = title === \"Driftstack\" ? title : `${title} · Driftstack`;' middle-dot separator + 'const canonical = new URL(pathname, Astro.site).toString();' — pinned so the canonical-tagline + Driftstack-no-suffix + middle-dot-title-separator + Astro.site-canonical commitment survives", () => {
+  it('default-description tagline + duplicate-brand-safe fullTitle + canonical framing pinned: already-branded titles stay verbatim, unbranded titles gain the middle-dot Driftstack suffix, and canonical URLs resolve against Astro.site', () => {
     // S15 2026-07-03 — the default description moves off the retired
     // "on demand / premium fidelity" tagline onto the fleet register
     // (mirrors the hero paragraph + the OG card subline).
@@ -72,8 +72,9 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
       /description =\s*\n?\s*"Real iPhone Safari in the cloud — to every website, they're just people on phones\. Drive them by hand, by code, or by AI\. Start free\.",/,
     );
     expect(body).toMatch(
-      /const fullTitle = title === 'Driftstack' \? title : `\$\{title\} · Driftstack`;/,
+      /const fullTitle = title\.includes\('Driftstack'\) \? title : `\$\{title\} · Driftstack`;/,
     );
+    expect(body).toMatch(/Preserve any already-branded title verbatim\./);
     expect(body).toMatch(/const canonical = new URL\(pathname, Astro\.site\)\.toString\(\);/);
   });
 
@@ -86,7 +87,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
 
   it("OG + Twitter meta 11-tag framing pinned: 'OpenGraph (LinkedIn, Slack, iMessage, generic OG-aware crawlers)' comment + og:title + og:description + og:url + og:type=website + og:site_name=Driftstack + og:image + og:image:width=1200 + og:image:height=630 + 'Twitter / X' comment + twitter:card=summary_large_image + twitter:title + twitter:description + twitter:image — pinned so the full OG-tag-set + 1200x630-card-size + twitter:card=summary_large_image commitment survives (drift here would break social-share preview rendering)", () => {
     expect(body).toMatch(
-      /<!-- OpenGraph \(LinkedIn, Slack, iMessage, generic OG-aware crawlers\) -->/,
+      /\{\/\* OpenGraph \(LinkedIn, Slack, iMessage, generic OG-aware crawlers\) \*\/\}/,
     );
     expect(body).toMatch(/<meta property="og:title" content=\{fullTitle\} \/>/);
     expect(body).toMatch(/<meta property="og:description" content=\{description\} \/>/);
@@ -96,7 +97,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/<meta property="og:image" content=\{ogImageUrl\} \/>/);
     expect(body).toMatch(/<meta property="og:image:width" content="1200" \/>/);
     expect(body).toMatch(/<meta property="og:image:height" content="630" \/>/);
-    expect(body).toMatch(/<!-- Twitter \/ X -->/);
+    expect(body).toMatch(/\{\/\* Twitter \/ X \*\/\}/);
     expect(body).toMatch(/<meta name="twitter:card" content="summary_large_image" \/>/);
     expect(body).toMatch(/<meta name="twitter:title" content=\{fullTitle\} \/>/);
     expect(body).toMatch(/<meta name="twitter:description" content=\{description\} \/>/);
