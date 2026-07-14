@@ -136,8 +136,9 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
       /<a href="https:\/\/driftstack\.dev\/\.well-known\/security\.txt">security\.txt<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="\/legal\/vulnerability-disclosure">vulnerability-disclosure policy<\/a>/,
+      /<a href="\/legal\/vulnerability-disclosure\/">vulnerability-disclosure policy<\/a>/,
     );
+    expect(body).not.toMatch(/href="\/legal\/vulnerability-disclosure"/);
   });
 
   it('file exists at canonical path', () => {
