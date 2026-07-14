@@ -1,17 +1,14 @@
 // W471.C — drift guard for apps/gui-client/src/lib/use-admin-csv-export.ts.
-// V-534.AX admin CSV export hook. Drift here either drops the
-// blob-URL revocation in finally (memory leak: object URLs
-// accumulate for the whole session) or breaks the Bearer header
-// (a plain anchor link with the admin token in URL would expose
-// the token in browser history + referer headers).
+// V-534.AX admin CSV export hook. Drift here either bypasses the
+// bounded native-safe save helper (WKWebView can swallow synthesized
+// downloads) or breaks the Bearer header (putting the admin token in
+// a URL would expose it in browser history + referer headers).
 //
 //   • V-534.AX framing pinned: 'admin CSV export hook.' + 'Wraps
 //     GET /v1/admin/crypto-orders.csv (V-666.AC). The endpoint
 //     requires `Authorization: Bearer` so a plain anchor link
-//     won't work — we fetch the response as a blob, mint an
-//     object URL, and trigger a download via a synthesized anchor
-//     click. The blob URL is revoked immediately after the click
-//     to avoid leaking it for the rest of the session.'
+//     won't work. The bounded response is saved through the shared
+//     Tauri filesystem/browser fallback so native downloads work.'
 //   • State-machine framing 'idle | downloading | failed.
 //     Successful downloads snap back to idle so the button is
 //     immediately usable again.'
@@ -23,9 +20,8 @@
 //   • Query-string builder: status + search.trim() + accountId.
 //     trim() + createdAfter.trim() + createdBefore.trim() with
 //     length>0 guards.
-//   • Download flow: fetch blob + URL.createObjectURL +
-//     buildFilename + synthesized anchor click +
-//     URL.revokeObjectURL + setState idle.
+//   • Download flow: readBoundedDownloadBlob + buildFilename +
+//     downloadBlob + explicit save-failure state.
 //   • buildFilename: `crypto-orders-${y}-${m}-${d}.csv` UTC with
 //     padStart 4/2/2 + UTCMonth+1.
 
@@ -45,10 +41,10 @@ function read(p: string): string {
 describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-534.AX framing pinned: 'V-534.AX — admin CSV export hook.' + 'Wraps GET /v1/admin/crypto-orders.csv (V-666.AC). The endpoint requires `Authorization: Bearer` so a plain anchor link won't work — we fetch the response as a blob, mint an object URL, and trigger a download via a synthesized anchor click. The blob URL is revoked immediately after the click to avoid leaking it for the rest of the session.'", () => {
+  it('V-534.AX framing pins authenticated bounded saving through the shared native/browser fallback', () => {
     expect(body).toMatch(/\/\/ V-534\.AX — admin CSV export hook\./);
     expect(body).toMatch(
-      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\.csv \(V-666\.AC\)\. The endpoint requires\s*\n?\s*\/\/ `Authorization: Bearer` so a plain anchor link won't work — we fetch\s*\n?\s*\/\/ the response as a blob, mint an object URL, and trigger a download\s*\n?\s*\/\/ via a synthesized anchor click\. The blob URL is revoked immediately\s*\n?\s*\/\/ after the click to avoid leaking it for the rest of the session\./,
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\.csv \(V-666\.AC\)\. The endpoint requires\s*\n?\s*\/\/ `Authorization: Bearer` so a plain anchor link won't work\. The bounded\s*\n?\s*\/\/ response is saved through the shared Tauri filesystem\/browser fallback,\s*\n?\s*\/\/ which avoids WKWebView's silently swallowed synthesized downloads\./,
     );
   });
 
@@ -92,11 +88,14 @@ describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity'
     expect(body).toContain("accept: 'text/csv',");
     expect(body).toContain('if (inFlightRef.current) return;');
     expect(body).toContain('if (sequence !== sequenceRef.current) return;');
-    expect(body).toContain('objectUrl = URL.createObjectURL(blob);');
-    expect(body).toContain("anchor = document.createElement('a');");
-    expect(body).toContain('anchor.click();');
-    expect(body).toContain('anchor.parentNode.removeChild(anchor);');
-    expect(body).toContain('if (objectUrl !== null) URL.revokeObjectURL(objectUrl);');
+    expect(body).toContain("import { downloadBlob, readBoundedDownloadBlob } from './download';");
+    expect(body).toContain('const blob = await readBoundedDownloadBlob(res);');
+    expect(body).toContain('const saved = await downloadBlob(filename, blob);');
+    expect(body).toContain(
+      "message: 'The CSV export could not be saved. Check Downloads access and try again.',",
+    );
+    expect(body).not.toContain('URL.createObjectURL');
+    expect(body).not.toContain("document.createElement('a')");
     expect(body).toContain('requestRef.current?.abort();');
   });
 
