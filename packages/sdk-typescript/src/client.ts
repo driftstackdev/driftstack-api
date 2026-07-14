@@ -21,6 +21,7 @@ import { TeamResource } from './resources/team.js';
 import { EgressResource } from './resources/egress.js';
 import { AgentSessionsResource } from './resources/agent-sessions.js';
 import { RecipesResource } from './resources/recipes.js';
+import { ArchetypesResource } from './resources/archetypes.js';
 import type { RetryConfig } from './retry.js';
 
 export interface DriftstackOptions {
@@ -46,6 +47,8 @@ export interface DriftstackOptions {
 const DEFAULT_BASE_URL = 'https://api.driftstack.dev';
 
 export class Driftstack {
+  /** Server-authoritative customer-selectable browser archetypes. */
+  readonly archetypes: ArchetypesResource;
   readonly sessions: SessionsResource;
   readonly apiKeys: ApiKeysResource;
   readonly usage: UsageResource;
@@ -94,6 +97,7 @@ export class Driftstack {
     this.http = new HttpClient(httpConfig);
 
     this.sessions = new SessionsResource(this.http);
+    this.archetypes = new ArchetypesResource(this.http);
     this.apiKeys = new ApiKeysResource(this.http);
     this.usage = new UsageResource(this.http);
     this.webhooks = new WebhooksResource(this.http);

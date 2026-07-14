@@ -55,6 +55,7 @@ from driftstack.errors import (
 )
 from driftstack.resources.agent_sessions import LiveKitInfo
 from driftstack.resources.api_keys import ApiKeyList
+from driftstack.resources.archetypes import ListArchetypesResponse, PublicArchetype
 from driftstack.resources.sessions import SessionsListPage
 from driftstack.resources.team import (
     AcceptInviteResponse,
@@ -107,6 +108,8 @@ __all__ = [
     "ProfileInUseError",
     "ProxyValidationFailedError",
     "LiveKitInfo",
+    "ListArchetypesResponse",
+    "PublicArchetype",
     # Customer-facing pydantic models — used as return types on
     # client.*.method() so callers can annotate handlers without
     # deep-importing via driftstack.resources.*.

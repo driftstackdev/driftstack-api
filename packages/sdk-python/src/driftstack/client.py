@@ -22,6 +22,7 @@ from driftstack.resources.agent_sessions import (
     AsyncAgentSessionsResource,
 )
 from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
+from driftstack.resources.archetypes import ArchetypesResource, AsyncArchetypesResource
 from driftstack.resources.audit_log import AsyncAuditLogResource, AuditLogResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
 from driftstack.resources.billing import AsyncBillingResource, BillingResource
@@ -97,6 +98,7 @@ class Driftstack:
             client=http_client,
         )
         self.sessions = SessionsResource(self._http)
+        self.archetypes = ArchetypesResource(self._http)
         self.api_keys = ApiKeysResource(self._http)
         self.usage = UsageResource(self._http)
         self.webhooks = WebhooksResource(self._http)
@@ -165,6 +167,7 @@ class AsyncDriftstack:
             client=http_client,
         )
         self.sessions = AsyncSessionsResource(self._http)
+        self.archetypes = AsyncArchetypesResource(self._http)
         self.api_keys = AsyncApiKeysResource(self._http)
         self.usage = AsyncUsageResource(self._http)
         self.webhooks = AsyncWebhooksResource(self._http)

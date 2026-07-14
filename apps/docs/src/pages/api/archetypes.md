@@ -55,3 +55,23 @@ chooses when `POST /v1/sessions` or `POST /v1/profiles` omits an archetype.
 The same response schema is published in
 [`/openapi.json`](https://api.driftstack.dev/openapi.json), so generated clients
 can expose it without maintaining a separate hand-written model.
+
+## SDKs
+
+All official SDKs read the same live catalog:
+
+```ts
+const catalog = await client.archetypes.list();
+```
+
+```python
+catalog = client.archetypes.list()
+```
+
+```go
+catalog, err := client.Archetypes.List(ctx)
+```
+
+Use `catalog.default_archetype_id` (Go: `DefaultArchetypeID`) when presenting a
+recommended choice. Do not copy the returned IDs into a separate application
+constant; refresh the cache after its five-minute response lifetime.

@@ -86,6 +86,7 @@ type Client struct {
 
 	// Resource accessors (filled in by New).
 	Sessions         *SessionsResource
+	Archetypes       *ArchetypesResource
 	APIKeys          *APIKeysResource
 	Usage            *UsageResource
 	Webhooks         *WebhooksResource
@@ -183,6 +184,7 @@ func New(apiKey string, opts ...Option) *Client {
 	}
 
 	c.Sessions = &SessionsResource{client: c}
+	c.Archetypes = &ArchetypesResource{client: c}
 	c.APIKeys = &APIKeysResource{client: c}
 	c.Usage = &UsageResource{client: c}
 	c.Webhooks = &WebhooksResource{client: c}

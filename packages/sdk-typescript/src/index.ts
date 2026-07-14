@@ -5,6 +5,7 @@ export type { RetryConfig } from './retry.js';
 export type { HttpClientConfig, RequestOptions } from './http.js';
 export { iteratePaginated, type CursorPage } from './pagination.js';
 export type { SessionsListPage } from './resources/sessions.js';
+export { ArchetypesResource } from './resources/archetypes.js';
 export type {
   ApiKeyList,
   RotateApiKeyOptions,
@@ -270,4 +271,7 @@ export type {
   AccountProxyMetadata,
   AccountProxyList,
   AccountProxyTestResult,
+  PublicArchetypeStatus,
+  PublicArchetype,
+  ListArchetypesResponse,
 } from '@driftstack/api-types';
