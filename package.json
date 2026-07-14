@@ -31,6 +31,7 @@
     "bench": "vitest bench --run",
     "bench:json": "vitest bench --run --outputJson=tmp/bench-results.json",
     "bench:check-regression": "node scripts/check-bench-regression.mjs",
+    "check:rendered-product-status": "node scripts/check-rendered-product-status.mjs",
     "test:e2e": "npm run test:e2e --workspace apps/server",
     "test:e2e:setup": "docker compose up -d --wait",
     "typecheck": "npm run typecheck --workspaces --if-present",
