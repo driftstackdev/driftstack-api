@@ -24797,3 +24797,30 @@ Verification:
 - live staging and production DB hosts differ (`ep-lingering-math` versus
   `ep-aged-pond`);
 - focused deploy/template parity, shell syntax, formatting, and diff checks pass.
+
+## V-570 — reliable desktop deep-link delivery
+
+**Date:** 2026-07-13
+
+Closed both delivery gaps that made a dashboard “Open in desktop client” action
+focus the installed app without opening its Simulator window:
+
+- app startup now consumes the deep-link plugin's current URL after settings are
+  ready, while retaining one listener installation that always reads the latest
+  account and workspace context;
+- a collapsed second main-app instance forwards only bounded, control-free
+  `driftstack://` argv to the existing WebView instead of discarding it;
+- plugin, cold-start, and single-instance deliveries share a bounded two-second
+  duplicate filter, preventing one OS action from minting two Simulator tokens
+  while permitting a later deliberate re-open;
+- cancellation removes both listeners, and a failed native source no longer
+  disables the remaining live or cold-start source.
+
+Verification:
+
+- full GUI jsdom: 225 files passed, with 1,986 tests passed and 6 skipped;
+- focused deep-link/Simulator slice: 36/36 tests pass;
+- GUI TypeScript, targeted ESLint/Prettier, and production Vite build pass;
+- native Rust tests: 19/19 pass, including bounded scheme/argv forwarding;
+- native Clippy passes with only two unrelated pre-existing lint classes in the
+  same legacy file explicitly allowed for the verification run.

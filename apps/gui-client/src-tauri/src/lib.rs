@@ -34,6 +34,25 @@ const KEYRING_SERVICE: &str = "dev.driftstack.gui";
 /// multi-account support lands, this becomes a per-account-id key.
 const KEYRING_USER: &str = "default";
 
+/// Bound and validate custom-scheme argv before forwarding it from a collapsed
+/// second instance to the existing main WebView. Deep links may carry one-shot
+/// auth state, so they are never logged; only the intended scheme crosses the
+/// native event boundary.
+const MAX_MAIN_GUI_DEEP_LINK_BYTES: usize = 8_192;
+const MAX_MAIN_GUI_DEEP_LINKS: usize = 8;
+
+fn main_gui_deep_links(argv: &[String]) -> Vec<String> {
+    argv.iter()
+        .filter(|arg| {
+            arg.starts_with("driftstack://")
+                && arg.len() <= MAX_MAIN_GUI_DEEP_LINK_BYTES
+                && !arg.chars().any(char::is_control)
+        })
+        .take(MAX_MAIN_GUI_DEEP_LINKS)
+        .cloned()
+        .collect()
+}
+
 /// #137 — native crash breadcrumb. The founder reported the GUI window "just
 /// closing on its own even if the browser remains open." main.tsx already
 /// fails-visible on every JS `error` + `unhandledrejection` (with a RootErrorBoundary
@@ -123,12 +142,19 @@ pub fn run() {
                 return;
             }
 
-            // Main GUI: focus the existing window. Session payloads are handled
-            // only by the separate Simulator app through the protected file.
+            // Main GUI: focus the existing window and forward only validated
+            // custom-scheme argv. The deep-link plugin's macOS event and this
+            // single-instance fallback may both fire; the frontend briefly
+            // deduplicates identical URLs before minting a Simulator token.
+            let deep_links = main_gui_deep_links(&argv);
             if let Some(win) = app.get_webview_window("main") {
+                use tauri::Emitter;
                 let _ = win.unminimize();
                 let _ = win.show();
                 let _ = win.set_focus();
+                if !deep_links.is_empty() {
+                    let _ = win.emit("ds-deep-link", deep_links);
+                }
             }
         }))
         .plugin(tauri_plugin_shell::init())
@@ -1432,5 +1458,38 @@ mod tests {
         );
         assert!(!args.iter().any(|arg| arg.contains("token=")));
         assert!(!args.iter().any(|arg| arg.contains("ck=")));
+    }
+
+    #[test]
+    fn main_gui_deep_links_forward_only_bounded_clean_driftstack_urls() {
+        let valid = "driftstack://session/open?session_id=agt_123".to_string();
+        let argv = vec![
+            "/Applications/Driftstack.app/Contents/MacOS/driftstack-gui".to_string(),
+            "https://attacker.invalid/".to_string(),
+            "--ds-label=agt_123".to_string(),
+            "driftstack://session/open\n?session_id=agt_bad".to_string(),
+            format!("driftstack://session/open?session_id={}", "a".repeat(8_192)),
+            valid.clone(),
+        ];
+
+        assert_eq!(main_gui_deep_links(&argv), vec![valid]);
+    }
+
+    #[test]
+    fn main_gui_deep_links_cap_each_second_instance_batch() {
+        let argv = (0..12)
+            .map(|index| format!("driftstack://session/open?session_id=agt_{index}"))
+            .collect::<Vec<_>>();
+        let links = main_gui_deep_links(&argv);
+
+        assert_eq!(links.len(), MAX_MAIN_GUI_DEEP_LINKS);
+        assert_eq!(
+            links.first().map(String::as_str),
+            Some("driftstack://session/open?session_id=agt_0")
+        );
+        assert_eq!(
+            links.last().map(String::as_str),
+            Some("driftstack://session/open?session_id=agt_7")
+        );
     }
 }

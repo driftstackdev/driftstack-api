@@ -6,7 +6,7 @@
 // single-window desktop app, and Tauri's window doesn't have a real
 // history stack to integrate with.
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ConnectionPill } from './components/ConnectionPill';
 import { Sidebar, type SidebarViewKind } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
@@ -29,6 +29,7 @@ import { buildClient } from './lib/client';
 import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
 import { friendlySimulatorOpenReason } from './lib/simulator-open-error';
+import { installAppDeepLinkSources } from './lib/app-deep-link-listener';
 
 // The default Command Center and boot/first-run surfaces stay eager. Every other
 // destination is loaded only when selected, keeping crypto/billing, profile tooling,
@@ -415,50 +416,78 @@ function Shell(): JSX.Element {
   // (it pointed at the now-removed in-app session viewer). This app-boot
   // listener routes session-open to REOPEN the floating Simulator window for
   // that session via openSessionById. MUST stay above the early returns below
-  // (hooks-order rule). Re-registered when the api key / base url / workspace
-  // change so it always opens against the current client. The
-  // @tauri-apps/plugin-deep-link import is dynamic so a browser preview (no
-  // plugin) doesn't throw — it just no-ops.
+  // (hooks-order rule). Keep one native listener installation after settings
+  // load, while a ref supplies the latest api key / base URL / workspace. That
+  // makes getCurrent() a true one-shot cold-start consume rather than replaying
+  // it whenever account state changes. Imports stay dynamic so a browser
+  // preview (no Tauri bridge) just no-ops.
+  const deepLinkContext = useRef({ settings, activeWorkspace, push });
+  deepLinkContext.current = { settings, activeWorkspace, push };
   useEffect(() => {
+    if (loading) return;
+
     let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    const client = buildClient(settings.apiKey, settings.baseUrl, activeWorkspace);
+    const abort = new AbortController();
     void (async () => {
       try {
-        const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
-        const stop = await onOpenUrl((urls) => {
-          for (const url of urls) {
-            dispatchDeepLink(url, {
-              onSessionOpen: (sessionId) => {
-                void openSessionById({
-                  client,
-                  baseUrl: settings.baseUrl,
-                  apiKey: settings.apiKey,
-                  sessionId,
-                }).then((res) => {
-                  if (!res.opened) {
-                    // Keep the console line for diagnostics…
-                    console.warn(
-                      '[app] session-open deep-link could not open the simulator:',
-                      res.reason ?? 'unknown',
-                    );
-                    // …but ALSO surface it: the customer clicked "Open in
-                    // desktop client" on the dashboard expecting the iPhone
-                    // window — when it fails (signed out / session ended /
-                    // Simulator app not installed) they must see why, not have
-                    // nothing happen.
-                    push({
-                      tone: 'error',
-                      title: 'Could not open the session',
-                      body: friendlyDeepLinkReason(res.reason),
-                    });
-                  }
-                });
-              },
-            });
-          }
-        });
-        if (cancelled) {
+        const [deepLinkPlugin, tauriEvent] = await Promise.all([
+          import('@tauri-apps/plugin-deep-link'),
+          import('@tauri-apps/api/event'),
+        ]);
+        const stop = await installAppDeepLinkSources(
+          {
+            getCurrent:
+              typeof deepLinkPlugin.getCurrent === 'function'
+                ? () => deepLinkPlugin.getCurrent()
+                : undefined,
+            onOpenUrl:
+              typeof deepLinkPlugin.onOpenUrl === 'function'
+                ? (handler) => deepLinkPlugin.onOpenUrl(handler)
+                : undefined,
+            onForwardedUrl: (handler) =>
+              tauriEvent.listen<unknown>('ds-deep-link', (event) => handler(event.payload)),
+          },
+          (urls) => {
+            const current = deepLinkContext.current;
+            const client = buildClient(
+              current.settings.apiKey,
+              current.settings.baseUrl,
+              current.activeWorkspace,
+            );
+            for (const url of urls) {
+              dispatchDeepLink(url, {
+                onSessionOpen: (sessionId) => {
+                  void openSessionById({
+                    client,
+                    baseUrl: current.settings.baseUrl,
+                    apiKey: current.settings.apiKey,
+                    sessionId,
+                  }).then((res) => {
+                    if (!res.opened) {
+                      // Keep the console line for diagnostics…
+                      console.warn(
+                        '[app] session-open deep-link could not open the simulator:',
+                        res.reason ?? 'unknown',
+                      );
+                      // …but ALSO surface it: the customer clicked "Open in
+                      // desktop client" on the dashboard expecting the iPhone
+                      // window — when it fails (signed out / session ended /
+                      // Simulator app not installed) they must see why, not have
+                      // nothing happen.
+                      current.push({
+                        tone: 'error',
+                        title: 'Could not open the session',
+                        body: friendlyDeepLinkReason(res.reason),
+                      });
+                    }
+                  });
+                },
+              });
+            }
+          },
+          { signal: abort.signal },
+        );
+        if (abort.signal.aborted) {
           stop();
           return;
         }
@@ -469,10 +498,10 @@ function Shell(): JSX.Element {
       }
     })();
     return () => {
-      cancelled = true;
+      abort.abort();
       if (unlisten !== undefined) unlisten();
     };
-  }, [settings.apiKey, settings.baseUrl, activeWorkspace, push]);
+  }, [loading]);
 
   // While settings load, show a calm spinner rather than a bare "Loading…" text
   // flash (matches the index.html boot splash so the boot→mount handoff is
