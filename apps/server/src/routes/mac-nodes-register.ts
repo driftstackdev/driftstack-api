@@ -148,7 +148,11 @@ export function registerMacNodesRoutes(
       // in the response.
       let ciphertextBase64: string;
       try {
-        ciphertextBase64 = encryptLivekitSecret(body.livekit.api_secret, encryptionKey);
+        ciphertextBase64 = encryptLivekitSecret(body.livekit.api_secret, encryptionKey, {
+          nodeId: body.mac_node_id,
+          apiKey: body.livekit.api_key,
+          wsUrl: body.livekit.ws_url,
+        });
       } catch {
         bumpOutcome('encryption_error');
         // A config-time failure (e.g. a misconfigured MFA_ENCRYPTION_KEY) — not

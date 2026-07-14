@@ -76,7 +76,11 @@ async function main(): Promise<void> {
       await repo.setLivekitCredentials({
         nodeId: node.id,
         apiKey: livekitApiKey,
-        apiSecretCiphertextBase64: encryptLivekitSecret(livekitSecret, encryptionKey),
+        apiSecretCiphertextBase64: encryptLivekitSecret(livekitSecret, encryptionKey, {
+          nodeId: node.id,
+          apiKey: livekitApiKey,
+          wsUrl: livekitWsUrl,
+        }),
         wsUrl: livekitWsUrl,
       });
     }

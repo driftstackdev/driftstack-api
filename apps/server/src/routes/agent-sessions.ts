@@ -948,6 +948,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     const apiSecret = decryptLivekitSecret(
       mac.livekit.apiSecretCiphertextBase64,
       livekitSecretEncryptionKey,
+      { nodeId: mac.id, apiKey: mac.livekit.apiKey, wsUrl: mac.livekit.wsUrl },
     );
     const nowMs = Date.now();
     const ttlSeconds = 6 * 60 * 60;
@@ -1568,6 +1569,7 @@ export function registerAgentSessionsRoutes(
       const apiSecret = decryptLivekitSecret(
         mac.livekit.apiSecretCiphertextBase64,
         livekitSecretEncryptionKey,
+        { nodeId: mac.id, apiKey: mac.livekit.apiKey, wsUrl: mac.livekit.wsUrl },
       );
       const ttlSeconds = 24 * 60 * 60;
       const nowMs = Date.now();

@@ -25,6 +25,7 @@ import type { ProbeExitIdentity } from '../../src/services/proxy-connectivity-pr
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const NODE_ID = 'local-mac-dev-001';
+const NODE_UUID = '11111111-1111-4111-8111-111111111111';
 
 const DISPATCH: SessionDispatchConfig = {
   archetype: 'iphone16pro_ios18_6_safari18_6',
@@ -33,16 +34,25 @@ const DISPATCH: SessionDispatchConfig = {
   proxy: { host: '127.0.0.1', port: 1080, udp_associate: true, require_remote_dns: false },
 };
 
-function macWithLivekit() {
+function macWithLivekit(overrides: { id?: string; nodeId?: string } = {}) {
+  const id = overrides.id ?? NODE_UUID;
+  const nodeId = overrides.nodeId ?? NODE_ID;
+  const apiKey = 'devkey';
+  const wsUrl = 'ws://localhost:7880';
   return {
-    id: NODE_ID,
+    id,
+    nodeId,
     publicKeyBase64Url: 'pk',
     registeredAt: new Date(),
     revokedAt: null,
     livekit: {
-      apiKey: 'devkey',
-      apiSecretCiphertextBase64: encryptLivekitSecret('secret', KEY),
-      wsUrl: 'ws://localhost:7880',
+      apiKey,
+      apiSecretCiphertextBase64: encryptLivekitSecret('secret', KEY, {
+        nodeId: id,
+        apiKey,
+        wsUrl,
+      }),
+      wsUrl,
       registeredAt: new Date(),
     },
   };
@@ -309,8 +319,14 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register('mac-eu-paris-001', (d) => sentEu.push(d));
     registry.register('mac-us-vegas-001', (d) => sentUs.push(d));
-    const usNode = { ...macWithLivekit(), id: 'us-uuid', nodeId: 'mac-us-vegas-001' };
-    const euNode = { ...macWithLivekit(), id: 'eu-uuid', nodeId: 'mac-eu-paris-001' };
+    const usNode = macWithLivekit({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      nodeId: 'mac-us-vegas-001',
+    });
+    const euNode = macWithLivekit({
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      nodeId: 'mac-eu-paris-001',
+    });
     let regionSeen: string | null | undefined = 'UNSET';
     const regionalRepo = {
       findAnyWithLivekit: () => Promise.resolve(usNode),
@@ -342,7 +358,10 @@ describe('dispatchSessionAssignOnCreate', () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register('mac-us-vegas-001', (d) => sent.push(d));
-    const usNode = { ...macWithLivekit(), id: 'us-uuid', nodeId: 'mac-us-vegas-001' };
+    const usNode = macWithLivekit({
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      nodeId: 'mac-us-vegas-001',
+    });
     const regionalRepo = {
       findAnyWithLivekit: () => Promise.resolve(usNode),
       // apac viewer, no apac node → the repo's fallback returns the US node.
@@ -368,11 +387,10 @@ describe('dispatchSessionAssignOnCreate', () => {
     registry.register('mac-macstadium-us-001', (d) => sent.push(d));
     const agentSessions = new InMemoryAgentSessionsRepo();
     const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
-    const mac = {
-      ...macWithLivekit(),
-      id: '3c80787f-95d6-40cf-uuid-pk',
+    const mac = macWithLivekit({
+      id: '3c80787f-95d6-40cf-895d-123456789abc',
       nodeId: 'mac-macstadium-us-001',
-    };
+    });
     await dispatchSessionAssignOnCreate({
       sessionId: created.id,
       fleetControlRegistry: registry,
@@ -467,11 +485,10 @@ describe('dispatchSessionAssignOnCreate', () => {
     // and the fleet_nodes uuid PK is a DIFFERENT value. The old code looked up by
     // mac.id (the uuid) → would MISS this connection → session created blank.
     registry.register('mac-macstadium-us-001', (d) => sent.push(d));
-    const mac = {
-      ...macWithLivekit(),
-      id: '3c80787f-95d6-40cf-uuid-pk',
+    const mac = macWithLivekit({
+      id: '3c80787f-95d6-40cf-895d-123456789abc',
       nodeId: 'mac-macstadium-us-001',
-    };
+    });
     await dispatchSessionAssignOnCreate({
       sessionId: 'agt_byid',
       fleetControlRegistry: registry,
@@ -732,12 +749,14 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     // Only the SIBLING box is connected; the region-nearest (first) box is offline.
     registry.register('mac-eu-online-002', (d) => sentOnline.push(d));
-    const offlineTop = { ...macWithLivekit(), id: 'eu-offline-uuid', nodeId: 'mac-eu-offline-001' };
-    const onlineSibling = {
-      ...macWithLivekit(),
-      id: 'eu-online-uuid',
+    const offlineTop = macWithLivekit({
+      id: '44444444-4444-4444-8444-444444444444',
+      nodeId: 'mac-eu-offline-001',
+    });
+    const onlineSibling = macWithLivekit({
+      id: '55555555-5555-4555-8555-555555555555',
       nodeId: 'mac-eu-online-002',
-    };
+    });
     let regionSeen: string | null | undefined = 'UNSET';
     const agentSessions = new InMemoryAgentSessionsRepo();
     const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
@@ -780,8 +799,14 @@ describe('dispatchSessionAssignOnCreate', () => {
       },
       setNodeId: () => Promise.resolve({}),
     } as unknown as InstanceType<typeof InMemoryAgentSessionsRepo>;
-    const a = { ...macWithLivekit(), id: 'a-uuid', nodeId: 'mac-a-001' };
-    const b = { ...macWithLivekit(), id: 'b-uuid', nodeId: 'mac-b-002' };
+    const a = macWithLivekit({
+      id: '66666666-6666-4666-8666-666666666666',
+      nodeId: 'mac-a-001',
+    });
+    const b = macWithLivekit({
+      id: '77777777-7777-4777-8777-777777777777',
+      nodeId: 'mac-b-002',
+    });
     const candidateRepo = {
       findAnyWithLivekit: () => Promise.resolve(a),
       findNearestWithLivekit: () => Promise.resolve(a),
@@ -1163,7 +1188,7 @@ describe('dispatchSessionEndOnClose / dispatchResumeSession — owning-node targ
   it('sessionEnd falls back to findAnyWithLivekit when node_id is null (legacy/never-dispatched row)', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
-    registry.register(NODE_ID, (d) => sent.push(d)); // macWithLivekit().id === NODE_ID
+    registry.register(NODE_ID, (d) => sent.push(d)); // macWithLivekit().nodeId === NODE_ID
     let fallbackCalled = false;
     await dispatchSessionEndOnClose({
       sessionId: 'agt_y',

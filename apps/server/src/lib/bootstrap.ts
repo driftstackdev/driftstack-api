@@ -853,6 +853,41 @@ export async function createProductionDeps(
   // can't enroll. Generate the key with:
   //   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
   // and set as MFA_ENCRYPTION_KEY in deploy env.
+  // LK.2 — construct the fleet repository before route composition so its
+  // context-free legacy LiveKit envelopes can be drained to record-bound v2
+  // before any token mint or publisher dispatch can read them.
+  const drizzleFleetNodesRepo = new DrizzleFleetNodesRepo(dbHandle);
+  if (config.mfaEncryptionKey !== undefined) {
+    const MAX_LIVEKIT_SECRET_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await drizzleFleetNodesRepo.migrateLivekitSecretEnvelopes(
+        config.mfaEncryptionKey,
+        500,
+      );
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `LiveKit API secret migration made no progress with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_LIVEKIT_SECRET_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `LiveKit API secret migration exceeded the ${MAX_LIVEKIT_SECRET_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
+      logger.info(
+        { component: 'livekit-api-secret-encryption', scanned, converted, remaining },
+        'legacy LiveKit API secrets migrated to node-bound v2 before serving',
+      );
+    }
+  }
   const mfaRepo = new DrizzleMfaRepo(dbHandle);
   if (config.mfaEncryptionKey !== undefined) {
     const MAX_MFA_SECRET_BOOT_MIGRATION_ROWS = 10_000;
@@ -1677,11 +1712,11 @@ export async function createProductionDeps(
   const permissiveCors = (process.env.PERMISSIVE_CORS ?? '').toLowerCase() === 'true';
   assertCorsPosture(permissiveCors, config.nodeEnv);
 
-  // LK.2 + V-820 — the Drizzle fleet_nodes repo backs BOTH the
+  // LK.2 + V-820 — the Drizzle fleet_nodes repo constructed before the
+  // record-bound secret migration backs BOTH the
   // /v1/mac-nodes/register LiveKit-credential writes AND the fleet-node
   // JWT verifier. Hoisted to a const so the control-plane deps below can
   // share the instance.
-  const drizzleFleetNodesRepo = new DrizzleFleetNodesRepo(dbHandle);
 
   // V-820 — fleet-node control-plane deps. Constructed (boot-safe: redis
   // is already ping-validated above + dbHandle is live, so neither opens

@@ -228,6 +228,17 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/new MfaService\(\s*mfaRepo,/);
   });
 
+  it('drains legacy LiveKit API secrets to node-bound v2 before route composition', () => {
+    expect(body).toMatch(/const drizzleFleetNodesRepo = new DrizzleFleetNodesRepo\(dbHandle\);/);
+    expect(body).toMatch(/const MAX_LIVEKIT_SECRET_BOOT_MIGRATION_ROWS = 10_000;/);
+    expect(body).toMatch(
+      /await drizzleFleetNodesRepo\.migrateLivekitSecretEnvelopes\(\s*config\.mfaEncryptionKey,\s*500,\s*\)/,
+    );
+    expect(body).toMatch(/batch\.scanned === 0 \|\| batch\.converted === 0/);
+    expect(body).toMatch(/scanned >= MAX_LIVEKIT_SECRET_BOOT_MIGRATION_ROWS/);
+    expect(body).toContain('legacy LiveKit API secrets migrated to node-bound v2 before serving');
+  });
+
   it('V-295c2 status-snapshot framing pinned: separate public-readable R2 bucket (recordings bucket intentionally NOT used — recordings contain Customer Data and must remain private); fall-back when live API fetch fails; active ONLY when R2_BUCKET_PUBLIC configured', () => {
     expect(body).toMatch(
       /\/\/ V-295c2 — public status snapshot writer\. Writes the same data the\s*\n?\s*\/\/ public \/v1\/status\/incidents endpoint surfaces to a SEPARATE\s*\n?\s*\/\/ public-readable R2 bucket so the status site can fall back to the\s*\n?\s*\/\/ snapshot when the live API fetch fails\. The recordings bucket is\s*\n?\s*\/\/ intentionally NOT used — recordings contain Customer Data and must\s*\n?\s*\/\/ remain private\. Active only when R2_BUCKET_PUBLIC is configured\./,

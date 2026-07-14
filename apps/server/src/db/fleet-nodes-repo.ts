@@ -11,15 +11,31 @@
 // InMemory variant to grow too; the operator routes only run against
 // the Drizzle path so this asymmetry is intentional.
 
-import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { fleetNodes } from './schema.js';
 import type { FleetNodePublicKey, FleetNodesRepo } from '../services/fleet-node-auth.js';
+import {
+  decryptLegacyLivekitSecret,
+  decryptLivekitSecret,
+  encryptLivekitSecret,
+  LIVEKIT_SECRET_V2_PREFIX,
+} from '../lib/livekit-secret-encryption.js';
 
 /** Canonical uuid shape — used to guard a uuid-only column comparison against a
  *  caller-supplied key that may be a human node_id (which would otherwise force
  *  a Postgres uuid cast and raise 22P02, failing the whole query). */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_LIVEKIT_SECRET_MIGRATION_BATCH = 500;
+
+function livekitSecretIsLegacy() {
+  return sql`${fleetNodes.livekitApiSecretCiphertext} IS NOT NULL
+    AND ${fleetNodes.livekitApiSecretCiphertext} NOT LIKE ${`${LIVEKIT_SECRET_V2_PREFIX}%`}`;
+}
+
+function livekitSecretIsV2() {
+  return sql`${fleetNodes.livekitApiSecretCiphertext} LIKE ${`${LIVEKIT_SECRET_V2_PREFIX}%`}`;
+}
 
 /**
  * Latest per-node telemetry snapshot (migration 0083), persisted from the
@@ -82,8 +98,8 @@ export interface RegisterFleetNodeArgs {
 }
 
 /** LK.2 — credentials the Mac harness POSTs to the control plane on
- *  boot. apiSecretCiphertextBase64 is the base64-encoded
- *  [IV | tag | ciphertext] blob produced by encryptLivekitSecret(). */
+ *  boot. apiSecretCiphertextBase64 is the explicit versioned,
+ *  record-bound envelope produced by encryptLivekitSecret(). */
 export interface SetFleetNodeLivekitArgs {
   nodeId: string;
   apiKey: string;
@@ -94,6 +110,116 @@ export interface SetFleetNodeLivekitArgs {
 
 export class DrizzleFleetNodesRepo implements FleetNodesRepo {
   constructor(private readonly database: Database) {}
+
+  /**
+   * Bootstrap-only no-DDL conversion from the context-free LiveKit envelope
+   * to purpose/node/credential-bound v2. A page is fully authenticated before
+   * its first write, and each rewrite compares the complete old tuple while
+   * deliberately preserving livekit_registered_at.
+   */
+  async migrateLivekitSecretEnvelopes(
+    keyBase64: string,
+    limit = MAX_LIVEKIT_SECRET_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIVEKIT_SECRET_MIGRATION_BATCH) {
+      throw new Error(
+        `LiveKit secret migration limit must be an integer from 1 to ${MAX_LIVEKIT_SECRET_MIGRATION_BATCH.toString()}.`,
+      );
+    }
+
+    // Successor boots authenticate one already-bound row first. A wrong
+    // operator key therefore fails before any legacy rewrite is attempted.
+    const [v2Probe] = await this.database.db
+      .select({
+        id: fleetNodes.id,
+        apiKey: fleetNodes.livekitApiKey,
+        ciphertext: fleetNodes.livekitApiSecretCiphertext,
+        wsUrl: fleetNodes.livekitWsUrl,
+      })
+      .from(fleetNodes)
+      .where(livekitSecretIsV2())
+      .orderBy(asc(fleetNodes.id))
+      .limit(1);
+    if (v2Probe !== undefined) {
+      if (v2Probe.apiKey === null || v2Probe.ciphertext === null || v2Probe.wsUrl === null) {
+        throw new Error(`Fleet node ${v2Probe.id} has an incomplete LiveKit credential tuple.`);
+      }
+      decryptLivekitSecret(v2Probe.ciphertext, keyBase64, {
+        nodeId: v2Probe.id,
+        apiKey: v2Probe.apiKey,
+        wsUrl: v2Probe.wsUrl,
+      });
+    }
+
+    const rows = await this.database.db
+      .select({
+        id: fleetNodes.id,
+        apiKey: fleetNodes.livekitApiKey,
+        ciphertext: fleetNodes.livekitApiSecretCiphertext,
+        wsUrl: fleetNodes.livekitWsUrl,
+        registeredAt: fleetNodes.livekitRegisteredAt,
+      })
+      .from(fleetNodes)
+      .where(livekitSecretIsLegacy())
+      .orderBy(asc(fleetNodes.id))
+      .limit(limit);
+
+    // Decode/authenticate the whole page before its first UPDATE. The schema's
+    // all-or-null CHECK should make these fields complete; retain the explicit
+    // fail-closed assertion for drifted or manually corrupted databases.
+    const prepared = rows.map((row) => {
+      if (
+        row.apiKey === null ||
+        row.ciphertext === null ||
+        row.wsUrl === null ||
+        row.registeredAt === null
+      ) {
+        throw new Error(`Fleet node ${row.id} has an incomplete LiveKit credential tuple.`);
+      }
+      const plaintext = decryptLegacyLivekitSecret(row.ciphertext, keyBase64);
+      const next = encryptLivekitSecret(plaintext, keyBase64, {
+        nodeId: row.id,
+        apiKey: row.apiKey,
+        wsUrl: row.wsUrl,
+      });
+      return {
+        id: row.id,
+        apiKey: row.apiKey,
+        ciphertext: row.ciphertext,
+        wsUrl: row.wsUrl,
+        registeredAt: row.registeredAt,
+        next,
+      };
+    });
+
+    let converted = 0;
+    for (const row of prepared) {
+      const updated = await this.database.db
+        .update(fleetNodes)
+        .set({
+          livekitApiSecretCiphertext: row.next,
+          // Do not change livekitRegisteredAt: it controls fleet-node
+          // selection order and is the operational credential revision.
+        })
+        .where(
+          and(
+            eq(fleetNodes.id, row.id),
+            eq(fleetNodes.livekitApiKey, row.apiKey),
+            eq(fleetNodes.livekitApiSecretCiphertext, row.ciphertext),
+            eq(fleetNodes.livekitWsUrl, row.wsUrl),
+            eq(fleetNodes.livekitRegisteredAt, row.registeredAt),
+          ),
+        )
+        .returning({ id: fleetNodes.id });
+      if (updated.length === 1) converted += 1;
+    }
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
+      .from(fleetNodes)
+      .where(livekitSecretIsLegacy());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
+  }
 
   async getPublicKey(nodeId: string): Promise<FleetNodePublicKey | null> {
     // migration 0085 — `nodeId` here is the harness JWT `iss` = the human

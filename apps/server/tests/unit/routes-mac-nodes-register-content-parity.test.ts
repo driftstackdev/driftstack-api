@@ -81,7 +81,7 @@ describe('routes/mac-nodes-register content parity', () => {
       /\/\/ Encrypt the plaintext secret immediately\. The plaintext does\s*\n?\s*\/\/ NOT leave this scope — never written to logs, never echoed\s*\n?\s*\/\/ in the response\./,
     );
     expect(body).toMatch(
-      /ciphertextBase64 = encryptLivekitSecret\(body\.livekit\.api_secret, encryptionKey\);/,
+      /ciphertextBase64 = encryptLivekitSecret\(body\.livekit\.api_secret, encryptionKey, \{\s*\n?\s*nodeId: body\.mac_node_id,\s*\n?\s*apiKey: body\.livekit\.api_key,\s*\n?\s*wsUrl: body\.livekit\.ws_url,\s*\n?\s*\}\);/,
     );
   });
 

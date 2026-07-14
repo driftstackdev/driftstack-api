@@ -25,6 +25,7 @@ const stubAuthPlugin = fp(
 const ACCOUNT_ID = 'acc_lk3_owner';
 const OTHER_ACCOUNT_ID = 'acc_other';
 const SESSION_ID = 'agt_11111111-2222-3333-4444-555555555555';
+const MAC_UUID = '22222222-2222-4222-8222-222222222222';
 
 function makeKey(): string {
   return randomBytes(32).toString('base64');
@@ -63,12 +64,17 @@ function makeMac(
     apiKey?: string;
     apiSecret?: string;
     wsUrl?: string;
+    id?: string;
+    nodeId?: string;
   } = { encryptionKey: '' },
 ): FleetNodeDetail {
   const apiSecret = args.apiSecret ?? 'lk_secret_macmac_macmac_macmac_macmac';
+  const apiKey = args.apiKey ?? 'lk_api_test_xxx';
+  const wsUrl = args.wsUrl ?? 'wss://mac-test-01.driftstack.dev:8443';
+  const id = args.id ?? MAC_UUID;
   return {
-    id: 'fleet_mac_test',
-    nodeId: 'mac-test-01',
+    id,
+    nodeId: args.nodeId ?? 'mac-test-01',
     publicKeyBase64Url: 'A'.repeat(43) + '=',
     displayName: 'mac-test-01',
     region: 'eu-central-1',
@@ -79,9 +85,13 @@ function makeMac(
     revokedAt: null,
     revocationReason: null,
     livekit: {
-      apiKey: args.apiKey ?? 'lk_api_test_xxx',
-      apiSecretCiphertextBase64: encryptLivekitSecret(apiSecret, args.encryptionKey),
-      wsUrl: args.wsUrl ?? 'wss://mac-test-01.driftstack.dev:8443',
+      apiKey,
+      apiSecretCiphertextBase64: encryptLivekitSecret(apiSecret, args.encryptionKey, {
+        nodeId: id,
+        apiKey,
+        wsUrl,
+      }),
+      wsUrl,
       registeredAt: new Date('2026-05-18T01:00:00Z'),
     },
   };
@@ -206,24 +216,20 @@ describe('LK.3 — POST /v1/agent-sessions/:id/livekit-token', () => {
     // Mac-A publishes this session (agent_sessions.node_id = mac-A-01). Mac-B is
     // more-recently LiveKit-registered, so findNearestWithLivekit would hand the
     // viewer Mac-B's token → empty room on Mac-B (black screen + dead control).
-    const macA: FleetNodeDetail = {
-      ...makeMac({
-        encryptionKey: key,
-        apiKey: 'lk_api_A',
-        wsUrl: 'wss://mac-A.driftstack.dev:8443',
-      }),
-      id: 'fleet_mac_A',
+    const macA: FleetNodeDetail = makeMac({
+      encryptionKey: key,
+      apiKey: 'lk_api_A',
+      wsUrl: 'wss://mac-A.driftstack.dev:8443',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       nodeId: 'mac-A-01',
-    };
-    const macB: FleetNodeDetail = {
-      ...makeMac({
-        encryptionKey: key,
-        apiKey: 'lk_api_B',
-        wsUrl: 'wss://mac-B.driftstack.dev:8443',
-      }),
-      id: 'fleet_mac_B',
+    });
+    const macB: FleetNodeDetail = makeMac({
+      encryptionKey: key,
+      apiKey: 'lk_api_B',
+      wsUrl: 'wss://mac-B.driftstack.dev:8443',
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       nodeId: 'mac-B-02',
-    };
+    });
     const app = await buildApp({
       session: makeSession({ nodeId: 'mac-A-01' }),
       mac: macB, // findNearestWithLivekit returns the WRONG (latest-registered) Mac

@@ -208,7 +208,11 @@ export function registerAgentSessionsLivekitTokenRoute(
 
       let apiSecret: string;
       try {
-        apiSecret = decryptLivekitSecret(mac.livekit.apiSecretCiphertextBase64, encryptionKey);
+        apiSecret = decryptLivekitSecret(mac.livekit.apiSecretCiphertextBase64, encryptionKey, {
+          nodeId: mac.id,
+          apiKey: mac.livekit.apiKey,
+          wsUrl: mac.livekit.wsUrl,
+        });
       } catch {
         // Decryption failure = catastrophic: either the secret is
         // corrupted or the key has rotated without re-registering

@@ -70,9 +70,9 @@ describe('db/fleet-nodes-repo content parity', () => {
     expect(body).toContain('registeredAt?: Date;');
   });
 
-  it("LK.2 SetFleetNodeLivekitArgs framing pinned + apiSecretCiphertextBase64 envelope spec: 'credentials the Mac harness POSTs to the control plane on boot. apiSecretCiphertextBase64 is the base64-encoded [IV | tag | ciphertext] blob produced by encryptLivekitSecret().' — pinned so the LK.2 anchor + Mac-harness-POSTs-on-boot + base64-encoded envelope + encryptLivekitSecret cross-reference contract all stay documented", () => {
+  it('LK.2 SetFleetNodeLivekitArgs pins the explicit versioned record-bound envelope', () => {
     expect(body).toMatch(
-      /\/\*\* LK\.2 — credentials the Mac harness POSTs to the control plane on\s*\n?\s*\*\s+boot\. apiSecretCiphertextBase64 is the base64-encoded\s*\n?\s*\*\s+\[IV \| tag \| ciphertext\] blob produced by encryptLivekitSecret\(\)\. \*\//,
+      /\/\*\* LK\.2 — credentials the Mac harness POSTs to the control plane on\s*\n?\s*\*\s+boot\. apiSecretCiphertextBase64 is the explicit versioned,\s*\n?\s*\*\s+record-bound envelope produced by encryptLivekitSecret\(\)\. \*\//,
     );
     expect(body).toMatch(
       /export interface SetFleetNodeLivekitArgs \{\s*\n?\s*nodeId: string;\s*\n?\s*apiKey: string;\s*\n?\s*apiSecretCiphertextBase64: string;\s*\n?\s*wsUrl: string;\s*\n?\s*registeredAt\?: Date;\s*\n?\s*\}/,
@@ -83,5 +83,18 @@ describe('db/fleet-nodes-repo content parity', () => {
     expect(body).toMatch(
       /export class DrizzleFleetNodesRepo implements FleetNodesRepo \{\s*\n?\s*constructor\(private readonly database: Database\) \{\}/,
     );
+  });
+
+  it('boot migration prevalidates pages, probes v2, exact-CASes the five old tuple fields, and preserves registration time', () => {
+    expect(body).toContain('async migrateLivekitSecretEnvelopes(');
+    expect(body).toContain('decryptLivekitSecret(v2Probe.ciphertext, keyBase64');
+    expect(body).toContain('decryptLegacyLivekitSecret(row.ciphertext, keyBase64)');
+    expect(body).toContain('const prepared = rows.map((row) => {');
+    expect(body).toContain('eq(fleetNodes.id, row.id)');
+    expect(body).toContain('eq(fleetNodes.livekitApiKey, row.apiKey)');
+    expect(body).toContain('eq(fleetNodes.livekitApiSecretCiphertext, row.ciphertext)');
+    expect(body).toContain('eq(fleetNodes.livekitWsUrl, row.wsUrl)');
+    expect(body).toContain('eq(fleetNodes.livekitRegisteredAt, row.registeredAt)');
+    expect(body).not.toContain('livekitRegisteredAt: row.next');
   });
 });

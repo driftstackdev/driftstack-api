@@ -27235,3 +27235,39 @@ and 361/361 tests, including every direction, exact and nonmultiple boundaries,
 fractional totals, deterministic repetition and both sides of the allocation
 cap. The package build, strict server source-and-test TypeScript, targeted
 ESLint/Prettier, diff and whitespace checks are green.
+
+## V-649 — LiveKit API secrets are bound to their fleet-node credential tuple
+
+**Date:** 2026-07-14
+
+The fleet-node table stored each LiveKit API secret as a context-free
+AES-256-GCM envelope. If the database boundary were already writable or
+corrupted, moving that valid ciphertext onto another complete node row could
+make the destination mint publisher/subscriber authority with the source
+node's secret. This was not an unauthenticated network path, but it left the
+encrypted row unable to authenticate its own placement.
+
+New writes use an explicit v2 prefix and canonical JSON-array authenticated
+context containing a dedicated store purpose/version, the stable internal
+fleet-node UUID, and the paired LiveKit API key and WebSocket URL. Runtime token
+mint and publisher-dispatch readers accept v2 only and must supply that exact
+tuple. Canonical base64, UUID, context-length, ciphertext-length and UTF-8
+checks fail closed before decryption; wrong node, key, URL, store purpose,
+encryption key or ciphertext bytes cannot be substituted.
+
+The no-DDL bootstrap converter first authenticates an existing v2 probe, then
+decrypts and validates the entire bounded legacy page before its first write.
+Each conversion compares node ID plus all four prior credential fields and
+updates only the ciphertext, deliberately preserving `livekit_registered_at`
+because it controls fleet selection order and represents the operational
+registration revision. Startup drains legacy rows to zero with no-progress and
+10,000-row bounds. The next controlled deploy covers the one aggregate-
+confirmed production legacy row before the service begins accepting requests.
+
+The expanded LiveKit, route/dispatch and content-guard matrix passes 22 files
+and 267/267 tests. The isolated real-PostgreSQL proof passes 3/3 cases, including
+wrong-key byte/timestamp preservation, whole-page prevalidation, physical
+node/key/URL relocation refusal, successor wrong-key probing, and a blocked
+concurrent registration whose five-field compare-and-swap safely beats the
+migration without being overwritten. Server build and strict source-and-test
+TypeScript are green.
