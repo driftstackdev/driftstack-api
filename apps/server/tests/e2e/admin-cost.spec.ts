@@ -20,12 +20,9 @@ test.beforeEach(async () => {
 });
 
 test('GET /v1/admin/cost/accounts/:id — requires internal-admin scope', async ({ request }) => {
-  // 2026-05-21 — seedAccount's DEFAULT scopes are ['read', 'write', 'admin'].
-  // V-174's admin alias makes 'admin' satisfy 'driftstack_internal_admin',
-  // so the default seed would PASS the scope check and fall through to a
-  // 404 (no usage). Drop 'admin' so the requireScope guard actually fires
-  // and returns the expected 403.
-  const seed = await seedAccount(server.client, { scopes: ['read', 'write'] });
+  // Exercise the expired V-174 bridge directly: legacy customer `admin`
+  // retains own-account authority but must never cross into staff APIs.
+  const seed = await seedAccount(server.client, { scopes: ['read', 'write', 'admin'] });
   const res = await request.get(`${server.baseUrl}/v1/admin/cost/accounts/${seed.accountId}`, {
     headers: authHeader(seed.plaintext),
   });

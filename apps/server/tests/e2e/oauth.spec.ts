@@ -65,11 +65,9 @@ async function interactiveAuth(
 }
 
 test('POST /v1/admin/oauth/clients — requires internal-admin scope', async ({ request }) => {
-  // 2026-05-21 — seedAccount's DEFAULT scopes are ['read', 'write', 'admin'];
-  // V-174's admin alias satisfies 'driftstack_internal_admin', so the
-  // default seed would pass the gate. Drop 'admin' so the scope check
-  // actually fires.
-  const seed = await seedAccount(server.client, { scopes: ['read', 'write'] });
+  // Exercise the expired V-174 bridge directly: legacy customer `admin`
+  // retains own-account authority but must never create staff-managed clients.
+  const seed = await seedAccount(server.client, { scopes: ['read', 'write', 'admin'] });
   const res = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
     headers: authHeader(seed.plaintext),
     data: { label: 'App', redirect_uris: ['https://app.example/cb'] },
