@@ -88,10 +88,16 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     );
   });
 
-  it("Lazy-hydrate effect: loadFrames() (setHydrating(true) + clear error + hydrateFrames(recordingId).catch→setHydrateError.finally→setHydrating(false)) called when recording.hydrated && recording.frames.length === 0; recording null branch → 'Recording not found' empty state + 'It may have been deleted or the app restarted.' + Back button", () => {
+  it('Lazy-hydrate effect humanizes disk errors, clears loading in finally, and retains the recording-not-found branch', () => {
+    expect(body).toMatch(/import \{ humanizeError \} from '\.\.\/lib\/humanize-error';/);
     expect(body).toMatch(
-      /const loadFrames = useCallback\(\(\): void => \{\s*\n?\s*setHydrating\(true\);\s*\n?\s*setHydrateError\(null\);\s*\n?\s*void hydrateFrames\(recordingId\)\s*\n?\s*\.catch\(\(err: unknown\) => \{\s*\n?\s*setHydrateError\(\s*\n?\s*err instanceof Error \? err\.message : 'Could not read the recording from disk\.',\s*\n?\s*\);\s*\n?\s*\}\)\s*\n?\s*\.finally\(\(\) => setHydrating\(false\)\);\s*\n?\s*\}, \[hydrateFrames, recordingId\]\);/,
+      /const loadFrames = useCallback\(\(\): void => \{[\s\S]*?setHydrating\(true\);[\s\S]*?setHydrateError\(null\);[\s\S]*?hydrateFrames\(recordingId\)[\s\S]*?setHydrateError\(\s*humanizeError\(\s*err,\s*"Couldn't read the saved recording\. Check the app's file permissions and try again\."[\s\S]*?\.finally\(\(\) => setHydrating\(false\)\);[\s\S]*?\}, \[hydrateFrames, recordingId\]\);/,
     );
+    const bypassMutation = body.replace(
+      'setHydrateError(\n          humanizeError(',
+      'setHydrateError(\n          String(',
+    );
+    expect(bypassMutation).not.toMatch(/setHydrateError\(\s*humanizeError\(/);
     expect(body).toMatch(
       /if \(recording === null\) return;\s*\n?\s*if \(!recording\.hydrated \|\| recording\.frames\.length > 0\) return;\s*\n?\s*loadFrames\(\);/,
     );
