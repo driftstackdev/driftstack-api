@@ -145,17 +145,24 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/^#\[tauri::command\]$/m);
     expect(body).toMatch(/^fn ping\(\) -> &'static str \{$/m);
     expect(body).toMatch(/^\s+"pong"$/m);
+    expect(body).toMatch(/^fn secret_save\($/m);
     expect(body).toMatch(
-      /^fn secret_save\(key: String, value: String\) -> Result<\(\), String> \{$/m,
+      /fn secret_save\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?main_session: tauri::State<'_, MainSession>,[\s\S]*?ensure_secret_command\(&window, &main_session, &key\)\?;/,
     );
     expect(body).toMatch(/let user = format!\("\{KEYRING_USER\}:\{key\}"\);/);
     expect(body).toMatch(
       /let entry = Entry::new\(KEYRING_SERVICE, &user\)\.map_err\(\|e\| e\.to_string\(\)\)\?;/,
     );
     expect(body).toMatch(/entry\.set_password\(&value\)\.map_err\(\|e\| e\.to_string\(\)\)\?;/);
-    expect(body).toMatch(/^fn secret_load\(key: String\) -> Result<Option<String>, String> \{$/m);
+    expect(body).toMatch(/^fn secret_load\($/m);
+    expect(body).toMatch(
+      /fn secret_load\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?main_session: tauri::State<'_, MainSession>,[\s\S]*?ensure_secret_command\(&window, &main_session, &key\)\?;/,
+    );
     expect(body).toMatch(/Err\(keyring::Error::NoEntry\) => Ok\(None\),/);
-    expect(body).toMatch(/^fn secret_delete\(key: String\) -> Result<\(\), String> \{$/m);
+    expect(body).toMatch(/^fn secret_delete\($/m);
+    expect(body).toMatch(
+      /fn secret_delete\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?main_session: tauri::State<'_, MainSession>,[\s\S]*?ensure_secret_command\(&window, &main_session, &key\)\?;/,
+    );
     expect(body).toMatch(/Err\(keyring::Error::NoEntry\) => Ok\(\(\)\),/);
     expect(body).toMatch(/^#\[cfg\(test\)\]$/m);
     expect(body).toMatch(/^mod tests \{$/m);
@@ -164,6 +171,49 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/fn keyring_service_matches_tauri_bundle_id\(\) \{/);
     expect(body).toMatch(/assert_eq!\(KEYRING_SERVICE, "dev\.driftstack\.gui"\);/);
     expect(existsSync(T('src/lib.rs'))).toBe(true);
+  });
+
+  it('CRITICAL locally registered commands enforce bundle/window origin and per-session Keychain isolation', () => {
+    const body = read(T('src/lib.rs'));
+    const commandSource = (name: string): string => {
+      const start = body.search(new RegExp(`(?:async )?fn ${name}\\(`));
+      expect(start).toBeGreaterThanOrEqual(0);
+      const next = body.indexOf('\n#[tauri::command]', start + 1);
+      return body.slice(start, next < 0 ? body.length : next);
+    };
+
+    expect(body).toMatch(/^const MAIN_GUI_IDENTIFIER: &str = "dev\.driftstack\.gui";$/m);
+    expect(body).toMatch(/^const SIMULATOR_IDENTIFIER: &str = "dev\.driftstack\.simulator";$/m);
+    expect(body).toMatch(
+      /fn is_main_gui_command_caller\([\s\S]*?app_identifier == MAIN_GUI_IDENTIFIER && window_label == "main"/,
+    );
+    expect(body).toMatch(
+      /fn secret_command_caller_allowed\([\s\S]*?strip_prefix\("gui_control:"\)[\s\S]*?caller_session == Some\(requested_session\)/,
+    );
+    expect(body).toMatch(
+      /fn ensure_secret_command\([\s\S]*?active_main_session\.as_deref\(\),[\s\S]*?Err\(COMMAND_ACCESS_DENIED\.to_string\(\)\)/,
+    );
+    for (const command of ['secret_save', 'secret_load', 'secret_delete']) {
+      const source = commandSource(command);
+      expect(source).toMatch(/window: tauri::WebviewWindow/);
+      expect(source).toMatch(/main_session: tauri::State<'_, MainSession>/);
+      expect(source).toMatch(/ensure_secret_command\(&window, &main_session, &key\)\?;/);
+    }
+    for (const command of ['launch_simulator', 'proxy_test', 'endpoint_resolve']) {
+      const source = commandSource(command);
+      expect(source).toMatch(/window: tauri::WebviewWindow/);
+      expect(source).toMatch(/ensure_main_gui_command\(&window\)\?;/);
+    }
+    const exitProbe = commandSource('proxy_exit_probe');
+    expect(exitProbe).toMatch(/window: tauri::WebviewWindow/);
+    expect(exitProbe).toMatch(/ensure_main_gui_command\(&window\)\?;/);
+    for (const command of ['set_dock_tile', 'reset_dock_tile']) {
+      const source = commandSource(command);
+      expect(source).toMatch(/window: tauri::WebviewWindow/);
+      expect(source).toMatch(/ensure_simulator_command\(&window\)\?;/);
+    }
+    expect(body).toMatch(/fn simulator_secret_access_is_exactly_its_active_control_key\(\)/);
+    expect(body).toMatch(/fn native_command_origins_separate_main_gui_and_simulator_windows\(\)/);
   });
 
   it('capabilities/default.json: identifier=default + windows=[main] + 9 core/store permissions (incl. core:window:allow-start-dragging for the custom title-bar drag region) + fs:scope $APPDATA/recordings/** + $DOWNLOAD/** + 7 fs allow-* + updater:default + exact shell:allow-open activation URL allow-list pinned', () => {

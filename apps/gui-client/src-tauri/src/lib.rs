@@ -29,10 +29,128 @@ const PROXY_PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 /// identity (e.g. macOS Keychain shows "dev.driftstack.gui").
 const KEYRING_SERVICE: &str = "dev.driftstack.gui";
 
+/// Locally registered Tauri commands do not inherit plugin ACL entries. Keep
+/// the two bundle identities and their WebView roles explicit here so the
+/// separately bundled Simulator cannot reach main-app native capabilities.
+const MAIN_GUI_IDENTIFIER: &str = "dev.driftstack.gui";
+const SIMULATOR_IDENTIFIER: &str = "dev.driftstack.simulator";
+const COMMAND_ACCESS_DENIED: &str = "native command access denied";
+const MAX_SECRET_VALUE_BYTES: usize = 128 * 1024;
+
 /// Stable username used for the per-user-account secret. The current
 /// design is single-account (one keyring entry per device); when
 /// multi-account support lands, this becomes a per-account-id key.
 const KEYRING_USER: &str = "default";
+
+fn is_main_gui_command_caller(app_identifier: &str, window_label: &str) -> bool {
+    app_identifier == MAIN_GUI_IDENTIFIER && window_label == "main"
+}
+
+fn is_simulator_command_caller(app_identifier: &str, window_label: &str) -> bool {
+    app_identifier == SIMULATOR_IDENTIFIER
+        && (window_label == "main"
+            || window_label
+                .strip_prefix("sim-")
+                .is_some_and(is_safe_session_label))
+}
+
+fn safe_secret_suffix(value: &str, max_bytes: usize) -> bool {
+    !value.is_empty()
+        && value.len() <= max_bytes
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+fn is_valid_main_gui_secret_key(key: &str) -> bool {
+    key == "api_key"
+        || key
+            .strip_prefix("api_key:")
+            .is_some_and(|suffix| safe_secret_suffix(suffix, 320))
+        || key
+            .strip_prefix("proxy_secret:")
+            .is_some_and(|suffix| safe_secret_suffix(suffix, 128))
+        || key
+            .strip_prefix("gui_control:")
+            .is_some_and(is_safe_session_label)
+}
+
+/// Pure authorization matrix used by the command adapters and unit tests.
+/// The main GUI may access only known secret namespaces. A Simulator WebView
+/// receives exactly one session control key and may access only that key—not
+/// the account API key, proxy credentials, or another live session's key.
+fn secret_command_caller_allowed(
+    app_identifier: &str,
+    window_label: &str,
+    main_session: Option<&str>,
+    key: &str,
+) -> bool {
+    if is_main_gui_command_caller(app_identifier, window_label) {
+        return is_valid_main_gui_secret_key(key);
+    }
+    if !is_simulator_command_caller(app_identifier, window_label) {
+        return false;
+    }
+    let Some(requested_session) = key.strip_prefix("gui_control:") else {
+        return false;
+    };
+    if !is_safe_session_label(requested_session) {
+        return false;
+    }
+    let caller_session = if window_label == "main" {
+        main_session
+    } else {
+        window_label.strip_prefix("sim-")
+    };
+    caller_session == Some(requested_session)
+}
+
+fn ensure_main_gui_command(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use tauri::Manager as _;
+    if is_main_gui_command_caller(&window.app_handle().config().identifier, window.label()) {
+        Ok(())
+    } else {
+        Err(COMMAND_ACCESS_DENIED.to_string())
+    }
+}
+
+fn ensure_simulator_command(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use tauri::Manager as _;
+    if is_simulator_command_caller(&window.app_handle().config().identifier, window.label()) {
+        Ok(())
+    } else {
+        Err(COMMAND_ACCESS_DENIED.to_string())
+    }
+}
+
+fn ensure_secret_command(
+    window: &tauri::WebviewWindow,
+    main_session: &tauri::State<'_, MainSession>,
+    key: &str,
+) -> Result<(), String> {
+    use tauri::Manager as _;
+    let app_identifier = &window.app_handle().config().identifier;
+    let active_main_session = if app_identifier == SIMULATOR_IDENTIFIER && window.label() == "main"
+    {
+        main_session
+            .0
+            .lock()
+            .map_err(|_| COMMAND_ACCESS_DENIED.to_string())?
+            .clone()
+    } else {
+        None
+    };
+    if secret_command_caller_allowed(
+        app_identifier,
+        window.label(),
+        active_main_session.as_deref(),
+        key,
+    ) {
+        Ok(())
+    } else {
+        Err(COMMAND_ACCESS_DENIED.to_string())
+    }
+}
 
 /// Bound and validate custom-scheme argv before forwarding it from a collapsed
 /// second instance to the existing main WebView. Deep links may carry one-shot
@@ -56,7 +174,7 @@ fn main_gui_deep_links(argv: &[String]) -> Vec<String> {
 /// #137 — native crash breadcrumb. The founder reported the GUI window "just
 /// closing on its own even if the browser remains open." main.tsx already
 /// fails-visible on every JS `error` + `unhandledrejection` (with a RootErrorBoundary
-/// + a fatal overlay), so a SILENT window vanish is a NATIVE tear-down — a Rust panic
+/// and a fatal overlay), so a SILENT window vanish is a NATIVE tear-down — a Rust panic
 /// (e.g. in a spawned proxy-probe thread or the event loop) or a webview-process
 /// crash — not a JS fault. This panic hook persists the panic's location + message to
 /// a stable log file BEFORE the process unwinds, turning an un-diagnosable "it just
@@ -196,28 +314,29 @@ pub fn run() {
             // owner-only handoff file before applying it to the internal WebView.
             // Validation still precedes eval interpolation; malformed/oversized
             // payloads fail closed and the file has already been unlinked.
-            let initial_label = std::env::args()
-                .find(|a| a.starts_with("--ds-label="))
-                .map(|a| a.trim_start_matches("--ds-label=").to_string())
-                .filter(|l| is_safe_session_label(l));
+            let initial_label = (app.config().identifier == SIMULATOR_IDENTIFIER)
+                .then(|| {
+                    std::env::args()
+                        .find(|a| a.starts_with("--ds-label="))
+                        .map(|a| a.trim_start_matches("--ds-label=").to_string())
+                        .filter(|l| is_safe_session_label(l))
+                })
+                .flatten();
+            // Establish native command authority before the payload can start
+            // the React tree. The config-created `main` Simulator window may
+            // access only this exact session's `gui_control:*` Keychain item.
+            if let Some(label) = &initial_label {
+                if let Ok(mut current) = app.state::<MainSession>().0.lock() {
+                    *current = Some(label.clone());
+                }
+            }
             if let Some(b64) = initial_label
                 .as_deref()
                 .and_then(|l| take_sim_payload(l).ok().flatten())
                 .filter(|p| is_valid_b64_payload(p))
             {
                 if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
-                }
-            }
-            // Multi-window simulator (founder 2026-06-23): record which session `main`
-            // holds, so a re-open of that SAME session focuses `main` instead of opening a
-            // duplicate window (open_or_focus_sim_window checks this).
-            if let Some(arg) = std::env::args().find(|a| a.starts_with("--ds-label=")) {
-                let lbl = arg.trim_start_matches("--ds-label=").to_string();
-                if is_safe_session_label(&lbl) {
-                    if let Ok(mut g) = app.state::<MainSession>().0.lock() {
-                        *g = Some(lbl);
-                    }
+                    let _ = win.eval(format!("window.location.search = atob('{b64}')"));
                 }
             }
             #[cfg(target_os = "macos")]
@@ -417,7 +536,12 @@ fn ping() -> &'static str {
 /// label; the Simulator reads and unlinks the payload before creating/updating
 /// its WebView. Base64 must never be treated as process-list protection.
 #[tauri::command]
-fn launch_simulator(payload: String, session_label: String) -> Result<(), String> {
+fn launch_simulator(
+    window: tauri::WebviewWindow,
+    payload: String,
+    session_label: String,
+) -> Result<(), String> {
+    ensure_main_gui_command(&window)?;
     #[cfg(target_os = "macos")]
     {
         if !is_safe_session_label(&session_label) {
@@ -626,10 +750,12 @@ fn take_sim_payload(session_label: &str) -> Result<Option<String>, String> {
 /// failure is returned as `Err` and the caller (JS) ignores it.
 #[tauri::command]
 fn set_dock_tile(
-    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     country_code: Option<String>,
     profile_name: Option<String>,
 ) -> Result<(), String> {
+    use tauri::Manager as _;
+    ensure_simulator_command(&window)?;
     #[cfg(target_os = "macos")]
     {
         // Normalise to an uppercase 2-letter ISO code; anything else (Tor 'T1',
@@ -638,11 +764,11 @@ fn set_dock_tile(
         let name: Option<String> = profile_name
             .map(|n| n.trim().to_string())
             .filter(|n| !n.is_empty());
-        apply_dock_icon(&app, flag, name)
+        apply_dock_icon(window.app_handle(), flag, name)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (app, country_code, profile_name);
+        let _ = (window, country_code, profile_name);
         Ok(())
     }
 }
@@ -651,16 +777,18 @@ fn set_dock_tile(
 /// from the simulator window's close path + when it has no session. macOS-only
 /// + best-effort, mirroring `set_dock_tile`.
 #[tauri::command]
-fn reset_dock_tile(app: tauri::AppHandle) -> Result<(), String> {
+fn reset_dock_tile(window: tauri::WebviewWindow) -> Result<(), String> {
+    use tauri::Manager as _;
+    ensure_simulator_command(&window)?;
     #[cfg(target_os = "macos")]
     {
         // No flag → apply_dock_icon resets the icon to the bundle default and
         // clears the badge.
-        apply_dock_icon(&app, None, None)
+        apply_dock_icon(window.app_handle(), None, None)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = app;
+        let _ = window;
         Ok(())
     }
 }
@@ -835,18 +963,25 @@ fn render_flag_icon(
     NSImage::imageWithSize_flipped_drawingHandler(NSSize::new(SIDE, SIDE), false, &handler)
 }
 
-/// Save a secret (typically the API key) to the OS keychain under the
-/// given key name. Returns `Ok(())` on success, `Err(message)` on
+/// Save an authorized API/proxy/session secret to the OS keychain under its
+/// validated key name. Returns `Ok(())` on success, `Err(message)` on
 /// failure. Errors include OS-keychain access denial (user dismissed
 /// the prompt on macOS, or LinuxSecret-Service is locked).
 ///
-/// `key` is a logical name like `"api_key"`. Multiple keys can coexist
-/// under the same service identifier; each gets a separate keychain
-/// entry. The username slot is fixed (`KEYRING_USER`) to keep the
-/// implementation simple; multi-account support adds per-account-id
-/// usernames in a future revision.
+/// `key` is a logical name like `"api_key"`. Multiple keys can coexist under
+/// the same service identifier; each gets a separate keychain entry. The
+/// caller's bundle/window role constrains which namespaces are reachable.
 #[tauri::command]
-fn secret_save(key: String, value: String) -> Result<(), String> {
+fn secret_save(
+    window: tauri::WebviewWindow,
+    main_session: tauri::State<'_, MainSession>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    ensure_secret_command(&window, &main_session, &key)?;
+    if value.is_empty() || value.len() > MAX_SECRET_VALUE_BYTES {
+        return Err("invalid secret value".to_string());
+    }
     let user = format!("{KEYRING_USER}:{key}");
     let entry = Entry::new(KEYRING_SERVICE, &user).map_err(|e| e.to_string())?;
     entry.set_password(&value).map_err(|e| e.to_string())?;
@@ -859,7 +994,12 @@ fn secret_save(key: String, value: String) -> Result<(), String> {
 /// `Ok(None)` is the expected first-run state — the wizard sets the
 /// API key at signup, so until that lands the entry doesn't exist.
 #[tauri::command]
-fn secret_load(key: String) -> Result<Option<String>, String> {
+fn secret_load(
+    window: tauri::WebviewWindow,
+    main_session: tauri::State<'_, MainSession>,
+    key: String,
+) -> Result<Option<String>, String> {
+    ensure_secret_command(&window, &main_session, &key)?;
     let user = format!("{KEYRING_USER}:{key}");
     let entry = Entry::new(KEYRING_SERVICE, &user).map_err(|e| e.to_string())?;
     match entry.get_password() {
@@ -873,7 +1013,12 @@ fn secret_load(key: String) -> Result<Option<String>, String> {
 /// existed or not (idempotent — Settings logout flow shouldn't fail
 /// if the entry was already removed).
 #[tauri::command]
-fn secret_delete(key: String) -> Result<(), String> {
+fn secret_delete(
+    window: tauri::WebviewWindow,
+    main_session: tauri::State<'_, MainSession>,
+    key: String,
+) -> Result<(), String> {
+    ensure_secret_command(&window, &main_session, &key)?;
     let user = format!("{KEYRING_USER}:{key}");
     let entry = match Entry::new(KEYRING_SERVICE, &user) {
         Ok(e) => e,
@@ -1054,23 +1199,25 @@ fn run_socks5_probe(
     })
 }
 
-/// Test a saved SOCKS5 proxy from the desktop host (raw sockets are
-/// unavailable inside the WebView, so the GUI invokes this). Never
-/// throws to the JS side — a failed probe is returned as a
-/// `reachable: false` result carrying the diagnostic in `message`.
+/// Test a saved SOCKS5 proxy from the desktop host (raw sockets are unavailable
+/// inside the WebView, so the GUI invokes this). For an authorized main-window
+/// caller, operational failures return a `reachable: false` result carrying the
+/// diagnostic in `message`; unauthorized windows fail before native I/O.
 #[tauri::command]
 async fn proxy_test(
+    window: tauri::WebviewWindow,
     host: String,
     port: u16,
     username: Option<String>,
     password: Option<String>,
-) -> ProxyTestResult {
+) -> Result<ProxyTestResult, String> {
+    ensure_main_gui_command(&window)?;
     // Run the blocking SOCKS5 probe on a dedicated blocking thread. A sync
     // command runs on the main thread, so a slow/dead proxy (multi-second
     // connect timeout inside run_socks5_probe) froze the ENTIRE WebView —
     // rendering + input + the "Testing…" spinner all stalled until it returned.
     // spawn_blocking keeps the UI (and the spinner) live while the probe runs.
-    tauri::async_runtime::spawn_blocking(move || {
+    Ok(tauri::async_runtime::spawn_blocking(move || {
         match run_socks5_probe(&host, port, username.as_deref(), password.as_deref()) {
             Ok(result) => result,
             Err(message) => ProxyTestResult {
@@ -1089,7 +1236,7 @@ async fn proxy_test(
         udp_associate: false,
         latency_ms: 0,
         message: "Proxy test could not be scheduled — please retry.".to_string(),
-    })
+    }))
 }
 
 /// Result of a VPN-endpoint reachability pre-flight. A VPN endpoint is usually
@@ -1109,37 +1256,44 @@ struct EndpointResolveResult {
 /// Resolve a VPN endpoint host to confirm it's a valid, reachable hostname.
 /// Native so we can resolve arbitrary hosts the WebView sandbox can't.
 #[tauri::command]
-async fn endpoint_resolve(host: String, port: u16) -> EndpointResolveResult {
+async fn endpoint_resolve(
+    window: tauri::WebviewWindow,
+    host: String,
+    port: u16,
+) -> Result<EndpointResolveResult, String> {
+    ensure_main_gui_command(&window)?;
     // to_socket_addrs() is a blocking DNS lookup; keep it off the main thread so
     // a slow resolver can't freeze the WebView (same class as proxy_test).
-    tauri::async_runtime::spawn_blocking(move || match (host.as_str(), port).to_socket_addrs() {
-        Ok(mut addrs) => match addrs.next() {
-            Some(addr) => EndpointResolveResult {
-                resolved: true,
-                ip: addr.ip().to_string(),
-                message: format!(
-                    "Endpoint resolves to {} — tunnel verified at launch.",
-                    addr.ip()
-                ),
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        match (host.as_str(), port).to_socket_addrs() {
+            Ok(mut addrs) => match addrs.next() {
+                Some(addr) => EndpointResolveResult {
+                    resolved: true,
+                    ip: addr.ip().to_string(),
+                    message: format!(
+                        "Endpoint resolves to {} — tunnel verified at launch.",
+                        addr.ip()
+                    ),
+                },
+                None => EndpointResolveResult {
+                    resolved: false,
+                    ip: String::new(),
+                    message: "Host resolved to no addresses — check the endpoint.".into(),
+                },
             },
-            None => EndpointResolveResult {
+            Err(e) => EndpointResolveResult {
                 resolved: false,
                 ip: String::new(),
-                message: "Host resolved to no addresses — check the endpoint.".into(),
+                message: format!("Couldn't resolve the endpoint host: {e}"),
             },
-        },
-        Err(e) => EndpointResolveResult {
-            resolved: false,
-            ip: String::new(),
-            message: format!("Couldn't resolve the endpoint host: {e}"),
-        },
+        }
     })
     .await
     .unwrap_or_else(|_| EndpointResolveResult {
         resolved: false,
         ip: String::new(),
         message: "Endpoint resolution could not be scheduled — please retry.".into(),
-    })
+    }))
 }
 
 /// E-2 exit-geo probe (probe-backend design, build-order 2): fetch the
@@ -1207,11 +1361,13 @@ fn lumtest_geo(
 
 #[tauri::command]
 async fn proxy_exit_probe(
+    window: tauri::WebviewWindow,
     host: String,
     port: u16,
     username: Option<String>,
     password: Option<String>,
 ) -> Result<ProxyExitProbeResult, String> {
+    ensure_main_gui_command(&window)?;
     // Two blocking HTTP round-trips THROUGH the proxy (echo + lumtest geo) with
     // an 8s timeout each — the worst offender for freezing the WebView when run
     // on the main thread. Push the whole thing to a blocking thread so the UI
@@ -1283,6 +1439,113 @@ mod tests {
         // Visual verification of this happens via `tauri:dev` on each
         // platform; this test catches the constant-drift case.
         assert_eq!(KEYRING_SERVICE, "dev.driftstack.gui");
+    }
+
+    #[test]
+    fn native_command_origins_separate_main_gui_and_simulator_windows() {
+        assert!(is_main_gui_command_caller(MAIN_GUI_IDENTIFIER, "main"));
+        assert!(!is_main_gui_command_caller(
+            MAIN_GUI_IDENTIFIER,
+            "sim-agt_1"
+        ));
+        assert!(!is_main_gui_command_caller(SIMULATOR_IDENTIFIER, "main"));
+
+        assert!(is_simulator_command_caller(SIMULATOR_IDENTIFIER, "main"));
+        assert!(is_simulator_command_caller(
+            SIMULATOR_IDENTIFIER,
+            "sim-agt_1"
+        ));
+        assert!(!is_simulator_command_caller(
+            SIMULATOR_IDENTIFIER,
+            "sim-../../api_key"
+        ));
+        assert!(!is_simulator_command_caller(MAIN_GUI_IDENTIFIER, "main"));
+        assert!(!is_simulator_command_caller(
+            "dev.attacker.app",
+            "sim-agt_1"
+        ));
+    }
+
+    #[test]
+    fn main_gui_secret_names_are_bounded_to_known_namespaces() {
+        for key in [
+            "api_key",
+            "api_key:api.driftstack.dev",
+            "api_key:localhost_3000",
+            "proxy_secret:550e8400-e29b-41d4-a716-446655440000",
+            "gui_control:agt_550e8400-e29b-41d4-a716-446655440000",
+        ] {
+            assert!(secret_command_caller_allowed(
+                MAIN_GUI_IDENTIFIER,
+                "main",
+                None,
+                key
+            ));
+        }
+        for key in [
+            "",
+            "api_key:",
+            "proxy_secret:../../api_key",
+            "gui_control:agt/other",
+            "arbitrary",
+        ] {
+            assert!(!secret_command_caller_allowed(
+                MAIN_GUI_IDENTIFIER,
+                "main",
+                None,
+                key
+            ));
+        }
+        assert!(!secret_command_caller_allowed(
+            MAIN_GUI_IDENTIFIER,
+            "main",
+            None,
+            &format!("api_key:{}", "a".repeat(321)),
+        ));
+    }
+
+    #[test]
+    fn simulator_secret_access_is_exactly_its_active_control_key() {
+        let session = "agt_550e8400-e29b-41d4-a716-446655440000";
+        let key = format!("gui_control:{session}");
+
+        assert!(secret_command_caller_allowed(
+            SIMULATOR_IDENTIFIER,
+            "main",
+            Some(session),
+            &key,
+        ));
+        assert!(secret_command_caller_allowed(
+            SIMULATOR_IDENTIFIER,
+            &format!("sim-{session}"),
+            None,
+            &key,
+        ));
+        for denied in [
+            "api_key",
+            "api_key:api.driftstack.dev",
+            "proxy_secret:550e8400-e29b-41d4-a716-446655440000",
+            "gui_control:agt_another-session",
+        ] {
+            assert!(!secret_command_caller_allowed(
+                SIMULATOR_IDENTIFIER,
+                "main",
+                Some(session),
+                denied,
+            ));
+        }
+        assert!(!secret_command_caller_allowed(
+            SIMULATOR_IDENTIFIER,
+            "main",
+            None,
+            &key,
+        ));
+        assert!(!secret_command_caller_allowed(
+            MAIN_GUI_IDENTIFIER,
+            &format!("sim-{session}"),
+            Some(session),
+            &key,
+        ));
     }
 
     #[test]

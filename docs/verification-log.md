@@ -25792,3 +25792,34 @@ Verification:
 - both JSON configs parse, focused config/index suites pass, and the full GUI
   TypeScript, jsdom, and production Vite build gates pass;
 - targeted linting/formatting, diff, and hooks pass.
+
+## V-603 — native commands authorize the invoking desktop window
+
+**Date:** 2026-07-14
+
+Added an origin and namespace boundary to every sensitive locally registered
+Tauri command. Plugin/core ACLs already constrained the separately bundled
+Simulator, but application commands are registered outside those permission
+lists. Before this repair any Simulator WebView could request an arbitrary
+Keychain name from the shared service—including an account API key or proxy
+credential—and could invoke the main app's native proxy, DNS, and process-launch
+commands.
+
+The main-only commands now require the `dev.driftstack.gui` bundle's `main`
+WebView. Dock mutation requires a valid `dev.driftstack.simulator` window. All
+secret operations validate a bounded known namespace; a Simulator can access
+only `gui_control:<its exact active session>`. The config-created `main` window
+is matched through native `MainSession` state established before its React tree
+starts, while dynamic `sim-<session>` windows derive the same exact authority
+from their validated label. Unknown bundles, labels, namespaces, cross-session
+keys, and poisoned state fail closed before Keychain or native I/O.
+
+Verification:
+
+- pure Rust caller-matrix tests cover both bundles, main/dynamic windows,
+  invalid labels/namespaces, cross-session attempts, and API/proxy-key denial;
+- the Rust library compiles and all native unit tests pass;
+- structural guards pin WebviewWindow injection and authorization before every
+  Keychain, proxy, DNS, process-launch, and Dock command body;
+- focused GUI/server behavior, strict TypeScript, formatting, diff, and hooks
+  pass.
