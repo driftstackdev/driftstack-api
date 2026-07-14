@@ -14,7 +14,7 @@
 //     uptime from a fetch error alone" framing.
 //   • Anchor href=https://status.driftstack.dev + target="_blank"
 //     + rel="noopener noreferrer".
-//   • aria-label="Platform status" on the anchor.
+//   • Dot-only accessible names track the resolved live state.
 //   • Props: className (override) + withLabel (default true,
 //     dot-only when false for header strips).
 //   • Initial render: slate-300 dot + "checking…" label.
@@ -22,11 +22,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const COMPONENT = resolve(REPO_ROOT, 'apps/marketing-site/src/components/StatusBadge.astro');
+const BUILT_TRUST = resolve(REPO_ROOT, 'apps/marketing-site/dist/trust/index.html');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -91,11 +93,11 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
     expect(body).toMatch(/nothing is implied about uptime from\s*\n?\s*\/\/\s*a fetch error alone/);
   });
 
-  it("anchor: href=https://status.driftstack.dev + target=_blank + rel=noopener noreferrer + conditional aria-label (S17 2026-07-04: the labeled variant's visible text is its accessible name; the static label applies only to the dot-only variant)", () => {
+  it('anchor is safe and the dot-only accessible name starts in checking state', () => {
     expect(body).toMatch(
       /<a\s*\n?\s*href="https:\/\/status\.driftstack\.dev"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer"/,
     );
-    expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status'\}/);
+    expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status: checking'\}/);
   });
 
   it('Props: className override (default empty) + withLabel default true', () => {
@@ -109,8 +111,23 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
       /renders a tighter dot-only variant suitable\s*\n?\s*\*\s*for header strips/,
     );
     expect(body).toMatch(
-      /\{withLabel \? <span class="driftstack-status-label">checking…<\/span> : null\}/,
+      /\{withLabel \? <span class="driftstack-status-label" aria-live="polite">checking…<\/span> : null\}/,
     );
+  });
+
+  it('single-flights status fetches across multiple component instances', () => {
+    expect(body).toContain("const promiseKey = '__driftstackStatusStatePromise'");
+    expect(body).toMatch(/if \(!window\[promiseKey\]\)/);
+    expect(body).toMatch(/window\[promiseKey\] = fetch\(apiBaseUrl \+ '\/v1\/status'/);
+    expect(body).toMatch(/window\[promiseKey\]\.then\(applyState\)/);
+  });
+
+  it('publishes resolved state to dot-only accessible names', () => {
+    expect(body).toContain("let accessibleState = 'Status unavailable'");
+    expect(body).toContain(
+      "badge.setAttribute('aria-label', 'Platform status: ' + accessibleState)",
+    );
+    expect(body).toMatch(/aria-live="polite"/);
   });
 
   it('initial render: slate-300 dot + "checking…" label (no flicker before fetch settles)', () => {
@@ -139,5 +156,45 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
 
   it('component file exists at canonical path', () => {
     expect(existsSync(COMPONENT)).toBe(true);
+  });
+
+  it('built trust page shares one request across both instances and updates dot-only state', async () => {
+    const html = read(BUILT_TRUST);
+    const scripts = Array.from(html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))
+      .map((match) => match[1] ?? '')
+      .filter((script) => script.includes('__driftstackStatusStatePromise'));
+    expect(scripts).toHaveLength(2);
+
+    const dom = new JSDOM(html, {
+      url: 'https://driftstack.dev/trust/',
+      runScripts: 'outside-only',
+    });
+    const dotOnly = dom.window.document.createElement('a');
+    dotOnly.className = 'driftstack-status-badge';
+    dotOnly.setAttribute('aria-label', 'Platform status: checking');
+    dotOnly.innerHTML = '<span class="driftstack-status-dot bg-slate-300"></span>';
+    dom.window.document.body.append(dotOnly);
+
+    let fetchCount = 0;
+    // @ts-expect-error — deterministic fetch double for the built inline scripts.
+    dom.window.fetch = () => {
+      fetchCount += 1;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ overall_status: 'degraded' }),
+      });
+    };
+    scripts.forEach((script) => dom.window.eval(script));
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    await new Promise<void>((resolveDone) => dom.window.setTimeout(resolveDone, 0));
+
+    expect(fetchCount).toBe(1);
+    expect(
+      Array.from(dom.window.document.querySelectorAll('.driftstack-status-label')).every(
+        (label) => label.textContent === 'Degraded performance',
+      ),
+    ).toBe(true);
+    expect(dotOnly.getAttribute('aria-label')).toBe('Platform status: Degraded performance');
+    dom.window.close();
   });
 });

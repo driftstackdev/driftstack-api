@@ -34,13 +34,13 @@ const apiBaseUrl = 'https://api.driftstack.dev';
     'driftstack-status-badge inline-flex items-center gap-2 rounded-full border border-tk-border bg-tk-surface px-3 py-1 text-xs text-tk-ink-2 hover:bg-tk-hover',
     className,
   ]}
-  aria-label={withLabel ? undefined : 'Platform status'}
+  aria-label={withLabel ? undefined : 'Platform status: checking'}
 >
   <span
     class="driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300"
     aria-hidden="true"
   ></span>
-  {withLabel ? <span class="driftstack-status-label">checking…</span> : null}
+  {withLabel ? <span class="driftstack-status-label" aria-live="polite">checking…</span> : null}
 </a>
 
 <script is:inline define:vars={{ apiBaseUrl }}>
@@ -53,6 +53,7 @@ const apiBaseUrl = 'https://api.driftstack.dev';
         const dot = badge.querySelector('.driftstack-status-dot');
         const label = badge.querySelector('.driftstack-status-label');
         if (!dot) return;
+        let accessibleState = 'Status unavailable';
         // Reset color classes.
         dot.classList.remove(
           'bg-slate-300',
@@ -62,14 +63,17 @@ const apiBaseUrl = 'https://api.driftstack.dev';
         );
         switch (state) {
           case 'operational':
+            accessibleState = 'All systems operational';
             dot.classList.add('bg-emerald-500');
             if (label) label.textContent = 'All systems operational';
             break;
           case 'degraded':
+            accessibleState = 'Degraded performance';
             dot.classList.add('bg-amber-500');
             if (label) label.textContent = 'Degraded performance';
             break;
           case 'major_outage':
+            accessibleState = 'Major outage';
             dot.classList.add('bg-red-500');
             if (label) label.textContent = 'Major outage';
             break;
@@ -79,27 +83,27 @@ const apiBaseUrl = 'https://api.driftstack.dev';
             if (label) label.textContent = 'Status unavailable';
             break;
         }
+        if (!label) badge.setAttribute('aria-label', 'Platform status: ' + accessibleState);
       });
     }
 
-    // 4-second hard timeout — a slow status endpoint shouldn't keep
-    // the badge spinning forever.
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 4000);
-
-    fetch(apiBaseUrl + '/v1/status', { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-      .then((body) => {
-        window.clearTimeout(timeout);
-        const state =
-          body && typeof body.overall_status === 'string'
-            ? body.overall_status
-            : 'unknown';
-        applyState(state);
-      })
-      .catch(() => {
-        window.clearTimeout(timeout);
-        applyState('unknown');
-      });
+    // Trust pages render a hero badge plus the footer badge. Astro emits this
+    // script for each instance, so share one page-level request and let every
+    // instance subscribe to the same honest state.
+    const promiseKey = '__driftstackStatusStatePromise';
+    if (!window[promiseKey]) {
+      // 4-second hard timeout — a slow status endpoint shouldn't keep
+      // the badge spinning forever.
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 4000);
+      window[promiseKey] = fetch(apiBaseUrl + '/v1/status', { signal: controller.signal })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((body) =>
+          body && typeof body.overall_status === 'string' ? body.overall_status : 'unknown',
+        )
+        .catch(() => 'unknown')
+        .finally(() => window.clearTimeout(timeout));
+    }
+    window[promiseKey].then(applyState);
   })();
 </script>
