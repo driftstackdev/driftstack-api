@@ -25486,3 +25486,46 @@ Verification:
   denials;
 - strict server source/test typechecking, docs checking/build, targeted
   linting, formatting, diff, and hooks pass.
+
+## V-594 — MFA enrollment atomically advances session authority
+
+**Date:** 2026-07-14
+
+Closed the session-authority gap at MFA activation. Authentication flows read
+MFA enrollment before minting a web session, while activation previously
+updated only the MFA and recovery-code tables. A session issued before
+enrollment could therefore remain valid afterward, and a concurrent login
+could observe the account as unenrolled before inserting its bearer after
+activation.
+
+Enrollment completion now locks the account authority row shared with session
+minting, requires the exact active enrolling web session at the current epoch,
+and completes one transaction that activates MFA, inserts the first recovery
+batch, advances `accounts.auth_epoch`, and rebases only the enrolling session
+to the new epoch with `mfa_satisfied_at` set to the verified-TOTP time. A mint
+that wins first is retired by the epoch advance; a mint that loses cannot
+insert its stale epoch. Existing predecessor sessions fail the account/session
+epoch join immediately, while the customer who just proved the first TOTP can
+continue without entering the same factor twice. Successful commit also
+invalidates the account auth-cache generation.
+
+The audit also found and fixed a Fastify hook-contract regression in V-593's
+interactive-session guard. A synchronous one-argument pre-handler was treated
+as callback-style and left every MFA mutation request waiting indefinitely.
+The guard now returns an explicit promise, preserving the interactive-only
+boundary without hanging the route.
+
+Verification:
+
+- focused MFA service, route, step-up, device-key, repository, and structural
+  coverage passes 9 files and 162 tests; the direct lifecycle suite passes all
+  16 cases;
+- real PostgreSQL adapter coverage passes all 3 cases, including exactly-one
+  concurrent completion, current-session epoch rebase/freshness, predecessor
+  retirement, mint-before-activation retirement, and stale mint-after-
+  activation refusal;
+- real HTTP with Redis and PostgreSQL passes all 9 Playwright cases, including
+  a positively cached predecessor that receives 401 immediately after another
+  session activates MFA;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

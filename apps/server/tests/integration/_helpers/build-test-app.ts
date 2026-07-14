@@ -1181,7 +1181,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   // V-353b — MFA service backed by in-memory repo. Encryption key is
   // a fixed 32-byte test key so tests are deterministic.
-  const mfaRepo = new InMemoryMfaRepo();
+  const mfaRepo = new InMemoryMfaRepo(authFlowsRepo);
   const mfaService = new MfaService(
     mfaRepo,
     {
@@ -1189,6 +1189,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       encryptionKey: Buffer.alloc(32, 0).toString('base64'),
     },
     accountAuditService,
+    authCache,
   );
 
   // V-353d — in-memory challenge token store for the MFA login

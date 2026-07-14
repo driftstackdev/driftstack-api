@@ -46,9 +46,11 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
   });
 
   it('machine bearers fail closed before every MFA credential mutation', () => {
-    expect(body).toMatch(/const requireInteractiveWebSession = \(request: FastifyRequest\): void/);
     expect(body).toMatch(/if \(ctx\.webSession === null\) \{/);
     expect(body).toMatch(/MFA credential management requires an interactive web session\./);
+    expect(body).toMatch(
+      /const requireInteractiveWebSession = \(request: FastifyRequest\): Promise<void> => \{[\s\S]{0,500}return Promise\.resolve\(\);/,
+    );
     expect(body.match(/requireInteractiveWebSession,/g)).toHaveLength(5);
   });
 
@@ -121,7 +123,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
       /const parsed = CompleteMfaEnrollmentRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*\n?\s*if \(!parsed\.success\) \{\s*\n?\s*throw new BadRequestError\(parsed\.error\.issues\[0\]\?\.message \?\? 'Invalid body\.'\);/,
     );
     expect(body).toMatch(
-      /const result = await service\.completeEnrollment\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*\}\);\s*\n?\s*return \{ recovery_codes: result\.recoveryCodes \};/,
+      /const result = await service\.completeEnrollment\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*currentWebSessionId: interactiveWebSessionId\(request\),\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*\}\);\s*\n?\s*return \{ recovery_codes: result\.recoveryCodes \};/,
     );
   });
 

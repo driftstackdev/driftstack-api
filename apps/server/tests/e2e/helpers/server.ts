@@ -320,6 +320,7 @@ export async function startTestServer(): Promise<TestServer> {
     mfaRepo,
     { encryptionKey: Buffer.alloc(32, 0).toString('base64') },
     accountAuditService,
+    authCache,
   );
   const mfaChallengeStore = new InMemoryMfaChallengeStore();
   const authFlowsRepo = new DrizzleAuthFlowsRepo(database);

@@ -850,6 +850,7 @@ export async function createProductionDeps(
         new DrizzleMfaRepo(dbHandle),
         { encryptionKey: config.mfaEncryptionKey },
         accountAuditService,
+        authCache,
       )
     : null;
   if (!mfaService) {

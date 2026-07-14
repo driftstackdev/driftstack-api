@@ -265,6 +265,41 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve(true);
   }
 
+  /**
+   * Test-repository mirror of DrizzleMfaRepo's enrollment authority
+   * transaction. The map mutation is synchronous, so validating the exact
+   * active session, advancing the account epoch, and rebasing only that
+   * session form one indivisible test-model step.
+   */
+  activateMfaEnrollmentSession(args: {
+    accountId: string;
+    currentWebSessionId: string;
+    now: Date;
+  }): boolean {
+    const slot = this.accounts.get(args.accountId);
+    const session = this.webSessions.get(args.currentWebSessionId);
+    if (
+      !slot ||
+      slot.account.status !== 'active' ||
+      !session ||
+      session.accountId !== args.accountId ||
+      session.authEpoch !== slot.account.authEpoch ||
+      session.revokedAt !== null ||
+      session.expiresAt.getTime() <= args.now.getTime()
+    ) {
+      return false;
+    }
+
+    const authEpoch = slot.account.authEpoch + 1;
+    slot.account = { ...slot.account, authEpoch };
+    this.webSessions.set(session.id, {
+      ...session,
+      authEpoch,
+      mfaSatisfiedAt: args.now,
+    });
+    return true;
+  }
+
   // ── V-355 — list / lookup / bulk-revoke per account ───────────────
   listActiveWebSessionsForAccount(accountId: string, now: Date): Promise<WebSessionRow[]> {
     const out: WebSessionRow[] = [];

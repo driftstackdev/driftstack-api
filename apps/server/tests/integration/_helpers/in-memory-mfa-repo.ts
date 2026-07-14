@@ -5,9 +5,19 @@
 import { randomUUID } from 'node:crypto';
 import type { MfaEnrollmentRow, MfaRepo, RecoveryCodeRow } from '../../../src/services/mfa.js';
 
+interface MfaSessionAuthority {
+  activateMfaEnrollmentSession(args: {
+    accountId: string;
+    currentWebSessionId: string;
+    now: Date;
+  }): boolean;
+}
+
 export class InMemoryMfaRepo implements MfaRepo {
   private readonly enrollments = new Map<string, MfaEnrollmentRow>();
   private readonly recoveryCodes = new Map<string, RecoveryCodeRow>();
+
+  constructor(private readonly sessionAuthority: MfaSessionAuthority | null = null) {}
 
   findByAccount(accountId: string): Promise<MfaEnrollmentRow | null> {
     return Promise.resolve(this.enrollments.get(accountId) ?? null);
@@ -42,6 +52,7 @@ export class InMemoryMfaRepo implements MfaRepo {
 
   completeEnrollmentIfPending(args: {
     accountId: string;
+    currentWebSessionId: string;
     expectedUpdatedAt: Date;
     hashes: string[];
     now: Date;
@@ -52,6 +63,9 @@ export class InMemoryMfaRepo implements MfaRepo {
       row.enrolledAt !== null ||
       row.updatedAt.getTime() !== args.expectedUpdatedAt.getTime()
     ) {
+      return Promise.resolve(false);
+    }
+    if (this.sessionAuthority && !this.sessionAuthority.activateMfaEnrollmentSession(args)) {
       return Promise.resolve(false);
     }
     this.enrollments.set(args.accountId, {

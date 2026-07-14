@@ -23,6 +23,7 @@ import { computeTotpCode, TOTP_PERIOD_SECONDS } from '../../src/lib/mfa-totp.js'
 import { hashApiKey } from '../../src/lib/api-keys.js';
 
 const ENC_KEY = Buffer.alloc(32, 7).toString('base64');
+const CURRENT_WEB_SESSION_ID = 'ws_current';
 
 function makeRepo(): {
   repo: MfaRepo;
@@ -200,18 +201,26 @@ describe('V-553.B-11 MfaService.completeEnrollment', () => {
   it('rejects when there is no pending enrollment', async () => {
     const { repo } = makeRepo();
     const svc = new MfaService(repo, SVC_CONFIG);
-    await expect(svc.completeEnrollment({ accountId: 'acc_1', code: '123456' })).rejects.toThrow(
-      /No pending MFA enrollment/,
-    );
+    await expect(
+      svc.completeEnrollment({
+        accountId: 'acc_1',
+        currentWebSessionId: CURRENT_WEB_SESSION_ID,
+        code: '123456',
+      }),
+    ).rejects.toThrow(/No pending MFA enrollment/);
   });
 
   it('rejects when the code is wrong', async () => {
     const { repo } = makeRepo();
     const svc = new MfaService(repo, SVC_CONFIG);
     await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
-    await expect(svc.completeEnrollment({ accountId: 'acc_1', code: '000000' })).rejects.toThrow(
-      /Invalid/,
-    );
+    await expect(
+      svc.completeEnrollment({
+        accountId: 'acc_1',
+        currentWebSessionId: CURRENT_WEB_SESSION_ID,
+        code: '000000',
+      }),
+    ).rejects.toThrow(/Invalid/);
   });
 
   it('on correct code: enrolledAt is set, 10 recovery codes minted + audited', async () => {
@@ -223,12 +232,33 @@ describe('V-553.B-11 MfaService.completeEnrollment', () => {
     // the test doesn't need to know any TOTP internals beyond the helper.
     const secretBytes = base32Decode(start.secretBase32);
     const code = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-    const result = await svc.completeEnrollment({ accountId: 'acc_1', code });
+    const result = await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code,
+    });
     expect(result.recoveryCodes).toHaveLength(10);
     expect(state.row?.enrolledAt).not.toBeNull();
     // Audit entry should record account.mfa_enrolled.
     expect(calls).toHaveLength(1);
     expect((calls[0] as { action: string }).action).toBe('account.mfa_enrolled');
+  });
+
+  it('invalidates cached account authority only after enrollment commits', async () => {
+    const { repo } = makeRepo();
+    const invalidateAccount = vi.fn(() => Promise.resolve());
+    const svc = new MfaService(repo, SVC_CONFIG, null, { invalidateAccount } as never);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const code = computeTotpCode(base32Decode(start.secretBase32), Math.floor(Date.now() / 1000));
+
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code,
+    });
+
+    expect(invalidateAccount).toHaveBeenCalledOnce();
+    expect(invalidateAccount).toHaveBeenCalledWith('acc_1');
   });
 
   it('allows exactly one concurrent enrollment completion to issue recovery codes', async () => {
@@ -238,8 +268,16 @@ describe('V-553.B-11 MfaService.completeEnrollment', () => {
     const code = computeTotpCode(base32Decode(start.secretBase32), Math.floor(Date.now() / 1000));
 
     const results = await Promise.allSettled([
-      svc.completeEnrollment({ accountId: 'acc_1', code }),
-      svc.completeEnrollment({ accountId: 'acc_1', code }),
+      svc.completeEnrollment({
+        accountId: 'acc_1',
+        currentWebSessionId: CURRENT_WEB_SESSION_ID,
+        code,
+      }),
+      svc.completeEnrollment({
+        accountId: 'acc_1',
+        currentWebSessionId: CURRENT_WEB_SESSION_ID,
+        code,
+      }),
     ]);
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
@@ -256,7 +294,11 @@ describe('V-553.B-11 MfaService.completeEnrollment', () => {
     const code = computeTotpCode(base32Decode(first.secretBase32), Math.floor(Date.now() / 1000));
 
     const [completion, restart] = await Promise.allSettled([
-      svc.completeEnrollment({ accountId: 'acc_1', code }),
+      svc.completeEnrollment({
+        accountId: 'acc_1',
+        currentWebSessionId: CURRENT_WEB_SESSION_ID,
+        code,
+      }),
       svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' }),
     ]);
 
@@ -311,7 +353,11 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
     const secretBytes = base32Decode(start.secretBase32);
     const code = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-    await svc.completeEnrollment({ accountId: 'acc_1', code });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code,
+    });
 
     const result = await svc.verifyCode({ accountId: 'acc_1', input: code });
     expect(result).toBe('totp');
@@ -325,7 +371,11 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const secretBytes = base32Decode(start.secretBase32);
     const nowSeconds = Math.floor(Date.now() / 1000);
     const code = computeTotpCode(secretBytes, nowSeconds);
-    await svc.completeEnrollment({ accountId: 'acc_1', code });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code,
+    });
 
     // First use succeeds + stamps the consumed counter.
     const first = await svc.verifyCode({ accountId: 'acc_1', input: code, nowSeconds });
@@ -346,7 +396,11 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const secretBytes = base32Decode(start.secretBase32);
     const t0 = Math.floor(Date.now() / 1000);
     const enrollCode = computeTotpCode(secretBytes, t0);
-    await svc.completeEnrollment({ accountId: 'acc_1', code: enrollCode });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code: enrollCode,
+    });
 
     // Consume the code at the NEXT timestep first.
     const tNext = t0 + TOTP_PERIOD_SECONDS;
@@ -370,7 +424,11 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
     const secretBytes = base32Decode(start.secretBase32);
     const t0 = Math.floor(Date.now() / 1000);
-    await svc.completeEnrollment({ accountId: 'acc_1', code: computeTotpCode(secretBytes, t0) });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code: computeTotpCode(secretBytes, t0),
+    });
 
     const code0 = computeTotpCode(secretBytes, t0);
     expect(await svc.verifyCode({ accountId: 'acc_1', input: code0, nowSeconds: t0 })).toBe('totp');
@@ -390,7 +448,11 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
     const secretBytes = base32Decode(start.secretBase32);
     const goodCode = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-    await svc.completeEnrollment({ accountId: 'acc_1', code: goodCode });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code: goodCode,
+    });
     const wrongCode = goodCode === '000000' ? '111111' : '000000';
     const result = await svc.verifyCode({ accountId: 'acc_1', input: wrongCode });
     expect(result).toBeNull();
@@ -405,7 +467,11 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
     const secretBytes = base32Decode(start.secretBase32);
     const totp = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-    const { recoveryCodes } = await svc.completeEnrollment({ accountId: 'acc_1', code: totp });
+    const { recoveryCodes } = await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code: totp,
+    });
     const recovery = recoveryCodes[0];
     if (!recovery) throw new Error('no recovery code');
 
@@ -433,7 +499,11 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
       const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
       const secretBytes = base32Decode(start.secretBase32);
       const totp = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-      const { recoveryCodes } = await svc.completeEnrollment({ accountId: 'acc_1', code: totp });
+      const { recoveryCodes } = await svc.completeEnrollment({
+        accountId: 'acc_1',
+        currentWebSessionId: CURRENT_WEB_SESSION_ID,
+        code: totp,
+      });
       const recovery = recoveryCodes[0];
       if (!recovery) throw new Error('no recovery code');
 
@@ -484,7 +554,11 @@ describe('V-553.B-11 MfaService.regenerateRecoveryCodes', () => {
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
     const secretBytes = base32Decode(start.secretBase32);
     const totp = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-    await svc.completeEnrollment({ accountId: 'acc_1', code: totp });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code: totp,
+    });
     expect(state.codes).toHaveLength(10);
 
     const refreshed = await svc.regenerateRecoveryCodes({ accountId: 'acc_1' });
@@ -500,7 +574,11 @@ describe('V-553.B-11 MfaService.regenerateRecoveryCodes', () => {
     const svc = new MfaService(repo, SVC_CONFIG);
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
     const totp = computeTotpCode(base32Decode(start.secretBase32), Math.floor(Date.now() / 1000));
-    await svc.completeEnrollment({ accountId: 'acc_1', code: totp });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code: totp,
+    });
 
     const results = await Promise.allSettled([
       svc.regenerateRecoveryCodes({ accountId: 'acc_1' }),
@@ -533,7 +611,11 @@ describe('V-553.B-11 MfaService.getStatus', () => {
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
     const secretBytes = base32Decode(start.secretBase32);
     const totp = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-    await svc.completeEnrollment({ accountId: 'acc_1', code: totp });
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code: totp,
+    });
 
     // Consume one recovery code manually so the count reflects 9.
     if (state.codes[0]) state.codes[0].usedAt = new Date();

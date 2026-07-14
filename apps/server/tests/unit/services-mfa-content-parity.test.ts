@@ -92,7 +92,7 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
       /startEnrollmentIfNotEnrolled\(args: \{[\s\S]*?\}\): Promise<MfaEnrollmentRow \| null>;/,
     );
     expect(body).toMatch(
-      /completeEnrollmentIfPending\(args: \{[\s\S]*?expectedUpdatedAt: Date;[\s\S]*?hashes: string\[\];[\s\S]*?\}\): Promise<boolean>;/,
+      /completeEnrollmentIfPending\(args: \{[\s\S]*?currentWebSessionId: string;[\s\S]*?expectedUpdatedAt: Date;[\s\S]*?hashes: string\[\];[\s\S]*?\}\): Promise<boolean>;/,
     );
     expect(body).toMatch(
       /\/\*\* V-353b — touch `last_used_at` after a successful verify\. \*\/\s*\n?\s*touchLastUsed\(accountId: string, now: Date\): Promise<void>;/,
@@ -151,8 +151,10 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
       /\/\/ Hash the NORMALIZED form \(hyphen-stripped, uppercased\) so verify\s*\n?\s*\/\/ can check against either typed form \(with or without hyphen\)\.\s*\n?\s*const hashes = await Promise\.all\(codes\.map\(\(c\) => hashApiKey\(normalizeRecoveryCode\(c\)\)\)\);/,
     );
     expect(body).toMatch(/const completed = await this\.repo\.completeEnrollmentIfPending\(\{/);
+    expect(body).toMatch(/currentWebSessionId: args\.currentWebSessionId,/);
     expect(body).toMatch(/expectedUpdatedAt: row\.updatedAt,/);
     expect(body).toMatch(/if \(!completed\) \{\s*\n?\s*throw new ConflictError\(/);
+    expect(body).toMatch(/await this\.authCache\.invalidateAccount\(args\.accountId\);/);
   });
 
   it('completeEnrollment: emits account.mfa_enrolled audit; try/catch swallow', () => {
@@ -240,9 +242,9 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     );
   });
 
-  it('Constructor: accountAudit nullable default (defaults to null when omitted)', () => {
+  it('Constructor: audit and auth cache are nullable defaults', () => {
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: MfaRepo,\s*\n?\s*private readonly config: MfaServiceConfig,\s*\n?\s*private readonly accountAudit: AccountAuditService \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*\n?\s*private readonly repo: MfaRepo,\s*\n?\s*private readonly config: MfaServiceConfig,\s*\n?\s*private readonly accountAudit: AccountAuditService \| null = null,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*\) \{\}/,
     );
   });
 
@@ -255,6 +257,7 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
       /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(/import type \{ AccountAuditService \} from '\.\/account-audit\.js';/);
+    expect(body).toMatch(/import type \{ AuthCache \} from '\.\/auth-cache\.js';/);
   });
 
   it('file exists at canonical path', () => {

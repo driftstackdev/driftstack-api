@@ -124,11 +124,12 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
     expect(res.statusCode).toBe(204);
   });
 
-  it('403 + requires_mfa_step_up extension when web session never satisfied MFA', async () => {
+  it('204 immediately after enrollment because the first TOTP proof freshly satisfies that session', async () => {
     fx = await buildTestApp();
-    // Signup + verify-email gives a session; enroll MFA on it. The
-    // verify-email session was issued PRE-MFA, so its
-    // mfa_satisfied_at is null. Disable should refuse.
+    // Signup + verify-email gives a session, then activation atomically
+    // advances account authority and rebases only this exact session. The
+    // first verified TOTP is itself a fresh factor proof, so an immediate
+    // sensitive action should not demand the same code a second time.
     const password = 'correct horse battery staple';
     const signup = await fx.app.inject({
       method: 'POST',
@@ -156,17 +157,15 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
       payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
     });
 
-    // Now attempt to disable from the same pre-MFA session.
+    // The exact enrolling session is now both current-epoch and freshly
+    // MFA-satisfied; predecessor sessions are invalidated instead.
     const res = await fx.app.inject({
       method: 'DELETE',
       url: '/v1/account/mfa',
       headers: { authorization: `Bearer ${sessionToken}`, 'content-type': 'application/json' },
       payload: { confirm: 'disable-mfa' },
     });
-    expect(res.statusCode).toBe(403);
-    const body = res.json<{ requires_mfa_step_up?: boolean; reason?: string }>();
-    expect(body.requires_mfa_step_up).toBe(true);
-    expect(body.reason).toBe('never_satisfied');
+    expect(res.statusCode).toBe(204);
   });
 
   it('204 after POST /v1/auth/mfa/step-up refreshes the satisfied timestamp', async () => {

@@ -44,12 +44,14 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ V-353b — Drizzle implementation of MfaRepo\./);
   });
 
-  it('imports: and/desc/eq/isNull/or/sql from drizzle-orm; MfaEnrollmentRow/MfaRepo/RecoveryCodeRow from services/mfa; Database; accountMfa + accountMfaRecoveryCodes', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, isNull, or, sql \} from 'drizzle-orm';/);
+  it('imports the MFA tables plus account/web-session authority primitives', () => {
+    expect(body).toMatch(/import \{ and, desc, eq, gt, isNull, or, sql \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{ MfaEnrollmentRow, MfaRepo, RecoveryCodeRow \} from '\.\.\/services\/mfa\.js';/,
     );
-    expect(body).toMatch(/import \{ accountMfa, accountMfaRecoveryCodes \} from '\.\/schema\.js';/);
+    expect(body).toMatch(
+      /import \{ accountMfa, accountMfaRecoveryCodes, accounts, webSessions \} from '\.\/schema\.js';/,
+    );
   });
 
   it('toEnrollmentRow: 9-field MfaEnrollmentRow (accountId + totpSecretCiphertext/Iv/Tag + enrolledAt + lastUsedAt + lastUsedTotpCounter + created/updated_at)', () => {
@@ -92,10 +94,19 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
 
   it('completeEnrollmentIfPending CASes the exact pending revision and inserts hashes in the transaction', () => {
     expect(body).toMatch(/async completeEnrollmentIfPending\(args: \{/);
+    expect(body).toMatch(/currentWebSessionId: string;/);
+    expect(body).toMatch(/\.from\(accounts\)[\s\S]{0,180}\.for\('update'\)/);
+    expect(body).toMatch(/eq\(webSessions\.id, args\.currentWebSessionId\)/);
+    expect(body).toMatch(/eq\(webSessions\.authEpoch, authority\.authEpoch\)/);
+    expect(body).toMatch(/gt\(webSessions\.expiresAt, args\.now\)/);
     expect(body).toMatch(/isNull\(accountMfa\.enrolledAt\)/);
     expect(body).toMatch(/eq\(accountMfa\.updatedAt, args\.expectedUpdatedAt\)/);
     expect(body).toMatch(/if \(!updated\) return false;/);
     expect(body).toMatch(/await tx\.insert\(accountMfaRecoveryCodes\)\.values\(/);
+    expect(body).toMatch(/authEpoch: sql`\$\{accounts\.authEpoch\} \+ 1`/);
+    expect(body).toMatch(
+      /\.set\(\{ authEpoch: nextAuthority\.authEpoch, mfaSatisfiedAt: args\.now \}\)/,
+    );
   });
 
   it('touchLastUsed: update set lastUsedAt + updatedAt where accountId', () => {

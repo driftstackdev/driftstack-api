@@ -158,6 +158,56 @@ test('full enroll → verify → status → disable cycle', async ({ request }) 
   expect(postDisableStatus.unused_recovery_codes).toBe(0);
 });
 
+test('activation preserves only the enrolling session and evicts a cached predecessor', async ({
+  request,
+}) => {
+  const email = 'mfa-epoch@driftstack.test';
+  const password = 'correct horse battery staple';
+  const signup = await request.post(`${server.baseUrl}/v1/auth/signup`, {
+    data: { email, password },
+  });
+  const verificationToken = ((await signup.json()) as SignupResponse).debug_token;
+  expect(verificationToken).toBeTruthy();
+  const verified = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
+    data: { token: verificationToken },
+  });
+  const enrollingToken = ((await verified.json()) as SessionEnvelope).session.token;
+  const predecessorLogin = await request.post(`${server.baseUrl}/v1/auth/login`, {
+    data: { email, password },
+  });
+  expect(predecessorLogin.status()).toBe(200);
+  const predecessorToken = ((await predecessorLogin.json()) as SessionEnvelope).session.token;
+  const enrollingHeaders = authHeader(enrollingToken);
+  const predecessorHeaders = authHeader(predecessorToken);
+
+  // Populate the real Redis positive cache for the predecessor before
+  // activation. Enrollment must evict this as well as advancing SQL authority.
+  expect(
+    (
+      await request.get(`${server.baseUrl}/v1/account/mfa`, { headers: predecessorHeaders })
+    ).status(),
+  ).toBe(200);
+
+  const enroll = await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, {
+    headers: enrollingHeaders,
+  });
+  const secret = base32Decode(((await enroll.json()) as EnrollResponse).secret_base32);
+  const activation = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
+    headers: enrollingHeaders,
+    data: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+  });
+  expect(activation.status()).toBe(200);
+
+  expect(
+    (await request.get(`${server.baseUrl}/v1/account/mfa`, { headers: enrollingHeaders })).status(),
+  ).toBe(200);
+  expect(
+    (
+      await request.get(`${server.baseUrl}/v1/account/mfa`, { headers: predecessorHeaders })
+    ).status(),
+  ).toBe(401);
+});
+
 test('POST /v1/account/mfa/verify with wrong code returns 400', async ({ request }) => {
   const headers = await interactiveAuth(request, 'mfa-wrong@driftstack.test');
 

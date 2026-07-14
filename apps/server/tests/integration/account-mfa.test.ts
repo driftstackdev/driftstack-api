@@ -170,6 +170,64 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     expect(statusBody.unused_recovery_codes).toBe(10);
   });
 
+  it('keeps only the enrolling session valid after activation and evicts a cached predecessor', async () => {
+    fx = await buildTestApp();
+    const email = 'mfa-epoch-owner@driftstack.local';
+    const password = 'correct horse battery staple';
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email, password },
+    });
+    const verificationToken = signup.json<SignupResponse>().debug_token;
+    if (!verificationToken) throw new Error('fixture did not expose verification token');
+    const verified = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: verificationToken },
+    });
+    const enrollingToken = verified.json<SessionEnvelope>().session.token;
+    const predecessorLogin = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email, password },
+    });
+    expect(predecessorLogin.statusCode).toBe(200);
+    const predecessorToken = predecessorLogin.json<SessionEnvelope>().session.token;
+    const enrollingHeaders = { authorization: `Bearer ${enrollingToken}` };
+    const predecessorHeaders = { authorization: `Bearer ${predecessorToken}` };
+
+    // Populate the predecessor's positive auth-cache entry before authority
+    // changes, reproducing the short cache window that must also be closed.
+    expect(
+      (await fx.app.inject({ method: 'GET', url: '/v1/account/mfa', headers: predecessorHeaders }))
+        .statusCode,
+    ).toBe(200);
+
+    const enroll = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/mfa/enroll',
+      headers: enrollingHeaders,
+    });
+    const secret = base32Decode(enroll.json<EnrollStartResponse>().secret_base32);
+    const verify = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/mfa/verify',
+      headers: enrollingHeaders,
+      payload: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+    });
+    expect(verify.statusCode).toBe(200);
+
+    expect(
+      (await fx.app.inject({ method: 'GET', url: '/v1/account/mfa', headers: enrollingHeaders }))
+        .statusCode,
+    ).toBe(200);
+    expect(
+      (await fx.app.inject({ method: 'GET', url: '/v1/account/mfa', headers: predecessorHeaders }))
+        .statusCode,
+    ).toBe(401);
+  });
+
   it('400 verify rejects a wrong code', async () => {
     const headers = await buildInteractiveFixture();
     await fx.app.inject({

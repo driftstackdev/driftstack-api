@@ -25,12 +25,20 @@ export function registerAccountMfaRoutes(
   // an attacker-controlled TOTP secret or remove the dashboard's second
   // factor. Keep the generic requireMfaFresh machine carve-out intact for
   // unrelated routes while this surface fails closed on non-web bearers.
-  const requireInteractiveWebSession = (request: FastifyRequest): void => {
+  const interactiveWebSessionId = (request: FastifyRequest): string => {
     const ctx = request.account;
     if (!ctx) throw new Error('account context missing after requireAuth');
     if (ctx.webSession === null) {
       throw new ForbiddenError('MFA credential management requires an interactive web session.');
     }
+    return ctx.webSession.id;
+  };
+  const requireInteractiveWebSession = (request: FastifyRequest): Promise<void> => {
+    interactiveWebSessionId(request);
+    // Fastify preHandlers must either accept/call `done` or return a promise.
+    // A synchronous one-argument function is treated as callback-style and
+    // leaves the request waiting forever after successful authentication.
+    return Promise.resolve();
   };
 
   app.get(
@@ -95,6 +103,7 @@ export function registerAccountMfaRoutes(
       }
       const result = await service.completeEnrollment({
         accountId: ctx.account.id,
+        currentWebSessionId: interactiveWebSessionId(request),
         code: parsed.data.code,
       });
       return { recovery_codes: result.recoveryCodes };

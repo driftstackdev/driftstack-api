@@ -1,9 +1,9 @@
 // V-353b — Drizzle implementation of MfaRepo.
 
-import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import type { MfaEnrollmentRow, MfaRepo, RecoveryCodeRow } from '../services/mfa.js';
 import type { Database } from './client.js';
-import { accountMfa, accountMfaRecoveryCodes } from './schema.js';
+import { accountMfa, accountMfaRecoveryCodes, accounts, webSessions } from './schema.js';
 
 function toEnrollmentRow(r: typeof accountMfa.$inferSelect): MfaEnrollmentRow {
   return {
@@ -97,6 +97,7 @@ export class DrizzleMfaRepo implements MfaRepo {
 
   async completeEnrollmentIfPending(args: {
     accountId: string;
+    currentWebSessionId: string;
     expectedUpdatedAt: Date;
     hashes: string[];
     now: Date;
@@ -105,6 +106,38 @@ export class DrizzleMfaRepo implements MfaRepo {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${`mfa-credentials:${args.accountId}`}))`,
       );
+
+      // Lock the same account authority row used by web-session minting. This
+      // serializes MFA activation with password/magic-link/OAuth/reset login:
+      // a mint that wins first is retired by the epoch advance below; a mint
+      // that loses observes the new epoch and refuses its stale snapshot.
+      const [authority] = await tx
+        .select({ authEpoch: accounts.authEpoch })
+        .from(accounts)
+        .where(and(eq(accounts.id, args.accountId), eq(accounts.status, 'active')))
+        .for('update')
+        .limit(1);
+      if (!authority) return false;
+
+      // Activation is authorized by the exact live web session that proved the
+      // first TOTP. A cached/stale, expired, revoked, cross-account, or old-epoch
+      // bearer cannot turn a pending secret into an active credential.
+      const [currentSession] = await tx
+        .select({ id: webSessions.id })
+        .from(webSessions)
+        .where(
+          and(
+            eq(webSessions.id, args.currentWebSessionId),
+            eq(webSessions.accountId, args.accountId),
+            eq(webSessions.authEpoch, authority.authEpoch),
+            gt(webSessions.expiresAt, args.now),
+            isNull(webSessions.revokedAt),
+          ),
+        )
+        .for('update')
+        .limit(1);
+      if (!currentSession) return false;
+
       const [updated] = await tx
         .update(accountMfa)
         .set({
@@ -128,6 +161,31 @@ export class DrizzleMfaRepo implements MfaRepo {
             createdAt: args.now,
           })),
         );
+      }
+
+      const [nextAuthority] = await tx
+        .update(accounts)
+        .set({ authEpoch: sql`${accounts.authEpoch} + 1` })
+        .where(and(eq(accounts.id, args.accountId), eq(accounts.authEpoch, authority.authEpoch)))
+        .returning({ authEpoch: accounts.authEpoch });
+      if (!nextAuthority) {
+        throw new Error('completeEnrollmentIfPending: account authority update returned no row');
+      }
+
+      const [rebasedSession] = await tx
+        .update(webSessions)
+        .set({ authEpoch: nextAuthority.authEpoch, mfaSatisfiedAt: args.now })
+        .where(
+          and(
+            eq(webSessions.id, args.currentWebSessionId),
+            eq(webSessions.accountId, args.accountId),
+            eq(webSessions.authEpoch, authority.authEpoch),
+            isNull(webSessions.revokedAt),
+          ),
+        )
+        .returning({ id: webSessions.id });
+      if (!rebasedSession) {
+        throw new Error('completeEnrollmentIfPending: enrolling session rebase returned no row');
       }
       return true;
     });

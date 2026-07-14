@@ -32,6 +32,7 @@ import {
 } from '../lib/mfa-totp.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
+import type { AuthCache } from './auth-cache.js';
 
 export interface MfaEnrollmentRow {
   accountId: string;
@@ -71,6 +72,7 @@ export interface MfaRepo {
    *  its first recovery-code batch. Returns false when the snapshot is stale. */
   completeEnrollmentIfPending(args: {
     accountId: string;
+    currentWebSessionId: string;
     expectedUpdatedAt: Date;
     hashes: string[];
     now: Date;
@@ -126,6 +128,7 @@ export class MfaService {
     private readonly repo: MfaRepo,
     private readonly config: MfaServiceConfig,
     private readonly accountAudit: AccountAuditService | null = null,
+    private readonly authCache: AuthCache | null = null,
   ) {}
 
   /** V-353b — start enrollment: generate + encrypt + upsert pending
@@ -164,6 +167,7 @@ export class MfaService {
    *  exists (customer must call /enroll first). */
   async completeEnrollment(args: {
     accountId: string;
+    currentWebSessionId: string;
     code: string;
   }): Promise<CompleteEnrollmentResult> {
     const row = await this.repo.findByAccount(args.accountId);
@@ -193,6 +197,7 @@ export class MfaService {
     const hashes = await Promise.all(codes.map((c) => hashApiKey(normalizeRecoveryCode(c))));
     const completed = await this.repo.completeEnrollmentIfPending({
       accountId: args.accountId,
+      currentWebSessionId: args.currentWebSessionId,
       expectedUpdatedAt: row.updatedAt,
       hashes,
       now: new Date(),
@@ -201,6 +206,18 @@ export class MfaService {
       throw new ConflictError(
         'MFA enrollment changed while the code was being verified. Retry with the latest enrollment.',
       );
+    }
+
+    // Enrollment activation advances account auth authority in the same
+    // transaction that rebases the one enrolling web session. Evict any
+    // pre-activation AccountContext so predecessor bearers cannot survive in
+    // the short auth-cache window after their persisted epochs became stale.
+    if (this.authCache) {
+      try {
+        await this.authCache.invalidateAccount(args.accountId);
+      } catch {
+        /* best effort; cache implementations degrade safely */
+      }
     }
 
     if (this.accountAudit) {
