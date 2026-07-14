@@ -56,6 +56,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const HEADER = resolve(REPO_ROOT, 'apps/marketing-site/src/components/Header.astro');
 const FOOTER = resolve(REPO_ROOT, 'apps/marketing-site/src/components/Footer.astro');
+const BUILT_PRICING = resolve(REPO_ROOT, 'apps/marketing-site/dist/pricing/index.html');
+const BUILT_QA = resolve(REPO_ROOT, 'apps/marketing-site/dist/use-cases/qa-testing/index.html');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -137,9 +139,24 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/rel=\{item\.external \? 'noopener noreferrer' : undefined\}/);
   });
 
-  it('active-route highlighting: pathname === item.href → text-tk-accent-text (S24 2026-07-06: the active tone is TEXT, so it reads the AA-safe accent-text pair — the raw accent is ~3.0:1 on the dark bg, a fill tone). 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced horizontal nudge as the active text bolds; same fix as the dashboard 50b0dd7a + admin-panel 3331f410 sidebars).', () => {
-    expect(body).toMatch(/pathname === item\.href && 'text-tk-accent-text'/);
+  it('normalizes canonical trailing slashes and highlights internal section descendants', () => {
+    expect(body).toMatch(/const normalizedPathname = pathname === '\/'/);
+    expect(body).toMatch(/if \(item\.external === true\) return false/);
+    expect(body).toMatch(/normalizedPathname === item\.href/);
+    expect(body).toMatch(/normalizedPathname\.startsWith\(`\$\{item\.href\}\/`\)/);
+    expect(body.match(/aria-current=\{isActiveItem\(item\) \? 'page' : undefined\}/g)).toHaveLength(
+      2,
+    );
+    expect(body.match(/isActiveItem\(item\) && 'text-tk-accent-text'/g)).toHaveLength(2);
     expect(body).toMatch(/'nav-link font-medium'/);
+  });
+
+  it('built desktop and mobile nav expose the current top-level section', () => {
+    const pricing = read(BUILT_PRICING);
+    const qa = read(BUILT_QA);
+    expect(pricing.match(/href="\/pricing\/" aria-current="page"/g)).toHaveLength(2);
+    expect(qa.match(/href="\/use-cases\/" aria-current="page"/g)).toHaveLength(2);
+    expect(pricing).not.toMatch(/href="https:\/\/docs\.driftstack\.dev" aria-current="page"/);
   });
 });
 

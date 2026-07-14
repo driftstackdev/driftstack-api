@@ -27,6 +27,11 @@ const mobileExtraItems: Array<{ href: string; label: string }> = [
   { href: '/glossary', label: 'Glossary' },
 ];
 const pathname = Astro.url.pathname;
+const normalizedPathname = pathname === '/' ? '/' : pathname.replace(/\/+$/, '');
+function isActiveItem(item: { href: string; external?: boolean }): boolean {
+  if (item.external === true) return false;
+  return normalizedPathname === item.href || normalizedPathname.startsWith(`${item.href}/`);
+}
 ---
 
 <header
@@ -61,7 +66,7 @@ const pathname = Astro.url.pathname;
         navItems.map((item) => (
           <a
             href={item.external ? item.href : `${item.href}/`}
-            aria-current={pathname === item.href ? 'page' : undefined}
+            aria-current={isActiveItem(item) ? 'page' : undefined}
             class:list={[
               // 2026-05-21 — font-medium on base class so width stays
               // constant across active/inactive; active state distinguished
@@ -71,7 +76,7 @@ const pathname = Astro.url.pathname;
               // text bolds. S24: the active tone is TEXT → tk-accent-text
               // (raw accent is ~3.0:1 on the dark bg — a fill tone).
               'nav-link font-medium',
-              pathname === item.href && 'text-tk-accent-text',
+              isActiveItem(item) && 'text-tk-accent-text',
             ]}
             target={item.external ? '_blank' : undefined}
             rel={item.external ? 'noopener noreferrer' : undefined}
@@ -133,14 +138,14 @@ const pathname = Astro.url.pathname;
             [...navItems, ...mobileExtraItems].map((item) => (
               <a
                 href={'external' in item && item.external ? item.href : `${item.href}/`}
-                aria-current={pathname === item.href ? 'page' : undefined}
+                aria-current={isActiveItem(item) ? 'page' : undefined}
                 class:list={[
                   // 2026-05-21 — same constant-font-weight pattern as the
                   // desktop nav (above) so the mobile popup doesn't reflow
                   // when the active item is tapped. S24: same AA-safe
                   // accent-text active tone as the desktop nav.
                   'rounded px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
-                  pathname === item.href && 'text-tk-accent-text',
+                  isActiveItem(item) && 'text-tk-accent-text',
                 ]}
                 target={'external' in item && item.external ? '_blank' : undefined}
                 rel={'external' in item && item.external ? 'noopener noreferrer' : undefined}
