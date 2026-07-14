@@ -147,8 +147,13 @@ describe('W649 cross-SDK verb parity', () => {
     expect(extractV1Paths(read(tsPath('mfa')))).toEqual(expected);
   });
 
-  it('team — V-298c/V-309f wire paths match: /v1/team/invites + /v1/team/members + /v1/team/invites/accept. Per-id DELETE collapses into the list path after normalization.', () => {
-    const expected = new Set(['/v1/team/invites', '/v1/team/members', '/v1/team/invites/accept']);
+  it('team — invite, member, accept, and owner-workspace wire paths match across every SDK; per-id DELETE collapses into the list path after normalization', () => {
+    const expected = new Set([
+      '/v1/team/invites',
+      '/v1/team/members',
+      '/v1/team/invites/accept',
+      '/v1/team/owners',
+    ]);
     expect(extractV1Paths(read(goPath('team')))).toEqual(expected);
     expect(extractV1Paths(read(pythonPath('team')))).toEqual(expected);
     expect(extractV1Paths(read(tsPath('team')))).toEqual(expected);
