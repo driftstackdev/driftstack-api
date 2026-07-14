@@ -36,7 +36,8 @@ describe('docs api/email-preferences content parity', () => {
 
   it('DPA-anchored affirmative-opt-out posture pinned (drift to a bulk "opt out of everything" toggle would violate the GDPR Article 21(2) right-to-object framing the DPA references)', () => {
     expect(body).toMatch(/Per-event opt-in is the unit/);
-    expect(body).toMatch(/\[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\)/);
+    expect(body).toMatch(/\[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\/\)/);
+    expect(body).not.toMatch(/\[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\)/);
     expect(body).toMatch(/affirmative customer choice/);
   });
 
