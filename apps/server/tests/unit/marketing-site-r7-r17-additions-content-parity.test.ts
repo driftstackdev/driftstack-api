@@ -80,7 +80,7 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       );
     });
 
-    it('Vendor names stay off the homepage splash (moved to /trust/sub-processors)', () => {
+    it('Vendor names stay off the homepage splash (moved to /trust/sub-processors/)', () => {
       expect(body).not.toMatch(/Hetzner FSN · Neon EU · R2 EU/);
       expect(body).not.toMatch(/SCA \/ 3DS · 14-day window/);
       expect(body).not.toMatch(/Article 28\(2\) change-log/);
@@ -110,7 +110,8 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(
         /uploaded files use Cloudflare's storage network,\s*\n?\s*which can replicate outside the EU/,
       );
-      expect(body).toMatch(/href="\/trust\/sub-processors"/);
+      expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
+      expect(body).not.toMatch(/href="\/trust\/sub-processors"/);
       // S30 negative pin — the blanket card title must not return.
       expect(body).not.toMatch(/Card title="Your data stays in the EU"/);
     });
@@ -149,10 +150,11 @@ describe('W627 R7-R17 marketing additions content parity', () => {
   describe('R8 "What detection systems see" fingerprint check matrix (homepage)', () => {
     const body = read(INDEX);
 
-    it('Section eyebrow + headline pinned ("Same signals as a physical iPhone. Not \\"close enough\\".") + /trust/security-overview cross-link for the live posture', () => {
+    it('Section eyebrow + headline pinned ("Same signals as a physical iPhone. Not \\"close enough\\".") + canonical /trust/security-overview/ cross-link for the live posture', () => {
       expect(body).toMatch(/What detection systems see/);
       expect(body).toMatch(/Same signals as a physical iPhone\. Not "close enough"\./);
-      expect(body).toMatch(/href="\/trust\/security-overview"/);
+      expect(body).toMatch(/href="\/trust\/security-overview\/"/);
+      expect(body).not.toMatch(/href="\/trust\/security-overview"/);
     });
 
     it('7-signal table rows pinned (User-agent / Canvas hash / WebGL renderer / Audio fingerprint (AudioContext) / Core Text metrics / JavaScript engine timing / Fingerprint across sessions — the 7th row added 2026-05-16 to make the population-stable claim concrete; S20b 2026-07-06 plain-language labels) + Driftstack-column values + population-stable footnote', () => {
