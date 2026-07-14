@@ -216,6 +216,9 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           <button
             type="button"
             data-crypto-copy
+            aria-label="Copy payment address"
+            aria-live="polite"
+            aria-atomic="true"
             class="mt-3 text-sm text-tk-accent-text hover:underline"
           >
             Copy address
@@ -619,6 +622,27 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       const cryptoReady = root.querySelector('[data-crypto-modal-ready]');
       const cryptoCloseBtn = root.querySelector('[data-crypto-modal-close]');
       const cryptoCopyBtn = root.querySelector('[data-crypto-copy]');
+      let cryptoCopyInFlight = false;
+      let cryptoCopyGeneration = 0;
+      let cryptoCopyResetTimer = null;
+
+      function resetCryptoCopyFeedback() {
+        if (!cryptoCopyBtn) return;
+        if (cryptoCopyResetTimer !== null) window.clearTimeout(cryptoCopyResetTimer);
+        cryptoCopyResetTimer = null;
+        cryptoCopyBtn.textContent = 'Copy address';
+        cryptoCopyBtn.setAttribute('aria-label', 'Copy payment address');
+      }
+
+      function showCryptoCopyResult(label, ariaLabel, generation) {
+        if (!cryptoCopyBtn || generation !== cryptoCopyGeneration) return;
+        resetCryptoCopyFeedback();
+        cryptoCopyBtn.textContent = label;
+        cryptoCopyBtn.setAttribute('aria-label', ariaLabel);
+        cryptoCopyResetTimer = window.setTimeout(() => {
+          if (generation === cryptoCopyGeneration) resetCryptoCopyFeedback();
+        }, 2200);
+      }
 
       // Finding #8 — re-clicking "pay with crypto" must not mint a
       // SECOND order with a different payment address. cryptoOrderCache
@@ -658,6 +682,13 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       }
       function hideCryptoModal() {
         if (!cryptoModal) return;
+        cryptoCopyGeneration += 1;
+        cryptoCopyInFlight = false;
+        resetCryptoCopyFeedback();
+        if (cryptoCopyBtn) {
+          cryptoCopyBtn.disabled = false;
+          cryptoCopyBtn.setAttribute('aria-busy', 'false');
+        }
         cryptoModal.classList.add('hidden');
         cryptoModal.classList.remove('flex');
       }
@@ -802,15 +833,30 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       if (cryptoCopyBtn) {
         cryptoCopyBtn.addEventListener('click', async () => {
           const addr = root.querySelector('[data-field="crypto-address"]');
-          if (!addr || !addr.textContent || !navigator.clipboard) return;
+          if (!addr || !addr.textContent || cryptoCopyInFlight) return;
+          const generation = ++cryptoCopyGeneration;
+          cryptoCopyInFlight = true;
+          resetCryptoCopyFeedback();
+          cryptoCopyBtn.textContent = 'Copying…';
+          cryptoCopyBtn.setAttribute('aria-label', 'Copying payment address');
+          cryptoCopyBtn.disabled = true;
+          cryptoCopyBtn.setAttribute('aria-busy', 'true');
           try {
-            await navigator.clipboard.writeText(addr.textContent);
-            cryptoCopyBtn.textContent = 'Copied ✓';
-            setTimeout(() => {
-              cryptoCopyBtn.textContent = 'Copy address';
-            }, 2000);
-          } catch (_) {
-            /* swallow */
+            await window.driftstackWriteClipboard(addr.textContent);
+            showCryptoCopyResult('Copied ✓', 'Payment address copied', generation);
+          } catch {
+            showCryptoCopyResult(
+              'Copy failed',
+              'Could not copy payment address; select it manually',
+              generation,
+            );
+            showBanner('Copy failed. Select the payment address manually.');
+          } finally {
+            if (generation === cryptoCopyGeneration) {
+              cryptoCopyInFlight = false;
+              cryptoCopyBtn.disabled = false;
+              cryptoCopyBtn.setAttribute('aria-busy', 'false');
+            }
           }
         });
       }

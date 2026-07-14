@@ -31,6 +31,7 @@ interface SetUpOpts {
   token?: string | null;
   storageDenied?: boolean;
   cryptoStorageDenied?: boolean;
+  clipboardPlan?: Array<(text: string) => Promise<void>>;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
@@ -40,6 +41,7 @@ function setUpDom(
 ): {
   window: JSDOM['window'];
   fetchCalls: MockFetchCall[];
+  clipboardWrites: string[];
   hydratedCount: () => number;
 } {
   const scriptBodies: string[] = [];
@@ -57,6 +59,8 @@ function setUpDom(
   });
   const { window } = dom;
   const fetchCalls: MockFetchCall[] = [];
+  const clipboardWrites: string[] = [];
+  const clipboardPlan = [...(opts.clipboardPlan ?? [])];
   // @ts-expect-error — jsdom global is loose
   if (typeof window.Response !== 'function') window.Response = Response;
   // @ts-expect-error — jsdom global is loose
@@ -65,6 +69,15 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve(opts.route(call));
   };
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText(text: string) {
+        clipboardWrites.push(text);
+        return clipboardPlan.shift()?.(text) ?? Promise.resolve();
+      },
+    },
+  });
   if (opts.storageDenied === true) {
     Object.defineProperty(Object.getPrototypeOf(window.localStorage), 'getItem', {
       configurable: true,
@@ -110,6 +123,7 @@ function setUpDom(
   return {
     window: window as JSDOM['window'],
     fetchCalls,
+    clipboardWrites,
     hydratedCount: () => hydrated,
   };
 }
@@ -538,6 +552,53 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
       '0xABCDEF0000000000000000000000000000001234',
     );
     expect(text(window, '[data-field="crypto-order-id"]')).toBe('ord_crypto_test1');
+  });
+
+  it('serializes payment-address copy and recovers from denial on retry', async () => {
+    let rejectFirst: ((reason?: unknown) => void) | undefined;
+    const firstWrite = new Promise<void>((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+    const address = '0xABCDEF0000000000000000000000000000001234';
+    const { window, clipboardWrites } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      clipboardPlan: [() => firstWrite, () => Promise.resolve()],
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url)
+          ? json({ subscription: null })
+          : json({
+              provider: 'nowpayments',
+              pay_amount: 0.0123,
+              pay_currency: 'eth',
+              payment_address: address,
+              order_id: 'ord_crypto_copy',
+            }),
+    });
+    win = window;
+    await flush();
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await flush();
+
+    const copy = window.document.querySelector('[data-crypto-copy]') as HTMLButtonElement;
+    copy.click();
+    copy.click();
+    expect(clipboardWrites).toEqual([address]);
+    expect(copy.disabled).toBe(true);
+    expect(copy.getAttribute('aria-busy')).toBe('true');
+    expect(copy.textContent).toMatch(/copying/i);
+
+    rejectFirst?.(new Error('clipboard denied'));
+    await flush();
+    expect(copy.disabled).toBe(false);
+    expect(copy.getAttribute('aria-busy')).toBe('false');
+    expect(copy.textContent).toMatch(/copy failed/i);
+    expect(text(window, '[data-banner]')).toMatch(/select the payment address manually/i);
+
+    copy.click();
+    await flush();
+    expect(clipboardWrites).toEqual([address, address]);
+    expect(copy.textContent).toBe('Copied ✓');
+    expect(copy.getAttribute('aria-label')).toBe('Payment address copied');
   });
 
   it('crypto checkout fails closed before POST when its idempotency key cannot persist', async () => {

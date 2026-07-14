@@ -391,6 +391,19 @@ const navSections: NavSection[] = [
             return null;
           }
         };
+        window.driftstackWriteClipboard = function (value) {
+          if (typeof value !== 'string') {
+            return Promise.reject(new Error('clipboard value must be a string'));
+          }
+          try {
+            if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+              return Promise.reject(new Error('clipboard unavailable'));
+            }
+            return Promise.resolve(navigator.clipboard.writeText(value));
+          } catch (error) {
+            return Promise.reject(error);
+          }
+        };
       })();
     </script>
   </head>
