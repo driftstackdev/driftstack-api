@@ -387,6 +387,80 @@ describe('admin account detail mutation reconciliation', () => {
     );
   });
 
+  it('treats malformed accepted support-note JSON as recorded without a duplicate POST', async () => {
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', () => {});
+    const dom = new JSDOM(
+      `<!doctype html><title>Account</title>
+       <main data-page="admin-account-detail">
+         <div data-banner class="hidden"></div>
+         <span data-field="title-name"></span><span data-field="title-email"></span>
+         <span data-field="tier"></span><span data-field="status">active</span>
+         <span data-field="created"></span><span data-field="updated"></span>
+         <span data-field="account-id"></span><a data-field="full-audit-link"></a>
+         <span data-field="status-badge"></span>
+         <div data-field="action-row"><button data-action="add-note">Add support note</button></div>
+         <form data-field="override-form" class="hidden"></form>
+         <ul data-list="account-audit"></ul><div data-account-cost-body></div>
+       </main>`,
+      {
+        url: 'https://admin.driftstack.dev/accounts/1234',
+        runScripts: 'dangerously',
+        virtualConsole,
+      },
+    );
+    windowRef = dom.window;
+    const calls: FetchCall[] = [];
+    // @ts-expect-error -- jsdom's fetch global is intentionally injected.
+    dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+      const call = { url: String(input), init };
+      calls.push(call);
+      if (call.init?.method === 'POST' && /\/audit-note$/.test(call.url)) {
+        return Promise.resolve(
+          new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
+      if (/\/v1\/admin\/accounts\/acc_1234$/.test(call.url)) {
+        return Promise.resolve(
+          response({
+            name: 'Test Account',
+            email: 'owner@example.test',
+            tier: 'api_builder',
+            status: 'active',
+            created_at: '2026-07-01T00:00:00.000Z',
+            updated_at: '2026-07-13T00:00:00.000Z',
+          }),
+        );
+      }
+      if (/\/v1\/admin\/audit-log\?/.test(call.url)) {
+        return Promise.resolve(response({ data: [] }));
+      }
+      return Promise.resolve(response({}, 404));
+    };
+    // @ts-expect-error -- branded modal helper is injected by AdminLayout.
+    dom.window.driftstackPrompt = () => Promise.resolve('investigated customer report');
+    dom.window.localStorage.setItem('ds_web_session_token', 'staff-token');
+    evalPage(dom.window);
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    await flush();
+
+    const noteButton = dom.window.document.querySelector(
+      '[data-action="add-note"]',
+    ) as HTMLButtonElement;
+    noteButton.click();
+    noteButton.dispatchEvent(new dom.window.Event('click', { bubbles: true, cancelable: true }));
+    await flush(80);
+
+    expect(calls.filter((call) => /\/audit-note$/.test(call.url))).toHaveLength(1);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toBe(
+      'Support note recorded.',
+    );
+    expect(noteButton.disabled).toBe(false);
+  });
+
   it('requires an advanced exact override version before treating a timed-out upsert as applied', async () => {
     const virtualConsole = new VirtualConsole();
     virtualConsole.on('jsdomError', () => {});

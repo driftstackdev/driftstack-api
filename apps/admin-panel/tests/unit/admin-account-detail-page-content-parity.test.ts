@@ -174,16 +174,15 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(confirmCall![0]).toMatch(/destructive:\s*true/);
   });
 
-  it('mutations surface the server problem+json detail via mutationJson (W151/W152), so refusals explain why', () => {
-    // tier change / suspend / unsuspend / override / note / refund all
-    // route their non-ok response through mutationJson, which reads
-    // b.detail — so an operator sees "Refund amount exceeds the original
-    // charge" instead of a bare "HTTP 400". Pin the helper + that the six
-    // mutations use it (not the old inline bare-HTTP reject).
+  it('mutations surface problem details while bodyless accepted writes skip success parsing', () => {
+    // Tier/suspend/unsuspend consume returned account JSON. Override/note/refund
+    // do not, but still parse non-ok problem details so refusals explain why.
     expect(body).toMatch(/function mutationJson\(r\)/);
+    expect(body).toMatch(/function mutationAccepted\(r\)/);
+    expect(body).toContain('These writes do not consume success JSON');
     expect(body).toMatch(/window\.driftstackResponseError\(r, b\)/);
-    const usages = body.match(/\.then\(mutationJson\)/g) ?? [];
-    expect(usages.length).toBe(6);
+    expect(body.match(/\.then\(mutationJson\)/g) ?? []).toHaveLength(3);
+    expect(body.match(/\.then\(mutationAccepted\)/g) ?? []).toHaveLength(3);
   });
 
   it('quota override apply is single-flight and locks the whole form accessibly', () => {

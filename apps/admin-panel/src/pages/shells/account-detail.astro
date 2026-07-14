@@ -547,6 +547,16 @@ const accountId = account.id;
           .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
       }
 
+      function mutationAccepted(r) {
+        // These writes do not consume success JSON. Accepted status is the
+        // mutation boundary; only non-2xx problem details are parsed.
+        if (r.ok) return;
+        return r
+          .json()
+          .catch(() => ({}))
+          .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+      }
+
       function applyAccount(a) {
         const titleName = a.name || a.email;
         setText('title-name', titleName);
@@ -1163,7 +1173,7 @@ const accountId = account.id;
                 body: JSON.stringify(payload),
               },
             )
-              .then(mutationJson)
+              .then(mutationAccepted)
               .catch(async (err) => {
                 if (err && err.name === 'AbortError') {
                   await reconcileOverrideSet(payload, snapshot);
@@ -1254,7 +1264,7 @@ const accountId = account.id;
           method: 'POST',
           body: JSON.stringify(payload),
         })
-          .then(mutationJson)
+          .then(mutationAccepted)
           .then(() => {
             showBanner('Support note recorded.');
             load();
@@ -1306,7 +1316,7 @@ const accountId = account.id;
           method: 'POST',
           body: JSON.stringify(payload),
         })
-          .then(mutationJson)
+          .then(mutationAccepted)
           .then(() => {
             showBanner(
               'Refund recorded. Reminder: actual refund is issued via Stripe dashboard — this endpoint is audit-only.',
