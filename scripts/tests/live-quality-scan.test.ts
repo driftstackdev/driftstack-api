@@ -1,11 +1,23 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 const SCRIPT = resolve(process.cwd(), 'scripts/live-quality-scan.mjs');
+
+function needsCanonicalSlash(url: string): boolean {
+  const parsed = new URL(url);
+  if (parsed.pathname === '/' || parsed.pathname.endsWith('/')) return false;
+  return !(parsed.pathname.split('/').at(-1) ?? '').includes('.');
+}
+
+function defaultSeeds(source: string): string[] {
+  const block = source.match(/const DEFAULT_SEEDS = \[([\s\S]*?)\n\];/)?.[1] ?? '';
+  return Array.from(block.matchAll(/'([^']+)'/g), (match) => String(match[1]));
+}
 
 async function runScan(
   baseUrl: string,
@@ -34,6 +46,17 @@ async function runScan(
 }
 
 describe('live-quality-scan redirect detection', () => {
+  it('requests canonical default static routes directly', () => {
+    const seeds = defaultSeeds(readFileSync(SCRIPT, 'utf8'));
+    expect(seeds.length).toBeGreaterThan(8);
+    expect(seeds.filter(needsCanonicalSlash)).toEqual([]);
+
+    const mutated = seeds.map((seed) =>
+      seed === 'https://driftstack.dev/pricing/' ? seed.slice(0, -1) : seed,
+    );
+    expect(mutated.filter(needsCanonicalSlash)).toEqual(['https://driftstack.dev/pricing']);
+  });
+
   it('fails when fetch follows an internal redirect to a different final URL', async () => {
     const server = createServer((req, res) => {
       if (req.url === '/redirected') {

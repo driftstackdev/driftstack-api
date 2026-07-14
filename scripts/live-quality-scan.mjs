@@ -30,14 +30,14 @@ const seedArgs = ARGS.filter(
 // Default seed set = every live customer-facing surface + its high-value deep paths.
 const DEFAULT_SEEDS = [
   'https://driftstack.dev',
-  'https://driftstack.dev/pricing',
-  'https://driftstack.dev/security',
-  'https://driftstack.dev/self-hosted',
-  'https://driftstack.dev/comparison',
-  'https://driftstack.dev/docs',
-  'https://driftstack.dev/legal/terms',
-  'https://driftstack.dev/legal/privacy',
-  'https://driftstack.dev/legal/aup',
+  'https://driftstack.dev/pricing/',
+  'https://driftstack.dev/security/',
+  'https://driftstack.dev/self-hosted/',
+  'https://driftstack.dev/comparison/',
+  'https://driftstack.dev/docs/',
+  'https://driftstack.dev/legal/terms/',
+  'https://driftstack.dev/legal/privacy/',
+  'https://driftstack.dev/legal/aup/',
   'https://docs.driftstack.dev',
   'https://status.driftstack.dev',
 ];
