@@ -125,10 +125,15 @@ describe('V-553.B-15 AccountsAdminService — scope gates', () => {
     await expect(svc.unsuspend(unscoped, 'acc_1')).rejects.toThrow(/driftstack_internal_admin/);
   });
 
-  it('admin scope satisfies internal-admin via V-174 alias', async () => {
+  it('legacy customer admin cannot satisfy staff authority; exact internal-admin can', async () => {
     const { repo } = makeRepo([baseAccount()]);
     const svc = new AccountsAdminService(repo);
-    await expect(svc.getAccount(ctxWith(['admin']), 'acc_1')).resolves.toBeDefined();
+    await expect(svc.getAccount(ctxWith(['admin']), 'acc_1')).rejects.toThrow(
+      /driftstack_internal_admin/,
+    );
+    await expect(
+      svc.getAccount(ctxWith(['driftstack_internal_admin']), 'acc_1'),
+    ).resolves.toBeDefined();
   });
 });
 
