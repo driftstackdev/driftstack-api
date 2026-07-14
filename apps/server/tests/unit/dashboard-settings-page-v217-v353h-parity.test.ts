@@ -107,8 +107,9 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
+      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security\/" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
     );
+    expect(p).not.toMatch(/href="\/security"/);
   });
 
   it("CRITICAL no-token banner — 'Sign in to see live preferences + recent activity.' Drift to a 401 redirect would lose the partial-preview affordance.", () => {
