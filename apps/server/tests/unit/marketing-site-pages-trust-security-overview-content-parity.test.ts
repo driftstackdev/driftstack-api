@@ -205,11 +205,11 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
   // the old pin locked a stale count.
   it("Cross-link to /security + /trust/compliance pinned: 'The architecture deep-dive at /security walks the six-pillar surface in detail. For pen-test evidence or compliance certifications, see /trust/compliance.' — pinned so the 3-page navigation (security-overview → security deep-dive → compliance) survives (drift to dropping either cross-link would orphan that page from the security-evaluation walk). Fleet v2 (S10): link tone moved to the AA-safe text-tk-accent-text", () => {
     expect(body).toMatch(
-      /<a href="\/security" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>\s*\n?\s*walks the six-pillar surface in detail\./,
+      /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>\s*\n?\s*walks the six-pillar surface in detail\./,
     );
     expect(body).not.toMatch(/five-pillar/);
     expect(body).toMatch(
-      /For pen-test\s*\n?\s*evidence or compliance certifications, see\s*\n?\s*<a href="\/trust\/compliance" class="text-tk-accent-text underline"\s*\n?\s*>\/trust\/compliance<\/a\s*\n?\s*>\./,
+      /For pen-test\s*\n?\s*evidence or compliance certifications, see\s*\n?\s*<a href="\/trust\/compliance\/" class="text-tk-accent-text underline"\s*\n?\s*>\/trust\/compliance<\/a\s*\n?\s*>\./,
     );
   });
 
