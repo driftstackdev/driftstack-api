@@ -508,6 +508,101 @@ describe('webhooks page — local integration', () => {
     expect(editBtn.disabled).toBe(false);
   });
 
+  it('treats a malformed accepted webhook edit body as committed without a duplicate PATCH', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [ENDPOINT] }),
+        () => json(ENDPOINT),
+        () =>
+          new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-edit="wh_endpoint"]') as HTMLButtonElement).click();
+    await flush();
+    const editForm = window.document.querySelector('[data-edit-form]') as HTMLFormElement;
+    (editForm.querySelector('input[name="event"]') as HTMLInputElement).checked = true;
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
+    expect(isHidden(window, '[data-edit-wrap]')).toBe(true);
+    expect(isHidden(window, '[data-edit-error]')).toBe(true);
+  });
+
+  it('reconciles a timed-out webhook edit that committed without submitting it again', async () => {
+    const updatedEndpoint = {
+      ...ENDPOINT,
+      url: 'https://example.com/updated-hook',
+      description: 'Updated hook',
+      events: ['session.completed'],
+    };
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [ENDPOINT] }),
+        () => json(ENDPOINT),
+        () => Promise.reject(timeout),
+        () => json({ data: [updatedEndpoint] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-edit="wh_endpoint"]') as HTMLButtonElement).click();
+    await flush();
+    const editForm = window.document.querySelector('[data-edit-form]') as HTMLFormElement;
+    (editForm.querySelector('input[name="url"]') as HTMLInputElement).value = updatedEndpoint.url;
+    (editForm.querySelector('input[name="description"]') as HTMLInputElement).value =
+      updatedEndpoint.description;
+    (editForm.querySelector('input[name="event"]') as HTMLInputElement).checked = true;
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
+    expect(isHidden(window, '[data-edit-wrap]')).toBe(true);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /refreshed endpoint exactly matches.*save completed.*not submitted again/i,
+    );
+  });
+
+  it('locks blind webhook edit retry when timeout authority cannot be refreshed', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [ENDPOINT] }),
+        () => json(ENDPOINT),
+        () => Promise.reject(timeout),
+        () => Promise.reject(new Error('list unavailable')),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-edit="wh_endpoint"]') as HTMLButtonElement).click();
+    await flush();
+    const editForm = window.document.querySelector('[data-edit-form]') as HTMLFormElement;
+    (editForm.querySelector('input[name="event"]') as HTMLInputElement).checked = true;
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+
+    const submit = editForm.querySelector('[data-edit-submit]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toMatch(/verify before retrying/i);
+    expect(window.document.querySelector('[data-edit-error]')?.textContent).toMatch(
+      /outcome is unknown.*could not be refreshed.*reload and verify.*overwrite a committed change/i,
+    );
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
+  });
+
   it('rotate timeout reconciles committed grace state without a false secret reveal', async () => {
     const rotating = {
       ...ENDPOINT,

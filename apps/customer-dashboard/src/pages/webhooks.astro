@@ -527,6 +527,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       let createOutcomeBlocked = false;
       let createOutcomeReason = '';
       let editInFlight = false;
+      let editOutcomeBlocked = false;
       let endpointDataAvailable = false;
       let endpointListLoading = false;
 
@@ -1390,6 +1391,11 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function startEdit(endpoint) {
         editingEndpoint = endpoint;
+        editOutcomeBlocked = false;
+        if (editSubmit) {
+          editSubmit.disabled = false;
+          editSubmit.textContent = 'Save changes';
+        }
         if (editIdEl) editIdEl.textContent = endpoint.id;
         const urlInput = editForm.querySelector('input[name="url"]');
         const descInput = editForm.querySelector('input[name="description"]');
@@ -1445,7 +1451,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (editForm) {
         editForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
-          if (editInFlight) return;
+          if (editInFlight || editOutcomeBlocked) return;
           if (!editingEndpoint) return;
           if (editError) {
             editError.classList.add('hidden');
@@ -1465,6 +1471,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             return;
           }
           const editingEndpointId = String(editingEndpoint.id);
+          const desiredEndpoint = {
+            url: url,
+            description: description,
+            events: [...events].sort(),
+            active: active,
+          };
           if (!beginEndpointMutation(editingEndpointId)) {
             showEditError('Wait for the active webhook action to finish.');
             return;
@@ -1491,19 +1503,57 @@ const apiBaseUrl = resolveApiBaseUrl();
               active: active,
             }),
           })
-            .then((r) =>
-              r.ok
-                ? r.json()
-                : r
-                    .json()
-                    .catch(() => ({}))
-                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-            )
+            .then((r) => {
+              if (r.ok) {
+                // The PATCH body is unused. Accepted status is authoritative;
+                // parsing cosmetic JSON must not create a duplicate-save path.
+                return;
+              }
+              return r
+                .json()
+                .catch(() => ({}))
+                .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+            })
             .then(() => {
               hideEdit();
               window.location.reload();
             })
-            .catch((err) => {
+            .catch(async (err) => {
+              if (err && err.name === 'AbortError') {
+                const refreshed = await refreshEndpointList(false);
+                const liveEndpoint = refreshed
+                  ? endpointSnapshot.find(
+                      (endpoint) => String(endpoint.id) === editingEndpointId,
+                    )
+                  : null;
+                const liveEvents = Array.isArray(liveEndpoint?.events)
+                  ? [...liveEndpoint.events].map(String).sort()
+                  : [];
+                const exactMatch =
+                  liveEndpoint &&
+                  String(liveEndpoint.url || '') === desiredEndpoint.url &&
+                  String(liveEndpoint.description || '') === desiredEndpoint.description &&
+                  liveEndpoint.active === desiredEndpoint.active &&
+                  JSON.stringify(liveEvents) === JSON.stringify(desiredEndpoint.events);
+                if (exactMatch) {
+                  hideEdit();
+                  showBanner(
+                    'The save response timed out, but the refreshed endpoint exactly matches your changes. The save completed and was not submitted again.',
+                  );
+                  return;
+                }
+                if (refreshed) {
+                  showEditError(
+                    'The save response timed out, and the refreshed endpoint does not match your changes. Review the live values, then retry only if the update is still needed.',
+                  );
+                  return;
+                }
+                editOutcomeBlocked = true;
+                showEditError(
+                  'The save outcome is unknown and the endpoint list could not be refreshed. Reload and verify the live endpoint before retrying; another save could overwrite a committed change.',
+                );
+                return;
+              }
               showEditError(
                 window.driftstackRequestErrorMessage(
                   err,
@@ -1515,9 +1565,11 @@ const apiBaseUrl = resolveApiBaseUrl();
               editInFlight = false;
               endEndpointMutation(editingEndpointId);
               if (editSubmit) {
-                editSubmit.disabled = false;
+                editSubmit.disabled = editOutcomeBlocked;
                 editSubmit.setAttribute('aria-busy', 'false');
-                editSubmit.textContent = 'Save changes';
+                editSubmit.textContent = editOutcomeBlocked
+                  ? 'Verify before retrying'
+                  : 'Save changes';
               }
             });
         });

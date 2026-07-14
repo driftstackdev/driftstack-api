@@ -42,7 +42,7 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toContain('let createInFlight = false;');
     expect(body).toContain('let editInFlight = false;');
     expect(body).toMatch(/if \(createInFlight\) return;/);
-    expect(body).toMatch(/if \(editInFlight\) return;/);
+    expect(body).toMatch(/if \(editInFlight \|\| editOutcomeBlocked\) return;/);
     expect(body).toMatch(/if \(actionButtonsInFlight\.has\(btn\)\) return;/);
     expect(body.match(/boundedFetch\(/g)?.length).toBeGreaterThanOrEqual(11);
     expect(body).toContain('Request took too long. Check your connection and try again.');
@@ -92,6 +92,21 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toMatch(/if \(uncertainRotationIds\.has\(String\(id\)\)\)/);
     expect(body).toContain('refreshed authoritative list has no new endpoint for this URL');
     expect(body).toContain('refreshed authoritative endpoint has no new rotation grace period');
+  });
+
+  it('treats accepted webhook edits as authoritative and reconciles timeout ambiguity', () => {
+    expect(body).toContain('The PATCH body is unused. Accepted status is authoritative');
+    expect(body).toContain('let editOutcomeBlocked = false;');
+    expect(body).toMatch(/const refreshed = await refreshEndpointList\(false\)/);
+    expect(body).toContain('the refreshed endpoint exactly matches your changes');
+    expect(body).toContain('the refreshed endpoint does not match your changes');
+    expect(body).toContain('another save could overwrite a committed change');
+    expect(body).toMatch(/editSubmit\.disabled = editOutcomeBlocked/);
+
+    const start = body.indexOf('if (editForm) {');
+    const end = body.indexOf('// V-347b', start);
+    const handler = body.slice(start, end);
+    expect(handler).not.toContain('? r.json()');
   });
 
   it('terminally guards ambiguous replay and test-enqueue outcomes', () => {
