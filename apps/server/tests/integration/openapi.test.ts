@@ -93,16 +93,24 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/accounts/{id}/unsuspend',
         '/v1/admin/accounts/{id}/usage',
         '/v1/admin/api-keys',
+        '/v1/admin/atlas-priority/event/{id}',
+        '/v1/admin/atlas-priority/queue',
         '/v1/admin/audit-log',
         '/v1/admin/overview',
         // admin billing analytics — active-subscription mix by tier
         '/v1/admin/billing/subscriptions/stats',
+        '/v1/admin/cost/accounts/{id}',
+        '/v1/admin/cost/config',
+        '/v1/admin/cost/overview',
         // owner-only platform activation status (master-owner cockpit)
         '/v1/admin/owner/platform-status',
         // owner-only current per-tier pricing (read)
         '/v1/admin/owner/pricing',
         // owner-only edit a tier's monthly price (audited)
         '/v1/admin/owner/pricing/{tier}',
+        '/v1/admin/owner/secrets',
+        '/v1/admin/owner/secrets/{name}',
+        '/v1/admin/owner/secrets/{name}/reveal',
         '/v1/admin/rate-limit-overrides',
         '/v1/admin/sessions',
         '/v1/admin/sessions/stats',
@@ -112,6 +120,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/webhook-deliveries/{id}',
         '/v1/admin/webhook-deliveries/{id}/replay',
         '/v1/admin/webhook-dlq',
+        '/v1/admin/webhook-dlq/{id}/discard',
         '/v1/admin/webhook-dlq/{id}/requeue',
         // V-465 — admin OpenAPI gap closure
         '/v1/admin/accounts',
@@ -121,11 +130,17 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/api-keys/{id}/revoke',
         '/v1/admin/incidents',
         '/v1/admin/incidents/{id}',
+        '/v1/admin/incidents/{id}/reopen',
         '/v1/admin/incidents/{id}/resolve',
         '/v1/admin/incidents/{id}/updates',
+        '/v1/admin/oauth/clients',
+        '/v1/admin/oauth/clients/{id}',
+        '/v1/admin/oauth/clients/{id}/rotate-secret',
         '/v1/admin/sessions/{id}/destroy',
         '/v1/admin/status-subscribers',
+        '/v1/admin/status-subscribers/force-subscribe',
         '/v1/admin/status-subscribers/{id}/force-unsubscribe',
+        '/v1/admin/usage/accounts/{id}',
         '/v1/account/audit-log',
         '/v1/account/audit-log/export',
         '/v1/account/email-preferences',
@@ -570,10 +585,12 @@ describe('OpenAPI spec generation', () => {
     // Drift-guard pins the clean shape.
     expect(json).not.toMatch(/docs\/internal\/fleet-nodes-sql-migration-design/);
     expect(json).not.toMatch(/docs\/internal\/cross-agent-control-plane-contract/);
-    // The fleet-events 503 description still carries the load-bearing
-    // operator-only framing so customer API-key holders know it's not
-    // for them.
-    expect(json).toMatch(/operator-only \(fleet nodes auth via mTLS\)/);
+    // The live fleet-events summary still carries the load-bearing
+    // operator-only + mTLS/JWT framing so customer API-key holders know
+    // it is a separate node-authenticated control-plane surface.
+    expect(json).toMatch(
+      /Fleet-node WebSocket event stream \(operator-only; mTLS \+ signed Ed25519 JWT/,
+    );
     // The fleet-events summary line no longer cites the internal
     // `docs/network-architecture.md` repo path — that doc lives at
     // the repo root, not on docs.driftstack.dev, so customers reading
