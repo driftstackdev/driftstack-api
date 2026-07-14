@@ -51,7 +51,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
     expect(body).toMatch(/<code>POST \/v1\/status\/subscribe<\/code>/);
     expect(body).toMatch(
-      /<a href="\/docs\/status-subscriptions">\/docs\/status-subscriptions<\/a>/,
+      /<a href="\/docs\/status-subscriptions\/">\/docs\/status-subscriptions<\/a>/,
     );
   });
 
@@ -105,7 +105,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
 
   it("/docs/sla-policy authoritative-reference framing pinned: 'Tier-by-tier SLA targets, the windowing methodology, the credit bands, and the dispute process all live in /docs/sla-policy — that is the authoritative reference. Tier identifiers used there match the AccountTier enum exactly.' — pinned so the /docs/sla-policy authoritative cross-ref + AccountTier-enum-match commitment survives (drift to dropping the AccountTier-enum-match anchor would re-create tier-name-divergence risk)", () => {
     expect(body).toMatch(
-      /Tier-by-tier SLA targets, the windowing methodology, the\s*\n?\s*credit bands, and the dispute process all live in\s*\n?\s*<a href="\/docs\/sla-policy">\/docs\/sla-policy<\/a> — that is the\s*\n?\s*authoritative reference\. Tier identifiers used there match\s*\n?\s*the <code>AccountTier<\/code> enum exactly\./,
+      /Tier-by-tier SLA targets, the windowing methodology, the\s*\n?\s*credit bands, and the dispute process all live in\s*\n?\s*<a href="\/docs\/sla-policy\/">\/docs\/sla-policy<\/a> — that is the\s*\n?\s*authoritative reference\. Tier identifiers used there match\s*\n?\s*the <code>AccountTier<\/code> enum exactly\./,
     );
   });
 
@@ -142,17 +142,22 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
       /<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\s*\n?\s*— PGP available on the page\./,
     );
     expect(body).toMatch(
-      /<a href="\/docs\/api-security-headers">\/docs\/api-security-headers<\/a>/,
+      /<a href="\/docs\/api-security-headers\/">\/docs\/api-security-headers<\/a>/,
     );
   });
 
   it('4-related-doc cluster: /docs/sla-policy + /docs/status-subscriptions + /docs/webhooks (subscribable today) + status.driftstack.dev — pinned so the 4-related navigation surface stays complete (drift to dropping /docs/sla-policy would orphan the authoritative-credit-bands reference)', () => {
     expect(body).toMatch(
-      /<a href="\/docs\/sla-policy">SLA policy \(authoritative tier targets \+ credit bands\)<\/a>/,
+      /<a href="\/docs\/sla-policy\/">SLA policy \(authoritative tier targets \+ credit bands\)<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/status-subscriptions">Status email subscriptions<\/a>/);
     expect(body).toMatch(
-      /<a href="\/docs\/webhooks">Webhook signing \+ retries \(for the events that are subscribable today\)<\/a>/,
+      /<a href="\/docs\/status-subscriptions\/">Status email subscriptions<\/a>/,
+    );
+    expect(body).toMatch(
+      /<a href="\/docs\/webhooks\/">Webhook signing \+ retries \(for the events that are subscribable today\)<\/a>/,
+    );
+    expect(body).not.toMatch(
+      /href="\/docs\/(?:sla-policy|status-subscriptions|webhooks|api-security-headers)"/,
     );
   });
 
