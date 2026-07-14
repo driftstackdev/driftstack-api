@@ -11,7 +11,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 // fleet token).
 //
 // Progressive enhancement: SSG renders an empty shell; inline <script>
-// reads ds_admin_session_token from localStorage, fetches the queue
+// reads ds_web_session_token from localStorage, fetches the queue
 // endpoint, populates table + stats card, and re-polls every 30s.
 // Filter bar wires status select + customer_id text input + page_url
 // substring filter (client-side for now; server-side surfaces later
@@ -99,7 +99,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         <label for="filter-status" class="block text-xs text-tk-ink-3 mb-1">Status</label>
         <select
           id="filter-status"
-          class="border border-tk-border rounded-md px-3 py-1.5 text-sm bg-tk-surface"
+          disabled
+          aria-disabled="true"
+          title="Available after the live queue loads."
+          class="border border-tk-border rounded-md px-3 py-1.5 text-sm bg-tk-surface disabled:cursor-not-allowed disabled:bg-tk-hover disabled:text-tk-ink-3"
         >
           <option value="">All</option>
           {STATUS_VALUES.map((s) => <option value={s}>{s}</option>)}
@@ -112,8 +115,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         <input
           id="filter-customer"
           type="text"
+          disabled
+          aria-disabled="true"
+          title="Available after the live queue loads."
           placeholder="cust-..."
-          class="border border-tk-border rounded-md px-3 py-1.5 text-sm bg-tk-surface w-64"
+          class="border border-tk-border rounded-md px-3 py-1.5 text-sm bg-tk-surface w-64 disabled:cursor-not-allowed disabled:bg-tk-hover disabled:text-tk-ink-3"
         />
       </div>
       <div>
@@ -123,12 +129,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         <input
           id="filter-page-url"
           type="text"
+          disabled
+          aria-disabled="true"
+          title="Available after the live queue loads."
           placeholder="example.com"
-          class="border border-tk-border rounded-md px-3 py-1.5 text-sm bg-tk-surface w-64"
+          class="border border-tk-border rounded-md px-3 py-1.5 text-sm bg-tk-surface w-64 disabled:cursor-not-allowed disabled:bg-tk-hover disabled:text-tk-ink-3"
         />
       </div>
       <div class="flex items-center gap-2">
-        <input id="filter-failures-only" type="checkbox" />
+        <input
+          id="filter-failures-only"
+          type="checkbox"
+          disabled
+          aria-disabled="true"
+          title="Available after the live queue loads."
+        />
         <label for="filter-failures-only" class="text-sm text-tk-ink-2"
           >Show failures only</label
         >
@@ -136,7 +151,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       <button
         id="refresh-btn"
         type="button"
-        class="ml-auto px-3 py-1.5 text-sm rounded-md border border-tk-border bg-tk-surface hover:bg-tk-bg"
+        disabled
+        aria-disabled="true"
+        title="Available after staff sign-in."
+        class="ml-auto px-3 py-1.5 text-sm rounded-md border border-tk-border bg-tk-surface hover:bg-tk-bg disabled:cursor-not-allowed disabled:text-tk-ink-3"
       >
         Refresh now
       </button>
@@ -159,7 +177,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <tbody id="queue-tbody" class="divide-y divide-slate-100">
           <tr>
             <td colspan="7" class="px-4 py-6 text-center text-tk-ink-3"
-              >Loading via /v1/internal/atlas-priority/queue…</td
+              >Live queue events are unavailable until loaded.</td
             >
           </tr>
         </tbody>
@@ -252,11 +270,72 @@ const apiBaseUrl = resolveApiBaseUrl();
       );
     }
 
+    function getToken() {
+      try {
+        return localStorage.getItem('ds_web_session_token') || '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function setRefreshAuthority(available, reason) {
+      const disabled = !available || manualRefreshLoading;
+      refreshBtn.disabled = disabled;
+      refreshBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      if (!available) {
+        refreshBtn.title = reason || 'Available after staff sign-in.';
+      } else if (manualRefreshLoading) {
+        refreshBtn.title = 'Wait for the current queue refresh to finish.';
+      } else {
+        refreshBtn.removeAttribute('title');
+      }
+    }
+
+    function setFilterAuthority(available, reason) {
+      Object.values(filters).forEach((el) => {
+        el.disabled = !available;
+        el.setAttribute('aria-disabled', available ? 'false' : 'true');
+        if (available) el.removeAttribute('title');
+        else el.title = reason || 'Available after the live queue loads.';
+      });
+    }
+
+    function renderStatsUnavailable() {
+      Object.values(statSpans).forEach((el) => {
+        if (el) el.textContent = '—';
+      });
+    }
+
+    function renderUnavailable(message) {
+      tbody.innerHTML =
+        '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">' +
+        escapeHtml(message) +
+        '</td></tr>';
+      renderStatsUnavailable();
+      statusLine.textContent = message;
+      setFilterAuthority(false, message);
+    }
+
     async function fetchQueue(manual = false) {
       if (manual && manualRefreshLoading) return;
+      const token = getToken();
+      if (!token) {
+        inFlight += 1;
+        if (loadController) loadController.abort();
+        loadController = null;
+        renderUnavailable('Sign in with a staff admin account to load the live queue.');
+        setRefreshAuthority(false, 'Available after staff sign-in.');
+        errorBanner.classList.add('hidden');
+        if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+        return false;
+      }
+      setRefreshAuthority(true);
+      setFilterAuthority(false, 'Loading the current queue.');
+      statusLine.textContent = 'Loading the current queue…';
+      errorBanner.classList.add('hidden');
       if (manual) {
         manualRefreshLoading = true;
-        refreshBtn.disabled = true;
+        setRefreshAuthority(true);
         refreshBtn.setAttribute('aria-busy', 'true');
         refreshBtn.textContent = 'Refreshing…';
       }
@@ -274,7 +353,6 @@ const apiBaseUrl = resolveApiBaseUrl();
       // (per-environment) like every sibling page, not a hardcoded prod
       // host — so a staging/local admin build queries its own env.
       const url = apiBaseUrl + '/v1/admin/atlas-priority/queue?' + params.toString();
-      const token = localStorage.getItem('ds_web_session_token');
       if (loadController) loadController.abort();
       const controller = new AbortController();
       loadController = controller;
@@ -293,36 +371,32 @@ const apiBaseUrl = resolveApiBaseUrl();
             new Error('HTTP ' + res.status),
             'Could not load the queue. Try again.',
           );
-          // Clear the "Loading…" placeholder so a first-load failure (e.g. a
-          // 401 with no token) doesn't leave a stuck loading row under the
-          // error banner.
-          tbody.innerHTML =
-            '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">' +
-            escapeHtml(message) +
-            '</td></tr>';
+          renderUnavailable(message);
           showError(message);
-          return;
+          return false;
         }
         const data = await res.json();
         if (myReq !== inFlight) return; // superseded by a newer call
         renderStats(data.stats || {});
         renderRows(filterClientSide(data.events || []));
+        setFilterAuthority(true);
         errorBanner.classList.add('hidden');
         statusLine.textContent =
           'Showing ' + (data.events?.length ?? 0) + ' events · ' + new Date().toISOString();
+        return true;
       } catch (err) {
         if (myReq !== inFlight) return; // superseded by a newer call
-        tbody.innerHTML =
-          '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">Could not load the queue.</td></tr>';
-        showError(
+        const message =
           err && err.name === 'AbortError'
             ? 'Request timed out. Try again.'
-            : 'Could not load the queue. Check your connection and try again.',
-        );
+            : 'Could not load the queue. Check your connection and try again.';
+        renderUnavailable(message);
+        showError(message);
+        return false;
       } finally {
         if (manual) {
           manualRefreshLoading = false;
-          refreshBtn.disabled = false;
+          setRefreshAuthority(Boolean(getToken()), 'Available after staff sign-in.');
           refreshBtn.setAttribute('aria-busy', 'false');
           refreshBtn.textContent = 'Refresh now';
         }
