@@ -307,17 +307,17 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('total tree size (S37 census): 60 top-level route hrefs (S22.2 pinned 50; S29 batch 1 → 55; S37 content-enrichment batch 2 added 2 crypto guides + webhooks/crypto-events + reference/emails + reference/data-residency — a drop below 60 means a page went orphaned again) + 139 children anchor hrefs (131 API + 8 webhooks — unchanged by S37: the new pages are guides/catalog/reference pages, not endpoint resources; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
+  it('total tree size: 61 top-level routes + 140 child anchors, including the archetype catalog and its list endpoint', () => {
     const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
     const topLevel = hrefs.filter((h) => !h.includes('#'));
     const anchors = hrefs.filter((h) => h.includes('#'));
-    expect(topLevel).toHaveLength(60);
-    expect(anchors).toHaveLength(139);
+    expect(topLevel).toHaveLength(61);
+    expect(anchors).toHaveLength(140);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
-    expect(new Set(topLevel).size).toBe(60);
-    expect(new Set(anchors).size).toBe(139);
+    expect(new Set(topLevel).size).toBe(61);
+    expect(new Set(anchors).size).toBe(140);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {
