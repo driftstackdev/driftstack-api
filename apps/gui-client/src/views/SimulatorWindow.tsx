@@ -5426,16 +5426,23 @@ export function SimulatorWindow(): JSX.Element {
   );
   // One place classifies a control error into a short, human caption — used by
   // both the transient notice toast and the persistent panel "unavailable" state.
-  const controlErrorMessage = (err: unknown): string =>
-    err instanceof AgentSessionControlError
-      ? err.kind === 'forbidden'
-        ? "Your key can't control this session"
-        : err.kind === 'conflict'
-          ? 'Session is no longer active'
-          : err.kind === 'auth_missing'
-            ? 'Sign in to control the session'
-            : err.message
-      : 'Control request failed';
+  // AgentSessionControlError.message contains the remote RFC7807 detail/title for
+  // diagnostics. Never render it: an unknown kind or status must not put internal
+  // server prose (or a bare HTTP code) into the founder-facing Simulator.
+  const controlErrorMessage = (err: unknown): string => {
+    if (!(err instanceof AgentSessionControlError)) return 'Control request failed — try again';
+    if (err.kind === 'auth_missing') return 'Sign in to control the session';
+    if (err.status === 401) return 'Session control expired — reopen the session';
+    if (err.kind === 'forbidden' || err.status === 403) {
+      return "Your key can't control this session";
+    }
+    if (err.kind === 'not-found' || err.status === 404) return 'Session is no longer active';
+    if (err.kind === 'conflict' || err.status === 409) return 'Session is no longer active';
+    if (err.status === 422) return "This control action isn't available right now";
+    if (err.status === 429) return 'Too many control requests — wait a moment';
+    if (err.status >= 500) return 'Session controls are temporarily unavailable';
+    return 'Control request failed — try again';
+  };
   const noticeControlError = (err: unknown, reqSessionId = sessionIdRef.current): void => {
     if (sessionIdRef.current === reqSessionId) showNotice(controlErrorMessage(err));
   };

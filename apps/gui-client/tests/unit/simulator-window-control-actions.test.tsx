@@ -77,11 +77,20 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   handbackSession: vi.fn(),
   sendAgentMessage: (...args: unknown[]) => sendMessageMock(...args) as unknown,
   endAgentSession: (...args: unknown[]) => endSessionMock(...args) as unknown,
-  AgentSessionControlError: class extends Error {},
+  AgentSessionControlError: class extends Error {
+    constructor(
+      message: string,
+      readonly status = 500,
+      readonly kind = 'unknown',
+    ) {
+      super(message);
+    }
+  },
 }));
 
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
+const { AgentSessionControlError } = await import('../../src/lib/agent-session-control');
 
 function renderSimulator() {
   window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_x');
@@ -141,8 +150,9 @@ describe('SimulatorWindow — control actions', () => {
     expect(input.value).toBe('');
     expect(container.textContent).toMatch(/Sending(?: to agent)?…/i);
 
+    const hostileRemoteDetail = 'postgres shard node-7 failed at internal/control.ts:418';
     await act(async () => {
-      send.reject(new Error('temporary control failure'));
+      send.reject(new AgentSessionControlError(hostileRemoteDetail, 503, 'unknown'));
       await send.promise.catch(() => undefined);
     });
 
@@ -150,6 +160,8 @@ describe('SimulatorWindow — control actions', () => {
       expect(
         (container.querySelector('[aria-label="Tell the agent"]') as HTMLInputElement).value,
       ).toBe(originalDraft);
+      expect(container.textContent).toContain('Session controls are temporarily unavailable');
+      expect(container.textContent).not.toContain(hostileRemoteDetail);
     });
   });
 
