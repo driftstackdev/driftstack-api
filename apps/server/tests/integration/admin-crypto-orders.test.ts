@@ -74,10 +74,8 @@ async function seedOrders(
 }
 
 describe('V-666.D GET /v1/admin/crypto-orders — auth + list', () => {
-  it('403 for a customer key without the internal-admin scope', async () => {
-    // 'admin' satisfies driftstack_internal_admin via V-174 alias —
-    // so a customer-facing rejection test uses read/write only.
-    fx = await buildTestApp({ scopes: ['read', 'write'] });
+  it('403 for a legacy customer-admin key without exact internal staff authority', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write', 'admin'] });
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/admin/crypto-orders',
