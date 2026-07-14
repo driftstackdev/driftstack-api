@@ -106,16 +106,18 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
     expect(confirmCall![0]).toMatch(/destructive:\s*true/);
   });
 
-  it('requeue/discard failures surface the server problem+json detail via mutationError (W151/W152)', () => {
+  it('requeue/discard non-2xx failures retain typed problem detail while accepted responses never parse unused JSON', () => {
     // Concurrent operators on a shared DLQ can race; a refused
     // requeue/discard ("already requeued", "already discarded") must
     // explain itself rather than show a bare "HTTP 409". Pin the helper +
-    // both mutations routing through it (the load fetch keeps its own
-    // graceful fallback and is unaffected).
+    // both mutations route only non-2xx responses through it. A successful
+    // mutation is already authoritative and must not parse an unused body that
+    // could fail after the one-time action committed.
     expect(body).toMatch(/function mutationError\(r\)/);
     expect(body).toMatch(/window\.driftstackResponseError\(r, b\)/);
-    const usages = body.match(/r\.ok \? r\.json\(\) : mutationError\(r\)/g) ?? [];
-    expect(usages.length).toBe(2);
+    expect(body).toMatch(/if \(r\.ok\) return;\s*return mutationError\(r\);/);
+    expect(body).toContain('if (!r.ok) await mutationError(r);');
+    expect(body).not.toContain('r.ok ? r.json() : mutationError(r)');
   });
 
   it('reconciles ambiguous requeue/discard row removals before any retry', () => {

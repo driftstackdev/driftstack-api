@@ -373,7 +373,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           credentials: 'include',
           body: '{}',
         })
-          .then((r) => (r.ok ? r.json() : mutationError(r)))
+          .then((r) => {
+            // The success payload is unused. A 2xx means the delivery has left
+            // the DLQ; parsing a malformed/truncated body after that point must
+            // not manufacture retry guidance for an already-committed requeue.
+            if (r.ok) return;
+            return mutationError(r);
+          })
           .then(() => {
             showBanner('Requeued ' + id + '. Refreshing list…');
             return load();
@@ -432,7 +438,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               body: '{}',
             },
           );
-          await (r.ok ? r.json() : mutationError(r));
+          // Discard is irreversible and its success payload is unused. Trust
+          // the accepted status itself so a broken response body cannot make
+          // an operator repeat a hard-delete that already committed.
+          if (!r.ok) await mutationError(r);
           showBanner('Discarded ' + id + '. Refreshing list…');
           await load();
         } catch (err) {

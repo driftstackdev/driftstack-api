@@ -257,6 +257,46 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
     expect(window.document.querySelectorAll('button[data-id]').length).toBe(0);
   });
 
+  it.each(['requeue', 'discard'] as const)(
+    '%s trusts an accepted status without parsing a malformed success body or inviting replay',
+    async (action) => {
+      const entries = [mkEntry({ id: 'whd_1' }), mkEntry({ id: 'whd_2' })];
+      const base = makeRouter(entries);
+      const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+        route: (call) => {
+          if (call.init?.method === 'POST' && new RegExp('/' + action + '$').test(call.url)) {
+            entries.splice(0, 1);
+            return new Response('{', {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          return base(call);
+        },
+      });
+      win = window;
+      await flush();
+
+      (
+        window.document.querySelector(
+          `[data-action="${action}"][data-id="whd_1"]`,
+        ) as HTMLButtonElement
+      ).click();
+      await flush(10);
+
+      expect(
+        fetchCalls.filter(
+          (call) => call.init?.method === 'POST' && new RegExp('/' + action + '$').test(call.url),
+        ),
+      ).toHaveLength(1);
+      expect(window.document.querySelector('[data-id="whd_1"]')).toBeNull();
+      expect(window.document.querySelector('[data-id="whd_2"]')).not.toBeNull();
+      expect(window.document.querySelector('[data-banner]')?.textContent).not.toMatch(
+        /couldn't (?:requeue|discard)/i,
+      );
+    },
+  );
+
   it('requeue timeout refreshes a committed removal and warns against a second delivery attempt', async () => {
     const entries = [mkEntry({ id: 'whd_1' })];
     const base = makeRouter(entries);

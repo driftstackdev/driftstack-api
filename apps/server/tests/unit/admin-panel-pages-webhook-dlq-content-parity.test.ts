@@ -67,6 +67,12 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
     expect(body).toMatch(/const DLQ_TIMEOUT_MS = 15_000;/);
   });
 
+  it('accepted requeue/discard responses never parse unused success JSON and non-2xx responses retain typed mutation errors', () => {
+    expect(body).toMatch(/if \(r\.ok\) return;\s*return mutationError\(r\);/);
+    expect(body).toContain('if (!r.ok) await mutationError(r);');
+    expect(body).not.toContain('r.ok ? r.json() : mutationError(r)');
+  });
+
   it("ageStr 4-tier helper: null/empty → '—' / <60min → 'Nm ago' / <48hr → 'Nh ago' / else 'Nd ago' (Math.floor on each tier boundary) — pinned so the age-display stays human-readable (drift to 'X minutes' would overflow the badge slot; drift to dropping the days tier would render '72h ago' for 3-day-old entries instead of '3d ago')", () => {
     expect(body).toMatch(
       /function ageStr\(createdAt\) \{\s*\n?\s*if \(!createdAt\) return '—';\s*\n?\s*const ms = Date\.now\(\) - new Date\(createdAt\)\.getTime\(\);\s*\n?\s*if \(ms < 0\) return '—';\s*\n?\s*const min = Math\.floor\(ms \/ 60000\);\s*\n?\s*if \(min < 60\) return min \+ 'm ago';\s*\n?\s*const hr = Math\.floor\(min \/ 60\);\s*\n?\s*if \(hr < 48\) return hr \+ 'h ago';\s*\n?\s*const days = Math\.floor\(hr \/ 24\);\s*\n?\s*return days \+ 'd ago';\s*\n?\s*\}/,
@@ -131,8 +137,8 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
 
   it('defers token authority until DOMContentLoaded so the AdminLayout SSO bridge lands first', () => {
     expect(body).toMatch(/let token = null;/);
-    expect(body).toMatch(
-      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+    expect(body).toContain(
+      "function start() {\n        try {\n          token = localStorage.getItem('ds_web_session_token');\n        } catch {\n          token = null;\n        }",
     );
     expect(body).toMatch(/document\.addEventListener\('DOMContentLoaded', start\);/);
   });
