@@ -77,7 +77,7 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
       /<li>New endpoints \+ new optional fields ship without bumping the version\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>Removing a field or changing its type requires the 90-day\s*\n?\s*deprecation window documented in\s*\n?\s*<a href="\/docs\/api-versioning">\/docs\/api-versioning<\/a>, with\s*\n?\s*a <code>Deprecation<\/code> response header \(RFC 5988\) carrying\s*\n?\s*the sunset date from the moment the deprecation lands\.<\/li>/,
+      /<li>Removing a field or changing its type requires the 90-day\s*\n?\s*deprecation window documented in\s*\n?\s*<a href="\/docs\/api-versioning\/">\/docs\/api-versioning<\/a>, with\s*\n?\s*a <code>Deprecation<\/code> response header \(RFC 5988\) carrying\s*\n?\s*the sunset date from the moment the deprecation lands\.<\/li>/,
     );
     expect(body).toMatch(
       /<li>Major-version bumps \(next is v2\) ship in lock-step with\s*\n?\s*published migration notes and at least 12 months of v1 support\.<\/li>/,
@@ -90,15 +90,21 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
   // /settings (apps/customer-dashboard/src/pages/settings.astro).
   it("Subscribe 3-channel framing pinned: 'We post a summary of each month's changes to status.driftstack.dev as a non-incident announcement, and email the api-changes@ mailing list. Subscribe at app.driftstack.dev/settings.' — pinned so the 3-channel subscribe surface (status-page non-incident + api-changes@ mailing list + dashboard /settings) survives and the dead /settings/notifications link cannot return", () => {
     expect(body).toMatch(
-      /We post a summary of each month's changes to\s*\n?\s*<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>\s*\n?\s*as a non-incident announcement, and email the\s*\n?\s*<code>api-changes@<\/code> mailing list\. Subscribe at\s*\n?\s*(?:<!--[\s\S]*?-->\s*)?<a href="https:\/\/app\.driftstack\.dev\/settings">app\.driftstack\.dev\/settings<\/a>\./,
+      /We post a summary of each month's changes to\s*\n?\s*<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>\s*\n?\s*as a non-incident announcement, and email the\s*\n?\s*<code>api-changes@<\/code> mailing list\. Subscribe at\s*\n?\s*(?:<!--[\s\S]*?-->\s*)?<a href="https:\/\/app\.driftstack\.dev\/settings\/">app\.driftstack\.dev\/settings<\/a>\./,
     );
     expect(body).not.toMatch(/href="https:\/\/app\.driftstack\.dev\/settings\/notifications"/);
   });
 
   it('3-related-doc cluster: /docs/api-versioning + /api-reference + /docs/error-codes — pinned so the 3-related-doc navigation surface stays complete (drift to dropping /docs/error-codes would orphan the typed-error reference from the changelog)', () => {
-    expect(body).toMatch(/<a href="\/docs\/api-versioning">API versioning policy<\/a>/);
-    expect(body).toMatch(/<a href="\/api-reference">API reference<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/error-codes">Error codes<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/api-versioning\/">API versioning policy<\/a>/);
+    expect(body).toMatch(/<a href="\/api-reference\/">API reference<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/error-codes\/">Error codes<\/a>/);
+
+    const slashlessOwnedHref = /href="\/(?:docs\/api-versioning|api-reference|docs\/error-codes)"/;
+    expect(body).not.toMatch(slashlessOwnedHref);
+    expect(body.replace('href="/api-reference/"', 'href="/api-reference"')).toMatch(
+      slashlessOwnedHref,
+    );
   });
 
   it('file exists at canonical path', () => {
