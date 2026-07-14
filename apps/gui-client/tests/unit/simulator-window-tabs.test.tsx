@@ -138,6 +138,13 @@ describe('SimulatorWindow — page tab strip', () => {
     }
     return m;
   }
+  function keyboardPressed(container: HTMLElement): string | null {
+    return (
+      container
+        .querySelector('[data-component="simulator-keyboard-toggle"]')
+        ?.getAttribute('aria-pressed') ?? null
+    );
+  }
 
   it('renders a single seed tab with a + new-tab button (always ≥1 tab)', () => {
     const { container } = renderSim();
@@ -240,6 +247,39 @@ describe('SimulatorWindow — page tab strip', () => {
       error: { kind: 'dns' },
     });
     expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+  });
+
+  it('keeps keyboard focus scoped to the active tab across rapid switches and stale frames', () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    const firstPayload = lastTabListCall();
+    const tabAId = (firstPayload.tabs[0] as { id: string }).id;
+    const tabBId = (firstPayload.tabs[1] as { id: string }).id;
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    const tabCId = (lastTabListCall().tabs[2] as { id: string }).id;
+
+    // The current tab's tagged focus is authoritative and opens the keyboard.
+    pushPageState({ tabId: tabCId, state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('true');
+
+    // Rapid C→B→A switches hide synchronously. Late tagged frames from either tab
+    // we left, plus an old-box tabId-less frame inside the grace period, stay ignored.
+    fireEvent.click(tabEls(container)[1]);
+    expect(keyboardPressed(container)).toBe('false');
+    fireEvent.click(tabEls(container)[0]);
+    expect(keyboardPressed(container)).toBe('false');
+    pushPageState({ tabId: tabBId, state: 'loaded', inputFocused: true });
+    pushPageState({ tabId: tabCId, state: 'loaded', inputFocused: true });
+    pushPageState({ state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('false');
+
+    // Only the now-active tab may reopen it; a background blur cannot close it.
+    pushPageState({ tabId: tabAId, state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('true');
+    pushPageState({ tabId: tabBId, state: 'loaded', inputFocused: false });
+    expect(keyboardPressed(container)).toBe('true');
+    pushPageState({ tabId: tabAId, state: 'loaded', inputFocused: false });
+    expect(keyboardPressed(container)).toBe('false');
   });
 
   // workflow w58dcbhxt #4: opening a new tab (+) supersedes an in-flight switch, so a

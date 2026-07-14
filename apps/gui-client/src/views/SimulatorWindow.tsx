@@ -4098,6 +4098,14 @@ export function SimulatorWindow(): JSX.Element {
   // pageLoading/pageStalled/loadProgress move into the per-tab SimTab record, this is
   // the correct optimistic clear.
   const resetPageChromeForSwitch = useCallback((): void => {
+    // Keyboard focus belongs to a specific page renderer just like the page chrome
+    // below. Hide it synchronously whenever the active page context changes; a fresh
+    // page_state for the new active tab may re-open it. Updating both refs before the
+    // React state prevents a rapid second switch/manual-toggle from reading the prior
+    // tab's not-yet-committed visibility.
+    keyboardVisibleRef.current = false;
+    keyboardOverlayRef.current = false;
+    setKeyboardVisible(false);
     setPageError(null);
     setPageStalled(false);
     setPageLoadStalled(null); // #135 — don't bleed a load-stall advisory across tabs
@@ -4281,6 +4289,11 @@ export function SimulatorWindow(): JSX.Element {
           for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
           activationRetryRef.current.clear();
           setSwitchingTabId(null);
+          // Replacing the tab model is also a page-context transition. Clear focus
+          // owned by the pre-restore renderer and arm the same grace used by an
+          // operator switch so an older tabId-less frame cannot immediately reopen it.
+          lastSwitchAtRef.current = Date.now();
+          resetPageChromeForSwitch();
           setTabs(restored);
           setActiveTabId(active.id);
           // Reflect the active tab's url in the address bar (the BrowserBar reads liveUrl).
@@ -4332,16 +4345,30 @@ export function SimulatorWindow(): JSX.Element {
             }
           }
         }
-        // #6 — auto-show/hide the on-screen keyboard from the box's real DOM focus
-        // state (a real iPhone never makes you reach for a toggle). Mirrors the box
-        // signal directly; the manual ⌨ button can still show/hide it at any time
-        // (e.g. before this signal arrives on an older build) and isn't fought by a
-        // frame that doesn't carry the field (absent → no change, not a hide). Gated
-        // OUT in AI mode: the focus event there is the AGENT typing, not the founder
-        // — popping the keyboard for the agent's own input would be confusing chrome
-        // over a read-only view (the ⌨ toggle is already disabled in AI mode).
+        // #6 — focus is renderer/tab-scoped. A recognised ACTIVE tab may update the
+        // keyboard immediately (including during a switch); a recognised BACKGROUND
+        // tab and an unknown non-empty id are not authoritative for foreground chrome.
+        // Older boxes omit tabId, so retain their signal only outside the short switch
+        // grace, after late focus from the page we just left can no longer reopen the
+        // keyboard. Frames without inputFocused remain no-ops, and AI mode stays gated
+        // because that focus belongs to the agent rather than the founder.
         if (typeof msg.inputFocused === 'boolean' && controlModeRef.current !== 'ai') {
-          setKeyboardVisible(msg.inputFocused);
+          const rawFocusTabId =
+            typeof msg.tabId === 'string' && msg.tabId !== '' ? msg.tabId : null;
+          const focusTabId =
+            rawFocusTabId !== null && tabsRef.current.some((t) => t.id === rawFocusTabId)
+              ? rawFocusTabId
+              : null;
+          const inTablessSwitchGrace =
+            rawFocusTabId === null && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+          const focusIsAuthoritative =
+            focusTabId === activeTabIdRef.current ||
+            (rawFocusTabId === null && !inTablessSwitchGrace);
+          if (focusIsAuthoritative) {
+            keyboardVisibleRef.current = msg.inputFocused;
+            keyboardOverlayRef.current = msg.inputFocused;
+            setKeyboardVisible(msg.inputFocused);
+          }
         }
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
         // refactor). Route by tabId when the frame carries one, else the active tab;
@@ -4525,7 +4552,7 @@ export function SimulatorWindow(): JSX.Element {
         /* ignore */
       }
     };
-  }, [room, writeTabPageState, applyStalledState, showNotice]);
+  }, [room, writeTabPageState, applyStalledState, showNotice, resetPageChromeForSwitch]);
 
   // Live URL via the page-state API (A3 W2730): the box reports pageState over the
   // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
