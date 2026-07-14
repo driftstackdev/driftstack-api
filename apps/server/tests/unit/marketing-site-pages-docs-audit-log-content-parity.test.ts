@@ -128,7 +128,7 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
 
   it("Pagination + effectiveAccountId team-RBAC framing pinned: 'Standard cursor pagination — see /docs/pagination. Sort order is timestamp DESC with id DESC tiebreaker, so newest entries appear first.' + effectiveAccountId behaviour + 'both member and admin team roles are read-allowed on this surface' + '/v1/account/audit-log/export effective-account header gate applies too' — pinned so the timestamp-DESC + id-DESC-tiebreaker + effectiveAccountId + member-AND-admin-can-read + export-also-gated commitments survive. The previous skip pinned an inline `(V-330b` anchor that was removed from the customer-facing copy (internal V-labels should not bleed into marketing pages); the structural framing survives without it.", () => {
     expect(body).toMatch(
-      /Standard cursor pagination — see <a href="\/docs\/pagination">\/docs\/pagination<\/a>\.\s*\n?\s*Sort order is <code>timestamp DESC<\/code> with <code>id DESC<\/code>\s*\n?\s*tiebreaker, so newest entries appear first\./,
+      /Standard cursor pagination — see <a href="\/docs\/pagination\/">\/docs\/pagination<\/a>\.\s*\n?\s*Sort order is <code>timestamp DESC<\/code> with <code>id DESC<\/code>\s*\n?\s*tiebreaker, so newest entries appear first\./,
     );
     expect(body).toMatch(
       /<code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;<\/code>\s*\n?\s*header, the server returns the <strong>owner's<\/strong> audit\s*\n?\s*log — both <code>member<\/code> and <code>admin<\/code> team\s*\n?\s*roles are read-allowed on this surface \(\s*\n?\s*<code>effectiveAccountId<\/code> behaviour\)/,
@@ -159,8 +159,9 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
 
   it("No-per-entry-webhook + feedback-loop-avoidance framing pinned: 'The audit log itself does not emit a per-entry webhook event — that would create a feedback loop (writing a webhook delivery would itself generate an audit entry). Subscribe to the underlying resource webhooks instead (api_key.revoked, session.completed, etc.) — see /docs/webhooks.' — pinned so the no-per-entry-webhook + feedback-loop-rationale + subscribe-to-underlying-resource-webhooks-instead commitment survives", () => {
     expect(body).toMatch(
-      /The audit log itself does <strong>not<\/strong> emit a per-entry\s*\n?\s*webhook event — that would create a feedback loop \(writing a\s*\n?\s*webhook delivery would itself generate an audit entry\)\.\s*\n?\s*Subscribe to the underlying resource webhooks instead\s*\n?\s*\(<code>api_key\.revoked<\/code>, <code>session\.completed<\/code>,\s*\n?\s*etc\.\) — see <a href="\/docs\/webhooks">\/docs\/webhooks<\/a>\./,
+      /The audit log itself does <strong>not<\/strong> emit a per-entry\s*\n?\s*webhook event — that would create a feedback loop \(writing a\s*\n?\s*webhook delivery would itself generate an audit entry\)\.\s*\n?\s*Subscribe to the underlying resource webhooks instead\s*\n?\s*\(<code>api_key\.revoked<\/code>, <code>session\.completed<\/code>,\s*\n?\s*etc\.\) — see <a href="\/docs\/webhooks\/">\/docs\/webhooks<\/a>\./,
     );
+    expect(body).not.toMatch(/href="\/docs\/(?:pagination|webhooks)"/);
   });
 
   it('Support 2-channel framing pinned: compliance@driftstack.dev for compliance/audit-export questions + developers@driftstack.dev for technical questions — pinned so the 2-channel split (compliance vs technical) stays consistent', () => {
