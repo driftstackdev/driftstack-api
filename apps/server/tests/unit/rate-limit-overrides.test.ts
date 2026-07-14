@@ -1,11 +1,11 @@
 // V-553.B-8 — unit tests for RateLimitOverridesService (V-097).
 //
 // Surface under test:
-//   - set(): scope guard ('admin'), input validation (capacity,
+//   - set(): exact staff scope guard ('driftstack_internal_admin'), input validation (capacity,
 //     refill range, expiresAt-in-future), pass-through to repo,
 //     cache invalidation on success
-//   - clear(): scope guard, 404 when no row, cache invalidation
-//   - listAll(): elevated scope guard ('driftstack_internal_admin'),
+//   - clear(): exact staff scope guard, 404 when no row, cache invalidation
+//   - listAll(): exact staff scope guard ('driftstack_internal_admin'),
 //     repo pass-through
 
 import { describe, expect, it, vi } from 'vitest';
@@ -89,25 +89,28 @@ const FUTURE_DATE = new Date(Date.now() + 60 * 60 * 1000); // +1h
 const PAST_DATE = new Date(Date.now() - 60 * 60 * 1000); // -1h
 
 describe('V-553.B-8 RateLimitOverridesService.set — scope + validation', () => {
-  it('throws when caller is missing the admin scope', async () => {
+  it('requires exact internal staff scope; customer read and legacy admin are denied', async () => {
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
-    await expect(
-      svc.set(ctxWithScopes(['read']), {
-        accountId: 'acc_b',
-        bucketKey: 'global',
-        capacity: 10,
-        refillPerSecond: 1,
-        expiresAt: FUTURE_DATE,
-      }),
-    ).rejects.toThrow(/admin/);
+    const input = {
+      accountId: 'acc_b',
+      bucketKey: 'global',
+      capacity: 10,
+      refillPerSecond: 1,
+      expiresAt: FUTURE_DATE,
+    };
+    for (const scopes of [['read'], ['admin']] satisfies ApiKeyScope[][]) {
+      await expect(svc.set(ctxWithScopes(scopes), input)).rejects.toThrow(
+        /driftstack_internal_admin/,
+      );
+    }
   });
 
   it('rejects capacity < 1', async () => {
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
     await expect(
-      svc.set(ctxWithScopes(['admin']), {
+      svc.set(ctxWithScopes(['driftstack_internal_admin']), {
         accountId: 'acc_b',
         bucketKey: 'global',
         capacity: 0,
@@ -121,7 +124,7 @@ describe('V-553.B-8 RateLimitOverridesService.set — scope + validation', () =>
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
     await expect(
-      svc.set(ctxWithScopes(['admin']), {
+      svc.set(ctxWithScopes(['driftstack_internal_admin']), {
         accountId: 'acc_b',
         bucketKey: 'global',
         capacity: 10,
@@ -135,7 +138,7 @@ describe('V-553.B-8 RateLimitOverridesService.set — scope + validation', () =>
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
     await expect(
-      svc.set(ctxWithScopes(['admin']), {
+      svc.set(ctxWithScopes(['driftstack_internal_admin']), {
         accountId: 'acc_b',
         bucketKey: 'global',
         capacity: 10,
@@ -149,7 +152,7 @@ describe('V-553.B-8 RateLimitOverridesService.set — scope + validation', () =>
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
     await expect(
-      svc.set(ctxWithScopes(['admin']), {
+      svc.set(ctxWithScopes(['driftstack_internal_admin']), {
         accountId: 'acc_b',
         bucketKey: 'global',
         capacity: 10,
@@ -165,7 +168,7 @@ describe('V-553.B-8 RateLimitOverridesService.set — happy path', () => {
     const { repo, upsertSpy } = makeRepo();
     const { cache, invalidateSpy } = makeCache();
     const svc = new RateLimitOverridesService(repo, cache);
-    const result = await svc.set(ctxWithScopes(['admin'], 'key_admin_1'), {
+    const result = await svc.set(ctxWithScopes(['driftstack_internal_admin'], 'key_admin_1'), {
       accountId: 'acc_b',
       bucketKey: 'global',
       capacity: 25.7,
@@ -186,7 +189,7 @@ describe('V-553.B-8 RateLimitOverridesService.set — happy path', () => {
   it('omits reason from repo input when caller did not supply it', async () => {
     const { repo, upsertSpy } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
-    await svc.set(ctxWithScopes(['admin']), {
+    await svc.set(ctxWithScopes(['driftstack_internal_admin']), {
       accountId: 'acc_b',
       bucketKey: 'global',
       capacity: 5,
@@ -197,13 +200,13 @@ describe('V-553.B-8 RateLimitOverridesService.set — happy path', () => {
     expect('reason' in (upsertArg ?? {})).toBe(false);
   });
 
-  it('swallows cache-invalidation errors — admin write still succeeds', async () => {
+  it('swallows cache-invalidation errors — authorized staff write still succeeds', async () => {
     const { repo } = makeRepo();
     const invalidateSpy = vi.fn(() => Promise.reject(new Error('cache down')));
     const cache = { invalidateAccount: invalidateSpy } as unknown as AuthCache;
     const svc = new RateLimitOverridesService(repo, cache);
     await expect(
-      svc.set(ctxWithScopes(['admin']), {
+      svc.set(ctxWithScopes(['driftstack_internal_admin']), {
         accountId: 'acc_b',
         bucketKey: 'global',
         capacity: 5,
@@ -215,38 +218,42 @@ describe('V-553.B-8 RateLimitOverridesService.set — happy path', () => {
 });
 
 describe('V-553.B-8 RateLimitOverridesService.clear', () => {
-  it('throws when caller is missing the admin scope', async () => {
+  it('requires exact internal staff scope; customer read and legacy admin are denied', async () => {
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
-    await expect(svc.clear(ctxWithScopes(['read']), 'acc_b', 'global')).rejects.toThrow(/admin/);
+    for (const scopes of [['read'], ['admin']] satisfies ApiKeyScope[][]) {
+      await expect(svc.clear(ctxWithScopes(scopes), 'acc_b', 'global')).rejects.toThrow(
+        /driftstack_internal_admin/,
+      );
+    }
   });
 
   it('throws NotFound when no row was deleted', async () => {
     const { repo, clearWillReturn } = makeRepo();
     clearWillReturn(false);
     const svc = new RateLimitOverridesService(repo);
-    await expect(svc.clear(ctxWithScopes(['admin']), 'acc_b', 'global')).rejects.toThrow(
-      /No active override/,
-    );
+    await expect(
+      svc.clear(ctxWithScopes(['driftstack_internal_admin']), 'acc_b', 'global'),
+    ).rejects.toThrow(/No active override/);
   });
 
   it('invalidates the auth cache on successful delete', async () => {
     const { repo } = makeRepo();
     const { cache, invalidateSpy } = makeCache();
     const svc = new RateLimitOverridesService(repo, cache);
-    await svc.clear(ctxWithScopes(['admin']), 'acc_b', 'global');
+    await svc.clear(ctxWithScopes(['driftstack_internal_admin']), 'acc_b', 'global');
     expect(invalidateSpy).toHaveBeenCalledWith('acc_b');
   });
 });
 
 describe('V-553.B-8 RateLimitOverridesService.listAll', () => {
-  it('requires the elevated driftstack_internal_admin scope (admin alone is not enough)', async () => {
+  it('requires the exact driftstack_internal_admin scope', async () => {
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
-    // V-174 admin alias DOES satisfy driftstack_internal_admin — so
-    // an 'admin'-scoped key must pass. A plain 'account_owner' key
-    // must NOT.
     await expect(svc.listAll(ctxWithScopes(['account_owner']), { limit: 10 })).rejects.toThrow(
+      /driftstack_internal_admin/,
+    );
+    await expect(svc.listAll(ctxWithScopes(['admin']), { limit: 10 })).rejects.toThrow(
       /driftstack_internal_admin/,
     );
   });
