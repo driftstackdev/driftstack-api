@@ -1,24 +1,12 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
-import { MOCK_ACCOUNTS } from '../data/mocks.ts';
 
 // V-187 — progressive-enhancement against /v1/admin/accounts. SSG
-// renders the mock; an inline <script> reads ds_web_session_token
-// from localStorage and replaces the table body with live rows
+// renders an inert unavailable shell; an inline <script> reads
+// ds_web_session_token from localStorage and replaces it with live rows
 // (filtered server-side via the status / tier query params). Banners
 // surface no-token / fetch-error / empty-result states. Filter bar
 // inputs trigger a re-fetch on change.
-
-function fmtIso(iso: string | null): string {
-  if (iso === null) return '—';
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  active: 'bg-emerald-50 text-emerald-700',
-  suspended: 'bg-amber-50 text-amber-700',
-  deleted: 'bg-tk-hover text-tk-ink-2',
-};
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -50,14 +38,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           <span
             aria-hidden="true"
             data-live-dot
-            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+            class="inline-block h-2 w-2 rounded-full bg-amber-500"
           ></span>
-          <span>Live · updated <span data-live-age>just now</span></span>
+          <span data-live-status>Waiting for live data</span>
+          <span data-live-age class="hidden"></span>
         </span>
         <button
           type="button"
           data-live-refresh
-          class="text-tk-accent hover:underline"
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in"
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           Refresh now
         </button>
@@ -123,48 +115,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="accounts">
-          {
-            MOCK_ACCOUNTS.map((account) => (
-              <tr class="hover:bg-tk-bg">
-                <td class="px-4 py-3">
-                  <p class="font-medium text-tk-ink">{account.name ?? account.email}</p>
-                  {account.name !== null && (
-                    <p class="mt-0.5 text-xs text-tk-ink-3">{account.email}</p>
-                  )}
-                  <p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">{account.id}</p>
-                </td>
-                <td class="px-4 py-3 font-mono text-xs text-tk-ink-2">{account.tier}</td>
-                <td class="px-4 py-3">
-                  <span
-                    class:list={[
-                      'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
-                      STATUS_BADGE[account.status],
-                    ]}
-                  >
-                    {account.status}
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-tk-ink-2">{fmtIso(account.createdAt)}</td>
-                <td class="px-4 py-3 text-tk-ink-2">{fmtIso(account.lastSeenAt)}</td>
-                <td class="px-4 py-3 text-right">
-                  <a
-                    href={`/accounts/${account.id}`}
-                    class="text-sm text-tk-accent hover:underline"
-                  >
-                    Open
-                  </a>
-                </td>
-              </tr>
-            ))
-          }
+          <tr>
+            <td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">
+              Live accounts are unavailable until loaded.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
 
     <div class="mt-4 flex items-center gap-4">
       <p class="text-xs text-tk-ink-3" data-field="footnote">
-        Showing {MOCK_ACCOUNTS.length} of {MOCK_ACCOUNTS.length} accounts. Pagination
-        via cursor when count exceeds page size (50 default).
       </p>
       {/* audit waefer6wu — the footnote advertised cursor pagination the UI
           never actually implemented: GET /v1/admin/accounts already returns
@@ -192,6 +153,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       const searchEl = root.querySelector('[data-field="search"]');
       const statusEl = root.querySelector('[data-field="status"]');
       const tierEl = root.querySelector('[data-field="tier"]');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveStatus = root.querySelector('[data-live-status]');
+      const liveAge = root.querySelector('[data-live-age]');
+      const refreshBtn = root.querySelector('[data-live-refresh]');
       // audit waefer6wu — SSO-bridge race: this page's own <script> is
       // nested inside <AdminLayout>'s <slot/>, so it parses + runs BEFORE
       // AdminLayout's trailing <script> that reads the #token= hash from a
@@ -312,6 +277,45 @@ const apiBaseUrl = resolveApiBaseUrl();
       let loadedAccounts = [];
       let nextCursor = null;
 
+      function renderAccountsUnavailable(message) {
+        loadedAccounts = [];
+        nextCursor = null;
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+            escapeHtml(message) +
+            '</td></tr>';
+        }
+        if (footnote) footnote.textContent = '';
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.add('hidden');
+          loadMoreBtn.disabled = true;
+          loadMoreBtn.textContent = 'Load more';
+        }
+      }
+
+      function setLiveState(state, message) {
+        if (liveDot) {
+          const color =
+            state === 'ready'
+              ? 'bg-emerald-500'
+              : state === 'failed'
+                ? 'bg-red-500'
+                : 'bg-amber-500';
+          liveDot.className = 'inline-block h-2 w-2 rounded-full ' + color;
+        }
+        if (liveStatus) {
+          liveStatus.textContent = message
+            ? message
+            : state === 'ready'
+              ? 'Live · updated'
+              : state === 'failed'
+                ? 'Live refresh failed'
+                : 'Loading live data';
+        }
+        if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
+      }
+
       let inFlight = 0;
       // append=true fetches the next cursor page and adds it to the
       // currently-rendered rows (the "Load more" click path); the default
@@ -342,7 +346,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return; // stale response, ignore
+            if (myReq !== inFlight) return false; // stale response, ignore
             const accounts = body.data || [];
             loadedAccounts = append ? loadedAccounts.concat(accounts) : accounts;
             nextCursor = body.next_cursor || null;
@@ -372,19 +376,15 @@ const apiBaseUrl = resolveApiBaseUrl();
               loadMoreBtn.textContent = 'Load more';
             }
             hideBanner();
+            return true;
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
             const msg = requestErrorMessage(err, 'network error');
             if (loadMoreBtn) loadMoreBtn.disabled = false;
-            // W604 — clear the SSG mock rows on ANY load failure so operators
-            // never triage a fabricated customer list (3 fake accounts with
-            // Open links into mock detail pages) during an API error.
-            if (!append && tbody) {
-              tbody.innerHTML =
-                '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load accounts. Resolve the error above and retry.</td></tr>';
+            if (!append) {
+              renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.');
             }
-            if (!append && footnote) footnote.textContent = '';
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -396,6 +396,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                   ').',
               );
             }
+            return false;
           })
           .finally(() => {
             if (append) loadMoreInFlight = false;
@@ -421,22 +422,23 @@ const apiBaseUrl = resolveApiBaseUrl();
         token = localStorage.getItem('ds_web_session_token');
 
         if (!token) {
-          // W604 — clear the SSG mock so the unauthenticated state never shows
-          // fabricated customer accounts with Open links into mock detail pages.
-          if (tbody) {
-            tbody.innerHTML =
-              '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in with a staff admin account to see accounts.</td></tr>';
-          }
-          if (footnote) footnote.textContent = '';
+          renderAccountsUnavailable('Sign in with a staff admin account to see accounts.');
+          setLiveState('failed', 'Sign in for live data');
           showBanner('Sign in with a staff admin account to see live data.');
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return;
         }
 
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.removeAttribute('aria-disabled');
+          refreshBtn.removeAttribute('title');
+        }
+
         let debounce = 0;
         function scheduleLoad() {
           clearTimeout(debounce);
-          debounce = setTimeout(load, 200);
+          debounce = setTimeout(loadWithLive, 200);
         }
 
         if (statusEl) statusEl.addEventListener('change', scheduleLoad);
@@ -477,24 +479,38 @@ const apiBaseUrl = resolveApiBaseUrl();
         // 200ms debounce which is for input typing only).
         let lastFetch = Date.now();
         function loadWithLive() {
-          const liveDot = root.querySelector('[data-live-dot]');
-          if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+          setLiveState('loading');
+          if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.setAttribute('aria-disabled', 'true');
+          }
+          const expectedReq = inFlight + 1;
           const p = load();
           if (p && typeof p.then === 'function') {
-            p.then(
-              () => {
+            return p.then((loaded) => {
+              if (expectedReq !== inFlight) return loaded;
+              if (loaded) {
                 lastFetch = Date.now();
-                if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
-              },
-              () => {
-                if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
-              },
-            );
+                if (liveAge) liveAge.textContent = 'just now';
+                setLiveState('ready');
+              } else {
+                setLiveState('failed');
+              }
+              if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.removeAttribute('aria-disabled');
+              }
+              return loaded;
+            });
           } else {
-            lastFetch = Date.now();
+            setLiveState('failed');
+            if (refreshBtn) {
+              refreshBtn.disabled = false;
+              refreshBtn.removeAttribute('aria-disabled');
+            }
+            return Promise.resolve(false);
           }
         }
-        const refreshBtn = root.querySelector('[data-live-refresh]');
         if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
         setInterval(loadWithLive, 30_000);
         function fmtAge(ms) {
@@ -504,12 +520,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
           return Math.floor(s / 3600).toString() + 'h ago';
         }
-        const ageEl = root.querySelector('[data-live-age]');
         setInterval(() => {
-          if (ageEl) ageEl.textContent = fmtAge(lastFetch);
+          if (liveAge) liveAge.textContent = fmtAge(lastFetch);
         }, 5_000);
 
-        load();
+        loadWithLive();
       }
 
       if (document.readyState === 'loading') {

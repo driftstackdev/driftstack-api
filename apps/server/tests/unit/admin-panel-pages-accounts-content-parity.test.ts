@@ -6,9 +6,8 @@
 // from this page).
 //
 //   • V-187 framing pinned + ds_web_session_token storage key.
-//   • STATUS_BADGE 3-tone (active/suspended/deleted) — pinned in
-//     both the Astro frontmatter Record AND the inline-script
-//     const (the inline script can't import from frontmatter).
+//   • Inert first paint: no mock account rows, links, count, or false-live state.
+//   • STATUS_BADGE 3-tone (active/suspended/deleted) in the live row renderer.
 //   • Tier filter 8-option catalogue (free / solo_manual /
 //     team_manual / agency_manual / api_starter / api_builder /
 //     api_scale / enterprise).
@@ -32,19 +31,27 @@ function read(p: string): string {
 describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-187 framing pinned: 'progressive-enhancement against /v1/admin/accounts. SSG renders the mock; an inline <script> reads ds_web_session_token from localStorage and replaces the table body with live rows (filtered server-side via the status / tier query params). Banners surface no-token / fetch-error / empty-result states. Filter bar inputs trigger a re-fetch on change.'", () => {
+  it('V-187 framing pins an inert unavailable SSG shell that is replaced only with live rows', () => {
     expect(body).toMatch(
-      /\/\/ V-187 — progressive-enhancement against \/v1\/admin\/accounts\. SSG\s*\n?\s*\/\/ renders the mock; an inline <script> reads ds_web_session_token\s*\n?\s*\/\/ from localStorage and replaces the table body with live rows\s*\n?\s*\/\/ \(filtered server-side via the status \/ tier query params\)\. Banners\s*\n?\s*\/\/ surface no-token \/ fetch-error \/ empty-result states\. Filter bar\s*\n?\s*\/\/ inputs trigger a re-fetch on change\./,
+      /\/\/ V-187 — progressive-enhancement against \/v1\/admin\/accounts\. SSG\s*\n?\s*\/\/ renders an inert unavailable shell; an inline <script> reads\s*\n?\s*\/\/ ds_web_session_token from localStorage and replaces it with live rows/,
     );
   });
 
-  it("STATUS_BADGE 3-tone duplicated across Astro frontmatter Record + inline-script const: active (emerald-50) / suspended (amber-50) / deleted (slate-100) — pinned so the SSG-rendered initial table + the inline-script's live-replacement use the same colour vocabulary (drift between the two would cause a flash-of-mismatched-badges when the script hydrates)", () => {
-    expect(body).toMatch(
-      /const STATUS_BADGE: Record<string, string> = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*suspended: 'bg-amber-50 text-amber-700',\s*\n?\s*deleted: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
-    );
+  it('STATUS_BADGE 3-tone remains in the authoritative live-row renderer only', () => {
     expect(body).toMatch(
       /const STATUS_BADGE = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*suspended: 'bg-amber-50 text-amber-700',\s*\n?\s*deleted: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
     );
+    expect(body).not.toContain('const STATUS_BADGE: Record<string, string>');
+  });
+
+  it('ships no sample customer identity, account link, count, or green live claim before a successful read', () => {
+    expect(body).not.toContain('MOCK_ACCOUNTS');
+    expect(body).toContain('Live accounts are unavailable until loaded.');
+    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toContain('<span data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).not.toMatch(/href=\{`\/accounts\/\$\{account\.id\}`\}/);
+    expect(body).not.toMatch(/Showing \{[^}]+\} of \{[^}]+\} accounts/);
   });
 
   it('Tier filter 8-option catalogue: free / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise — pinned so the customer-tier vocabulary stays in sync with TierEnum in the schema (drift to 7 options would make the missing tier unfilterable from the admin panel, hiding accounts on that tier from operators)', () => {
@@ -94,22 +101,36 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     );
   });
 
-  it("Account row 'Account' column structure: name ?? email primary line + email subtitle (only when name exists) + account.id in mono small text — pinned so the per-account triple-line layout stays consistent and accounts without a name still surface their email as the primary identifier", () => {
+  it('Live account row structure keeps name-or-email primary, conditional email subtitle, escaped id, and encoded detail link', () => {
     expect(body).toMatch(
-      /<p class="font-medium text-tk-ink">\{account\.name \?\? account\.email\}<\/p>/,
+      /const nameLine = a\.name \? escapeHtml\(a\.name\) : escapeHtml\(a\.email\);/,
     );
     expect(body).toMatch(
-      /\{account\.name !== null && \(\s*\n?\s*<p class="mt-0\.5 text-xs text-tk-ink-3">\{account\.email\}<\/p>\s*\n?\s*\)\}/,
+      /const subEmail = a\.name\s*\n?\s*\? '<p class="mt-0\.5 text-xs text-tk-ink-3">' \+ escapeHtml\(a\.email\) \+ '<\/p>'\s*\n?\s*: '';/,
     );
+    expect(body).toContain('escapeHtml(a.id)');
+  });
+
+  it('live fmtIso uses an empty-value fallback and date-only slice so absent activity does not crash the row', () => {
     expect(body).toMatch(
-      /<p class="mt-0\.5 font-mono text-\[11px\] text-tk-ink-3">\{account\.id\}<\/p>/,
+      /function fmtIso\(iso\) \{\s*\n?\s*if \(!iso\) return '—';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.slice\(0, 10\);\s*\n?\s*\}/,
     );
   });
 
-  it("fmtIso variant: createdAt null → '—' fallback else slice(0, 10) — date-only (no time) since accounts pages show dates not seconds — pinned so a null lastSeenAt (account never logged in) doesn't crash the row + the date format stays consistent (drift to including hours would crowd the table)", () => {
-    expect(body).toMatch(
-      /function fmtIso\(iso: string \| null\): string \{\s*\n?\s*if \(iso === null\) return '—';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.slice\(0, 10\);\s*\n?\s*\}/,
+  it('failed/signed-out reads reapply unavailable rows and success alone turns the live indicator green', () => {
+    expect(body).toContain('function renderAccountsUnavailable(message)');
+    expect(body).toContain(
+      "renderAccountsUnavailable('Sign in with a staff admin account to see accounts.')",
     );
+    expect(body).toContain(
+      "renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.')",
+    );
+    expect(body).toMatch(/return true;\s*\n?\s*\}\)\s*\n?\s*\.catch/);
+    expect(body).toMatch(/return false;\s*\n?\s*\}\)\s*\n?\s*\.finally/);
+    expect(body).toMatch(
+      /if \(loaded\) \{\s*\n?\s*lastFetch = Date\.now\(\);\s*\n?\s*if \(liveAge\) liveAge\.textContent = 'just now';\s*\n?\s*setLiveState\('ready'\);/,
+    );
+    expect(body).toMatch(/if \(expectedReq !== inFlight\) return loaded;/);
   });
 
   it('file exists at canonical path', () => {
