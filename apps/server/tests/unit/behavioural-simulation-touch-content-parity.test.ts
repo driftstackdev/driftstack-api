@@ -129,6 +129,15 @@ describe('W596.A packages/behavioural-simulation/src/touch.ts content parity', (
     );
   });
 
+  it('right and bottom edge arithmetic is required to remain finite', () => {
+    expect(body).toContain(
+      "requireFinite('generateTouchEvent: bounds right edge', opts.bounds.x + opts.bounds.width);",
+    );
+    expect(body).toContain(
+      "requireFinite('generateTouchEvent: bounds bottom edge', opts.bounds.y + opts.bounds.height);",
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

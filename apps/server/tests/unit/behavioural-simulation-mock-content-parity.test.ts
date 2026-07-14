@@ -106,6 +106,16 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
+  it('derived spans and mock keyboard text/duration boundaries are pinned', () => {
+    expect(body).toContain("import { MAX_TEXT_LENGTH } from './keyboard.js';");
+    expect(body).toContain("requireFinite('generateMouseTrajectory: derived x span', dx);");
+    expect(body).toContain("requireFinite('generateMouseTrajectory: derived y span', dy);");
+    expect(body).toContain('if (opts.text.length > MAX_TEXT_LENGTH) {');
+    expect(body).toContain(
+      "requireFinite('MockBehaviouralSimulator.generateKeyboardCadence: durationMs', durationMs);",
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

@@ -26915,3 +26915,31 @@ and a route-level record-relocation regression. The focused crypto, content,
 transport and integration suite passes 8 files and 219/219 tests. Strict server
 source/test TypeScript, targeted lint/format, diff and whitespace checks are
 green.
+
+## V-637 — Behavioural streams reject unrepresentable derived values
+
+**Date:** 2026-07-14
+
+Finite caller inputs could still overflow after validation. Opposite
+maximum-magnitude mouse endpoints produced an infinite interpolation span;
+finite touch origins and dimensions could produce infinite rectangle edges;
+multi-touch centipixel rounding could overflow; and finite keyboard delays
+could accumulate into infinite mock, cadence or typo-sequence durations. The
+mock keyboard also lacked the real generator's 20,000-code-unit allocation cap.
+
+Each generator now validates the first derived boundary it owns. Mouse spans
+and touch right/bottom edges must remain finite. Multi-touch coordinates stay
+inside an exact centipixel envelope with jitter headroom. Real and mock keyboard
+durations must remain finite, the real path checks each rounded delay, and the
+typing layer checks correction delays plus its expanded event-stream total.
+The mock reuses the shared text cap. Ordinary inputs, defaults and seeded output
+algorithms are unchanged.
+
+Regression tests cover every finite-input overflow, including independent
+accumulation cases where all individual real-keyboard delays remain finite and
+where the delegated base cadence remains finite but typo corrections overflow
+the expanded sequence. The five focused files pass 97/97 tests; the full
+behavioural package passes 9 files and 186/186 tests; package plus duplicate
+source-parity evidence passes 15 files and 244/244 tests. Package/server strict
+TypeScript, package build, targeted lint/format, diff and whitespace checks are
+green.

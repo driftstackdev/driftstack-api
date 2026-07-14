@@ -164,6 +164,15 @@ describe('W452.C packages/behavioural-simulation/src/touch.ts content parity', (
     );
   });
 
+  it('finite bounds must also have finitely representable right and bottom edges', () => {
+    expect(body).toContain(
+      "requireFinite('generateTouchEvent: bounds right edge', opts.bounds.x + opts.bounds.width);",
+    );
+    expect(body).toContain(
+      "requireFinite('generateTouchEvent: bounds bottom edge', opts.bounds.y + opts.bounds.height);",
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

@@ -4,6 +4,7 @@ import {
   generateTwoFingerScrollGesture,
   generateThreeFingerSwipeGesture,
   interleaveGestureStream,
+  MAX_ABS_CENTIPIXEL_COORDINATE,
   MAX_SAMPLES_PER_FINGER,
 } from '../src/multi-touch.js';
 
@@ -365,6 +366,26 @@ describe('BSIM-5 — fail-closed multi-touch input domain', () => {
         seed: 'infinite-swipe-start',
       }),
     ).toThrow(/start\.x/);
+  });
+
+  it('rejects finite derived coordinates outside the safe centipixel envelope', () => {
+    expect(() =>
+      generatePinchGesture({
+        startCentre: { x: MAX_ABS_CENTIPIXEL_COORDINATE - 50, y: 0 },
+        startSpanPx: 100,
+        endSpanPx: 400,
+        seed: 'derived-centipixel-overflow',
+      }),
+    ).toThrow(/centipixel coordinate envelope/);
+
+    expect(() =>
+      generateTwoFingerScrollGesture({
+        start: { x: MAX_ABS_CENTIPIXEL_COORDINATE - 50, y: 0 },
+        direction: 'right',
+        distancePx: 100,
+        seed: 'scroll-centipixel-overflow',
+      }),
+    ).toThrow(/centipixel coordinate envelope/);
   });
 
   it('keeps replay endpoints exact and every valid timeline non-negative and monotonic', () => {

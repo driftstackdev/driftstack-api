@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TYPO_PROBABILITY,
+  generateKeyboardCadence,
   generateTypingSequence,
   getProfile,
   MAX_TEXT_LENGTH,
@@ -100,6 +101,34 @@ describe('generateTypingSequence', () => {
       typoProbability: 0.3,
     });
     expect(seq.durationMs).toBe(seq.events.reduce((a, e) => a + e.delayMs, 0));
+  });
+
+  it('rejects a finite base cadence whose correction stream total overflows', () => {
+    const text = 'aaaa';
+    const seed = 'typing-total-overflow';
+    const calibrationMean = 1_000_000;
+    const calibrationProfile = { ...PROFILE, meanKeyDelayMs: calibrationMean };
+    const base = generateKeyboardCadence({ text, profile: calibrationProfile, seed });
+    const typing = generateTypingSequence({
+      text,
+      profile: calibrationProfile,
+      seed,
+      typoProbability: 1,
+    });
+    const baseRatio = base.durationMs / calibrationMean;
+    const typingRatio = typing.durationMs / calibrationMean;
+    const overflowingMean = Number.MAX_VALUE / ((baseRatio + typingRatio) / 2);
+
+    expect(baseRatio).toBeLessThan(typingRatio);
+    expect(Number.isFinite(overflowingMean)).toBe(true);
+    expect(() =>
+      generateTypingSequence({
+        text,
+        profile: { ...PROFILE, meanKeyDelayMs: overflowingMean },
+        seed,
+        typoProbability: 1,
+      }),
+    ).toThrow(/^generateTypingSequence: durationMs must be finite/);
   });
 
   it('non-letter characters (spaces, digits) are never typo-substituted', () => {

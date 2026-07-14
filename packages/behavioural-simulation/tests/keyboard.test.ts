@@ -197,6 +197,29 @@ describe('generateKeyboardCadence', () => {
     }
   });
 
+  it('rejects finite per-key delays whose accumulated duration overflows', () => {
+    const text = 'aaaa';
+    const seed = 'keyboard-total-overflow';
+    const calibrationMean = 1_000_000;
+    const calibration = generateKeyboardCadence({
+      text,
+      profile: { ...PROFILE, meanKeyDelayMs: calibrationMean },
+      seed,
+    });
+    const totalRatio = calibration.durationMs / calibrationMean;
+    const maxRatio = Math.max(...calibration.delaysMs) / calibrationMean;
+    const overflowingMean = Number.MAX_VALUE / ((totalRatio + maxRatio) / 2);
+
+    expect(Number.isFinite(overflowingMean)).toBe(true);
+    expect(() =>
+      generateKeyboardCadence({
+        text,
+        profile: { ...PROFILE, meanKeyDelayMs: overflowingMean },
+        seed,
+      }),
+    ).toThrow(/^generateKeyboardCadence: durationMs must be finite/);
+  });
+
   it('BSIM-4: rejects text over MAX_TEXT_LENGTH', () => {
     const overLong = 'x'.repeat(MAX_TEXT_LENGTH + 1);
     expect(() =>

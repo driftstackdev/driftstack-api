@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_MOUSE_TRAJECTORY_SAMPLES,
   MAX_SCROLL_PATTERN_TICKS,
+  MAX_TEXT_LENGTH,
   MockBehaviouralSimulator,
   type BehaviouralProfile,
 } from '../src/index.js';
@@ -117,6 +118,16 @@ describe('MockBehaviouralSimulator — determinism', () => {
     }
   });
 
+  it('rejects finite mouse endpoints whose derived span overflows', () => {
+    const sim = new MockBehaviouralSimulator();
+    expect(() =>
+      sim.generateMouseTrajectory({
+        from: { x: Number.MAX_VALUE, y: 0 },
+        to: { x: -Number.MAX_VALUE, y: 0 },
+      }),
+    ).toThrow(/derived x span must be finite/);
+  });
+
   it('different inputs produce different seeds', () => {
     const sim = new MockBehaviouralSimulator();
     const a = sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 0 } });
@@ -149,6 +160,26 @@ describe('MockBehaviouralSimulator — determinism', () => {
         }),
       ).toThrow(/meanKeyDelayMs/);
     }
+  });
+
+  it('generateKeyboardCadence applies the real generator text allocation cap', () => {
+    const sim = new MockBehaviouralSimulator();
+    expect(() =>
+      sim.generateKeyboardCadence({
+        text: 'x'.repeat(MAX_TEXT_LENGTH + 1),
+        profile: PROFILE,
+      }),
+    ).toThrow(/^MockBehaviouralSimulator\.generateKeyboardCadence: text must be <= 20000/);
+  });
+
+  it('generateKeyboardCadence rejects a non-finite accumulated duration', () => {
+    const sim = new MockBehaviouralSimulator();
+    expect(() =>
+      sim.generateKeyboardCadence({
+        text: 'aa',
+        profile: { ...PROFILE, meanKeyDelayMs: Number.MAX_VALUE },
+      }),
+    ).toThrow(/^MockBehaviouralSimulator\.generateKeyboardCadence: durationMs must be finite/);
   });
 
   it('generateScrollPattern produces ticks of profile.meanScrollPxPerTick magnitude', () => {

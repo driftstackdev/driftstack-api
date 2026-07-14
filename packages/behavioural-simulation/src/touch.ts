@@ -166,6 +166,8 @@ export function generateTouchEvent(opts: {
         `(got width=${opts.bounds.width}, height=${opts.bounds.height})`,
     );
   }
+  requireFinite('generateTouchEvent: bounds right edge', opts.bounds.x + opts.bounds.width);
+  requireFinite('generateTouchEvent: bounds bottom edge', opts.bounds.y + opts.bounds.height);
 
   const dist = TOUCH_DISTRIBUTIONS[opts.elementClass];
   const seed = opts.seed ?? defaultSeed(opts);

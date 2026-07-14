@@ -22,7 +22,7 @@
 import { generateKeyboardCadence, MAX_TEXT_LENGTH } from './keyboard.js';
 import type { GenerateKeyboardCadenceOpts } from './interfaces.js';
 import { splitGraphemes } from './graphemes.js';
-import { requireUnitInterval } from './validation.js';
+import { requireFinite, requireUnitInterval } from './validation.js';
 
 export interface GenerateTypingSequenceOpts extends GenerateKeyboardCadenceOpts {
   /** Per-character typo probability (0..1). Default 0.025 (file 05: 1-3%). */
@@ -31,8 +31,7 @@ export interface GenerateTypingSequenceOpts extends GenerateKeyboardCadenceOpts 
 
 /** One physical keystroke in a typing sequence. */
 export type KeystrokeEvent =
-  | { kind: 'char'; char: string; delayMs: number }
-  | { kind: 'backspace'; delayMs: number };
+  { kind: 'char'; char: string; delayMs: number } | { kind: 'backspace'; delayMs: number };
 
 export interface TypingSequence {
   /** The intended final text (what the events reproduce when replayed). */
@@ -149,16 +148,20 @@ export function generateTypingSequence(opts: GenerateTypingSequenceOpts): Typing
       const wrong = char >= 'A' && char <= 'Z' ? pick.toUpperCase() : pick;
       events.push({ kind: 'char', char: wrong, delayMs: baseDelay });
       // Notice + delete — quick (the typo is caught immediately).
+      const backspaceDelayMs = Math.max(minDelayMs, Math.round(mean * (0.5 + rng() * 0.3)));
+      requireFinite('generateTypingSequence: derived backspace delayMs', backspaceDelayMs);
       events.push({
         kind: 'backspace',
-        delayMs: Math.max(minDelayMs, Math.round(mean * (0.5 + rng() * 0.3))),
+        delayMs: backspaceDelayMs,
       });
       // Retype the correct key — slightly quicker than a fresh keystroke
       // (the finger now knows where to go).
+      const correctedDelayMs = Math.max(minDelayMs, Math.round(mean * (0.6 + rng() * 0.3)));
+      requireFinite('generateTypingSequence: derived corrected delayMs', correctedDelayMs);
       events.push({
         kind: 'char',
         char,
-        delayMs: Math.max(minDelayMs, Math.round(mean * (0.6 + rng() * 0.3))),
+        delayMs: correctedDelayMs,
       });
     } else {
       events.push({ kind: 'char', char, delayMs: baseDelay });
@@ -166,6 +169,7 @@ export function generateTypingSequence(opts: GenerateTypingSequenceOpts): Typing
   }
 
   const durationMs = events.reduce((acc, e) => acc + e.delayMs, 0);
+  requireFinite('generateTypingSequence: durationMs', durationMs);
   return { text, events, durationMs, typoCount, seed };
 }
 

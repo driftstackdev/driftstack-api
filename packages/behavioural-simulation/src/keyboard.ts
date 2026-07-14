@@ -199,10 +199,13 @@ export function generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): Keyb
       delay += mean * (lo + rng() * (hi - lo));
     }
 
-    delaysMs.push(Math.max(d.minDelayMs, Math.round(delay)));
+    const roundedDelayMs = Math.max(d.minDelayMs, Math.round(delay));
+    requireFinite('generateKeyboardCadence: derived delayMs', roundedDelayMs);
+    delaysMs.push(roundedDelayMs);
     prevChar = char;
   }
 
   const durationMs = delaysMs.reduce((acc, v) => acc + v, 0);
+  requireFinite('generateKeyboardCadence: durationMs', durationMs);
   return { text, delaysMs, durationMs, seed };
 }

@@ -201,6 +201,21 @@ describe('V-530.A touch event generator — properties', () => {
     }
   });
 
+  it('rejects finite bounds whose derived right or bottom edge overflows', () => {
+    expect(() =>
+      generateTouchEvent({
+        elementClass: 'button',
+        bounds: { x: Number.MAX_VALUE, y: 0, width: Number.MAX_VALUE, height: 10 },
+      }),
+    ).toThrow(/bounds right edge must be finite/);
+    expect(() =>
+      generateTouchEvent({
+        elementClass: 'button',
+        bounds: { x: 0, y: Number.MAX_VALUE, width: 10, height: Number.MAX_VALUE },
+      }),
+    ).toThrow(/bounds bottom edge must be finite/);
+  });
+
   it('scroll-container touches drift further than button touches (class differentiation)', () => {
     // Property: distributions are meaningfully distinct — a scroll-container
     // touch should drift visibly more than a button tap. Sample many seeds

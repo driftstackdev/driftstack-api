@@ -87,6 +87,14 @@ describe('W597.C packages/behavioural-simulation/src/multi-touch.ts content pari
     expect(body).toMatch(/export function interleaveGestureStream\(/);
   });
 
+  it('centipixel quantization carries an exact safe-coordinate envelope', () => {
+    expect(body).toContain(
+      'export const MAX_ABS_CENTIPIXEL_COORDINATE = Math.floor(Number.MAX_SAFE_INTEGER / 100) - 1;',
+    );
+    expect(body).toContain('if (Math.abs(value) > MAX_ABS_CENTIPIXEL_COORDINATE) {');
+    expect(body).toContain('must be within the centipixel coordinate envelope');
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

@@ -158,6 +158,13 @@ function fingerStartLagMs(rng: () => number): number {
  */
 export const MAX_SAMPLES_PER_FINGER = 1000;
 
+/**
+ * Tracks are serialized at centipixel precision below. Keep coordinates in an
+ * envelope where multiplying by 100 remains an exact safe integer, with one
+ * pixel of headroom for the generator's interior jitter.
+ */
+export const MAX_ABS_CENTIPIXEL_COORDINATE = Math.floor(Number.MAX_SAFE_INTEGER / 100) - 1;
+
 function requireFinite(name: string, value: number): void {
   if (!Number.isFinite(value)) {
     throw new Error(`${name} must be finite (got ${String(value)})`);
@@ -174,6 +181,17 @@ function requirePositiveFinite(name: string, value: number): void {
 function requireFinitePoint(name: string, point: { x: number; y: number }): void {
   requireFinite(`${name}.x`, point.x);
   requireFinite(`${name}.y`, point.y);
+  for (const [axis, value] of [
+    ['x', point.x],
+    ['y', point.y],
+  ] as const) {
+    if (Math.abs(value) > MAX_ABS_CENTIPIXEL_COORDINATE) {
+      throw new Error(
+        `${name}.${axis} must be within the centipixel coordinate envelope ` +
+          `(got ${String(value)})`,
+      );
+    }
+  }
 }
 
 /** Gesture duration = the latest sample tMs across all fingers (per the

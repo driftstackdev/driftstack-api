@@ -16,6 +16,7 @@ import type {
 import { generateScrollVelocityProfile, type ScrollVelocityProfile } from './scroll.js';
 import { generateTouchEvent } from './touch.js';
 import { splitGraphemes } from './graphemes.js';
+import { MAX_TEXT_LENGTH } from './keyboard.js';
 import { requireFinite, requireIntegerInRange, requirePositiveFinite } from './validation.js';
 import type {
   BehaviouralProfile,
@@ -92,6 +93,8 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
     const seed = opts.seed ?? defaultSeed('mouse', opts);
     const dx = opts.to.x - opts.from.x;
     const dy = opts.to.y - opts.from.y;
+    requireFinite('generateMouseTrajectory: derived x span', dx);
+    requireFinite('generateMouseTrajectory: derived y span', dy);
     // Deterministic linear interpolation — the real Phase 3 path is
     // Bezier with humanlike noise; the mock keeps it linear so tests
     // can assert exact midpoints.
@@ -113,12 +116,19 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
       'MockBehaviouralSimulator.generateKeyboardCadence: profile.meanKeyDelayMs',
       opts.profile.meanKeyDelayMs,
     );
+    if (opts.text.length > MAX_TEXT_LENGTH) {
+      throw new Error(
+        `MockBehaviouralSimulator.generateKeyboardCadence: text must be <= ` +
+          `${MAX_TEXT_LENGTH} characters (got ${opts.text.length})`,
+      );
+    }
     const seed = opts.seed ?? defaultSeed('kb', { text: opts.text, profileId: opts.profile.id });
     // Deterministic constant delay — real path samples around mean
     // with profile-tuned jitter. Keep one delay per Unicode grapheme so the
     // mock cannot hide lone-surrogate events that the real path rejects.
     const delaysMs = splitGraphemes(opts.text).map(() => opts.profile.meanKeyDelayMs);
     const durationMs = delaysMs.reduce((acc, d) => acc + d, 0);
+    requireFinite('MockBehaviouralSimulator.generateKeyboardCadence: durationMs', durationMs);
     return { text: opts.text, delaysMs, durationMs, seed };
   }
 

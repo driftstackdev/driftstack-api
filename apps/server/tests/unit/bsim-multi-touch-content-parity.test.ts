@@ -195,6 +195,14 @@ describe('W454.A packages/behavioural-simulation/src/multi-touch.ts content pari
     expect(body).toMatch(/pressure: Math\.round\(pressure \* 100\) \/ 100,/);
   });
 
+  it('centipixel quantization rejects coordinates outside its safe derived envelope', () => {
+    expect(body).toContain(
+      'export const MAX_ABS_CENTIPIXEL_COORDINATE = Math.floor(Number.MAX_SAFE_INTEGER / 100) - 1;',
+    );
+    expect(body).toContain('if (Math.abs(value) > MAX_ABS_CENTIPIXEL_COORDINATE) {');
+    expect(body).toContain('must be within the centipixel coordinate envelope');
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
