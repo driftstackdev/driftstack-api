@@ -1,9 +1,8 @@
 // W238.A — drift-guard for /trust/security-overview. The page is
 // procurement-facing marketing copy; the previous revision asserted
 // customer-controlled SOCKS5 / WireGuard / OpenVPN egress and
-// customer-configurable capture retention — neither of which is
-// implemented today. This guard fails if anyone reasserts those
-// claims while no matching server-side config exists.
+// customer-configurable capture retention before those boundaries
+// existed. This guard pins current implementation truth.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -55,8 +54,12 @@ describe('W238.A trust/security-overview doc parity', () => {
     }
   });
 
-  it('does not claim configurable capture retention while recordings ship as roadmap', () => {
+  it('states the direct-capture and desktop-local recording boundary', () => {
     expect(doc).not.toMatch(/Default 30 days for screenshots/);
-    expect(doc).toMatch(/Capture retention \(roadmap\)/i);
+    expect(doc).toMatch(/Direct captures and local recordings/);
+    expect(doc).toMatch(/returned directly inside the API\s+response as inline bytes/);
+    expect(doc).toMatch(/not retained by the capture\s+endpoint/);
+    expect(doc).toMatch(/desktop recorder stores streamed frames on the\s+operator's machine/);
+    expect(doc).not.toMatch(/capture retention \(roadmap\)/i);
   });
 });
