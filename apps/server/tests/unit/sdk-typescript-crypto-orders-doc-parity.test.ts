@@ -154,24 +154,27 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
     expect(existsSync(example), `referenced example file ${example} must exist`).toBe(true);
   });
 
-  it('CRITICAL doc related-links roster pinned — 6 hyperlinks: sdk-typescript, sdk-python-crypto-orders, sdk-go-crypto-orders, billing-crypto-integration-guide, idempotency-keys, webhooks-crypto-events. Drift to dropping a link would break navigation.', () => {
+  it('CRITICAL doc related-links roster pinned — 6 canonical hyperlinks: sdk-typescript, sdk-python-crypto-orders, sdk-go-crypto-orders, billing-crypto-integration-guide, idempotency-keys, webhooks-crypto-events. Drift to dropping or de-canonicalizing a link would break navigation.', () => {
     const doc = read(DOC);
 
     const links = [
-      '/docs/sdk-typescript',
-      '/docs/sdk-python-crypto-orders',
-      '/docs/sdk-go-crypto-orders',
+      '/docs/sdk-typescript/',
+      '/docs/sdk-python-crypto-orders/',
+      '/docs/sdk-go-crypto-orders/',
       // S47 2026-07-07 (founder-approved: mirror deprecation): the
       // integration-guide + webhooks-crypto-events mirrors are
       // deleted; hrefs re-pinned to the docs successors.
       'https://docs.driftstack.dev/guides/paying-with-crypto/',
-      '/docs/idempotency-keys',
+      '/docs/idempotency-keys/',
       'https://docs.driftstack.dev/webhooks/crypto-events/',
     ];
     for (const link of links) {
       const re = new RegExp(`href="${link.replace(/\//g, '\\/')}"`);
       expect(doc, `related-link ${link}`).toMatch(re);
     }
+    expect(doc).not.toMatch(
+      /href="\/(?:docs\/sdk-typescript|docs\/sdk-python-crypto-orders|docs\/sdk-go-crypto-orders|docs\/idempotency-keys)"/,
+    );
   });
 
   it('CRITICAL doc idempotencyKey field-name + crypto.randomUUID() pattern pinned. Drift to UUIDv7 or a different field name would mis-document the W683 V-666.AO Idempotency-Key contract.', () => {
