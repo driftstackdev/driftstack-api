@@ -40,7 +40,11 @@ interface SetUpOpts {
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  runRefreshInterval: () => void;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -53,6 +57,7 @@ function setUpDom(
   });
   const { window } = dom;
   const fetchCalls: MockFetchCall[] = [];
+  const intervalHandlers: TimerHandler[] = [];
   // @ts-expect-error — jsdom global is loose
   if (typeof window.Response !== 'function') window.Response = Response;
   // @ts-expect-error — jsdom global is loose
@@ -66,12 +71,23 @@ function setUpDom(
   // @ts-expect-error — driftstackConfirm is injected by AdminLayout
   window.driftstackConfirm = () => Promise.resolve(cr);
   installAdminDeadline(window);
+  window.setInterval = ((handler: TimerHandler) => {
+    intervalHandlers.push(handler);
+    return intervalHandlers.length;
+  }) as typeof window.setInterval;
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="status-subscribers"'));
   if (!pageScript) throw new Error('admin status-subscribers inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    runRefreshInterval: () => {
+      const handler = intervalHandlers[0];
+      if (typeof handler === 'function') handler();
+    },
+  };
 }
 
 function json(obj: unknown, status = 200): Response {
@@ -324,7 +340,7 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
       resolveInitial = resolve;
     });
     let reads = 0;
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls, runRefreshInterval } = setUpDom(loadBuiltPage(), {
       route: (call) => {
         if (call.init?.method && call.init.method !== 'GET') return json({}, 404);
         reads += 1;
@@ -334,7 +350,8 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     });
     win = window;
 
-    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush(1);
+    runRefreshInterval();
     await flush();
     expect(fetchCalls).toHaveLength(2);
     expect((fetchCalls[0]?.init?.signal as AbortSignal).aborted).toBe(true);
@@ -353,7 +370,7 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
       rejectInitial = reject;
     });
     let reads = 0;
-    const { window } = setUpDom(loadBuiltPage(), {
+    const { window, runRefreshInterval } = setUpDom(loadBuiltPage(), {
       route: () => {
         reads += 1;
         return reads === 1 ? initial : json({ data: [] });
@@ -361,7 +378,8 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     });
     win = window;
 
-    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush(1);
+    runRefreshInterval();
     await flush();
     rejectInitial?.(new window.DOMException('superseded', 'AbortError'));
     await flush();
@@ -376,6 +394,7 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), { route: () => pending });
     win = window;
+    await flush(1);
     window.dispatchEvent(new window.Event('pagehide'));
     expect((fetchCalls[0]?.init?.signal as AbortSignal).aborted).toBe(true);
 

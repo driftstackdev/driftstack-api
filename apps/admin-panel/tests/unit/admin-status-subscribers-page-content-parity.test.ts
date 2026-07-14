@@ -99,10 +99,12 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toMatch(/Force-unsubscribe outcome is unknown after the request timed out/);
     expect(body).toMatch(/still shows ' \+/);
     expect(body).toMatch(/no longer shows ' \+/);
-    expect(body).toMatch(/if \(addInFlight \|\| addOutcomeUnknown\) return/);
+    expect(body).toMatch(
+      /if \(!subscriberDataAvailable \|\| addInFlight \|\| addOutcomeUnknown\) return/,
+    );
     expect(body).toMatch(/Add-subscriber outcome is unknown after the request timed out/);
     expect(body).toMatch(/returned unsubscribe link cannot be recovered/);
-    expect(body).toMatch(/submitBtn\.disabled = addOutcomeUnknown/);
+    expect(body).toMatch(/const disabled = !available \|\| addInFlight \|\| addOutcomeUnknown/);
   });
 
   it('re-rendered rows inherit and visibly explain pending or uncertain unsubscribe state', () => {
@@ -133,8 +135,8 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
 
   it('no-token + empty states: structured (headline + helper copy), matching the admin empty-state pattern', () => {
     // No-token guard: structured empty state guiding the operator to SSO.
-    expect(body).toMatch(/Sign in to view subscribers/);
-    expect(body).toMatch(/Sign in with a staff admin key via the dashboard SSO bridge/);
+    expect(body).toMatch(/Sign in with a staff admin account to load subscribers/);
+    expect(body).toMatch(/Available after staff sign-in/);
     // Empty list: headline + helper copy (not a bare one-line <li>).
     expect(body).toMatch(/No subscribers yet/);
     expect(body).toMatch(
