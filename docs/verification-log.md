@@ -26160,3 +26160,40 @@ Verification:
   tests, and the surrounding auth/team/bootstrap matrix passes with 11 files
   and 242/242 tests, plus strict server source/test TypeScript, lint,
   formatting, diff, and hooks.
+
+## V-615 — configured safety policy loads atomically in production
+
+**Date:** 2026-07-14
+
+Closed a fail-open activation path in the agent task-refusal start gate.
+`DRIFTSTACK_TASK_REFUSAL_PATTERNS` is optional because the binding abuse policy
+belongs to the founder/AUP, but an explicitly configured production value
+previously continued serving after invalid JSON, a non-array or empty value, or
+one or more malformed/uncompilable/ReDoS-rejected entries. Depending on the
+input, the intended gate was silently off or only a subset of the declared
+policy remained active.
+
+A pure resolver now treats a configured production list as one atomic policy:
+it must be valid JSON, be a nonempty array, and load with zero skipped rules or
+boot refuses with a diagnostic that contains neither the policy text nor task
+data. Unset/blank production remains the intentionally inactive shipped
+default. Development and test retain skip-and-report behavior so policy authors
+can inspect multiple rule errors without repeatedly restarting.
+
+The screening mechanism itself is unchanged: normalization order, bounded task
+length, bias-to-allow for runtime nonmatches, first-match behavior, deterministic
+global/sticky regex handling, and the existing nested/overlapping-quantifier
+ReDoS detector remain exact. This is configuration-integrity enforcement, not
+new abuse policy.
+
+Verification:
+
+- production tests prove unset/blank stays off and a complete valid list loads;
+- invalid JSON, object shape, empty array, mixed valid/ReDoS-rejected input, and
+  partial malformed lists all refuse production boot;
+- development/test tests prove valid siblings remain inspectable beside a
+  skipped rule, while a diagnostic test proves raw policy text is never echoed;
+- the focused task-refusal/bootstrap/starter-policy gate passes with 3 files and
+  69/69 tests, and the surrounding task-refusal/agent-runtime matrix passes with
+  6 files and 148/148 tests, plus strict server source/test TypeScript, lint,
+  formatting, diff, and hooks.

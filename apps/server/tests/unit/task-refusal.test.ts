@@ -11,6 +11,7 @@ import {
   hasNestedQuantifier,
   loadRefusalPatterns,
   normalizeTaskForScreening,
+  resolveTaskRefusalConfig,
   screenTaskForRefusal,
 } from '../../src/services/task-refusal.js';
 
@@ -194,6 +195,82 @@ describe('W582 task-refusal contract mirror', () => {
       for (const ok of ['(a+){2}', '\\(a+\\)+', '[a+]+', 'a|b', 'a+', 'steal password']) {
         expect(hasNestedQuantifier(ok)).toBe(false);
       }
+    });
+  });
+
+  describe('resolveTaskRefusalConfig (production activation integrity)', () => {
+    const valid = JSON.stringify([
+      { id: 'cred', category: 'credential_theft', pattern: 'steal password', reason: 'no' },
+    ]);
+
+    it.each([undefined, '', '   '])('leaves an unconfigured production gate off for %s', (raw) => {
+      expect(resolveTaskRefusalConfig(raw, 'production')).toEqual({
+        configured: false,
+        patterns: [],
+        skipped: [],
+        issue: null,
+      });
+    });
+
+    it('loads a complete valid production policy', () => {
+      const resolved = resolveTaskRefusalConfig(valid, 'production');
+      expect(resolved.configured).toBe(true);
+      expect(resolved.issue).toBeNull();
+      expect(resolved.skipped).toEqual([]);
+      expect(resolved.patterns.map((pattern) => pattern.id)).toEqual(['cred']);
+    });
+
+    it.each([
+      ['invalid_json', '{not-json'],
+      ['not_an_array', JSON.stringify({ policy: [] })],
+      ['empty_array', '[]'],
+      [
+        'skipped_entries',
+        JSON.stringify([
+          { id: 'valid', category: 'c', pattern: 'safe phrase', reason: 'no' },
+          { id: 'bad', category: 'c', pattern: '(a+)+', reason: 'no' },
+        ]),
+      ],
+      [
+        'skipped_entries',
+        JSON.stringify([
+          { id: 'valid', category: 'c', pattern: 'safe phrase', reason: 'no' },
+          { id: 'missing-reason', category: 'c', pattern: 'blocked phrase' },
+        ]),
+      ],
+    ])('refuses production %s instead of serving a partial or empty policy', (issue, raw) => {
+      expect(() => resolveTaskRefusalConfig(raw, 'production')).toThrow(
+        new RegExp(`DRIFTSTACK_TASK_REFUSAL_PATTERNS is configured but ${issue}`),
+      );
+    });
+
+    it.each(['development', 'test'] as const)(
+      'retains skip-and-inspect behavior in %s',
+      (nodeEnv) => {
+        const resolved = resolveTaskRefusalConfig(
+          JSON.stringify([
+            { id: 'valid', category: 'c', pattern: 'safe phrase', reason: 'no' },
+            { id: 'bad', category: 'c', pattern: '(a+)+', reason: 'no' },
+          ]),
+          nodeEnv,
+        );
+        expect(resolved.issue).toBe('skipped_entries');
+        expect(resolved.patterns.map((pattern) => pattern.id)).toEqual(['valid']);
+        expect(resolved.skipped).toHaveLength(1);
+      },
+    );
+
+    it('does not echo the raw policy in a production diagnostic', () => {
+      const raw = '{SUPERSECRET-POLICY-TEXT';
+      let caught: unknown;
+      try {
+        resolveTaskRefusalConfig(raw, 'production');
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).not.toContain(raw);
+      expect((caught as Error).message).not.toContain('SUPERSECRET');
     });
   });
 

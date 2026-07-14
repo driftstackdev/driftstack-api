@@ -429,11 +429,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/\.\.\.fleetControlPlaneDeps,/);
   });
 
-  it('W592 task-refusal activation: reads DRIFTSTACK_TASK_REFUSAL_PATTERNS -> loadRefusalPatterns -> injects deps.refusalPatterns (empty => no-op); JSON-parse + skipped both fail-safe', () => {
+  it('W592 task-refusal activation: production resolves the configured policy atomically; unset stays off', () => {
     expect(body).toMatch(/process\.env\.DRIFTSTACK_TASK_REFUSAL_PATTERNS/);
-    expect(body).toMatch(/parsed = JSON\.parse\(refusalPatternsRaw\)/);
+    expect(body).toMatch(/resolveTaskRefusalConfig\(refusalPatternsRaw, config\.nodeEnv\)/);
+    expect(body).toMatch(/production requires a complete valid list and/);
     expect(body).toMatch(/task-refusal gate stays OFF/);
-    expect(body).toMatch(/const loaded = loadRefusalPatterns\(parsed\)/);
+    expect(body).not.toMatch(/parsed = JSON\.parse\(refusalPatternsRaw\)/);
     expect(body).toMatch(/\.\.\.\(refusalPatterns\.length > 0 \? \{ refusalPatterns \} : \{\}\)/);
   });
 

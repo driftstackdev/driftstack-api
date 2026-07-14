@@ -104,7 +104,7 @@ import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
 import { DrizzleAgentTurnReceiptsRepo } from '../db/agent-turn-receipts-repo.js';
 import { DrizzleAgentDecomposerUsageRecorder } from '../db/agent-decomposer-usage-recorder.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
-import { loadRefusalPatterns, type RefusalPattern } from '../services/task-refusal.js';
+import { resolveTaskRefusalConfig, type RefusalPattern } from '../services/task-refusal.js';
 import { StubAgentExecutor, type AgentExecutor } from '../services/agent-executor.js';
 import { ControlPlaneAgentExecutor } from '../services/agent-executor-control-plane.js';
 import { FleetSessionRoutingDispatcher } from '../services/fleet-session-routing-dispatcher.js';
@@ -1026,27 +1026,24 @@ export async function createProductionDeps(
   // The mechanism (W582) + run-loop wiring (W589) are in place; this is the
   // pure-DATA on-switch: set DRIFTSTACK_TASK_REFUSAL_PATTERNS to a JSON array
   // of { id, category, pattern, flags?, reason } (the policy authored by the
-  // founder/AUP — Tier-3) and restart. Unset/empty/malformed-JSON ⇒ no
-  // patterns ⇒ the gate stays a no-op (allows everything). loadRefusalPatterns
-  // is bias-safe: a bad individual entry is SKIPPED (logged), never thrown, so
-  // one typo can't void the list or crash boot.
+  // founder/AUP — Tier-3) and restart. Unset/blank intentionally leaves the
+  // gate off. Once configured, production requires a complete valid list and
+  // refuses boot rather than silently weakening policy; development/test keep
+  // the loader's skip-and-warn authoring ergonomics.
   const refusalPatternsRaw = process.env.DRIFTSTACK_TASK_REFUSAL_PATTERNS;
   let refusalPatterns: readonly RefusalPattern[] = [];
   if (refusalPatternsRaw && refusalPatternsRaw.trim().length > 0) {
-    let parsed: unknown = [];
-    try {
-      parsed = JSON.parse(refusalPatternsRaw);
-    } catch {
+    const resolved = resolveTaskRefusalConfig(refusalPatternsRaw, config.nodeEnv);
+    refusalPatterns = resolved.patterns;
+    if (resolved.issue !== null && resolved.issue !== 'skipped_entries') {
       logger.warn(
-        { component: 'agent-runtime' },
-        'DRIFTSTACK_TASK_REFUSAL_PATTERNS is not valid JSON — task-refusal gate stays OFF',
+        { component: 'agent-runtime', issue: resolved.issue },
+        'DRIFTSTACK_TASK_REFUSAL_PATTERNS is configured but invalid — task-refusal gate stays OFF',
       );
     }
-    const loaded = loadRefusalPatterns(parsed);
-    refusalPatterns = loaded.patterns;
-    if (loaded.skipped.length > 0) {
+    if (resolved.skipped.length > 0) {
       logger.warn(
-        { component: 'agent-runtime', skipped: loaded.skipped },
+        { component: 'agent-runtime', skipped: resolved.skipped },
         'task-refusal: some pattern entries were skipped (malformed) — they will NOT fire',
       );
     }

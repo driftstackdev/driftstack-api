@@ -295,3 +295,63 @@ export function loadRefusalPatterns(data: unknown): {
   });
   return { patterns, skipped };
 }
+
+export type TaskRefusalConfigIssue =
+  | 'invalid_json'
+  | 'not_an_array'
+  | 'empty_array'
+  | 'skipped_entries';
+
+export interface TaskRefusalConfigResolution {
+  configured: boolean;
+  patterns: RefusalPattern[];
+  skipped: Array<{ index: number; reason: string }>;
+  issue: TaskRefusalConfigIssue | null;
+}
+
+/**
+ * Resolve the optional environment-backed policy without performing I/O.
+ *
+ * An absent value intentionally leaves the gate off. Once an operator supplies
+ * a value, production treats the complete list as one configuration unit: a
+ * parse/shape/entry failure must stop boot instead of silently weakening the
+ * declared policy. Development and test retain the loader's skip-and-inspect
+ * behavior for authoring ergonomics.
+ */
+export function resolveTaskRefusalConfig(
+  raw: string | undefined,
+  nodeEnv: 'development' | 'test' | 'production',
+): TaskRefusalConfigResolution {
+  if (raw === undefined || raw.trim().length === 0) {
+    return { configured: false, patterns: [], skipped: [], issue: null };
+  }
+
+  let parsed: unknown;
+  let issue: TaskRefusalConfigIssue | null = null;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    parsed = [];
+    issue = 'invalid_json';
+  }
+
+  const loaded = loadRefusalPatterns(parsed);
+  if (issue === null) {
+    if (!Array.isArray(parsed)) issue = 'not_an_array';
+    else if (parsed.length === 0) issue = 'empty_array';
+    else if (loaded.skipped.length > 0) issue = 'skipped_entries';
+  }
+
+  if (nodeEnv === 'production' && issue !== null) {
+    throw new Error(
+      `Refusing to boot: DRIFTSTACK_TASK_REFUSAL_PATTERNS is configured but ${issue}; production requires a non-empty JSON array with every rule valid.`,
+    );
+  }
+
+  return {
+    configured: true,
+    patterns: loaded.patterns,
+    skipped: loaded.skipped,
+    issue,
+  };
+}

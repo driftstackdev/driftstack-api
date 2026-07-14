@@ -77,8 +77,11 @@ harassment) plus malware. Each is intentionally narrow.
    DRIFTSTACK_TASK_REFUSAL_PATTERNS=<the JSON array, minified>
    ```
 3. Restart the API. Boot logs `task-refusal start-gate ACTIVE` with the
-   active-pattern count. A malformed entry is skipped + logged (never crashes
-   boot); the whole var being absent/empty/invalid ⇒ gate stays a no-op.
+   active-pattern count. Production refuses to boot if the configured value is
+   invalid JSON, is not a nonempty array, or contains any malformed,
+   uncompilable, or ReDoS-rejected entry; fix the complete list instead of
+   accepting partial protection. An absent/blank value intentionally leaves the
+   gate off. Development/test skip and report malformed entries for authoring.
 
 ## Notes for the reviewer
 
