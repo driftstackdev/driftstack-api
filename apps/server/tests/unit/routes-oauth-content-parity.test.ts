@@ -71,13 +71,14 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
 
   it('RegisterClientBody: label 1..120 + redirect_uris array of URL min 1 max 10 + account_id uuid nullable optional', () => {
     expect(body).toMatch(
-      /const RegisterClientBody = z\.object\(\{\s*\n?\s*label: z\.string\(\)\.min\(1\)\.max\(120\),\s*\n?\s*redirect_uris: z\.array\(z\.string\(\)\.url\(\)\)\.min\(1\)\.max\(10\),\s*\n?\s*account_id: z\.string\(\)\.uuid\(\)\.nullable\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const RegisterClientBody = z\.object\(\{\s*\n?\s*label: z\.string\(\)\.min\(1\)\.max\(120\),\s*\n?\s*redirect_uris: z\.array\(z\.string\(\)\.max\(2048\)\.url\(\)\)\.min\(1\)\.max\(10\),\s*\n?\s*account_id: z\.string\(\)\.uuid\(\)\.nullable\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
+    expect(body.match(/redirect_uri: z\.string\(\)\.max\(2048\)\.url\(\),/g)).toHaveLength(2);
   });
 
   it('PKCE AuthorizeQuery framing pinned: code_challenge 43..128 + code_challenge_method LITERAL S256 (no plain downgrade); state 8..256 CSRF; scope optional (≤1024 chars per slice 117 cap)', () => {
     expect(body).toMatch(
-      /const AuthorizeQuery = z\.object\(\{\s*\n?\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*redirect_uri: z\.string\(\)\.url\(\),\s*\n?\s*state: z\.string\(\)\.min\(8\)\.max\(256\),\s*\n?\s*code_challenge: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*code_challenge_method: z\.literal\('S256'\),\s*\n?\s*scope: z\.string\(\)\.max\(1024\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const AuthorizeQuery = z\.object\(\{\s*\n?\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*redirect_uri: z\.string\(\)\.max\(2048\)\.url\(\),\s*\n?\s*state: z\.string\(\)\.min\(8\)\.max\(256\),\s*\n?\s*code_challenge: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*code_challenge_method: z\.literal\('S256'\),\s*\n?\s*scope: z\.string\(\)\.max\(1024\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -86,7 +87,7 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
       /const ApproveAuthorizationBody = z\.object\(\{\s*\n?\s*authorization_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /const ExchangeCodeBody = z\.object\(\{\s*\n?\s*grant_type: z\.literal\('authorization_code'\),\s*\n?\s*code: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*code_verifier: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*client_secret: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*redirect_uri: z\.string\(\)\.url\(\),\s*\n?\s*\}\);/,
+      /const ExchangeCodeBody = z\.object\(\{\s*\n?\s*grant_type: z\.literal\('authorization_code'\),\s*\n?\s*code: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*code_verifier: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*client_secret: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*redirect_uri: z\.string\(\)\.max\(2048\)\.url\(\),\s*\n?\s*\}\);/,
     );
   });
 

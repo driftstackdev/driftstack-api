@@ -36,7 +36,7 @@ import type { RateLimitStore } from '../services/rate-limit.js';
 
 const RegisterClientBody = z.object({
   label: z.string().min(1).max(120),
-  redirect_uris: z.array(z.string().url()).min(1).max(10),
+  redirect_uris: z.array(z.string().max(2048).url()).min(1).max(10),
   account_id: z.string().uuid().nullable().optional(),
 });
 
@@ -48,7 +48,7 @@ const RegisterClientBody = z.object({
 // so legitimate variations stay valid.
 const AuthorizeQuery = z.object({
   client_id: z.string().min(1).max(128),
-  redirect_uri: z.string().url(),
+  redirect_uri: z.string().max(2048).url(),
   state: z.string().min(8).max(256),
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.literal('S256'),
@@ -69,7 +69,7 @@ const ExchangeCodeBody = z.object({
   code_verifier: z.string().min(43).max(128),
   client_id: z.string().min(1).max(128),
   client_secret: z.string().min(1).max(256),
-  redirect_uri: z.string().url(),
+  redirect_uri: z.string().max(2048).url(),
 });
 
 const IntrospectBody = z.object({

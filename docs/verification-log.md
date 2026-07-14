@@ -26366,3 +26366,60 @@ Verification:
 - strict server source/test TypeScript, targeted ESLint, diff and whitespace
   checks are green; Docs Astro reports 0 errors/0 warnings/0 hints and builds
   all 61 pages with its search index.
+
+## V-619 — Hosted OAuth authorization is human-completable and callback-safe
+
+**Date:** 2026-07-14
+
+Closed the final human-flow gap in the third-party provider. Although the
+backend could persist consent and issue a usable token, no shipped Dashboard
+page accepted an integrator's authorization redirect. The public
+`GET /v1/oauth/authorize` route returned a JSON staging envelope, so a customer
+sent there directly could neither sign in, inspect requested authority, approve
+or refuse it, nor return to the registered application. The integration guide
+described the intended hosted flow while exposing the internal endpoint as its
+browser entry point.
+
+The Customer Dashboard now ships `/oauth/authorize/` as the only documented
+customer entry. It captures exactly one bounded value for every required
+parameter, rejects duplicate-parameter pollution and PKCE downgrade, preserves
+the exact request through same-origin sign-in, and stages only after a web
+session is present. Consent displays the server-returned app label, reduced
+scope list and callback host using text-only DOM construction. Those untrusted
+fields, API errors and response bodies are never reflected as markup; requests
+have a 15-second deadline, response reads stop at 64 KiB, and active work aborts
+on page exit.
+
+Approval has one in-flight authority and calls the interactive web-session
+endpoint exactly once. Both the stage and approval envelopes must remain bound
+to the captured client, redirect URI and state before navigation. Cancellation
+never calls the approval endpoint and returns `error=access_denied` with the
+original state. Both outcomes use `URL`/`URLSearchParams`, preserve a registered
+callback's existing query, and replace stale OAuth-owned fields. The original
+authorization query is removed from the visible URL after successful staging.
+
+Provider redirect registration, staging and exchange now enforce a 2,048-character
+boundary before URL parsing. Registration rejects fragments and userinfo in
+addition to the existing HTTPS-or-loopback rule; the Dashboard independently
+applies that same rule before displaying or navigating to a callback. The
+developer references now direct integrators to the hosted Dashboard and keep
+the intermediate `authorization_id` explicitly provider-internal.
+
+Verification:
+
+- focused helper/page/route/service/documentation guards pass with 13 files and
+  166/166 tests, including duplicate query pollution, stage/approval binding,
+  response byte limits, callback query preservation and unsafe URI refusal;
+- the complete OAuth-named unit/integration matrix passes with 46 files and
+  492/492 tests, covering both provider authorization and the separate
+  customer sign-in OAuth-client flow;
+- compiled-page browser acceptance passes 4/4 human scenarios: malformed link,
+  signed-out exact-request resumption, inert rendering of an XSS-shaped app
+  label plus cancellation, and forced double approval producing one request;
+- the real PostgreSQL/Redis Playwright provider flow remains green at 6/6,
+  including persistent consent, atomic parallel approval/exchange, real
+  web-session authority, digest-only storage and immediate revocation;
+- Customer Dashboard, marketing and Docs Astro checks report zero errors; all
+  three production builds are green, including the new static authorization
+  route and the Docs 61-page search index. Strict server source/test TypeScript,
+  targeted lint/format, diff and whitespace checks are green.

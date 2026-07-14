@@ -14,7 +14,7 @@
 //     hash-only.
 //   • PKCE-S256 + 43-128 char verifier + URL-safe-base64 SHA-256
 //     code_challenge.
-//   • /v1/oauth/authorize 6-param query: client_id + redirect_uri +
+//   • Hosted /oauth/authorize/ 6-param query: client_id + redirect_uri +
 //     state + code_challenge + code_challenge_method=S256 + scope.
 //   • /v1/oauth/token 5-param body + 4-field response (access_token oat_
 //     + token_type Bearer + expires_in 3600 + scope[]).
@@ -94,15 +94,23 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
     );
   });
 
-  it("/v1/oauth/authorize 6-param framing pinned: client_id (oac_) + redirect_uri + state (csrf-token) + code_challenge (sha256(verifier) base64url) + code_challenge_method=S256 + scope (space-separated) + 'Verify state matches what you sent (CSRF guard).' — pinned so the 6-query-param surface + CSRF-state-guard commitment survives", () => {
-    expect(body).toMatch(/GET \/v1\/oauth\/authorize/);
+  it('Hosted /oauth/authorize/ 6-param framing pinned: client_id (oac_) + redirect_uri + state (csrf-token) + code_challenge (sha256(verifier) base64url) + code_challenge_method=S256 + scope (space-separated) + callback outcomes + internal staging boundary', () => {
+    expect(body).toMatch(/GET https:\/\/app\.driftstack\.dev\/oauth\/authorize\//);
     expect(body).toMatch(/\?client_id=oac_…/);
     expect(body).toMatch(/&redirect_uri=https:\/\/yourapp\.com\/oauth\/callback/);
     expect(body).toMatch(/&state=<csrf-token>/);
     expect(body).toMatch(/&code_challenge=<sha256\(verifier\) base64url>/);
     expect(body).toMatch(/&code_challenge_method=S256/);
     expect(body).toMatch(/&scope=read:sessions write:sessions/);
-    expect(body).toMatch(/Verify <code>state<\/code> matches what you sent \(CSRF guard\)\./);
+    expect(body).toMatch(
+      /Verify <code>state<\/code> matches what you sent \(CSRF guard\) in\s*\n?\s*either case\./,
+    );
+    expect(body).toMatch(/\?error=access_denied&amp;state=…/);
+    expect(body).toMatch(
+      /your integration never receives or handles\s*\n?\s*the intermediate <code>authorization_id<\/code>/,
+    );
+    expect(body).toContain('GET /v1/oauth/authorize');
+    expect(body).toContain('POST /v1/oauth/authorize/complete');
   });
 
   it('/v1/oauth/token 5-param body + 4-field response framing pinned: POST /v1/oauth/token body (code + code_verifier + client_id + client_secret + redirect_uri) → access_token (oat_ prefix) + token_type Bearer + expires_in 3600 + scope[] — pinned so the 5-field-body + 4-field-response + oat_-prefix + Bearer-type + 3600s = 1h TTL commitments survive', () => {

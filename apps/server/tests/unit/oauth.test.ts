@@ -81,6 +81,31 @@ describe('V-667 OAuthService — registerClient', () => {
     ).resolves.toMatchObject({ client_id: expect.stringMatching(/^oac_/) });
   });
 
+  it.each([
+    'https://user@example.com/cb',
+    'https://user:password@example.com/cb',
+    'https://example.com/cb#fragment',
+    `https://example.com/${'x'.repeat(2048)}`,
+  ])('rejects unsafe or oversized redirect URI %s', async (redirectUri) => {
+    const { svc } = makeService();
+    await expect(
+      svc.registerClient({ label: 'Unsafe App', redirect_uris: [redirectUri] }),
+    ).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: 'redirect_uri rejected',
+    });
+  });
+
+  it('accepts an HTTPS callback query because the handoff preserves it safely', async () => {
+    const { svc } = makeService();
+    await expect(
+      svc.registerClient({
+        label: 'Query App',
+        redirect_uris: ['https://example.com/cb?tenant=customer'],
+      }),
+    ).resolves.toMatchObject({ client_id: expect.stringMatching(/^oac_/) });
+  });
+
   it('rejects empty label or empty redirect_uris', async () => {
     const { svc } = makeService();
     await expect(
@@ -163,6 +188,33 @@ describe('V-667 OAuthService — authorize', () => {
         scope: [],
       }),
     ).rejects.toMatchObject({ code: 'invalid_request' });
+  });
+
+  it('rejects an unsafe redirect even if a corrupted client row contains it', async () => {
+    const { svc, store } = makeService();
+    const redirectUri = 'https://user:password@app.example/cb';
+    await store.insertClient({
+      client_id: 'oac_corrupt',
+      client_secret_hash: 'digest',
+      redirect_uris: [redirectUri],
+      label: 'Corrupt App',
+      account_id: null,
+      created_at: Date.now(),
+      revoked_at: null,
+    });
+    await expect(
+      svc.authorize({
+        client_id: 'oac_corrupt',
+        redirect_uri: redirectUri,
+        state: 'state_corrupt',
+        code_challenge: computeS256Challenge(makeVerifier()),
+        code_challenge_method: 'S256',
+        scope: [],
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: 'redirect_uri rejected',
+    });
   });
 
   it.each([
@@ -337,6 +389,34 @@ describe('V-667 OAuthService — granted scope restriction (the cross-account/es
         approverScopes: ['read'],
       }),
     ).resolves.toMatchObject({ code: expect.stringMatching(/^oac_/) });
+  });
+
+  it('refuses a corrupted pending authorization with an unsafe redirect', async () => {
+    const { svc, store } = makeService();
+    const client = await svc.registerClient({
+      label: 'Safe App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+    await store.insertAuthorization({
+      authorization_id: 'oaa_corrupt',
+      client_id: client.client_id,
+      redirect_uri: 'https://app.example/cb#injected',
+      state: 'state_corrupt',
+      scope: ['read:sessions'],
+      code_challenge: computeS256Challenge(makeVerifier()),
+      created_at: Date.now(),
+    });
+
+    await expect(
+      svc.approveAuthorization({
+        authorization_id: 'oaa_corrupt',
+        account_id: 'acc_test',
+        approverScopes: ['read'],
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: 'redirect_uri rejected',
+    });
   });
 });
 

@@ -38,8 +38,8 @@
 //     revoked; same client_id retained.
 //   • RFC 7662/7009 lifecycle calls authenticate and bind the live
 //     client; foreign/unknown tokens collapse to minimal responses.
-//   • isAllowedRedirectUri: HTTPS only OR http://localhost|127.0.0.1
-//     (RFC 8252 native-app guidance).
+//   • isAllowedRedirectUri: bounded HTTPS or localhost HTTP, with
+//     fragment/userinfo refusal (RFC 6749/8252).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -162,7 +162,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
       /if \(args\.redirect_uris\.length === 0\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'at least one redirect_uri required'\);/,
     );
     expect(body).toMatch(
-      /\/\/ Lock-down: HTTPS only, except localhost\. Mirrors RFC 8252 native-app guidance\.\s*\n?\s*if \(!isAllowedRedirectUri\(uri\)\) \{\s*\n?\s*throw new OAuthError\('invalid_request', `redirect_uri rejected: \$\{uri\}`\);/,
+      /if \(uri\.length > MAX_REDIRECT_URI_LENGTH \|\| !isAllowedRedirectUri\(uri\)\) \{[\s\S]{0,260}throw new OAuthError\('invalid_request', 'redirect_uri rejected'\);/,
     );
     expect(body).toMatch(
       /const client_id = `oac_\$\{randomBytes\(12\)\.toString\('base64url'\)\}`;/,
@@ -263,9 +263,13 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     );
   });
 
-  it('isAllowedRedirectUri: HTTPS only OR http://localhost|127.0.0.1 (RFC 8252 native-app guidance)', () => {
+  it('isAllowedRedirectUri: bounded safe HTTPS or localhost HTTP without fragment/userinfo', () => {
+    expect(body).toMatch(/const MAX_REDIRECT_URI_LENGTH = 2048;/);
     expect(body).toMatch(
-      /function isAllowedRedirectUri\(uri: string\): boolean \{\s*\n?\s*try \{\s*\n?\s*const u = new URL\(uri\);\s*\n?\s*if \(u\.protocol === 'https:'\) return true;\s*\n?\s*if \(u\.protocol === 'http:' && \(u\.hostname === 'localhost' \|\| u\.hostname === '127\.0\.0\.1'\)\) \{\s*\n?\s*return true;\s*\n?\s*\}\s*\n?\s*return false;/,
+      /const u = new URL\(uri\);\s*\n?\s*if \(u\.username !== '' \|\| u\.password !== '' \|\| u\.hash !== ''\) return false;\s*\n?\s*if \(u\.protocol === 'https:'\) return true;/,
+    );
+    expect(body).toMatch(
+      /u\.protocol === 'http:' && \(u\.hostname === 'localhost' \|\| u\.hostname === '127\.0\.0\.1'\)/,
     );
   });
 

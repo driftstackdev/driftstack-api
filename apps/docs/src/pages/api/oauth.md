@@ -60,7 +60,7 @@ via support.
 └──┬───┘                                         └─────┬──────┘
    │                                                   │
    │ 1. redirect customer's browser to                 │
-   │    GET /v1/oauth/authorize?client_id=…&PKCE=…     │
+   │    app.driftstack.dev/oauth/authorize/?PKCE=…     │
    │ ────────────────────────────────────────────────► │
    │                                                   │
    │                 ┌────────────────┐                │
@@ -87,9 +87,9 @@ via support.
    │ ────────────────────────────────────────────────► │
 ```
 
-## 1 — Stage authorization
+## 1 — Redirect to Driftstack
 
-`GET /v1/oauth/authorize`
+`GET https://app.driftstack.dev/oauth/authorize/`
 
 Query parameters (RFC 7636 PKCE — `S256` only):
 
@@ -102,18 +102,17 @@ Query parameters (RFC 7636 PKCE — `S256` only):
 | `code_challenge_method` | yes      | literal `S256` (the plain method is rejected)                        |
 | `scope`                 | optional | space-separated list from the curated third-party scope set          |
 
-Response (`200`):
+Your app redirects the customer's browser to this page. The Dashboard
+asks them to sign in when needed, stages the request through the
+provider's `GET /v1/oauth/authorize` API, and shows the server-returned
+app label, requested scopes, and callback host. Your integration never
+receives or handles the intermediate `authorization_id`.
 
-```json
-{ "authorization_id": "<opaque>" }
-```
+Approval returns the browser to the registered `redirect_uri` with
+`?code=…&state=…`. Cancellation returns
+`?error=access_denied&state=…`. Verify `state` exactly in either case.
 
-In practice your code redirects the customer's browser to this
-endpoint. The dashboard renders the consent screen using the
-`authorization_id`, then posts to `/authorize/complete` (step 2) on
-the customer's behalf once they approve.
-
-## 2 — Customer approves (dashboard-internal)
+## 2 — Customer approves (provider-internal)
 
 `POST /v1/oauth/authorize/complete` (interactive dashboard session required)
 

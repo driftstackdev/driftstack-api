@@ -28,6 +28,7 @@ import { verifyS256Challenge } from '../lib/oauth-pkce.js';
 import { scopesSatisfy } from '../lib/errors-helpers.js';
 
 const CODE_TTL_SECONDS = 5 * 60;
+const MAX_REDIRECT_URI_LENGTH = 2048;
 
 // Exact third-party scope surface published to integrators. This is an
 // allowlist rather than a privileged-scope denylist: newly added API-key
@@ -410,9 +411,12 @@ export class OAuthService {
       throw new OAuthError('invalid_request', 'at least one redirect_uri required');
     }
     for (const uri of args.redirect_uris) {
-      // Lock-down: HTTPS only, except localhost. Mirrors RFC 8252 native-app guidance.
-      if (!isAllowedRedirectUri(uri)) {
-        throw new OAuthError('invalid_request', `redirect_uri rejected: ${uri}`);
+      // Lock-down: bounded HTTPS only, except localhost. Fragment/userinfo
+      // components are never valid callback authority.
+      if (uri.length > MAX_REDIRECT_URI_LENGTH || !isAllowedRedirectUri(uri)) {
+        // Do not reflect a rejected URI: it may contain userinfo or other
+        // attacker-controlled material that should not enter problem bodies/logs.
+        throw new OAuthError('invalid_request', 'redirect_uri rejected');
       }
     }
     const client_id = `oac_${randomBytes(12).toString('base64url')}`;
@@ -480,6 +484,12 @@ export class OAuthService {
     if (client === null || client.revoked_at !== null) {
       throw new OAuthError('invalid_client', 'unknown or revoked client_id');
     }
+    if (
+      args.redirect_uri.length > MAX_REDIRECT_URI_LENGTH ||
+      !isAllowedRedirectUri(args.redirect_uri)
+    ) {
+      throw new OAuthError('invalid_request', 'redirect_uri rejected');
+    }
     if (!client.redirect_uris.includes(args.redirect_uri)) {
       throw new OAuthError('invalid_request', 'redirect_uri not registered');
     }
@@ -512,6 +522,12 @@ export class OAuthService {
     }
     if (this.nowFn() - pending.created_at > CODE_TTL_SECONDS * 1000) {
       throw new OAuthError('invalid_request', 'authorization expired before approval');
+    }
+    if (
+      pending.redirect_uri.length > MAX_REDIRECT_URI_LENGTH ||
+      !isAllowedRedirectUri(pending.redirect_uri)
+    ) {
+      throw new OAuthError('invalid_request', 'redirect_uri rejected');
     }
     // SECURITY: retain the exact OAuth allowlist at approval as defense in depth,
     // then reduce through the canonical hierarchy so broad approver authority can
@@ -549,6 +565,12 @@ export class OAuthService {
 
   async exchangeCode(args: ExchangeCodeArgs): Promise<ExchangeCodeResult> {
     const { client, presentedSecretHash } = await this.authenticateClient(args);
+    if (
+      args.redirect_uri.length > MAX_REDIRECT_URI_LENGTH ||
+      !isAllowedRedirectUri(args.redirect_uri)
+    ) {
+      throw new OAuthError('invalid_request', 'redirect_uri rejected');
+    }
     const code = await this.store.getCode(args.code);
     if (code === null) throw new OAuthError('invalid_grant', 'code unknown or expired');
     if (code.consumed_at !== null) {
@@ -660,6 +682,7 @@ function oauthCredentialId(token: string): string {
 function isAllowedRedirectUri(uri: string): boolean {
   try {
     const u = new URL(uri);
+    if (u.username !== '' || u.password !== '' || u.hash !== '') return false;
     if (u.protocol === 'https:') return true;
     if (u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) {
       return true;

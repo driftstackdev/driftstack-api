@@ -105,7 +105,7 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
     expect(p).toMatch(/code_verifier: z\.string\(\)\.min\(43\)\.max\(128\),/);
     expect(p).toMatch(/client_id: z\.string\(\)\.min\(1\)\.max\(128\),/);
     expect(p).toMatch(/client_secret: z\.string\(\)\.min\(1\)\.max\(256\),/);
-    expect(p).toMatch(/redirect_uri: z\.string\(\)\.url\(\),/);
+    expect(p).toMatch(/redirect_uri: z\.string\(\)\.max\(2048\)\.url\(\),/);
   });
 
   // ─── RegisterClientBody ──────────────────────────────────────
@@ -113,7 +113,9 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
   it("CRITICAL RegisterClientBody — label 1..120 chars + 1..10 redirect_uris + optional account_id nullable. The 1..10 redirect-uri cap balances 'enterprise customer needs multiple envs' against attack surface.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
     expect(p).toMatch(/label: z\.string\(\)\.min\(1\)\.max\(120\),/);
-    expect(p).toMatch(/redirect_uris: z\.array\(z\.string\(\)\.url\(\)\)\.min\(1\)\.max\(10\),/);
+    expect(p).toMatch(
+      /redirect_uris: z\.array\(z\.string\(\)\.max\(2048\)\.url\(\)\)\.min\(1\)\.max\(10\),/,
+    );
     expect(p).toMatch(/account_id: z\.string\(\)\.uuid\(\)\.nullable\(\)\.optional\(\),/);
   });
 

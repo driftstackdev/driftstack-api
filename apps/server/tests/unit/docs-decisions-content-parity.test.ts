@@ -112,8 +112,17 @@ describe('W549.A /docs/decisions.md content parity', () => {
       /## D-2026-05-06-03 — GUI distribution: Tauri Updater \+ GitHub Releases \(cross-platform\)/,
     );
     expect(body).toMatch(
-      /## D-2026-05-10-01 — OAuth 2\.0 third-party flow uses PKCE S256, opaque tokens \(no JWT\)/,
+      /## D-2026-05-10-01 — OAuth 2\.0 third-party flow uses PKCE S256, confidential clients, opaque tokens \(no JWT\)/,
     );
+  });
+
+  it('pins the hosted OAuth human-consent boundary and safe registered callbacks', () => {
+    expect(body).toMatch(/https:\/\/app\.driftstack\.dev\/oauth\/authorize\//);
+    expect(body).toMatch(/never directly to the provider-internal staging API/);
+    expect(body).toMatch(/intermediate `authorization_id` remains provider-internal/);
+    expect(body).toMatch(/bounded to 2,048 characters, reject userinfo and fragments/);
+    expect(body).toMatch(/existing registered query is preserved safely/);
+    expect(body).toMatch(/\*\*V-log:\*\* V-488, V-617, V-618, V-619\./);
   });
 
   it('file exists at canonical path', () => {

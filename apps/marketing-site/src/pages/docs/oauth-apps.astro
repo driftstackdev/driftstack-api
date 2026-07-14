@@ -95,8 +95,8 @@ const SCOPES = [
       the token endpoint.
     </p>
 
-    <h3>2. Redirect the customer to /v1/oauth/authorize</h3>
-    <pre><code>{`GET /v1/oauth/authorize
+    <h3>2. Redirect the customer to Driftstack</h3>
+    <pre><code>{`GET https://app.driftstack.dev/oauth/authorize/
   ?client_id=oac_…
   &redirect_uri=https://yourapp.com/oauth/callback
   &state=<csrf-token>
@@ -104,20 +104,20 @@ const SCOPES = [
   &code_challenge_method=S256
   &scope=read:sessions write:sessions`}</code></pre>
     <p>
-      The customer signs into Driftstack if they aren't already,
-      then sees a consent screen for your app + the requested
-      scopes. On approval they're redirected back to your
-      <code>redirect_uri</code> with <code>?code=…&amp;state=…</code>.
-      Verify <code>state</code> matches what you sent (CSRF guard).
+      The customer signs into Driftstack if they aren't already, then
+      sees the app label, requested scopes, and callback host before
+      choosing Approve or Cancel. Approval returns them to your
+      <code>redirect_uri</code> with <code>?code=…&amp;state=…</code>;
+      cancellation returns <code>?error=access_denied&amp;state=…</code>.
+      Verify <code>state</code> matches what you sent (CSRF guard) in
+      either case.
     </p>
     <p class="text-sm text-tk-ink-3">
-      Status note: the hosted login + consent + redirect-back UX is
-      the target flow. As built today, <code>GET /v1/oauth/authorize</code>
-      stages the request and returns an
-      <code>authorization_id</code>; the customer-dashboard renders the
-      consent screen and approves via
-      <code>POST /v1/oauth/authorize/complete</code>, which yields the
-      <code>code</code> for your callback.
+      The Dashboard validates and stages this request through
+      <code>GET /v1/oauth/authorize</code>, then performs approved consent
+      through <code>POST /v1/oauth/authorize/complete</code>. Those are
+      provider-internal steps: your integration never receives or handles
+      the intermediate <code>authorization_id</code>.
     </p>
 
     <h3>3. Exchange the code for an access token</h3>

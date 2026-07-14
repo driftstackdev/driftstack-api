@@ -1,0 +1,305 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+
+const apiBaseUrl = resolveApiBaseUrl();
+---
+
+<DashboardLayout title="Authorize integration" withSidebar={false}>
+  <main
+    class="mx-auto max-w-lg px-6 py-16"
+    data-page="oauth-provider-consent"
+    data-api-base-url={apiBaseUrl}
+  >
+    <header class="text-center">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
+        Third-party integration
+      </p>
+      <h1 class="mt-2 text-2xl font-semibold tracking-tight text-tk-ink">
+        Authorize access to Driftstack?
+      </h1>
+    </header>
+
+    <section data-state="loading" class="mt-8 text-center text-sm text-tk-ink-3" aria-live="polite">
+      Checking this authorization request…
+    </section>
+
+    <section data-state="missing" class="mt-8 hidden">
+      <div class="rounded-lg border border-tk-err/30 bg-tk-err/10 px-4 py-3 text-sm text-tk-err-text" role="alert">
+        This authorization link is incomplete or malformed. Return to the app that sent you here and start again.
+      </div>
+      <a href="/" class="mt-6 block text-center text-sm text-tk-accent-text underline">
+        Return to dashboard
+      </a>
+    </section>
+
+    <section data-state="needs-signin" class="mt-8 hidden">
+      <p class="text-sm text-tk-ink-2">
+        Sign in to choose whether this integration may access your Driftstack account.
+      </p>
+      <div class="mt-6 grid grid-cols-2 gap-3">
+        <a data-signup-link href="/signup/" class="btn-secondary text-center">Create account</a>
+        <a data-signin-link href="/login/" class="btn-primary text-center">Sign in</a>
+      </div>
+      <p class="mt-3 text-center text-xs text-tk-ink-3">
+        You’ll return to this exact authorization request after signing in.
+      </p>
+    </section>
+
+    <section data-state="consent" class="mt-8 hidden" aria-labelledby="oauth-app-name">
+      <div class="rounded-lg border border-tk-border bg-tk-surface px-5 py-5">
+        <p class="text-xs font-medium uppercase tracking-wide text-tk-ink-3">Application</p>
+        <h2 id="oauth-app-name" data-client-label class="mt-1 text-xl font-semibold text-tk-ink"></h2>
+        <p class="mt-3 text-sm text-tk-ink-2">
+          This app is asking to act on your behalf with these permissions:
+        </p>
+        <ul data-scope-list class="mt-4 space-y-2 text-sm text-tk-ink-2"></ul>
+        <p data-empty-scopes class="mt-4 hidden text-sm text-tk-ink-3">
+          No API permissions were requested.
+        </p>
+        <div class="mt-5 border-t border-tk-border pt-4 text-xs text-tk-ink-3">
+          After your decision, Driftstack returns you to
+          <strong data-callback-host class="font-mono text-tk-ink-2"></strong>.
+        </div>
+      </div>
+
+      <div class="mt-6 rounded-lg border border-tk-err/20 bg-tk-err/5 px-4 py-3 text-xs text-tk-ink-2">
+        Approve only if you recognize this app and expected this request. Anyone controlling an approved app can use the listed permissions for one hour.
+      </div>
+
+      <div class="mt-6 grid grid-cols-2 gap-3">
+        <button type="button" data-cancel class="btn-secondary">Cancel</button>
+        <button type="button" data-approve class="btn-primary">Approve</button>
+      </div>
+      <p data-action-status class="mt-3 text-center text-xs text-tk-ink-3" role="status" aria-live="polite"></p>
+    </section>
+
+    <section data-state="error" class="mt-8 hidden">
+      <div data-error-message class="rounded-lg border border-tk-err/30 bg-tk-err/10 px-4 py-3 text-sm text-tk-err-text" role="alert"></div>
+      <button type="button" data-retry class="btn-primary mt-6 w-full">Try again</button>
+    </section>
+  </main>
+
+  <script>
+    import {
+      buildOAuthCallbackUrl,
+      captureOAuthAuthorizeRequest,
+      oauthCallbackHost,
+      parseOAuthApprovalCode,
+      parseOAuthStageResult,
+      readBoundedJson,
+      type OAuthStageResult,
+    } from '../../lib/oauth-provider-consent';
+
+    const root = document.querySelector<HTMLElement>('[data-page="oauth-provider-consent"]');
+    if (root) {
+      // Preserve the DOM guard across nested callbacks; Astro's checker does not
+      // retain the outer narrowing inside function declarations.
+      const consentRoot = root;
+      const apiBaseUrl = root.dataset.apiBaseUrl ?? '';
+      const captured = captureOAuthAuthorizeRequest(window.location.search);
+      const resumePath = `${window.location.pathname}${window.location.search}`;
+      const sections = {
+        loading: root.querySelector<HTMLElement>('[data-state="loading"]'),
+        missing: root.querySelector<HTMLElement>('[data-state="missing"]'),
+        needsSignin: root.querySelector<HTMLElement>('[data-state="needs-signin"]'),
+        consent: root.querySelector<HTMLElement>('[data-state="consent"]'),
+        error: root.querySelector<HTMLElement>('[data-state="error"]'),
+      };
+      const approveButton = root.querySelector<HTMLButtonElement>('[data-approve]');
+      const cancelButton = root.querySelector<HTMLButtonElement>('[data-cancel]');
+      const actionStatus = root.querySelector<HTMLElement>('[data-action-status]');
+      const controllers = new Set<AbortController>();
+      let stage: OAuthStageResult | null = null;
+      let actionInFlight = false;
+      let sessionToken = readSessionToken();
+
+      function readSessionToken(): string | null {
+        try {
+          return window.localStorage.getItem('ds_web_session_token') ?? null;
+        } catch {
+          return null;
+        }
+      }
+
+      function show(name: keyof typeof sections): void {
+        for (const [key, section] of Object.entries(sections)) {
+          section?.classList.toggle('hidden', key !== name);
+        }
+      }
+
+      function setSigninLinks(): void {
+        const next = encodeURIComponent(resumePath);
+        consentRoot.querySelector<HTMLAnchorElement>('[data-signin-link]')?.setAttribute(
+          'href',
+          `/login/?next=${next}`,
+        );
+        consentRoot.querySelector<HTMLAnchorElement>('[data-signup-link]')?.setAttribute(
+          'href',
+          `/signup/?next=${next}`,
+        );
+      }
+
+      function requireSignin(): void {
+        sessionToken = null;
+        try {
+          window.localStorage.removeItem('ds_web_session_token');
+        } catch {
+          // Storage can be denied; in-memory authority is already cleared.
+        }
+        setSigninLinks();
+        show('needsSignin');
+      }
+
+      function showError(message: string): void {
+        const target = consentRoot.querySelector<HTMLElement>('[data-error-message]');
+        if (target) target.textContent = message;
+        show('error');
+      }
+
+      async function boundedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+        const controller = new AbortController();
+        controllers.add(controller);
+        const timeout = window.setTimeout(() => controller.abort(), 15_000);
+        try {
+          return await fetch(input, { ...init, signal: controller.signal });
+        } finally {
+          window.clearTimeout(timeout);
+          controllers.delete(controller);
+        }
+      }
+
+      function renderConsent(result: OAuthStageResult): void {
+        const label = consentRoot.querySelector<HTMLElement>('[data-client-label]');
+        const host = consentRoot.querySelector<HTMLElement>('[data-callback-host]');
+        const list = consentRoot.querySelector<HTMLUListElement>('[data-scope-list]');
+        const empty = consentRoot.querySelector<HTMLElement>('[data-empty-scopes]');
+        if (label) label.textContent = result.clientLabel;
+        if (host) host.textContent = oauthCallbackHost(result.redirectUri);
+        list?.replaceChildren();
+        for (const scope of result.scopes) {
+          const item = document.createElement('li');
+          const code = document.createElement('code');
+          code.textContent = scope;
+          item.append(code);
+          list?.append(item);
+        }
+        empty?.classList.toggle('hidden', result.scopes.length !== 0);
+      }
+
+      async function stageAuthorization(): Promise<void> {
+        if (captured === null) {
+          show('missing');
+          return;
+        }
+        if (sessionToken === null) {
+          setSigninLinks();
+          show('needsSignin');
+          return;
+        }
+        show('loading');
+        try {
+          const response = await boundedFetch(
+            `${apiBaseUrl}/v1/oauth/authorize?${captured.query}`,
+            { headers: { accept: 'application/json' } },
+          );
+          const body = await readBoundedJson(response);
+          if (!response.ok) {
+            showError(
+              response.status === 429
+                ? 'Too many authorization attempts. Wait a moment and try again.'
+                : 'This authorization request is invalid or expired. Return to the app and start again.',
+            );
+            return;
+          }
+          const parsed = parseOAuthStageResult(body, captured);
+          if (parsed === null) {
+            showError('Driftstack returned an invalid authorization response. Start again from the app.');
+            return;
+          }
+          stage = parsed;
+          renderConsent(parsed);
+          window.history.replaceState(null, '', window.location.pathname);
+          show('consent');
+        } catch {
+          showError('The authorization service could not be reached. Check your connection and try again.');
+        }
+      }
+
+      function setActionBusy(busy: boolean): void {
+        actionInFlight = busy;
+        if (approveButton) {
+          approveButton.disabled = busy;
+          approveButton.setAttribute('aria-busy', String(busy));
+          approveButton.textContent = busy ? 'Approving…' : 'Approve';
+        }
+        if (cancelButton) cancelButton.disabled = busy;
+        if (actionStatus) actionStatus.textContent = busy ? 'Confirming your decision…' : '';
+      }
+
+      approveButton?.addEventListener('click', async () => {
+        if (actionInFlight || stage === null || sessionToken === null) return;
+        setActionBusy(true);
+        try {
+          const response = await boundedFetch(`${apiBaseUrl}/v1/oauth/authorize/complete`, {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${sessionToken}`,
+              'content-type': 'application/json',
+              accept: 'application/json',
+            },
+            body: JSON.stringify({ authorization_id: stage.authorizationId }),
+          });
+          const body = await readBoundedJson(response);
+          if (response.status === 401) {
+            stage = null;
+            requireSignin();
+            return;
+          }
+          if (!response.ok) {
+            stage = null;
+            showError('This authorization could not be approved. Return to the app and start again.');
+            return;
+          }
+          const code = parseOAuthApprovalCode(body, stage);
+          if (code === null) {
+            stage = null;
+            showError('Driftstack returned an invalid approval response. Start again from the app.');
+            return;
+          }
+          const destination = buildOAuthCallbackUrl(stage.redirectUri, stage.state, { code });
+          window.location.assign(destination);
+        } catch {
+          showError('The authorization service could not be reached. Check your connection and try again.');
+        } finally {
+          setActionBusy(false);
+        }
+      });
+
+      cancelButton?.addEventListener('click', () => {
+        if (actionInFlight || stage === null) return;
+        setActionBusy(true);
+        try {
+          const destination = buildOAuthCallbackUrl(stage.redirectUri, stage.state, {
+            error: 'access_denied',
+          });
+          window.location.assign(destination);
+        } catch {
+          showError('The registered callback is invalid. Return to the app and start again.');
+          setActionBusy(false);
+        }
+      });
+
+      root.querySelector<HTMLButtonElement>('[data-retry]')?.addEventListener('click', () => {
+        if (actionInFlight) return;
+        stage = null;
+        void stageAuthorization();
+      });
+      window.addEventListener('pagehide', () => {
+        for (const controller of controllers) controller.abort();
+        controllers.clear();
+      });
+      void stageAuthorization();
+    }
+  </script>
+</DashboardLayout>
