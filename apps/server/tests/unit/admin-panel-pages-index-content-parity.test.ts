@@ -32,16 +32,16 @@ function read(p: string): string {
 describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-190 framing pinned: 'progressive-enhancement against /v1/admin/overview + /v1/admin/audit-log?limit=5. SSG renders mock counts; an inline <script> fetches both endpoints and replaces the tile values + the recent-activity list. Banner surfaces no-token / 403 forbidden / fetch-error states.' — pinned so the progressive-enhancement strategy + 3-state banner taxonomy stays documented", () => {
+  it('V-190 framing pins an inert unavailable shell that never presents sample data as operational truth', () => {
     expect(body).toMatch(
-      /\/\/ V-190 — progressive-enhancement against \/v1\/admin\/overview \+\s*\n?\s*\/\/ \/v1\/admin\/audit-log\?limit=5\. SSG renders mock counts; an inline\s*\n?\s*\/\/ <script> fetches both endpoints and replaces the tile values \+ the\s*\n?\s*\/\/ recent-activity list\. Banner surfaces no-token \/ 403 forbidden \/\s*\n?\s*\/\/ fetch-error states\./,
+      /\/\/ V-190 — progressive-enhancement against \/v1\/admin\/overview \+\s*\/\/ \/v1\/admin\/audit-log\?limit=5\. SSG renders an inert unavailable shell;\s*\/\/ an inline <script> fetches both endpoints and replaces the tile values\s*\/\/ \+ recent-activity list\.[\s\S]*?without presenting sample data as operational truth\./,
     );
     expect(body).toMatch(
       /\/\/ 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count\s*\n?\s*\/\/ from \/v1\/admin\/incidents \(status != resolved\), replacing a prior mock\s*\n?\s*\/\/ tile \(no Postgres surface\) so the grid carries no fabricated number\./,
     );
   });
 
-  it("4-tile grid layout: Active accounts (data-field='active-accounts') / Suspended (data-field='suspended-accounts') / Open incidents (data-field='incidents-open', REAL — from /v1/admin/incidents) / DLQ depth (data-field='dlq-depth' default '0') — pinned so the at-a-glance health surface keeps the 4 canonical metrics. 2026-06-03: the 3rd tile was swapped from the former mock 'Open leads' to a real 'Open incidents' count (count of non-resolved incidents), removing the last fabricated number from the grid; drift back to a mock tile would reintroduce fake data.", () => {
+  it('The four canonical health tiles render neutral placeholders until authoritative live values arrive', () => {
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Active accounts<\/p>/,
     );
@@ -61,15 +61,16 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">DLQ depth<\/p>/,
     );
-    expect(body).toMatch(/data-field="dlq-depth">0<\/p>/);
+    expect(body).toMatch(/data-field="dlq-depth">—<\/p>/);
   });
 
-  it("Recent admin activity card: 'See full log →' link to /audit-log (canonical audit-log page route — drift to /admin-audit or /logs would 404) + 'No admin actions recorded yet.' empty-state — pinned so the see-more link points to the real subpage. 2026-05-21 — 2c24750f wrapped the link in a text-xs flex row alongside the live-indicator + Refresh-now button; size class inherits from the row so text-sm dropped off the link itself.", () => {
+  it('Recent admin activity uses the canonical route, an unavailable static shell, and a distinct authoritative empty state', () => {
     expect(body).toMatch(
-      /<a href="\/audit-log" class="text-tk-accent hover:underline">\s*\n?\s*See full log →\s*\n?\s*<\/a>/,
+      /<a href="\/audit-log\/" class="text-tk-accent hover:underline">\s*See full log →\s*<\/a>/,
     );
+    expect(body).toMatch(/Live admin activity unavailable until loaded\./);
     expect(body).toMatch(
-      /<li class="py-3 text-sm text-tk-ink-3">No admin actions recorded yet\.<\/li>/,
+      /if \(entries\.length === 0\) \{\s*list\.innerHTML =\s*'<li class="py-3 text-sm text-tk-ink-3">No admin actions recorded yet\.<\/li>';/,
     );
   });
 
@@ -79,7 +80,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     );
   });
 
-  it("403-forbidden + no-token banner branches: 'Sign in with a staff admin account to see live data. Showing preview below.' (no-token) + 'Access denied — admin scope required. You are signed in as a customer account.' (403) + 'Couldn't load overview (msg). Showing preview data below.' (fetch-error) — pinned so the 3-state banner taxonomy stays in sync with the V-190 framing comment", () => {
+  it('Signed-out, forbidden, and failed overview states keep their distinct operator guidance', () => {
     expect(body).toMatch(/showBanner\('Sign in with a staff admin account to see live data\.'\);/);
     expect(body).toMatch(
       /showBanner\(\s*\n?\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\n?\s*\);/,
@@ -95,7 +96,8 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/function authedFetch\(path, init\) \{/);
     expect(body).toContain("authorization: 'Bearer ' + token");
     expect(body).toContain("credentials: 'include'");
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ path,/);
+    expect(body).toMatch(/\.driftstackFetchWithDeadline\(\s*apiBaseUrl \+ path,/);
+    expect(body).toMatch(/15_000,/);
   });
 
   it("Endpoint contract: GET /v1/admin/overview reads body.accounts.{active,suspended,total} + body.webhooks.dlq_depth into the live tiles + GET /v1/admin/audit-log?limit=5 reads body.data[] into the recent-activity list — pinned so the field names match the server response shape (drift to body.active_accounts or body.dlq would silently zero out the tile). Slice 136 added a 'of N total' annotation under the Active-accounts tile, surfacing the V-515 server-returned `body.accounts.total` field (with a defensive a+s+d fallback if total is missing)", () => {
@@ -131,17 +133,18 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     );
   });
 
-  it("accounts-by-tier section: SSR mock-preview bars (data-list='tier-distribution') + live hydration via renderTiers from overview.accounts.by_tier — pinned so the tier-distribution stat keeps a real-data wiring (drift would silently revert the dashboard to mock-only tier counts)", () => {
+  it('accounts-by-tier section starts unavailable and hydrates only from overview.accounts.by_tier', () => {
     // Canonical tier order + friendly labels are the single source shared by
     // SSR and hydration (passed via define:vars).
     expect(body).toMatch(/const TIER_ORDER = \[/);
     expect(body).toMatch(/'free',/);
     expect(body).toMatch(/'enterprise',/);
     expect(body).toMatch(/const TIER_LABELS: Record<string, string> = \{/);
-    // SSR section + per-tier bar list.
+    // Static section is unavailable, not fabricated zero/sample bars.
     expect(body).toMatch(/Accounts by tier/);
     expect(body).toMatch(/data-list="tier-distribution"/);
     expect(body).toMatch(/data-field="tier-total"/);
+    expect(body).toMatch(/Live tier distribution unavailable until loaded\./);
     // Live hydration reads the server field + replaces the SSR bars.
     expect(body).toMatch(/if \(body\.accounts\.by_tier\) \{/);
     expect(body).toMatch(/renderTiers\(body\.accounts\.by_tier, total\);/);
@@ -170,9 +173,33 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/setText\('sessions-active', String\(body\.active\)\);/);
     expect(body).toMatch(/setText\('sessions-total', String\(body\.total\)\);/);
     expect(body).toMatch(/setText\('sessions-errored', String\(body\.by_status\.errored\)\);/);
-    // Wired into the boot Promise.all gate + the 30s refresh timer.
+    // Wired into the boot Promise.all gate + all-settled 30s refresh timer.
     expect(body).toMatch(/Promise\.all\(\[overviewP, auditP, sessionsP, incidentsP\]\)/);
-    expect(body).toMatch(/void fetchSessionStats\(\)\.catch\(\(\) => \{\}\);/);
+    expect(body).toMatch(
+      /Promise\.allSettled\(\[\s*fetchAudit\(\),\s*fetchOverview\(\),\s*fetchSessionStats\(\),/,
+    );
+  });
+
+  it('Signed-out and independently failed reads clear only their non-authoritative regions', () => {
+    expect(body).not.toMatch(/MOCK_ACCOUNTS|MOCK_AUDIT_LOG/);
+    expect(body).toMatch(
+      /function renderOverviewUnavailable\(\) \{[\s\S]*?setText\('active-accounts', '—'\);[\s\S]*?setText\('dlq-depth', '—'\);[\s\S]*?Live tier distribution unavailable\./,
+    );
+    expect(body).toMatch(
+      /if \(!token\) \{\s*renderOverviewUnavailable\(\);\s*renderSessionsUnavailable\(\);\s*renderIncidentsUnavailable\(\);\s*renderAuditsUnavailable\('Sign in to load recent admin activity\.'\);/,
+    );
+    expect(body).toMatch(
+      /function fetchOverview\(\) \{[\s\S]*?\.catch\(\(err\) => \{\s*renderOverviewUnavailable\(\);\s*throw err;/,
+    );
+    expect(body).toMatch(
+      /function fetchSessionStats\(\) \{[\s\S]*?\.catch\(\(err\) => \{\s*renderSessionsUnavailable\(\);\s*throw err;/,
+    );
+    expect(body).toMatch(
+      /function fetchOpenIncidents\(\) \{[\s\S]*?\.catch\(\(err\) => \{\s*renderIncidentsUnavailable\(\);\s*throw err;/,
+    );
+    expect(body).toMatch(
+      /function fetchAudit\(\) \{[\s\S]*?\.catch\(\(err\) => \{[\s\S]*?renderAuditsUnavailable\('Could not load recent admin activity\. Refresh to try again\.'\);\s*throw err;/,
+    );
   });
 
   it('file exists at canonical path', () => {
