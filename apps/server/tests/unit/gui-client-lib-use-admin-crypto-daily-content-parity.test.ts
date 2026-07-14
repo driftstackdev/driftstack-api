@@ -47,7 +47,7 @@ describe('W466.A apps/gui-client/src/lib/use-admin-crypto-daily.ts content parit
 
   it("AdminDailyStatus 6-value union ('pending'|'confirming'|'paid'|'failed'|'partial'|'cancelled') matches server payment-status surface", () => {
     expect(body).toMatch(
-      /export type AdminDailyStatus =\s*\n?\s*'?pending'?\s*\| '?confirming'?\s*\| '?paid'?\s*\| '?failed'?\s*\| '?partial'?\s*\| '?cancelled'?;/,
+      /export type AdminDailyStatus =\s*\n?\s*\| 'pending'\s*\n?\s*\| 'confirming'\s*\n?\s*\| 'paid'\s*\n?\s*\| 'failed'\s*\n?\s*\| 'partial'\s*\n?\s*\| 'cancelled';/,
     );
   });
 
@@ -73,6 +73,9 @@ describe('W466.A apps/gui-client/src/lib/use-admin-crypto-daily.ts content parit
     expect(body).toMatch(
       /const res = await fetchWithDeadline\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'application\/json',/,
     );
+    expect(body).toMatch(/import \{ readBoundedApiJson \} from '\.\/read-bounded-json';/);
+    expect(body).toMatch(/const body = await readBoundedApiJson<AdminDailyData>\(res\);/);
+    expect(body).not.toMatch(/await res\.json\(\)/);
   });
 
   it('State-machine behavior remains while reads are single-flight, sequence-gated, and aborted on key/base/days changes or unmount', () => {
