@@ -6,7 +6,7 @@
 // indication of what went wrong).
 //
 //   • V-269 framing pinned + ?next= round-trip.
-//   • V-267 + V-269 cross-link preservation (next= → /signup
+//   • V-267 + V-269 cross-link preservation (next= → /signup/
 //     fallback link).
 //   • V-353d MFA discriminated union: {session} vs {mfa_required}.
 //   • POST /v1/auth/login + ds_web_session_token storage.
@@ -45,7 +45,7 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     );
   });
 
-  it("V-269 next= preservation on /signup fallback link + open-redirect guard: 'preserve ?next= when bouncing the user to /signup…' + ?next= is run through a same-origin safeNextPath() sanitizer before ANY use (signup-link forward + the post-login window.location.href + the OAuth redirect_to) — pinned so the open-redirect fix can't silently regress (login.astro:240/266 navigate the result)", () => {
+  it('V-269 next= preservation on canonical /signup/ fallback link + open-redirect guard: ?next= is sanitized before every use', () => {
     expect(body).toMatch(
       /\/\/ V-269 — preserve \?next= when bouncing the user to \/signup so a\s*\n?\s*\/\/ returning user who clicks "Create one" doesn't lose their deep-\s*\n?\s*\/\/ link target\./,
     );
@@ -57,7 +57,7 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     expect(body).toMatch(/if \(u\.origin !== origin\) return '\/';/);
     expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
     expect(body).toMatch(
-      /if \(rawNext && signupLink\) \{\s*\n?\s*signupLink\.setAttribute\('href', '\/signup\?next=' \+ encodeURIComponent\(next\)\);\s*\n?\s*\}/,
+      /if \(rawNext && signupLink\) \{\s*\n?\s*signupLink\.setAttribute\('href', '\/signup\/\?next=' \+ encodeURIComponent\(next\)\);\s*\n?\s*\}/,
     );
   });
 
