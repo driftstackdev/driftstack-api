@@ -74,7 +74,7 @@ describe('W350.B /signup page parity', () => {
   });
 
   it("stashes the typed email under sessionStorage 'ds_signup_email' (W348 resend depends on it)", () => {
-    expect(body).toContain("sessionStorage.setItem('ds_signup_email'");
+    expect(body).toContain("writeSignupState('ds_signup_email'");
     // The companion verify-email page reads the same key for the
     // resend button — pin both ends.
     const verify = read(VERIFY_PAGE);

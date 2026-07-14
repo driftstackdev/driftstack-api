@@ -316,6 +316,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const submitBtn = form.querySelector('button[type="submit"]');
       const submitLabel = submitBtn ? submitBtn.textContent : '';
       const SIGNUP_REQUEST_TIMEOUT_MS = 15_000;
+      const SIGNUP_STORAGE_PROBE_KEY = 'ds_signup_storage_probe';
       let signupInFlight = false;
       let signupOutcomeUnknown = false;
       function setSubmitting(on) {
@@ -325,9 +326,42 @@ const apiBaseUrl = resolveApiBaseUrl();
         submitBtn.textContent = on ? 'Creating account…' : submitLabel;
       }
 
-      function showSignupOutcomeUnknown(email) {
+      function writeSignupState(key, value) {
+        try {
+          const expected = String(value);
+          sessionStorage.setItem(key, expected);
+          return sessionStorage.getItem(key) === expected;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function removeSignupState(key) {
+        try {
+          sessionStorage.removeItem(key);
+          return sessionStorage.getItem(key) === null;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function canPersistSignupState() {
+        const sentinel = String(Date.now()) + ':' + Math.random();
+        if (!writeSignupState(SIGNUP_STORAGE_PROBE_KEY, sentinel)) return false;
+        return removeSignupState(SIGNUP_STORAGE_PROBE_KEY);
+      }
+
+      function persistSignupState(email, debugToken) {
+        if (!writeSignupState('ds_signup_email', email)) return false;
+        if (typeof debugToken === 'string' && debugToken.length > 0) {
+          return writeSignupState('ds_debug_verify_token', debugToken);
+        }
+        return removeSignupState('ds_debug_verify_token');
+      }
+
+      function showTerminalSignupRecovery(email, message) {
         signupOutcomeUnknown = true;
-        sessionStorage.setItem('ds_signup_email', email);
+        const emailStored = writeSignupState('ds_signup_email', email);
         const passwordInput = form.querySelector('input[name="password"]');
         if (passwordInput) passwordInput.value = '';
         form.classList.add('hidden');
@@ -338,11 +372,28 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (submitBtn) {
           submitBtn.disabled = true;
           submitBtn.setAttribute('aria-busy', 'false');
-          submitBtn.textContent = 'Check inbox before continuing';
+          submitBtn.textContent = 'Continue to verification';
         }
         setOauthButtonsDisabled(true);
         showBanner(
+          message +
+            (emailStored
+              ? ''
+              : ' Browser site storage is unavailable, so enter your email manually on the verification page.'),
+        );
+      }
+
+      function showSignupOutcomeUnknown(email) {
+        showTerminalSignupRecovery(
+          email,
           'Account-creation outcome is unknown after the request timed out. The server may already have created your account and sent its verification email. Do not submit this signup again on this page. Check your inbox and spam folder, then continue to email verification to enter or resend the code.',
+        );
+      }
+
+      function showAcceptedSignupRecovery(email) {
+        showTerminalSignupRecovery(
+          email,
+          'Your account was created, but this page could not complete the verification handoff. Do not submit this signup again. Check your inbox and spam folder, then continue to email verification to enter or resend the code.',
         );
       }
 
@@ -352,6 +403,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (signupInFlight) return;
         if (oauthStartInFlight) return;
         banner.classList.add('hidden');
+        if (!canPersistSignupState()) {
+          showBanner(
+            'Browser site storage is unavailable. Enable site storage and try again. No account-creation request was sent, and your entries are still here.',
+          );
+          return;
+        }
         signupInFlight = true;
         setSubmitting(true);
         setOauthButtonsDisabled(true);
@@ -362,6 +419,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         };
         const name = fd.get('name');
         if (name) payload.name = name;
+        let signupAccepted = false;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), SIGNUP_REQUEST_TIMEOUT_MS);
 
@@ -372,32 +430,38 @@ const apiBaseUrl = resolveApiBaseUrl();
           credentials: 'include',
           signal: controller.signal,
         })
-          .then((r) =>
-            r.ok
-              ? r.json()
-              : r
-                  .json()
-                  .catch(() => ({}))
-                  .then((b) => {
-                    // Per-field validation errors take precedence over the
-                    // generic detail string (Issue 2 wave 1085+).
-                    const specific = formatValidationIssues(b.extensions && b.extensions.issues);
-                    const err = specific
-                      ? Object.assign(new Error(specific), { customerSafe: true })
-                      : window.driftstackResponseError(r, b);
-                    // Carry the problem type so the catch can branch (e.g.
-                    // email-already-registered → inline sign-in/reset links).
-                    err.problemType = b.type;
-                    return Promise.reject(err);
-                  }),
-          )
+          .then((r) => {
+            if (r.ok) {
+              // Account creation is irreversible. Once the server accepts it,
+              // parsing or browser-storage failures must never invite a replay.
+              signupAccepted = true;
+              return r.json();
+            }
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => {
+                // Per-field validation errors take precedence over the
+                // generic detail string (Issue 2 wave 1085+).
+                const specific = formatValidationIssues(b.extensions && b.extensions.issues);
+                const err = specific
+                  ? Object.assign(new Error(specific), { customerSafe: true })
+                  : window.driftstackResponseError(r, b);
+                // Carry the problem type so the catch can branch (e.g.
+                // email-already-registered → inline sign-in/reset links).
+                err.problemType = b.type;
+                return Promise.reject(err);
+              });
+          })
           .then((body) => {
             // Stash the email for the verify page (no token yet — that
             // comes from /v1/auth/verify-email). debug_token is exposed
             // in test/dev mode for paste-in convenience.
-            sessionStorage.setItem('ds_signup_email', payload.email);
-            if (body.debug_token) {
-              sessionStorage.setItem('ds_debug_verify_token', body.debug_token);
+            if (!body || typeof body !== 'object') {
+              throw new Error('Signup returned an invalid response.');
+            }
+            if (!persistSignupState(payload.email, body.debug_token)) {
+              throw new Error('Signup state could not be persisted.');
             }
             // V-267 — pass through the ?next= deep link so flows that
             // brought the user to signup (e.g. GUI activation at
@@ -405,6 +469,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             window.location.href = verificationUrl();
           })
           .catch((err) => {
+            if (signupAccepted) {
+              showAcceptedSignupRecovery(payload.email);
+              return;
+            }
             // Email already registered → inline sign-in / reset links that
             // carry the entered email, not a dead text banner.
             if (err && err.problemType === EMAIL_ALREADY_REGISTERED_TYPE) {

@@ -119,6 +119,18 @@ function submitSignup(window: JSDOM['window'], email: string, password: string):
   form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 }
 
+function denySessionStorageWrites(window: JSDOM['window'], silent = false): void {
+  const storagePrototype = Object.getPrototypeOf(window.sessionStorage) as Storage;
+  Object.defineProperty(storagePrototype, 'setItem', {
+    configurable: true,
+    value: silent
+      ? () => {}
+      : () => {
+          throw new window.DOMException('Storage denied', 'SecurityError');
+        },
+  });
+}
+
 describe('signup page — local integration', () => {
   let win: JSDOM['window'] | null = null;
   afterEach(() => {
@@ -144,6 +156,68 @@ describe('signup page — local integration', () => {
     // Email stashed for the verify page; debug_token stashed for dev paste-in.
     expect(window.sessionStorage.getItem('ds_signup_email')).toBe('newbie@example.com');
     expect(window.sessionStorage.getItem('ds_debug_verify_token')).toBe('verify_abc');
+  });
+
+  it('sends no account-creation request when verification state cannot be persisted', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => json({}, 201)],
+    });
+    win = window;
+    denySessionStorageWrites(window);
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(bannerText(window)).toMatch(
+      /site storage is unavailable.*no account-creation request was sent.*entries are still here/i,
+    );
+    const password = window.document.querySelector(
+      '[data-form="signup"] input[name="password"]',
+    ) as HTMLInputElement;
+    expect(password.value).toBe('a-very-long-password');
+  });
+
+  it('locks replay when storage silently fails after an accepted account creation', async () => {
+    let activeWindow: JSDOM['window'];
+    const setup = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () => {
+          denySessionStorageWrites(activeWindow, true);
+          return json({}, 201);
+        },
+      ],
+    });
+    activeWindow = setup.window;
+    win = activeWindow;
+    submitSignup(activeWindow, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+
+    expect(setup.fetchCalls).toHaveLength(1);
+    expect(bannerText(activeWindow)).toMatch(
+      /account was created.*could not complete the verification handoff.*do not submit.*enter your email manually/i,
+    );
+    expect(activeWindow.sessionStorage.getItem('ds_signup_email')).toBeNull();
+    submitSignup(activeWindow, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+    expect(setup.fetchCalls).toHaveLength(1);
+  });
+
+  it('treats malformed JSON after 2xx as accepted and never replays signup', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => new Response('{', { status: 201 })],
+    });
+    win = window;
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(bannerText(window)).toMatch(
+      /account was created.*could not complete the verification handoff.*do not submit/i,
+    );
+    expect(window.sessionStorage.getItem('ds_signup_email')).toBe('newbie@example.com');
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
   });
 
   it('per-field validation: zod extensions.issues.fieldErrors → friendly banner message', async () => {
@@ -224,7 +298,7 @@ describe('signup page — local integration', () => {
     ) as HTMLButtonElement;
     expect(submitBtn.disabled).toBe(true);
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
-    expect(submitBtn.textContent).toBe('Check inbox before continuing');
+    expect(submitBtn.textContent).toBe('Continue to verification');
     expect(bannerText(window)).toMatch(
       /outcome is unknown.*may already have created your account.*verification email.*do not submit this signup again.*inbox and spam.*continue to email verification/i,
     );

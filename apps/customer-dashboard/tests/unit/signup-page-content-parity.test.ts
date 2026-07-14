@@ -62,8 +62,21 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toContain('Account-creation outcome is unknown after the request timed out.');
     expect(body).toContain('Do not submit this signup again on this page.');
     expect(body).toContain('Continue to email verification');
-    expect(body).toMatch(/sessionStorage\.setItem\('ds_signup_email', email\)/);
+    expect(body).toMatch(/writeSignupState\('ds_signup_email', email\)/);
     expect(body).toMatch(/continueVerification\.setAttribute\('href', verificationUrl\(\)\)/);
+  });
+
+  it('preflights verification storage and locks every accepted-response handoff failure', () => {
+    expect(body).toMatch(/function canPersistSignupState\(\)/);
+    expect(body).toMatch(/if \(!canPersistSignupState\(\)\)/);
+    expect(body).toContain(
+      'No account-creation request was sent, and your entries are still here.',
+    );
+    expect(body).toMatch(/let signupAccepted = false/);
+    expect(body).toMatch(/signupAccepted = true;\s*return r\.json\(\)/);
+    expect(body).toMatch(/if \(signupAccepted\) \{\s*showAcceptedSignupRecovery\(payload\.email\)/);
+    expect(body).toMatch(/if \(!persistSignupState\(payload\.email, body\.debug_token\)\)/);
+    expect(body).toContain('Your account was created, but this page could not complete');
   });
 
   it('OAuth start is group-serialized, visibly busy, and bounded', () => {
@@ -111,11 +124,10 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
   it('sessionStorage stashes ds_signup_email + ds_debug_verify_token (dev paste-in)', () => {
     expect(body).toContain('ds_signup_email');
     expect(body).toContain('ds_debug_verify_token');
-    expect(body).toMatch(/sessionStorage\.setItem\('ds_signup_email'/);
+    expect(body).toMatch(/writeSignupState\('ds_signup_email'/);
     // debug_token only stashed when server returns it (test/dev mode).
-    expect(body).toMatch(
-      /if \(body\.debug_token\) \{\s*\n?\s*sessionStorage\.setItem\('ds_debug_verify_token'/,
-    );
+    expect(body).toMatch(/writeSignupState\('ds_debug_verify_token', debugToken\)/);
+    expect(body).toMatch(/removeSignupState\('ds_debug_verify_token'\)/);
   });
 
   it('withSidebar={false} layout (pre-auth surface)', () => {
