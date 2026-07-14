@@ -120,8 +120,9 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
     expect(body).not.toMatch(/X-Driftstack-Export-Truncated/);
     expect(body).not.toMatch(/a warning header is set/);
     expect(body).toMatch(
-      /For full-history exports beyond 1000 rows, walk the\s*\n?\s*<a href="\/docs\/admin-api-pagination">cursor-paginated JSON\s*\n?\s*list<\/a> and stream rows yourself; the CSV endpoint is a\s*\n?\s*convenience for ad-hoc reconciliation, not a bulk-export\s*\n?\s*channel\./,
+      /For full-history exports beyond 1000 rows, walk the\s*\n?\s*<a href="\/docs\/admin-api-pagination\/">cursor-paginated JSON\s*\n?\s*list<\/a> and stream rows yourself; the CSV endpoint is a\s*\n?\s*convenience for ad-hoc reconciliation, not a bulk-export\s*\n?\s*channel\./,
     );
+    expect(body).not.toMatch(/href="\/docs\/admin-api-pagination"/);
   });
 
   it("GUI Download CSV button + 'mints a blob URL client-side so the download honours the Bearer auth header' pinned — pinned so the GUI-button-uses-blob-URL pattern + the auth-header-preservation rationale survive (drift to documenting a direct-link would surprise customers who try and find the API rejects credential-less direct links; this is the same pattern as the customer-dashboard CSV download)", () => {
