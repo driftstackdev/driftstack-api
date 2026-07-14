@@ -16,8 +16,9 @@
 //   • fmtTime: ISO → new Date() → Number.isNaN guard returns
 //     raw iso on parse failure + d.toLocaleString() on success.
 //   • limit default 25 + useSessionsList({limit}) wiring.
-//   • State-machine render: loading 'Loading sessions…' role
-//     status + error 'Could not load sessions: ${message}' role
+//   • State-machine render: one loading authority drives the
+//     skeleton + Refresh disabled/aria-busy/label state; error
+//     'Could not load sessions: ${message}' role
 //     alert + ready empty <EmptyState title='No sessions yet'> (W462 shared primitive) + ready non-empty
 //     <table> with Id/URL/Status/Created columns.
 
@@ -50,22 +51,23 @@ describe('W478.B apps/gui-client/src/views/SessionsListView.tsx content parity',
     );
   });
 
-  it('limit default 25 + useSessionsList({limit}) wiring + refresh button onClick=void refetch(); section aria-labelledby + h2 id sessions-list-heading', () => {
+  it('limit default 25 + useSessionsList({limit}) wiring + one loading authority drives the refresh lifecycle; section aria-labelledby + h2 id sessions-list-heading', () => {
     expect(body).toMatch(/const limit = props\.limit \?\? 25;/);
     expect(body).toMatch(/const \{ state, refetch \} = useSessionsList\(\{ limit \}\);/);
+    expect(body).toMatch(/const loading = state\.kind === 'loading';/);
     expect(body).toMatch(
       /<section className="space-y-4 p-4" aria-labelledby="sessions-list-heading">/,
     );
     expect(body).toMatch(/<h2[\s\S]*?id="sessions-list-heading"[\s\S]*?Sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(/onClick=\{\(\) => void refetch\(\)\}/);
+    expect(body).toMatch(/disabled=\{loading\}\s*\n\s*aria-busy=\{loading\}/);
+    expect(body).toMatch(/\{loading \? 'Refreshing…' : 'Refresh'\}/);
   });
 
   it("State-machine render: loading → <SkeletonRows> (W465) + error 'Could not load sessions: ${message}' role='alert' status-error tints + ready empty 'No sessions yet.' + ready non-empty <table> with Id/URL/Status/Created columns + SessionStatusBadge size='sm' + fmtTime(s.createdAt) on Created col", () => {
     // W465 — loading state upgraded from a bare <p> to the shared <SkeletonRows>.
     expect(body).toMatch(/import \{ SkeletonRows \} from '\.\.\/components\/Skeleton';/);
-    expect(body).toMatch(
-      /\{state\.kind === 'loading' && <SkeletonRows rows=\{5\} label="Loading sessions" \/>\}/,
-    );
+    expect(body).toMatch(/\{loading && <SkeletonRows rows=\{5\} label="Loading sessions" \/>\}/);
     expect(body).not.toMatch(
       /<p className="text-sm text-ink-secondary" role="status">\s*\n?\s*Loading sessions…/,
     );
