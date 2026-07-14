@@ -87,7 +87,7 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
   it("Bearer-token-auth framing pinned: 'Authorization: Bearer ds_live_…' + 'Every authenticated response carries rate-limit headers (see /docs/rate-limits). Watch them; they'll save you a 429 down the line.' — pinned so the Bearer-token + every-response-rate-limit-headers + 429-warning + /docs/rate-limits cross-ref survive", () => {
     expect(body).toMatch(/Authorization: Bearer ds_live_…/);
     expect(body).toMatch(
-      /Every authenticated response carries rate-limit headers\s*\n?\s*\(see <a href="\/docs\/rate-limits">\/docs\/rate-limits<\/a>\)\.\s*\n?\s*Watch them; they'll save you a 429 down the line\./,
+      /Every authenticated response carries rate-limit headers\s*\n?\s*\(see <a href="\/docs\/rate-limits\/">\/docs\/rate-limits<\/a>\)\.\s*\n?\s*Watch them; they'll save you a 429 down the line\./,
     );
   });
 
@@ -124,8 +124,9 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
       /<strong>One key per third-party integration<\/strong> if\s*\n?\s*you're handing keys to other services\. Revoking one\s*\n?\s*integration doesn't take out the others\./,
     );
     expect(body).toMatch(
-      /Don't share keys across team members\. For human-driven\s*\n?\s*ad-hoc use, use the OAuth flow \(see\s*\n?\s*<a href="\/docs\/oauth-apps">\/docs\/oauth-apps<\/a>\) — that ties\s*\n?\s*access to the human's account, not a shared key\./,
+      /Don't share keys across team members\. For human-driven\s*\n?\s*ad-hoc use, use the OAuth flow \(see\s*\n?\s*<a href="\/docs\/oauth-apps\/">\/docs\/oauth-apps<\/a>\) — that ties\s*\n?\s*access to the human's account, not a shared key\./,
     );
+    expect(body).not.toMatch(/href="\/docs\/(?:rate-limits|oauth-apps)"/);
   });
 
   it("api_key_id-in-audit-log + GET /v1/account/audit-log framing pinned: 'Every audit-log entry your account generates includes the acting api_key_id.' + 'View the audit log at Dashboard → Settings → Audit log or via GET /v1/account/audit-log.' — pinned so the api_key_id-on-every-audit-row + 2-access-path (Dashboard vs API) survives", () => {
