@@ -101,6 +101,19 @@ describe('W363.B customer-dashboard /usage page content parity', () => {
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     expect(body).toContain('ds_web_session_token');
+    expect(body).toMatch(/try \{\s*token = localStorage\.getItem\('ds_web_session_token'\)/);
+    expect(body).toMatch(/catch \{\s*token = '';/);
+  });
+
+  it('keeps chart-window controls inert until auth and exposes symmetric per-read busy state', () => {
+    expect(body.match(/title="Available after sign-in\."/g)).toHaveLength(3);
+    expect(body).toMatch(/button\.disabled = active;/);
+    expect(body).toMatch(/button\.setAttribute\('aria-disabled', active \? 'true' : 'false'\)/);
+    expect(body).toMatch(/button\.disabled = false;/);
+    expect(body).toContain("button.setAttribute('aria-disabled', 'false')");
+    expect(body).toMatch(
+      /if \(typeof window\.dashboardHydrated === 'function'\) window\.dashboardHydrated\(\);\s*return;/,
+    );
   });
 
   it('combined captures tile sums state_capture + screenshot_capture in the live handler', () => {

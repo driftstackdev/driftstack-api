@@ -198,11 +198,33 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           </div>
         </div>
         <div class="themer" role="group" aria-label="Chart window">
-          <button type="button" class="themer-btn" data-usage-days="7">7d</button>
-          <button type="button" class="themer-btn" data-usage-days="30" aria-pressed="true">
+          <button
+            type="button"
+            class="themer-btn disabled:cursor-not-allowed disabled:opacity-50"
+            data-usage-days="7"
+            disabled
+            aria-disabled="true"
+            title="Available after sign-in."
+          >7d</button>
+          <button
+            type="button"
+            class="themer-btn disabled:cursor-not-allowed disabled:opacity-50"
+            data-usage-days="30"
+            aria-pressed="true"
+            disabled
+            aria-disabled="true"
+            title="Available after sign-in."
+          >
             30d
           </button>
-          <button type="button" class="themer-btn" data-usage-days="90">90d</button>
+          <button
+            type="button"
+            class="themer-btn disabled:cursor-not-allowed disabled:opacity-50"
+            data-usage-days="90"
+            disabled
+            aria-disabled="true"
+            title="Available after sign-in."
+          >90d</button>
         </div>
       </div>
       <div data-daily-chart class="mt-6 hidden h-[120px] items-end gap-1" aria-hidden="true"></div>
@@ -317,7 +339,12 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       const root = document.querySelector('[data-page="usage"]');
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
-      const token = localStorage.getItem('ds_web_session_token');
+      let token = '';
+      try {
+        token = localStorage.getItem('ds_web_session_token') || '';
+      } catch {
+        token = '';
+      }
       const USAGE_TIMEOUT_MS = 15_000;
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
@@ -347,6 +374,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
 
       if (!token) {
         showBanner('Sign in to see live usage.');
+        if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
         return;
       }
 
@@ -374,6 +402,11 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         if (chartSection) chartSection.setAttribute('aria-busy', 'true');
         root.querySelectorAll('[data-usage-days]').forEach(function (button) {
           button.removeAttribute('aria-busy');
+          const active = button === btn;
+          button.disabled = active;
+          button.setAttribute('aria-disabled', active ? 'true' : 'false');
+          if (active) button.title = 'Loading this usage window.';
+          else button.removeAttribute('title');
         });
         if (btn) btn.setAttribute('aria-busy', 'true');
       }
@@ -383,6 +416,9 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         if (chartSection) chartSection.removeAttribute('aria-busy');
         root.querySelectorAll('[data-usage-days]').forEach(function (button) {
           button.removeAttribute('aria-busy');
+          button.disabled = false;
+          button.setAttribute('aria-disabled', 'false');
+          button.removeAttribute('title');
         });
       }
 

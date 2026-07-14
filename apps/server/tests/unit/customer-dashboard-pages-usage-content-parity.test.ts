@@ -98,7 +98,7 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
 
   it("No-token state: !token → 'Sign in to see live usage.' + early bail (neutral placeholders painted via SSG — no fabricated numbers) — pinned so unauthenticated visitors see a clean shell + a clear sign-in prompt", () => {
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*showBanner\('Sign in to see live usage\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{\s*\n?\s*showBanner\('Sign in to see live usage\.'\);\s*\n?\s*if \(typeof window\.dashboardHydrated === 'function'\) window\.dashboardHydrated\(\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 

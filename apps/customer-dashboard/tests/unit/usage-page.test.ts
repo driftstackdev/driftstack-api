@@ -28,6 +28,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
+  storageDenied?: boolean;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
@@ -61,7 +62,16 @@ function setUpDom(html: string, opts: SetUpOpts): SetUpResult {
     fetchCalls.push(call);
     return Promise.resolve(opts.route(call));
   };
-  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== undefined) {
+    window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
   let hydrated = 0;
   // @ts-expect-error — injected by DashboardLayout
   window.dashboardHydrated = () => {
@@ -131,8 +141,8 @@ afterEach(() => {
 });
 
 describe('customer-dashboard Usage (usage.astro) behaviour', () => {
-  it('no session token: shows the sign-in banner and makes no API calls (mock preview stays)', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+  it('no session token: shows the sign-in banner, releases hydration, and keeps chart controls inert', async () => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
       route: () => {
         throw new Error('must not fetch when unauthenticated');
       },
@@ -142,6 +152,32 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     expect(fetchCalls.length).toBe(0);
     expect(isHidden(window, '[data-banner]')).toBe(false);
     expect(text(window, '[data-banner]')).toContain('Sign in to see live usage');
+    expect(hydratedCount()).toBe(1);
+    for (const button of window.document.querySelectorAll<HTMLButtonElement>('[data-usage-days]')) {
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(button.title).toContain('sign-in');
+    }
+  });
+
+  it('storage denial follows the same hydrated signed-out path without a network request', async () => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
+      storageDenied: true,
+      route: () => {
+        throw new Error('must not fetch when storage is unavailable');
+      },
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(hydratedCount()).toBe(1);
+    expect(text(window, '[data-banner]')).toContain('Sign in to see live usage');
+    expect(
+      Array.from(window.document.querySelectorAll<HTMLButtonElement>('[data-usage-days]')).every(
+        (button) => button.disabled,
+      ),
+    ).toBe(true);
   });
 
   it('live data: replaces tiles with API totals, computes the combined captures sum, and updates period + tier', async () => {
@@ -380,6 +416,9 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     btn7.click();
     btn90.click();
     expect(btn90.getAttribute('aria-busy')).toBe('true');
+    expect(btn90.disabled).toBe(true);
+    expect(btn90.getAttribute('aria-disabled')).toBe('true');
+    expect(btn7.disabled).toBe(false);
     expect(
       window.document.querySelector('[data-section="daily-activity"]')?.getAttribute('aria-busy'),
     ).toBe('true');
@@ -395,6 +434,8 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     await flush();
     expect(text(window, '[data-daily-legend]')).toContain('2026-09-30');
     expect(btn90.hasAttribute('aria-busy')).toBe(false);
+    expect(btn90.disabled).toBe(false);
+    expect(btn90.getAttribute('aria-disabled')).toBe('false');
 
     resolve7?.(
       json({
