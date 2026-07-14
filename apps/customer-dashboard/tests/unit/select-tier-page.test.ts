@@ -28,14 +28,19 @@ interface MockFetchCall {
 }
 
 interface SetUpOpts {
-  token?: string;
+  token?: string | null;
+  storageDenied?: boolean;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -59,14 +64,32 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve(opts.route(call));
   };
-  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== undefined && opts.token !== null) {
+    window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
+  let hydrated = 0;
+  // @ts-expect-error — injected by DashboardLayout
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   installDashboardDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="select-tier"'));
   if (!pageScript) throw new Error('select-tier inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function text(window: JSDOM['window'], selector: string): string {
@@ -105,7 +128,7 @@ afterEach(() => {
 
 describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour', () => {
   it('Stripe buy-tier without a token: prompts to sign up, no checkout call', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
       route: () => {
         throw new Error('must not fetch when unauthenticated');
       },
@@ -114,15 +137,139 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     clickFirst(window, '[data-action="buy-tier"]');
     await flush();
     expect(fetchCalls.length).toBe(0);
+    expect(hydratedCount()).toBe(1);
     expect(text(window, '[data-banner]')).toContain('Sign up first');
+  });
+
+  it('storage denial follows the hydrated signed-out path with inert payment controls', async () => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
+      storageDenied: true,
+      route: () => {
+        throw new Error('must not fetch when storage is unavailable');
+      },
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(hydratedCount()).toBe(1);
+    for (const button of window.document.querySelectorAll<HTMLButtonElement>(
+      '[data-action="buy-tier"], [data-action="buy-tier-crypto"]',
+    )) {
+      expect(button.disabled).toBe(true);
+      expect(button.title).toMatch(/Sign in/i);
+    }
+  });
+
+  it('requires a successful current billing snapshot before either payment path can start', async () => {
+    let resolveBilling: ((response: Response) => void) | undefined;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) {
+          return new Promise<Response>((resolve) => {
+            resolveBilling = resolve;
+          });
+        }
+        return json({ checkout_url: 'https://checkout.stripe.com/c/too-early' });
+      },
+    });
+    win = window;
+    const stripe = window.document.querySelector('[data-action="buy-tier"]') as HTMLButtonElement;
+    const crypto = window.document.querySelector(
+      '[data-action="buy-tier-crypto"]',
+    ) as HTMLButtonElement;
+    expect(stripe.disabled).toBe(true);
+    expect(crypto.disabled).toBe(true);
+    stripe.dispatchEvent(new window.Event('click', { bubbles: true }));
+    crypto.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(2);
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+
+    resolveBilling?.(json({ subscription: null }));
+    await flush();
+    expect(stripe.disabled).toBe(false);
+    expect(crypto.disabled).toBe(false);
+  });
+
+  it('keeps all payment controls locked when the billing snapshot is failed or malformed', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url) ? json({ unexpected: true }) : json({}, 500),
+    });
+    win = window;
+    await flush();
+
+    for (const button of window.document.querySelectorAll<HTMLButtonElement>(
+      '[data-action="buy-tier"], [data-action="buy-tier-crypto"]',
+    )) {
+      expect(button.disabled).toBe(true);
+      expect(button.title).toMatch(/Reload/i);
+      button.dispatchEvent(new window.Event('click', { bubbles: true }));
+    }
+    await flush(2);
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+  });
+
+  it('routes active subscribers through Stripe portal and keeps crypto orders unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) {
+          return json({
+            subscription: {
+              tier: 'solo_manual',
+              status: 'active',
+              cancel_at_period_end: false,
+            },
+          });
+        }
+        if (/\/v1\/billing\/portal-session$/.test(call.url)) {
+          return json({ portal_url: 'https://billing.stripe.com/p/session_test' });
+        }
+        return json({}, 500);
+      },
+    });
+    win = window;
+    await flush();
+
+    const stripeButtons = Array.from(
+      window.document.querySelectorAll<HTMLButtonElement>('[data-action="buy-tier"]'),
+    );
+    const current = stripeButtons.find((button) => button.dataset.tier === 'solo_manual');
+    const switchPlan = stripeButtons.find((button) => button.dataset.tier === 'team_manual');
+    expect(current?.disabled).toBe(true);
+    expect(current?.textContent).toContain('Current plan');
+    expect(switchPlan?.disabled).toBe(false);
+    for (const crypto of window.document.querySelectorAll<HTMLButtonElement>(
+      '[data-action="buy-tier-crypto"]',
+    )) {
+      expect(crypto.classList.contains('hidden')).toBe(true);
+      expect(crypto.disabled).toBe(true);
+      crypto.dispatchEvent(new window.Event('click', { bubbles: true }));
+    }
+
+    switchPlan?.click();
+    await flush();
+    expect(
+      fetchCalls.filter(
+        (call) => /\/v1\/billing\/portal-session$/.test(call.url) && call.init?.method === 'POST',
+      ),
+    ).toHaveLength(1);
+    expect(fetchCalls.some((call) => /crypto-checkout$/.test(call.url))).toBe(false);
   });
 
   it('Stripe buy-tier with a token: POSTs a monthly checkout-session for the tier', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
-      route: () => json({ checkout_url: 'https://checkout.stripe.com/c/session_test' }),
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url)
+          ? json({ subscription: null })
+          : json({ checkout_url: 'https://checkout.stripe.com/c/session_test' }),
     });
     win = window;
+    await flush();
     clickFirst(window, '[data-action="buy-tier"]');
     clickFirst(window, '[data-action="buy-tier"]');
     await flush();
@@ -200,6 +347,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
       },
     });
     win = window;
+    await flush();
     clickFirst(window, '[data-action="buy-tier"]');
     await flush();
     clickFirst(window, '[data-action="buy-tier"]');
@@ -226,6 +374,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
       },
     });
     win = window;
+    await flush();
     clickFirst(window, '[data-action="buy-tier"]');
     await flush();
     clickFirst(window, '[data-action="buy-tier"]');
@@ -306,16 +455,19 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
   it('Stripe buy-tier 503 uses fixed temporary-unavailable guidance', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
-      route: () =>
-        json(
-          {
-            type: 'https://errors.driftstack.dev/feature-unavailable',
-            detail: 'billing provider unwired at billing.internal',
-          },
-          503,
-        ),
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url)
+          ? json({ subscription: null })
+          : json(
+              {
+                type: 'https://errors.driftstack.dev/feature-unavailable',
+                detail: 'billing provider unwired at billing.internal',
+              },
+              503,
+            ),
     });
     win = window;
+    await flush();
     clickFirst(window, '[data-action="buy-tier"]');
     await flush();
     expect(text(window, '[data-banner]')).toContain('service is temporarily unavailable');
@@ -338,16 +490,19 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
   it('crypto checkout success: renders the exact amount, currency, address, and order id from the API', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
-      route: () =>
-        json({
-          provider: 'nowpayments',
-          pay_amount: 0.0123,
-          pay_currency: 'eth',
-          payment_address: '0xABCDEF0000000000000000000000000000001234',
-          order_id: 'ord_crypto_test1',
-        }),
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url)
+          ? json({ subscription: null })
+          : json({
+              provider: 'nowpayments',
+              pay_amount: 0.0123,
+              pay_currency: 'eth',
+              payment_address: '0xABCDEF0000000000000000000000000000001234',
+              order_id: 'ord_crypto_test1',
+            }),
     });
     win = window;
+    await flush();
     clickFirst(window, '[data-action="buy-tier-crypto"]');
     clickFirst(window, '[data-action="buy-tier-crypto"]');
     await flush();
@@ -366,9 +521,13 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
   it('crypto checkout stub provider: shows the manual-wire fallback with the order id', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
-      route: () => json({ provider: 'stub', order_id: 'ord_stub_1' }),
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url)
+          ? json({ subscription: null })
+          : json({ provider: 'stub', order_id: 'ord_stub_1' }),
     });
     win = window;
+    await flush();
     clickFirst(window, '[data-action="buy-tier-crypto"]');
     await flush();
     expect(isHidden(window, '[data-crypto-modal-error]')).toBe(false);

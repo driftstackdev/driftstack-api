@@ -166,8 +166,21 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
   });
 
   it('localStorage ds_web_session_token gate (anonymous redirect to "Sign up first")', () => {
-    expect(body).toMatch(/const token = localStorage\.getItem\('ds_web_session_token'\);/);
+    expect(body).toMatch(/try \{\s*return localStorage\.getItem\('ds_web_session_token'\)/);
     expect(body).toMatch(/showBanner\('Sign up first\.'\);/);
+  });
+
+  it('requires a current billing snapshot before exposing either payment path', () => {
+    for (const selector of ['data-action="buy-tier"', 'data-action="buy-tier-crypto"']) {
+      const start = body.indexOf(selector);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(body.slice(start, body.indexOf('>', start))).toMatch(/disabled/);
+    }
+    expect(body).toMatch(/let billingDataAvailable = false/);
+    expect(body).toMatch(/if \(!billingDataAvailable\) \{[\s\S]*?Wait for live billing to load/);
+    expect(body).toMatch(/setBillingAuthority\(true\);\s*applySubscriptionState/);
+    expect(body).toMatch(/Use the Stripe billing portal to change an active plan/);
+    expect(body).toMatch(/if \(typeof window\.dashboardHydrated === 'function'\)/);
   });
 
   it('data-action="buy-tier" buttons carry data-tier attribute (router knows which tier checkout to start)', () => {

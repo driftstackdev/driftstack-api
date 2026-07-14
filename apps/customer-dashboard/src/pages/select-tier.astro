@@ -143,6 +143,9 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
               data-action="buy-tier"
               data-tier={t.id}
               class="btn-secondary mt-4 w-full"
+              disabled
+              aria-disabled="true"
+              title="Sign in and wait for live billing to load"
             >
               Start {t.label}
             </button>
@@ -153,6 +156,9 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
               data-tier-label={t.label}
               data-tier-price-cents={t.priceCents.toString()}
               class="mt-2 w-full text-xs text-tk-ink-3 hover:text-tk-accent-text"
+              disabled
+              aria-disabled="true"
+              title="Sign in and wait for live billing to load"
             >
               or pay with crypto →
             </button>
@@ -232,7 +238,13 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       const root = document.querySelector('[data-page="select-tier"]');
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const token = (() => {
+        try {
+          return localStorage.getItem('ds_web_session_token');
+        } catch {
+          return null;
+        }
+      })();
 
       function showBanner(text) {
         banner.textContent = text;
@@ -387,8 +399,30 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       }
 
       const tierButtons = root.querySelectorAll('[data-action="buy-tier"]');
+      const cryptoBtns = root.querySelectorAll('[data-action="buy-tier-crypto"]');
       const cryptoLinksByTier = new Map();
       const checkoutKeysByTier = new Map();
+      let billingDataAvailable = false;
+      let billingUnavailableReason = token
+        ? 'Wait for live billing to load'
+        : 'Sign in to choose a paid plan';
+
+      function setBillingAuthority(available, reason = '') {
+        billingDataAvailable = available;
+        if (reason) billingUnavailableReason = reason;
+        [...tierButtons, ...cryptoBtns].forEach((button) => {
+          button.disabled = !available;
+          if (available) {
+            button.removeAttribute('aria-disabled');
+            button.removeAttribute('title');
+          } else {
+            button.setAttribute('aria-disabled', 'true');
+            button.title = billingUnavailableReason;
+          }
+        });
+      }
+
+      setBillingAuthority(false);
 
       function checkoutKeyFor(tier) {
         const existing = checkoutKeysByTier.get(tier);
@@ -426,14 +460,26 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           if (tier === sub.tier) {
             btn.textContent = 'Current plan';
             btn.disabled = true;
+            btn.setAttribute('aria-disabled', 'true');
+            btn.title = 'This is your current plan';
             btn.classList.add('opacity-60', 'cursor-not-allowed');
-            if (cryptoLink) cryptoLink.classList.add('hidden');
+            if (cryptoLink) {
+              cryptoLink.classList.add('hidden');
+              cryptoLink.disabled = true;
+              cryptoLink.setAttribute('aria-disabled', 'true');
+              cryptoLink.title = 'Use the Stripe billing portal to change an active plan';
+            }
           } else {
             btn.textContent = 'Switch to this plan';
             // Starting a NEW crypto order while already on a paid Stripe
             // subscription is the same double-subscribe risk class — hide
             // it too; switching plans goes through the portal above.
-            if (cryptoLink) cryptoLink.classList.add('hidden');
+            if (cryptoLink) {
+              cryptoLink.classList.add('hidden');
+              cryptoLink.disabled = true;
+              cryptoLink.setAttribute('aria-disabled', 'true');
+              cryptoLink.title = 'Use the Stripe billing portal to change an active plan';
+            }
           }
         });
       }
@@ -442,6 +488,10 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
         btn.addEventListener('click', () => {
           if (!token) {
             showBanner('Sign up first.');
+            return;
+          }
+          if (!billingDataAvailable) {
+            showBanner('Wait for live billing to load. Reload if loading failed.');
             return;
           }
           const tier = btn.getAttribute('data-tier');
@@ -550,7 +600,6 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       // Stripe button; clicking opens the shared modal + POSTs
       // /v1/billing/crypto-checkout with the tier's price_cents. All
       // tiers clear NowPayments' $19.16 USD-equivalent floor.
-      const cryptoBtns = root.querySelectorAll('[data-action="buy-tier-crypto"]');
       cryptoBtns.forEach((btn) => {
         const tier = btn.getAttribute('data-tier');
         if (tier) cryptoLinksByTier.set(tier, btn);
@@ -598,6 +647,14 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
         btn.addEventListener('click', async () => {
           if (!token) {
             showBanner('Sign in to pay with crypto.');
+            return;
+          }
+          if (!billingDataAvailable) {
+            showBanner('Wait for live billing to load. Reload if loading failed.');
+            return;
+          }
+          if (isActiveSubscription(currentSubscription)) {
+            showBanner('Use the Stripe billing portal to change an active plan.');
             return;
           }
           if (cryptoRequestInFlight) return; // guard: a mint is already in flight.
@@ -715,7 +772,7 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           } finally {
             window.clearTimeout(timeout);
             cryptoRequestInFlight = false;
-            btn.disabled = false;
+            btn.disabled = !billingDataAvailable || isActiveSubscription(currentSubscription);
             btn.setAttribute('aria-busy', 'false');
           }
         });
@@ -746,19 +803,50 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       // Finding #1 — load the account's live billing state so an
       // already-subscribed customer sees "Switch to this plan" /
       // portal-routed CTAs instead of fresh "Start <tier>" Checkout
-      // buttons. Best-effort: a failed/unconfigured read just leaves
-      // the default free-tier UI up — the server-side 409 guard on
-      // checkout-session is the real backstop either way.
-      if (token) {
-        authedFetch('/v1/billing', { method: 'GET' })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((body) => {
-            if (body && body.subscription) applySubscriptionState(body.subscription);
-          })
-          .catch(() => {
-            /* best-effort; see comment above */
-          });
+      // buttons. Checkout stays fail-closed until this authoritative read
+      // succeeds: the Stripe 409 is a backstop, while crypto orders are a
+      // separate non-refundable payment path.
+      if (!token) {
+        showBanner('Sign in to choose a paid plan.');
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
+        return;
       }
+
+      authedFetch('/v1/billing', { method: 'GET' })
+        .then((r) =>
+          r.ok
+            ? r.json()
+            : r
+                .json()
+                .catch(() => ({}))
+                .then((body) => Promise.reject(window.driftstackResponseError(r, body))),
+        )
+        .then((body) => {
+          if (
+            !body ||
+            typeof body !== 'object' ||
+            !Object.prototype.hasOwnProperty.call(body, 'subscription')
+          ) {
+            throw new Error('The billing response was incomplete.');
+          }
+          setBillingAuthority(true);
+          applySubscriptionState(body.subscription || null);
+        })
+        .catch((err) => {
+          setBillingAuthority(false, 'Reload to try loading live billing again');
+          const reason = window.driftstackRequestErrorMessage(
+            err,
+            "Couldn't load live billing.",
+          );
+          showBanner(reason + ' Purchases remain unavailable; reload to try again.');
+        })
+        .finally(() => {
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
+        });
     })();
   </script>
 </DashboardLayout>
