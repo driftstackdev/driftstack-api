@@ -92,8 +92,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           <input
             type="text"
             name="account_id"
+            disabled
+            aria-disabled="true"
+            title="Available after live cost configuration loads."
             placeholder="acc_… or raw UUID"
-            class="mt-1 w-72 rounded-md border border-tk-border px-3 py-2 font-mono text-xs shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
+            class="mt-1 w-72 rounded-md border border-tk-border px-3 py-2 font-mono text-xs shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent disabled:cursor-not-allowed disabled:bg-tk-hover disabled:text-tk-ink-3"
             required
           />
         </label>
@@ -102,13 +105,19 @@ const apiBaseUrl = resolveApiBaseUrl();
           <input
             type="text"
             name="billing_cycle"
+            disabled
+            aria-disabled="true"
+            title="Available after live cost configuration loads."
             placeholder="YYYY-MM (default current)"
-            class="mt-1 w-44 rounded-md border border-tk-border px-3 py-2 font-mono text-xs shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
+            class="mt-1 w-44 rounded-md border border-tk-border px-3 py-2 font-mono text-xs shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent disabled:cursor-not-allowed disabled:bg-tk-hover disabled:text-tk-ink-3"
           />
         </label>
         <button
           type="submit"
-          class="rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-tk-accent-hover"
+          disabled
+          aria-disabled="true"
+          title="Available after live cost configuration loads."
+          class="rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-tk-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           Query
         </button>
@@ -146,15 +155,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button
             type="button"
             data-button="export-top-csv"
-            class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-sm shadow-sm hover:bg-tk-bg"
-            title="Download the currently-rendered top-accounts table as CSV"
+            disabled
+            aria-disabled="true"
+            class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-sm shadow-sm hover:bg-tk-bg disabled:cursor-not-allowed disabled:text-tk-ink-3"
+            title="Available after a live top-accounts table loads."
           >
             Export CSV
           </button>
           <button
             type="button"
             data-button="refresh-top"
-            class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-sm shadow-sm hover:bg-tk-bg"
+            disabled
+            aria-disabled="true"
+            title="Available after live cost configuration loads."
+            class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-sm shadow-sm hover:bg-tk-bg disabled:cursor-not-allowed disabled:text-tk-ink-3"
           >
             Refresh
           </button>
@@ -164,7 +178,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         data-field="top-result"
         class="mt-4 dashboard-card"
       >
-        <p class="text-sm text-tk-ink-3">Click Refresh to fetch the top accounts.</p>
+        <p class="text-sm text-tk-ink-3">
+          Live top accounts are unavailable until cost configuration loads.
+        </p>
       </div>
     </section>
 
@@ -187,7 +203,15 @@ const apiBaseUrl = resolveApiBaseUrl();
   const accountForm = root.querySelector('[data-form="account-query"]');
   const accountResult = root.querySelector('[data-field="account-result"]');
   const accountSubmitBtn = accountForm?.querySelector('button[type="submit"]');
+  const accountInputs = accountForm ? Array.from(accountForm.querySelectorAll('input')) : [];
+  const topResult = root.querySelector('[data-field="top-result"]');
+  const refreshTopBtn = root.querySelector('[data-button="refresh-top"]');
+  const exportCsvBtn = root.querySelector('[data-button="export-top-csv"]');
   const COST_REQUEST_TIMEOUT_MS = 15_000;
+  let costDataAvailable = false;
+  let topAccountsAvailable = false;
+  let topAccountsLoading = false;
+  let accountQueryLoading = false;
 
   function showBanner(msg) {
     if (!banner) return;
@@ -196,7 +220,11 @@ const apiBaseUrl = resolveApiBaseUrl();
   }
 
   function adminToken() {
-    return globalThis.localStorage?.getItem('ds_web_session_token') ?? '';
+    try {
+      return globalThis.localStorage?.getItem('ds_web_session_token') ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   async function authedFetch(path, init = {}) {
@@ -229,6 +257,63 @@ const apiBaseUrl = resolveApiBaseUrl();
     return String(s ?? '').replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
     );
+  }
+
+  function syncAccountQueryAuthority(reason) {
+    const unavailableReason = reason || 'Available after live cost configuration loads.';
+    accountInputs.forEach((input) => {
+      input.disabled = !costDataAvailable;
+      input.setAttribute('aria-disabled', costDataAvailable ? 'false' : 'true');
+      if (costDataAvailable) input.removeAttribute('title');
+      else input.title = unavailableReason;
+    });
+    if (accountSubmitBtn) {
+      const disabled = !costDataAvailable || accountQueryLoading;
+      accountSubmitBtn.disabled = disabled;
+      accountSubmitBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      if (!costDataAvailable) accountSubmitBtn.title = unavailableReason;
+      else if (accountQueryLoading) {
+        accountSubmitBtn.title = 'Wait for the current cost query to finish.';
+      } else accountSubmitBtn.removeAttribute('title');
+    }
+  }
+
+  function syncTopAuthority(reason) {
+    const unavailableReason = reason || 'Available after live cost configuration loads.';
+    if (refreshTopBtn) {
+      const disabled = !costDataAvailable || topAccountsLoading;
+      refreshTopBtn.disabled = disabled;
+      refreshTopBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      if (!costDataAvailable) refreshTopBtn.title = unavailableReason;
+      else if (topAccountsLoading) {
+        refreshTopBtn.title = 'Wait for the current top-accounts query to finish.';
+      } else refreshTopBtn.removeAttribute('title');
+    }
+    if (exportCsvBtn) {
+      exportCsvBtn.disabled = !topAccountsAvailable;
+      exportCsvBtn.setAttribute('aria-disabled', topAccountsAvailable ? 'false' : 'true');
+      exportCsvBtn.title = topAccountsAvailable
+        ? 'Download the currently-rendered top-accounts table as CSV'
+        : 'Available after a live top-accounts table loads.';
+    }
+  }
+
+  function setCostDataAuthority(available, reason) {
+    costDataAvailable = available;
+    if (!available) topAccountsAvailable = false;
+    syncAccountQueryAuthority(reason);
+    syncTopAuthority(reason);
+    if (topResult && !topAccountsAvailable && !topAccountsLoading) {
+      topResult.innerHTML = available
+        ? '<p class="text-sm text-tk-ink-3">Click Refresh to fetch the top accounts.</p>'
+        : '<p class="text-sm text-tk-ink-3">Live top accounts are unavailable until cost configuration loads.</p>';
+    }
+  }
+
+  function renderAccountUnavailable(message) {
+    if (!accountResult) return;
+    accountResult.classList.remove('hidden');
+    accountResult.innerHTML = `<p class="text-sm text-tk-ink-3">${escapeHtml(message)}</p>`;
   }
 
   function renderRateCard(rates) {
@@ -352,7 +437,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
         showBanner(msg);
         showConfigError(msg);
-        return;
+        return false;
       }
       const body = await res.json();
       renderRateCard(body.rates ?? {});
@@ -364,21 +449,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       // admin/ops visibility. Same field-drift class as the
       // softWarningCents → softCents fix.
       renderTierThresholds(body.tierThresholds ?? body.tiers ?? {});
+      return true;
     } catch (err) {
       const msg = requestErrorMessage(err, 'Could not load cost configuration. Try again.');
       showBanner(msg);
       showConfigError(msg);
+      return false;
     }
   }
-
-  const topResult = root.querySelector('[data-field="top-result"]');
-  const refreshTopBtn = root.querySelector('[data-button="refresh-top"]');
-  let topAccountsLoading = false;
 
   function renderTopAccounts(rows) {
     if (!topResult) return;
     const cents = (n) => '$' + (Number(n ?? 0) / 100).toFixed(2);
     if (!Array.isArray(rows) || rows.length === 0) {
+      topAccountsAvailable = false;
+      syncTopAuthority();
       topResult.innerHTML = '<p class="text-sm text-tk-ink-3">No accounts with usage in the current cycle.</p>';
       return;
     }
@@ -408,13 +493,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         })
         .join('') +
       '</tbody></table>';
+    topAccountsAvailable = true;
+    syncTopAuthority();
   }
 
   async function loadTopAccounts() {
-    if (!topResult || topAccountsLoading) return;
+    if (!costDataAvailable || !topResult || topAccountsLoading) return;
     topAccountsLoading = true;
+    topAccountsAvailable = false;
+    syncTopAuthority();
     if (refreshTopBtn) {
-      refreshTopBtn.disabled = true;
       refreshTopBtn.setAttribute('aria-busy', 'true');
       refreshTopBtn.textContent = 'Refreshing…';
     }
@@ -457,8 +545,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       topResult.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(msg)}</p>`;
     } finally {
       topAccountsLoading = false;
+      syncTopAuthority();
       if (refreshTopBtn) {
-        refreshTopBtn.disabled = false;
         refreshTopBtn.setAttribute('aria-busy', 'false');
         refreshTopBtn.textContent = 'Refresh';
       }
@@ -475,9 +563,9 @@ const apiBaseUrl = resolveApiBaseUrl();
   // rendered DOM table (so it always matches what the operator
   // sees on-screen) + downloads as a timestamped file. Survives
   // pagination since the page only shows 50 accounts anyway.
-  const exportCsvBtn = root.querySelector('[data-button="export-top-csv"]');
   if (exportCsvBtn) {
     exportCsvBtn.addEventListener('click', () => {
+      if (!topAccountsAvailable) return;
       if (!topResult) return;
       const table = topResult.querySelector('table');
       if (!table) {
@@ -510,10 +598,9 @@ const apiBaseUrl = resolveApiBaseUrl();
   }
 
   if (accountForm) {
-    let accountQueryLoading = false;
     accountForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (accountQueryLoading) return;
+      if (!costDataAvailable || accountQueryLoading) return;
       const fd = new FormData(accountForm);
       const rawInput = String(fd.get('account_id') ?? '').trim();
       // Strip the public 'acc_' prefix if present — the cost endpoint
@@ -523,11 +610,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       const billingCycle = String(fd.get('billing_cycle') ?? '').trim();
       if (!accountId) return;
       accountQueryLoading = true;
+      syncAccountQueryAuthority();
       accountForm.setAttribute('aria-busy', 'true');
       if (accountSubmitBtn) {
-        accountSubmitBtn.disabled = true;
         accountSubmitBtn.textContent = 'Querying…';
       }
+      renderAccountUnavailable('Loading the current account cost…');
       try {
         const qs = billingCycle ? `?billing_cycle=${encodeURIComponent(billingCycle)}` : '';
         const res = await authedFetch(
@@ -571,20 +659,26 @@ const apiBaseUrl = resolveApiBaseUrl();
           return;
         }
         if (!res.ok) {
-          showBanner(responseErrorMessage(res, 'Could not load account cost. Try again.'));
+          const msg = responseErrorMessage(res, 'Could not load account cost. Try again.');
+          showBanner(msg);
+          renderAccountUnavailable(
+            'Could not load the current account cost. Check the error above and retry.',
+          );
           return;
         }
         const body = await res.json();
         renderAccountSummary(body);
       } catch (err) {
-        showBanner(
-          requestErrorMessage(err, 'Could not load account cost. Try again.'),
+        const msg = requestErrorMessage(err, 'Could not load account cost. Try again.');
+        showBanner(msg);
+        renderAccountUnavailable(
+          'Could not load the current account cost. Check the error above and retry.',
         );
       } finally {
         accountQueryLoading = false;
+        syncAccountQueryAuthority();
         accountForm.setAttribute('aria-busy', 'false');
         if (accountSubmitBtn) {
-          accountSubmitBtn.disabled = false;
           accountSubmitBtn.textContent = 'Query';
         }
       }
@@ -592,12 +686,16 @@ const apiBaseUrl = resolveApiBaseUrl();
   }
 
   function start() {
-    void loadConfig().finally(() => {
-      // 2026-05-21 — AdminLayout opacity-gate signal.
-      if (typeof window.dashboardHydrated === 'function') {
-        window.dashboardHydrated();
-      }
-    });
+    void loadConfig()
+      .then((loaded) => {
+        setCostDataAuthority(loaded, 'Available after live cost configuration loads.');
+      })
+      .finally(() => {
+        // 2026-05-21 — AdminLayout opacity-gate signal.
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
+      });
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', start, { once: true });

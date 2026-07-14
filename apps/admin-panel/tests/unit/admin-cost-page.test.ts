@@ -164,6 +164,19 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     await flush();
     expect(fetchCalls.length).toBe(0);
     expect(text(window, '[data-banner]')).toContain('admin token');
+    expect(
+      (window.document.querySelector('input[name="account_id"]') as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (window.document.querySelector('button[type="submit"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (window.document.querySelector('[data-button="export-top-csv"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it('config load: renders the rate card and per-tier thresholds at 2-decimal precision', async () => {
@@ -204,6 +217,19 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(
       fetchCalls.find((call) => /\/v1\/admin\/cost\/config$/.test(call.url))?.init?.signal,
     ).toBeTruthy();
+    expect(
+      (window.document.querySelector('input[name="account_id"]') as HTMLInputElement).disabled,
+    ).toBe(false);
+    expect(
+      (window.document.querySelector('button[type="submit"]') as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      (window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      (window.document.querySelector('[data-button="export-top-csv"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it('uses one 15s timer-cleaned boundary and defers config hydration for fresh SSO', () => {
@@ -325,6 +351,47 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(banner).not.toMatch(/private-account|503|node\.internal|token=secret|\/v1\//);
   });
 
+  it('revokes a previous customer breakdown immediately and never leaves it visible after the next query fails', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/cost\/accounts\/first-account/.test(call.url)) {
+          return json({
+            account_id: 'first-account',
+            billing_cycle: '2026-07',
+            tier: 'api_builder',
+            breakdown: { totalCents: 4321, thresholdState: 'under-soft' },
+            thresholds: { softCents: 10000, hardCents: 20000 },
+          });
+        }
+        if (/\/v1\/admin\/cost\/accounts\/second-account/.test(call.url)) {
+          return json({ detail: 'private upstream failure' }, 503);
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    const input = form.querySelector('input[name="account_id"]') as HTMLInputElement;
+    input.value = 'acc_first-account';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(window, '[data-field="account-result"]')).toContain('first-account');
+    expect(text(window, '[data-field="account-result"]')).toContain('$43.21');
+
+    input.value = 'acc_second-account';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    expect(text(window, '[data-field="account-result"]')).toContain(
+      'Loading the current account cost',
+    );
+    expect(text(window, '[data-field="account-result"]')).not.toContain('first-account');
+    await flush();
+    const result = text(window, '[data-field="account-result"]');
+    expect(result).toContain('Could not load the current account cost');
+    expect(result).not.toMatch(/first-account|\$43\.21|second-account|503|private upstream/);
+  });
+
   it('account query 404 + account DOES exist (admin-accounts lookup is 200): "exists but no usage" — distinct from "not found" (audit waefer6wu)', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
@@ -423,6 +490,60 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(top).toContain('$21.00');
     expect(top).toContain('$15.50');
     expect(top).toContain('$50.00');
+    expect(
+      (window.document.querySelector('[data-button="export-top-csv"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it('revokes CSV authority while refreshing and keeps export disabled when the current top-accounts read fails', async () => {
+    let accountsReads = 0;
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/accounts\?/.test(call.url)) {
+          accountsReads += 1;
+          return accountsReads === 1
+            ? json({ data: [{ id: 'acc_a1' }] })
+            : json({ detail: 'new failure' }, 503);
+        }
+        if (/\/v1\/admin\/cost\/overview\?/.test(call.url)) {
+          return json({
+            summaries: [
+              {
+                account_id: 'a1',
+                tier: 'api_builder',
+                breakdown: { totalCents: 2100, thresholdState: 'under-soft' },
+                thresholds: { softCents: 3000, hardCents: 5000 },
+              },
+            ],
+          });
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const refresh = window.document.querySelector(
+      '[data-button="refresh-top"]',
+    ) as HTMLButtonElement;
+    const exportCsv = window.document.querySelector(
+      '[data-button="export-top-csv"]',
+    ) as HTMLButtonElement;
+    refresh.click();
+    await flush();
+    expect(exportCsv.disabled).toBe(false);
+    expect(text(window, '[data-field="top-result"]')).toContain('a1');
+
+    refresh.click();
+    expect(exportCsv.disabled).toBe(true);
+    expect(text(window, '[data-field="top-result"]')).toContain('Loading');
+    await flush();
+    expect(exportCsv.disabled).toBe(true);
+    expect(text(window, '[data-field="top-result"]')).toContain(
+      'admin service is temporarily unavailable',
+    );
+    expect(text(window, '[data-field="top-result"]')).not.toContain('a1');
   });
 
   it('top-accounts failures use staff-safe copy without raw endpoint/status/body text', async () => {

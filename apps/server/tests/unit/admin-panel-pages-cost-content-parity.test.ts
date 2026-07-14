@@ -100,4 +100,21 @@ describe('admin-panel pages/cost content parity', () => {
       /const cents = \(n\) => '\$' \+ \(Number\(n \?\? 0\) \/ 100\)\.toFixed\(2\);/,
     );
   });
+
+  it('read controls and programmatic handlers require live cost authority, while CSV additionally requires a successful current top table', () => {
+    expect(body).toMatch(
+      /name="account_id"\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"\s*\n?\s*title="Available after live cost configuration loads\."/,
+    );
+    expect(body).toMatch(
+      /data-button="export-top-csv"\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/,
+    );
+    expect(body).toContain('let costDataAvailable = false;');
+    expect(body).toContain('let topAccountsAvailable = false;');
+    expect(body).toContain('if (!costDataAvailable || !topResult || topAccountsLoading) return;');
+    expect(body).toContain('if (!costDataAvailable || accountQueryLoading) return;');
+    expect(body).toContain('if (!topAccountsAvailable) return;');
+    expect(body).toMatch(
+      /loadConfig\(\)\s*\n?\s*\.then\(\(loaded\) => \{\s*\n?\s*setCostDataAuthority\(loaded, 'Available after live cost configuration loads\.'\);/,
+    );
+  });
 });
