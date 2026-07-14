@@ -11,15 +11,11 @@ import authPlugin from '../../src/middleware/auth.js';
 import type { AccountAuthRepo, AccountContext } from '../../src/services/auth.js';
 import { type AuthCache, sha256Hex } from '../../src/services/auth-cache.js';
 
-function makeRepo(): AccountAuthRepo {
-  return { findApiKeyByPrefix: () => Promise.resolve(null) } as unknown as AccountAuthRepo;
-}
-
 const OWNER_EMAIL = 'owner@driftstack.test';
 const OWNER_TOKEN = 'ds_live_oooooooooooooooooooooooooooooooo';
 const STAFF_TOKEN = 'ds_live_ssssssssssssssssssssssssssssssss';
 
-function ctxFor(id: string, email: string): AccountContext {
+function ctxFor(id: string, email: string, sessionId: string): AccountContext {
   return {
     account: {
       id,
@@ -35,7 +31,7 @@ function ctxFor(id: string, email: string): AccountContext {
       updatedAt: new Date('2026-01-01T00:00:00Z'),
     },
     apiKey: {
-      id: `key-${id}`,
+      id: `wsk_${sessionId}`,
       accountId: id,
       name: 'web-session',
       keyPrefix: 'web_session',
@@ -51,28 +47,69 @@ function ctxFor(id: string, email: string): AccountContext {
     },
     rateLimitOverrides: {},
     teams: [],
-    webSession: { id: 'ws-1', mfaSatisfiedAt: null },
+    webSession: { id: sessionId, mfaSatisfiedAt: null },
   };
+}
+
+const OWNER_CTX = ctxFor('acc-owner', OWNER_EMAIL, 'ws-owner');
+const STAFF_CTX = ctxFor('acc-staff', 'staff@driftstack.test', 'ws-staff');
+
+function makeRepo(retiredTokenHash: string | null = null): AccountAuthRepo {
+  const sessions = new Map([
+    [sha256Hex(OWNER_TOKEN), { ctx: OWNER_CTX, id: 'ws-owner' }],
+    [sha256Hex(STAFF_TOKEN), { ctx: STAFF_CTX, id: 'ws-staff' }],
+  ]);
+  return {
+    findApiKeyByPrefix: () => Promise.resolve(null),
+    findActiveWebSession: ({ tokenHash }: { tokenHash: string }) => {
+      if (tokenHash === retiredTokenHash) return Promise.resolve(null);
+      const entry = sessions.get(tokenHash);
+      return Promise.resolve(
+        entry
+          ? {
+              id: entry.id,
+              accountId: entry.ctx.account.id,
+              expiresAt: new Date('2027-01-01T00:00:00Z'),
+              revokedAt: null,
+              lastUsedAt: null,
+              mfaSatisfiedAt: null,
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+            }
+          : null,
+      );
+    },
+    getAccount: (id: string) =>
+      Promise.resolve(
+        id === OWNER_CTX.account.id
+          ? OWNER_CTX.account
+          : id === STAFF_CTX.account.id
+            ? STAFF_CTX.account
+            : null,
+      ),
+    findTeamMemberships: () => Promise.resolve([]),
+    findActiveRateLimitOverrides: () => Promise.resolve([]),
+  } as unknown as AccountAuthRepo;
 }
 
 function makeCache(): AuthCache {
   const ownerSha = sha256Hex(OWNER_TOKEN);
   const staffSha = sha256Hex(STAFF_TOKEN);
-  const owner = ctxFor('acc-owner', OWNER_EMAIL);
-  const staff = ctxFor('acc-staff', 'staff@driftstack.test');
   return {
     get: (sha: string) =>
-      Promise.resolve(sha === ownerSha ? owner : sha === staffSha ? staff : null),
+      Promise.resolve(sha === ownerSha ? OWNER_CTX : sha === staffSha ? STAFF_CTX : null),
     set: () => Promise.resolve(),
     invalidateKey: () => Promise.resolve(),
     invalidateAccount: () => Promise.resolve(),
   };
 }
 
-async function buildApp(ownerEmail: string | null): Promise<FastifyInstance> {
+async function buildApp(
+  ownerEmail: string | null,
+  authRepo: AccountAuthRepo = makeRepo(),
+): Promise<FastifyInstance> {
   const app = Fastify();
   await app.register(authPlugin, {
-    authRepo: makeRepo(),
+    authRepo,
     authCache: makeCache(),
     authCoalescer: null,
     ...(ownerEmail !== null ? { ownerEmail } : {}),
@@ -135,6 +172,17 @@ describe('requireOwner — project-owner gate', () => {
       headers: { authorization: `Bearer ${OWNER_TOKEN}` },
     });
     expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('rejects a cached owner after live session authority retires it', async () => {
+    const app = await buildApp(OWNER_EMAIL, makeRepo(sha256Hex(OWNER_TOKEN)));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/owner-only',
+      headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+    });
+    expect(res.statusCode).toBe(401);
     await app.close();
   });
 });
