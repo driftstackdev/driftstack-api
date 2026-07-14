@@ -18,7 +18,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { useRecordings } from '../lib/recordings';
 import { isCloudBaseUrl } from '../lib/telemetry';
-import { listProxies } from '../lib/proxies';
+import { listProxyMetadata } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
 
 export type SidebarViewKind =
@@ -81,7 +81,7 @@ export function Sidebar({
     let cancelled = false;
     void (async () => {
       try {
-        const list = await listProxies();
+        const list = await listProxyMetadata();
         if (!cancelled) setProxyCount(list.length);
       } catch {
         if (!cancelled) setProxyCount(null);

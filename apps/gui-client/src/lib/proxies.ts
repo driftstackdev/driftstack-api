@@ -43,6 +43,10 @@ export interface ProxyConfig {
   wireguard?: WireGuardConfigInput;
 }
 
+/** Non-secret proxy fields safe for counts, pickers, and fleet summaries.
+ * Reading these must not wake the OS credential store. */
+export type ProxyMetadata = Omit<ProxyConfig, 'password' | 'openvpn' | 'wireguard'>;
+
 export interface ProxyDraft {
   label: string;
   host: string;
@@ -83,7 +87,12 @@ interface ProxySecretPayload {
 }
 
 let store: LazyStore | null = null;
+// A protected value only needs to cross the native boundary once per process.
+// Apart from avoiding redundant IPC, this prevents multiple mounted views and
+// background polls from replaying the same macOS Keychain authorization prompt.
 const volatileSecrets = new Map<string, ProxySecretPayload>();
+const protectedLoadFailures = new Map<string, { message: string; retryAfter: number }>();
+const PROTECTED_LOAD_RETRY_MS = 30_000;
 function getStore(): LazyStore {
   if (store === null) {
     store = new LazyStore(STORE_FILE);
@@ -98,6 +107,13 @@ const writeLock = makeWriteLock();
 
 export async function listProxies(): Promise<ProxyConfig[]> {
   return writeLock(listProxiesUnlocked);
+}
+
+/** Read sanitized proxy metadata without touching Keychain. Legacy rows that
+ * still contain plaintext deliberately fall back to the full migration path so
+ * their secrets are protected before the disk copy is purged. */
+export async function listProxyMetadata(): Promise<ProxyMetadata[]> {
+  return writeLock(listProxyMetadataUnlocked);
 }
 
 export async function addProxy(draft: ProxyDraft): Promise<ProxyConfig> {
@@ -190,9 +206,46 @@ export async function setProxyServerId(id: string, serverId: string): Promise<Pr
   });
 }
 
-async function persist(proxies: ProxyConfig[]): Promise<void> {
+async function persist(proxies: readonly PersistedProxyConfig[]): Promise<void> {
   await getStore().set(PROXIES_KEY, proxies.map(toPersistedProxy));
   await getStore().save();
+}
+
+async function listProxyMetadataUnlocked(): Promise<ProxyMetadata[]> {
+  const value = await getStore().get<unknown>(PROXIES_KEY);
+  if (!Array.isArray(value)) {
+    if (value !== undefined) {
+      await getStore().set(PROXIES_KEY, []);
+      await getStore().save();
+    }
+    return [];
+  }
+
+  const metadata: ProxyMetadata[] = [];
+  const seenIds = new Set<string>();
+  let rewriteDisk = false;
+  let requiresSecretMigration = false;
+  for (const raw of value) {
+    if (!isPersistedProxyConfig(raw)) {
+      rewriteDisk = true;
+      continue;
+    }
+    if (seenIds.has(raw.id)) {
+      rewriteDisk = true;
+      continue;
+    }
+    seenIds.add(raw.id);
+    if (hasLegacySecretFields(raw)) requiresSecretMigration = true;
+    const clean = toPersistedProxy(raw);
+    if (!samePersistedShape(raw, clean)) rewriteDisk = true;
+    metadata.push(clean);
+  }
+
+  if (requiresSecretMigration) {
+    return (await listProxiesUnlocked()).map(toPersistedProxy);
+  }
+  if (rewriteDisk) await persist(metadata);
+  return metadata;
 }
 
 async function listProxiesUnlocked(): Promise<ProxyConfig[]> {
@@ -328,11 +381,32 @@ async function saveSecret(proxy: ProxyConfig): Promise<void> {
 
 async function saveSecretPayload(id: string, secret: ProxySecretPayload): Promise<void> {
   await invoke('secret_save', { key: secretName(id), value: JSON.stringify(secret) });
-  volatileSecrets.delete(id);
+  volatileSecrets.set(id, secret);
+  protectedLoadFailures.delete(id);
 }
 
 async function loadSecret(id: string): Promise<ProxySecretPayload | null> {
-  const value = await invoke<string | null>('secret_load', { key: secretName(id) });
+  const cached = volatileSecrets.get(id);
+  if (cached !== undefined) return cached;
+
+  const priorFailure = protectedLoadFailures.get(id);
+  if (priorFailure !== undefined && Date.now() < priorFailure.retryAfter) {
+    throw new Error(priorFailure.message);
+  }
+
+  let value: string | null;
+  try {
+    value = await invoke<string | null>('secret_load', { key: secretName(id) });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Protected proxy credentials unavailable.';
+    protectedLoadFailures.set(id, {
+      message,
+      retryAfter: Date.now() + PROTECTED_LOAD_RETRY_MS,
+    });
+    throw error;
+  }
+  protectedLoadFailures.delete(id);
   if (value === null) return null;
   let parsed: unknown;
   try {
@@ -343,11 +417,13 @@ async function loadSecret(id: string): Promise<ProxySecretPayload | null> {
   if (!isProxySecretPayload(parsed)) {
     throw new Error('Protected proxy credentials have an unsupported format.');
   }
+  volatileSecrets.set(id, parsed);
   return parsed;
 }
 
 async function deleteSecret(id: string): Promise<void> {
   volatileSecrets.delete(id);
+  protectedLoadFailures.delete(id);
   await invoke('secret_delete', { key: secretName(id) });
 }
 

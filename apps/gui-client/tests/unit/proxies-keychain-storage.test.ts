@@ -40,7 +40,8 @@ vi.mock('@tauri-apps/plugin-store', () => ({
   },
 }));
 
-const { addProxy, listProxies, removeProxy, updateProxy } = await import('../../src/lib/proxies');
+const { addProxy, listProxies, listProxyMetadata, removeProxy, updateProxy } =
+  await import('../../src/lib/proxies');
 
 const base = {
   label: 'Amsterdam',
@@ -81,6 +82,85 @@ describe('proxy protected credential storage', () => {
       password: 'socks-secret',
     });
     await expect(listProxies()).resolves.toEqual([added]);
+  });
+
+  it('lists sanitized metadata without reading any protected value', async () => {
+    disk.set('proxies', [
+      {
+        id: 'metadata-only',
+        ...base,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    keychain.set('proxy_secret:metadata-only', 'must-not-be-read');
+
+    await expect(listProxyMetadata()).resolves.toEqual([
+      {
+        id: 'metadata-only',
+        ...base,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('migrates and purges legacy secrets before returning metadata', async () => {
+    disk.set('proxies', [
+      {
+        id: 'legacy-metadata',
+        ...base,
+        password: 'legacy-secret',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const metadata = await listProxyMetadata();
+    expect(metadata).toEqual([
+      {
+        id: 'legacy-metadata',
+        ...base,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    expect(keychain.get('proxy_secret:legacy-metadata')).toContain('legacy-secret');
+    expect(JSON.stringify(disk.get('proxies'))).not.toContain('legacy-secret');
+  });
+
+  it('caches successful protected reads for the lifetime of the process', async () => {
+    disk.set('proxies', [
+      {
+        id: 'cache-once',
+        ...base,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    keychain.set(
+      'proxy_secret:cache-once',
+      JSON.stringify({
+        version: 1,
+        binding: { host: base.host, port: base.port, username: base.username, scheme: null },
+        password: 'cached-secret',
+      }),
+    );
+
+    await expect(listProxies()).resolves.toHaveLength(1);
+    await expect(listProxies()).resolves.toHaveLength(1);
+    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
+  });
+
+  it('backs off after a protected-store denial instead of prompt-looping', async () => {
+    disk.set('proxies', [
+      {
+        id: 'denial-backoff',
+        ...base,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    failSecretAccess = true;
+
+    await expect(listProxies()).rejects.toThrow('credential store locked');
+    await expect(listProxies()).rejects.toThrow('credential store locked');
+    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
   });
 
   it('round-trips OpenVPN and WireGuard blocks only through protected storage', async () => {

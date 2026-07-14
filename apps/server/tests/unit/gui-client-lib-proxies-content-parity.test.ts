@@ -68,6 +68,16 @@ describe('GUI proxy protected-storage content invariant', () => {
     );
   });
 
+  it('keeps count-only reads out of Keychain and suppresses repeated authorization prompts', () => {
+    expect(body).toContain('export async function listProxyMetadata()');
+    expect(body).toContain('if (requiresSecretMigration)');
+    expect(body).toContain('return (await listProxiesUnlocked()).map(toPersistedProxy);');
+    expect(body).toContain('const cached = volatileSecrets.get(id);');
+    expect(body).toContain('if (cached !== undefined) return cached;');
+    expect(body).toContain('const protectedLoadFailures = new Map');
+    expect(body).toContain('Date.now() + PROTECTED_LOAD_RETRY_MS');
+  });
+
   it('retains public validation and server-id sync contracts', () => {
     expect(body).toContain('export async function setProxyServerId(');
     expect(body).toContain('export function validateDraft(d: ProxyDraft): DraftValidation');

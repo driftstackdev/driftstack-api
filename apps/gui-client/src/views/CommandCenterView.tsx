@@ -22,7 +22,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { RelativeTime } from '../components/RelativeTime';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { useOnboardingDismissed, buildOnboardingSteps } from '../lib/use-onboarding-steps';
-import { listProxies } from '../lib/proxies';
+import { listProxyMetadata } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions' | 'settings';
@@ -407,7 +407,7 @@ export function CommandCenterView({
   const [proxyCount, setProxyCount] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void listProxies()
+    void listProxyMetadata()
       .then((list) => {
         if (!cancelled) setProxyCount(list.length);
       })
