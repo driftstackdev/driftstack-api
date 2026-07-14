@@ -137,9 +137,19 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
   });
 
   it('defers token authority until DOMContentLoaded so the AdminLayout SSO bridge lands first', () => {
+    const protectedTokenRead =
+      /function start\(\) \{\s*try \{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch \{\s*token = null;\s*\}\s*if \(!token\) \{/;
+
     expect(body).toMatch(/let token = null;/);
-    expect(body).toMatch(
-      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+    expect(body).toMatch(protectedTokenRead);
+    expect(
+      body.replace(
+        /try \{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch \{\s*token = null;\s*\}/,
+        "token = localStorage.getItem('ds_web_session_token');",
+      ),
+    ).not.toMatch(protectedTokenRead);
+    expect(body.slice(0, body.indexOf('function start()'))).not.toContain(
+      "localStorage.getItem('ds_web_session_token')",
     );
     expect(body).toMatch(
       /if \(document\.readyState === 'loading'\) \{\s*\n?\s*document\.addEventListener\('DOMContentLoaded', start\);\s*\n?\s*\} else \{\s*\n?\s*start\(\);/,
