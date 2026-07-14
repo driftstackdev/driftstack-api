@@ -36,8 +36,9 @@ describe('W504.C apps/marketing-site/src/pages/legal/refunds.md content parity',
   it('Version 1.0 + effective 2026-05-11 + Terms section 8.7 anchor — pinned so the version-tracked policy + the Terms-§8.7-cross-reference both survive (drift to dropping the version header would let the policy drift without a tracked version; drift to dropping the §8.7 anchor would orphan the binding contractual statement from the operational expansion)', () => {
     expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-11/);
     expect(body).toMatch(
-      /incorporated into the \[Terms of Service\]\(terms\.md\) by reference;\s*\n?\s*section 8\.7 of the Terms is the binding contractual statement and\s*\n?\s*this policy expands on the operational mechanics\./,
+      /incorporated into the \[Terms of Service\]\(\/legal\/terms\/\) by reference;\s*\n?\s*section 8\.7 of the Terms is the binding contractual statement and\s*\n?\s*this policy expands on the operational mechanics\./,
     );
+    expect(body).not.toMatch(/\[Terms of Service\]\(terms\.md\)/);
   });
 
   it("4-scenario refund eligibility: 'Failed delivery' + 'Service failure attributable to Driftstack' + 'Within 14 days of first paid charge, no usage' + 'Mistaken duplicate charge' — pinned so the 4-refund-paths stay complete (drift to dropping 'Failed delivery' would orphan stuck-charge customers; drift to changing the 14-day no-usage window would create marketing↔policy divergence)", () => {
