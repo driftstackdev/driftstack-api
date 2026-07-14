@@ -108,7 +108,10 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/const RESEND_REQUEST_TIMEOUT_MS = 15_000/);
     expect(body).toMatch(/let resendInFlight = false/);
     expect(body).toMatch(/let resendOutcomeUnknown = false/);
-    expect(body).toMatch(/if \(resendInFlight \|\| resendOutcomeUnknown\) return/);
+    expect(body).toMatch(/let resendAccepted = false/);
+    expect(body).toMatch(
+      /if \(resendInFlight \|\| resendOutcomeUnknown \|\| resendAccepted\) return/,
+    );
     expect(body).toMatch(/resendInFlight = true/);
     expect(body).toMatch(/resendBtn\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), RESEND_REQUEST_TIMEOUT_MS\)/);
@@ -117,7 +120,10 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/resendInFlight = false/);
     expect(body).toMatch(/resendOutcomeUnknown = true/);
     expect(body).toMatch(/Delivery is unknown after the request timed out/);
-    expect(body).toMatch(/resendBtn\.disabled = resendOutcomeUnknown/);
+    expect(body).toMatch(/resendAccepted = true/);
+    expect(body).toContain('The resend body is unused and delivery may already be');
+    expect(body).not.toMatch(/r\.ok \? r\.json\(\)/);
+    expect(body).toMatch(/resendBtn\.disabled = resendOutcomeUnknown \|\| resendAccepted/);
   });
 
   it('OAuth start is group-serialized, visibly busy, and bounded', () => {

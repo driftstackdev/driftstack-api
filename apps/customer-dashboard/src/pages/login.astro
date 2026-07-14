@@ -290,6 +290,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const RESEND_REQUEST_TIMEOUT_MS = 15_000;
       let resendInFlight = false;
       let resendOutcomeUnknown = false;
+      let resendAccepted = false;
 
       // Problem-type URI the server returns when login is refused because
       // the account's email isn't verified (403). Matched on the body
@@ -444,7 +445,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       if (resendBtn) {
         resendBtn.addEventListener('click', () => {
-          if (resendInFlight || resendOutcomeUnknown) return;
+          if (resendInFlight || resendOutcomeUnknown || resendAccepted) return;
           const email = (form.querySelector('#login-email') || {}).value || '';
           if (!email.trim()) {
             if (resendStatus) resendStatus.textContent = 'Enter your email above first.';
@@ -462,11 +463,17 @@ const apiBaseUrl = resolveApiBaseUrl();
             body: JSON.stringify({ email: email.trim() }),
             signal: controller.signal,
           })
-            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+            .then((r) => {
+              if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
+              // The resend body is unused and delivery may already be
+              // committed. Latch the accepted status before any later UI work
+              // so malformed response JSON can never invite a duplicate email.
+              resendAccepted = true;
+            })
             .then(() => {
               if (resendStatus)
                 resendStatus.textContent =
-                  'Verification email sent. Check your inbox, then enter the code.';
+                  'Verification email sent. Check your inbox, then enter the code. Reload only if nothing arrives.';
             })
             .catch(() => {
               if (controller.signal.aborted) {
@@ -482,7 +489,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             .finally(() => {
               clearTimeout(timeoutId);
               resendInFlight = false;
-              resendBtn.disabled = resendOutcomeUnknown;
+              resendBtn.disabled = resendOutcomeUnknown || resendAccepted;
               resendBtn.setAttribute('aria-busy', 'false');
             });
         });

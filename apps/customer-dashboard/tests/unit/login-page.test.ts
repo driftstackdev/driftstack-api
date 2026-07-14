@@ -453,6 +453,47 @@ describe('login page — local integration', () => {
     expect(status).toMatch(/do not resend again.*inbox and spam.*newest one/i);
   });
 
+  it('treats malformed accepted resend JSON as delivered and refuses forced repeat clicks', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          json(
+            {
+              type: 'https://errors.driftstack.dev/email-not-verified',
+              detail: 'Verify your email before signing in.',
+            },
+            403,
+          ),
+        () =>
+          new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'pending@example.com', 'secret-password');
+    await flush();
+
+    const resendBtn = window.document.querySelector(
+      '[data-resend-verification]',
+    ) as HTMLButtonElement;
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls.filter((c) => /\/v1\/auth\/resend-verification$/.test(c.url))).toHaveLength(
+      1,
+    );
+    expect(resendBtn.disabled).toBe(true);
+    expect(resendBtn.getAttribute('aria-busy')).toBe('false');
+    const status = window.document.querySelector('[data-resend-status]')?.textContent ?? '';
+    expect(status).toMatch(/verification email sent.*check your inbox.*reload only/i);
+    expect(status).not.toMatch(/couldn't resend|try again shortly/i);
+  });
+
   it('serializes duplicate password submits and recovers after the bounded request times out', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       requestTimeoutImmediately: true,
