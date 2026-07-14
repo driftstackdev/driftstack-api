@@ -71,7 +71,7 @@ describe('W510.B apps/marketing-site/src/pages/docs/api-versioning.astro content
 
   it('Deprecation timeline 3-phase pinned: Day 0 announce + Deprecation header (RFC 5988 sunset) + Day 0–90 working (60d/30d email reminders) + Day 90+ 410 Gone — pinned so the 3-phase deprecation cadence + the RFC 5988 sunset-header format + the 410-Gone-with-replacement-pointer commitments survive (drift to a different status (e.g. 404) would create marketing↔server divergence; drift to dropping the 60d/30d email pattern would let deprecations land unannounced)', () => {
     expect(body).toMatch(
-      /<strong>Day 0:<\/strong> Deprecation announced in the\s*\n?\s*<a href="\/changelog">changelog<\/a> and via a\s*\n?\s*<code>Deprecation<\/code> response header on the affected\s*\n?\s*endpoint\. The header includes a sunset date in RFC 5988\s*\n?\s*format\./,
+      /<strong>Day 0:<\/strong> Deprecation announced in the\s*\n?\s*<a href="\/changelog\/">changelog<\/a> and via a\s*\n?\s*<code>Deprecation<\/code> response header on the affected\s*\n?\s*endpoint\. The header includes a sunset date in RFC 5988\s*\n?\s*format\./,
     );
     expect(body).toMatch(
       /<strong>Day 0 → 90:<\/strong> Endpoint continues to work\s*\n?\s*unchanged\. We email accounts that have called the endpoint\s*\n?\s*in the last 30 days at the 60-day and 30-day marks\./,
@@ -111,12 +111,15 @@ describe('W510.B apps/marketing-site/src/pages/docs/api-versioning.astro content
 
   it('SDK semver independent of API + 0.x current pre-1.0 line + 1.x→v1 lockstep + 2.x→v2 lockstep pinned — pinned so the SDK-independent-semver + 0.x-current + future-1.x-still-v1 + 2.x-for-v2 commitments survive (drift to claiming SDK majors track API majors 1:1 today would create marketing↔SDK-versioning divergence)', () => {
     expect(body).toMatch(
-      /The official SDKs \(<a href="\/docs\/sdk-typescript">TypeScript<\/a>,\s*\n?\s*<a href="\/docs\/sdk-python">Python<\/a>,\s*\n?\s*<a href="\/docs\/sdk-go">Go<\/a>\) follow semver independently of\s*\n?\s*the API\./,
+      /The official SDKs \(<a href="\/docs\/sdk-typescript\/">TypeScript<\/a>,\s*\n?\s*<a href="\/docs\/sdk-python\/">Python<\/a>,\s*\n?\s*<a href="\/docs\/sdk-go\/">Go<\/a>\) follow semver independently of\s*\n?\s*the API\./,
     );
     expect(body).toMatch(/SDK <code>0\.x<\/code> is the current pre-1\.0 line/);
     expect(body).toMatch(
       /When the SDK reaches <code>1\.x<\/code>\s*\n?\s*it will continue to target API <code>\/v1\/<\/code>; an API\s*\n?\s*<code>\/v2\/<\/code> would mean an SDK <code>2\.x<\/code> in\s*\n?\s*lockstep\./,
     );
+    for (const path of ['/changelog', '/docs/sdk-typescript', '/docs/sdk-python', '/docs/sdk-go']) {
+      expect(body).not.toContain(`href="${path}"`);
+    }
   });
 
   it('file exists at canonical path', () => {
