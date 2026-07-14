@@ -310,7 +310,7 @@ DASHBOARD_ORIGIN=https://app.driftstack.dev
 # AUTH_MAGIC_LINK_URL=https://app.driftstack.dev/auth/magic-link
 # AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/reset-password
 # AUTH_EXPOSE_DEBUG_TOKEN must remain unset in staging + production —
-# only ever set to `true` in local dev / CI.
+# only ever set to `true` in local dev / CI. Production boot refuses it.
 ```
 
 Production `.env` is structurally identical with environment-tagged

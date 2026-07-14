@@ -26059,3 +26059,34 @@ Verification:
   restoration of the former log-only branch; the focused CORS/bootstrap gate
   passes with 4 files and 61/61 tests, plus strict server source/test
   TypeScript, lint, formatting, diff, and hooks.
+
+## V-612 — production cannot expose auth-flow debug credentials
+
+**Date:** 2026-07-14
+
+Added a fail-closed configuration boundary for `AUTH_EXPOSE_DEBUG_TOKEN`. The
+flag intentionally returns freshly minted plaintext email-verification,
+resend-verification, magic-link, and password-reset tokens to local/CI callers.
+Those response fields are useful for deterministic development but bypass
+mailbox possession. Documentation said the flag must remain disabled in
+production, while configuration previously accepted the exact insecure pair
+without enforcing that requirement.
+
+Configuration loading now refuses
+`AUTH_EXPOSE_DEBUG_TOKEN=true && NODE_ENV=production` before application
+construction. The diagnostic identifies the unsafe flag and credential class
+but contains no generated token or request data. Unset/false production remains
+unchanged; development and test retain the exact-string `true` escape hatch.
+Strict parsing is preserved, so operator values such as `false`, `0`, `no`, and
+`off` cannot become truthy through coercion.
+
+Verification:
+
+- executable configuration tests prove production `true` throws and both
+  development/test `true` values remain enabled;
+- parameterized production tests prove `false`, `0`, `no`, and `off` all remain
+  disabled, in addition to the ordinary unset case;
+- config source guards pin the strict string comparison and the production
+  refusal; the surrounding config/origin gate passes with 4 files and 90/90
+  tests, plus strict server source/test TypeScript, lint, formatting, diff, and
+  hooks.

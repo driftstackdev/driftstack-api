@@ -490,6 +490,11 @@ function deriveAuthFlowUrls(env: NodeJS.ProcessEnv): {
     exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN === 'true',
   };
   if (env.NODE_ENV === 'production') {
+    if (resolved.exposeDebugToken) {
+      throw new Error(
+        'Refusing to boot: AUTH_EXPOSE_DEBUG_TOKEN=true is development/test-only and would expose plaintext one-time authentication tokens in production responses.',
+      );
+    }
     for (const [name, value] of Object.entries({
       DASHBOARD_ORIGIN: env.DASHBOARD_ORIGIN,
       AUTH_VERIFY_EMAIL_URL: resolved.verifyEmail,

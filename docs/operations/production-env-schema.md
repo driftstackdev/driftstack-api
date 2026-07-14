@@ -59,6 +59,9 @@ no DNS record and must not be used unless that custom domain is deliberately
 provisioned and passes DNS, TLS, browser, and GUI capability acceptance first.
 
 `AUTH_EXPOSE_DEBUG_TOKEN` MUST stay unset / false in production. Local dev only.
+The API refuses production boot when its exact value is `true`; this prevents an
+environment regression from returning plaintext verification, magic-link, or
+password-reset credentials in public auth-flow responses.
 
 ### 5. Email (Postmark)
 

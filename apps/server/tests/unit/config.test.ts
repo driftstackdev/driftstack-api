@@ -249,6 +249,41 @@ describe('loadConfig', () => {
     expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.dev/verify-email');
   });
 
+  it('refuses to expose plaintext auth-flow tokens in production', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+        REDIS_URL: 'redis://localhost:6379',
+        NODE_ENV: 'production',
+        DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+        AUTH_EXPOSE_DEBUG_TOKEN: 'true',
+      }),
+    ).toThrow(
+      /AUTH_EXPOSE_DEBUG_TOKEN=true is development\/test-only.*plaintext one-time authentication tokens/,
+    );
+  });
+
+  it.each(['false', '0', 'no', 'off'])('keeps production debug tokens disabled for %s', (raw) => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      NODE_ENV: 'production',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      AUTH_EXPOSE_DEBUG_TOKEN: raw,
+    });
+    expect(cfg.authFlowUrls.exposeDebugToken).toBe(false);
+  });
+
+  it.each(['development', 'test'])('retains the debug-token escape hatch in %s', (nodeEnv) => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      NODE_ENV: nodeEnv,
+      AUTH_EXPOSE_DEBUG_TOKEN: 'true',
+    });
+    expect(cfg.authFlowUrls.exposeDebugToken).toBe(true);
+  });
+
   it('W190 strips trailing slash from DASHBOARD_ORIGIN so `${dashboardOrigin}/billing` is clean', () => {
     // Operator pastes the env var with a trailing slash. Without the
     // schema-level strip, every URL built via template literals would
