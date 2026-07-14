@@ -26889,3 +26889,29 @@ evidence passes 3 files and 47/47 tests; the full behavioural package passes 9
 files and 179/179 tests; the two exact server guards pass 17/17. Package build,
 strict server-test TypeScript, targeted lint/format, diff and whitespace checks
 are green.
+
+## V-636 — GUI control credentials are bound to their session record
+
+**Date:** 2026-07-14
+
+The per-session GUI control credential was encrypted with an authenticated
+cipher, but its envelope did not authenticate the owning account or session
+identity. Integrity therefore covered the plaintext while leaving the database
+record context outside the cryptographic boundary.
+
+New credentials use an explicit v2 envelope and canonical additional
+authenticated data containing a dedicated purpose, account ID and agent-session
+ID. Validation supplies the identity from the loaded record and fails closed for
+legacy, corrupt or context-mismatched blobs with the existing uniform
+unauthorized response. The account-authenticated credential endpoint is the
+only recovery path: it replaces an unusable record with a newly bound credential
+and then preserves the existing within-TTL idempotent echo behavior. No schema,
+OpenAPI or external response shape changed.
+
+Verification covers correct-context round trips, wrong account/session refusal,
+legacy-envelope refusal and authenticated recovery, corrupt-record recovery,
+fresh IVs, tag/key failures, bounded context identities, within-TTL idempotency
+and a route-level record-relocation regression. The focused crypto, content,
+transport and integration suite passes 8 files and 219/219 tests. Strict server
+source/test TypeScript, targeted lint/format, diff and whitespace checks are
+green.

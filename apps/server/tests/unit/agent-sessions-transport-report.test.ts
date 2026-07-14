@@ -347,7 +347,10 @@ describe('ICE.T — POST /v1/agent-sessions/:id/transport-report', () => {
       // Cross-account owner: proves the control-key path does NOT run the
       // account ownership check (the key IS the per-session credential).
       accountId: OTHER_ACCOUNT_ID,
-      guiControlKeyCiphertext: encryptGuiControlKey(CONTROL_KEY, key),
+      guiControlKeyCiphertext: encryptGuiControlKey(CONTROL_KEY, key, {
+        accountId: OTHER_ACCOUNT_ID,
+        sessionId: SESSION_ID,
+      }),
       guiControlKeyExpiresAt: new Date(Date.now() + 60_000),
     });
     const app = await buildApp({
@@ -373,7 +376,10 @@ describe('ICE.T — POST /v1/agent-sessions/:id/transport-report', () => {
   it('401 — a PRESENTED-but-wrong gui_control_key hard-fails (never falls through to account auth)', async () => {
     const key = makeKey();
     const session = makeSession({
-      guiControlKeyCiphertext: encryptGuiControlKey(CONTROL_KEY, key),
+      guiControlKeyCiphertext: encryptGuiControlKey(CONTROL_KEY, key, {
+        accountId: ACCOUNT_ID,
+        sessionId: SESSION_ID,
+      }),
       guiControlKeyExpiresAt: new Date(Date.now() + 60_000),
     });
     const app = await buildApp({ session, guiControlKeyEncryptionKey: key });

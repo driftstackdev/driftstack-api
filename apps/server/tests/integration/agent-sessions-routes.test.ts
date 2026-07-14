@@ -2473,6 +2473,50 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
     expect(modeB.statusCode).toBe(401);
   });
 
+  it('P0: transplanting session A ciphertext onto session B cannot relocate A control authority', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const idA = await createSession();
+    const idB = await createSession();
+    const keyA = await mintKey(idA);
+    const repo = fx.agentSessionsRepo!;
+    const recA = await repo.get(idA);
+    expect(recA?.guiControlKeyCiphertext).not.toBeNull();
+
+    // Model a datastore-write attacker copying their known ciphertext into a
+    // victim row. Before v2 AAD, this made keyA authorize session B.
+    await repo.setGuiControlKey({
+      id: idB,
+      ciphertext: recA!.guiControlKeyCiphertext!,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const relocatedRead = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${idB}`,
+      headers: { [GCK_HEADER]: keyA },
+    });
+    expect(relocatedRead.statusCode).toBe(401);
+
+    // Only account auth may recover the mismatched record. It remints a key
+    // bound to B, while A's key remains unusable on B.
+    const recovered = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${idB}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(recovered.statusCode).toBe(200);
+    const recoveredBody = recovered.json<{ gui_control_key: string; minted: boolean }>();
+    expect(recoveredBody.minted).toBe(true);
+    expect(recoveredBody.gui_control_key).not.toBe(keyA);
+
+    const boundRead = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${idB}`,
+      headers: { [GCK_HEADER]: recoveredBody.gui_control_key },
+    });
+    expect(boundRead.statusCode).toBe(200);
+    expect(boundRead.json<{ id: string }>().id).toBe(idB);
+  });
+
   it('CRITICAL (destructive): a key minted for session A can NOT DELETE session B — 401 (control-key DELETE is bound to its ONE session)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const idA = await createSession();

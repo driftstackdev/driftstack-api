@@ -30,6 +30,7 @@ export const GUI_CONTROL_KEY_HEADER = 'x-driftstack-gui-control-key';
 /** The minimal session shape the validator reads. Both the agent-sessions
  *  service record and the livekit-token route's repo record satisfy this. */
 export interface ControlKeyBoundSession {
+  id: string;
   accountId: string;
   guiControlKeyCiphertext: Buffer | null;
   guiControlKeyExpiresAt: Date | null;
@@ -80,7 +81,10 @@ export function validateGuiControlKey(args: ValidateControlKeyArgs): ControlKeyV
   }
   let expected: string;
   try {
-    expected = decryptGuiControlKey(session.guiControlKeyCiphertext, encryptionKey);
+    expected = decryptGuiControlKey(session.guiControlKeyCiphertext, encryptionKey, {
+      accountId: session.accountId,
+      sessionId: session.id,
+    });
   } catch {
     // Ciphertext that won't decrypt (key rotation / corruption) is treated as
     // no valid key — reject, don't 500.

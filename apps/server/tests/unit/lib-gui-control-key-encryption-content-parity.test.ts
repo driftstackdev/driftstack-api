@@ -1,6 +1,6 @@
 // Drift guard for apps/server/src/lib/gui-control-key-encryption.ts.
 // Pins the Arc 2 sub-slice 8.4 auto-minted gui_control_key encryption
-// — same AES-256-GCM envelope as BYOK Anthropic + gck_-prefixed
+// — versioned, context-bound AES-256-GCM envelope + gck_-prefixed
 // base32 plaintext + 24h-TTL Q2=C verdict + brand-type taint marker.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -23,10 +23,10 @@ describe('lib/gui-control-key-encryption content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Arc 2 sub-slice 8.4 module-level framing pinned: 'Encryption for the auto-minted gui_control_key. Same AES-256-GCM scheme + canonical [IV | tag | ciphertext] blob as the BYOK Anthropic crypto (lib/byok-anthropic-encryption.ts). Re-uses MFA_ENCRYPTION_KEY per Q2=C (24h-TTL, MFA-key pattern).' — pinned so the 8.4 anchor + cross-lib byok-anthropic-encryption cross-reference + Q2=C verdict + 24h-TTL + MFA-key-pattern contract all stay documented", () => {
+  it('Arc 2 sub-slice 8.4 module framing pins the versioned envelope, canonical AAD purpose/account/session binding, and the 24h MFA-key pattern', () => {
     expect(body).toMatch(/\/\/ Arc 2 sub-slice 8\.4 \(v2-#8 AI chat \+ manual side-by-side\)\./);
     expect(body).toMatch(
-      /\/\/ Encryption for the auto-minted gui_control_key\. Same AES-256-GCM\s*\n?\s*\/\/ scheme \+ canonical `\[IV \| tag \| ciphertext\]` blob as the BYOK\s*\n?\s*\/\/ Anthropic crypto \(lib\/byok-anthropic-encryption\.ts\)\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
+      /\/\/ Encryption for the auto-minted gui_control_key\. AES-256-GCM uses a\s*\n?\s*\/\/ versioned `\[magic \| IV \| tag \| ciphertext\]` envelope and canonical\s*\n?\s*\/\/ additional authenticated data \(AAD\) that binds the ciphertext to its\s*\n?\s*\/\/ purpose, owning account, and one agent-session\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
     );
   });
 
@@ -36,12 +36,15 @@ describe('lib/gui-control-key-encryption content parity', () => {
     );
   });
 
-  it("5-constant catalog pinned: GCM_IV_BYTES = 12 + GCM_TAG_BYTES = 16 + AES_256_KEY_BYTES = 32 + PLAINTEXT_BODY_BYTES = 20 + BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567' (RFC 4648 lowercase). Drift to a different alphabet would mint keys that fail to round-trip through any standard base32 decoder", () => {
+  it('cryptographic sizes, bounded context, v2 magic, unique purpose and base32 alphabet are pinned', () => {
     expect(body).toMatch(/const GCM_IV_BYTES = 12;/);
     expect(body).toMatch(/const GCM_TAG_BYTES = 16;/);
     expect(body).toMatch(/const AES_256_KEY_BYTES = 32;/);
     expect(body).toMatch(/const PLAINTEXT_BODY_BYTES = 20;/);
+    expect(body).toMatch(/const MAX_CONTEXT_FIELD_BYTES = 256;/);
     expect(body).toMatch(/const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';/);
+    expect(body).toMatch(/const GUI_CONTROL_KEY_V2_MAGIC = Buffer\.from\('DSGCK2', 'ascii'\);/);
+    expect(body).toMatch(/const GUI_CONTROL_KEY_AAD_PURPOSE = 'driftstack:gui-control-key:v2';/);
   });
 
   it("GuiControlKeyPlaintext brand-type framing pinned: 'string & { readonly __brand: gui-control-key-plaintext }'. + 'Compile-time taint marker so the gui-control-key plaintext can't be assigned to a raw string without an explicit cast — matches the BYOK taint pattern.' — pinned so the brand-pattern + BYOK-taint-pattern-cross-reference + cast-required-for-leak contract all stay documented", () => {
@@ -65,16 +68,17 @@ describe('lib/gui-control-key-encryption content parity', () => {
     );
   });
 
-  it('encryptGuiControlKey + decryptGuiControlKey envelope pinned (same shape as byok-anthropic-encryption): empty-key throws + Buffer.concat([iv, tag, ciphertext]) + setAuthTag on decrypt. Drift would diverge from the canonical envelope shared with BYOK Anthropic encryption', () => {
+  it('encrypt/decrypt require immutable context, authenticate canonical purpose/account/session AAD, and reject non-v2 envelopes', () => {
     expect(body).toMatch(
-      /export function encryptGuiControlKey\(plaintext: string, keyBase64: string\): Buffer \{\s*\n?\s*if \(plaintext\.length === 0\) \{\s*\n?\s*throw new Error\('gui_control_key plaintext is empty; refusing to encrypt'\);\s*\n?\s*\}/,
+      /export function encryptGuiControlKey\(\s*\n?\s*plaintext: string,\s*\n?\s*keyBase64: string,\s*\n?\s*context: GuiControlKeyEncryptionContext,\s*\n?\s*\): Buffer \{/,
     );
+    expect(body).toMatch(/cipher\.setAAD\(buildAdditionalAuthenticatedData\(context\)\);/);
     expect(body).toMatch(
-      /const cipher = createCipheriv\('aes-256-gcm', key, iv\);\s*\n?\s*const ciphertext = Buffer\.concat\(\[cipher\.update\(plaintext, 'utf8'\), cipher\.final\(\)\]\);\s*\n?\s*const tag = cipher\.getAuthTag\(\);\s*\n?\s*return Buffer\.concat\(\[iv, tag, ciphertext\]\);/,
+      /return Buffer\.concat\(\[GUI_CONTROL_KEY_V2_MAGIC, iv, tag, ciphertext\]\);/,
     );
-    expect(body).toMatch(
-      /export function decryptGuiControlKey\(blob: Buffer, keyBase64: string\): GuiControlKeyPlaintext \{/,
-    );
+    expect(body).toMatch(/GUI_CONTROL_KEY_AAD_PURPOSE, accountId, sessionId/);
+    expect(body).toMatch(/ciphertext version is unsupported/);
+    expect(body).toMatch(/decipher\.setAAD\(buildAdditionalAuthenticatedData\(context\)\);/);
     expect(body).toMatch(/decipher\.setAuthTag\(tag\);/);
     expect(body).toMatch(/return plaintext as GuiControlKeyPlaintext;/);
   });

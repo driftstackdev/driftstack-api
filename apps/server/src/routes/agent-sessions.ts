@@ -1622,11 +1622,10 @@ export function registerAgentSessionsRoutes(
    * validate — a present-but-wrong/expired key must NOT silently fall
    * through to the account path.
    *
-   * The key is cryptographically bound to ONE session's stored
-   * ciphertext, so a key minted for session A can never validate
-   * against session B: B's ciphertext decrypts to B's plaintext, which
-   * never equals A's header. Equal-length-buffer + timingSafeEqual
-   * avoids a length/early-return side channel.
+   * The ciphertext's authenticated context binds it to ONE account and
+   * session ID, so moving session A's stored blob onto session B still
+   * fails before plaintext comparison. Equal-length-buffer +
+   * timingSafeEqual avoids a length/early-return side channel.
    */
   async function validateControlKey(
     req: FastifyRequest,
@@ -3219,13 +3218,31 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
         const now = new Date();
-        // Mint when no key exists OR the existing one has expired.
+        // Mint when no key exists, the existing one has expired, or it is a
+        // legacy/corrupt/context-mismatched blob. Only this account-authenticated
+        // route may recover a key; control-key authorization always fails closed.
         const expired =
           rec.guiControlKeyExpiresAt === null ||
           rec.guiControlKeyExpiresAt.getTime() <= now.getTime();
-        if (expired || rec.guiControlKeyCiphertext === null) {
+        let plaintext: string | null = null;
+        if (!expired && rec.guiControlKeyCiphertext !== null) {
+          try {
+            plaintext = decryptGuiControlKey(
+              rec.guiControlKeyCiphertext,
+              guiControlKeyEncryptionKey,
+              { accountId: rec.accountId, sessionId: rec.id },
+            );
+          } catch {
+            // Legacy v1, corruption, encryption-key rotation, and ciphertext
+            // relocation all take the same authenticated recovery path below.
+          }
+        }
+        if (plaintext === null) {
           const plaintext = generateGuiControlKey();
-          const ciphertext = encryptGuiControlKey(plaintext, guiControlKeyEncryptionKey);
+          const ciphertext = encryptGuiControlKey(plaintext, guiControlKeyEncryptionKey, {
+            accountId: rec.accountId,
+            sessionId: rec.id,
+          });
           const expiresAt = new Date(now.getTime() + guiControlKeyTtlMs);
           await sessions.setGuiControlKey({
             id: req.params.id,
@@ -3238,14 +3255,10 @@ export function registerAgentSessionsRoutes(
             minted: true as const,
           };
         }
-        // Live key: decrypt + echo. The dashboard treats every call
-        // as idempotent within the TTL.
-        const plaintext = decryptGuiControlKey(
-          rec.guiControlKeyCiphertext,
-          guiControlKeyEncryptionKey,
-        );
+        // Live v2 key: echo. The dashboard treats every call as idempotent
+        // within the TTL.
         return {
-          gui_control_key: plaintext as string,
+          gui_control_key: plaintext,
           expires_at: rec.guiControlKeyExpiresAt!.toISOString(),
           minted: false as const,
         };
