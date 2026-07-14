@@ -1,10 +1,12 @@
 // Every /v1/admin/* route must carry an admin-or-owner authorization gate.
 //
-// Security invariant: discover ALL literal Fastify admin registrations first,
-// then inspect only their options argument. A scanner whose match itself
-// requires `preHandler` is vacuous: a completely ungated route disappears from
-// the inventory and the assertion still passes. TypeScript's AST also keeps a
-// handler-body mention of requireScope from being mistaken for a preHandler.
+// Security invariant: discover ALL Fastify admin registrations first, then
+// inspect only their options argument. Finite template domains are expanded;
+// any other computed path fails closed instead of disappearing. A scanner whose
+// match itself requires `preHandler` is vacuous: a completely ungated route
+// disappears from the inventory and the assertion still passes. TypeScript's
+// AST also keeps a handler-body mention of requireScope from being mistaken for
+// a preHandler.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -37,6 +39,66 @@ interface StubExemption {
 // being a two-argument registration.
 const STUB_EXEMPTIONS: readonly StubExemption[] = [];
 
+function enclosingForOfValues(node: ts.Node, identifier: string): string[] | null {
+  let parent: ts.Node | undefined = node.parent;
+  while (parent !== undefined) {
+    if (ts.isForOfStatement(parent) && ts.isVariableDeclarationList(parent.initializer)) {
+      const declarations = parent.initializer.declarations;
+      const declaration = declarations.length === 1 ? declarations[0] : undefined;
+      if (
+        declaration !== undefined &&
+        ts.isIdentifier(declaration.name) &&
+        declaration.name.text === identifier
+      ) {
+        let expression = parent.expression;
+        while (ts.isAsExpression(expression) || ts.isParenthesizedExpression(expression)) {
+          expression = expression.expression;
+        }
+        if (!ts.isArrayLiteralExpression(expression)) return null;
+        const values: string[] = [];
+        for (const element of expression.elements) {
+          if (!ts.isStringLiteral(element) && !ts.isNoSubstitutionTemplateLiteral(element)) {
+            return null;
+          }
+          values.push(element.text);
+        }
+        return values;
+      }
+    }
+    parent = parent.parent;
+  }
+  return null;
+}
+
+function routePaths(
+  pathArg: ts.Expression,
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+): string[] {
+  if (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) {
+    return pathArg.text.startsWith('/')
+      ? [pathArg.text]
+      : [`<unresolved:${pathArg.getText(sourceFile)}>`];
+  }
+  if (ts.isTemplateExpression(pathArg)) {
+    let paths = [pathArg.head.text];
+    for (const span of pathArg.templateSpans) {
+      if (!ts.isIdentifier(span.expression)) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      const values = enclosingForOfValues(call, span.expression.text);
+      if (values === null || values.length === 0) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      paths = paths.flatMap((prefix) =>
+        values.map((value) => `${prefix}${value}${span.literal.text}`),
+      );
+    }
+    if (paths.every((path) => path.startsWith('/'))) return paths;
+  }
+  return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+}
+
 function scanAdminRoutes(file: string, source: string): AdminRouteDecl[] {
   const sourceFile = ts.createSourceFile(
     file,
@@ -56,11 +118,7 @@ function scanAdminRoutes(file: string, source: string): AdminRouteDecl[] {
       METHODS.has(node.expression.name.text)
     ) {
       const pathArg = node.arguments[0];
-      if (
-        pathArg !== undefined &&
-        (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) &&
-        pathArg.text.startsWith('/v1/admin/')
-      ) {
+      if (pathArg !== undefined) {
         const secondArg = node.arguments[1];
         const hasSeparateHandler = node.arguments.length >= 3;
         const optionsArg =
@@ -68,14 +126,17 @@ function scanAdminRoutes(file: string, source: string): AdminRouteDecl[] {
             ? secondArg
             : undefined;
         const handlerArg = hasSeparateHandler ? node.arguments[2] : secondArg;
-        routes.push({
-          file,
-          method: node.expression.name.text,
-          path: pathArg.text,
-          optionsText: optionsArg?.getText(sourceFile) ?? '',
-          handlerIdentifier:
-            handlerArg !== undefined && ts.isIdentifier(handlerArg) ? handlerArg.text : null,
-        });
+        for (const path of routePaths(pathArg, node, sourceFile)) {
+          if (!path.startsWith('/v1/admin/') && !path.startsWith('<unresolved:')) continue;
+          routes.push({
+            file,
+            method: node.expression.name.text,
+            path,
+            optionsText: optionsArg?.getText(sourceFile) ?? '',
+            handlerIdentifier:
+              handlerArg !== undefined && ts.isIdentifier(handlerArg) ? handlerArg.text : null,
+          });
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -165,5 +226,32 @@ describe('/v1/admin route authorization invariant', () => {
       );`,
     );
     expect(violations(synthetic)).toEqual([]);
+  });
+
+  it('expands finite literal template domains into every admin route', () => {
+    const synthetic = scanAdminRoutes(
+      'synthetic.ts',
+      `for (const resource of ['accounts', 'sessions'] as const) {
+        app.get(
+          \`/v1/admin/\${resource}\`,
+          { preHandler: [app.requireAuth, app.requireScope('driftstack_internal_admin')] },
+          async () => ({ ok: true }),
+        );
+      }`,
+    );
+    expect(synthetic.map((route) => route.path)).toEqual([
+      '/v1/admin/accounts',
+      '/v1/admin/sessions',
+    ]);
+    expect(violations(synthetic)).toEqual([]);
+  });
+
+  it('reports an unresolved computed route instead of silently skipping it', () => {
+    const synthetic = scanAdminRoutes(
+      'synthetic.ts',
+      `const path = chooseAdminPath();
+      app.get(path, async () => ({ secret: true }));`,
+    );
+    expect(violations(synthetic)).toEqual(['GET <unresolved:path> (synthetic.ts)']);
   });
 });

@@ -2,9 +2,10 @@
 // exact, reviewable exemption.
 //
 // Discover registrations with the TypeScript AST before checking their
-// options. A textual `app.post(` scanner skips generic Fastify calls such as
-// `app.post<{ Params: ... }>(...)`; handler-body mentions must not satisfy the
-// options-only security check.
+// options. Finite template domains are expanded; any other computed path fails
+// closed instead of disappearing. A textual `app.post(` scanner skips generic
+// Fastify calls such as `app.post<{ Params: ... }>(...)`; handler-body mentions
+// must not satisfy the options-only security check.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -136,6 +137,66 @@ function collectIpGateIdentifiers(sourceFile: ts.SourceFile): ReadonlySet<string
   return identifiers;
 }
 
+function enclosingForOfValues(node: ts.Node, identifier: string): string[] | null {
+  let parent: ts.Node | undefined = node.parent;
+  while (parent !== undefined) {
+    if (ts.isForOfStatement(parent) && ts.isVariableDeclarationList(parent.initializer)) {
+      const declarations = parent.initializer.declarations;
+      const declaration = declarations.length === 1 ? declarations[0] : undefined;
+      if (
+        declaration !== undefined &&
+        ts.isIdentifier(declaration.name) &&
+        declaration.name.text === identifier
+      ) {
+        let expression = parent.expression;
+        while (ts.isAsExpression(expression) || ts.isParenthesizedExpression(expression)) {
+          expression = expression.expression;
+        }
+        if (!ts.isArrayLiteralExpression(expression)) return null;
+        const values: string[] = [];
+        for (const element of expression.elements) {
+          if (!ts.isStringLiteral(element) && !ts.isNoSubstitutionTemplateLiteral(element)) {
+            return null;
+          }
+          values.push(element.text);
+        }
+        return values;
+      }
+    }
+    parent = parent.parent;
+  }
+  return null;
+}
+
+function routePaths(
+  pathArg: ts.Expression,
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+): string[] {
+  if (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) {
+    return pathArg.text.startsWith('/')
+      ? [pathArg.text]
+      : [`<unresolved:${pathArg.getText(sourceFile)}>`];
+  }
+  if (ts.isTemplateExpression(pathArg)) {
+    let paths = [pathArg.head.text];
+    for (const span of pathArg.templateSpans) {
+      if (!ts.isIdentifier(span.expression)) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      const values = enclosingForOfValues(call, span.expression.text);
+      if (values === null || values.length === 0) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      paths = paths.flatMap((prefix) =>
+        values.map((value) => `${prefix}${value}${span.literal.text}`),
+      );
+    }
+    if (paths.every((path) => path.startsWith('/'))) return paths;
+  }
+  return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+}
+
 function scanMutationRoutes(file: string, source: string): MutationRouteDecl[] {
   const sourceFile = ts.createSourceFile(
     file,
@@ -156,11 +217,7 @@ function scanMutationRoutes(file: string, source: string): MutationRouteDecl[] {
       MUTATION_METHODS.has(node.expression.name.text)
     ) {
       const pathArg = node.arguments[0];
-      if (
-        pathArg !== undefined &&
-        (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) &&
-        pathArg.text.startsWith('/')
-      ) {
+      if (pathArg !== undefined) {
         const secondArg = node.arguments[1];
         const hasSeparateHandler = node.arguments.length >= 3;
         const optionsArg =
@@ -168,16 +225,18 @@ function scanMutationRoutes(file: string, source: string): MutationRouteDecl[] {
             ? secondArg
             : undefined;
         const handlerArg = hasSeparateHandler ? node.arguments[2] : secondArg;
-        routes.push({
-          file,
-          method: node.expression.name.text,
-          path: pathArg.text,
-          optionsText: optionsArg?.getText(sourceFile) ?? '',
-          handlerIdentifier:
-            handlerArg !== undefined && ts.isIdentifier(handlerArg) ? handlerArg.text : null,
-          ipGateIdentifiers,
-          hasTypeArguments: (node.typeArguments?.length ?? 0) > 0,
-        });
+        for (const path of routePaths(pathArg, node, sourceFile)) {
+          routes.push({
+            file,
+            method: node.expression.name.text,
+            path,
+            optionsText: optionsArg?.getText(sourceFile) ?? '',
+            handlerIdentifier:
+              handlerArg !== undefined && ts.isIdentifier(handlerArg) ? handlerArg.text : null,
+            ipGateIdentifiers,
+            hasTypeArguments: (node.typeArguments?.length ?? 0) > 0,
+          });
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -280,5 +339,29 @@ describe('mutation-route rate-limit coverage invariant', () => {
       );`,
     );
     expect(violations(synthetic)).toEqual([]);
+  });
+
+  it('expands finite literal template domains into every mutation route', () => {
+    const synthetic = scanMutationRoutes(
+      'synthetic.ts',
+      `for (const action of ['start', 'stop'] as const) {
+        app.post(
+          \`/v1/jobs/\${action}\`,
+          { preHandler: [app.requireAuth, app.rateLimit('global')] },
+          async () => ({ ok: true }),
+        );
+      }`,
+    );
+    expect(synthetic.map((route) => route.path)).toEqual(['/v1/jobs/start', '/v1/jobs/stop']);
+    expect(violations(synthetic)).toEqual([]);
+  });
+
+  it('reports an unresolved computed route instead of silently skipping it', () => {
+    const synthetic = scanMutationRoutes(
+      'synthetic.ts',
+      `const path = chooseMutationPath();
+      app.post(path, async () => ({ changed: true }));`,
+    );
+    expect(violations(synthetic)).toEqual(['POST <unresolved:path> (synthetic.ts)']);
   });
 });

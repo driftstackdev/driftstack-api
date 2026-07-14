@@ -26838,3 +26838,26 @@ operations, 230 published and 22 intentionally omitted. Synthetic tests prove
 finite expansion and unresolved-path rejection. Focused authority/OpenAPI
 evidence passes 4 files and 63/63 tests; strict server source/test TypeScript,
 targeted lint/format, diff and whitespace checks are green.
+
+## V-634 — Computed admin and mutation paths fail closed
+
+**Date:** 2026-07-14
+
+The specialized admin-authority and mutation abuse-control invariants still
+discarded every computed route path. A computed admin route carrying only
+ordinary customer authentication or a computed mutation with no limiter could
+therefore pass both specialized controls; the complete route-authority guard
+would not distinguish the weaker authority or missing abuse limit.
+
+Both scanners now expand template identifiers bound by enclosing `for..of`
+loops over finite literal arrays. Every other computed path remains visible as
+an unresolved route and fails the corresponding scope or limiter assertion.
+Current source contains no computed admin or mutation registration, so the
+exact live inventories remain 67 admin routes and 160 mutations with no latent
+violation or product behavior change.
+
+Synthetic tests prove finite expansion and unresolved-path rejection for both
+security classes. The two focused guards pass 2 files and 14/14 tests; the
+combined admin, mutation, complete-authority and OpenAPI inventory matrix passes
+4 files and 31/31 tests. Strict server test TypeScript, targeted lint/format,
+diff and whitespace checks are green.
