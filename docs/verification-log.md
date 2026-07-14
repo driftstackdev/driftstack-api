@@ -27018,3 +27018,27 @@ ceilings and replays exactly. The focused source/export matrix passes 3 files
 and 32/32 tests; the full behavioural package plus duplicate source/index guards
 passes 28 files and 356/356 tests. Package build, strict affected-source/test
 TypeScript, targeted lint/format, diff and whitespace checks are green.
+
+## V-641 — Persona parameters are immutable for the session lifetime
+
+**Date:** 2026-07-14
+
+The canonical persona catalogue exposed a shared array of mutable objects.
+Changing one object obtained from `getProfile()` or `listProfiles()` changed all
+later callers globally. The mock simulator likewise retained a caller-supplied
+array by reference, so mutation after construction could silently change an
+already-created simulator's timing and scroll model. Both behaviors violated
+the documented session-lifetime persona consistency contract.
+
+All `BehaviouralProfile` fields are now readonly. Canonical catalogue entries
+and the catalogue array are frozen at runtime, while each mock simulator takes a
+defensive, deeply frozen snapshot of its injected profiles. The canonical IDs,
+values, order, lookup identity and ordinary generator outputs are unchanged.
+
+Regression tests prove the shared catalogue rejects entry and array mutation,
+failed writes leave later lookups unchanged, source-array mutation cannot alter
+a constructed mock, and returned mock snapshots reject mutation. The focused
+profile/type/mock matrix passes 7 files and 68/68 tests; the full behavioural
+package plus all duplicate guards and the cross-source persona invariant passes
+29 files and 362/362 tests. Package build, strict affected-source/test
+TypeScript, targeted lint/format, diff and whitespace checks are green.

@@ -57,7 +57,7 @@ describe('W595.A packages/behavioural-simulation/src/types.ts content parity', (
       /\/\*\*\s*\n \* The DOM element class a touch interaction targets\. Distributions differ\s*\n \* per class — a `button` tap is short and central; a `video` tap may dwell\s*\n \* longer and bias toward the play affordance; a `scroll-container` touch\s*\n \* begins a swipe rather than completing a tap\.\s*\n \*\s*\n \* V-530\.A — per-element-class distributions\. Sub-slices B \(scroll velocity\),\s*\n \* C \(dwell \+ click-position\), D \(idle jitter \+ multi-touch\) ship later\./m,
     );
     expect(body).toMatch(
-      /^export type ElementClass =\s*\n\s*\| 'button'\s*\n\s*\| 'link'\s*\n\s*\| 'input'\s*\n\s*\| 'image'\s*\n\s*\| 'video'\s*\n\s*\| 'scroll-container'\s*\n\s*\| 'generic';/m,
+      /^export type ElementClass =\s*\n\s*'button' \| 'link' \| 'input' \| 'image' \| 'video' \| 'scroll-container' \| 'generic';/m,
     );
     expect(body).toMatch(/^export interface ElementBounds \{$/m);
     expect(body).toMatch(/\/\*\* Width \(CSS px\)\. Must be > 0\. \*\//);
@@ -88,12 +88,12 @@ describe('W595.A packages/behavioural-simulation/src/types.ts content parity', (
       /\* and apply them to every interaction within the session for coherence\./,
     );
     expect(body).toMatch(/^export interface BehaviouralProfile \{$/m);
-    expect(body).toMatch(/id: string;/);
-    expect(body).toMatch(/meanKeyDelayMs: number;/);
-    expect(body).toMatch(/meanMouseSpeedPxPerMs: number;/);
-    expect(body).toMatch(/meanScrollPxPerTick: number;/);
-    expect(body).toMatch(/pauseProbability: number;/);
-    expect(body).toMatch(/meanPauseMs: number;/);
+    expect(body).toMatch(/readonly id: string;/);
+    expect(body).toMatch(/readonly meanKeyDelayMs: number;/);
+    expect(body).toMatch(/readonly meanMouseSpeedPxPerMs: number;/);
+    expect(body).toMatch(/readonly meanScrollPxPerTick: number;/);
+    expect(body).toMatch(/readonly pauseProbability: number;/);
+    expect(body).toMatch(/readonly meanPauseMs: number;/);
   });
 
   it('file exists at canonical path', () => {

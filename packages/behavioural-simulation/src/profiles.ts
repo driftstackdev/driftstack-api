@@ -32,6 +32,10 @@ function wpmToMeanKeyDelayMs(wpm: number): number {
 /** The v1 persona ids (file 05 §"Persona model"). */
 export type PersonaId = 'casual' | 'regular' | 'power_user';
 
+function freezeProfile(profile: BehaviouralProfile): BehaviouralProfile {
+  return Object.freeze(profile);
+}
+
 /**
  * Persona catalogue — the canonical persona ID SET (`casual`/`regular`/
  * `power_user`, file 05) for selection (dashboard / SDK / session-create).
@@ -46,8 +50,8 @@ export type PersonaId = 'casual' | 'regular' | 'power_user';
  * canonical; 5-param vs the rich shared shape). Tier-2 ML updates the shared
  * JSON, not this. See docs/internal/2026-06-10-behavioral-model-ownership-decision.md.
  */
-export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = [
-  {
+export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = Object.freeze([
+  freezeProfile({
     // base_wpm 38 (file 05). Deliberate, hunt-and-peck-ish mobile typist;
     // scrolls cautiously and pauses often to read.
     id: 'casual',
@@ -56,8 +60,8 @@ export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = [
     meanScrollPxPerTick: 28,
     pauseProbability: 0.16,
     meanPauseMs: 950,
-  },
-  {
+  }),
+  freezeProfile({
     // ~52 WPM. Comfortable thumb-typist; moderate scroll + pause cadence.
     id: 'regular',
     meanKeyDelayMs: wpmToMeanKeyDelayMs(52),
@@ -65,8 +69,8 @@ export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = [
     meanScrollPxPerTick: 42,
     pauseProbability: 0.1,
     meanPauseMs: 720,
-  },
-  {
+  }),
+  freezeProfile({
     // ~72 WPM. Fast, fluent power user; aggressive scroll, rarely pauses.
     id: 'power_user',
     meanKeyDelayMs: wpmToMeanKeyDelayMs(72),
@@ -74,8 +78,8 @@ export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = [
     meanScrollPxPerTick: 58,
     pauseProbability: 0.06,
     meanPauseMs: 520,
-  },
-];
+  }),
+]);
 
 /** Look up a persona by id; `undefined` if unknown (caller decides the
  *  fallback — typically `DEFAULT_PERSONA_ID`). */

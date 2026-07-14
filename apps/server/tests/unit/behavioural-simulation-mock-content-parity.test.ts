@@ -29,7 +29,9 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
   });
 
   it('DEFAULT_PROFILES: 2 personas (casual_browser_us + fast_typer_dev) with full BehaviouralProfile shape pinned', () => {
-    expect(body).toMatch(/^const DEFAULT_PROFILES: readonly BehaviouralProfile\[\] = \[/m);
+    expect(body).toMatch(
+      /^const DEFAULT_PROFILES: readonly BehaviouralProfile\[\] = immutableProfileSnapshot\(\[/m,
+    );
     expect(body).toMatch(
       /\{\s*\n\s*id: 'casual_browser_us',\s*\n\s*meanKeyDelayMs: 120,\s*\n\s*meanMouseSpeedPxPerMs: 0\.4,\s*\n\s*meanScrollPxPerTick: 80,\s*\n\s*pauseProbability: 0\.25,\s*\n\s*meanPauseMs: 800,\s*\n\s*\}/,
     );
@@ -48,8 +50,12 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(
       /^export class MockBehaviouralSimulator implements BehaviouralSimulator \{$/m,
     );
+    expect(body).toMatch(/private readonly profiles: readonly BehaviouralProfile\[\];/);
     expect(body).toMatch(
-      /constructor\(private readonly profiles: readonly BehaviouralProfile\[\] = DEFAULT_PROFILES\) \{\}/,
+      /constructor\(profiles: readonly BehaviouralProfile\[\] = DEFAULT_PROFILES\) \{\s*\n\s*this\.profiles = immutableProfileSnapshot\(profiles\);\s*\n\s*\}/,
+    );
+    expect(body).toMatch(
+      /return Object\.freeze\(profiles\.map\(\(profile\) => Object\.freeze\(\{ \.\.\.profile \}\)\)\);/,
     );
     expect(body).toMatch(
       /generateMouseTrajectory\(opts: GenerateMouseTrajectoryOpts\): MouseTrajectory \{/,

@@ -26,7 +26,13 @@ import type {
   TouchEvent,
 } from './types.js';
 
-const DEFAULT_PROFILES: readonly BehaviouralProfile[] = [
+function immutableProfileSnapshot(
+  profiles: readonly BehaviouralProfile[],
+): readonly BehaviouralProfile[] {
+  return Object.freeze(profiles.map((profile) => Object.freeze({ ...profile })));
+}
+
+const DEFAULT_PROFILES: readonly BehaviouralProfile[] = immutableProfileSnapshot([
   {
     id: 'casual_browser_us',
     meanKeyDelayMs: 120,
@@ -43,7 +49,7 @@ const DEFAULT_PROFILES: readonly BehaviouralProfile[] = [
     pauseProbability: 0.1,
     meanPauseMs: 300,
   },
-];
+]);
 
 /**
  * Bounds on `generateMouseTrajectory`'s `samples` option. There is no non-mock
@@ -70,7 +76,11 @@ function defaultSeed(label: string, opts: unknown): string {
 }
 
 export class MockBehaviouralSimulator implements BehaviouralSimulator {
-  constructor(private readonly profiles: readonly BehaviouralProfile[] = DEFAULT_PROFILES) {}
+  private readonly profiles: readonly BehaviouralProfile[];
+
+  constructor(profiles: readonly BehaviouralProfile[] = DEFAULT_PROFILES) {
+    this.profiles = immutableProfileSnapshot(profiles);
+  }
 
   generateMouseTrajectory(opts: GenerateMouseTrajectoryOpts): MouseTrajectory {
     for (const [name, value] of [

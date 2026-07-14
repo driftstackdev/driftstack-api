@@ -257,4 +257,21 @@ describe('MockBehaviouralSimulator — determinism', () => {
     const sim = new MockBehaviouralSimulator([PROFILE]);
     expect(sim.listProfiles()).toEqual([PROFILE]);
   });
+
+  it('snapshots and freezes injected profiles for session-lifetime consistency', () => {
+    const source = { ...PROFILE };
+    const injected = [source];
+    const sim = new MockBehaviouralSimulator(injected);
+    source.meanKeyDelayMs = 1;
+    injected.pop();
+
+    const snapshot = sim.listProfiles();
+    expect(snapshot).toEqual([PROFILE]);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot[0])).toBe(true);
+    expect(() => {
+      (snapshot[0] as { meanKeyDelayMs: number }).meanKeyDelayMs = 2;
+    }).toThrow(TypeError);
+    expect(sim.listProfiles()).toEqual([PROFILE]);
+  });
 });

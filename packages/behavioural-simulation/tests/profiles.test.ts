@@ -5,6 +5,7 @@ import {
   getProfile,
   listProfiles,
   PROFILE_CATALOGUE,
+  type BehaviouralProfile,
 } from '../src/index.js';
 
 describe('behavioural persona catalogue', () => {
@@ -20,6 +21,22 @@ describe('behavioural persona catalogue', () => {
 
   it('listProfiles returns the full catalogue', () => {
     expect(listProfiles()).toBe(PROFILE_CATALOGUE);
+    expect(listProfiles()).toHaveLength(3);
+  });
+
+  it('deep-freezes the shared catalogue so one caller cannot rewrite every persona', () => {
+    const casual = getProfile('casual')!;
+    const originalDelay = casual.meanKeyDelayMs;
+    expect(Object.isFrozen(PROFILE_CATALOGUE)).toBe(true);
+    expect(PROFILE_CATALOGUE.every((profile) => Object.isFrozen(profile))).toBe(true);
+
+    expect(() => {
+      (casual as { meanKeyDelayMs: number }).meanKeyDelayMs = 1;
+    }).toThrow(TypeError);
+    expect(() => {
+      (PROFILE_CATALOGUE as BehaviouralProfile[]).pop();
+    }).toThrow(TypeError);
+    expect(getProfile('casual')?.meanKeyDelayMs).toBe(originalDelay);
     expect(listProfiles()).toHaveLength(3);
   });
 

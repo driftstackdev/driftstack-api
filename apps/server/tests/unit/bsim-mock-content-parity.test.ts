@@ -81,7 +81,7 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
 
   it('DEFAULT_PROFILES: 2-entry catalogue (casual_browser_us with meanKeyDelayMs:120 + fast_typer_dev with meanKeyDelayMs:60); each has 5 numeric fields (meanKeyDelayMs + meanMouseSpeedPxPerMs + meanScrollPxPerTick + pauseProbability + meanPauseMs)', () => {
     expect(body).toMatch(
-      /const DEFAULT_PROFILES: readonly BehaviouralProfile\[\] = \[\s*\n?\s*\{\s*\n?\s*id: 'casual_browser_us',\s*\n?\s*meanKeyDelayMs: 120,\s*\n?\s*meanMouseSpeedPxPerMs: 0\.4,\s*\n?\s*meanScrollPxPerTick: 80,\s*\n?\s*pauseProbability: 0\.25,\s*\n?\s*meanPauseMs: 800,\s*\n?\s*\},\s*\n?\s*\{\s*\n?\s*id: 'fast_typer_dev',\s*\n?\s*meanKeyDelayMs: 60,\s*\n?\s*meanMouseSpeedPxPerMs: 0\.6,\s*\n?\s*meanScrollPxPerTick: 120,\s*\n?\s*pauseProbability: 0\.1,\s*\n?\s*meanPauseMs: 300,\s*\n?\s*\},\s*\n?\s*\];/,
+      /const DEFAULT_PROFILES: readonly BehaviouralProfile\[\] = immutableProfileSnapshot\(\[\s*\n?\s*\{\s*\n?\s*id: 'casual_browser_us',\s*\n?\s*meanKeyDelayMs: 120,\s*\n?\s*meanMouseSpeedPxPerMs: 0\.4,\s*\n?\s*meanScrollPxPerTick: 80,\s*\n?\s*pauseProbability: 0\.25,\s*\n?\s*meanPauseMs: 800,\s*\n?\s*\},\s*\n?\s*\{\s*\n?\s*id: 'fast_typer_dev',\s*\n?\s*meanKeyDelayMs: 60,\s*\n?\s*meanMouseSpeedPxPerMs: 0\.6,\s*\n?\s*meanScrollPxPerTick: 120,\s*\n?\s*pauseProbability: 0\.1,\s*\n?\s*meanPauseMs: 300,\s*\n?\s*\},\s*\n?\s*\]\);/,
     );
   });
 
@@ -91,9 +91,12 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
-  it('MockBehaviouralSimulator class implements BehaviouralSimulator; constructor profiles default = DEFAULT_PROFILES; readonly modifier', () => {
+  it('MockBehaviouralSimulator snapshots injected profiles into a frozen readonly catalogue', () => {
     expect(body).toMatch(
-      /export class MockBehaviouralSimulator implements BehaviouralSimulator \{\s*\n?\s*constructor\(private readonly profiles: readonly BehaviouralProfile\[\] = DEFAULT_PROFILES\) \{\}/,
+      /function immutableProfileSnapshot\([\s\S]*?return Object\.freeze\(profiles\.map\(\(profile\) => Object\.freeze\(\{ \.\.\.profile \}\)\)\);/,
+    );
+    expect(body).toMatch(
+      /export class MockBehaviouralSimulator implements BehaviouralSimulator \{\s*\n?\s*private readonly profiles: readonly BehaviouralProfile\[\];\s*\n?\s*constructor\(profiles: readonly BehaviouralProfile\[\] = DEFAULT_PROFILES\) \{\s*\n?\s*this\.profiles = immutableProfileSnapshot\(profiles\);\s*\n?\s*\}/,
     );
   });
 

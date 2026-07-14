@@ -60,13 +60,7 @@ export interface ScrollPattern {
  * C (dwell + click-position), D (idle jitter + multi-touch) ship later.
  */
 export type ElementClass =
-  | 'button'
-  | 'link'
-  | 'input'
-  | 'image'
-  | 'video'
-  | 'scroll-container'
-  | 'generic';
+  'button' | 'link' | 'input' | 'image' | 'video' | 'scroll-container' | 'generic';
 
 /** Rectangular DOM bounds for the touched element (CSS-pixel coordinates). */
 export interface ElementBounds {
@@ -145,15 +139,15 @@ export interface TouchDistribution {
  */
 export interface BehaviouralProfile {
   /** Stable identifier for this profile (e.g. `'casual_browser_us'`). */
-  id: string;
+  readonly id: string;
   /** Mean inter-keystroke delay (ms). Real generators add jitter around this. */
-  meanKeyDelayMs: number;
+  readonly meanKeyDelayMs: number;
   /** Mean mouse travel speed (px/ms). */
-  meanMouseSpeedPxPerMs: number;
+  readonly meanMouseSpeedPxPerMs: number;
   /** Mean scroll velocity (px/tick). */
-  meanScrollPxPerTick: number;
+  readonly meanScrollPxPerTick: number;
   /** Probability the persona pauses between actions (0..1). */
-  pauseProbability: number;
+  readonly pauseProbability: number;
   /** Mean pause duration when one fires (ms). */
-  meanPauseMs: number;
+  readonly meanPauseMs: number;
 }

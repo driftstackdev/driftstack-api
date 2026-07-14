@@ -79,7 +79,7 @@ describe('W452.A packages/behavioural-simulation/src/types.ts content parity', (
       /\* V-530\.A — per-element-class distributions\. Sub-slices B \(scroll velocity\),\s*\n?\s*\*\s*C \(dwell \+ click-position\), D \(idle jitter \+ multi-touch\) ship later\./,
     );
     expect(body).toMatch(
-      /export type ElementClass =\s*\n?\s*\| 'button'\s*\n?\s*\| 'link'\s*\n?\s*\| 'input'\s*\n?\s*\| 'image'\s*\n?\s*\| 'video'\s*\n?\s*\| 'scroll-container'\s*\n?\s*\| 'generic';/,
+      /export type ElementClass =\s*\n?\s*'button' \| 'link' \| 'input' \| 'image' \| 'video' \| 'scroll-container' \| 'generic';/,
     );
   });
 
@@ -124,7 +124,7 @@ describe('W452.A packages/behavioural-simulation/src/types.ts content parity', (
       /\* Top-level behavioural profile — bundles cadence preferences for a\s*\n?\s*\*\s*synthetic persona\. Real generators sample these once at session-start\s*\n?\s*\*\s*and apply them to every interaction within the session for coherence\./,
     );
     expect(body).toMatch(
-      /export interface BehaviouralProfile \{[\s\S]*?id: string;[\s\S]*?meanKeyDelayMs: number;[\s\S]*?meanMouseSpeedPxPerMs: number;[\s\S]*?meanScrollPxPerTick: number;[\s\S]*?\/\*\* Probability the persona pauses between actions \(0\.\.1\)\. \*\/\s*\n?\s*pauseProbability: number;[\s\S]*?meanPauseMs: number;/,
+      /export interface BehaviouralProfile \{[\s\S]*?readonly id: string;[\s\S]*?readonly meanKeyDelayMs: number;[\s\S]*?readonly meanMouseSpeedPxPerMs: number;[\s\S]*?readonly meanScrollPxPerTick: number;[\s\S]*?\/\*\* Probability the persona pauses between actions \(0\.\.1\)\. \*\/\s*\n?\s*readonly pauseProbability: number;[\s\S]*?readonly meanPauseMs: number;/,
     );
   });
 

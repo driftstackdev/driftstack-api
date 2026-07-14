@@ -34,6 +34,10 @@ describe('BehavioralProfile ⇔ persona-catalogue cross-source invariant', () =>
     const profiles = read('packages/behavioural-simulation/src/profiles.ts');
     expect(profiles).toMatch(/export type PersonaId = 'casual' \| 'regular' \| 'power_user';/);
     expect(profiles).toMatch(/DEFAULT_PERSONA_ID: PersonaId = 'regular';/);
+    expect(profiles).toContain('return Object.freeze(profile);');
+    expect(profiles).toContain(
+      'export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = Object.freeze([',
+    );
     for (const id of PERSONA_IDS) {
       expect(profiles, `PROFILE_CATALOGUE must contain id '${id}'`).toMatch(
         new RegExp(`id: '${id}'`),
