@@ -57,9 +57,10 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(
       /href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/tree\/main\/docs"/,
     );
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/self-hosted"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing\/"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security\/"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/self-hosted\/"/);
+    expect(body).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security|self-hosted)"/);
     expect(body).toMatch(/href="mailto:support@driftstack\.dev"/);
     expect(existsSync(INDEX)).toBe(true);
   });
