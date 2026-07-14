@@ -87,10 +87,12 @@ describe('W466.C apps/gui-client/src/lib/use-admin-order-events.ts content parit
     expect(body).toContain("accept: 'application/json',");
   });
 
-  it('Defensive parsing: body typed as {events?: AdminOrderEvent[]} + Array.isArray(body.events) ? body.events : [] fallback (handles server returning {} or {events: null})', () => {
+  it('Bounded defensive parsing: typed event envelope + Array.isArray fallback handles {} or {events: null}', () => {
     expect(body).toMatch(
-      /const body = \(await res\.json\(\)\) as \{ events\?: AdminOrderEvent\[\] \};/,
+      /const body = await readBoundedApiJson<\{ events\?: AdminOrderEvent\[\] \}>\(res\);/,
     );
+    expect(body).toMatch(/import \{ readBoundedApiJson \} from '\.\/read-bounded-json';/);
+    expect(body).not.toMatch(/\bres\.json\(\)/);
     expect(body).toContain(
       "setState({ kind: 'ready', events: Array.isArray(body.events) ? body.events : [] });",
     );
