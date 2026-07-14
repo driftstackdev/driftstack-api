@@ -127,9 +127,12 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     expect(body).toMatch(/OpenVPN \+ WG/);
   });
 
-  it("CTA pair pinned: 'Contact sales' → mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry (primary) + 'See pricing' → /pricing#self-hosted (secondary) — pinned so the conversion path stays consistent (drift to dropping the URL-encoded subject would lose the routing tag self-hosted-tagged inquiries get)", () => {
-    expect(body).toMatch(/mailto:sales@driftstack\.dev\?subject=Self-Hosted%20inquiry/);
-    expect(body).toMatch(/<a href="\/pricing#self-hosted" class="btn-secondary">See pricing<\/a>/);
+  it('CTA pair pins the tagged sales mailto and canonical pricing anchor through CtaBand props', () => {
+    expect(body).toMatch(
+      /primaryHref="mailto:sales@driftstack\.dev\?subject=Self-Hosted%20inquiry"\s*primaryLabel="Contact sales"/,
+    );
+    expect(body).toMatch(/secondaryHref="\/pricing\/#self-hosted"\s*secondaryLabel="See pricing"/);
+    expect(body).not.toContain('secondaryHref="/pricing#self-hosted"');
   });
 
   it('file exists at canonical path', () => {
