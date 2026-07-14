@@ -35,14 +35,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           <span
             aria-hidden="true"
             data-live-dot
-            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+            class="inline-block h-2 w-2 rounded-full bg-amber-500"
           ></span>
-          <span>Live · updated <span data-live-age>just now</span></span>
+          <span data-live-status>Waiting for live data</span>
+          <span data-live-age class="hidden"></span>
         </span>
         <button
           type="button"
           data-live-refresh
-          class="text-tk-accent hover:underline"
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in."
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
         >
           Refresh now
         </button>
@@ -67,17 +71,28 @@ const apiBaseUrl = resolveApiBaseUrl();
           name="email"
           type="email"
           required
+          disabled
+          aria-disabled="true"
+          title="Available after the live subscriber list loads."
           placeholder="customer@example.com"
-          class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
+          class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent disabled:cursor-not-allowed disabled:bg-tk-hover disabled:text-tk-ink-3"
         />
       </div>
-      <button type="submit" class="btn-primary">Add subscriber</button>
+      <button
+        type="submit"
+        disabled
+        aria-disabled="true"
+        title="Available after the live subscriber list loads."
+        class="btn-primary disabled:cursor-not-allowed disabled:opacity-60">Add subscriber</button
+      >
     </form>
     <div data-add-result class="mb-6 hidden rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs"></div>
 
     <div class="rounded-lg border border-tk-border bg-tk-surface">
       <ul data-list class="divide-y divide-slate-100">
-        <li class="px-6 py-4 text-sm text-tk-ink-3">Loading subscribers…</li>
+        <li class="px-6 py-4 text-sm text-tk-ink-3">
+          Live subscribers are unavailable until loaded.
+        </li>
       </ul>
     </div>
 
@@ -95,6 +110,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (!root) return;
       const list = root.querySelector('[data-list]');
       const banner = root.querySelector('[data-banner]');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveStatus = root.querySelector('[data-live-status]');
+      const ageEl = root.querySelector('[data-live-age]');
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      const addForm = root.querySelector('[data-add-form]');
+      const addEmail = addForm ? addForm.querySelector('#add-email') : null;
+      const addSubmit = addForm ? addForm.querySelector('button[type="submit"]') : null;
+      const addResult = root.querySelector('[data-add-result]');
       const SUBSCRIBER_TIMEOUT_MS = 15_000;
       let refreshController = null;
       let refreshGeneration = 0;
@@ -102,6 +125,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const uncertainForceUnsubs = new Set();
       let addInFlight = false;
       let addOutcomeUnknown = false;
+      let subscriberDataAvailable = false;
+      let lastFetch = null;
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         return window.driftstackFetchWithDeadline(url, init, SUBSCRIBER_TIMEOUT_MS, controller);
@@ -130,6 +155,61 @@ const apiBaseUrl = resolveApiBaseUrl();
           banner.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
         } else {
           banner.classList.remove('border-red-200', 'bg-red-50', 'text-red-700');
+        }
+      }
+
+      function setRefreshAuthority(available, reason) {
+        if (!refreshBtn) return;
+        refreshBtn.disabled = !available;
+        refreshBtn.setAttribute('aria-disabled', available ? 'false' : 'true');
+        if (available) refreshBtn.removeAttribute('title');
+        else refreshBtn.title = reason || 'Available after staff sign-in.';
+      }
+
+      function setAddAuthority(available, reason) {
+        subscriberDataAvailable = available;
+        const unavailableReason = reason || 'Available after the live subscriber list loads.';
+        if (addEmail) {
+          addEmail.disabled = !available;
+          addEmail.setAttribute('aria-disabled', available ? 'false' : 'true');
+          if (available) addEmail.removeAttribute('title');
+          else addEmail.title = unavailableReason;
+        }
+        if (addSubmit) {
+          const disabled = !available || addInFlight || addOutcomeUnknown;
+          addSubmit.disabled = disabled;
+          addSubmit.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+          if (addOutcomeUnknown) {
+            addSubmit.title = 'Reload later to verify the previous add-subscriber outcome.';
+          } else if (!available) {
+            addSubmit.title = unavailableReason;
+          } else if (addInFlight) {
+            addSubmit.title = 'Wait for the current add-subscriber action to finish.';
+          } else {
+            addSubmit.removeAttribute('title');
+          }
+        }
+      }
+
+      function renderUnavailable(message) {
+        setAddAuthority(false, message);
+        if (list) {
+          list.innerHTML =
+            '<li class="px-6 py-12 text-center text-sm text-tk-ink-3">' +
+            escapeHtml(message) +
+            '</li>';
+        }
+      }
+
+      function setLiveState(state, message) {
+        if (liveDot) {
+          const color = state === 'success' ? 'bg-emerald-500' : state === 'error' ? 'bg-red-500' : 'bg-amber-500';
+          liveDot.className = 'inline-block h-2 w-2 rounded-full ' + color;
+        }
+        if (liveStatus) liveStatus.textContent = message;
+        if (ageEl) {
+          ageEl.classList.toggle('hidden', state !== 'success');
+          if (state === 'success') ageEl.textContent = '· updated just now';
         }
       }
 
@@ -217,16 +297,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       function refresh() {
         const token = getToken();
         if (!token) {
-          if (list)
-            list.innerHTML =
-              '<li class="px-6 py-12 text-center">' +
-              '<div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">' +
-              '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-              '<rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />' +
-              '</svg></div>' +
-              '<h2 class="text-base font-semibold tracking-tight text-tk-ink">Sign in to view subscribers</h2>' +
-              '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">Sign in with a staff admin key via the dashboard SSO bridge to load status-page subscribers.</p>' +
-              '</li>';
+          refreshGeneration += 1;
+          if (refreshController) refreshController.abort();
+          refreshController = null;
+          root.removeAttribute('aria-busy');
+          renderUnavailable('Sign in with a staff admin account to load subscribers.');
+          setRefreshAuthority(false, 'Available after staff sign-in.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return Promise.resolve(false);
         }
         if (refreshController) refreshController.abort();
@@ -244,8 +321,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.json();
           })
           .then(function (body) {
-            if (generation !== refreshGeneration) return;
+            if (generation !== refreshGeneration) return null;
             const subs = body.data || [];
+            setAddAuthority(true);
             if (subs.length === 0) {
               if (list)
                 list.innerHTML =
@@ -270,7 +348,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             // previous read. Its late rejection (or a response that had
             // already reached body parsing) must not overwrite the newer
             // list or publish a false timeout banner.
-            if (generation !== refreshGeneration) return;
+            if (generation !== refreshGeneration) return null;
+            renderUnavailable('Could not load the current subscriber list. Refresh to try again.');
             showBanner(
               'Failed to load subscribers: ' +
                 requestErrorMessage(err, 'network error'),
@@ -335,11 +414,11 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
               if (!response.ok) throw new Error('HTTP ' + response.status);
               await response.json();
-              await refresh();
+              await refreshWithLive();
             } catch (err) {
               if (err && err.name === 'AbortError') {
                 uncertainForceUnsubs.add(id);
-                const refreshed = Boolean(await refresh());
+                const refreshed = Boolean(await refreshWithLive());
                 const stillActive = Array.from(
                   list ? list.querySelectorAll('[data-force-unsub]') : [],
                 ).some((action) => action.getAttribute('data-force-unsub') === id);
@@ -389,21 +468,19 @@ const apiBaseUrl = resolveApiBaseUrl();
       // shows the returned unsubscribe link in the success banner so
       // staff can copy it for the customer. Refreshes the list on
       // success.
-      const addForm = root.querySelector('[data-add-form]');
-      const addResult = root.querySelector('[data-add-result]');
       if (addForm) {
         addForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
-          if (addInFlight || addOutcomeUnknown) return;
+          if (!subscriberDataAvailable || addInFlight || addOutcomeUnknown) return;
           const token = getToken();
           if (!token) {
             showBanner('Sign in with a staff admin account first.', true);
             return;
           }
-          const emailEl = addForm.querySelector('#add-email');
+          const emailEl = addEmail;
           const email = emailEl && 'value' in emailEl ? emailEl.value.trim() : '';
           if (!email) return;
-          const submitBtn = addForm.querySelector('button[type="submit"]');
+          const submitBtn = addSubmit;
           addInFlight = true;
           addForm.setAttribute('aria-busy', 'true');
           if (submitBtn) {
@@ -446,7 +523,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             .catch(async (err) => {
               if (err && err.name === 'AbortError') {
                 addOutcomeUnknown = true;
-                const refreshed = Boolean(await refresh());
+                const refreshed = Boolean(await refreshWithLive());
                 const normalizedEmail = email.toLowerCase();
                 const appearsInList = Array.from(
                   list ? list.querySelectorAll('[data-subscriber-email]') : [],
@@ -476,9 +553,9 @@ const apiBaseUrl = resolveApiBaseUrl();
               addInFlight = false;
               addForm.removeAttribute('aria-busy');
               if (submitBtn) {
-                submitBtn.disabled = addOutcomeUnknown;
                 submitBtn.textContent = addOutcomeUnknown ? 'Check status' : 'Add subscriber';
               }
+              setAddAuthority(subscriberDataAvailable);
             });
         });
       }
@@ -486,42 +563,54 @@ const apiBaseUrl = resolveApiBaseUrl();
       // 2026-05-22 — live auto-poll. Same pattern as ab41f9d8.
       // Subscribers list refreshes every 30s so a fresh confirmed
       // subscription appears without F5.
-      let lastFetch = Date.now();
       function refreshWithLive() {
-        const liveDot = root.querySelector('[data-live-dot]');
-        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        setLiveState('loading', 'Loading live data…');
+        setRefreshAuthority(false, 'Loading the current subscriber list.');
         const p = refresh();
+        const generation = refreshGeneration;
         if (p && typeof p.then === 'function') {
           p.then(
-            () => {
-              lastFetch = Date.now();
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+            (loaded) => {
+              if (generation !== refreshGeneration || loaded === null) return;
+              if (loaded === true) {
+                lastFetch = Date.now();
+                setLiveState('success', 'Live');
+              } else {
+                setLiveState('error', getToken() ? 'Live data unavailable' : 'Staff sign-in required');
+              }
+              setRefreshAuthority(Boolean(getToken()), 'Available after staff sign-in.');
             },
             () => {
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+              if (generation !== refreshGeneration) return;
+              setLiveState('error', 'Live data unavailable');
+              setRefreshAuthority(Boolean(getToken()), 'Available after staff sign-in.');
             },
           );
-        } else {
-          lastFetch = Date.now();
         }
         return p;
       }
-      const refreshBtn = root.querySelector('[data-live-refresh]');
-      if (refreshBtn) refreshBtn.addEventListener('click', refreshWithLive);
-      setInterval(refreshWithLive, 30_000);
       function fmtAge(ms) {
+        if (!ms) return '';
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
         if (s < 60) return s.toString() + 's ago';
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
-      const ageEl = root.querySelector('[data-live-age]');
-      setInterval(() => {
-        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
-      }, 5_000);
+      function start() {
+        if (refreshBtn) refreshBtn.addEventListener('click', refreshWithLive);
+        setInterval(refreshWithLive, 30_000);
+        setInterval(() => {
+          if (ageEl && lastFetch) ageEl.textContent = '· updated ' + fmtAge(lastFetch);
+        }, 5_000);
+        refreshWithLive();
+      }
 
-      refresh();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>

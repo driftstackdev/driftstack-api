@@ -13,7 +13,7 @@
 //     sub.email (tombstoned rows show 'no action').
 //   • Tombstoned-row span: '(purged — V-295c3-tombstone)'.
 //   • escapeHtml 5-char map (& < > " ').
-//   • localStorage token key 'driftstack_admin_token'.
+//   • localStorage token key 'ds_web_session_token'.
 //   • POST /v1/admin/status-subscribers/{id}/force-unsubscribe
 //     endpoint contract.
 //   • Pagination framing: 'default 50 per page; ?limit=&offset='.
@@ -82,7 +82,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
     // never populated anywhere.
     expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) \|\| ''/);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
+      /boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200',\s*\n?\s*\{ headers: \{ authorization: 'Bearer ' \+ token \} \},\s*\n?\s*controller,\s*\n?\s*\)/,
     );
   });
 
@@ -91,8 +91,61 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
       /await window\.driftstackConfirm\(\s*\n?\s*'Force-unsubscribe ' \+\s*\n?\s*email \+\s*\n?\s*'\? Writes admin_audit_log\. Customer can re-subscribe via the public form\.',/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
+      /boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe',\s*\n?\s*\{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ getToken\(\),\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: '\{\}',\s*\n?\s*\},\s*\n?\s*\)/,
     );
+  });
+
+  it('starts neutral and keeps refresh plus force-add inert until staff identity and a current subscriber read establish authority', () => {
+    expect(body).toContain('data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).toMatch(
+      /id="add-email"[\s\S]*?required\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/,
+    );
+    expect(body).toMatch(
+      /type="submit"\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"[\s\S]*?>Add subscriber<\/button/,
+    );
+    expect(body).toContain('Live subscribers are unavailable until loaded.');
+    expect(body).toContain('let subscriberDataAvailable = false;');
+    expect(body).toContain(
+      'if (!subscriberDataAvailable || addInFlight || addOutcomeUnknown) return;',
+    );
+  });
+
+  it('publishes list and mutation authority only after a successful current read, while stale or failed reads cannot preserve destructive controls', () => {
+    expect(body).toMatch(
+      /if \(generation !== refreshGeneration\) return null;\s*\n?\s*const subs = body\.data \|\| \[\];\s*\n?\s*setAddAuthority\(true\);/,
+    );
+    expect(body).toMatch(
+      /\.catch\(function \(err\) \{[\s\S]*?if \(generation !== refreshGeneration\) return null;\s*\n?\s*renderUnavailable\('Could not load the current subscriber list\. Refresh to try again\.'\);/,
+    );
+    expect(body).toMatch(
+      /function renderUnavailable\(message\) \{\s*\n?\s*setAddAuthority\(false, message\);/,
+    );
+  });
+
+  it('reports live freshness only for a successful current read and leaves signed-out or failed reads visibly unavailable', () => {
+    expect(body).toMatch(
+      /if \(generation !== refreshGeneration \|\| loaded === null\) return;\s*\n?\s*if \(loaded === true\) \{\s*\n?\s*lastFetch = Date\.now\(\);\s*\n?\s*setLiveState\('success', 'Live'\);/,
+    );
+    expect(body).toContain(
+      "setLiveState('error', getToken() ? 'Live data unavailable' : 'Staff sign-in required');",
+    );
+    expect(body).toContain("setLiveState('error', 'Live data unavailable');");
+  });
+
+  it('defers the first read until the AdminLayout SSO bridge has had its DOMContentLoaded turn', () => {
+    expect(body).toMatch(
+      /if \(document\.readyState === 'loading'\) \{\s*\n?\s*document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\);\s*\n?\s*\} else \{\s*\n?\s*start\(\);/,
+    );
+    expect(body).not.toMatch(/\n\s*refresh\(\);\s*\n\s*\}\)\(\);/);
+  });
+
+  it('keeps subscriber reads and mutations on the shared 15-second bounded transport', () => {
+    expect(body).toContain('const SUBSCRIBER_TIMEOUT_MS = 15_000;');
+    expect(body).toContain(
+      'window.driftstackFetchWithDeadline(url, init, SUBSCRIBER_TIMEOUT_MS, controller)',
+    );
+    expect(body).not.toMatch(/\bfetch\(/);
   });
 
   it("Pagination framing pinned: 'Subscribers list paginated server-side (default 50 per page; ?limit=&offset= query params for paging). Confirmed-and-still-subscribed rows trigger fan-out emails on public incident state changes (V-295c3-followup). Tombstoned rows (90d post-unsubscribe via V-295c3-tombstone purge cron) appear with email = null.' — pinned so the pagination contract + tombstone lifecycle stay documented to admins", () => {
