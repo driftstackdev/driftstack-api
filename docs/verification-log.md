@@ -26679,3 +26679,29 @@ the exact four-grapheme/12-code-unit repro and final replay equality. The full
 behavioural-simulation suite passes 9 files and 166/166 tests; strict package
 and server-test TypeScript, targeted lint/format, diff and whitespace checks
 are green.
+
+## V-628 — OpenAPI coverage compares operations, not path text
+
+**Date:** 2026-07-14
+
+The OpenAPI-to-server coverage guard extracted path-like strings with regular
+expressions. It ignored HTTP methods, so a documented `GET /resource` was
+considered implemented by `POST /resource`; path text in a comment or handler
+string also counted as a route. The customer-core roster used the same
+path-only model, allowing a wrong-method SDK contract to pass while failing at
+runtime.
+
+The guard now reads exact method/path operations from the committed published
+OpenAPI JSON and discovers literal Fastify registrations with the TypeScript
+AST. It follows both `FastifyInstance` parameters in route modules and the
+app-level Fastify factory used for infrastructure endpoints, so `/health` and
+`/version` are compared without weakening the `/v1` surface. Normalization
+changes parameter names only; method identity remains exact. The core roster
+now states all 26 expected operations with their methods.
+
+Verification finds 212 published operations backed by the current 250 unique
+registered method/path pairs and no live phantom. Synthetic regressions prove
+a matching comment plus wrong-method registration does not satisfy coverage,
+while differing route/spec parameter names normalize safely. Focused evidence
+passes 1 file and 5/5 tests; strict server test TypeScript, targeted
+lint/format, diff and whitespace checks are green.
