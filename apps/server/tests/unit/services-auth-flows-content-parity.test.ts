@@ -340,8 +340,9 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('issueWebSession: active-account invariant + 32-byte authToken + tokenHash sha256-at-rest + web-session TTL', () => {
     expect(body).toMatch(
-      /private async issueWebSession\(\s*\n?\s*account: AuthFlowAccountRow,\s*\n?\s*issuedFromIp: string \| null,\s*\n?\s*userAgent: string \| null,\s*\n?\s*\): Promise<\{ plaintext: string; row: WebSessionRow \}> \{[\s\S]+?if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);\s*\n?\s*const plaintext = generateAuthToken\(\);\s*\n?\s*const expiresAt = new Date\(Date\.now\(\) \+ AUTH_TOKEN_TTL_MS\.webSession\);/,
+      /private async issueWebSession\([\s\S]*?authorityEpoch = account\.authEpoch,[\s\S]*?if \(account\.status !== 'active'\) throw new AuthFlowError\('account_suspended'\);[\s\S]*?authEpoch: authorityEpoch,[\s\S]*?if \(row === null\) throw new AuthFlowError\('invalid_auth_token'\);/,
     );
+    expect(body).toMatch(/old\.authEpoch,/);
   });
 
   it('issueOAuthWebSession returns the shared IP-bound challenge when local MFA is enrolled', () => {

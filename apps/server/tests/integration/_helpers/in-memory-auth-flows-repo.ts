@@ -97,6 +97,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       emailVerifiedAt: null,
       tier: args.initialTier,
       status: 'active',
+      authEpoch: 0,
       createdAt: now,
     };
     this.accounts.set(row.id, {
@@ -106,11 +107,15 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve(row);
   }
 
-  setPassword(accountId: string, passwordHash: string): Promise<void> {
+  setPassword(accountId: string, passwordHash: string): Promise<AuthFlowAccountRow | null> {
     const slot = this.accounts.get(accountId);
-    if (!slot) return Promise.resolve();
-    slot.account = { ...slot.account, passwordHash };
-    return Promise.resolve();
+    if (!slot || slot.account.status !== 'active') return Promise.resolve(null);
+    slot.account = {
+      ...slot.account,
+      passwordHash,
+      authEpoch: slot.account.authEpoch + 1,
+    };
+    return Promise.resolve(slot.account);
   }
 
   markEmailVerified(accountId: string, at: Date): Promise<boolean> {
@@ -203,15 +208,25 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
   insertWebSession(args: {
     accountId: string;
     tokenHash: string;
+    authEpoch: number;
     expiresAt: Date;
     issuedFromIp: string | null;
     userAgent: string | null;
-  }): Promise<WebSessionRow> {
+  }): Promise<WebSessionRow | null> {
+    const account = this.accounts.get(args.accountId)?.account;
+    if (
+      account === undefined ||
+      account.status !== 'active' ||
+      account.authEpoch !== args.authEpoch
+    ) {
+      return Promise.resolve(null);
+    }
     const now = new Date();
     const row: WebSessionRow = {
       id: randomUUID(),
       accountId: args.accountId,
       tokenHash: args.tokenHash,
+      authEpoch: args.authEpoch,
       expiresAt: args.expiresAt,
       lastUsedAt: now,
       revokedAt: null,
@@ -229,6 +244,8 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       if (row.tokenHash !== args.tokenHash) continue;
       if (row.revokedAt !== null) continue;
       if (row.expiresAt.getTime() <= args.now.getTime()) continue;
+      const account = this.accounts.get(row.accountId)?.account;
+      if (!account || account.authEpoch !== row.authEpoch) continue;
       return Promise.resolve(row);
     }
     return Promise.resolve(null);
@@ -255,6 +272,8 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       if (row.accountId !== accountId) continue;
       if (row.revokedAt !== null) continue;
       if (row.expiresAt.getTime() <= now.getTime()) continue;
+      const account = this.accounts.get(row.accountId)?.account;
+      if (!account || account.authEpoch !== row.authEpoch) continue;
       out.push(row);
     }
     out.sort((a, b) => b.lastUsedAt.getTime() - a.lastUsedAt.getTime());

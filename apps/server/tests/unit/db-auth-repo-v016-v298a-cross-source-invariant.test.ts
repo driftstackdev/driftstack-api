@@ -113,6 +113,7 @@ describe('W993 db/auth-repo V-016 + V-298a cross-source invariant', () => {
     expect(p).toMatch(/eq\(webSessions\.tokenHash, args\.tokenHash\),/);
     expect(p).toMatch(/gt\(webSessions\.expiresAt, args\.now\),/);
     expect(p).toMatch(/isNull\(webSessions\.revokedAt\),/);
+    expect(p).toMatch(/eq\(accounts\.authEpoch, webSessions\.authEpoch\)/);
   });
 
   // ─── WebSessionAuthRow 7-field projection ────────────────────

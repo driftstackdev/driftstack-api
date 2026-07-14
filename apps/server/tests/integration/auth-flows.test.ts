@@ -10,7 +10,12 @@ import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js'
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { createTestLogger } from '../../src/lib/logger.js';
 import { createEmailService } from '../../src/services/email.js';
-import { AuthFlowError, AuthFlowsService } from '../../src/services/auth-flows.js';
+import type { AuthCache } from '../../src/services/auth-cache.js';
+import {
+  AuthFlowError,
+  AuthFlowsService,
+  type WebSessionRow,
+} from '../../src/services/auth-flows.js';
 import {
   InMemoryMfaChallengeStore,
   MAX_MFA_CHALLENGE_ATTEMPTS,
@@ -19,18 +24,51 @@ import {
 } from '../../src/services/mfa-challenge-store.js';
 import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
 
-function makeDirectService(repo = new InMemoryAuthFlowsRepo()): {
+class PasswordResetBeforeSessionInsertRepo extends InMemoryAuthFlowsRepo {
+  private resetBeforeNextInsert = false;
+
+  armPasswordResetBeforeNextInsert(): void {
+    this.resetBeforeNextInsert = true;
+  }
+
+  override async insertWebSession(args: {
+    accountId: string;
+    tokenHash: string;
+    authEpoch: number;
+    expiresAt: Date;
+    issuedFromIp: string | null;
+    userAgent: string | null;
+  }): Promise<WebSessionRow | null> {
+    if (this.resetBeforeNextInsert) {
+      this.resetBeforeNextInsert = false;
+      await this.setPassword(args.accountId, 'reset-won-password-hash');
+      await this.revokeAllWebSessionsForAccount(args.accountId, new Date());
+    }
+    return super.insertWebSession(args);
+  }
+}
+
+function makeDirectService(
+  repo = new InMemoryAuthFlowsRepo(),
+  authCache: AuthCache | null = null,
+): {
   repo: InMemoryAuthFlowsRepo;
   service: AuthFlowsService;
 } {
   const logger = createTestLogger();
   const email = createEmailService({ config: null, logger });
-  const service = new AuthFlowsService(repo, email, logger, {
-    verifyEmailUrl: 'https://app.driftstack.local/verify-email',
-    magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
-    passwordResetUrl: 'https://app.driftstack.local/reset-password',
-    exposeDebugToken: true,
-  });
+  const service = new AuthFlowsService(
+    repo,
+    email,
+    logger,
+    {
+      verifyEmailUrl: 'https://app.driftstack.local/verify-email',
+      magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+      passwordResetUrl: 'https://app.driftstack.local/reset-password',
+      exposeDebugToken: true,
+    },
+    authCache,
+  );
   return { repo, service };
 }
 
@@ -928,6 +966,7 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
     await repo.insertWebSession({
       accountId: signup.account.id,
       tokenHash: 'old-session-one',
+      authEpoch: signup.account.authEpoch,
       expiresAt,
       issuedFromIp: null,
       userAgent: 'old-browser-one',
@@ -935,6 +974,7 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
     await repo.insertWebSession({
       accountId: signup.account.id,
       tokenHash: 'old-session-two',
+      authEpoch: signup.account.authEpoch,
       expiresAt,
       issuedFromIp: null,
       userAgent: 'old-browser-two',
@@ -1246,6 +1286,32 @@ describe('POST /v1/auth/password-reset', () => {
     expect(fresh.statusCode).toBe(200);
   });
 
+  it('invalidates cached account auth even when there are no older session rows to revoke', async () => {
+    const invalidateAccount = vi.fn().mockResolvedValue(undefined);
+    const authCache = { invalidateAccount } as unknown as AuthCache;
+    const { service } = makeDirectService(new InMemoryAuthFlowsRepo(), authCache);
+    const signup = await service.signup({
+      email: 'reset-cache-fence@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: signup.account.email,
+      requestedFromIp: null,
+    });
+
+    await expect(
+      service.confirmPasswordReset({
+        token: reset.debugToken as string,
+        newPassword: 'an entirely different cache-fenced passphrase!!',
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).resolves.toMatchObject({ kind: 'session' });
+    expect(invalidateAccount).toHaveBeenCalledTimes(1);
+    expect(invalidateAccount).toHaveBeenCalledWith(signup.account.id);
+  });
+
   it('a suspended account cannot use an outstanding reset link to change its password or mint a session', async () => {
     const { service, repo } = makeDirectService();
     const signup = await service.signup({
@@ -1370,6 +1436,33 @@ describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
 // (same pattern as the magic-link race-regression test in
 // auth-flows-email.test.ts) so both boundaries are deterministic.
 describe('AuthFlowsService.refreshSession — single-use under concurrency (security fix)', () => {
+  it('cannot insert a successor after password reset changes the account epoch and sweeps sessions', async () => {
+    const repo = new PasswordResetBeforeSessionInsertRepo();
+    const { service } = makeDirectService(repo);
+    const signup = await service.signup({
+      email: 'reset-refresh-race@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const verify = await service.verifyEmail({
+      token: signup.debugToken!,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    repo.armPasswordResetBeforeNextInsert();
+
+    await expect(
+      service.refreshSession({
+        token: verify.session.plaintext,
+        issuedFromIp: '203.0.113.90',
+        userAgent: 'stolen-browser',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+
+    expect(await repo.listActiveWebSessionsForAccount(verify.account.id, new Date())).toEqual([]);
+    expect((await repo.findAccountById(verify.account.id))?.authEpoch).toBe(1);
+  });
+
   it('consumes but does not replace a suspended account refresh token', async () => {
     const { repo, service } = makeDirectService();
     const signup = await service.signup({

@@ -90,6 +90,16 @@ describe('InMemoryAuthCache', () => {
     expect(await cache.get(SHA)).toBeNull();
   });
 
+  it('keeps a late write stale when it carries a pre-invalidation account generation', async () => {
+    const cache = new InMemoryAuthCache();
+    const captured = await cache.captureAccountVersion(CTX.account.id);
+    await cache.invalidateAccount(CTX.account.id);
+    await cache.set(SHA, CTX.apiKey.id, CTX.account.id, CTX, 30, captured);
+
+    expect(cache.size()).toBe(1);
+    expect(await cache.get(SHA)).toBeNull();
+  });
+
   it('invalidateAccount affects only the specified account', async () => {
     const cache = new InMemoryAuthCache();
     const otherSha = sha256Hex('ds_live_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');

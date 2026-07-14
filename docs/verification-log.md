@@ -25337,3 +25337,51 @@ Verification:
   introspection, route, and content guards remain covered;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-590 — password changes fence web-session successors
+
+**Date:** 2026-07-14
+
+Closed a cross-request compromise-recovery race between password reset and web
+session refresh. Reset changed the password and then swept existing sessions,
+while refresh claimed its old bearer and then inserted a successor. If refresh
+claimed before the sweep but inserted after it, that successor escaped both
+revocation and the password change.
+
+Accounts and web sessions now share an authorization epoch. Password changes
+atomically increment the account epoch. Every session mint locks the active
+account row and inserts only when its presented epoch still matches; refresh
+inherits the claimed session's epoch rather than newer authority it did not
+authenticate. Session reads in both the refresh repository and normal request
+authentication require exact epoch equality, so prior-epoch rows become
+inactive at the password update even before the defensive physical sweep.
+Existing accounts and sessions migrate together at epoch zero, preserving
+validity until the next credential change.
+
+The reset path also invalidates account authorization cache state regardless of
+the sweep's revoked-row count. This matters when there are no older rows or a
+concurrent request already changed physical session state: the credential
+boundary still occurred and cannot depend on an incidental row count. A
+web-session cache miss now captures that account generation and rechecks the
+authoritative session before building its context. Its eventual cache write is
+tagged with the captured generation, so reset either makes the recheck reject
+or makes a later write immediately stale; a pre-reset slow path cannot
+repopulate a current cache entry after invalidation.
+
+Verification:
+
+- a forced in-memory ordering changes the password and sweeps sessions
+  immediately before refresh successor insertion; refresh rejects, no session
+  remains active, and the account epoch advances;
+- a real PostgreSQL transaction holds an uncommitted password/epoch update,
+  proves a stale insert blocks on the authority row, then commits and proves
+  the insert returns no row;
+- real PostgreSQL refresh and runtime-auth repositories both stop resolving an
+  already-minted prior-epoch session immediately after password change;
+- adversarial cache tests force reset both before the post-generation database
+  recheck and after it but before cache insertion; the first authentication
+  rejects and the second late entry is present only as an immediate miss;
+- focused auth, schema, migration, cache, runtime, and structural coverage
+  passes 24 files and 348 tests, plus 3 real-PostgreSQL concurrency tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

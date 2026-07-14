@@ -43,7 +43,9 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
   });
 
   it('imports: and/eq/gt/isNull/lt/or from drizzle-orm; 6 service types; Database; 5 schema tables (accounts + apiKeys + rateLimitOverrides + teamMembers + webSessions)', () => {
-    expect(body).toMatch(/import \{ and, eq, gt, isNull, lt, or \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import \{ and, eq, getTableColumns, gt, isNull, lt, or \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(
       /import type \{\s*\n?\s*AccountAuthRepo,\s*\n?\s*AccountRow,\s*\n?\s*ApiKeyRow,\s*\n?\s*RateLimitOverride,\s*\n?\s*TeamMembership,\s*\n?\s*WebSessionAuthRow,\s*\n?\s*\} from '\.\.\/services\/auth\.js';/,
     );
@@ -85,6 +87,8 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
   });
 
   it('findActiveWebSession: triple and(eq(tokenHash), gt(expiresAt, now), isNull(revokedAt)) + limit 1; 7-field WebSessionAuthRow incl. mfaSatisfiedAt', () => {
+    expect(body).toMatch(/\.select\(getTableColumns\(webSessions\)\)/);
+    expect(body).toMatch(/eq\(accounts\.authEpoch, webSessions\.authEpoch\)/);
     expect(body).toMatch(
       /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(webSessions\.tokenHash, args\.tokenHash\),\s*\n?\s*gt\(webSessions\.expiresAt, args\.now\),\s*\n?\s*isNull\(webSessions\.revokedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);/,
     );

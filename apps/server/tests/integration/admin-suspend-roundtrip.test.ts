@@ -229,9 +229,24 @@ describe('admin: delete → full reclaim → blocked', () => {
     expect(secondKeyRes.statusCode).toBe(201);
 
     const webSessionPlaintext = 'wsess_target_bbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    // The fixture splits API-key and auth-flow accounts across two maps even
+    // though production uses one table; mirror the target before exercising
+    // the web-session mint authority check.
+    fx.authFlowsRepo.seedAccount({
+      id: target.accountId,
+      email: `tester-${target.accountId.slice(-4)}@driftstack.local`,
+      name: 'Tester-2',
+      passwordHash: null,
+      emailVerifiedAt: null,
+      tier: 'api_builder',
+      status: 'active',
+      authEpoch: 0,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
     await fx.authFlowsRepo.insertWebSession({
       accountId: target.accountId,
       tokenHash: sha256Hex(webSessionPlaintext),
+      authEpoch: 0,
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       issuedFromIp: null,
       userAgent: null,

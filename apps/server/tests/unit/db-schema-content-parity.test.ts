@@ -143,6 +143,7 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     );
     expect(body).toMatch(/tier: accountTier\('tier'\)\.notNull\(\)\.default\('free'\),/);
     expect(body).toMatch(/status: accountStatus\('status'\)\.notNull\(\)\.default\('active'\),/);
+    expect(body).toMatch(/authEpoch: integer\('auth_epoch'\)\.notNull\(\)\.default\(0\),/);
     expect(body).toMatch(/stripeCustomerId: text\('stripe_customer_id'\),/);
     expect(body).toMatch(
       /firstFailureEmailSentAt: timestamp\('first_failure_email_sent_at', \{ withTimezone: true \}\),/,
@@ -162,6 +163,9 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/export const profileSnapshots = pgTable\(/);
     expect(body).toMatch(/export const processedStripeEvents = pgTable\(/);
     expect(body).toMatch(/export const webSessions = pgTable\(/);
+    expect(body).toMatch(
+      /export const webSessions = pgTable\([\s\S]*?authEpoch: integer\('auth_epoch'\)\.notNull\(\)\.default\(0\),/,
+    );
     expect(body).toMatch(/export const accountMfa = pgTable\('account_mfa', \{/);
     expect(body).toMatch(/export const accountMfaRecoveryCodes = pgTable\(/);
     expect(body).toMatch(/export const apiKeys = pgTable\(/);

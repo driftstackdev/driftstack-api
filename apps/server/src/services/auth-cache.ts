@@ -19,6 +19,10 @@
 //     which atomically increments an account-version counter; subsequent
 //     `get()` reads detect the version mismatch and treat the cache as
 //     missed (the stale entry then TTLs out cheaply).
+//   - Web-session slow paths capture that account version, revalidate their
+//     database row, and tag the eventual cache write with the captured value.
+//     A reset/invalidation racing after the recheck therefore makes even a
+//     late cache write stale rather than resurrecting the old bearer.
 //   - `expiresAt` is re-checked on every cache read (not just on cache
 //     write) so a key cached just before its expiry doesn't leak past the
 //     clock-bound deadline.
@@ -34,6 +38,12 @@ import type { AccountContext } from './auth.js';
 export interface AuthCache {
   /** Returns a cached context for this plaintext sha if one is fresh, else null. */
   get(plaintextSha256: string): Promise<AccountContext | null>;
+  /**
+   * Capture the account generation before an authoritative recheck. Optional
+   * custom caches that omit this safely forgo positive web-session caching.
+   * Returns null when the generation cannot be read.
+   */
+  captureAccountVersion?(accountId: string): Promise<number | null>;
   /** Cache the context; reverse-indexes by keyId for invalidation. */
   set(
     plaintextSha256: string,
@@ -41,6 +51,7 @@ export interface AuthCache {
     accountId: string,
     context: AccountContext,
     ttlSec: number,
+    capturedAccountVersion?: number,
   ): Promise<void>;
   /** Invalidate the cached entry for one specific API key (used by revocation). */
   invalidateKey(keyId: string): Promise<void>;
@@ -357,22 +368,41 @@ export class RedisAuthCache implements AuthCache {
     }
   }
 
+  async captureAccountVersion(accountId: string): Promise<number | null> {
+    try {
+      const raw = await this.redis.get(KEY_ACCOUNT_VERSION(accountId));
+      return raw ? Number(raw) : 0;
+    } catch (err) {
+      this.logger.warn(
+        { err: errSummary(err) },
+        'auth cache account version read failed; skipping cache write',
+      );
+      return null;
+    }
+  }
+
   async set(
     plaintextSha256: string,
     keyId: string,
     accountId: string,
     context: AccountContext,
     ttlSec: number,
+    capturedAccountVersion?: number,
   ): Promise<void> {
     try {
-      // V-247 — capture both versions (account + key) at write time so
-      // a subsequent `invalidateAccount` OR `invalidateKey` increments
-      // the counter and the next `get()` detects the stale entry.
+      // V-590 — a web-session caller supplies the account generation it
+      // captured before its authoritative DB recheck. Other callers retain
+      // the existing write-time account capture. V-247 still captures the
+      // key generation here. A later invalidation makes either tagged value
+      // stale on the next get().
       const [accountVersionRaw, keyVersionRaw] = await Promise.all([
-        this.redis.get(KEY_ACCOUNT_VERSION(accountId)),
+        capturedAccountVersion === undefined
+          ? this.redis.get(KEY_ACCOUNT_VERSION(accountId))
+          : Promise.resolve(null),
         this.redis.get(KEY_KEY_VERSION(keyId)),
       ]);
-      const accountVersion = accountVersionRaw ? Number(accountVersionRaw) : 0;
+      const accountVersion =
+        capturedAccountVersion ?? (accountVersionRaw ? Number(accountVersionRaw) : 0);
       const keyVersion = keyVersionRaw ? Number(keyVersionRaw) : 0;
       const entry: CachedEntry = {
         schemaVersion: AUTH_CACHE_SCHEMA_VERSION,
@@ -454,14 +484,19 @@ export class InMemoryAuthCache implements AuthCache {
     return Promise.resolve(entry.context);
   }
 
+  captureAccountVersion(accountId: string): Promise<number> {
+    return Promise.resolve(this.accountVersions.get(accountId) ?? 0);
+  }
+
   set(
     plaintextSha256: string,
     keyId: string,
     accountId: string,
     context: AccountContext,
     ttlSec: number,
+    capturedAccountVersion?: number,
   ): Promise<void> {
-    const accountVersion = this.accountVersions.get(accountId) ?? 0;
+    const accountVersion = capturedAccountVersion ?? this.accountVersions.get(accountId) ?? 0;
     const keyVersion = this.keyVersions.get(keyId) ?? 0;
     this.entries.set(plaintextSha256, {
       context,

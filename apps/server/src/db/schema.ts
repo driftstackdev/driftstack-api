@@ -270,6 +270,11 @@ export const accounts = pgTable(
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     tier: accountTier('tier').notNull().default('free'),
     status: accountStatus('status').notNull().default('active'),
+    // V-590 — credential epoch shared with web_sessions. Password changes
+    // increment this value; session mint + authentication require equality so
+    // a refresh racing a password-reset sweep cannot create a successor from
+    // pre-reset authority.
+    authEpoch: integer('auth_epoch').notNull().default(0),
     // GDPR Article 17 (migration 0094) — set at admin-triggered deletion
     // time (AccountsAdminService.deleteAccount). Nullable: null for every
     // active/suspended account. Powers the account-deletion-purge-
@@ -926,6 +931,11 @@ export const webSessions = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
     tokenHash: text('token_hash').notNull(),
+    // V-590 — account auth_epoch captured at mint. Existing rows migrate at
+    // zero alongside accounts, preserving all sessions until the next
+    // credential change while making that change an immediate invalidation
+    // boundary.
+    authEpoch: integer('auth_epoch').notNull().default(0),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true })
       .notNull()

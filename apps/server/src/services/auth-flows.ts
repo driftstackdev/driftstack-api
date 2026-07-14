@@ -52,6 +52,8 @@ export interface AuthFlowAccountRow {
   emailVerifiedAt: Date | null;
   tier: AccountTier;
   status: AccountStatus;
+  /** V-590 — incremented whenever password authority changes. */
+  authEpoch: number;
   createdAt: Date;
 }
 
@@ -68,6 +70,8 @@ export interface WebSessionRow {
   id: string;
   accountId: string;
   tokenHash: string;
+  /** Account auth epoch captured when this bearer was minted. */
+  authEpoch: number;
   expiresAt: Date;
   lastUsedAt: Date;
   revokedAt: Date | null;
@@ -114,8 +118,11 @@ export interface AuthFlowsRepo {
     bundledLlmConsent?: boolean;
     bundledLlmMonthlyCapUsdCents?: number;
   }): Promise<AuthFlowAccountRow>;
-  /** Update password_hash. */
-  setPassword(accountId: string, passwordHash: string): Promise<void>;
+  /**
+   * Update password_hash and atomically increment auth_epoch. Returns the
+   * updated active account, or null if the account vanished/became inactive.
+   */
+  setPassword(accountId: string, passwordHash: string): Promise<AuthFlowAccountRow | null>;
   /** Mark email as verified — idempotent (no-op if already verified). */
   /** C9 — returns true iff THIS call performed the null→verified transition
    *  (so the caller can fire the one-time signup-welcome exactly once). */
@@ -176,10 +183,11 @@ export interface AuthFlowsRepo {
   insertWebSession(args: {
     accountId: string;
     tokenHash: string;
+    authEpoch: number;
     expiresAt: Date;
     issuedFromIp: string | null;
     userAgent: string | null;
-  }): Promise<WebSessionRow>;
+  }): Promise<WebSessionRow | null>;
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionRow | null>;
   touchWebSession(id: string, at: Date): Promise<void>;
   /** Atomically revoke an active session. True iff this call changed the row;
@@ -555,29 +563,10 @@ export class AuthFlowsService {
   }
 
   /**
-   * Security fix (2026-06-30 audit) — in-process single-flight queue
-   * keyed on an arbitrary string (refreshSession keys on the presented
-   * token's hash). Closes a TOCTOU race: refreshSession does
-   * find-active-session (SELECT) → revoke (UPDATE) → mint (INSERT) with
-   * no atomic claim between the read and the mint — unlike every OTHER
-   * single-use-token flow in this file (verifyEmail / consumeMagicLink /
-   * confirmPasswordReset), which reject a concurrent loser via
-   * `consumeAuthToken`'s atomic UPDATE...RETURNING boolean.
-   * `AuthFlowsRepo.revokeWebSession` has no equivalent boolean return,
-   * so two requests racing the SAME refresh token could both pass the
-   * find before either's revoke lands, and both mint an independent new
-   * session. `withKeyedLock` serializes callers sharing a key so the
-   * second caller's find always observes the first caller's revoke and
-   * correctly rejects with `invalid_auth_token` — the same "reject the
-   * race loser" contract the codebase already guarantees elsewhere.
-   * This is process-wide (not cross-process/cross-host); the Driftstack
-   * API runs one Node process per host (systemd Type=simple, no cluster
-   * mode — infra/systemd/driftstack-api.service), so this closes the
-   * race for the current deployment topology. If the service is ever
-   * horizontally scaled, the durable fix is to give
-   * `AuthFlowsRepo.revokeWebSession` an atomic claim-and-return-boolean
-   * (mirroring `consumeAuthToken`) so the guarantee survives across
-   * processes too.
+   * Process-local single-flight queue keyed on an arbitrary string
+   * (refreshSession uses the presented token hash). This avoids duplicate
+   * work on one host; revokeWebSession's conditional UPDATE remains the
+   * authoritative cross-process/cross-host first-winner claim.
    */
   private readonly keyedLocks = new Map<string, Promise<void>>();
 
@@ -1178,7 +1167,8 @@ export class AuthFlowsService {
     if (account.status !== 'active') throw new AuthFlowError('account_suspended');
     const mfaRequired = this.mfa !== null && (await this.mfa.getStatus(account.id)).enrolled;
     const newHash = await hashPassword(args.newPassword);
-    await this.repo.setPassword(account.id, newHash);
+    const accountAfterPasswordChange = await this.repo.setPassword(account.id, newHash);
+    if (accountAfterPasswordChange === null) throw new AuthFlowError('account_suspended');
 
     if (mfaRequired) {
       // Password reset is a compromise-recovery boundary. With MFA enrolled,
@@ -1192,12 +1182,20 @@ export class AuthFlowsService {
       });
       return {
         kind: 'mfa_required',
-        account,
-        ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+        account: accountAfterPasswordChange,
+        ...(await this.createMfaChallenge(
+          accountAfterPasswordChange,
+          args.issuedFromIp,
+          args.userAgent,
+        )),
       };
     }
 
-    const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+    const session = await this.issueWebSession(
+      accountAfterPasswordChange,
+      args.issuedFromIp,
+      args.userAgent,
+    );
     // Security: a password reset is a compromise-recovery action, so revoke
     // EVERY OTHER web session (an attacker-held session must not survive the
     // reset) while keeping the just-issued one. The reset-specific helper also
@@ -1212,7 +1210,7 @@ export class AuthFlowsService {
       issued_from_ip: args.issuedFromIp,
       user_agent: args.userAgent,
     });
-    return { kind: 'session', account, session };
+    return { kind: 'session', account: accountAfterPasswordChange, session };
   }
 
   async refreshSession(args: RefreshSessionArgs): Promise<RefreshSessionResult> {
@@ -1244,7 +1242,12 @@ export class AuthFlowsService {
         }
       }
       const account = await this.requireAccount(old.accountId);
-      const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+      const session = await this.issueWebSession(
+        account,
+        args.issuedFromIp,
+        args.userAgent,
+        old.authEpoch,
+      );
       return { account, session };
     });
   }
@@ -1454,7 +1457,11 @@ export class AuthFlowsService {
       keepSessionId === null
         ? await this.repo.revokeAllWebSessionsForAccount(accountId, now)
         : await this.repo.revokeAllWebSessionsExcept(accountId, keepSessionId, now);
-    if (revoked > 0 && this.authCache) {
+    // Password change increments auth_epoch even when the physical sweep finds
+    // no live rows. Always invalidate: a previously cached context must not
+    // survive the credential boundary merely because its DB row was already
+    // revoked or a concurrent refresh lost the epoch fence.
+    if (this.authCache) {
       try {
         await this.authCache.invalidateAccount(accountId);
       } catch {
@@ -1501,6 +1508,7 @@ export class AuthFlowsService {
     account: AuthFlowAccountRow,
     issuedFromIp: string | null,
     userAgent: string | null,
+    authorityEpoch = account.authEpoch,
   ): Promise<{ plaintext: string; row: WebSessionRow }> {
     // Shared fail-closed invariant for every current/future session-mint path.
     // Callers may retain earlier checks for clearer flow ordering, but none can
@@ -1511,10 +1519,14 @@ export class AuthFlowsService {
     const row = await this.repo.insertWebSession({
       accountId: account.id,
       tokenHash: tokenHash(plaintext),
+      authEpoch: authorityEpoch,
       expiresAt,
       issuedFromIp,
       userAgent,
     });
+    // A password/status transition won after the caller's account read. The
+    // repo did not insert a row, so never surface the generated plaintext.
+    if (row === null) throw new AuthFlowError('invalid_auth_token');
     return { plaintext, row };
   }
 

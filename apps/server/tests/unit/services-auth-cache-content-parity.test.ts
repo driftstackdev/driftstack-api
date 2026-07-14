@@ -72,13 +72,14 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     );
   });
 
-  it('AuthCache: 4-method contract (get / set / invalidateKey / invalidateAccount)', () => {
+  it('AuthCache: cache read/write, optional generation capture, and key/account invalidation', () => {
     expect(body).toMatch(/export interface AuthCache \{/);
     expect(body).toMatch(
       /\/\*\* Returns a cached context for this plaintext sha if one is fresh, else null\. \*\/\s*\n?\s*get\(plaintextSha256: string\): Promise<AccountContext \| null>;/,
     );
+    expect(body).toMatch(/captureAccountVersion\?\(accountId: string\): Promise<number \| null>;/);
     expect(body).toMatch(
-      /\/\*\* Cache the context; reverse-indexes by keyId for invalidation\. \*\/\s*\n?\s*set\(\s*\n?\s*plaintextSha256: string,\s*\n?\s*keyId: string,\s*\n?\s*accountId: string,\s*\n?\s*context: AccountContext,\s*\n?\s*ttlSec: number,\s*\n?\s*\): Promise<void>;/,
+      /\/\*\* Cache the context; reverse-indexes by keyId for invalidation\. \*\/\s*\n?\s*set\(\s*\n?\s*plaintextSha256: string,\s*\n?\s*keyId: string,\s*\n?\s*accountId: string,\s*\n?\s*context: AccountContext,\s*\n?\s*ttlSec: number,\s*\n?\s*capturedAccountVersion\?: number,\s*\n?\s*\): Promise<void>;/,
     );
     expect(body).toMatch(
       /\/\*\* Invalidate the cached entry for one specific API key \(used by revocation\)\. \*\/\s*\n?\s*invalidateKey\(keyId: string\): Promise<void>;/,
@@ -168,12 +169,15 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     );
   });
 
-  it('RedisAuthCache.set: captures BOTH account+key versions at write time (V-247 race-resolution); SET with PX TTL ms; reverse-index parallel write', () => {
+  it('RedisAuthCache.set: preserves a caller-captured account generation and captures key generation at write time', () => {
     expect(body).toMatch(
-      /\/\/ V-247 — capture both versions \(account \+ key\) at write time so\s*\n?\s*\/\/ a subsequent `invalidateAccount` OR `invalidateKey` increments\s*\n?\s*\/\/ the counter and the next `get\(\)` detects the stale entry\./,
+      /\/\/ V-590 — a web-session caller supplies the account generation it\s*\n?\s*\/\/ captured before its authoritative DB recheck\./,
     );
     expect(body).toMatch(
-      /const \[accountVersionRaw, keyVersionRaw\] = await Promise\.all\(\[\s*\n?\s*this\.redis\.get\(KEY_ACCOUNT_VERSION\(accountId\)\),\s*\n?\s*this\.redis\.get\(KEY_KEY_VERSION\(keyId\)\),\s*\n?\s*\]\);/,
+      /capturedAccountVersion === undefined\s*\n?\s*\? this\.redis\.get\(KEY_ACCOUNT_VERSION\(accountId\)\)\s*\n?\s*: Promise\.resolve\(null\)/,
+    );
+    expect(body).toMatch(
+      /capturedAccountVersion \?\? \(accountVersionRaw \? Number\(accountVersionRaw\) : 0\)/,
     );
     expect(body).toMatch(
       /this\.redis\.set\(KEY_ENTRY\(plaintextSha256\), JSON\.stringify\(entry\), 'PX', ttlMs\),\s*\n?\s*\/\/ Reverse-index so revocation can find the cache entry by keyId\.\s*\n?\s*this\.redis\.set\(KEY_REVERSE\(keyId\), plaintextSha256, 'PX', ttlMs\),/,

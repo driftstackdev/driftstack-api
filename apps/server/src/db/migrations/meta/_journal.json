@@ -736,6 +736,13 @@
       "when": 1783997755000,
       "tag": "0104_team_invites_pending_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1784003764771,
+      "tag": "0105_web_session_auth_epoch",
+      "breakpoints": true
     }
   ]
 }

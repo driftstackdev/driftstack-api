@@ -124,6 +124,29 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
     });
   });
 
+  it('tags a late write with its captured account generation', async () => {
+    const redis = new FakeRedis();
+    const { cache } = makeCache(redis);
+    const captured = await cache.captureAccountVersion('acc-security');
+    expect(captured).toBe(0);
+    redis.values.set('auth:account:acc-security:v', '1');
+
+    await cache.set(
+      TOKEN_SHA,
+      'key-security',
+      'acc-security',
+      context(),
+      30,
+      captured ?? undefined,
+    );
+
+    const stored = JSON.parse(redis.values.get(entryKey()) ?? '{}') as {
+      accountVersion?: unknown;
+    };
+    expect(stored.accountVersion).toBe(0);
+    await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
+  });
+
   it('treats an unversioned legacy envelope as a miss before Redis version reads', async () => {
     const redis = new FakeRedis();
     const { cache, warn } = makeCache(redis);

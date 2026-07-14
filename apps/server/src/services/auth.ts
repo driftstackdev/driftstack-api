@@ -465,7 +465,7 @@ async function slowPathWebSession(
   now: Date,
   staffEmails: ReadonlySet<string>,
 ): Promise<AccountContext> {
-  const session = await repo.findActiveWebSession({ tokenHash: sha, now });
+  let session = await repo.findActiveWebSession({ tokenHash: sha, now });
   // findActiveWebSession already filters expired + revoked rows in the
   // query. A null result here means: token unknown OR expired OR
   // revoked. We can't distinguish the cases (and shouldn't — same
@@ -475,6 +475,25 @@ async function slowPathWebSession(
   // Defensive: re-check expiry/revocation in case repo impl skips them.
   if (session.revokedAt !== null) throw new RevokedKeyError();
   if (session.expiresAt.getTime() <= now.getTime()) throw new ExpiredKeyError();
+
+  // Capture the cache's account generation, then re-read the authoritative
+  // session. Password reset commits its DB epoch change before invalidating
+  // this generation. The ordering closes both sides of a late-write race:
+  // an invalidation already observed here makes the second DB read reject,
+  // while an invalidation after it makes the captured generation stale.
+  let capturedAccountVersion: number | null = null;
+  if (cache?.captureAccountVersion) {
+    try {
+      capturedAccountVersion = await cache.captureAccountVersion(session.accountId);
+    } catch {
+      capturedAccountVersion = null;
+    }
+    if (capturedAccountVersion !== null) {
+      const revalidated = await repo.findActiveWebSession({ tokenHash: sha, now });
+      if (!revalidated || revalidated.id !== session.id) throw new InvalidKeyError();
+      session = revalidated;
+    }
+  }
 
   const account = await repo.getAccount(session.accountId);
   if (!account) throw new InvalidKeyError();
@@ -548,12 +567,12 @@ async function slowPathWebSession(
 
   // Cap TTL at session expiry so the cache entry can never outlive the
   // session token. Same shape as the API key path.
-  if (cache) {
+  if (cache && capturedAccountVersion !== null) {
     let ttl = CACHE_TTL_SEC;
     const remaining = Math.floor((session.expiresAt.getTime() - now.getTime()) / 1000);
     if (remaining < ttl) ttl = Math.max(1, remaining);
     try {
-      await cache.set(sha, syntheticKey.id, account.id, ctx, ttl);
+      await cache.set(sha, syntheticKey.id, account.id, ctx, ttl, capturedAccountVersion);
     } catch {
       // Same graceful-degradation as the API key path.
     }

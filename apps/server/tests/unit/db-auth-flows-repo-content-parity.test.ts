@@ -10,13 +10,13 @@
 //   • V-079 framing pinned (4-token-table dispatch + web_sessions +
 //     accounts.password_hash + accounts.email_verified_at).
 //   • tableForKind: 3-case kind→table dispatcher.
-//   • toAccountRow: 8-field AuthFlowAccountRow.
+//   • toAccountRow: 9-field AuthFlowAccountRow incl. authEpoch.
 //   • toTokenRow: 6-field AuthFlowTokenRow.
-//   • toWebSessionRow: 10-field WebSessionRow incl. mfaSatisfiedAt.
+//   • toWebSessionRow: 11-field WebSessionRow incl. authEpoch + mfaSatisfiedAt.
 //   • findAccountByEmail: trim().toLowerCase() canonicalize.
 //   • createAccount: trim().toLowerCase() email canonicalize + 4-field
 //     values + throws on no-row.
-//   • setPassword: 2-field set (passwordHash + updatedAt).
+//   • setPassword: passwordHash + authEpoch increment + active-row guard.
 //   • markEmailVerified: where and(eq(id), isNull(emailVerifiedAt))
 //     — first-verify-wins, idempotent re-click no-op.
 //   • findActiveAuthToken: triple and(tokenHash, gt(expiresAt, now),
@@ -51,7 +51,7 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
 
   it('imports: and/desc/eq/gt/isNull/lt/ne/or/sql from drizzle-orm (2026-05-20 sweeper slice added lt/or/sql for stale-token deletion); 5 service types; Database; 5 schema tables (accounts + emailVerifyTokens + magicLinkTokens + passwordResetTokens + webSessions); AccountTier from @driftstack/api-types', () => {
     expect(body).toMatch(
-      /import \{ and, desc, eq, gt, isNull, lt, ne, or, sql \} from 'drizzle-orm';/,
+      /import \{ and, desc, eq, getTableColumns, gt, isNull, lt, ne, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
       /import type \{\s*\n?\s*AuthFlowAccountRow,\s*\n?\s*AuthFlowKind,\s*\n?\s*AuthFlowTokenRow,\s*\n?\s*AuthFlowsRepo,\s*\n?\s*WebSessionRow,\s*\n?\s*\} from '\.\.\/services\/auth-flows\.js';/,
@@ -68,15 +68,15 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     );
   });
 
-  it('toAccountRow: 8-field AuthFlowAccountRow (id + email + name + passwordHash + emailVerifiedAt + tier + status + createdAt); toTokenRow: 6-field AuthFlowTokenRow; toWebSessionRow: 10-field WebSessionRow incl. mfaSatisfiedAt', () => {
+  it('maps account/session authEpoch alongside the existing auth-flow fields', () => {
     expect(body).toMatch(
-      /function toAccountRow\(r: typeof accounts\.\$inferSelect\): AuthFlowAccountRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*email: r\.email,\s*\n?\s*name: r\.name,\s*\n?\s*passwordHash: r\.passwordHash,\s*\n?\s*emailVerifiedAt: r\.emailVerifiedAt,\s*\n?\s*tier: r\.tier,\s*\n?\s*status: r\.status,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toAccountRow[\s\S]*?status: r\.status,\s*\n?\s*authEpoch: r\.authEpoch,\s*\n?\s*createdAt: r\.createdAt,/,
     );
     expect(body).toMatch(
       /function toTokenRow<T extends typeof emailVerifyTokens\.\$inferSelect>\(r: T\): AuthFlowTokenRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*tokenHash: r\.tokenHash,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*consumedAt: r\.consumedAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /function toWebSessionRow\(r: typeof webSessions\.\$inferSelect\): WebSessionRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*tokenHash: r\.tokenHash,\s*\n?\s*expiresAt: r\.expiresAt,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*revokedAt: r\.revokedAt,\s*\n?\s*issuedFromIp: r\.issuedFromIp,\s*\n?\s*userAgent: r\.userAgent,\s*\n?\s*mfaSatisfiedAt: r\.mfaSatisfiedAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toWebSessionRow[\s\S]*?tokenHash: r\.tokenHash,\s*\n?\s*authEpoch: r\.authEpoch,[\s\S]*?mfaSatisfiedAt: r\.mfaSatisfiedAt,/,
     );
   });
 
@@ -93,14 +93,23 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     expect(body).toMatch(/if \(!row\) throw new Error\('createAccount: insert returned no row'\);/);
   });
 
-  it('setPassword: 2-field set (passwordHash + updatedAt:new Date()); markEmailVerified: where and(eq(id), isNull(emailVerifiedAt)) — first-verify-wins guard (idempotent re-click no-op preserves original verification timestamp)', () => {
+  it('setPassword increments authEpoch on an active account; markEmailVerified retains first-verify-wins', () => {
     expect(body).toMatch(
-      /async setPassword\(accountId: string, passwordHash: string\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ passwordHash, updatedAt: new Date\(\) \}\)\s*\n?\s*\.where\(eq\(accounts\.id, accountId\)\);\s*\n?\s*\}/,
+      /authEpoch: sql`\$\{accounts\.authEpoch\} \+ 1`,[\s\S]*?\.where\(and\(eq\(accounts\.id, accountId\), eq\(accounts\.status, 'active'\)\)\)\s*\n?\s*\.returning\(\);/,
     );
     // C9 — markEmailVerified now returns the first-transition boolean.
     expect(body).toMatch(
       /async markEmailVerified\(accountId: string, at: Date\): Promise<boolean> \{[\s\S]*?\.set\(\{ emailVerifiedAt: at, updatedAt: at \}\)\s*\n?\s*\.where\(and\(eq\(accounts\.id, accountId\), isNull\(accounts\.emailVerifiedAt\)\)\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);\s*\n?\s*return rows\.length > 0;/,
     );
+  });
+
+  it('insertWebSession locks and matches live account authEpoch before inserting the bearer', () => {
+    expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
+    expect(body).toMatch(/eq\(accounts\.status, 'active'\),/);
+    expect(body).toMatch(/eq\(accounts\.authEpoch, args\.authEpoch\),/);
+    expect(body).toMatch(/\.for\('update'\)/);
+    expect(body).toMatch(/if \(!authority\) return null;/);
+    expect(body).toMatch(/authEpoch: args\.authEpoch,/);
   });
 
   it('findActiveAuthToken: triple and(eq(tokenHash), gt(expiresAt, now), isNull(consumedAt)) + limit 1 — expired/consumed tokens NEVER authenticate', () => {
@@ -122,6 +131,7 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
   });
 
   it('findActiveWebSession: triple and(tokenHash, gt(expiresAt, now), isNull(revokedAt)) + limit 1; listActiveWebSessionsForAccount: 3-cond filter + orderBy desc(lastUsedAt)', () => {
+    expect(body).toMatch(/eq\(accounts\.authEpoch, webSessions\.authEpoch\)/);
     expect(body).toMatch(
       /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(webSessions\.tokenHash, args\.tokenHash\),\s*\n?\s*gt\(webSessions\.expiresAt, args\.now\),\s*\n?\s*isNull\(webSessions\.revokedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);/,
     );

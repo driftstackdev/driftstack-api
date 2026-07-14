@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of AccountAuthRepo.
 
-import { and, eq, gt, isNull, lt, or } from 'drizzle-orm';
+import { and, eq, getTableColumns, gt, isNull, lt, or } from 'drizzle-orm';
 import type {
   AccountAuthRepo,
   AccountRow,
@@ -80,8 +80,12 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
     now: Date;
   }): Promise<WebSessionAuthRow | null> {
     const [row] = await this.database.db
-      .select()
+      .select(getTableColumns(webSessions))
       .from(webSessions)
+      .innerJoin(
+        accounts,
+        and(eq(accounts.id, webSessions.accountId), eq(accounts.authEpoch, webSessions.authEpoch)),
+      )
       .where(
         and(
           eq(webSessions.tokenHash, args.tokenHash),

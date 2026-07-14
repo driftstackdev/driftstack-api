@@ -5,7 +5,7 @@
 // + `web_sessions` + the new `accounts.password_hash` /
 // `accounts.email_verified_at` columns.
 
-import { and, desc, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type {
   AuthFlowAccountRow,
   AuthFlowKind,
@@ -44,6 +44,7 @@ function toAccountRow(r: typeof accounts.$inferSelect): AuthFlowAccountRow {
     emailVerifiedAt: r.emailVerifiedAt,
     tier: r.tier,
     status: r.status,
+    authEpoch: r.authEpoch,
     createdAt: r.createdAt,
   };
 }
@@ -64,6 +65,7 @@ function toWebSessionRow(r: typeof webSessions.$inferSelect): WebSessionRow {
     id: r.id,
     accountId: r.accountId,
     tokenHash: r.tokenHash,
+    authEpoch: r.authEpoch,
     expiresAt: r.expiresAt,
     lastUsedAt: r.lastUsedAt,
     revokedAt: r.revokedAt,
@@ -145,11 +147,17 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     return toAccountRow(row);
   }
 
-  async setPassword(accountId: string, passwordHash: string): Promise<void> {
-    await this.database.db
+  async setPassword(accountId: string, passwordHash: string): Promise<AuthFlowAccountRow | null> {
+    const [row] = await this.database.db
       .update(accounts)
-      .set({ passwordHash, updatedAt: new Date() })
-      .where(eq(accounts.id, accountId));
+      .set({
+        passwordHash,
+        authEpoch: sql`${accounts.authEpoch} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(accounts.id, accountId), eq(accounts.status, 'active')))
+      .returning();
+    return row ? toAccountRow(row) : null;
   }
 
   async markEmailVerified(accountId: string, at: Date): Promise<boolean> {
@@ -253,22 +261,43 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
   async insertWebSession(args: {
     accountId: string;
     tokenHash: string;
+    authEpoch: number;
     expiresAt: Date;
     issuedFromIp: string | null;
     userAgent: string | null;
-  }): Promise<WebSessionRow> {
-    const [row] = await this.database.db
-      .insert(webSessions)
-      .values({
-        accountId: args.accountId,
-        tokenHash: args.tokenHash,
-        expiresAt: args.expiresAt,
-        issuedFromIp: args.issuedFromIp,
-        userAgent: args.userAgent,
-      })
-      .returning();
-    if (!row) throw new Error('insertWebSession: insert returned no row');
-    return toWebSessionRow(row);
+  }): Promise<WebSessionRow | null> {
+    return this.database.db.transaction(async (tx) => {
+      // Lock the account authority before inserting. If password/status update
+      // wins first, this read observes the new epoch/state and returns null. If
+      // mint wins first, the later password reset waits, then its session sweep
+      // necessarily sees and revokes this row.
+      const [authority] = await tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.id, args.accountId),
+            eq(accounts.status, 'active'),
+            eq(accounts.authEpoch, args.authEpoch),
+          ),
+        )
+        .for('update')
+        .limit(1);
+      if (!authority) return null;
+      const [row] = await tx
+        .insert(webSessions)
+        .values({
+          accountId: args.accountId,
+          tokenHash: args.tokenHash,
+          authEpoch: args.authEpoch,
+          expiresAt: args.expiresAt,
+          issuedFromIp: args.issuedFromIp,
+          userAgent: args.userAgent,
+        })
+        .returning();
+      if (!row) throw new Error('insertWebSession: insert returned no row');
+      return toWebSessionRow(row);
+    });
   }
 
   async findActiveWebSession(args: {
@@ -276,8 +305,12 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     now: Date;
   }): Promise<WebSessionRow | null> {
     const [row] = await this.database.db
-      .select()
+      .select(getTableColumns(webSessions))
       .from(webSessions)
+      .innerJoin(
+        accounts,
+        and(eq(accounts.id, webSessions.accountId), eq(accounts.authEpoch, webSessions.authEpoch)),
+      )
       .where(
         and(
           eq(webSessions.tokenHash, args.tokenHash),
@@ -307,8 +340,12 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
 
   async listActiveWebSessionsForAccount(accountId: string, now: Date): Promise<WebSessionRow[]> {
     const rows = await this.database.db
-      .select()
+      .select(getTableColumns(webSessions))
       .from(webSessions)
+      .innerJoin(
+        accounts,
+        and(eq(accounts.id, webSessions.accountId), eq(accounts.authEpoch, webSessions.authEpoch)),
+      )
       .where(
         and(
           eq(webSessions.accountId, accountId),

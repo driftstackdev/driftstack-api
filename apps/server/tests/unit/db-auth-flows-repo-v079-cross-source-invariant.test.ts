@@ -199,9 +199,9 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
     expect(p).toMatch(/\.where\(eq\(webSessions\.id, id\)\);/);
   });
 
-  // ─── toAccountRow 8-field mapper ─────────────────────────────
+  // ─── toAccountRow authority mapper ───────────────────────────
 
-  it('CRITICAL toAccountRow 8-field mapper — id + email + name + passwordHash + emailVerifiedAt + tier + status + createdAt. The 8-field AuthFlowAccountRow is the V-079 auth-service consumer shape.', () => {
+  it('CRITICAL toAccountRow carries authEpoch with account authority', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-flows-repo.ts'));
     expect(p).toMatch(
       /function toAccountRow\(r: typeof accounts\.\$inferSelect\): AuthFlowAccountRow \{/,
@@ -210,6 +210,7 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
     expect(p).toMatch(/emailVerifiedAt: r\.emailVerifiedAt,/);
     expect(p).toMatch(/tier: r\.tier,/);
     expect(p).toMatch(/status: r\.status,/);
+    expect(p).toMatch(/authEpoch: r\.authEpoch,/);
   });
 
   // ─── toTokenRow 6-field mapper ───────────────────────────────
@@ -227,9 +228,9 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
     expect(p).toMatch(/createdAt: r\.createdAt,/);
   });
 
-  // ─── toWebSessionRow 10-field mapper ─────────────────────────
+  // ─── toWebSessionRow authority mapper ────────────────────────
 
-  it('CRITICAL toWebSessionRow 10-field mapper — id + accountId + tokenHash + expiresAt + lastUsedAt + revokedAt + issuedFromIp + userAgent + mfaSatisfiedAt + createdAt. The 10-field WebSessionRow includes V-353e mfaSatisfiedAt.', () => {
+  it('CRITICAL toWebSessionRow carries authEpoch and MFA state', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-flows-repo.ts'));
     expect(p).toMatch(
       /function toWebSessionRow\(r: typeof webSessions\.\$inferSelect\): WebSessionRow \{/,
@@ -237,6 +238,7 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
     expect(p).toMatch(/id: r\.id,/);
     expect(p).toMatch(/accountId: r\.accountId,/);
     expect(p).toMatch(/tokenHash: r\.tokenHash,/);
+    expect(p).toMatch(/authEpoch: r\.authEpoch,/);
     expect(p).toMatch(/expiresAt: r\.expiresAt,/);
     expect(p).toMatch(/lastUsedAt: r\.lastUsedAt,/);
     expect(p).toMatch(/revokedAt: r\.revokedAt,/);

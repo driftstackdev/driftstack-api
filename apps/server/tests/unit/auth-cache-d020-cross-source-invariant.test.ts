@@ -158,21 +158,22 @@ describe('W924 D-020 auth-cache cross-source invariant', () => {
     expect(p).toMatch(/stays up/);
   });
 
-  // ─── AuthCache 4-method interface ────────────────────────────
+  // ─── AuthCache authority-generation interface ───────────────
 
-  it('CRITICAL AuthCache 4-method interface — get + set + invalidateKey + invalidateAccount. The 4-method split distinguishes per-key invalidation (revoke) from per-account invalidation (tier/status change).', () => {
+  it('CRITICAL AuthCache interface includes an optional account-generation capture for race-safe web-session writes.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-cache.ts'));
     expect(p).toMatch(/export interface AuthCache \{/);
     expect(p).toMatch(/get\(plaintextSha256: string\): Promise<AccountContext \| null>;/);
+    expect(p).toMatch(/captureAccountVersion\?\(accountId: string\): Promise<number \| null>;/);
     expect(p).toMatch(/set\(/);
     expect(p).toMatch(/invalidateKey\(keyId: string\): Promise<void>;/);
     expect(p).toMatch(/invalidateAccount\(accountId: string\): Promise<void>;/);
   });
 
-  it('CRITICAL set() takes 5 args — plaintextSha256 + keyId + accountId + context + ttlSec. The 5-arg signature carries enough to build the reverse-index and apply per-call TTL.', () => {
+  it('CRITICAL set() optionally accepts the account generation captured before authoritative recheck.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-cache.ts'));
     expect(p).toMatch(
-      /set\(\s*\n\s*plaintextSha256: string,\s*\n\s*keyId: string,\s*\n\s*accountId: string,\s*\n\s*context: AccountContext,\s*\n\s*ttlSec: number,\s*\n\s*\): Promise<void>;/,
+      /set\(\s*\n\s*plaintextSha256: string,\s*\n\s*keyId: string,\s*\n\s*accountId: string,\s*\n\s*context: AccountContext,\s*\n\s*ttlSec: number,\s*\n\s*capturedAccountVersion\?: number,\s*\n\s*\): Promise<void>;/,
     );
   });
 
