@@ -29,11 +29,7 @@ const OWNER_EMAIL = 'owner@driftstack.test';
 const OWNER_TOKEN = 'ds_live_oooooooooooooooooooooooooooooooo';
 const STAFF_TOKEN = 'ds_live_ssssssssssssssssssssssssssssssss';
 
-function makeRepo(): AccountAuthRepo {
-  return { findApiKeyByPrefix: () => Promise.resolve(null) } as unknown as AccountAuthRepo;
-}
-
-function ctxFor(id: string, email: string): AccountContext {
+function ctxFor(id: string, email: string, sessionId: string): AccountContext {
   return {
     account: {
       id,
@@ -49,7 +45,7 @@ function ctxFor(id: string, email: string): AccountContext {
       updatedAt: new Date('2026-01-01T00:00:00Z'),
     },
     apiKey: {
-      id: `key-${id}`,
+      id: `wsk_${sessionId}`,
       accountId: id,
       name: 'web-session',
       keyPrefix: 'web_session',
@@ -62,18 +58,56 @@ function ctxFor(id: string, email: string): AccountContext {
     },
     rateLimitOverrides: {},
     teams: [],
-    webSession: { id: 'ws-1', mfaSatisfiedAt: null },
+    webSession: { id: sessionId, mfaSatisfiedAt: null },
   };
+}
+
+const OWNER_CTX = ctxFor('acc-owner', OWNER_EMAIL, 'ws-owner');
+const STAFF_CTX = ctxFor('acc-staff', 'staff@driftstack.test', 'ws-staff');
+
+function makeRepo(retiredTokenHash: string | null = null): AccountAuthRepo {
+  const sessions = new Map([
+    [sha256Hex(OWNER_TOKEN), { ctx: OWNER_CTX, id: 'ws-owner' }],
+    [sha256Hex(STAFF_TOKEN), { ctx: STAFF_CTX, id: 'ws-staff' }],
+  ]);
+  return {
+    findApiKeyByPrefix: () => Promise.resolve(null),
+    findActiveWebSession: ({ tokenHash }: { tokenHash: string }) => {
+      if (tokenHash === retiredTokenHash) return Promise.resolve(null);
+      const entry = sessions.get(tokenHash);
+      return Promise.resolve(
+        entry
+          ? {
+              id: entry.id,
+              accountId: entry.ctx.account.id,
+              expiresAt: new Date('2027-01-01T00:00:00Z'),
+              revokedAt: null,
+              lastUsedAt: null,
+              mfaSatisfiedAt: null,
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+            }
+          : null,
+      );
+    },
+    getAccount: (id: string) =>
+      Promise.resolve(
+        id === OWNER_CTX.account.id
+          ? OWNER_CTX.account
+          : id === STAFF_CTX.account.id
+            ? STAFF_CTX.account
+            : null,
+      ),
+    findTeamMemberships: () => Promise.resolve([]),
+    findActiveRateLimitOverrides: () => Promise.resolve([]),
+  } as unknown as AccountAuthRepo;
 }
 
 function makeCache(): AuthCache {
   const ownerSha = sha256Hex(OWNER_TOKEN);
   const staffSha = sha256Hex(STAFF_TOKEN);
-  const owner = ctxFor('acc-owner', OWNER_EMAIL);
-  const staff = ctxFor('acc-staff', 'staff@driftstack.test');
   return {
     get: (sha: string) =>
-      Promise.resolve(sha === ownerSha ? owner : sha === staffSha ? staff : null),
+      Promise.resolve(sha === ownerSha ? OWNER_CTX : sha === staffSha ? STAFF_CTX : null),
     set: () => Promise.resolve(),
     invalidateKey: () => Promise.resolve(),
     invalidateAccount: () => Promise.resolve(),
@@ -86,11 +120,11 @@ interface Harness {
   auditRepo: InMemoryAdminAuditLogRepo;
 }
 
-async function buildApp(): Promise<Harness> {
+async function buildApp(authRepo: AccountAuthRepo = makeRepo()): Promise<Harness> {
   const app = Fastify();
   registerErrorHandler(app);
   await app.register(authPlugin, {
-    authRepo: makeRepo(),
+    authRepo,
     authCache: makeCache(),
     authCoalescer: null,
     ownerEmail: OWNER_EMAIL,
@@ -148,11 +182,26 @@ describe('PATCH /v1/admin/owner/pricing/:tier — owner price edit', () => {
     expect(audit.items[0]).toMatchObject({
       action: 'pricing.updated',
       adminAccountId: 'acc-owner',
-      adminKeyId: 'key-acc-owner',
+      adminKeyId: 'wsk_ws-owner',
       targetResourceId: 'api_scale',
       result: 'success',
       inputPayload: { tier: 'api_scale', monthly_cents: 199900 },
     });
+    await app.close();
+  });
+
+  it('rejects a cached owner session after live authority retires it', async () => {
+    const { app, pricing, auditRepo } = await buildApp(makeRepo(sha256Hex(OWNER_TOKEN)));
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/v1/admin/owner/pricing/api_scale',
+      headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+      payload: { monthly_cents: 199900 },
+    });
+    expect(response.statusCode).toBe(401);
+    const rows = await pricing.listEffective();
+    expect(rows.find((row) => row.tier === 'api_scale')?.monthlyCents).toBe(149900);
+    expect((await auditRepo.list({ limit: 10 })).items).toHaveLength(0);
     await app.close();
   });
 
