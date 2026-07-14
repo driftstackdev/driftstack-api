@@ -1,12 +1,10 @@
 // W343.C — drift guard for admin /api-keys SCOPE_LABEL maps.
 // Mirror of the customer-dashboard parity test (W340.B): the
-// admin page also has two SCOPE_LABEL blocks (frontmatter +
-// inline script). Both must:
+// admin page has one SCOPE_LABEL block in the live renderer. It must:
 //
-//   1. Share the same key set (SSR + CSR parity).
-//   2. Hold only valid ApiKeyScope values (catches typos / stale
+//   1. Hold only valid ApiKeyScope values (catches typos / stale
 //      scope names after a schema rename).
-//   3. Cover the four broad scopes (read/write/admin/account_owner)
+//   2. Cover the four broad scopes (read/write/admin/account_owner)
 //      plus driftstack_internal_admin (the admin-side cross-account
 //      surface explicitly needs to render the staff scope clearly).
 
@@ -32,17 +30,17 @@ describe('W343.C admin /api-keys SCOPE_LABEL parity', () => {
 
   const blocks = [...page.matchAll(/SCOPE_LABEL[^={]*=\s*\{([^}]*)\}/g)].map((m) => m[1]!);
 
-  it('frontmatter + inline SCOPE_LABEL blocks both present', () => {
-    expect(blocks.length).toBe(2);
+  it('one live-renderer SCOPE_LABEL block is present', () => {
+    expect(blocks.length).toBe(1);
   });
 
   function keysOf(block: string): string[] {
     return [...block.matchAll(/^\s*([a-z_]+):\s*'[^']+',/gm)].map((m) => m[1]!).sort();
   }
 
-  it('SSR + CSR SCOPE_LABEL blocks have identical key sets', () => {
-    const [fmKeys, csrKeys] = blocks.map(keysOf);
-    expect(fmKeys).toEqual(csrKeys);
+  it('live SCOPE_LABEL keys are unique', () => {
+    const keys = keysOf(blocks[0] ?? '');
+    expect(new Set(keys).size).toBe(keys.length);
   });
 
   it('every SCOPE_LABEL key is a real ApiKeyScope', () => {
@@ -66,8 +64,7 @@ describe('W343.C admin /api-keys SCOPE_LABEL parity', () => {
     }
   });
 
-  it('rendering uses `?? scope` (SSR) + `|| s` (CSR) defensive fallbacks', () => {
-    expect(page).toMatch(/SCOPE_LABEL\[scope\]\s*\?\?\s*scope/);
+  it('live rendering uses the raw scope as a defensive fallback', () => {
     expect(page).toMatch(/SCOPE_LABEL\[s\]\s*\|\|\s*s/);
   });
 

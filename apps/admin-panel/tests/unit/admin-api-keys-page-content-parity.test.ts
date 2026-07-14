@@ -64,10 +64,10 @@ describe('W362.C admin-panel /api-keys page content parity', () => {
     expect(forceRoute).toContain("'api_key.revoked_by_admin'");
   });
 
-  it('SCOPE_LABEL identical between frontmatter + inline <script>', () => {
-    const frontmatterMap = extractScopeLabel(body, 'const SCOPE_LABEL: Record');
+  it('live SCOPE_LABEL map is present in the authoritative renderer', () => {
     const inlineMap = extractScopeLabel(body, '(function ()');
-    expect(frontmatterMap).toBe(inlineMap);
+    expect(inlineMap).toMatch(/read:\s*'read'/);
+    expect(inlineMap).toMatch(/driftstack_internal_admin:\s*'staff'/);
   });
 
   it('customer-impact framing pinned (auth cache + 401 + audit row records admin/key/reason)', () => {
@@ -127,10 +127,12 @@ describe('W362.C admin-panel /api-keys page content parity', () => {
 
   it('localStorage key ds_web_session_token (admin-panel convention)', () => {
     expect(body).toContain("'ds_web_session_token'");
+    expect(body).toMatch(
+      /try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
+    );
   });
 
-  it('MockAdminApiKey.scopes is ReadonlyArray<string> + SCOPE_LABEL covers all 6 broad scopes', () => {
-    expect(body).toMatch(/scopes:\s*ReadonlyArray<string>/);
+  it('live SCOPE_LABEL covers all 6 broad scopes', () => {
     for (const broad of [
       'read',
       'write',
