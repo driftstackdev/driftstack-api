@@ -127,17 +127,33 @@ describe('W529 marketing-site Fleet v2 component kit content parity', () => {
     expect(body).toMatch(/class="btn-primary" rel=\{relFor\(primaryHref\)\}/);
   });
 
-  it('CodeWindow: .code-preview chrome + pips + [data-copy-target] copy button; the is:inline script is PLAIN CODE with a window.__dsCopyWired double-bind guard — never a template-literal expression container (ships a dead no-op string)', () => {
+  it('CodeWindow: chrome + copy button; plain guarded inline script has a single-flight, generation-safe, accessible clipboard lifecycle', () => {
     const body = read('CodeWindow.astro');
     expect(body).toMatch(/class="code-preview overflow-hidden"/);
     expect(body).toMatch(/class="code-window-chrome"/);
     expect(body).toMatch(/data-copy-target=\{copyTargetId\}/);
     expect(body).toMatch(/window\.__dsCopyWired = true;/);
-    // S34 2026-07-07 — the chained form (multiline .writeText(...)
-    // .then/.catch) replaced the bare call: restore-to-constant fixes a
-    // stuck 'Copied' label, .catch surfaces denied clipboard writes.
-    expect(body).toMatch(/navigator\.clipboard\s*\n?\s*\.writeText/);
-    expect(body).toMatch(/btn\.textContent = 'Copy failed';/);
+    // Clipboard capability failures and synchronous browser throws are
+    // normalized onto the same promise path as async write rejections.
+    expect(body).toMatch(
+      /if \(!navigator\.clipboard \|\| typeof navigator\.clipboard\.writeText !== 'function'\)/,
+    );
+    expect(body).toMatch(/return Promise\.resolve\(navigator\.clipboard\.writeText\(value\)\);/);
+    expect(body).toMatch(/catch \(error\) \{\s*return Promise\.reject\(error\);\s*\}/);
+    // Rapid taps must not overlap writes or let an older reset overwrite a
+    // newer result. The active write also exposes visible and AT feedback.
+    expect(body).toMatch(/var copyStates = new WeakMap\(\);/);
+    expect(body).toMatch(/if \(state\.inFlight\) return;/);
+    expect(body).toMatch(/var generation = \+\+state\.generation;/);
+    expect(body).toMatch(/btn\.textContent = 'Copying…';/);
+    expect(body).toMatch(/btn\.disabled = true;/);
+    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\);/);
+    expect(body).toMatch(/if \(generation !== state\.generation\) return;/);
+    expect(body).toMatch(
+      /showCopyResult\(\s*btn,\s*state,\s*generation,\s*'Copy failed',\s*'Could not copy code; select it manually',\s*1800,?\s*\);/,
+    );
+    expect(body).toMatch(/btn\.disabled = false;/);
+    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'false'\);/);
     // the dead-inline-script trap: an expression container opening right
     // after the script tag ships a literal string instead of running
     expect(body).not.toMatch(/<script is:inline>\s*\{/);
