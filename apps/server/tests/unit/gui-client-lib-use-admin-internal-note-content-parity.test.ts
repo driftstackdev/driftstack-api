@@ -48,10 +48,12 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
     );
   });
 
-  it('Imports lifecycle primitives + shared deadline + readApiErrorMessage + useSettings + type AdminCryptoOrder', () => {
+  it('Imports lifecycle primitives + shared deadline/bounded decode/safe errors + useSettings + type AdminCryptoOrder', () => {
     expect(body).toMatch(/import \{ useCallback, useEffect, useRef, useState \} from 'react';/);
     expect(body).toMatch(/import \{ readApiErrorMessage \} from '\.\/api-errors';/);
     expect(body).toMatch(/import \{ fetchWithDeadline \} from '\.\/fetch-with-deadline';/);
+    expect(body).toMatch(/import \{ humanizeError \} from '\.\/humanize-error';/);
+    expect(body).toMatch(/import \{ readBoundedApiJson \} from '\.\/read-bounded-json';/);
     expect(body).toMatch(/import \{ useSettings \} from '\.\/SettingsContext';/);
     expect(body).toMatch(
       /import type \{ AdminCryptoOrder \} from '\.\/use-admin-crypto-orders-list';/,
@@ -86,9 +88,17 @@ describe('W470.C apps/gui-client/src/lib/use-admin-internal-note.ts content pari
     expect(body).toMatch(
       /inFlightRef\.current = true;\s*\n?\s*const sequence = \+\+sequenceRef\.current;\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*requestRef\.current = controller;\s*\n?\s*setState\(\{ kind: 'submitting', orderId \}\);/,
     );
-    expect(body).toMatch(
-      /const order = \(await res\.json\(\)\) as AdminCryptoOrder;\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'succeeded', orderId, order \}\);/,
+    const boundedSuccess =
+      /const order = await readBoundedApiJson<AdminCryptoOrder>\(res\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'succeeded', orderId, order \}\);/;
+    expect(body).toMatch(boundedSuccess);
+    expect(body.replace('readBoundedApiJson<AdminCryptoOrder>(res)', 'res.json()')).not.toMatch(
+      boundedSuccess,
     );
+    expect(body).toMatch(
+      /err instanceof DOMException && err\.name === 'AbortError'\s*\n?\s*\? 'Saving the internal note timed out\. Check your connection and try again\.'\s*\n?\s*: humanizeError\(err, "Couldn't save the internal note\. Try again\."\)/,
+    );
+    const rawErrorMutation = body.replace('humanizeError(err,', 'String(err) || (');
+    expect(rawErrorMutation).not.toMatch(/humanizeError\(err,/);
   });
 
   it('save is single-flight; reset and unmount abort/invalidate active work; return contract remains', () => {
