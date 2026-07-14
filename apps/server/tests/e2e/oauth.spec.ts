@@ -6,7 +6,7 @@
 // isolation; this spec verifies the route layer wiring + Zod
 // validation + admin/public-route auth gating.
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { startTestServer, type TestServer } from './helpers/server.js';
 import { seedAccount, authHeader } from './helpers/seed.js';
@@ -27,6 +27,36 @@ test.beforeEach(async () => {
 
 function s256(verifier: string): string {
   return createHash('sha256').update(verifier).digest('base64url');
+}
+
+interface SignupResponse {
+  debug_token?: string;
+}
+
+interface SessionEnvelope {
+  session: { token: string; account_id: string };
+}
+
+async function interactiveAuth(
+  request: APIRequestContext,
+  email: string,
+): Promise<{ headers: { Authorization: string }; accountId: string }> {
+  const signup = await request.post(`${server.baseUrl}/v1/auth/signup`, {
+    data: { email, password: 'correct horse battery staple' },
+  });
+  expect(signup.status()).toBe(200);
+  const verificationToken = ((await signup.json()) as SignupResponse).debug_token;
+  expect(verificationToken).toBeTruthy();
+
+  const verify = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
+    data: { token: verificationToken },
+  });
+  expect(verify.status()).toBe(200);
+  const session = ((await verify.json()) as SessionEnvelope).session;
+  return {
+    headers: authHeader(session.token),
+    accountId: session.account_id.replace(/^acc_/, ''),
+  };
 }
 
 test('POST /v1/admin/oauth/clients — requires internal-admin scope', async ({ request }) => {
@@ -51,6 +81,7 @@ test('OAuth happy path: admin registers → /authorize → /authorize/complete �
   const admin = await seedAccount(server.client, {
     scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
   });
+  const customer = await interactiveAuth(request, 'oauth-customer@driftstack.test');
 
   // 1. Register OAuth client.
   const reg = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
@@ -86,12 +117,12 @@ test('OAuth happy path: admin registers → /authorize → /authorize/complete �
   expect(authBody.authorization_id).toMatch(/^oaa_/);
   expect(authBody.state).toBe('st_' + 'x'.repeat(20));
 
-  // 4. Dashboard "approve" — uses bearer auth (the dashboard is signed
-  //    in as the customer); the customer's account_id is what gets
-  //    bound to the access token.
+  // 4. Dashboard "approve" — uses a real interactive web-session bearer.
+  //    General API keys are deliberately rejected at this human-consent
+  //    boundary; the session's account is bound to the access token.
   const approve = await request.post(`${server.baseUrl}/v1/oauth/authorize/complete`, {
-    headers: authHeader(admin.plaintext),
-    data: { authorization_id: authBody.authorization_id, account_id: admin.accountId },
+    headers: customer.headers,
+    data: { authorization_id: authBody.authorization_id },
   });
   expect(approve.status()).toBe(200);
   const approveBody = (await approve.json()) as { code: string; redirect_uri: string };
@@ -119,18 +150,23 @@ test('OAuth happy path: admin registers → /authorize → /authorize/complete �
 
   // 6. Introspect — token is active.
   const introspect = await request.post(`${server.baseUrl}/v1/oauth/introspect`, {
-    data: { token: tokenBody.access_token },
+    data: {
+      token: tokenBody.access_token,
+      client_id: regBody.client_id,
+      client_secret: regBody.client_secret,
+    },
   });
   expect(introspect.status()).toBe(200);
   const introBody = (await introspect.json()) as { active: boolean; account_id: string };
   expect(introBody.active).toBe(true);
-  expect(introBody.account_id).toBe(admin.accountId);
+  expect(introBody.account_id).toBe(customer.accountId);
 });
 
 test('OAuth /token rejects a replayed code with 400 invalid_grant', async ({ request }) => {
   const admin = await seedAccount(server.client, {
     scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
   });
+  const customer = await interactiveAuth(request, 'oauth-replay@driftstack.test');
   const reg = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
     headers: authHeader(admin.plaintext),
     data: { label: 'App', redirect_uris: ['https://app.example/cb'] },
@@ -149,9 +185,10 @@ test('OAuth /token rejects a replayed code with 400 invalid_grant', async ({ req
   });
   const authBody = (await authorize.json()) as { authorization_id: string };
   const approve = await request.post(`${server.baseUrl}/v1/oauth/authorize/complete`, {
-    headers: authHeader(admin.plaintext),
-    data: { authorization_id: authBody.authorization_id, account_id: admin.accountId },
+    headers: customer.headers,
+    data: { authorization_id: authBody.authorization_id },
   });
+  expect(approve.status()).toBe(200);
   const approveBody = (await approve.json()) as { code: string };
 
   // First exchange — succeeds.

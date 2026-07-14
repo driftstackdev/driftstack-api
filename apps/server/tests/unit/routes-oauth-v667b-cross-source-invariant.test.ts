@@ -10,8 +10,8 @@
 //     GET    /v1/admin/oauth/clients         — list
 //     DELETE /v1/admin/oauth/clients/:id     — revoke
 //
-//   Public OAuth dance (no account auth — PKCE + client_secret + code
-//   are the auth):
+//   OAuth provider surface (no account auth; confidential-client
+//   credentials protect token exchange and lifecycle calls):
 //     GET    /v1/oauth/authorize             — stage authorization
 //     POST   /v1/oauth/token                 — code → access_token
 //     POST   /v1/oauth/introspect            — token validation
@@ -66,7 +66,7 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
   it('CRITICAL public provider roster and separately web-session-gated consent completion', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
     expect(p).toMatch(
-      /Public OAuth dance \(no account auth — PKCE \+ client_secret \+ code are auth\)/,
+      /OAuth provider surface \(no account auth; client credentials protect\s*\n?\s*\/\/\s*token exchange, introspection, and revocation\)/,
     );
     expect(p).toMatch(/GET\s+\/v1\/oauth\/authorize\s+— stage authorization/);
     expect(p).toMatch(/POST\s+\/v1\/oauth\/token\s+— code → access_token/);
@@ -127,6 +127,8 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
     expect(p).toMatch(
       /token_type_hint: z\.enum\(\['access_token', 'refresh_token'\]\)\.optional\(\),/,
     );
+    expect(p).toMatch(/await deps\.service\.revokeTokenForClient\(body\);/);
+    expect(p).toMatch(/await deps\.service\.introspectForClient\(body\);/);
   });
 
   // ─── V-667.D single-client lookup ────────────────────────────
@@ -141,12 +143,12 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
 
   // ─── V-667.E rotate-secret ───────────────────────────────────
 
-  it("CRITICAL V-667.E rotate-secret framing — 'Returns the new plaintext ONCE (the store keeps only the hash). Existing access tokens are NOT invalidated (they're bearer-authenticated; the secret is consulted only on the /token exchange)'. The plaintext-once + access-token-survival design is the security boundary between key-rotation and session-invalidation.", () => {
+  it('CRITICAL V-667.E rotation preserves bearer tokens but requires the successor secret for token lifecycle endpoints', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
     expect(p).toMatch(/V-667\.E — rotate the client_secret in place\. Returns the new/);
     expect(p).toMatch(/plaintext ONCE \(the store keeps only the hash\)\. Existing access/);
-    expect(p).toMatch(/tokens are NOT invalidated \(they're bearer-authenticated; the/);
-    expect(p).toMatch(/secret is consulted only on the \/token exchange\)\./);
+    expect(p).toMatch(/tokens are NOT invalidated \(they remain bearer-authenticated\), but/);
+    expect(p).toMatch(/new secret is required for token exchange\/introspection\/revoke\./);
   });
 
   // ─── Client list envelope (no hashed-secret leak) ────────────

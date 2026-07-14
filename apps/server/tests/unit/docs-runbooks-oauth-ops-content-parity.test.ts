@@ -59,7 +59,7 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     expect(body).toMatch(/founder's password manager \+ the email reply to the developer\./);
   });
 
-  it("Rotation + revoke + token-stays-valid framing pinned: '## Rotating a client_secret (V-667.E)' + '`$BASE_URL/v1/admin/oauth/clients/<client_id>/rotate-secret`' + 'The response carries the NEW plaintext `client_secret`.' + 'The old secret is invalid immediately — any in-flight `/token` exchanges using the old secret will fail.' + '**Existing access tokens stay valid** because they're bearer-authenticated; the secret is only consulted on `/token`.' + '## Revoking a client (full kill)' + 'curl -X DELETE' + '`revoked_at` is set on the client row.' + 'New `/authorize` requests for the client fail.' + 'New `/token` exchanges fail (the service blocks revoked clients).' + '**Existing access tokens stay valid until their 1-hour TTL.**' + 'If you need to invalidate **all** existing tokens too' + 'Revoke each token via `POST /v1/oauth/revoke` (always 200 — no feedback on success/failure; that's RFC 7009).' + 'A V-667.G follow-up will expose a \"revoke all tokens for client\" admin route' — pinned so the V-667.E-rotate-secret + NEW-plaintext + bearer-only-consulted-on-/token + DELETE-revoked_at + RFC-7009-revoke-always-200 + V-667.G-bulk-revoke-follow-up commitment survives", () => {
+  it('Rotation/revocation pins surviving-token caveat and requires administrative-store deletion after client revoke', () => {
     expect(body).toMatch(/## Rotating a client_secret \(V-667\.E\)/);
     expect(body).toMatch(/"\$BASE_URL\/v1\/admin\/oauth\/clients\/<client_id>\/rotate-secret"/);
     expect(body).toMatch(/The response carries the NEW plaintext `client_secret`\./);
@@ -68,8 +68,8 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     );
     expect(body).toMatch(/the old secret will fail\./);
     expect(body).toMatch(/\*\*Existing access tokens stay valid\*\*/);
-    expect(body).toMatch(/because they're bearer-authenticated; the secret is only consulted/);
-    expect(body).toMatch(/on `\/token`\./);
+    expect(body).toMatch(/because they're bearer-authenticated\. The new secret is required for/);
+    expect(body).toMatch(/subsequent `\/token`, `\/introspect`, and `\/revoke` requests\./);
     expect(body).toMatch(/## Revoking a client \(full kill\)/);
     expect(body).toMatch(/curl -X DELETE \\/);
     expect(body).toMatch(/`revoked_at` is set on the client row\. Effects:/);
@@ -77,17 +77,24 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     expect(body).toMatch(/- New `\/token` exchanges fail \(the service blocks revoked clients\)\./);
     expect(body).toMatch(/- \*\*Existing access tokens stay valid until their 1-hour TTL\.\*\*/);
     expect(body).toMatch(/If you need to invalidate \*\*all\*\* existing tokens too:/);
-    expect(body).toMatch(/3\. Revoke each token via `POST \/v1\/oauth\/revoke` \(always 200 — no/);
-    expect(body).toMatch(/feedback on success\/failure; that's RFC 7009\)\./);
+    expect(body).toMatch(/3\. Delete each token through the administrative store operation\./);
+    expect(body).toMatch(/public `POST \/v1\/oauth\/revoke` route cannot be used after client/);
+    expect(body).toMatch(/correctly rejects revoked client credentials\./);
     expect(body).toMatch(/A V-667\.G follow-up will expose a "revoke all tokens for client"/);
     expect(body).toMatch(/admin route/);
   });
 
-  it("Triage workflow + introspect interpretation framing pinned: '## Triage workflow — \"this token is failing\"' + 'never ask them to forward bearer headers in plaintext over an unencrypted channel' + 'curl -X POST' + '-d \\'{\"token\":\"oat\\_…\"}\\'' + '\"$BASE_URL/v1/oauth/introspect\"' + '`active: false` → token is revoked or expired.' + '`active: true` with the wrong `scope` → the developer requested narrower scopes than the call they're attempting needs.' + '`active: true` with the right scope but the call still 401s → not an OAuth problem; check the account's API rate-limit state + V-481 scope predicate edge cases.' — pinned so the never-plaintext-bearer-headers + introspect-POST-/v1/oauth/introspect + 3-interpretation-cases + V-481-scope-predicate commitment survives", () => {
+  it('Triage keeps token+secret with the developer, uses client-authenticated introspection, and shares only sanitized output', () => {
     expect(body).toMatch(/## Triage workflow — "this token is failing"/);
-    expect(body).toMatch(/never\s*\n?\s*ask them to forward bearer headers in plaintext over an/);
-    expect(body).toMatch(/unencrypted channel\)\./);
+    expect(body).toMatch(
+      /Do not ask\s*\n?\s*them to send Driftstack the bearer token or client secret/,
+    );
+    expect(body).toMatch(/base64 is\s*\n?\s*not encryption/);
+    expect(body).toMatch(/--arg client_id "\$OAUTH_CLIENT_ID"/);
+    expect(body).toMatch(/--arg client_secret "\$OAUTH_CLIENT_SECRET"/);
     expect(body).toMatch(/"\$BASE_URL\/v1\/oauth\/introspect"/);
+    expect(body).toMatch(/stores only the client-secret hash and cannot run this/);
+    expect(body).toMatch(/- `401 invalid_client` → client id\/secret mismatch or revoked client\./);
     expect(body).toMatch(/- `active: false` → token is revoked or expired\./);
     expect(body).toMatch(/- `active: true` with the wrong `scope` → the developer/);
     expect(body).toMatch(/requested narrower scopes than the call they're attempting/);

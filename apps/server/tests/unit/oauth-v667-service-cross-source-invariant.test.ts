@@ -6,8 +6,8 @@
 //   (invite-only v1)'. Builds on V-488's PKCE primitives.
 //
 //   D-2026-05-10-01 decision — tokens are OPAQUE bearer strings
-//   (no JWT). Live in same logical surface as API keys; scopes are
-//   a subset of ApiKeyScope; no refresh tokens v1.
+//   (no JWT), with dedicated client-authenticated lifecycle routes;
+//   scopes are a subset of ApiKeyScope; no refresh tokens v1.
 //
 //   5-step flow:
 //     1. Admin registers OAuth client via
@@ -86,14 +86,14 @@ describe('W919 V-667 OAuth service cross-source invariant', () => {
 
   it("CRITICAL no-refresh-tokens framing — 'No refresh tokens v1 — the third-party re-prompts the customer if their access token expires'. The no-refresh design simplifies revocation (just delete the token row).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/oauth.ts'));
-    expect(p).toMatch(/No refresh tokens v1 — the third-party re-prompts the/);
-    expect(p).toMatch(/customer if their access token expires/);
+    expect(p).toMatch(/No refresh\s*\n?\/\/ tokens v1 — the third-party re-prompts the customer/);
+    expect(p).toMatch(/if their access\s*\n?\/\/ token expires/);
   });
 
-  it("CRITICAL tokens live in API-key surface framing — 'live in the same logical surface as API keys: introspection via the existing /v1/api-keys/:id shape, scopes are a subset of ApiKeyScope'. The API-key-surface reuse avoids a parallel scope/introspection system.", () => {
+  it('CRITICAL tokens use dedicated client-authenticated introspection/revocation and ApiKeyScope subsets', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/oauth.ts'));
-    expect(p).toMatch(/They live in the same logical surface as API keys: introspection via/);
-    expect(p).toMatch(/the existing `\/v1\/api-keys\/:id` shape, scopes are a subset of/);
+    expect(p).toMatch(/They use dedicated client-authenticated introspection and revocation/);
+    expect(p).toMatch(/endpoints, and their scopes are a subset of `ApiKeyScope`/);
     expect(p).toMatch(/`ApiKeyScope`/);
   });
 
@@ -169,9 +169,11 @@ describe('W919 V-667 OAuth service cross-source invariant', () => {
     expect(p).toMatch(/Allowed redirect URIs\. Exact-match check on \/authorize/);
   });
 
-  it("CRITICAL revoked_at framing — 'Soft-deleted clients reject /authorize + /token'. The soft-delete preserves audit-trail without forcing hard-delete of historical authorizations.", () => {
+  it('CRITICAL revoked clients reject every provider authorization and lifecycle operation', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/oauth.ts'));
-    expect(p).toMatch(/Soft-deleted clients reject \/authorize \+ \/token/);
+    expect(p).toMatch(
+      /Soft-deleted clients reject authorize, token, introspection, and revocation/,
+    );
   });
 
   // ─── AuthorizationCode 9-field shape ─────────────────────────
@@ -194,11 +196,20 @@ describe('W919 V-667 OAuth service cross-source invariant', () => {
 
   // ─── AccessToken 6-field shape ───────────────────────────────
 
-  it('CRITICAL AccessToken has 6 fields — token + client_id + account_id + scope (readonly ApiKeyScope[]) + created_at + expires_at. The 6-field token row maps to the introspection /v1/api-keys/:id surface.', () => {
+  it('CRITICAL AccessToken has 6 fields and carries the client ownership used by introspection/revocation', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/oauth.ts'));
     expect(p).toMatch(/export interface AccessToken \{/);
     expect(p).toMatch(/token: string;/);
     expect(p).toMatch(/expires_at: number;/);
+  });
+
+  it('CRITICAL client lifecycle methods authenticate first and never disclose or mutate a foreign token', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/oauth.ts'));
+    expect(p).toMatch(/async introspectForClient\(args: ClientTokenArgs\)/);
+    expect(p).toMatch(/return token\?\.client_id === client\.client_id \? token : null;/);
+    expect(p).toMatch(/async revokeTokenForClient\(args: ClientTokenArgs\)/);
+    expect(p).toMatch(/if \(token\?\.client_id === client\.client_id\)/);
+    expect(p).toMatch(/throw new OAuthError\('invalid_client', 'invalid client credentials'\)/);
   });
 
   // ─── RegisterClientResult plaintext-once framing ─────────────

@@ -24,7 +24,10 @@ import { AUTH_IP_LIMITS } from '../../src/middleware/ip-rate-limit.js';
 
 const CAPACITY = AUTH_IP_LIMITS.oauthProvider.capacity;
 
-async function buildHarness(): Promise<FastifyInstance> {
+async function buildHarness(): Promise<{
+  app: FastifyInstance;
+  credentials: { client_id: string; client_secret: string };
+}> {
   const app: FastifyInstance = Fastify({ logger: false });
   registerErrorHandler(app);
   // The admin routes registered alongside use app.requireScope; the
@@ -33,17 +36,22 @@ async function buildHarness(): Promise<FastifyInstance> {
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
   app.decorate('requireAuth', () => Promise.resolve());
   app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
+  const service = new OAuthService(new InMemoryOAuthStore());
+  const credentials = await service.registerClient({
+    label: 'RateLimitApp',
+    redirect_uris: ['https://app.example/cb'],
+  });
   registerOAuthRoutes(app, {
-    service: new OAuthService(new InMemoryOAuthStore()),
+    service,
     rateLimitStore: new MemoryRateLimitStore(),
   });
   await app.ready();
-  return app;
+  return { app, credentials };
 }
 
 describe('V-667 OAuth-provider public dance — IP rate-limit gate', () => {
   it('allows the first request but throttles (429) a single-IP burst past capacity on /v1/oauth/revoke', async () => {
-    const app = await buildHarness();
+    const { app, credentials } = await buildHarness();
     try {
       const statuses: number[] = [];
       // capacity + 1: the token bucket starts full, so the first
@@ -54,7 +62,7 @@ describe('V-667 OAuth-provider public dance — IP rate-limit gate', () => {
         const res = await app.inject({
           method: 'POST',
           url: '/v1/oauth/revoke',
-          payload: { token: 'tok_unknown_value' },
+          payload: { token: 'tok_unknown_value', ...credentials },
         });
         statuses.push(res.statusCode);
       }
@@ -68,21 +76,21 @@ describe('V-667 OAuth-provider public dance — IP rate-limit gate', () => {
   });
 
   it('keys each public route on its OWN bucket — exhausting /revoke does not throttle /introspect', async () => {
-    const app = await buildHarness();
+    const { app, credentials } = await buildHarness();
     try {
       // Drain the /revoke bucket past capacity.
       for (let i = 0; i < CAPACITY + 1; i++) {
         await app.inject({
           method: 'POST',
           url: '/v1/oauth/revoke',
-          payload: { token: 'tok_unknown_value' },
+          payload: { token: 'tok_unknown_value', ...credentials },
         });
       }
       // A fresh /introspect must still be served (separate bucket).
       const introspect = await app.inject({
         method: 'POST',
         url: '/v1/oauth/introspect',
-        payload: { token: 'tok_unknown_value' },
+        payload: { token: 'tok_unknown_value', ...credentials },
       });
       expect(introspect.statusCode).toBe(200);
       expect(introspect.json()).toEqual({ active: false });

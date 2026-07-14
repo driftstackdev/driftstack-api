@@ -1,14 +1,14 @@
 // W438.B — drift guard for apps/server/src/routes/oauth.ts.
 // V-667.B OAuth 2.0 Fastify route layer (PKCE + client_secret + code).
 // Drift here either drops PKCE S256 literal validation (downgrade to
-// 'plain' opens prefix-attack class) or breaks the RFC 7009 always-
-// 200 revoke contract (probe-style enumeration risk).
+// 'plain' opens prefix-attack class) or drops client-bound token
+// introspection/revocation (metadata disclosure / cross-client revoke).
 //
 //   • V-667.B framing pinned: admin, public provider, and interactive
 //     dashboard-consent surfaces have distinct authentication gates.
 //   • Admin: register/list/get-one/delete/V-667.E rotate-secret.
-//   • Public dance: authorize / token / introspect / V-667.C RFC 7009
-//     revoke. Consent completion requires an interactive web session.
+//   • Provider: authorize / token / introspect / V-667.C RFC 7009
+//     revoke. Token lifecycle calls authenticate the confidential client.
 //   • PKCE: code_challenge 43..128 + code_challenge_method literal
 //     S256; code_verifier 43..128.
 //   • state 8..256 (CSRF token min length).
@@ -18,10 +18,10 @@
 //   • V-667.E rotate-secret: returns new plaintext ONCE; store keeps
 //     only hash; existing access tokens NOT invalidated (bearer-auth;
 //     secret only consulted on /token exchange).
-//   • V-667.C revoke: always 200 regardless of token existence
-//     (RFC 7009; prevents probe enumeration).
-//   • introspect: false when null; otherwise active+client_id+
-//     account_id+scope+exp (Math.floor(expires_at/1000) seconds).
+//   • V-667.C revoke: authenticated clients get 200 for own, unknown,
+//     and foreign tokens, but only their own token is mutated.
+//   • introspect: authenticated foreign/unknown tokens collapse to false;
+//     owned live tokens return client/account/scope/exp metadata.
 //   • oauthErrorToHttp: invalid_client/unauthorized_client → 401;
 //     invalid_request/_scope/_grant/access_denied → 400.
 
@@ -47,7 +47,7 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
       /\/\/\s*\* Admin \(auth-gated\):\s*\n?\s*\/\/\s*- POST\s+\/v1\/admin\/oauth\/clients\s+— register\s*\n?\s*\/\/\s*- GET\s+\/v1\/admin\/oauth\/clients\s+— list\s*\n?\s*\/\/\s*- DELETE \/v1\/admin\/oauth\/clients\/:id\s+— revoke/,
     );
     expect(body).toMatch(
-      /\/\/\s*\* Public OAuth dance \(no account auth — PKCE \+ client_secret \+ code are auth\):\s*\n?\s*\/\/\s*- GET\s+\/v1\/oauth\/authorize\s+— stage authorization\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/token\s+— code → access_token\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/introspect\s+— token validation/,
+      /\/\/\s*\* OAuth provider surface \(no account auth; client credentials protect\s*\n?\s*\/\/\s*token exchange, introspection, and revocation\):\s*\n?\s*\/\/\s*- GET\s+\/v1\/oauth\/authorize\s+— stage authorization\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/token\s+— code → access_token\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/introspect\s+— token validation/,
     );
     expect(body).toMatch(
       /\/\/\s*\* Interactive dashboard consent \(web-session \+ account-rate-limit gated\):\s*\n?\s*\/\/\s*- POST\s+\/v1\/oauth\/authorize\/complete\s+— approve staged authorization/,
@@ -90,12 +90,15 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('V-667.C RevokeBody framing pinned: RFC 7009; token_type_hint informational (access_token | refresh_token) — ignored but accepted so off-the-shelf OAuth clients post unchanged. Slice 117 added token max(2048) cap (JWT-sized headroom)', () => {
+  it('RFC 7662/7009 bodies require bounded client credentials; revoke retains optional token_type_hint', () => {
     expect(body).toMatch(
       /\/\/ V-667\.C — RFC 7009 revoke\. token_type_hint is informational\s*\n?\s*\/\/ \(access_token \| refresh_token\); we ignore it but accept it so\s*\n?\s*\/\/ off-the-shelf OAuth clients can post unchanged\./,
     );
     expect(body).toMatch(
-      /const RevokeBody = z\.object\(\{\s*\n?\s*token: z\.string\(\)\.min\(1\)\.max\(2048\),\s*\n?\s*token_type_hint: z\.enum\(\['access_token', 'refresh_token'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const IntrospectBody = z\.object\(\{\s*token: z\.string\(\)\.min\(1\)\.max\(2048\),\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*client_secret: z\.string\(\)\.min\(1\)\.max\(256\),\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /const RevokeBody = z\.object\(\{\s*token: z\.string\(\)\.min\(1\)\.max\(2048\),\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*client_secret: z\.string\(\)\.min\(1\)\.max\(256\),\s*token_type_hint: z\.enum\(\['access_token', 'refresh_token'\]\)\.optional\(\),\s*\}\);/,
     );
   });
 
@@ -124,9 +127,9 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('V-667.E rotate-secret framing pinned: returns new plaintext ONCE; store keeps only hash; existing access tokens NOT invalidated (bearer-authenticated; secret consulted only on /token exchange)', () => {
+  it('V-667.E rotate-secret keeps bearer tokens valid but requires the successor secret on every client-authenticated lifecycle call', () => {
     expect(body).toMatch(
-      /\/\/ V-667\.E — rotate the client_secret in place\. Returns the new\s*\n?\s*\/\/ plaintext ONCE \(the store keeps only the hash\)\. Existing access\s*\n?\s*\/\/ tokens are NOT invalidated \(they're bearer-authenticated; the\s*\n?\s*\/\/ secret is consulted only on the \/token exchange\)\./,
+      /\/\/ V-667\.E — rotate the client_secret in place\. Returns the new\s*\n?\s*\/\/ plaintext ONCE \(the store keeps only the hash\)\. Existing access\s*\n?\s*\/\/ tokens are NOT invalidated \(they remain bearer-authenticated\), but\s*\n?\s*\/\/ the new secret is required for token exchange\/introspection\/revoke\./,
     );
     expect(body).toMatch(
       /app\.post<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/admin\/oauth\/clients\/:id\/rotate-secret',/,
@@ -158,18 +161,19 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('introspect: null → {active:false}; otherwise {active:true + client_id + account_id + scope + exp Math.floor(expires_at/1000) seconds}', () => {
+  it('introspect authenticates/binds the client before returning minimal inactive or owned metadata', () => {
+    expect(body).toMatch(/await deps\.service\.introspectForClient\(body\)/);
     expect(body).toMatch(
       /if \(token === null\) \{\s*\n?\s*return reply\.send\(\{ active: false \}\);\s*\n?\s*\}\s*\n?\s*return reply\.send\(\{\s*\n?\s*active: true,\s*\n?\s*client_id: token\.client_id,\s*\n?\s*account_id: token\.account_id,\s*\n?\s*scope: token\.scope,\s*\n?\s*exp: Math\.floor\(token\.expires_at \/ 1000\),\s*\n?\s*\}\);/,
     );
   });
 
-  it('V-667.C RFC 7009 revoke framing pinned: always 200 regardless of whether the token existed; spec requirement — prevents probe-style enumeration', () => {
+  it('RFC 7009 revoke authenticates/binds the client and preserves authorized always-200 anti-enumeration', () => {
     expect(body).toMatch(
-      /\/\/ V-667\.C — RFC 7009\. Always 200, regardless of whether the token\s*\n?\s*\/\/ existed\. Spec requirement: prevents probe-style enumeration\./,
+      /\/\/ V-667\.C — RFC 7009\. Once client authentication succeeds, always\s*\n?\s*\/\/ return 200 for owned, foreign, and unknown tokens/,
     );
     expect(body).toMatch(
-      /await deps\.service\.revokeToken\(body\.token\);\s*\n?\s*return reply\.code\(200\)\.send\(\{\}\);/,
+      /await deps\.service\.revokeTokenForClient\(body\);\s*\n?\s*return reply\.code\(200\)\.send\(\{\}\);/,
     );
   });
 

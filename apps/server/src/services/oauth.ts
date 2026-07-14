@@ -17,10 +17,10 @@
 //      `client_id`, `client_secret`. Returns an opaque access token.
 //
 // Tokens are OPAQUE bearer strings (no JWT — D-2026-05-10-01 decision).
-// They live in the same logical surface as API keys: introspection via
-// the existing `/v1/api-keys/:id` shape, scopes are a subset of
-// `ApiKeyScope`. No refresh tokens v1 — the third-party re-prompts the
-// customer if their access token expires.
+// They use dedicated client-authenticated introspection and revocation
+// endpoints, and their scopes are a subset of `ApiKeyScope`. No refresh
+// tokens v1 — the third-party re-prompts the customer if their access
+// token expires.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { ApiKeyScope } from '@driftstack/api-types';
@@ -49,7 +49,7 @@ export interface OAuthClient {
   /** Account that the admin registered this client on behalf of (if any). */
   account_id: string | null;
   created_at: number;
-  /** Soft-deleted clients reject /authorize + /token. */
+  /** Soft-deleted clients reject authorize, token, introspection, and revocation. */
   revoked_at: number | null;
 }
 
@@ -88,8 +88,8 @@ export interface OAuthStore {
    * active row. A persistent implementation must make the revoked-at check
    * part of the same conditional UPDATE as the hash swap so a concurrent
    * revoke cannot authorize a successor secret from a stale read. Existing
-   * access tokens stay valid (they're bearer-authenticated; the secret is
-   * consulted only on /token exchange).
+   * access tokens stay bearer-valid; the successor secret is required for
+   * later introspection and revocation as well as token exchange.
    */
   rotateClientSecretHash(client_id: string, new_hash: string): Promise<boolean>;
   // Authorization codes
@@ -298,6 +298,15 @@ export interface ExchangeCodeResult {
   scope: readonly ApiKeyScope[];
 }
 
+export interface OAuthClientCredentials {
+  client_id: string;
+  client_secret: string;
+}
+
+export interface ClientTokenArgs extends OAuthClientCredentials {
+  token: string;
+}
+
 export class OAuthService {
   private readonly pendingAuthorizations = new Map<string, AuthorizationCode & { pending: true }>();
 
@@ -353,7 +362,9 @@ export class OAuthService {
    * V-667.E — rotate the client_secret in place. Returns the NEW
    * plaintext (shown ONCE — the store keeps only the hash). The
    * client_id stays the same so existing redirect URIs + customer
-   * consent records carry over.
+   * consent records carry over. Existing access tokens remain bearer-
+   * valid, but the successor secret is required to introspect or revoke
+   * them through the public client-authenticated endpoints.
    *
    * Errors:
    *   - invalid_client: client_id not found OR client is revoked
@@ -439,14 +450,7 @@ export class OAuthService {
   }
 
   async exchangeCode(args: ExchangeCodeArgs): Promise<ExchangeCodeResult> {
-    const client = await this.store.getClient(args.client_id);
-    if (client === null || client.revoked_at !== null) {
-      throw new OAuthError('invalid_client', 'unknown or revoked client_id');
-    }
-    const presentedSecretHash = this.secretHasher(args.client_secret);
-    if (!constantTimeStringEqual(client.client_secret_hash, presentedSecretHash)) {
-      throw new OAuthError('invalid_client', 'client_secret mismatch');
-    }
+    const { client, presentedSecretHash } = await this.authenticateClient(args);
     const code = await this.store.getCode(args.code);
     if (code === null) throw new OAuthError('invalid_grant', 'code unknown or expired');
     if (code.consumed_at !== null) {
@@ -498,6 +502,18 @@ export class OAuthService {
   }
 
   /**
+   * RFC 7662 client-authenticated introspection. Authenticate before
+   * looking up token material, then disclose metadata only when the
+   * token was issued to that exact live client. Unknown and foreign
+   * tokens intentionally share the minimal inactive response.
+   */
+  async introspectForClient(args: ClientTokenArgs): Promise<AccessToken | null> {
+    const { client } = await this.authenticateClient(args);
+    const token = await this.store.getToken(args.token);
+    return token?.client_id === client.client_id ? token : null;
+  }
+
+  /**
    * V-667.C — RFC 7009 token revocation. Per the spec, the response
    * does not distinguish "valid token revoked" from "invalid token"
    * — both succeed silently so third-party clients can't probe token
@@ -507,6 +523,37 @@ export class OAuthService {
    */
   async revokeToken(token: string): Promise<void> {
     await this.store.revokeToken(token);
+  }
+
+  /**
+   * RFC 7009 client-authenticated revocation. A valid client may revoke
+   * only its own token. Unknown and foreign tokens are silent no-ops so
+   * the authorized response remains enumeration-resistant.
+   */
+  async revokeTokenForClient(args: ClientTokenArgs): Promise<void> {
+    const { client } = await this.authenticateClient(args);
+    const token = await this.store.getToken(args.token);
+    if (token?.client_id === client.client_id) {
+      await this.store.revokeToken(args.token);
+    }
+  }
+
+  private async authenticateClient(
+    credentials: OAuthClientCredentials,
+  ): Promise<{ client: OAuthClient; presentedSecretHash: string }> {
+    const presentedSecretHash = this.secretHasher(credentials.client_secret);
+    const client = await this.store.getClient(credentials.client_id);
+
+    // Always perform one equal-length timing-safe comparison after the
+    // lookup. For an unknown client, comparing the presented digest with
+    // itself supplies the same crypto primitive without inventing a
+    // secret-dependent branch; the null check still rejects it.
+    const expectedSecretHash = client?.client_secret_hash ?? presentedSecretHash;
+    const secretMatches = constantTimeStringEqual(expectedSecretHash, presentedSecretHash);
+    if (client === null || client.revoked_at !== null || !secretMatches) {
+      throw new OAuthError('invalid_client', 'invalid client credentials');
+    }
+    return { client, presentedSecretHash };
   }
 }
 

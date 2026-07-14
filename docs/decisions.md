@@ -438,19 +438,19 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
 ---
 
-## D-2026-05-10-01 — OAuth 2.0 third-party flow uses PKCE S256, opaque tokens (no JWT)
+## D-2026-05-10-01 — OAuth 2.0 third-party flow uses PKCE S256, confidential clients, opaque tokens (no JWT)
 
-- **Decision:** V-488 third-party OAuth implementation will be Authorization-Code with PKCE (RFC 7636), `code_challenge_method=S256` only (we refuse `plain` at client-registration time). Issued access tokens are opaque random strings (same shape as existing API keys: `Bearer <key>`); they are NOT JWTs.
+- **Decision:** V-488 selected Authorization Code with mandatory PKCE (RFC 7636), `code_challenge_method=S256` only, and opaque bearer access tokens rather than JWTs. V-667's implemented invite-only client model is confidential: every client receives a one-time `client_secret`, and `/token`, `/introspect`, and `/revoke` authenticate that secret. Access tokens expire after one hour and there are no refresh tokens. V-617 binds introspection and revocation to the authenticated client's own tokens.
 
 - **Reasoning:**
-  - **PKCE-only, no client secret on confidential clients either.** Eliminates the implicit grant entirely; eliminates the client_credentials grant (third-party apps register and PKCE-bind every authorization, even server-side apps). One flow, one verifier, less to get wrong. Matches Auth0/Okta 2024+ guidance.
+  - **PKCE plus confidential-client authentication.** PKCE binds every authorization code to its verifier; the client secret separately authenticates the server-side integration at token exchange, introspection, and revocation. The provider does not expose implicit or client-credentials grants. Browser-only public clients are not supported by this invite-only v1 surface.
   - **S256 only, plain refused at registration.** Plain PKCE is in the RFC but exists only for legacy clients that can't compute SHA-256. We have no such clients; refusing plain at registration time means the verifier never branches on method at runtime. One fewer attacker-controllable degree of freedom.
   - **Opaque tokens, not JWTs.** JWTs require key-rotation infrastructure, audience-binding logic, and a JWT-validation lib on every reader path. We already authenticate every request through the V-066 auth-cache (sha256-keyed AccountContext). OAuth tokens slot into the same path: same hash-at-rest scheme, same Redis cache, same revocation primitive. Migrating to JWTs later is reversible (a single token-format flip with a grace-window dual-accept).
-  - **No refresh tokens v1.** Opaque tokens have a 30-day default TTL (configurable per-OAuth-client up to 90 days); customers re-authorize after expiry. Refresh-token plumbing (rotation, revocation, theft detection) is the largest source of bugs in OAuth implementations; we punt on it until customer demand surfaces. Re-authorize UX is acceptable at launch volume.
-  - **Token introspection follows existing API-key listing endpoint.** No `/oauth/introspect` endpoint; the existing `/v1/api-keys/:id` shape extends to OAuth-issued tokens. One less endpoint, one less auth surface.
+  - **No refresh tokens v1.** Opaque tokens have a fixed one-hour TTL; customers re-authorize after expiry. Refresh-token rotation, revocation, and theft detection are deferred until customer demand justifies the added attack surface.
+  - **Client-bound lifecycle endpoints.** `/v1/oauth/introspect` follows RFC 7662 and returns metadata only for a token owned by the authenticated live client. `/v1/oauth/revoke` follows RFC 7009 and revokes only that client's token. Authenticated unknown/foreign tokens collapse to minimal inactive/no-op responses, while bad client credentials fail before token lookup or mutation.
 
 - **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
-- **V-log:** V-488.
+- **V-log:** V-488, V-617.
 - **Revert path:**
   - If customers demand JWTs for federated trust (rare for SaaS API consumers): introduce a JWT format alongside opaque, gate per OAuth-client. Migration is opt-in.
   - If refresh tokens become necessary: add `/v1/oauth/token` with `grant_type=refresh_token`; change is purely additive.

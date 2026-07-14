@@ -220,7 +220,15 @@ approving the consent screen.
 
 `POST /v1/oauth/introspect` (RFC 7662)
 
-Body: `{ "token": "<access_token>" }`
+Body:
+
+```json
+{
+  "token": "<access_token>",
+  "client_id": "oac_…",
+  "client_secret": "oas_…"
+}
+```
 
 Response when the token is active:
 
@@ -234,7 +242,8 @@ Response when the token is active:
 }
 ```
 
-When the token is invalid, revoked, or expired:
+After client authentication succeeds, an invalid, revoked, expired,
+or foreign-client token returns the same minimal response:
 
 ```json
 { "active": false }
@@ -245,6 +254,11 @@ don't need this endpoint (they get all the same info from the
 `/token` response), but it's useful for resource servers proxying
 Driftstack on behalf of a different upstream.
 
+The endpoint returns `401` before token lookup when the client
+credentials are invalid or the client has been revoked. Keep the
+`client_secret` server-side; never call introspection from browser
+code or log the request body.
+
 ## Revoking tokens
 
 `POST /v1/oauth/revoke` (RFC 7009)
@@ -252,12 +266,20 @@ Driftstack on behalf of a different upstream.
 Body:
 
 ```json
-{ "token": "<access_token>", "token_type_hint": "access_token" }
+{
+  "token": "<access_token>",
+  "client_id": "oac_…",
+  "client_secret": "oas_…",
+  "token_type_hint": "access_token"
+}
 ```
 
-`token_type_hint` is informational only. Returns `200 {}` always —
-even if the token never existed, to prevent probe-style enumeration
-per the RFC.
+`token_type_hint` is informational only. Once client authentication
+succeeds, the endpoint returns `200 {}` for an owned, unknown, or
+foreign-client token; only a token issued to the authenticated client
+is revoked. This preserves RFC 7009 anti-enumeration behavior without
+allowing cross-client revocation. Invalid or revoked client credentials
+return `401` before mutation.
 
 Customers can ALSO revoke your integration from the customer
 dashboard at any time, which invalidates all access tokens issued
@@ -290,7 +312,9 @@ OAuth code from the table above (`invalid_grant`, `invalid_client`,
   `invalid_grant` (the code is atomically consumed).
 - **Access tokens are opaque** — don't try to parse them. They're
   not JWTs; introspect via `/v1/oauth/introspect` if you need the
-  encoded fields.
+  encoded fields. Introspection and revocation require the same
+  confidential-client credentials used at `/v1/oauth/token` and are
+  bound to that client's own tokens.
 - **Refresh tokens are NOT issued.** When a token expires, the
   customer must re-authorize. This is intentional; refresh tokens
   are an attack surface and 1-hour TTL access tokens are a workable

@@ -26238,3 +26238,52 @@ Verification:
 - strict server source/test, API-types, and Docs TypeScript checks pass; Astro
   reports 0 errors/0 warnings/0 hints, and targeted ESLint, Prettier, gofmt,
   diff, and whitespace checks are green.
+
+## V-617 — OAuth token lifecycle endpoints authenticate and bind the client
+
+**Date:** 2026-07-14
+
+Closed two missing confidential-client authority checks in the third-party
+OAuth provider. `/v1/oauth/introspect` previously accepted only an opaque token
+and returned its account, client, scope, and expiry metadata to any
+IP-rate-limited caller. `/v1/oauth/revoke` likewise accepted only the token, so
+any caller holding or guessing another client's token could invalidate it. An
+IP throttle limited request volume but supplied neither the authorization RFC
+7662 requires for introspection nor the client ownership check RFC 7009
+requires for revocation.
+
+Both request schemas now require bounded `client_id` and `client_secret`
+fields. The service authenticates the live client with the same hashed,
+timing-safe secret comparison used by code exchange before it reads token
+material. Introspection returns metadata only for a token issued to that exact
+client. An authenticated caller probing an unknown, inactive, or foreign token
+receives the same minimal `{ "active": false }`; invalid or revoked client
+credentials receive `401` before token lookup. Revocation mutates only an owned
+token and returns the same `200 {}` for owned, unknown, and foreign tokens after
+successful client authentication, preserving anti-enumeration behavior without
+permitting cross-client denial of service.
+
+The generated OpenAPI snapshot, developer references, architecture decision,
+and operator runbook now carry that contract. The runbook no longer asks
+operations to collect a bearer token and separately hold a recoverable client
+secret: developers run authenticated introspection on their own secure server
+and share only the sanitized response. It also records the rotation nuance:
+existing access tokens remain bearer-valid, while the successor client secret
+is required for later exchange, introspection, and revocation.
+
+Verification:
+
+- direct service/route tests prove valid owner introspection and revocation,
+  authenticated foreign-client `active:false` with no metadata, foreign-client
+  revoke `200` without mutation, invalid/revoked credentials `401`, and
+  authentication before token lookup;
+- the focused implementation/schema/docs matrix passes with 15 files and
+  167/167 tests; the complete OAuth-related unit matrix passes with 38 files
+  and 411/411 tests;
+- the real Postgres/Redis Playwright OAuth flow passes 4/4, including an actual
+  interactive web-session consent approval, code replay rejection, client
+  registration, code exchange, and client-authenticated introspection;
+- the OpenAPI integration suite passes 23/23 and the committed Python snapshot
+  is generator-identical; strict server source/test TypeScript, Docs and
+  marketing Astro checks (0 errors/0 warnings/0 hints), targeted ESLint,
+  Prettier, diff, and whitespace checks are green.

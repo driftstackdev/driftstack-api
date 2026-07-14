@@ -7,7 +7,8 @@
 //     - GET    /v1/admin/oauth/clients         — list
 //     - DELETE /v1/admin/oauth/clients/:id     — revoke
 //
-//   * Public OAuth dance (no account auth — PKCE + client_secret + code are auth):
+//   * OAuth provider surface (no account auth; client credentials protect
+//     token exchange, introspection, and revocation):
 //     - GET    /v1/oauth/authorize             — stage authorization
 //     - POST   /v1/oauth/token                 — code → access_token
 //     - POST   /v1/oauth/introspect            — token validation
@@ -73,6 +74,8 @@ const ExchangeCodeBody = z.object({
 
 const IntrospectBody = z.object({
   token: z.string().min(1).max(2048),
+  client_id: z.string().min(1).max(128),
+  client_secret: z.string().min(1).max(256),
 });
 
 // V-667.C — RFC 7009 revoke. token_type_hint is informational
@@ -80,14 +83,16 @@ const IntrospectBody = z.object({
 // off-the-shelf OAuth clients can post unchanged.
 const RevokeBody = z.object({
   token: z.string().min(1).max(2048),
+  client_id: z.string().min(1).max(128),
+  client_secret: z.string().min(1).max(256),
   token_type_hint: z.enum(['access_token', 'refresh_token']).optional(),
 });
 
 export interface RegisterOAuthRoutesDeps {
   service: OAuthService;
-  /** IP-rate-limit store for the unauthenticated public dance gates
-   *  (authorize/token/introspect/revoke). Required so the brute-force /
-   *  oracle protection can never be silently omitted when the provider
+  /** IP-rate-limit store for the OAuth provider gates
+   *  (authorize/token/introspect/revoke). Required so the brute-force
+   *  protection can never be silently omitted when the provider
    *  is wired; the full app always has a `rateLimitStore`. */
   rateLimitStore: RateLimitStore;
   /** Arc 7 obs.7 — optional metrics registry. When wired, the
@@ -108,11 +113,10 @@ function classifyOAuthTokenError(err: unknown): string {
 export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRoutesDeps): void {
   const metrics = deps.metrics;
 
-  // 2026-06-01 — IP gates on the UNAUTHENTICATED public dance (V-667).
-  // authorize/token/introspect/revoke carry no bearer/scope auth (PKCE
-  // + client_secret + code IS the auth), so /token is a code+secret
-  // brute-force surface and /introspect an unauth token-validity oracle
-  // — the only live unauth API family that lacked a limiter. Gate each
+  // 2026-06-01 — IP gates on the OAuth provider surface (V-667).
+  // authorize carries no client auth, while token/introspect/revoke use
+  // client credentials instead of account bearer/scope auth. The client-
+  // authenticated routes remain credential brute-force surfaces, so gate each
   // per-route (separate buckets) at AUTH_IP_LIMITS.oauthProvider
   // (60/min/IP) — generous for a legit client server, real friction for
   // an attacker. /authorize/complete is omitted (already requireAuth-
@@ -206,8 +210,8 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
 
   // V-667.E — rotate the client_secret in place. Returns the new
   // plaintext ONCE (the store keeps only the hash). Existing access
-  // tokens are NOT invalidated (they're bearer-authenticated; the
-  // secret is consulted only on the /token exchange).
+  // tokens are NOT invalidated (they remain bearer-authenticated), but
+  // the new secret is required for token exchange/introspection/revoke.
   app.post<{ Params: { id: string } }>(
     '/v1/admin/oauth/clients/:id/rotate-secret',
     { preHandler: [app.requireScope('driftstack_internal_admin')] },
@@ -221,7 +225,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
     },
   );
 
-  // ─── Public OAuth dance ───────────────────────────────────────
+  // ─── OAuth provider surface ───────────────────────────────────
   app.get(
     '/v1/oauth/authorize',
     { preHandler: [authorizeGate] },
@@ -309,26 +313,35 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
     { preHandler: [introspectGate] },
     async (req: FastifyRequest, reply) => {
       const body = parseOrThrow(IntrospectBody, req.body);
-      const token = await deps.service.introspect(body.token);
-      if (token === null) {
-        return reply.send({ active: false });
+      try {
+        const token = await deps.service.introspectForClient(body);
+        if (token === null) {
+          return reply.send({ active: false });
+        }
+        return reply.send({
+          active: true,
+          client_id: token.client_id,
+          account_id: token.account_id,
+          scope: token.scope,
+          exp: Math.floor(token.expires_at / 1000),
+        });
+      } catch (err) {
+        throw oauthErrorToHttp(err);
       }
-      return reply.send({
-        active: true,
-        client_id: token.client_id,
-        account_id: token.account_id,
-        scope: token.scope,
-        exp: Math.floor(token.expires_at / 1000),
-      });
     },
   );
 
-  // V-667.C — RFC 7009. Always 200, regardless of whether the token
-  // existed. Spec requirement: prevents probe-style enumeration.
+  // V-667.C — RFC 7009. Once client authentication succeeds, always
+  // return 200 for owned, foreign, and unknown tokens so the response
+  // cannot be used to enumerate token ownership or existence.
   app.post('/v1/oauth/revoke', { preHandler: [revokeGate] }, async (req: FastifyRequest, reply) => {
     const body = parseOrThrow(RevokeBody, req.body);
-    await deps.service.revokeToken(body.token);
-    return reply.code(200).send({});
+    try {
+      await deps.service.revokeTokenForClient(body);
+      return reply.code(200).send({});
+    } catch (err) {
+      throw oauthErrorToHttp(err);
+    }
   });
 }
 

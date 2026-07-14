@@ -11286,16 +11286,26 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 2048
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
                   }
                 },
-                "required": ["token"]
+                "required": ["token", "client_id", "client_secret"]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "active=true with token metadata, OR active=false when not recognized.",
+            "description": "For an authenticated client: active=true with metadata for its own token, OR active=false when the token is unknown, inactive, or belongs to another client.",
             "content": {
               "application/json": {
                 "schema": {
@@ -11340,6 +11350,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Invalid or revoked client credentials.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -11359,24 +11379,44 @@
                     "minLength": 1,
                     "maxLength": 2048
                   },
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "token_type_hint": {
                     "type": "string",
                     "enum": ["access_token", "refresh_token"]
                   }
                 },
-                "required": ["token"]
+                "required": ["token", "client_id", "client_secret"]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Always 200, regardless of whether the token existed. Spec requirement: prevents probe-style enumeration.",
+            "description": "For an authenticated client, always 200 whether its token was revoked, unknown, or belongs to another client. This prevents token enumeration.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or revoked client credentials.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }

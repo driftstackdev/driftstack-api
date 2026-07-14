@@ -22,7 +22,7 @@ Read this when:
        │
        │  3. POST /v1/oauth/token         (exchange code → access token)
        │  4. Authorization: Bearer oat_…  (use the token)
-       │  5. POST /v1/oauth/revoke        (revoke when done)
+       │  5. POST /v1/oauth/revoke        (client-authenticated revoke)
        ▼
    Driftstack API
        ▲
@@ -98,8 +98,8 @@ The response carries the NEW plaintext `client_secret`. Email it
 to the developer + delete from the response cache. The old secret
 is invalid immediately — any in-flight `/token` exchanges using
 the old secret will fail. **Existing access tokens stay valid**
-because they're bearer-authenticated; the secret is only consulted
-on `/token`.
+because they're bearer-authenticated. The new secret is required for
+subsequent `/token`, `/introspect`, and `/revoke` requests.
 
 If the developer has running services that ran out of access
 tokens (1-hour TTL), those services will fail to re-exchange until
@@ -121,8 +121,8 @@ be cut, developer asks for full deletion.
 - New `/token` exchanges fail (the service blocks revoked clients).
 - **Existing access tokens stay valid until their 1-hour TTL.**
   This is intentional — same posture as the V-667.E rotation: the
-  secret is the only auth on `/token`; tokens already issued are
-  bearer-authenticated and don't re-consult the client.
+  tokens remain bearer-authenticated even though client lifecycle
+  endpoints re-authenticate the client.
 
 If you need to invalidate **all** existing tokens too:
 
@@ -130,39 +130,51 @@ If you need to invalidate **all** existing tokens too:
 2. Fetch active tokens via the admin store (no UI yet — query
    `oauth_access_tokens` directly with `WHERE client_id = '…' AND
 expires_at > now()`).
-3. Revoke each token via `POST /v1/oauth/revoke` (always 200 — no
-   feedback on success/failure; that's RFC 7009).
+3. Delete each token through the administrative store operation. The
+   public `POST /v1/oauth/revoke` route cannot be used after client
+   revocation because it correctly rejects revoked client credentials.
 
 A V-667.G follow-up will expose a "revoke all tokens for client"
 admin route — until then it's a SQL operation.
 
 ## Triage workflow — "this token is failing"
 
-The developer reports a 401 on a previously-working token:
+The developer reports a 401 on a previously-working token. Do not ask
+them to send Driftstack the bearer token or client secret: base64 is
+not encryption, and collecting both credentials expands the incident
+blast radius. Have the developer run authenticated introspection from
+their own secure server and share only the response:
 
-1. Get the token from them (or have them base64-encode it; never
-   ask them to forward bearer headers in plaintext over an
-   unencrypted channel).
-2. Introspect it:
+```bash
+jq -n \
+  --arg token "$OAUTH_TOKEN" \
+  --arg client_id "$OAUTH_CLIENT_ID" \
+  --arg client_secret "$OAUTH_CLIENT_SECRET" \
+  '{token:$token, client_id:$client_id, client_secret:$client_secret}' | \
+  curl --fail-with-body -X POST \
+    -H "Content-Type: application/json" \
+    --data-binary @- \
+    "$BASE_URL/v1/oauth/introspect"
+```
 
-   ```bash
-   curl -X POST \
-     -H "Content-Type: application/json" \
-     -d '{"token":"oat_…"}' \
-     "$BASE_URL/v1/oauth/introspect"
-   ```
+Driftstack stores only the client-secret hash and cannot run this
+request on the developer's behalf. If they no longer possess the
+secret, coordinate a rotation; do not ask them to disclose a surviving
+copy. Interpret the sanitized response:
 
-3. Interpret the response:
-   - `active: false` → token is revoked or expired. If expired,
-     the developer needs to run the dance again (the 1h TTL is
-     intentional). If revoked, check whether the client is
-     revoked (see the lookup section).
-   - `active: true` with the wrong `scope` → the developer
-     requested narrower scopes than the call they're attempting
-     needs. Tell them to re-authorize with broader scope.
-   - `active: true` with the right scope but the call still 401s
-     → not an OAuth problem; check the account's API rate-limit
-     state + V-481 scope predicate edge cases.
+- `401 invalid_client` → client id/secret mismatch or revoked client.
+  Confirm the client state through the admin lookup; rotate only with
+  the developer's approval unless this is an active incident.
+- `active: false` → token is revoked or expired. If expired,
+  the developer needs to run the dance again (the 1h TTL is
+  intentional). If revoked, check whether the client is
+  revoked (see the lookup section).
+- `active: true` with the wrong `scope` → the developer
+  requested narrower scopes than the call they're attempting
+  needs. Tell them to re-authorize with broader scope.
+- `active: true` with the right scope but the call still 401s
+  → not an OAuth problem; check the account's API rate-limit
+  state + V-481 scope predicate edge cases.
 
 ## Security incident posture
 
@@ -187,7 +199,8 @@ If an OAuth client is implicated in a security incident:
 | `/authorize` returns 400 "invalid_request"      | redirect_uri doesn't match what's registered, or PKCE challenge missing/malformed. Check the request vs. registered URIs.              |
 | `/token` returns 401 "invalid_client"           | client_id wrong, client revoked, or client_secret wrong (e.g. the developer used an old one post-rotation).                            |
 | `/token` returns 400 "invalid_grant"            | Code already exchanged (codes are single-use), code expired, or code_verifier doesn't match the original challenge.                    |
-| `/introspect` returns active:false unexpectedly | Token expired (most common — 1h TTL caught them off-guard) or revoked via /revoke.                                                     |
+| `/introspect` returns 401 "invalid_client"      | Client id/secret mismatch or revoked client. Check admin state; rotate only through the credential workflow.                           |
+| `/introspect` returns active:false unexpectedly | Token expired, revoked, unknown, or belongs to another client id. Verify the client id before re-authorizing.                          |
 | Customer sees an unexpected OAuth consent       | Phishing — someone got their session and tried to authorize a malicious client. Lock the account, force re-auth, audit /authorize log. |
 
 ## Related runbooks

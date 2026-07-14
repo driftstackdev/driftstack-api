@@ -127,7 +127,7 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
     );
   });
 
-  it("Introspection RFC 7662 + Revocation RFC 7009 framing pinned: POST /v1/oauth/introspect 5-field response (active + client_id + account_id + scope[] + exp) + POST /v1/oauth/revoke + 'The endpoint always returns 200 — even for tokens that don't exist — per RFC 7009 to prevent token-enumeration probes. token_type_hint is optional and informational.' — pinned so the 2-RFC + always-200-on-revoke + token-enumeration-prevention rationale + token_type_hint-optional commitment survives", () => {
+  it('RFC 7662/7009 examples require client credentials and bind token metadata/mutation to that client', () => {
     expect(body).toMatch(/<h2>Introspection \(RFC 7662\)<\/h2>/);
     expect(body).toMatch(/POST \/v1\/oauth\/introspect/);
     expect(body).toMatch(/"active": true/);
@@ -135,12 +135,18 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
     expect(body).toMatch(/"account_id": "acc_…"/);
     expect(body).toMatch(/"scope": \["read:sessions"\]/);
     expect(body).toMatch(/"exp": 1736600000/);
+    expect(body).toMatch(/"client_secret": "oas_…"/);
+    expect(body).toMatch(/foreign-client token returns/);
+    expect(body).toMatch(
+      /Invalid or revoked client\s*\n?\s*credentials return 401 before token lookup\./,
+    );
     expect(body).toMatch(/<h2>Revocation \(RFC 7009\)<\/h2>/);
     expect(body).toMatch(/POST \/v1\/oauth\/revoke/);
     expect(body).toMatch(/"token_type_hint": "access_token"/);
     expect(body).toMatch(
-      /The endpoint always returns 200 — even for tokens that don't\s*\n?\s*exist — per RFC 7009 to prevent token-enumeration probes\.\s*\n?\s*<code>token_type_hint<\/code> is optional and informational\./,
+      /After client authentication succeeds, the endpoint returns 200\s*\n?\s*for an owned, unknown, or foreign-client token, but only a token\s*\n?\s*issued to your <code>client_id<\/code> is revoked\./,
     );
+    expect(body).toMatch(/Invalid or revoked client credentials return 401\./);
   });
 
   it('5-security-expectation list pinned: validate-state-CSRF + fresh-PKCE-verifier-per-flow + HTTPS-only-redirect_uri-production-not-localhost + store-client_secret-server-side (browser-cannot-keep-it-secret, ask-support-about-public-client-PKCE-only variant) + tokens-are-bearer-treat-like-passwords — pinned so the 5-security-bullet + public-client-variant-via-support commitment survives', () => {

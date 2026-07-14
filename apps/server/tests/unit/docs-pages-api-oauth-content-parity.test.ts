@@ -33,7 +33,7 @@ describe('docs/pages/api/oauth content parity', () => {
     );
   });
 
-  it('Implementation notes 5-rule framing pinned: PKCE mandatory + S256 only + Codes single-use 5-min TTL + Access tokens opaque (not JWTs) + Refresh tokens NOT issued (intentional, 1h TTL workable trade-off) + Same scope set as API keys via ApiKeyScopeSchema — pinned so the 5-rule implementation-contract roster + S256-only + atomic-code-consume + opaque-not-JWT contract all stay documented', () => {
+  it('Implementation notes pin PKCE, atomic codes, opaque tokens, client-bound lifecycle calls, and no refresh tokens', () => {
     expect(body).toMatch(
       /- \*\*PKCE is mandatory\*\*, including for confidential clients\. The\s*\n?\s*`plain` challenge method is rejected — `S256` only\./,
     );
@@ -41,7 +41,7 @@ describe('docs/pages/api/oauth content parity', () => {
       /- \*\*Codes are single-use\*\* and expire 5 minutes after issue\. Race a\s*\n?\s*second `\/token` exchange with the same code → both fail with\s*\n?\s*`invalid_grant` \(the code is atomically consumed\)\./,
     );
     expect(body).toMatch(
-      /- \*\*Access tokens are opaque\*\* — don't try to parse them\. They're\s*\n?\s*not JWTs; introspect via `\/v1\/oauth\/introspect` if you need the\s*\n?\s*encoded fields\./,
+      /- \*\*Access tokens are opaque\*\* — don't try to parse them\. They're\s*\n?\s*not JWTs; introspect via `\/v1\/oauth\/introspect` if you need the\s*\n?\s*encoded fields\. Introspection and revocation require the same\s*\n?\s*confidential-client credentials used at `\/v1\/oauth\/token` and are\s*\n?\s*bound to that client's own tokens\./,
     );
     expect(body).toMatch(
       /- \*\*Refresh tokens are NOT issued\.\*\* When a token expires, the\s*\n?\s*customer must re-authorize\./,
@@ -78,23 +78,26 @@ describe('docs/pages/api/oauth content parity', () => {
     expect(body).not.toMatch(/urn:driftstack:oauth:/);
   });
 
-  it("Revoke RFC 7009 anti-enumeration framing pinned: 'POST /v1/oauth/revoke (RFC 7009)' + 'Returns 200 {} always — even if the token never existed, to prevent probe-style enumeration per the RFC.' + 'Customers can ALSO revoke your integration from the customer dashboard at any time, which invalidates all access tokens issued to your client_id for that account.' — pinned so the RFC 7009 + always-200 anti-enumeration + customer-side dashboard-revoke + client_id-scoped-invalidation contract all stay documented", () => {
+  it('RFC 7009 revoke requires client credentials, binds ownership, preserves authorized anti-enumeration, and rejects invalid credentials', () => {
     expect(body).toMatch(/`POST \/v1\/oauth\/revoke` \(RFC 7009\)/);
+    expect(body).toMatch(/"client_id": "oac_…"/);
+    expect(body).toMatch(/"client_secret": "oas_…"/);
     expect(body).toMatch(
-      /Returns `200 \{\}` always —\s*\n?\s*even if the token never existed, to prevent probe-style enumeration\s*\n?\s*per the RFC\./,
+      /Once client authentication\s*\n?\s*succeeds, the endpoint returns `200 \{\}` for an owned, unknown, or\s*\n?\s*foreign-client token; only a token issued to the authenticated client\s*\n?\s*is revoked\./,
     );
     expect(body).toMatch(
-      /Customers can ALSO revoke your integration from the customer\s*\n?\s*dashboard at any time, which invalidates all access tokens issued\s*\n?\s*to your `client_id` for that account\./,
+      /Invalid or revoked client credentials\s*\n?\s*return `401` before mutation\./,
     );
   });
 
-  it("Introspect RFC 7662 active-true/false framing pinned: 'POST /v1/oauth/introspect (RFC 7662)' + active:true response { active + client_id + account_id + scope + exp } + active:false on invalid/revoked/expired. + 'exp is Unix seconds (per RFC 7662 §2.2)' — pinned so the RFC 7662 + 5-field-active-true-response + bare-active-false-on-invalid + Unix-seconds-exp contract all stay documented", () => {
+  it('RFC 7662 introspection pins client authentication, own-token metadata, minimal inactive foreign response, and Unix exp', () => {
     expect(body).toMatch(/`POST \/v1\/oauth\/introspect` \(RFC 7662\)/);
     expect(body).toMatch(
       /"active": true,\s*\n?\s*"client_id": "oac_…",\s*\n?\s*"account_id": "<customer-uuid>",\s*\n?\s*"scope": \["read", "write"\],\s*\n?\s*"exp": 1747852800/,
     );
     expect(body).toMatch(/\{ "active": false \}/);
     expect(body).toMatch(/`exp` is Unix seconds \(per RFC 7662 §2\.2\)\./);
+    expect(body).toMatch(/The endpoint returns `401` before token lookup when the client/);
   });
 
   it("Bearer-API-keys-AND-OAuth-tokens-share-header framing pinned: 'Bearer API keys (ds_live_…) and OAuth access tokens BOTH use the Authorization: Bearer <token> header on /v1/* requests. The server differentiates by token prefix; both surfaces respect the same scope + rate-limit + audit pipeline.' — pinned so the dual-token-shared-header + differentiate-by-prefix + same-pipeline contract all stay documented", () => {

@@ -166,14 +166,21 @@ Content-Type: application/json
     <pre><code>{`POST /v1/oauth/introspect
 Content-Type: application/json
 
-{ "token": "oat_…" }
+{
+  "token": "oat_…",
+  "client_id": "oac_…",
+  "client_secret": "oas_…"
+}
 
 → { "active": true, "client_id": "oac_…", "account_id": "acc_…",
     "scope": ["read:sessions"], "exp": 1736600000 }`}</code></pre>
     <p>
-      A revoked or expired token returns <code>{`{"active": false}`}</code>.
-      Use introspection sparingly — the access-token request itself
-      already carries the scope information.
+      After your client credentials are authenticated, a revoked,
+      expired, unknown, or foreign-client token returns
+      <code>{`{"active": false}`}</code>. Invalid or revoked client
+      credentials return 401 before token lookup. Use introspection
+      sparingly and only from server-side code — the request contains
+      your <code>client_secret</code>.
     </p>
 
     <h2>Revocation (RFC 7009)</h2>
@@ -184,12 +191,20 @@ Content-Type: application/json
     <pre><code>{`POST /v1/oauth/revoke
 Content-Type: application/json
 
-{ "token": "oat_…", "token_type_hint": "access_token" }
+{
+  "token": "oat_…",
+  "client_id": "oac_…",
+  "client_secret": "oas_…",
+  "token_type_hint": "access_token"
+}
 
 → 200 OK`}</code></pre>
     <p>
-      The endpoint always returns 200 — even for tokens that don't
-      exist — per RFC 7009 to prevent token-enumeration probes.
+      After client authentication succeeds, the endpoint returns 200
+      for an owned, unknown, or foreign-client token, but only a token
+      issued to your <code>client_id</code> is revoked. This preserves
+      RFC 7009 anti-enumeration behavior without allowing cross-client
+      revocation. Invalid or revoked client credentials return 401.
       <code>token_type_hint</code> is optional and informational.
     </p>
 

@@ -21,7 +21,13 @@ function s256(verifier: string): string {
  * minted access token. Reused by the service + route specs so each
  * test starts from a real token, not a hand-rolled fixture.
  */
-async function mintAccessToken(svc: OAuthService): Promise<string> {
+interface MintedAccessToken {
+  token: string;
+  client_id: string;
+  client_secret: string;
+}
+
+async function mintAccessToken(svc: OAuthService): Promise<MintedAccessToken> {
   const reg = await svc.registerClient({
     label: 'TestApp',
     redirect_uris: ['https://app.example/cb'],
@@ -47,7 +53,11 @@ async function mintAccessToken(svc: OAuthService): Promise<string> {
     client_secret: reg.client_secret,
     redirect_uri: 'https://app.example/cb',
   });
-  return exchange.access_token;
+  return {
+    token: exchange.access_token,
+    client_id: reg.client_id,
+    client_secret: reg.client_secret,
+  };
 }
 
 async function buildRouteHarness(svc: OAuthService): Promise<FastifyInstance> {
@@ -71,10 +81,10 @@ async function buildRouteHarness(svc: OAuthService): Promise<FastifyInstance> {
 describe('V-667.C OAuthService.revokeToken — service layer', () => {
   it('deletes the token so the next introspect returns null', async () => {
     const svc = new OAuthService(new InMemoryOAuthStore());
-    const token = await mintAccessToken(svc);
-    expect(await svc.introspect(token)).not.toBeNull();
-    await svc.revokeToken(token);
-    expect(await svc.introspect(token)).toBeNull();
+    const minted = await mintAccessToken(svc);
+    expect(await svc.introspect(minted.token)).not.toBeNull();
+    await svc.revokeToken(minted.token);
+    expect(await svc.introspect(minted.token)).toBeNull();
   });
 
   it('is idempotent — revoking an unknown token is a silent no-op', async () => {
@@ -101,19 +111,19 @@ describe('V-667.C OAuthService.revokeToken — service layer', () => {
 describe('V-667.C POST /v1/oauth/revoke — route layer', () => {
   it('200 + revokes a real minted token', async () => {
     const svc = new OAuthService(new InMemoryOAuthStore());
-    const token = await mintAccessToken(svc);
+    const minted = await mintAccessToken(svc);
     const app = await buildRouteHarness(svc);
     const res = await app.inject({
       method: 'POST',
       url: '/v1/oauth/revoke',
-      payload: { token },
+      payload: minted,
     });
     expect(res.statusCode).toBe(200);
     // Subsequent introspect on the same token should now return active:false.
     const intro = await app.inject({
       method: 'POST',
       url: '/v1/oauth/introspect',
-      payload: { token },
+      payload: minted,
     });
     expect(intro.json<{ active: boolean }>().active).toBe(false);
     await app.close();
@@ -121,11 +131,12 @@ describe('V-667.C POST /v1/oauth/revoke — route layer', () => {
 
   it('200 even for an unknown token (RFC 7009 — no enumeration)', async () => {
     const svc = new OAuthService(new InMemoryOAuthStore());
+    const minted = await mintAccessToken(svc);
     const app = await buildRouteHarness(svc);
     const res = await app.inject({
       method: 'POST',
       url: '/v1/oauth/revoke',
-      payload: { token: 'never-issued' },
+      payload: { ...minted, token: 'never-issued' },
     });
     expect(res.statusCode).toBe(200);
     await app.close();
@@ -133,12 +144,12 @@ describe('V-667.C POST /v1/oauth/revoke — route layer', () => {
 
   it('accepts the optional token_type_hint without storing it', async () => {
     const svc = new OAuthService(new InMemoryOAuthStore());
-    const token = await mintAccessToken(svc);
+    const minted = await mintAccessToken(svc);
     const app = await buildRouteHarness(svc);
     const res = await app.inject({
       method: 'POST',
       url: '/v1/oauth/revoke',
-      payload: { token, token_type_hint: 'access_token' },
+      payload: { ...minted, token_type_hint: 'access_token' },
     });
     expect(res.statusCode).toBe(200);
     await app.close();
@@ -158,13 +169,48 @@ describe('V-667.C POST /v1/oauth/revoke — route layer', () => {
 
   it('400 on invalid token_type_hint value', async () => {
     const svc = new OAuthService(new InMemoryOAuthStore());
+    const minted = await mintAccessToken(svc);
     const app = await buildRouteHarness(svc);
     const res = await app.inject({
       method: 'POST',
       url: '/v1/oauth/revoke',
-      payload: { token: 'tok', token_type_hint: 'mtls_jwt' },
+      payload: { ...minted, token_type_hint: 'mtls_jwt' },
     });
     expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('401 on invalid client credentials and leaves the token active', async () => {
+    const svc = new OAuthService(new InMemoryOAuthStore());
+    const minted = await mintAccessToken(svc);
+    const app = await buildRouteHarness(svc);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/oauth/revoke',
+      payload: { ...minted, client_secret: 'wrong-secret' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(await svc.introspect(minted.token)).not.toBeNull();
+    await app.close();
+  });
+
+  it('an authenticated foreign client gets 200 but cannot revoke the owner token', async () => {
+    const svc = new OAuthService(new InMemoryOAuthStore());
+    const owner = await mintAccessToken(svc);
+    const foreign = await mintAccessToken(svc);
+    const app = await buildRouteHarness(svc);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/oauth/revoke',
+      payload: {
+        token: owner.token,
+        client_id: foreign.client_id,
+        client_secret: foreign.client_secret,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await svc.introspect(owner.token)).not.toBeNull();
     await app.close();
   });
 });
@@ -172,25 +218,79 @@ describe('V-667.C POST /v1/oauth/revoke — route layer', () => {
 describe('V-667.C — introspect contract preserved after revoke', () => {
   it('introspect returns active:true before revoke and active:false after', async () => {
     const svc = new OAuthService(new InMemoryOAuthStore());
-    const token = await mintAccessToken(svc);
+    const minted = await mintAccessToken(svc);
     const app = await buildRouteHarness(svc);
 
     const before = await app.inject({
       method: 'POST',
       url: '/v1/oauth/introspect',
-      payload: { token },
+      payload: minted,
     });
     expect(before.json<{ active: boolean; scope: string[] }>().active).toBe(true);
     expect(before.json<{ active: boolean; scope: string[] }>().scope).toEqual(['read:sessions']);
 
-    await app.inject({ method: 'POST', url: '/v1/oauth/revoke', payload: { token } });
+    await app.inject({ method: 'POST', url: '/v1/oauth/revoke', payload: minted });
 
     const after = await app.inject({
       method: 'POST',
       url: '/v1/oauth/introspect',
-      payload: { token },
+      payload: minted,
     });
     expect(after.json<{ active: boolean }>().active).toBe(false);
+    await app.close();
+  });
+
+  it('returns active:false without metadata to an authenticated foreign client', async () => {
+    const svc = new OAuthService(new InMemoryOAuthStore());
+    const owner = await mintAccessToken(svc);
+    const foreign = await mintAccessToken(svc);
+    const app = await buildRouteHarness(svc);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/oauth/introspect',
+      payload: {
+        token: owner.token,
+        client_id: foreign.client_id,
+        client_secret: foreign.client_secret,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ active: false });
+    await app.close();
+  });
+
+  it('returns 401 before token lookup when client credentials are invalid', async () => {
+    const store = new InMemoryOAuthStore();
+    const getTokenSpy = vi.spyOn(store, 'getToken');
+    const svc = new OAuthService(store);
+    const minted = await mintAccessToken(svc);
+    getTokenSpy.mockClear();
+    const app = await buildRouteHarness(svc);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/oauth/introspect',
+      payload: { ...minted, client_id: 'oac_unknown' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(getTokenSpy).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('returns 401 for a revoked client before disclosing owned token metadata', async () => {
+    const svc = new OAuthService(new InMemoryOAuthStore());
+    const minted = await mintAccessToken(svc);
+    await svc.revokeClient(minted.client_id);
+    const app = await buildRouteHarness(svc);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/oauth/introspect',
+      payload: minted,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).not.toHaveProperty('active');
     await app.close();
   });
 });

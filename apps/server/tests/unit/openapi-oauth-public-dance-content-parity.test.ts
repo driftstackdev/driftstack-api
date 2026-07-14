@@ -64,8 +64,18 @@ describe('OpenAPI — OAuth 2.0 public dance endpoints', () => {
     );
   });
 
-  it('revoke endpoint documents the always-200 anti-enumeration spec note', () => {
-    expect(src).toMatch(/Always 200, regardless of whether the token existed/);
+  it('introspection and revocation require bounded confidential-client credentials', () => {
+    expect(src).toMatch(
+      /OAuthIntrospectRequestOpenApi[\s\S]{0,350}client_id: z\.string\(\)\.min\(1\)\.max\(128\)[\s\S]{0,150}client_secret: z\.string\(\)\.min\(1\)\.max\(256\)/,
+    );
+    expect(src).toMatch(
+      /OAuthRevokeRequestOpenApi[\s\S]{0,350}client_id: z\.string\(\)\.min\(1\)\.max\(128\)[\s\S]{0,150}client_secret: z\.string\(\)\.min\(1\)\.max\(256\)/,
+    );
+  });
+
+  it('revoke documents authenticated always-200 anti-enumeration and 401 bad credentials', () => {
+    expect(src).toMatch(/For an authenticated client, always 200 whether its token was revoked/);
+    expect(src).toMatch(/401: \{ description: 'Invalid or revoked client credentials\.'/);
   });
 
   it('all 4 endpoints tagged "oauth" (consistent grouping for the Scalar UI)', () => {

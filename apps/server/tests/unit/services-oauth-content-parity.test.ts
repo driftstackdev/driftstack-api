@@ -28,14 +28,14 @@
 //     in-memory staging.
 //   • approveAuthorization: pending pop + 5-min TTL recheck +
 //     canonical hierarchical scope reduction + fresh code mint.
-//   • exchangeCode: client_secret_hash timing-safe equality;
+//   • authenticateClient: shared client_secret_hash timing-safe equality;
 //     consumed_at !== null → invalid_grant; client_id-mismatch
 //     guard; redirect_uri-mismatch guard; verifyS256Challenge call;
 //     atomic consumeCodeIfUnconsumed claim (single-use gate); token mint with oat_ prefix.
 //   • V-667.E rotateClientSecret: invalid_client on unknown or
 //     revoked; same client_id retained.
-//   • V-667.C revokeToken: RFC 7009 silent (route always 200; no
-//     existence probing surface).
+//   • RFC 7662/7009 lifecycle calls authenticate and bind the live
+//     client; foreign/unknown tokens collapse to minimal responses.
 //   • isAllowedRedirectUri: HTTPS only OR http://localhost|127.0.0.1
 //     (RFC 8252 native-app guidance).
 
@@ -65,9 +65,9 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
       /Tokens are OPAQUE bearer strings \(no JWT — D-2026-05-10-01 decision\)\./,
     );
     expect(body).toMatch(
-      /No refresh tokens v1 — the third-party re-prompts the\s*\n?\s*\/\/\s*customer if their access token expires\./,
+      /No refresh\s*\n?\s*\/\/\s*tokens v1 — the third-party re-prompts the customer if their access\s*\n?\s*\/\/\s*token expires\./,
     );
-    expect(body).toMatch(/scopes are a subset of\s*\n?\s*\/\/\s*`ApiKeyScope`\./);
+    expect(body).toMatch(/scopes are a subset of `ApiKeyScope`\./);
   });
 
   it('CODE_TTL_SECONDS = 5*60 + TOKEN_TTL_SECONDS = 60*60 (1h short-by-design)', () => {
@@ -90,7 +90,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(/account_id: string \| null;/);
     expect(body).toMatch(/created_at: number;/);
     expect(body).toMatch(
-      /\/\*\* Soft-deleted clients reject \/authorize \+ \/token\. \*\/\s*\n?\s*revoked_at: number \| null;/,
+      /\/\*\* Soft-deleted clients reject authorize, token, introspection, and revocation\. \*\/\s*\n?\s*revoked_at: number \| null;/,
     );
   });
 
@@ -189,9 +189,9 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(/const code = `oac_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
   });
 
-  it('exchangeCode: 4 invariants pinned (client revoked, consumed_at, client_id mismatch, redirect_uri mismatch, PKCE failure) all → OAuthError', () => {
+  it('exchangeCode delegates shared constant-time client authentication and preserves grant invariants', () => {
     expect(body).toMatch(
-      /const presentedSecretHash = this\.secretHasher\(args\.client_secret\);\s*\n?\s*if \(!constantTimeStringEqual\(client\.client_secret_hash, presentedSecretHash\)\) \{\s*\n?\s*throw new OAuthError\('invalid_client', 'client_secret mismatch'\);/,
+      /const \{ client, presentedSecretHash \} = await this\.authenticateClient\(args\);/,
     );
     expect(body).toMatch(
       /if \(code === null\) throw new OAuthError\('invalid_grant', 'code unknown or expired'\);/,
@@ -229,9 +229,15 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     );
   });
 
-  it('V-667.C revokeToken: RFC 7009 silent (no existence probing via /revoke surface)', () => {
+  it('RFC 7662/7009 authenticate before lookup, bind exact client ownership, and keep foreign/unknown responses minimal', () => {
     expect(body).toMatch(
-      /V-667\.C — RFC 7009 token revocation\. Per the spec, the response\s*\n?\s*\*\s*does not distinguish "valid token revoked" from "invalid token"\s*\n?\s*\*\s*— both succeed silently so third-party clients can't probe token\s*\n?\s*\*\s*existence by calling \/revoke\./,
+      /async introspectForClient\(args: ClientTokenArgs\): Promise<AccessToken \| null> \{\s*const \{ client \} = await this\.authenticateClient\(args\);\s*const token = await this\.store\.getToken\(args\.token\);\s*return token\?\.client_id === client\.client_id \? token : null;/,
+    );
+    expect(body).toMatch(
+      /async revokeTokenForClient\(args: ClientTokenArgs\): Promise<void> \{\s*const \{ client \} = await this\.authenticateClient\(args\);\s*const token = await this\.store\.getToken\(args\.token\);\s*if \(token\?\.client_id === client\.client_id\) \{\s*await this\.store\.revokeToken\(args\.token\);/,
+    );
+    expect(body).toMatch(
+      /const expectedSecretHash = client\?\.client_secret_hash \?\? presentedSecretHash;\s*const secretMatches = constantTimeStringEqual\(expectedSecretHash, presentedSecretHash\);\s*if \(client === null \|\| client\.revoked_at !== null \|\| !secretMatches\) \{\s*throw new OAuthError\('invalid_client', 'invalid client credentials'\);/,
     );
   });
 

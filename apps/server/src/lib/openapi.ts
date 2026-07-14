@@ -1946,7 +1946,11 @@ function buildRegistry(): OpenAPIRegistry {
     expires_in: z.number().int().positive(),
     scope: z.array(z.string()),
   });
-  const OAuthIntrospectRequestOpenApi = z.object({ token: z.string().min(1).max(2048) });
+  const OAuthIntrospectRequestOpenApi = z.object({
+    token: z.string().min(1).max(2048),
+    client_id: z.string().min(1).max(128),
+    client_secret: z.string().min(1).max(256),
+  });
   const OAuthIntrospectResponseOpenApi = z.union([
     z.object({ active: z.literal(false) }),
     z.object({
@@ -1959,6 +1963,8 @@ function buildRegistry(): OpenAPIRegistry {
   ]);
   const OAuthRevokeRequestOpenApi = z.object({
     token: z.string().min(1).max(2048),
+    client_id: z.string().min(1).max(128),
+    client_secret: z.string().min(1).max(256),
     token_type_hint: z.enum(['access_token', 'refresh_token']).optional(),
   });
   registerRoute(r, {
@@ -2009,9 +2015,11 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'active=true with token metadata, OR active=false when not recognized.',
+        description:
+          'For an authenticated client: active=true with metadata for its own token, OR active=false when the token is unknown, inactive, or belongs to another client.',
         content: { 'application/json': { schema: OAuthIntrospectResponseOpenApi } },
       },
+      401: { description: 'Invalid or revoked client credentials.', content: problemContent },
     },
   });
   registerRoute(r, {
@@ -2025,9 +2033,10 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'Always 200, regardless of whether the token existed. Spec requirement: prevents probe-style enumeration.',
+          'For an authenticated client, always 200 whether its token was revoked, unknown, or belongs to another client. This prevents token enumeration.',
         content: { 'application/json': { schema: z.object({}) } },
       },
+      401: { description: 'Invalid or revoked client credentials.', content: problemContent },
     },
   });
 
