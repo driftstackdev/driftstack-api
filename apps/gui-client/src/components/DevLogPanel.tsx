@@ -13,6 +13,7 @@ import {
   subscribeLogs,
   type LogLevel,
 } from '../lib/log-buffer';
+import { writeClipboardText } from '../lib/clipboard';
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
   error: 'text-red-400',
@@ -24,7 +25,7 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
 
 export function DevLogPanel(): JSX.Element {
   const [open, setOpen] = useState(false);
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'failed'>('idle');
   const copyTimerRef = useRef<number | null>(null);
   // The buffer mutates in place, so subscribe + force a re-render on change
   // rather than relying on reference identity.
@@ -40,15 +41,15 @@ export function DevLogPanel(): JSX.Element {
   );
 
   const copyLogs = (): void => {
-    const write = navigator.clipboard?.writeText(formatLogEntries());
-    if (write === undefined) {
-      setCopyState('failed');
-      return;
+    if (copyState === 'copying') return;
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
     }
-    void write.then(
+    setCopyState('copying');
+    void writeClipboardText(formatLogEntries()).then(
       () => {
         setCopyState('copied');
-        if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
         copyTimerRef.current = window.setTimeout(() => {
           copyTimerRef.current = null;
           setCopyState('idle');
@@ -94,13 +95,17 @@ export function DevLogPanel(): JSX.Element {
           <button
             type="button"
             onClick={copyLogs}
-            className="rounded border border-white/15 px-2 py-0.5 text-white/70 hover:text-white"
+            aria-busy={copyState === 'copying'}
+            disabled={copyState === 'copying'}
+            className="rounded border border-white/15 px-2 py-0.5 text-white/70 hover:text-white disabled:cursor-wait disabled:opacity-70"
           >
-            {copyState === 'copied'
-              ? 'Copied'
-              : copyState === 'failed'
-                ? 'Copy failed — retry'
-                : 'Copy'}
+            {copyState === 'copying'
+              ? 'Copying…'
+              : copyState === 'copied'
+                ? 'Copied'
+                : copyState === 'failed'
+                  ? 'Copy failed — retry'
+                  : 'Copy'}
           </button>
           <button
             type="button"
