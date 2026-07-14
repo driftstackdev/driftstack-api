@@ -74,7 +74,11 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
       /Buckets are <strong>per account<\/strong>, not per API key\. If\s*\n?\s*you mint 10 keys to spread your load, you're still hitting\s*\n?\s*the same buckets — the limit is on the account\./,
     );
     expect(body).toMatch(
-      /Higher tiers \(API Scale, Enterprise\) get larger buckets — see\s*\n?\s*the <a href="\/pricing\/comparison">tier comparison<\/a> for the\s*\n?\s*full matrix\. Free uses the same bucket sizes as Solo\s*\n?\s*Manual\./,
+      /Higher tiers \(API Scale, Enterprise\) get larger buckets — see\s*\n?\s*the <a href="\/pricing\/comparison\/">tier comparison<\/a> for the\s*\n?\s*full matrix\. Free uses the same bucket sizes as Solo\s*\n?\s*Manual\./,
+    );
+    expect(body).not.toContain('href="/pricing/comparison"');
+    expect(body.replace('href="/pricing/comparison/"', 'href="/pricing/comparison"')).toContain(
+      'href="/pricing/comparison"',
     );
   });
 
