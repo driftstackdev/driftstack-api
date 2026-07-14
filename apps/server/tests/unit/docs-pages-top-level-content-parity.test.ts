@@ -161,9 +161,10 @@ describe('W784 docs top-level index + 404 content parity', () => {
   it('CRITICAL marketing-site product-page 3-link set pinned — driftstack.dev /pricing + /security + /self-hosted. Drift would lose the load-bearing cross-site nav.', () => {
     const p = read(INDEX);
 
-    expect(p).toMatch(/<a href="https:\/\/driftstack\.dev\/pricing">\/pricing<\/a>/);
-    expect(p).toMatch(/<a href="https:\/\/driftstack\.dev\/security">\/security<\/a>/);
-    expect(p).toMatch(/<a href="https:\/\/driftstack\.dev\/self-hosted">\/self-hosted<\/a>/);
+    expect(p).toMatch(/<a href="https:\/\/driftstack\.dev\/pricing\/">\/pricing<\/a>/);
+    expect(p).toMatch(/<a href="https:\/\/driftstack\.dev\/security\/">\/security<\/a>/);
+    expect(p).toMatch(/<a href="https:\/\/driftstack\.dev\/self-hosted\/">\/self-hosted<\/a>/);
+    expect(p).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security|self-hosted)"/);
   });
 
   it("CRITICAL support email + 'prioritized' framing pinned. Matches W780 guides/index support@driftstack.dev contact channel.", () => {
