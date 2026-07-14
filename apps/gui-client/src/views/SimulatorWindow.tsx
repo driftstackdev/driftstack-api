@@ -6741,6 +6741,15 @@ export function SimulatorWindow(): JSX.Element {
                     >
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-black/60" />
                       <span>Connection catching up — input paused briefly</span>
+                      <button
+                        type="button"
+                        data-component="input-congestion-reconnect"
+                        onClick={manualReconnect}
+                        disabled={recovering}
+                        className="shrink-0 rounded-full bg-black/25 px-2 py-0.5 font-semibold text-black transition-colors hover:bg-black/40 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {recovering ? 'Reconnecting…' : 'Reconnect'}
+                      </button>
                     </div>
                   )}
                   {manualInputAvailable === false && (

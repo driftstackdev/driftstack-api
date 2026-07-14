@@ -8,6 +8,9 @@
 //      disabled. A bare disabled field reads as broken, so the bar surfaces an
 //      explicit "connecting…" affordance, distinct from a real failure (which
 //      surfaces as a navigate-error notice toast).
+//   3. A reliable-channel congestion latch that never receives its buffer-low
+//      event has a deterministic full Room reconnect instead of pausing input
+//      forever behind a passive badge.
 //
 // A controllable AgentSessionPanel mock exposes onPublishError + onRoom so the
 // test can drive the failed-publish → recovery sequence (the real panel needs a
@@ -78,6 +81,7 @@ const panelCbs: {
   onStateChange?: (s: { kind: string }) => void;
   onPublisher?: (p: string) => void;
   interactive?: boolean;
+  recoverAction?: { nonce: number; mode: 'resubscribe' | 'rebuild' };
 } = {};
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
@@ -87,6 +91,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
     onStateChange?: (s: { kind: string }) => void;
     onPublisher?: (p: string) => void;
     interactive?: boolean;
+    recoverAction?: { nonce: number; mode: 'resubscribe' | 'rebuild' };
   }) => {
     panelCbs.onPublishError = props.onPublishError;
     panelCbs.onInputCongestionChange = props.onInputCongestionChange;
@@ -94,6 +99,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
     panelCbs.onStateChange = props.onStateChange;
     panelCbs.onPublisher = props.onPublisher;
     panelCbs.interactive = props.interactive;
+    panelCbs.recoverAction = props.recoverAction;
     return <div data-component="agent-session-panel-mock" />;
   },
 }));
@@ -191,6 +197,25 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
 
     act(() => panelCbs.onInputCongestionChange?.(false));
     expect(container.querySelector('[data-component="input-congestion-badge"]')).toBeNull();
+  });
+
+  it('offers a full Room reconnect when congestion does not drain', () => {
+    const { container } = renderSim();
+    const initialNonce = panelCbs.recoverAction?.nonce ?? 0;
+
+    act(() => panelCbs.onInputCongestionChange?.(true));
+    const reconnect = container.querySelector(
+      '[data-component="input-congestion-reconnect"]',
+    ) as HTMLButtonElement;
+    expect(reconnect).not.toBeNull();
+    expect(reconnect).toHaveTextContent('Reconnect');
+
+    fireEvent.click(reconnect);
+
+    expect(panelCbs.recoverAction).toEqual({ nonce: initialNonce + 1, mode: 'rebuild' });
+    expect(reconnect).toBeDisabled();
+    expect(reconnect).toHaveTextContent('Reconnecting…');
+    expect(container.querySelector('[data-component="input-congestion-badge"]')).not.toBeNull();
   });
 
   it('rolls back an optimistic tab switch when congestion wins the publish race', async () => {
