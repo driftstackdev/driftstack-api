@@ -29,6 +29,7 @@
 import type { GenerateKeyboardCadenceOpts } from './interfaces.js';
 import type { KeyboardCadence } from './types.js';
 import { splitGraphemes } from './graphemes.js';
+import { requireFinite } from './validation.js';
 
 export interface KeyboardCadenceDefaults {
   /** σ as a fraction of the mean delay (gaussian jitter width). */
@@ -132,6 +133,13 @@ const SYMBOLIC = /[0-9\p{P}\p{S}]/u;
  */
 export function generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): KeyboardCadence {
   const { text, profile } = opts;
+  requireFinite('generateKeyboardCadence: profile.meanKeyDelayMs', profile.meanKeyDelayMs);
+  if (profile.meanKeyDelayMs <= 0) {
+    throw new Error(
+      `generateKeyboardCadence: profile.meanKeyDelayMs must be > 0 ` +
+        `(got ${profile.meanKeyDelayMs})`,
+    );
+  }
   if (text.length > MAX_TEXT_LENGTH) {
     throw new Error(
       `generateKeyboardCadence: text must be <= ${MAX_TEXT_LENGTH} characters ` +

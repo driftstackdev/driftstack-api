@@ -188,6 +188,19 @@ describe('V-530.A touch event generator — properties', () => {
     ).toThrow(/positive width/);
   });
 
+  it('rejects non-finite bounds instead of emitting NaN touch samples', () => {
+    for (const bounds of [
+      { x: Number.NaN, y: 0, width: 10, height: 10 },
+      { x: 0, y: Number.POSITIVE_INFINITY, width: 10, height: 10 },
+      { x: 0, y: 0, width: Number.NEGATIVE_INFINITY, height: 10 },
+      { x: 0, y: 0, width: 10, height: Number.NaN },
+    ]) {
+      expect(() => generateTouchEvent({ elementClass: 'button', bounds })).toThrow(
+        /must be finite/,
+      );
+    }
+  });
+
   it('scroll-container touches drift further than button touches (class differentiation)', () => {
     // Property: distributions are meaningfully distinct — a scroll-container
     // touch should drift visibly more than a button tap. Sample many seeds

@@ -185,6 +185,18 @@ describe('generateKeyboardCadence', () => {
     expect(c.durationMs).toBe(0);
   });
 
+  it('rejects non-positive and non-finite profile mean delays', () => {
+    for (const meanKeyDelayMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        generateKeyboardCadence({
+          text: 'hello',
+          profile: { ...PROFILE, meanKeyDelayMs },
+          seed: 'invalid-mean',
+        }),
+      ).toThrow(/meanKeyDelayMs/);
+    }
+  });
+
   it('BSIM-4: rejects text over MAX_TEXT_LENGTH', () => {
     const overLong = 'x'.repeat(MAX_TEXT_LENGTH + 1);
     expect(() =>

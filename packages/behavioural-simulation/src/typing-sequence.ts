@@ -22,6 +22,7 @@
 import { generateKeyboardCadence, MAX_TEXT_LENGTH } from './keyboard.js';
 import type { GenerateKeyboardCadenceOpts } from './interfaces.js';
 import { splitGraphemes } from './graphemes.js';
+import { requireUnitInterval } from './validation.js';
 
 export interface GenerateTypingSequenceOpts extends GenerateKeyboardCadenceOpts {
   /** Per-character typo probability (0..1). Default 0.025 (file 05: 1-3%). */
@@ -124,6 +125,7 @@ export function generateTypingSequence(opts: GenerateTypingSequenceOpts): Typing
   // per-session `seed` to avoid correlated, replayable typing streams.
   const seed = opts.seed ?? `typing:${profile.id}:${text}`;
   const typoProbability = opts.typoProbability ?? DEFAULT_TYPO_PROBABILITY;
+  requireUnitInterval('generateTypingSequence: typoProbability', typoProbability);
 
   // Reuse the realistic per-keystroke timing model for the clean text.
   const cadence = generateKeyboardCadence({ text, profile, seed });

@@ -17,6 +17,7 @@
 
 import type { ElementBounds, ElementClass, TouchEvent } from './types.js';
 import { generateTouchEvent } from './touch.js';
+import { requireFinite, requirePositiveFinite } from './validation.js';
 
 /**
  * Dwell-time distribution shape. Real-world tap durations have a heavy
@@ -242,6 +243,14 @@ export interface RegionAwareTouchEvent extends TouchEvent {
 export function generateRegionAwareTouchEvent(
   opts: GenerateRegionAwareTouchOpts,
 ): RegionAwareTouchEvent {
+  for (const [name, value] of [
+    ['x', opts.bounds.x],
+    ['y', opts.bounds.y],
+    ['width', opts.bounds.width],
+    ['height', opts.bounds.height],
+  ] as const) {
+    requireFinite(`generateRegionAwareTouchEvent: bounds.${name}`, value);
+  }
   if (opts.bounds.width <= 0 || opts.bounds.height <= 0) {
     throw new Error(
       `generateRegionAwareTouchEvent: bounds must have positive width + height ` +
@@ -266,6 +275,11 @@ export function generateRegionAwareTouchEvent(
   for (let i = 0; i < regions.length; i += 1) {
     const r = regions[i];
     if (r === undefined) continue;
+    requireFinite(`generateRegionAwareTouchEvent: region ${i.toString()} center.x`, r.center.x);
+    requireFinite(`generateRegionAwareTouchEvent: region ${i.toString()} center.y`, r.center.y);
+    requireFinite(`generateRegionAwareTouchEvent: region ${i.toString()} radius.x`, r.radius.x);
+    requireFinite(`generateRegionAwareTouchEvent: region ${i.toString()} radius.y`, r.radius.y);
+    requirePositiveFinite(`generateRegionAwareTouchEvent: region ${i.toString()} weight`, r.weight);
     if (
       r.radius.x <= 0 ||
       r.radius.y <= 0 ||

@@ -56,6 +56,20 @@ describe('generateTypingSequence', () => {
     expect(replayTypingSequence(seq.events)).toBe('a');
   });
 
+  it('rejects typo probabilities outside the finite unit interval', () => {
+    for (const typoProbability of [
+      -0.01,
+      1.01,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
+      expect(() =>
+        generateTypingSequence({ text: 'hello', profile: PROFILE, typoProbability }),
+      ).toThrow(/typoProbability/);
+    }
+  });
+
   it('preserves case — an uppercase letter typo substitutes an uppercase neighbour', () => {
     const seq = generateTypingSequence({
       text: 'A',

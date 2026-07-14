@@ -13,11 +13,13 @@ import type {
 } from './types.js';
 
 export interface GenerateMouseTrajectoryOpts {
+  /** Finite CSS-pixel start coordinate. */
   from: { x: number; y: number };
+  /** Finite CSS-pixel end coordinate. */
   to: { x: number; y: number };
   /** Optional seed override (defaults to deterministic per-call seed). */
   seed?: string;
-  /** Number of intermediate samples to emit (default 32). */
+  /** Integer sample count in the implementation's bounded range (default 32). */
   samples?: number;
 }
 
@@ -30,6 +32,7 @@ export interface GenerateKeyboardCadenceOpts {
 
 export interface GenerateScrollPatternOpts {
   direction: 'up' | 'down' | 'left' | 'right';
+  /** Positive finite absolute distance. */
   totalDistancePx: number;
   profile: BehaviouralProfile;
   seed?: string;

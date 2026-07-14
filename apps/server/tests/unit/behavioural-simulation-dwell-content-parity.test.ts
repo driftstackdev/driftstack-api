@@ -112,6 +112,12 @@ describe('W597.A packages/behavioural-simulation/src/dwell.ts content parity', (
       /export function generateRegionAwareTouchEvent\(\s*\n\s*opts: GenerateRegionAwareTouchOpts,\s*\n\): RegionAwareTouchEvent \{/,
     );
     expect(body).toMatch(
+      /requireFinite\(`generateRegionAwareTouchEvent: bounds\.\$\{name\}`, value\);/,
+    );
+    expect(body).toMatch(
+      /requirePositiveFinite\(`generateRegionAwareTouchEvent: region \$\{i\.toString\(\)\} weight`, r\.weight\);/,
+    );
+    expect(body).toMatch(
       /`generateRegionAwareTouchEvent: bounds must have positive width \+ height ` \+/,
     );
     expect(body).toMatch(

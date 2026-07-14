@@ -27,6 +27,8 @@
 // the package means the same string seed produces the same shape
 // regardless of which generator's caller wires it through.
 
+import { requireFinite } from './validation.js';
+
 /**
  * A single idle interval with timestamps in ms since the idle-period
  * start. `microMovements` are jitter-pixel cursor wobbles that the
@@ -192,6 +194,7 @@ export function generateIdlePeriod(opts: GenerateIdlePeriodOpts): IdlePeriod {
     // guard. A non-positive duration yields a degenerate zero/negative-
     // length idle that collapses every micro-movement onto t=0 (and
     // breaks the Math.min(durationMs, …) time clamp).
+    requireFinite('generateIdlePeriod: durationMs', opts.durationMs);
     if (opts.durationMs <= 0) {
       throw new Error(
         `generateIdlePeriod: durationMs must be > 0 when set (got ${opts.durationMs})`,

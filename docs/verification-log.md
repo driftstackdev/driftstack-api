@@ -26784,3 +26784,31 @@ operations allowed to omit an OpenAPI security object. Focused fleet-auth,
 OpenAPI validity/coverage/snapshot/source/generated-spec evidence passes 7
 files and 55/55 tests; all workspace builds, strict server source/test
 TypeScript, targeted lint/format, diff and whitespace checks are green.
+
+## V-632 — Behavioural generators reject non-finite physical inputs
+
+**Date:** 2026-07-14
+
+The behavioural-simulation boundary validated several numeric overrides with
+ordinary comparisons. JavaScript comparisons do not reject `NaN`, so mouse,
+touch, dwell, idle, scroll and keyboard calls could emit empty tracks or
+non-finite positions, timestamps, deltas and durations. The deterministic mock
+also accepted fractional mouse sample counts, emitted positive deltas for
+declared up/left scrolls and allowed unbounded caller-controlled scroll-tick
+allocation.
+
+A shared numeric-boundary helper now establishes finiteness before every
+affected interpolation, timing calculation or allocation. Coordinates and
+region geometry must be finite; physical durations, distances, cadence means
+and region weights must also be positive; mouse samples must be bounded
+integers; typo probability must be in the finite unit interval. Mock scrolls
+now apply the declared direction sign and reject allocations above 10,000
+ticks. Existing valid deterministic outputs and established validation
+messages remain intact.
+
+Verification covers `NaN`, both infinities, non-positive values and fractional
+counts across every affected generator, plus all four scroll signs and the
+allocation boundary. The full behavioural package passes 9 files and 179/179
+tests; package plus source-parity evidence passes 21 files and 280/280 tests.
+All workspace typechecks and environment-complete builds, targeted lint/format,
+diff and whitespace checks are green.

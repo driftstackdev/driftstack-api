@@ -75,6 +75,12 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(
       /const tickCount = Math\.max\(1, Math\.ceil\(opts\.totalDistancePx \/ tickPx\)\);/,
     );
+    expect(body).toMatch(/export const MAX_SCROLL_PATTERN_TICKS = 10_000;/);
+    expect(body).toMatch(/if \(tickCount > MAX_SCROLL_PATTERN_TICKS\) \{/);
+    expect(body).toMatch(
+      /const sign = opts\.direction === 'up' \|\| opts\.direction === 'left' \? -1 : 1;/,
+    );
+    expect(body).toMatch(/ticks\.push\(\{ deltaPx: sign \* tickPx, tMs: i \* 16 \}\);/);
   });
 
   it('generateTouchEvent + generateScrollVelocityProfile delegate to real generators (mock/real parity rationale: real already deterministic+pure, callers see no behavioural shift when Phase 3 ships) + listProfiles returns the profiles array', () => {

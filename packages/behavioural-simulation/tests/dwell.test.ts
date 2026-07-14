@@ -278,6 +278,19 @@ describe('V-530.C region-aware touch generator — properties', () => {
     ).toThrow(/positive width/);
   });
 
+  it('rejects non-finite element bounds', () => {
+    for (const bounds of [
+      { x: Number.NaN, y: 0, width: 10, height: 10 },
+      { x: 0, y: Number.POSITIVE_INFINITY, width: 10, height: 10 },
+      { x: 0, y: 0, width: Number.NEGATIVE_INFINITY, height: 10 },
+      { x: 0, y: 0, width: 10, height: Number.NaN },
+    ]) {
+      expect(() => generateRegionAwareTouchEvent({ elementClass: 'button', bounds })).toThrow(
+        /must be finite/,
+      );
+    }
+  });
+
   it('rejects a custom region that spills past the element edge (would touch off-element)', () => {
     expect(() =>
       generateRegionAwareTouchEvent({
@@ -297,6 +310,32 @@ describe('V-530.C region-aware touch generator — properties', () => {
         regions: [{ center: { x: 0.5, y: 0.5 }, radius: { x: 0, y: 0.2 }, weight: 1 }],
       }),
     ).toThrow(/must lie within the element/);
+  });
+
+  it('rejects non-finite region geometry and non-positive/non-finite weights', () => {
+    const valid: ClickRegion = {
+      center: { x: 0.5, y: 0.5 },
+      radius: { x: 0.2, y: 0.2 },
+      weight: 1,
+    };
+    for (const region of [
+      { ...valid, center: { ...valid.center, x: Number.NaN } },
+      { ...valid, center: { ...valid.center, y: Number.POSITIVE_INFINITY } },
+      { ...valid, radius: { ...valid.radius, x: Number.NaN } },
+      { ...valid, radius: { ...valid.radius, y: Number.NEGATIVE_INFINITY } },
+      { ...valid, weight: 0 },
+      { ...valid, weight: -1 },
+      { ...valid, weight: Number.NaN },
+      { ...valid, weight: Number.POSITIVE_INFINITY },
+    ]) {
+      expect(() =>
+        generateRegionAwareTouchEvent({
+          elementClass: 'button',
+          bounds: SAMPLE_BOUNDS,
+          regions: [region],
+        }),
+      ).toThrow();
+    }
   });
 
   it('accepts a custom region exactly filling the element (center 0.5, radius 0.5)', () => {

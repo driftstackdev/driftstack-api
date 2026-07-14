@@ -257,6 +257,32 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     ).toThrow(/tickIntervalMs/);
   });
 
+  it('rejects non-finite physical overrides', () => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() =>
+        generateScrollVelocityProfile({
+          direction: 'down',
+          elementClass: 'scroll-container',
+          tickIntervalMs: value,
+        }),
+      ).toThrow(/tickIntervalMs must be finite/);
+      expect(() =>
+        generateScrollVelocityProfile({
+          direction: 'down',
+          elementClass: 'scroll-container',
+          initialVelocityPxPerSec: value,
+        }),
+      ).toThrow(/initialVelocityPxPerSec must be finite/);
+      expect(() =>
+        generateScrollVelocityProfile({
+          direction: 'down',
+          elementClass: 'scroll-container',
+          decayRate: value,
+        }),
+      ).toThrow(/decayRate must be finite/);
+    }
+  });
+
   it('BSIM-1: rejects a tickIntervalMs below MIN_TICK_INTERVAL_MS (unbounded-loop OOM guard)', () => {
     // Exact repro values from the finding: 0.001 synchronously builds a
     // 3.1M-element array in 166ms; 0.00001 OOM-crashes the process. Both

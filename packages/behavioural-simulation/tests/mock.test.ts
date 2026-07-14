@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_MOUSE_TRAJECTORY_SAMPLES,
+  MAX_SCROLL_PATTERN_TICKS,
   MockBehaviouralSimulator,
   type BehaviouralProfile,
 } from '../src/index.js';
@@ -91,6 +92,31 @@ describe('MockBehaviouralSimulator — determinism', () => {
     expect(explicitTraj.points).toHaveLength(17);
   });
 
+  it('rejects fractional and non-finite mouse sample counts', () => {
+    const sim = new MockBehaviouralSimulator();
+    for (const samples of [1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() =>
+        sim.generateMouseTrajectory({
+          from: { x: 0, y: 0 },
+          to: { x: 100, y: 50 },
+          samples,
+        }),
+      ).toThrow(/samples must/);
+    }
+  });
+
+  it('rejects non-finite mouse coordinates instead of emitting NaN points', () => {
+    const sim = new MockBehaviouralSimulator();
+    for (const opts of [
+      { from: { x: Number.NaN, y: 0 }, to: { x: 10, y: 10 } },
+      { from: { x: 0, y: Number.POSITIVE_INFINITY }, to: { x: 10, y: 10 } },
+      { from: { x: 0, y: 0 }, to: { x: Number.NEGATIVE_INFINITY, y: 10 } },
+      { from: { x: 0, y: 0 }, to: { x: 10, y: Number.NaN } },
+    ]) {
+      expect(() => sim.generateMouseTrajectory(opts)).toThrow(/must be finite/);
+    }
+  });
+
   it('different inputs produce different seeds', () => {
     const sim = new MockBehaviouralSimulator();
     const a = sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 0 } });
@@ -113,6 +139,18 @@ describe('MockBehaviouralSimulator — determinism', () => {
     expect(cad.durationMs).toBe(400);
   });
 
+  it('generateKeyboardCadence rejects non-positive and non-finite profile means', () => {
+    const sim = new MockBehaviouralSimulator();
+    for (const meanKeyDelayMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        sim.generateKeyboardCadence({
+          text: 'hello',
+          profile: { ...PROFILE, meanKeyDelayMs },
+        }),
+      ).toThrow(/meanKeyDelayMs/);
+    }
+  });
+
   it('generateScrollPattern produces ticks of profile.meanScrollPxPerTick magnitude', () => {
     const sim = new MockBehaviouralSimulator();
     const sc = sim.generateScrollPattern({
@@ -125,6 +163,55 @@ describe('MockBehaviouralSimulator — determinism', () => {
     expect(sc.ticks.every((t) => t.deltaPx === 50)).toBe(true);
     expect(sc.totalDistancePx).toBe(200);
     expect(sc.direction).toBe('down');
+  });
+
+  it('generateScrollPattern applies physical signs for every direction', () => {
+    const sim = new MockBehaviouralSimulator();
+    for (const direction of ['up', 'down', 'left', 'right'] as const) {
+      const pattern = sim.generateScrollPattern({
+        direction,
+        totalDistancePx: 100,
+        profile: PROFILE,
+      });
+      const expectedSign = direction === 'up' || direction === 'left' ? -1 : 1;
+      expect(pattern.ticks.every((tick) => Math.sign(tick.deltaPx) === expectedSign)).toBe(true);
+    }
+  });
+
+  it('generateScrollPattern rejects invalid distance and tick magnitudes', () => {
+    const sim = new MockBehaviouralSimulator();
+    for (const totalDistancePx of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        sim.generateScrollPattern({ direction: 'down', totalDistancePx, profile: PROFILE }),
+      ).toThrow(/totalDistancePx/);
+    }
+    for (const meanScrollPxPerTick of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        sim.generateScrollPattern({
+          direction: 'down',
+          totalDistancePx: 100,
+          profile: { ...PROFILE, meanScrollPxPerTick },
+        }),
+      ).toThrow(/meanScrollPxPerTick/);
+    }
+  });
+
+  it('generateScrollPattern caps caller-controlled tick allocation', () => {
+    const sim = new MockBehaviouralSimulator();
+    expect(() =>
+      sim.generateScrollPattern({
+        direction: 'down',
+        totalDistancePx: (MAX_SCROLL_PATTERN_TICKS + 1) * PROFILE.meanScrollPxPerTick,
+        profile: PROFILE,
+      }),
+    ).toThrow(/tick count must be <=/);
+    expect(
+      sim.generateScrollPattern({
+        direction: 'down',
+        totalDistancePx: MAX_SCROLL_PATTERN_TICKS * PROFILE.meanScrollPxPerTick,
+        profile: PROFILE,
+      }).ticks,
+    ).toHaveLength(MAX_SCROLL_PATTERN_TICKS);
   });
 
   it('listProfiles returns the default catalogue when none injected', () => {

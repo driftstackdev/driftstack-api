@@ -21,6 +21,7 @@ import type {
   TouchEvent,
   TouchSample,
 } from './types.js';
+import { requireFinite } from './validation.js';
 
 /**
  * Per-element-class distribution table. Values are class-typical and chosen
@@ -151,6 +152,14 @@ export function generateTouchEvent(opts: {
   bounds: ElementBounds;
   seed?: string;
 }): TouchEvent {
+  for (const [name, value] of [
+    ['x', opts.bounds.x],
+    ['y', opts.bounds.y],
+    ['width', opts.bounds.width],
+    ['height', opts.bounds.height],
+  ] as const) {
+    requireFinite(`generateTouchEvent: bounds.${name}`, value);
+  }
   if (opts.bounds.width <= 0 || opts.bounds.height <= 0) {
     throw new Error(
       `generateTouchEvent: element bounds must have positive width + height ` +

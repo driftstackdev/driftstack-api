@@ -69,6 +69,7 @@ describe('W597.B packages/behavioural-simulation/src/idle.ts content parity', ()
     );
     expect(body).toMatch(/const defaults = IDLE_DEFAULTS\[opts\.idleClass\];/);
     expect(body).toMatch(/if \(opts\.durationMs !== undefined\) \{/);
+    expect(body).toMatch(/requireFinite\('generateIdlePeriod: durationMs', opts\.durationMs\);/);
     expect(body).toMatch(/durationMs = opts\.durationMs;/);
     // Override-validation guard: non-positive explicit duration bypasses
     // the 50ms-min clamp, so it throws (mirrors the scroll-override guard).

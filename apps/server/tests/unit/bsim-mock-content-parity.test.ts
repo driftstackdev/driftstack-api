@@ -72,6 +72,9 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(/import \{ generateTouchEvent \} from '\.\/touch\.js';/);
     expect(body).toMatch(/import \{ splitGraphemes \} from '\.\/graphemes\.js';/);
     expect(body).toMatch(
+      /import \{ requireFinite, requireIntegerInRange, requirePositiveFinite \} from '\.\/validation\.js';/,
+    );
+    expect(body).toMatch(
       /import type \{\s*\n?\s*BehaviouralProfile,\s*\n?\s*KeyboardCadence,\s*\n?\s*MouseTrajectory,\s*\n?\s*ScrollPattern,\s*\n?\s*TouchEvent,\s*\n?\s*\} from '\.\/types\.js';/,
     );
   });
@@ -117,14 +120,19 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
-  it("generateScrollPattern framing pinned: 'Constant per-tick delta (no decay) — real path applies velocity decay + occasional reversal jitter.' + tickCount = ceil(totalDistancePx/tickPx) ≥ 1 + 16ms tick interval", () => {
+  it('generateScrollPattern framing pinned: constant per-tick magnitude + bounded tick count + physical direction sign + 16ms tick interval', () => {
     expect(body).toMatch(
       /\/\/ Constant per-tick delta \(no decay\) — real path applies velocity\s*\n?\s*\/\/ decay \+ occasional reversal jitter\./,
     );
     expect(body).toMatch(
       /const tickPx = opts\.profile\.meanScrollPxPerTick;\s*\n?\s*const tickCount = Math\.max\(1, Math\.ceil\(opts\.totalDistancePx \/ tickPx\)\);/,
     );
-    expect(body).toMatch(/ticks\.push\(\{ deltaPx: tickPx, tMs: i \* 16 \}\);/);
+    expect(body).toMatch(/export const MAX_SCROLL_PATTERN_TICKS = 10_000;/);
+    expect(body).toMatch(/if \(tickCount > MAX_SCROLL_PATTERN_TICKS\) \{/);
+    expect(body).toMatch(
+      /const sign = opts\.direction === 'up' \|\| opts\.direction === 'left' \? -1 : 1;/,
+    );
+    expect(body).toMatch(/ticks\.push\(\{ deltaPx: sign \* tickPx, tMs: i \* 16 \}\);/);
   });
 
   it("generateTouchEvent + generateScrollVelocityProfile: parity-by-reuse framing pinned 'mock surface re-uses it directly rather than shipping a separate constant-output stub. Mock/real parity here means callers don't see a behavioural shift when the real Phase 3 simulator ships behind the same interface.' + 'Same parity pattern as generateTouchEvent — the real generator is already deterministic + pure.'", () => {

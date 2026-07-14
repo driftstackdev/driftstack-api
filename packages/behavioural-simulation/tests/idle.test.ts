@@ -72,6 +72,14 @@ describe('V-530.D generateIdlePeriod — seeded determinism', () => {
       /durationMs must be > 0/,
     );
   });
+
+  it('rejects non-finite durationMs overrides', () => {
+    for (const durationMs of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() =>
+        generateIdlePeriod({ idleClass: 'reading', durationMs, seed: 'non-finite' }),
+      ).toThrow(/durationMs must be finite/);
+    }
+  });
 });
 
 describe('V-530.D generateIdleSequence', () => {

@@ -16,6 +16,7 @@
 //   - V-530.D (later) — idle-period jitter + multi-touch gesture sequencing.
 
 import type { ElementClass } from './types.js';
+import { requireFinite } from './validation.js';
 
 /** A single per-tick sample of a decaying scroll. */
 export interface ScrollVelocityTick {
@@ -214,6 +215,7 @@ export function generateScrollVelocityProfile(
   opts: GenerateScrollVelocityProfileOpts,
 ): ScrollVelocityProfile {
   const tickIntervalMs = opts.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS;
+  requireFinite('generateScrollVelocityProfile: tickIntervalMs', tickIntervalMs);
   if (tickIntervalMs <= 0) {
     throw new Error(
       `generateScrollVelocityProfile: tickIntervalMs must be > 0 (got ${tickIntervalMs})`,
@@ -240,16 +242,25 @@ export function generateScrollVelocityProfile(
   // friction) — so the override is FLOORED to 0.1 below, matching the
   // default path's Math.max(0.1, …) clamp rather than throwing (so existing
   // decayRate:0 callers keep working, just with a realistic floor).
-  if (opts.initialVelocityPxPerSec !== undefined && opts.initialVelocityPxPerSec <= 0) {
-    throw new Error(
-      `generateScrollVelocityProfile: initialVelocityPxPerSec must be > 0 when set ` +
-        `(got ${opts.initialVelocityPxPerSec})`,
+  if (opts.initialVelocityPxPerSec !== undefined) {
+    requireFinite(
+      'generateScrollVelocityProfile: initialVelocityPxPerSec',
+      opts.initialVelocityPxPerSec,
     );
+    if (opts.initialVelocityPxPerSec <= 0) {
+      throw new Error(
+        `generateScrollVelocityProfile: initialVelocityPxPerSec must be > 0 when set ` +
+          `(got ${opts.initialVelocityPxPerSec})`,
+      );
+    }
   }
-  if (opts.decayRate !== undefined && opts.decayRate < 0) {
-    throw new Error(
-      `generateScrollVelocityProfile: decayRate must be >= 0 when set (got ${opts.decayRate})`,
-    );
+  if (opts.decayRate !== undefined) {
+    requireFinite('generateScrollVelocityProfile: decayRate', opts.decayRate);
+    if (opts.decayRate < 0) {
+      throw new Error(
+        `generateScrollVelocityProfile: decayRate must be >= 0 when set (got ${opts.decayRate})`,
+      );
+    }
   }
 
   const seed = opts.seed ?? defaultSeed(opts);

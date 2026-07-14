@@ -94,6 +94,8 @@ describe('W596.A packages/behavioural-simulation/src/touch.ts content parity', (
     expect(body).toMatch(
       /export function generateTouchEvent\(opts: \{\s*\n\s*elementClass: ElementClass;\s*\n\s*bounds: ElementBounds;\s*\n\s*seed\?: string;\s*\n\}\): TouchEvent \{/,
     );
+    expect(body).toMatch(/\['x', opts\.bounds\.x\],[\s\S]*?\['height', opts\.bounds\.height\],/);
+    expect(body).toMatch(/requireFinite\(`generateTouchEvent: bounds\.\$\{name\}`, value\);/);
     expect(body).toMatch(
       /if \(opts\.bounds\.width <= 0 \|\| opts\.bounds\.height <= 0\) \{\s*\n\s*throw new Error\(/,
     );

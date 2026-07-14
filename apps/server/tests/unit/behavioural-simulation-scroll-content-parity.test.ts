@@ -85,6 +85,15 @@ describe('W596.B packages/behavioural-simulation/src/scroll.ts content parity', 
     expect(body).toMatch(
       /export function generateScrollVelocityProfile\(\s*\n\s*opts: GenerateScrollVelocityProfileOpts,\s*\n\): ScrollVelocityProfile \{/,
     );
+    expect(body).toMatch(
+      /requireFinite\('generateScrollVelocityProfile: tickIntervalMs', tickIntervalMs\);/,
+    );
+    expect(body).toMatch(
+      /requireFinite\(\s*'generateScrollVelocityProfile: initialVelocityPxPerSec'/,
+    );
+    expect(body).toMatch(
+      /requireFinite\('generateScrollVelocityProfile: decayRate', opts\.decayRate\);/,
+    );
     expect(body).toMatch(/if \(tickIntervalMs <= 0\) \{\s*\n\s*throw new Error\(/);
     expect(body).toMatch(/`generateScrollVelocityProfile: tickIntervalMs must be > 0/);
     expect(body).toMatch(

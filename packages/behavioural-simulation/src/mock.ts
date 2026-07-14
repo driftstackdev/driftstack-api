@@ -16,6 +16,7 @@ import type {
 import { generateScrollVelocityProfile, type ScrollVelocityProfile } from './scroll.js';
 import { generateTouchEvent } from './touch.js';
 import { splitGraphemes } from './graphemes.js';
+import { requireFinite, requireIntegerInRange, requirePositiveFinite } from './validation.js';
 import type {
   BehaviouralProfile,
   KeyboardCadence,
@@ -58,6 +59,8 @@ const DEFAULT_PROFILES: readonly BehaviouralProfile[] = [
  */
 export const MIN_MOUSE_TRAJECTORY_SAMPLES = 1;
 export const MAX_MOUSE_TRAJECTORY_SAMPLES = 1000;
+/** Bound the constant-tick mock's only caller-controlled allocation. */
+export const MAX_SCROLL_PATTERN_TICKS = 10_000;
 
 function defaultSeed(label: string, opts: unknown): string {
   // Deterministic seed = label + JSON-stringified opts. Stable across
@@ -69,13 +72,20 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
   constructor(private readonly profiles: readonly BehaviouralProfile[] = DEFAULT_PROFILES) {}
 
   generateMouseTrajectory(opts: GenerateMouseTrajectoryOpts): MouseTrajectory {
-    if (
-      opts.samples !== undefined &&
-      (opts.samples < MIN_MOUSE_TRAJECTORY_SAMPLES || opts.samples > MAX_MOUSE_TRAJECTORY_SAMPLES)
-    ) {
-      throw new Error(
-        `generateMouseTrajectory: samples must be between ${MIN_MOUSE_TRAJECTORY_SAMPLES} and ` +
-          `${MAX_MOUSE_TRAJECTORY_SAMPLES} (got ${opts.samples})`,
+    for (const [name, value] of [
+      ['from.x', opts.from.x],
+      ['from.y', opts.from.y],
+      ['to.x', opts.to.x],
+      ['to.y', opts.to.y],
+    ] as const) {
+      requireFinite(`generateMouseTrajectory: ${name}`, value);
+    }
+    if (opts.samples !== undefined) {
+      requireIntegerInRange(
+        'generateMouseTrajectory: samples',
+        opts.samples,
+        MIN_MOUSE_TRAJECTORY_SAMPLES,
+        MAX_MOUSE_TRAJECTORY_SAMPLES,
       );
     }
     const samples = opts.samples ?? 32;
@@ -99,6 +109,10 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
   }
 
   generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): KeyboardCadence {
+    requirePositiveFinite(
+      'MockBehaviouralSimulator.generateKeyboardCadence: profile.meanKeyDelayMs',
+      opts.profile.meanKeyDelayMs,
+    );
     const seed = opts.seed ?? defaultSeed('kb', { text: opts.text, profileId: opts.profile.id });
     // Deterministic constant delay — real path samples around mean
     // with profile-tuned jitter. Keep one delay per Unicode grapheme so the
@@ -109,14 +123,29 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
   }
 
   generateScrollPattern(opts: GenerateScrollPatternOpts): ScrollPattern {
+    requirePositiveFinite(
+      'MockBehaviouralSimulator.generateScrollPattern: totalDistancePx',
+      opts.totalDistancePx,
+    );
+    requirePositiveFinite(
+      'MockBehaviouralSimulator.generateScrollPattern: profile.meanScrollPxPerTick',
+      opts.profile.meanScrollPxPerTick,
+    );
     const seed = opts.seed ?? defaultSeed('scroll', opts);
     // Constant per-tick delta (no decay) — real path applies velocity
     // decay + occasional reversal jitter.
     const tickPx = opts.profile.meanScrollPxPerTick;
     const tickCount = Math.max(1, Math.ceil(opts.totalDistancePx / tickPx));
+    if (tickCount > MAX_SCROLL_PATTERN_TICKS) {
+      throw new Error(
+        `MockBehaviouralSimulator.generateScrollPattern: tick count must be <= ` +
+          `${MAX_SCROLL_PATTERN_TICKS} (got ${tickCount})`,
+      );
+    }
+    const sign = opts.direction === 'up' || opts.direction === 'left' ? -1 : 1;
     const ticks: Array<{ deltaPx: number; tMs: number }> = [];
     for (let i = 0; i < tickCount; i += 1) {
-      ticks.push({ deltaPx: tickPx, tMs: i * 16 });
+      ticks.push({ deltaPx: sign * tickPx, tMs: i * 16 });
     }
     return {
       direction: opts.direction,

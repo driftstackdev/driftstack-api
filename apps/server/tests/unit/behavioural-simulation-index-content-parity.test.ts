@@ -32,6 +32,7 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     // samples-bound constants (audit fix BSIM-3, 2026-07-01) don't break the pin.
     expect(body).toContain('export {');
     expect(body).toContain('MAX_MOUSE_TRAJECTORY_SAMPLES,');
+    expect(body).toContain('MAX_SCROLL_PATTERN_TICKS,');
     expect(body).toContain('MIN_MOUSE_TRAJECTORY_SAMPLES,');
     expect(body).toContain('MockBehaviouralSimulator,');
     expect(body).toContain("} from './mock.js';");

@@ -29,6 +29,7 @@ export type {
 
 export {
   MAX_MOUSE_TRAJECTORY_SAMPLES,
+  MAX_SCROLL_PATTERN_TICKS,
   MIN_MOUSE_TRAJECTORY_SAMPLES,
   MockBehaviouralSimulator,
 } from './mock.js';
