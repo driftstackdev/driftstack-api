@@ -136,7 +136,9 @@ describe('W363.B customer-dashboard /usage page content parity', () => {
 
   it('tier label renders the friendly plan name, not the raw tier id (TIER_DISPLAY_NAMES mapping mirrors index/billing)', () => {
     // Import + pass into the inline script.
-    expect(body).toMatch(/import \{ TIER_DISPLAY_NAMES \} from '\.\.\/data\/mocks\.ts';/);
+    expect(body).toMatch(
+      /import \{ TIER_DISPLAY_NAMES \} from '\.\.\/data\/tier-display-names\.ts';/,
+    );
     expect(body).toMatch(/tierDisplayNames: TIER_DISPLAY_NAMES/);
     // Both the tier span + the period string use the mapped name, never
     // the raw summary.tier id (e.g. "Personal", not "solo_manual").

@@ -12,7 +12,7 @@ import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installDashboardDeadline } from './dashboard-test-runtime';
-import { TIER_DISPLAY_NAMES } from '../../src/data/mocks.ts';
+import { TIER_DISPLAY_NAMES } from '../../src/data/tier-display-names.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'index.html');
