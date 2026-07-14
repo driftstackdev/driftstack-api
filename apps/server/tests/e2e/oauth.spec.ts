@@ -625,7 +625,7 @@ test('OAuth retention prunes only expired provider rows and retains backing acto
   expect(after[0]).toEqual({ authorizations: 1, codes: 2, tokens: 1, actors: 2 });
 });
 
-test('OAuth retention bootstrap dedup is atomic across concurrent replicas', async () => {
+test('OAuth retention successor dedup is atomic across replicas and duplicate current rows', async () => {
   const database = {
     client: server.client,
     db: drizzle(server.client, { schema }),
@@ -644,8 +644,8 @@ test('OAuth retention bootstrap dedup is atomic across concurrent replicas', asy
     ),
   );
   expect(results.filter((result) => result.enqueued)).toHaveLength(1);
-  const rows = await server.client<Array<{ id: string }>>`
-    SELECT id
+  const rows = await server.client<Array<{ id: string; run_at: string }>>`
+    SELECT id, run_at
       FROM scheduled_jobs
      WHERE account_id IS NULL
        AND job_type = 'oauth.retention_sweep'
@@ -653,25 +653,44 @@ test('OAuth retention bootstrap dedup is atomic across concurrent replicas', asy
        AND failed_at IS NULL
   `;
   expect(rows).toHaveLength(1);
-  const currentJobId = rows[0]?.id;
-  if (currentJobId === undefined) throw new Error('expected one current retention job');
+  const currentJob = rows[0];
+  if (currentJob === undefined) throw new Error('expected one current retention job');
+  const currentRunAt = new Date(currentJob.run_at);
 
+  // Reproduce the legacy cohort that made ID-only exclusion unsafe: two
+  // current rows share a run time. Each peer must ignore the whole cohort,
+  // then converge on one future successor under the advisory tuple lock.
+  await expect(
+    replicas[0]!.enqueue({
+      jobType: 'oauth.retention_sweep',
+      accountId: null,
+      payload: {},
+      runAt: currentRunAt,
+      dedupOnAccountAndType: false,
+    }),
+  ).resolves.toEqual({ enqueued: true });
+
+  const successorRunAt = new Date(currentRunAt.getTime() + 60 * 60 * 1000);
   const successorInput = {
     jobType: 'oauth.retention_sweep',
     accountId: null,
     payload: {},
-    runAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+    runAt: successorRunAt,
     dedupOnAccountAndType: true,
-    dedupExcludeJobId: currentJobId,
+    dedupAfterRunAt: currentRunAt,
   } as const;
-  await expect(replicas[0]!.enqueue(successorInput)).resolves.toEqual({ enqueued: true });
-  await expect(replicas[1]!.enqueue(successorInput)).resolves.toEqual({ enqueued: false });
+  const peers = await Promise.all([
+    replicas[0]!.enqueue(successorInput),
+    replicas[1]!.enqueue(successorInput),
+  ]);
+  expect(peers.filter((result) => result.enqueued)).toHaveLength(1);
+  await expect(replicas[2]!.enqueue(successorInput)).resolves.toEqual({ enqueued: false });
   const successors = await server.client<Array<{ id: string }>>`
     SELECT id
       FROM scheduled_jobs
      WHERE account_id IS NULL
        AND job_type = 'oauth.retention_sweep'
-       AND id <> ${currentJobId}
+       AND run_at > ${currentRunAt.toISOString()}
        AND completed_at IS NULL
        AND failed_at IS NULL
   `;

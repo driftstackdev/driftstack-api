@@ -113,7 +113,7 @@ describe('OAuth provider retention sweeper', () => {
     expect(harness.enqueued[0]).toMatchObject({
       runAt: new Date(now + OAUTH_RETENTION_SWEEP_INTERVAL_MS),
       dedupOnAccountAndType: true,
-      dedupExcludeJobId: 'job-oauth-retention',
+      dedupAfterRunAt: new Date(0),
     });
   });
 
@@ -145,7 +145,7 @@ describe('OAuth provider retention sweeper', () => {
     expect(harness.enqueued).toHaveLength(1);
     expect(harness.enqueued[0]).toMatchObject({
       dedupOnAccountAndType: true,
-      dedupExcludeJobId: 'job-oauth-retention',
+      dedupAfterRunAt: new Date(0),
     });
   });
 });

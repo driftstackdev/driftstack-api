@@ -16,9 +16,8 @@
 // downgrade, no duplicate email) and then marks. Never mark-then-work.
 //
 // Scheduling mirrors session-duration-sweeper EXACTLY: the bootstrap enqueue
-// dedups (one chain across restarts), the in-handler re-arm does NOT (the
-// still-locked, not-yet-completed current job would otherwise look like a
-// pending duplicate and kill the chain).
+// dedups all pending rows; in-handler re-arms ignore the current/older
+// run-time cohort but still deduplicate future successors.
 
 import type { StripeWebhooksRepo } from './stripe-webhooks.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
@@ -170,12 +169,8 @@ export interface RegisterCryptoEntitlementExpirySweepJobOpts {
 }
 
 /**
- * Wire the sweeper onto the ScheduledJobsService. The re-arm MUST enqueue with
- * `dedup: false` (the currently-executing job is still locked + not-completed
- * when the handler runs, so a dedup:true re-arm would see it as a pending
- * duplicate and kill the chain). The single locked executor guarantees one
- * handler run → one next enqueue, so no fan-out risk. See
- * session-duration-sweeper for the full reasoning.
+ * Wire the sweeper onto the ScheduledJobsService. Re-arms ignore the
+ * current/older run-time cohort but dedup against later successors.
  *
  * Chain survival: the re-arm must run even if `tickOnce` throws. If it did not,
  * a throw would leave no re-arm, the poller would retry the job, and once
@@ -193,7 +188,7 @@ export function registerCryptoEntitlementExpirySweepJob(
   const now = opts.nowFn ?? Date.now;
   opts.scheduledJobs.register(
     CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_JOB_TYPE,
-    async (_job: ScheduledJobRow) => {
+    async (job: ScheduledJobRow) => {
       try {
         await opts.sweeper.tickOnce(new Date(now()));
       } catch (err) {
@@ -210,21 +205,20 @@ export function registerCryptoEntitlementExpirySweepJob(
       await enqueueNextCryptoEntitlementExpirySweep({
         scheduledJobs: opts.scheduledJobs,
         nowFn: now,
-        dedup: false,
+        currentRunAt: job.runAt,
       });
     },
   );
 }
 
 /**
- * Enqueue the next sweep at `now + interval`. `dedup` (default true) → true for
- * the bootstrap enqueue (one chain across restarts), false for the in-handler
- * re-arm (see registerCryptoEntitlementExpirySweepJob).
+ * Enqueue the next sweep at `now + interval`. Bootstrap dedups all pending;
+ * re-arms dedup only against successors after `currentRunAt`.
  */
 export async function enqueueNextCryptoEntitlementExpirySweep(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
-  dedup?: boolean;
+  currentRunAt?: Date;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -232,6 +226,7 @@ export async function enqueueNextCryptoEntitlementExpirySweep(opts: {
     accountId: null,
     payload: {},
     runAt: new Date(now + CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_INTERVAL_MS),
-    dedupOnAccountAndType: opts.dedup ?? true,
+    dedupOnAccountAndType: true,
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }

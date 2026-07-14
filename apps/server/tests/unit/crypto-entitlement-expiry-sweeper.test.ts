@@ -278,25 +278,36 @@ describe('C1 CryptoEntitlementExpirySweeperService.tickOnce', () => {
 
 describe('C1 crypto entitlement sweep scheduling (dedup rule)', () => {
   function fakeScheduledJobs() {
-    const enqueues: Array<{ jobType: string; dedup: boolean; runAt: Date }> = [];
+    const enqueues: Array<{
+      jobType: string;
+      dedup: boolean;
+      dedupAfterRunAt?: Date;
+      runAt: Date;
+    }> = [];
     let handler: ((job: unknown) => Promise<void>) | null = null;
     const scheduledJobs = {
       register: (_jobType: string, h: (job: unknown) => Promise<void>) => {
         handler = h;
       },
-      enqueue: (args: { jobType: string; dedupOnAccountAndType: boolean; runAt: Date }) => {
+      enqueue: (args: {
+        jobType: string;
+        dedupOnAccountAndType: boolean;
+        dedupAfterRunAt?: Date;
+        runAt: Date;
+      }) => {
         enqueues.push({
           jobType: args.jobType,
           dedup: args.dedupOnAccountAndType,
+          dedupAfterRunAt: args.dedupAfterRunAt,
           runAt: args.runAt,
         });
         return Promise.resolve({ enqueued: true });
       },
     };
-    return { scheduledJobs, enqueues, invoke: () => handler!({}) };
+    return { scheduledJobs, enqueues, invoke: () => handler!({ runAt: NOW }) };
   }
 
-  it('bootstrap enqueue dedups; the in-handler re-arm does NOT', async () => {
+  it('bootstrap dedups all pending; re-arm dedups only future successors', async () => {
     const f = fakeScheduledJobs();
     const repo = new InMemoryStripeWebhooksRepo();
     const sweeper = new CryptoEntitlementExpirySweeperService({ repo, logger: makeLogger() });
@@ -310,7 +321,7 @@ describe('C1 crypto entitlement sweep scheduling (dedup rule)', () => {
       dedup: true,
     });
 
-    // Register + fire the handler → tickOnce then re-arm with dedup FALSE.
+    // Register + fire the handler → tickOnce then re-arm with a run-time boundary.
     registerCryptoEntitlementExpirySweepJob({
       scheduledJobs: f.scheduledJobs as any,
       sweeper,
@@ -318,7 +329,8 @@ describe('C1 crypto entitlement sweep scheduling (dedup rule)', () => {
     });
     await f.invoke();
     const reArm = f.enqueues.at(-1)!;
-    expect(reArm.dedup).toBe(false);
+    expect(reArm.dedup).toBe(true);
+    expect(reArm.dedupAfterRunAt).toEqual(NOW);
     expect(reArm.runAt).toEqual(
       new Date(NOW.getTime() + CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_INTERVAL_MS),
     );
@@ -347,7 +359,8 @@ describe('C1 crypto entitlement sweep scheduling (dedup rule)', () => {
     expect(f.enqueues).toHaveLength(1);
     expect(f.enqueues[0]).toMatchObject({
       jobType: CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_JOB_TYPE,
-      dedup: false,
+      dedup: true,
+      dedupAfterRunAt: NOW,
     });
     expect(tickOnce).toHaveBeenCalledTimes(1);
   });

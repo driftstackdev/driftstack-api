@@ -81,7 +81,7 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     expect(p).toMatch(/eq\(scheduledJobs\.jobType, input\.jobType\),/);
     expect(p).toMatch(/isNull\(scheduledJobs\.completedAt\),/);
     expect(p).toMatch(/isNull\(scheduledJobs\.failedAt\),/);
-    expect(p).toMatch(/ne\(scheduledJobs\.id, input\.dedupExcludeJobId\),/);
+    expect(p).toMatch(/gt\(scheduledJobs\.runAt, input\.dedupAfterRunAt\),/);
     expect(p).toMatch(/if \(existing\.length > 0\) return \{ enqueued: false \};/);
   });
 

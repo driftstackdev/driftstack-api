@@ -26,11 +26,9 @@
 //   runAt = nextMidnightUtc(now) — predictable wall-clock landing
 //   for ops; strictly after `now`.
 //
-//   dedupOnAccountAndType: opts.dedup ?? true — V-202d dedup primitive
-//   prevents duplicate pending jobs across overlapping enqueue calls
-//   (bootstrap → true). The in-handler RE-ARM passes dedup:false so the
-//   still-locked, not-yet-completed current job can't be mistaken for a
-//   pending duplicate (which would no-op the re-enqueue + kill the chain).
+//   dedupOnAccountAndType: true plus optional dedupAfterRunAt — bootstrap
+//   sees all pending rows; re-arms ignore current/older cohorts while still
+//   collapsing future successors.
 //
 //   registerCostNightlyJob 'Idempotent: re-registering replaces the
 //   previous handler' (matches V-202d register() last-write-wins).
@@ -108,10 +106,8 @@ describe('W928 V-541.E cost-nightly-job cross-source invariant', () => {
     expect(p).toMatch(/Even with zero accounts, re-enqueue tomorrow/);
     expect(p).toMatch(/await opts\.dispatcher\.evaluate\(\{/);
     expect(p).toMatch(/Re-arm the next run/);
-    // Re-arm enqueues with dedup OFF — the in-flight, still-locked current job
-    // would otherwise trip the dedup check and kill the re-arm chain.
     expect(p).toMatch(
-      /await enqueueNextNightlyRun\(\{ scheduledJobs: opts\.scheduledJobs, nowFn: now, dedup: false \}\);/,
+      /await enqueueNextNightlyRun\(\{[\s\S]*?scheduledJobs: opts\.scheduledJobs,[\s\S]*?nowFn: now,[\s\S]*?currentRunAt: job\.runAt,[\s\S]*?\}\);/,
     );
   });
 
@@ -141,14 +137,15 @@ describe('W928 V-541.E cost-nightly-job cross-source invariant', () => {
     expect(p).toMatch(/with account_id IS NULL, the enqueue is a no-op/);
   });
 
-  it('CRITICAL enqueueNextNightlyRun passes dedupOnAccountAndType: opts.dedup ?? true (parameterized) + accountId: null + jobType: COST_NIGHTLY_JOB_TYPE + runAt: nextMidnightUtc. The 4-arg enqueue shape is what the V-202d primitive expects; dedup is the bootstrap(true)/re-arm(false) seam.', () => {
+  it('CRITICAL enqueueNextNightlyRun always dedups and optionally limits matches to future successors', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cost-nightly-job.ts'));
     expect(p).toMatch(/jobType: COST_NIGHTLY_JOB_TYPE,/);
     expect(p).toMatch(/accountId: null,/);
     expect(p).toMatch(/payload: \{\},/);
     expect(p).toMatch(/runAt: nextMidnightUtc\(new Date\(now\)\),/);
-    expect(p).toMatch(/dedup\?: boolean;/);
-    expect(p).toMatch(/dedupOnAccountAndType: opts\.dedup \?\? true,/);
+    expect(p).toMatch(/currentRunAt\?: Date;/);
+    expect(p).toMatch(/dedupOnAccountAndType: true,/);
+    expect(p).toMatch(/dedupAfterRunAt: opts\.currentRunAt/);
   });
 
   // ─── nextMidnightUtc semantics + runtime ─────────────────────

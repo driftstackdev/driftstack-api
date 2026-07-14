@@ -26480,3 +26480,42 @@ Verification:
   success-count telemetry, and suppression of raw exception text;
 - strict server source/test TypeScript, targeted lint/format, diff and
   whitespace checks are green.
+
+## V-621 — Recurring scheduled jobs converge on one crash-safe successor
+
+**Date:** 2026-07-14
+
+The V-620 release made OAuth retention retry-safe, then an immediate
+cross-consumer trace found eight older self-arming jobs still disabling dedup
+inside their handlers: auth-token cleanup, free-session duration enforcement,
+scheduled-job pruning, crypto-entitlement expiry, profile-trash purge,
+account-deletion key purge, orphan agent-session reap and nightly cost
+recomputation. If a worker committed the next row and died before completing
+the current row, a retry inserted another successor. Repeated crashes could
+therefore grow parallel chains, duplicate expensive work and accelerate the
+same storage/entitlement operations those jobs protect.
+
+ID-only current-row exclusion was also insufficient for an already duplicated
+current cohort: each current row could see the other as a pending duplicate and
+both suppress the only successor. The generic enqueue contract now accepts a
+run-time boundary instead. Under the existing transaction-scoped tuple advisory
+lock, a self-arming enqueue ignores pending rows at or before the current
+job's `run_at` and is suppressed only by a pending row strictly after it. The
+first current peer inserts one future successor; every concurrent peer, replay
+or ambiguous retry then observes that successor and no-ops. Bootstrap omits the
+boundary and continues to deduplicate against the entire pending set.
+
+All nine recurring consumers, including OAuth retention, pass `job.runAt` and
+keep dedup enabled on every success, empty-work and swallowed-error re-arm
+branch. Cadences, work predicates, bounded logging and chain-survival behavior
+are unchanged.
+
+Verification:
+
+- the recurring scheduler/OAuth unit and content matrix passes 20 files and
+  221/221 tests, including per-consumer drift guards and handler replay cases;
+- real migrated PostgreSQL proves 20 simultaneous bootstrap replicas create
+  one current row, then two legacy current rows racing across replicas create
+  exactly one future successor and replay inserts none;
+- strict server source/test TypeScript, targeted lint/format, diff and
+  whitespace checks are green.

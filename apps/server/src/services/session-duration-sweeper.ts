@@ -17,9 +17,8 @@
 // ScheduledJobsService and re-arms itself after each run, same shape as the
 // auth-tokens sweeper. Cadence is short (every 2 min) because a 20-min cap
 // needs reasonably prompt enforcement — a session is destroyed within ~2
-// min of crossing 20 min. The re-arm enqueues with dedup OFF (the still-
-// locked current job would otherwise be mistaken for a pending duplicate);
-// only the bootstrap enqueue dedups, to keep one chain across restarts.
+// min of crossing 20 min. The re-arm ignores the current/older run-time
+// cohort while deduplicating future successors; bootstrap dedups all pending.
 // See `enqueueNextSessionDurationSweep` JSDoc for the full reasoning.
 
 import { type AccountTier, AccountTierSchema } from '@driftstack/api-types';
@@ -164,16 +163,9 @@ export interface RegisterSessionDurationSweepJobOpts {
  * one tick then re-arms the next run at `now + SESSION_DURATION_SWEEP_
  * INTERVAL_MS`.
  *
- * The re-arm MUST enqueue with `dedup: false`. The poller (scheduled-jobs.ts
- * `runOne`) runs `await handler(job)` THEN `await markComplete(job)`, so when
- * this handler fires the CURRENTLY-EXECUTING job is still locked and has
- * `completed_at IS NULL`. The repo's `dedupOnAccountAndType` treats any row
- * with `completed_at IS NULL AND failed_at IS NULL` as a pending duplicate —
- * it does NOT exclude the in-flight job — so a dedup:true re-arm would see
- * the running job, no-op, and the sweep chain would DIE after one run (only
- * the bootstrap-on-restart enqueue would ever fire). Because a single locked
- * executor processes this job, one handler run produces exactly one next
- * enqueue, so skipping dedup here can't fan out into duplicate chains.
+ * Re-arms use future-successor dedup: current/older run-time peers are ignored,
+ * while an already-pending successor strictly after this run suppresses the
+ * enqueue. This survives handler replay without creating parallel chains.
  *
  * Chain survival: the re-arm must run even if `tickOnce` throws. If it did
  * not, a throw would leave no re-arm, the poller would retry the job, and once
@@ -188,7 +180,7 @@ export interface RegisterSessionDurationSweepJobOpts {
  */
 export function registerSessionDurationSweepJob(opts: RegisterSessionDurationSweepJobOpts): void {
   const now = opts.nowFn ?? Date.now;
-  opts.scheduledJobs.register(SESSION_DURATION_SWEEP_JOB_TYPE, async (_job: ScheduledJobRow) => {
+  opts.scheduledJobs.register(SESSION_DURATION_SWEEP_JOB_TYPE, async (job: ScheduledJobRow) => {
     try {
       await opts.sweeper.tickOnce(new Date(now()));
     } catch (err) {
@@ -202,14 +194,12 @@ export function registerSessionDurationSweepJob(opts: RegisterSessionDurationSwe
         'session-duration sweep tick failed — re-arming; rows retry next tick',
       );
     }
-    // Re-arm path: dedup OFF — the in-flight (still-locked, not-yet-completed)
-    // current job would otherwise be seen as a pending duplicate and block the
-    // re-enqueue, killing the chain. See JSDoc above. This runs OUTSIDE the
-    // try above so a thrown tick still re-arms exactly once (chain survival).
+    // This runs outside the try so a thrown tick still re-arms exactly once.
+    // Future-successor dedup ignores this current/older run-time cohort.
     await enqueueNextSessionDurationSweep({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,
-      dedup: false,
+      currentRunAt: job.runAt,
     });
   });
 }
@@ -218,23 +208,14 @@ export function registerSessionDurationSweepJob(opts: RegisterSessionDurationSwe
  * Enqueue the next duration sweep at `now + SESSION_DURATION_SWEEP_INTERVAL_
  * MS`.
  *
- * `dedup` (default `true`) maps straight to the repo's
- * `dedupOnAccountAndType` flag — a pending row for this job_type with
- * account_id IS NULL no-ops the enqueue. Callers MUST pick deliberately:
- *
- *   - BOOTSTRAP on app start → dedup:true (default). Prevents a crash/restart
- *     from leaving two parallel sweep chains running.
- *   - RE-ARM from inside the handler → dedup:false. The current job is still
- *     locked + non-completed when the handler runs, so it looks like a pending
- *     duplicate to the dedup check; dedup:true here would no-op every re-arm
- *     and the chain would die after one tick. The single locked executor
- *     guarantees one handler run → one next enqueue, so no fan-out risk.
+ * Bootstrap omits `currentRunAt` and dedups against all pending rows. Re-arms
+ * pass the current row's `runAt` and dedup only against future successors.
  */
 export async function enqueueNextSessionDurationSweep(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
-  /** See JSDoc: true (default) for bootstrap, false for the in-handler re-arm. */
-  dedup?: boolean;
+  /** Current run-time cohort ignored for a crash-safe in-handler re-arm. */
+  currentRunAt?: Date;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -242,6 +223,7 @@ export async function enqueueNextSessionDurationSweep(opts: {
     accountId: null,
     payload: {},
     runAt: new Date(now + SESSION_DURATION_SWEEP_INTERVAL_MS),
-    dedupOnAccountAndType: opts.dedup ?? true,
+    dedupOnAccountAndType: true,
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }

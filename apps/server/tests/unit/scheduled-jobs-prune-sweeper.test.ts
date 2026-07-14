@@ -1,7 +1,6 @@
 // W441 — scheduled_jobs prune sweeper: registration + prune-cutoff + re-arm
 // contract. Mirrors the session-duration-sweeper scheduling test (the re-arm
-// MUST survive an in-flight job via dedup:false, else the chain dies after one
-// run).
+// must ignore the current cohort while deduplicating future successors).
 import { describe, it, expect, vi } from 'vitest';
 import type {
   EnqueueScheduledJobInput,
@@ -41,7 +40,11 @@ class FakeScheduledJobs {
   enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
     if (input.dedupOnAccountAndType) {
       const dup = this.jobs.some(
-        (j) => !j.completed && j.jobType === input.jobType && j.accountId === input.accountId,
+        (j) =>
+          !j.completed &&
+          j.jobType === input.jobType &&
+          j.accountId === input.accountId &&
+          (input.dedupAfterRunAt === undefined || j.runAt > input.dedupAfterRunAt),
       );
       if (dup) return Promise.resolve({ enqueued: false });
     }
@@ -90,7 +93,7 @@ describe('W441 scheduled_jobs prune sweeper', () => {
     expect(scheduledJobs.jobs[0]!.runAt.getTime()).toBe(NOW_MS + SCHEDULED_JOBS_PRUNE_INTERVAL_MS);
   });
 
-  it('handler prunes finished rows older than now - RETENTION_MS, then re-arms (survives in-flight job, dedup:false)', async () => {
+  it('handler prunes finished rows, then re-arms exactly once across replay', async () => {
     const scheduledJobs = new FakeScheduledJobs();
     const { repo, cutoffs } = fakeRepo();
     registerScheduledJobsPruneJob({
@@ -99,10 +102,13 @@ describe('W441 scheduled_jobs prune sweeper', () => {
       logger: silentLogger,
       nowFn: () => NOW_MS,
     });
-    // (a) bootstrap-enqueue (dedup:true default) → 1 pending.
-    await enqueueNextScheduledJobsPrune({
-      scheduledJobs: scheduledJobs as unknown as ScheduledJobsService,
-      nowFn: () => NOW_MS,
+    // Seed the in-flight current row at the handler's run time.
+    await scheduledJobs.enqueue({
+      jobType: SCHEDULED_JOBS_PRUNE_JOB_TYPE,
+      accountId: null,
+      payload: {},
+      runAt: new Date(NOW_MS),
+      dedupOnAccountAndType: false,
     });
     expect(scheduledJobs.pendingOfType(SCHEDULED_JOBS_PRUNE_JOB_TYPE)).toBe(1);
     // (b) run the handler while the bootstrap job is still in-flight (the poller
@@ -121,6 +127,16 @@ describe('W441 scheduled_jobs prune sweeper', () => {
     expect(cutoffs).toHaveLength(1);
     expect(cutoffs[0]!.getTime()).toBe(NOW_MS - SCHEDULED_JOBS_PRUNE_RETENTION_MS);
     // re-armed a 2nd job despite the 1st still pending → chain survives.
+    expect(scheduledJobs.pendingOfType(SCHEDULED_JOBS_PRUNE_JOB_TYPE)).toBe(2);
+    await handler({
+      id: 'job-1-replay',
+      jobType: SCHEDULED_JOBS_PRUNE_JOB_TYPE,
+      accountId: null,
+      payload: {},
+      runAt: new Date(NOW_MS),
+      attempts: 2,
+      maxAttempts: 5,
+    });
     expect(scheduledJobs.pendingOfType(SCHEDULED_JOBS_PRUNE_JOB_TYPE)).toBe(2);
   });
 
@@ -158,7 +174,7 @@ describe('W441 scheduled_jobs prune sweeper', () => {
     // Exactly one re-arm enqueued → chain alive, no duplicate parallel chains.
     expect(scheduledJobs.jobs).toHaveLength(1);
     expect(scheduledJobs.jobs[0]!.jobType).toBe(SCHEDULED_JOBS_PRUNE_JOB_TYPE);
-    expect(scheduledJobs.jobs[0]!.dedup).toBe(false);
+    expect(scheduledJobs.jobs[0]!.dedup).toBe(true);
     expect(pruneFinished).toHaveBeenCalledTimes(1);
   });
 });

@@ -12,8 +12,7 @@
 // Scheduling: daily at 04:00 UTC (staggered one hour after the 03:00 auth-token
 // sweep so the two don't contend). Exposes tickOnce(now) as the testable unit;
 // registerProfileTrashPurgeJob wires it into the scheduled-jobs poller and
-// re-arms after each run (dedup OFF on the in-handler re-arm — see the
-// auth-tokens-sweeper JSDoc for the locked-in-flight-job reasoning).
+// re-arms after each run with future-successor dedup.
 
 import type { ProfilesRepo } from './profiles.js';
 import type { ScheduledJobsService, ScheduledJobRow } from './scheduled-jobs.js';
@@ -105,7 +104,7 @@ export interface RegisterProfileTrashPurgeJobOpts {
  */
 export function registerProfileTrashPurgeJob(opts: RegisterProfileTrashPurgeJobOpts): void {
   const now = opts.nowFn ?? Date.now;
-  opts.scheduledJobs.register(PROFILE_TRASH_PURGE_JOB_TYPE, async (_job: ScheduledJobRow) => {
+  opts.scheduledJobs.register(PROFILE_TRASH_PURGE_JOB_TYPE, async (job: ScheduledJobRow) => {
     try {
       const result = await opts.sweeper.tickOnce(new Date(now()));
       opts.logger.info?.(
@@ -127,28 +126,24 @@ export function registerProfileTrashPurgeJob(opts: RegisterProfileTrashPurgeJobO
         'profile-trash purge tick failed — re-arming; rows retry next run',
       );
     }
-    // Re-arm with dedup OFF — the in-flight (still-locked, not-yet-completed)
-    // job would otherwise be seen as a pending duplicate and block the
-    // re-enqueue, killing the chain. See the auth-tokens-sweeper JSDoc. This
-    // runs OUTSIDE the try above so a tick failure never skips the re-arm.
+    // Ignore the current/older run-time cohort but collapse future successors.
+    // This runs OUTSIDE the try so a tick failure never skips the re-arm.
     await enqueueNextProfileTrashPurge({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,
-      dedup: false,
+      currentRunAt: job.runAt,
     });
   });
 }
 
 /**
- * Enqueue the next purge at 04:00 UTC strictly after `now`. dedup:true for the
- * bootstrap enqueue (one chain across restarts); dedup:false for the in-handler
- * re-arm (the current job is still locked + non-completed, so dedup:true would
- * no-op every re-arm and kill the chain).
+ * Enqueue the next purge at 04:00 UTC strictly after `now`. Bootstrap dedups
+ * all pending rows; a re-arm dedups only future successors after currentRunAt.
  */
 export async function enqueueNextProfileTrashPurge(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
-  dedup?: boolean;
+  currentRunAt?: Date;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -156,7 +151,8 @@ export async function enqueueNextProfileTrashPurge(opts: {
     accountId: null,
     payload: {},
     runAt: nextPurgeRunAt(new Date(now)),
-    dedupOnAccountAndType: opts.dedup ?? true,
+    dedupOnAccountAndType: true,
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }
 

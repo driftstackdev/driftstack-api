@@ -44,7 +44,7 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
 
   it('imports the exact query primitives, Database, scheduledJobs schema and service types', () => {
     expect(body).toMatch(
-      /import \{ and, eq, isNotNull, isNull, lt, ne, or, sql \} from 'drizzle-orm';/,
+      /import \{ and, eq, gt, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import \{ scheduledJobs \} from '\.\/schema\.js';/);
     expect(body).toMatch(
@@ -66,7 +66,7 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     );
     expect(body).toMatch(/if \(existing\.length > 0\) return \{ enqueued: false \};/);
     expect(body).toMatch(
-      /input\.dedupExcludeJobId === undefined\s*\n?\s*\? undefined\s*\n?\s*: ne\(scheduledJobs\.id, input\.dedupExcludeJobId\),/,
+      /input\.dedupAfterRunAt === undefined\s*\n?\s*\? undefined\s*\n?\s*: gt\(scheduledJobs\.runAt, input\.dedupAfterRunAt\),/,
     );
     expect(body).toMatch(
       /await tx\.insert\(scheduledJobs\)\.values\(\{\s*\n?\s*jobType: input\.jobType,\s*\n?\s*accountId: input\.accountId,\s*\n?\s*payload: input\.payload,\s*\n?\s*runAt: input\.runAt,\s*\n?\s*\}\);\s*\n?\s*return \{ enqueued: true \};/,

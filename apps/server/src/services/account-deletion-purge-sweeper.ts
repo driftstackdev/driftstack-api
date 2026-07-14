@@ -113,7 +113,7 @@ export interface RegisterAccountDeletionPurgeJobOpts {
  */
 export function registerAccountDeletionPurgeJob(opts: RegisterAccountDeletionPurgeJobOpts): void {
   const now = opts.nowFn ?? Date.now;
-  opts.scheduledJobs.register(ACCOUNT_DELETION_PURGE_JOB_TYPE, async (_job: ScheduledJobRow) => {
+  opts.scheduledJobs.register(ACCOUNT_DELETION_PURGE_JOB_TYPE, async (job: ScheduledJobRow) => {
     try {
       const result = await opts.sweeper.tickOnce(new Date(now()));
       opts.logger.info?.(
@@ -131,15 +131,14 @@ export function registerAccountDeletionPurgeJob(opts: RegisterAccountDeletionPur
         'account-deletion purge sweep tick failed — re-arming; accounts retry next sweep',
       );
     }
-    // Re-arm with dedup OFF — the in-flight (still-locked, not-yet-completed)
-    // job would otherwise be seen as a pending duplicate and block the
-    // re-enqueue, killing the chain. See the auth-tokens-sweeper JSDoc. This
-    // runs OUTSIDE the try above so a thrown tick still re-arms (chain survival,
-    // see the function JSDoc) — NOT in a finally+rethrow, which would fan out.
+    // Ignore the current/older run-time cohort and collapse future successors.
+    // This runs OUTSIDE the try above so a thrown tick still re-arms (chain
+    // survival, see the function JSDoc) — NOT in a finally+rethrow, which would
+    // fan out.
     await enqueueNextAccountDeletionPurge({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,
-      dedup: false,
+      currentRunAt: job.runAt,
     });
   });
 }
@@ -147,14 +146,13 @@ export function registerAccountDeletionPurgeJob(opts: RegisterAccountDeletionPur
 /**
  * Enqueue the next purge at 05:00 UTC strictly after `now` — staggered one
  * hour after the 04:00 profile-trash purge so the two don't contend.
- * dedup:true for the bootstrap enqueue (one chain across restarts);
- * dedup:false for the in-handler re-arm (the current job is still locked +
- * non-completed, so dedup:true would no-op every re-arm and kill the chain).
+ * Bootstrap dedups all pending rows; an in-handler re-arm dedups only future
+ * successors after currentRunAt.
  */
 export async function enqueueNextAccountDeletionPurge(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
-  dedup?: boolean;
+  currentRunAt?: Date;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -162,7 +160,8 @@ export async function enqueueNextAccountDeletionPurge(opts: {
     accountId: null,
     payload: {},
     runAt: nextAccountDeletionPurgeRunAt(new Date(now)),
-    dedupOnAccountAndType: opts.dedup ?? true,
+    dedupOnAccountAndType: true,
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }
 

@@ -124,22 +124,33 @@ describe('job type', () => {
 
 describe('account-deletion purge sweep scheduling (chain survival)', () => {
   function fakeScheduledJobs() {
-    const enqueues: Array<{ jobType: string; dedup: boolean; runAt: Date }> = [];
+    const enqueues: Array<{
+      jobType: string;
+      dedup: boolean;
+      dedupAfterRunAt?: Date;
+      runAt: Date;
+    }> = [];
     let handler: ((job: unknown) => Promise<void>) | null = null;
     const scheduledJobs = {
       register: (_jobType: string, h: (job: unknown) => Promise<void>) => {
         handler = h;
       },
-      enqueue: (args: { jobType: string; dedupOnAccountAndType: boolean; runAt: Date }) => {
+      enqueue: (args: {
+        jobType: string;
+        dedupOnAccountAndType: boolean;
+        dedupAfterRunAt?: Date;
+        runAt: Date;
+      }) => {
         enqueues.push({
           jobType: args.jobType,
           dedup: args.dedupOnAccountAndType,
+          dedupAfterRunAt: args.dedupAfterRunAt,
           runAt: args.runAt,
         });
         return Promise.resolve({ enqueued: true });
       },
     };
-    return { scheduledJobs, enqueues, invoke: () => handler!({}) };
+    return { scheduledJobs, enqueues, invoke: () => handler!({ runAt: NOW }) };
   }
 
   const NOW = new Date('2026-07-01T12:00:00.000Z');
@@ -169,12 +180,13 @@ describe('account-deletion purge sweep scheduling (chain survival)', () => {
     expect(f.enqueues).toHaveLength(1);
     expect(f.enqueues[0]).toMatchObject({
       jobType: ACCOUNT_DELETION_PURGE_JOB_TYPE,
-      dedup: false,
+      dedup: true,
+      dedupAfterRunAt: NOW,
     });
     expect(tickOnce).toHaveBeenCalledTimes(1);
   });
 
-  it('bootstrap-style handler re-arms with dedup OFF after a successful tick', async () => {
+  it('successful handler re-arms with future-successor dedup', async () => {
     const f = fakeScheduledJobs();
     const tickOnce = vi.fn().mockResolvedValue({ purged: 0 });
     const sweeper = { tickOnce } as unknown as AccountDeletionPurgeSweeperService;
@@ -190,7 +202,8 @@ describe('account-deletion purge sweep scheduling (chain survival)', () => {
     expect(f.enqueues).toHaveLength(1);
     expect(f.enqueues[0]).toMatchObject({
       jobType: ACCOUNT_DELETION_PURGE_JOB_TYPE,
-      dedup: false,
+      dedup: true,
+      dedupAfterRunAt: NOW,
     });
     expect(tickOnce).toHaveBeenCalledTimes(1);
   });

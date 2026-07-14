@@ -265,15 +265,15 @@ describe('SessionDurationSweeperService — free-tier auto-destroy safety', () =
   });
 });
 
-// Minimal fake that models the REAL repo dedup semantics so the re-arm
-// chain can be exercised without a database. `enqueue` no-ops when
-// `dedupOnAccountAndType` is true AND a non-completed job with the same
-// (jobType, accountId) already exists — exactly the predicate
-// (`completed_at IS NULL AND failed_at IS NULL`) the poller leaves the
-// in-flight, still-locked current job in while it runs the handler.
+// Minimal fake for the repo's future-successor dedup semantics.
 class FakeScheduledJobs {
   /** Enqueued jobs; `completed` flips when a job is marked complete. */
-  readonly jobs: Array<{ jobType: string; accountId: string | null; completed: boolean }> = [];
+  readonly jobs: Array<{
+    jobType: string;
+    accountId: string | null;
+    runAt: Date;
+    completed: boolean;
+  }> = [];
   private readonly handlers = new Map<string, ScheduledJobHandler>();
 
   register(jobType: string, handler: ScheduledJobHandler): void {
@@ -283,11 +283,20 @@ class FakeScheduledJobs {
   enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
     if (input.dedupOnAccountAndType) {
       const dup = this.jobs.some(
-        (j) => !j.completed && j.jobType === input.jobType && j.accountId === input.accountId,
+        (j) =>
+          !j.completed &&
+          j.jobType === input.jobType &&
+          j.accountId === input.accountId &&
+          (input.dedupAfterRunAt === undefined || j.runAt > input.dedupAfterRunAt),
       );
       if (dup) return Promise.resolve({ enqueued: false });
     }
-    this.jobs.push({ jobType: input.jobType, accountId: input.accountId, completed: false });
+    this.jobs.push({
+      jobType: input.jobType,
+      accountId: input.accountId,
+      runAt: input.runAt,
+      completed: false,
+    });
     return Promise.resolve({ enqueued: true });
   }
 
@@ -308,9 +317,8 @@ describe('SessionDurationSweeperService — re-arm survives an in-flight job', (
   // bootstrap. The real poller runs `await handler(job)` BEFORE
   // `await markComplete(job)`, so when the handler re-arms, the current job
   // is still present + non-completed. A dedup:true re-arm would see it as a
-  // pending duplicate and no-op — the chain dies. The re-arm MUST use
-  // dedup:false so the next run is always enqueued. FAILS pre-fix
-  // (re-arm with dedup:true → no second job); PASSES post-fix.
+  // pending duplicate and no-op under the legacy primitive. The replacement
+  // ignores the current cohort and dedups any later successor.
   it('re-arms a SECOND sweep job even while the current job is still in-flight', async () => {
     const scheduledJobs = new FakeScheduledJobs() as unknown as ScheduledJobsService;
     const fake = scheduledJobs as unknown as FakeScheduledJobs;
@@ -321,11 +329,19 @@ describe('SessionDurationSweeperService — re-arm survives an in-flight job', (
       tickOnce: () => Promise.resolve({ destroyed: 0, candidates: 0 }),
     } as unknown as SessionDurationSweeperService;
 
-    registerSessionDurationSweepJob({ scheduledJobs, sweeper, logger: silentLogger });
+    let clock = NOW.getTime();
+    registerSessionDurationSweepJob({
+      scheduledJobs,
+      sweeper,
+      logger: silentLogger,
+      nowFn: () => clock,
+    });
 
     // (a) bootstrap-enqueue one sweep job (default dedup:true) → 1 pending.
-    await enqueueNextSessionDurationSweep({ scheduledJobs });
+    await enqueueNextSessionDurationSweep({ scheduledJobs, nowFn: () => clock });
     expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(1);
+    const currentRunAt = fake.jobs[0]!.runAt;
+    clock = currentRunAt.getTime();
 
     // (b) run the handler WHILE that bootstrap job is still present +
     //     non-completed (the poller has not called markComplete yet),
@@ -336,13 +352,24 @@ describe('SessionDurationSweeperService — re-arm survives an in-flight job', (
       jobType: SESSION_DURATION_SWEEP_JOB_TYPE,
       accountId: null,
       payload: {},
-      runAt: NOW,
+      runAt: currentRunAt,
       attempts: 1,
       maxAttempts: 5,
     });
 
     // (c) the chain re-armed: a SECOND sweep job exists despite the first
     //     still being in-flight.
+    expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(2);
+
+    await handler({
+      id: 'job-1-replay',
+      jobType: SESSION_DURATION_SWEEP_JOB_TYPE,
+      accountId: null,
+      payload: {},
+      runAt: currentRunAt,
+      attempts: 2,
+      maxAttempts: 5,
+    });
     expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(2);
   });
 
@@ -382,7 +409,7 @@ describe('SessionDurationSweeperService — re-arm survives an in-flight job', (
     ).resolves.toBeUndefined();
 
     expect(tickOnce).toHaveBeenCalledTimes(1);
-    // Exactly one re-arm was enqueued (dedup:false) despite the throw — the
+    // Exactly one future successor was enqueued despite the throw — the
     // chain survives. No bootstrap enqueue here, so exactly 1 pending.
     expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(1);
   });

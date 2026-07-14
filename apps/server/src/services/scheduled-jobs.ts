@@ -58,12 +58,13 @@ export interface EnqueueScheduledJobInput {
    */
   dedupOnAccountAndType?: boolean;
   /**
-   * Pending row to ignore during a deduplicated re-arm. Self-arming handlers
-   * pass their current job ID so a committed successor suppresses retries,
-   * while the still-in-flight current row does not suppress the first re-arm.
-   * Internal scheduler primitive; leave unset for ordinary/bootstrap enqueue.
+   * When set, only a distinct pending successor with run_at strictly after
+   * this boundary suppresses enqueue. Self-arming handlers pass their current
+   * job's runAt, which ignores the current/older duplicate cohort while a
+   * committed future successor suppresses every peer or retry. Internal
+   * scheduler primitive; leave unset for ordinary/bootstrap enqueue.
    */
-  dedupExcludeJobId?: string;
+  dedupAfterRunAt?: Date;
 }
 
 export interface ScheduledJobsRepo {

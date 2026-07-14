@@ -35,12 +35,8 @@ export interface RegisterScheduledJobsPruneJobOpts {
  * Wire the prune sweeper onto the ScheduledJobsService. The handler prunes
  * once then re-arms the next run at `now + SCHEDULED_JOBS_PRUNE_INTERVAL_MS`.
  *
- * The re-arm MUST enqueue with `dedup: false` — same reasoning as the session-
- * duration sweeper: the currently-executing job is still locked + not-yet-
- * completed when the handler runs, so a `dedup: true` re-arm would treat it as
- * a pending duplicate, no-op, and the chain would die after one run. A single
- * locked executor processes this job, so one handler run → one next enqueue
- * (no fan-out).
+ * Re-arms ignore current/older run-time peers but dedup against future
+ * successors, keeping the chain alive and collapsing handler replay.
  *
  * Chain survival: the re-arm must run even if the prune throws. If it did not,
  * a throw would leave no re-arm, the poller would retry the job, and once
@@ -55,7 +51,7 @@ export interface RegisterScheduledJobsPruneJobOpts {
  */
 export function registerScheduledJobsPruneJob(opts: RegisterScheduledJobsPruneJobOpts): void {
   const now = opts.nowFn ?? Date.now;
-  opts.scheduledJobs.register(SCHEDULED_JOBS_PRUNE_JOB_TYPE, async (_job: ScheduledJobRow) => {
+  opts.scheduledJobs.register(SCHEDULED_JOBS_PRUNE_JOB_TYPE, async (job: ScheduledJobRow) => {
     try {
       const cutoff = new Date(now() - SCHEDULED_JOBS_PRUNE_RETENTION_MS);
       const deleted = await opts.repo.pruneFinished(cutoff);
@@ -79,7 +75,7 @@ export function registerScheduledJobsPruneJob(opts: RegisterScheduledJobsPruneJo
     await enqueueNextScheduledJobsPrune({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,
-      dedup: false,
+      currentRunAt: job.runAt,
     });
   });
 }
@@ -87,17 +83,13 @@ export function registerScheduledJobsPruneJob(opts: RegisterScheduledJobsPruneJo
 /**
  * Enqueue the next prune at `now + SCHEDULED_JOBS_PRUNE_INTERVAL_MS`.
  *
- * `dedup` (default `true`) maps to the repo's `dedupOnAccountAndType`:
- *   - BOOTSTRAP on app start → dedup:true (default). Prevents a restart from
- *     leaving two parallel prune chains.
- *   - RE-ARM from inside the handler → dedup:false (the in-flight job is still
- *     locked + non-completed, so it looks like a pending duplicate; dedup:true
- *     would no-op every re-arm and kill the chain).
+ * Bootstrap omits `currentRunAt` and dedups all pending rows. Re-arms pass the
+ * current row's `runAt` and dedup only against a later pending successor.
  */
 export async function enqueueNextScheduledJobsPrune(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
-  dedup?: boolean;
+  currentRunAt?: Date;
 }): Promise<void> {
   const now = (opts.nowFn ?? Date.now)();
   await opts.scheduledJobs.enqueue({
@@ -105,6 +97,7 @@ export async function enqueueNextScheduledJobsPrune(opts: {
     accountId: null,
     payload: {},
     runAt: new Date(now + SCHEDULED_JOBS_PRUNE_INTERVAL_MS),
-    dedupOnAccountAndType: opts.dedup ?? true,
+    dedupOnAccountAndType: true,
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }

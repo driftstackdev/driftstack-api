@@ -40,9 +40,9 @@ describe('OAuth provider retention production wiring', () => {
     expect(sweeper).toMatch(/await opts\.sweeper\.tickOnce\(new Date\(now\(\)\)\)/);
     expect(sweeper).toMatch(/error_type: err instanceof Error \? err\.name\.slice\(0, 80\)/);
     expect(sweeper).not.toMatch(/err\.message|String\(err\)/);
-    expect(sweeper).toMatch(/currentJobId: job\.id/);
+    expect(sweeper).toMatch(/currentRunAt: job\.runAt/);
     expect(sweeper).toMatch(/dedupOnAccountAndType: true/);
-    expect(sweeper).toMatch(/dedupExcludeJobId: opts\.currentJobId/);
+    expect(sweeper).toMatch(/dedupAfterRunAt: opts\.currentRunAt/);
   });
 
   it('constructs, registers and bootstrap-deduplicates the production store sweep', () => {
@@ -63,7 +63,7 @@ describe('OAuth provider retention production wiring', () => {
     expect(scheduledJobsRepo).toMatch(
       /pg_advisory_xact_lock\(hashtextextended\(\$\{dedupLockTuple\}, 0\)\)/,
     );
-    expect(scheduledJobsRepo).toMatch(/ne\(scheduledJobs\.id, input\.dedupExcludeJobId\)/);
+    expect(scheduledJobsRepo).toMatch(/gt\(scheduledJobs\.runAt, input\.dedupAfterRunAt\)/);
     const dedupTransaction = scheduledJobsRepo.split('const dedupLockTuple')[1] ?? '';
     expect(dedupTransaction.indexOf('await tx.execute')).toBeLessThan(
       dedupTransaction.indexOf('const existing = await tx'),

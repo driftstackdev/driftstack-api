@@ -23,7 +23,7 @@
 //     markRetry); permanent fail error-logged.
 //   • dedupOnAccountAndType: enqueue no-ops when pending (completed_at
 //     NULL AND failed_at NULL) row exists for same (account_id, job_type),
-//     optionally excluding the self-arming handler's current job ID.
+//     optionally matching only successors after the handler's current runAt.
 //   • claimDue: atomic, sets locked_by + locked_at + increments attempts.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -79,8 +79,8 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
       /When true, `enqueue` no-ops if a pending job \(completed_at IS NULL\s*\n?\s*\*\s*AND failed_at IS NULL\) already exists with the same\s*\n?\s*\*\s*\(account_id, job_type\)\. Used to ensure one pending job per account\s*\n?\s*\*\s*regardless of how many times the triggering event re-fires\./,
     );
     expect(body).toMatch(/dedupOnAccountAndType\?: boolean;/);
-    expect(body).toMatch(/dedupExcludeJobId\?: string;/);
-    expect(body).toMatch(/Self-arming handlers\s*\n?\s*\* pass their current job ID/);
+    expect(body).toMatch(/dedupAfterRunAt\?: Date;/);
+    expect(body).toMatch(/Self-arming handlers pass their current\s*\n?\s*\* job's runAt/);
     expect(body).toMatch(/leave unset for ordinary\/bootstrap enqueue/);
   });
 

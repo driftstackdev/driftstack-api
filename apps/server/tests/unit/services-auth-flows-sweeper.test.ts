@@ -123,15 +123,15 @@ describe('AuthTokensSweeperService', () => {
   });
 });
 
-// Minimal fake that models the REAL repo dedup semantics so the re-arm
-// chain can be exercised without a database. `enqueue` no-ops when
-// `dedupOnAccountAndType` is true AND a non-completed job with the same
-// (jobType, accountId) already exists — exactly the predicate
-// (`completed_at IS NULL AND failed_at IS NULL`) the poller leaves the
-// in-flight, still-locked current job in while it runs the handler.
+// Minimal fake for the repo's future-successor dedup semantics.
 class FakeScheduledJobs {
   /** Enqueued jobs; `completed` flips when a job is marked complete. */
-  readonly jobs: Array<{ jobType: string; accountId: string | null; completed: boolean }> = [];
+  readonly jobs: Array<{
+    jobType: string;
+    accountId: string | null;
+    runAt: Date;
+    completed: boolean;
+  }> = [];
   private readonly handlers = new Map<string, ScheduledJobHandler>();
 
   register(jobType: string, handler: ScheduledJobHandler): void {
@@ -141,11 +141,20 @@ class FakeScheduledJobs {
   enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
     if (input.dedupOnAccountAndType) {
       const dup = this.jobs.some(
-        (j) => !j.completed && j.jobType === input.jobType && j.accountId === input.accountId,
+        (j) =>
+          !j.completed &&
+          j.jobType === input.jobType &&
+          j.accountId === input.accountId &&
+          (input.dedupAfterRunAt === undefined || j.runAt > input.dedupAfterRunAt),
       );
       if (dup) return Promise.resolve({ enqueued: false });
     }
-    this.jobs.push({ jobType: input.jobType, accountId: input.accountId, completed: false });
+    this.jobs.push({
+      jobType: input.jobType,
+      accountId: input.accountId,
+      runAt: input.runAt,
+      completed: false,
+    });
     return Promise.resolve({ enqueued: true });
   }
 
@@ -164,12 +173,8 @@ describe('AuthTokensSweeperService — re-arm survives an in-flight job', () => 
   // PINS THE RE-ARM-SURVIVES-IN-FLIGHT-JOB CONTRACT (same bug class fixed
   // for sessions.duration_sweep in abcf76e7). The real poller runs
   // `await handler(job)` BEFORE `await markComplete(job)`, so when the
-  // handler re-arms, the current job is still present + non-completed. A
-  // dedup:true re-arm would see it as a pending duplicate and no-op — the
-  // daily sweep chain dies after one run (only the bootstrap-on-restart
-  // enqueue would ever fire). The re-arm MUST use dedup:false so the next
-  // run is always enqueued. FAILS pre-fix (re-arm with dedup:true → no
-  // second job); PASSES post-fix.
+  // handler re-arms, the current job is still pending. Future-successor dedup
+  // ignores that current cohort, while a replay sees the successor and no-ops.
   it('re-arms a SECOND sweep job even while the current job is still in-flight', async () => {
     const scheduledJobs = new FakeScheduledJobs() as unknown as ScheduledJobsService;
     const fake = scheduledJobs as unknown as FakeScheduledJobs;
@@ -184,11 +189,19 @@ describe('AuthTokensSweeperService — re-arm survives an in-flight job', () => 
         }),
     } as unknown as AuthTokensSweeperService;
 
-    registerAuthTokensSweepJob({ scheduledJobs, sweeper, logger: silentLogger });
+    let clock = Date.parse('2026-05-20T02:00:00Z');
+    registerAuthTokensSweepJob({
+      scheduledJobs,
+      sweeper,
+      logger: silentLogger,
+      nowFn: () => clock,
+    });
 
     // (a) bootstrap-enqueue one sweep job (default dedup:true) → 1 pending.
-    await enqueueNextAuthTokensSweep({ scheduledJobs });
+    await enqueueNextAuthTokensSweep({ scheduledJobs, nowFn: () => clock });
     expect(fake.pendingOfType(AUTH_TOKENS_SWEEP_JOB_TYPE)).toBe(1);
+    const currentRunAt = fake.jobs[0]!.runAt;
+    clock = currentRunAt.getTime();
 
     // (b) run the handler WHILE that bootstrap job is still present +
     //     non-completed (the poller has not called markComplete yet),
@@ -199,13 +212,26 @@ describe('AuthTokensSweeperService — re-arm survives an in-flight job', () => 
       jobType: AUTH_TOKENS_SWEEP_JOB_TYPE,
       accountId: null,
       payload: {},
-      runAt: new Date('2026-05-20T03:00:00Z'),
+      runAt: currentRunAt,
       attempts: 1,
       maxAttempts: 5,
     });
 
     // (c) the chain re-armed: a SECOND sweep job exists despite the first
     //     still being in-flight.
+    expect(fake.pendingOfType(AUTH_TOKENS_SWEEP_JOB_TYPE)).toBe(2);
+
+    // Handler replay / a legacy duplicate current row cannot create another
+    // future successor.
+    await handler({
+      id: 'job-1-replay',
+      jobType: AUTH_TOKENS_SWEEP_JOB_TYPE,
+      accountId: null,
+      payload: {},
+      runAt: currentRunAt,
+      attempts: 2,
+      maxAttempts: 5,
+    });
     expect(fake.pendingOfType(AUTH_TOKENS_SWEEP_JOB_TYPE)).toBe(2);
   });
 
@@ -215,7 +241,7 @@ describe('AuthTokensSweeperService — re-arm survives an in-flight job', () => 
   // pending sweep row — so if the handler re-threw instead of swallowing, the
   // chain would DIE until a process restart and stale auth-flow tokens would
   // accumulate forever. The handler must SWALLOW a tickOnce failure (log it)
-  // and re-arm exactly once (dedup:false) — never re-throw-and-re-arm-in-
+  // and re-arm exactly once — never re-throw-and-re-arm-in-
   // finally (the poller retry would re-arm each attempt → fan-out). FAILS
   // pre-fix (throw skips the re-arm → 0 re-arms + handler rejects); PASSES
   // post-fix (handler resolves + exactly one re-arm).

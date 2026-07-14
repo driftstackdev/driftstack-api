@@ -20,10 +20,8 @@
 //
 // Scheduling: hourly. Mirrors the profile-trash-purge sweeper's scheduled-jobs
 // shape — registerAgentSessionOrphanReapJob wires it into the poller and
-// re-arms after each run (dedup OFF on the in-handler re-arm — see the
-// auth-tokens-sweeper / profile-trash-purge JSDoc for the locked-in-flight-job
-// reasoning). Hourly (not daily) so an orphaned row closes within ~1h of the
-// cap rather than waiting up to a day.
+// re-arms after each run with future-successor dedup. Hourly (not daily) so an
+// orphaned row closes within ~1h of the cap rather than waiting up to a day.
 
 import type { AgentSessionsRepo } from './agent-sessions.js';
 import type { ScheduledJobsService, ScheduledJobRow } from './scheduled-jobs.js';
@@ -119,15 +117,14 @@ export interface RegisterAgentSessionOrphanReapJobOpts {
  * chains (fan-out). The tick is idempotent (a bulk close by wall-clock cutoff) —
  * the next tick re-reaps any rows this one missed.
  *
- * The re-arm enqueues with dedup OFF — the in-flight (still-locked,
- * not-yet-completed) job would otherwise be seen as a pending duplicate and
- * block the re-enqueue, killing the chain. See the profile-trash-purge JSDoc.
+ * Re-arms ignore the current/older run-time cohort and collapse later
+ * successors.
  */
 export function registerAgentSessionOrphanReapJob(
   opts: RegisterAgentSessionOrphanReapJobOpts,
 ): void {
   const now = opts.nowFn ?? Date.now;
-  opts.scheduledJobs.register(AGENT_SESSION_ORPHAN_REAP_JOB_TYPE, async (_job: ScheduledJobRow) => {
+  opts.scheduledJobs.register(AGENT_SESSION_ORPHAN_REAP_JOB_TYPE, async (job: ScheduledJobRow) => {
     try {
       const result = await opts.sweeper.tickOnce(new Date(now()));
       opts.logger.info?.(
@@ -150,21 +147,19 @@ export function registerAgentSessionOrphanReapJob(
     await enqueueNextAgentSessionOrphanReap({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,
-      dedup: false,
+      currentRunAt: job.runAt,
     });
   });
 }
 
 /**
  * Enqueue the next reap at the top of the next hour strictly after `now`.
- * dedup:true for the bootstrap enqueue (one chain across restarts); dedup:false
- * for the in-handler re-arm (the current job is still locked + non-completed,
- * so dedup:true would no-op every re-arm and kill the chain).
+ * Bootstrap dedups all pending rows; re-arms dedup only future successors.
  */
 export async function enqueueNextAgentSessionOrphanReap(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
-  dedup?: boolean;
+  currentRunAt?: Date;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -172,7 +167,8 @@ export async function enqueueNextAgentSessionOrphanReap(opts: {
     accountId: null,
     payload: {},
     runAt: nextReapRunAt(new Date(now)),
-    dedupOnAccountAndType: opts.dedup ?? true,
+    dedupOnAccountAndType: true,
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }
 

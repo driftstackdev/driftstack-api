@@ -10,10 +10,8 @@
 // Cadence: bootstrap calls `enqueueNextNightlyRun()` on app start
 // and after each successful run. Re-enqueue is idempotent via the
 // V-202d dedup-on-account-and-type flag (job_type 'cost.recompute_
-// nightly', account_id null). The in-handler re-arm enqueues with
-// dedup OFF (the still-locked current job would otherwise be mistaken
-// for a pending duplicate); only the bootstrap enqueue dedups, to keep
-// one chain across restarts. See `enqueueNextNightlyRun` JSDoc.
+// nightly', account_id null). Re-arms ignore current/older run-time peers
+// and collapse future successors; bootstrap dedups all pending rows.
 
 import type { CostAlertDispatcher } from './cost-alert-dispatcher.js';
 import { billingCycleFromDate, type CostMonitoringService } from './cost-monitoring.js';
@@ -76,20 +74,17 @@ export interface RegisterCostNightlyJobOpts {
 export function registerCostNightlyJob(opts: RegisterCostNightlyJobOpts): void {
   const now = opts.nowFn ?? Date.now;
 
-  opts.scheduledJobs.register(COST_NIGHTLY_JOB_TYPE, async (_job: ScheduledJobRow) => {
+  opts.scheduledJobs.register(COST_NIGHTLY_JOB_TYPE, async (job: ScheduledJobRow) => {
     try {
       const tickStart = new Date(now());
       const ids = await opts.accounts.listAllAccountIds();
       if (ids.length === 0) {
         opts.logger.debug?.({ component: 'cost-nightly' }, 'no accounts to evaluate');
-        // Even with zero accounts, re-enqueue tomorrow. Re-arm path: dedup OFF —
-        // the in-flight (still-locked, not-yet-completed) current job would
-        // otherwise be seen as a pending duplicate and block the re-enqueue,
-        // killing the chain. See enqueueNextNightlyRun JSDoc.
+        // Even with zero accounts, re-enqueue tomorrow using future-successor dedup.
         await enqueueNextNightlyRun({
           scheduledJobs: opts.scheduledJobs,
           nowFn: now,
-          dedup: false,
+          currentRunAt: job.runAt,
         });
         return;
       }
@@ -113,11 +108,12 @@ export function registerCostNightlyJob(opts: RegisterCostNightlyJobOpts): void {
         },
         'cost nightly recompute complete',
       );
-      // Re-arm the next run. Re-arm path: dedup OFF — the in-flight (still-
-      // locked, not-yet-completed) current job would otherwise be seen as a
-      // pending duplicate and block the re-enqueue, killing the chain. See
-      // enqueueNextNightlyRun JSDoc.
-      await enqueueNextNightlyRun({ scheduledJobs: opts.scheduledJobs, nowFn: now, dedup: false });
+      // Re-arm the next run using future-successor dedup.
+      await enqueueNextNightlyRun({
+        scheduledJobs: opts.scheduledJobs,
+        nowFn: now,
+        currentRunAt: job.runAt,
+      });
     } catch (err) {
       // Chain survival: SWALLOW a tick failure (do NOT re-throw) and re-arm
       // exactly once here. If the work above throws (listAllAccountIds /
@@ -138,7 +134,11 @@ export function registerCostNightlyJob(opts: RegisterCostNightlyJobOpts): void {
         },
         'cost nightly recompute tick failed — re-arming; the next tick re-evaluates',
       );
-      await enqueueNextNightlyRun({ scheduledJobs: opts.scheduledJobs, nowFn: now, dedup: false });
+      await enqueueNextNightlyRun({
+        scheduledJobs: opts.scheduledJobs,
+        nowFn: now,
+        currentRunAt: job.runAt,
+      });
     }
   });
 }
@@ -148,24 +148,14 @@ export function registerCostNightlyJob(opts: RegisterCostNightlyJobOpts): void {
  * dedup flag: if there's already a pending row for this job_type
  * with account_id IS NULL, the enqueue is a no-op.
  *
- * `dedup` (default `true`) maps straight to the repo's
- * `dedupOnAccountAndType` flag. Callers MUST pick deliberately:
- *
- *   - BOOTSTRAP on app start → dedup:true (default). Prevents a
- *     crash/restart from leaving two parallel nightly chains running.
- *   - RE-ARM from inside the handler → dedup:false. The poller runs
- *     `await handler(job)` THEN `await markComplete(job)`, so the
- *     current job is still locked + non-completed when the handler
- *     re-arms; it looks like a pending duplicate to the dedup check, so
- *     dedup:true here would no-op every re-arm and the chain would die
- *     after one run. The single locked executor guarantees one handler
- *     run → one next enqueue, so no fan-out risk.
+ * Bootstrap omits `currentRunAt` and dedups all pending rows. Re-arms pass
+ * the current row's run time and dedup only later pending successors.
  */
 export async function enqueueNextNightlyRun(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
-  /** See JSDoc: true (default) for bootstrap, false for the in-handler re-arm. */
-  dedup?: boolean;
+  /** Current run-time cohort ignored for a crash-safe in-handler re-arm. */
+  currentRunAt?: Date;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -173,7 +163,8 @@ export async function enqueueNextNightlyRun(opts: {
     accountId: null,
     payload: {},
     runAt: nextMidnightUtc(new Date(now)),
-    dedupOnAccountAndType: opts.dedup ?? true,
+    dedupOnAccountAndType: true,
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }
 

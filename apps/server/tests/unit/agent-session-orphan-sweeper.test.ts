@@ -163,22 +163,39 @@ describe('agent-session orphan reap scheduling (chain survival + dedup rule)', (
   }
 
   function fakeScheduledJobs() {
-    const enqueues: Array<{ jobType: string; dedup: boolean | undefined; runAt: Date }> = [];
+    const enqueues: Array<{
+      jobType: string;
+      dedup: boolean | undefined;
+      dedupAfterRunAt?: Date;
+      runAt: Date;
+    }> = [];
     let handler: ((job: unknown) => Promise<void>) | null = null;
     const scheduledJobs = {
       register: (_jobType: string, h: (job: unknown) => Promise<void>) => {
         handler = h;
       },
-      enqueue: (args: { jobType: string; dedupOnAccountAndType?: boolean; runAt: Date }) => {
+      enqueue: (args: {
+        jobType: string;
+        dedupOnAccountAndType?: boolean;
+        dedupAfterRunAt?: Date;
+        runAt: Date;
+      }) => {
         enqueues.push({
           jobType: args.jobType,
           dedup: args.dedupOnAccountAndType,
+          dedupAfterRunAt: args.dedupAfterRunAt,
           runAt: args.runAt,
         });
         return Promise.resolve({ enqueued: true });
       },
     };
-    return { scheduledJobs, enqueues, invoke: () => handler!({}) };
+    const currentRunAt = new Date('2026-06-19T09:00:00.000Z');
+    return {
+      scheduledJobs,
+      enqueues,
+      currentRunAt,
+      invoke: () => handler!({ runAt: currentRunAt }),
+    };
   }
 
   it('the re-arm survives a tickOnce failure (chain never dies) and does not fan out', async () => {
@@ -207,12 +224,13 @@ describe('agent-session orphan reap scheduling (chain survival + dedup rule)', (
     expect(f.enqueues).toHaveLength(1);
     expect(f.enqueues[0]).toMatchObject({
       jobType: AGENT_SESSION_ORPHAN_REAP_JOB_TYPE,
-      dedup: false,
+      dedup: true,
+      dedupAfterRunAt: f.currentRunAt,
     });
     expect(tickOnce).toHaveBeenCalledTimes(1);
   });
 
-  it('on a clean tick, re-arms exactly once with dedup OFF', async () => {
+  it('on a clean tick, re-arms exactly once with future-successor dedup', async () => {
     const f = fakeScheduledJobs();
     const tickOnce = vi.fn().mockResolvedValue({ reaped: 3 });
     const sweeper = { tickOnce } as unknown as AgentSessionOrphanSweeperService;
@@ -230,7 +248,8 @@ describe('agent-session orphan reap scheduling (chain survival + dedup rule)', (
     expect(f.enqueues).toHaveLength(1);
     expect(f.enqueues[0]).toMatchObject({
       jobType: AGENT_SESSION_ORPHAN_REAP_JOB_TYPE,
-      dedup: false,
+      dedup: true,
+      dedupAfterRunAt: f.currentRunAt,
     });
     // Re-arm at the top of the next hour after 09:30.
     expect(f.enqueues[0]!.runAt.toISOString()).toBe('2026-06-19T10:00:00.000Z');

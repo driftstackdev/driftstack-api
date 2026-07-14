@@ -1,6 +1,6 @@
 // V-202d — Drizzle implementation of ScheduledJobsRepo.
 
-import { and, eq, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, eq, gt, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { scheduledJobs } from './schema.js';
 import type {
@@ -37,9 +37,9 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
               eq(scheduledJobs.jobType, input.jobType),
               isNull(scheduledJobs.completedAt),
               isNull(scheduledJobs.failedAt),
-              input.dedupExcludeJobId === undefined
+              input.dedupAfterRunAt === undefined
                 ? undefined
-                : ne(scheduledJobs.id, input.dedupExcludeJobId),
+                : gt(scheduledJobs.runAt, input.dedupAfterRunAt),
             ),
           )
           .limit(1);

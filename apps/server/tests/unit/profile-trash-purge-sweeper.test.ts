@@ -117,22 +117,33 @@ describe('profile-trash purge scheduling (chain survival)', () => {
   const NOW = new Date('2026-06-16T02:00:00.000Z');
 
   function fakeScheduledJobs() {
-    const enqueues: Array<{ jobType: string; dedup: boolean; runAt: Date }> = [];
+    const enqueues: Array<{
+      jobType: string;
+      dedup: boolean;
+      dedupAfterRunAt?: Date;
+      runAt: Date;
+    }> = [];
     let handler: ((job: unknown) => Promise<void>) | null = null;
     const scheduledJobs = {
       register: (_jobType: string, h: (job: unknown) => Promise<void>) => {
         handler = h;
       },
-      enqueue: (args: { jobType: string; dedupOnAccountAndType: boolean; runAt: Date }) => {
+      enqueue: (args: {
+        jobType: string;
+        dedupOnAccountAndType: boolean;
+        dedupAfterRunAt?: Date;
+        runAt: Date;
+      }) => {
         enqueues.push({
           jobType: args.jobType,
           dedup: args.dedupOnAccountAndType,
+          dedupAfterRunAt: args.dedupAfterRunAt,
           runAt: args.runAt,
         });
         return Promise.resolve({ enqueued: true });
       },
     };
-    return { scheduledJobs, enqueues, invoke: () => handler!({}) };
+    return { scheduledJobs, enqueues, invoke: () => handler!({ runAt: NOW }) };
   }
 
   function silentLogger() {
@@ -163,7 +174,8 @@ describe('profile-trash purge scheduling (chain survival)', () => {
     expect(f.enqueues).toHaveLength(1);
     expect(f.enqueues[0]).toMatchObject({
       jobType: PROFILE_TRASH_PURGE_JOB_TYPE,
-      dedup: false,
+      dedup: true,
+      dedupAfterRunAt: NOW,
     });
     expect(tickOnce).toHaveBeenCalledTimes(1);
   });

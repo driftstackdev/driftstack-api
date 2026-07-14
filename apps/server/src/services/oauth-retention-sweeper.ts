@@ -34,10 +34,10 @@ export interface RegisterOAuthRetentionSweepJobOpts {
 
 /**
  * Register one hourly, restart-safe cleanup chain. The in-handler re-arm uses
- * dedup that excludes the still-incomplete current scheduled row. That permits the
- * first successor but makes a retry observe the already committed successor,
- * preventing crash/ambiguous-commit fan-out. A failed idempotent delete is
- * swallowed and re-armed exactly once so the chain survives.
+ * dedup that ignores the current/older run-time cohort. That permits the first
+ * future successor but makes every peer or retry observe it, preventing crash,
+ * ambiguous-commit, and legacy-duplicate fan-out. A failed idempotent delete
+ * is swallowed and re-armed exactly once so the chain survives.
  */
 export function registerOAuthRetentionSweepJob(opts: RegisterOAuthRetentionSweepJobOpts): void {
   const now = opts.nowFn ?? Date.now;
@@ -72,7 +72,7 @@ export function registerOAuthRetentionSweepJob(opts: RegisterOAuthRetentionSweep
     await enqueueNextOAuthRetentionSweep({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,
-      currentJobId: job.id,
+      currentRunAt: job.runAt,
     });
   });
 }
@@ -80,8 +80,8 @@ export function registerOAuthRetentionSweepJob(opts: RegisterOAuthRetentionSweep
 export async function enqueueNextOAuthRetentionSweep(opts: {
   scheduledJobs: Pick<ScheduledJobsService, 'enqueue'>;
   nowFn?: () => number;
-  /** Current row ignored by dedup for crash-safe in-handler re-arms. */
-  currentJobId?: string;
+  /** Current run-time cohort ignored by dedup for crash-safe re-arms. */
+  currentRunAt?: Date;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -90,6 +90,6 @@ export async function enqueueNextOAuthRetentionSweep(opts: {
     payload: {},
     runAt: new Date(now + OAUTH_RETENTION_SWEEP_INTERVAL_MS),
     dedupOnAccountAndType: true,
-    ...(opts.currentJobId === undefined ? {} : { dedupExcludeJobId: opts.currentJobId }),
+    ...(opts.currentRunAt === undefined ? {} : { dedupAfterRunAt: opts.currentRunAt }),
   });
 }
