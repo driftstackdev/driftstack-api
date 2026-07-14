@@ -205,7 +205,11 @@ returns `200` regardless of whether the address matches an account
 email is delivered with a one-time link.
 
 `POST /v1/auth/magic-link/consume` with `{ "token": "..." }` from the
-link returns the same `session` shape as `verify-email`.
+link returns the same discriminated union as password login: a normal
+`session` when MFA is not enrolled, or `mfa_required` plus a one-time
+challenge token when it is. The enrolled branch mints no session until
+the caller completes `POST /v1/auth/mfa/challenge`; mailbox access is
+the first factor, not a bypass for TOTP or recovery-code proof.
 
 ## Password reset
 
@@ -218,10 +222,16 @@ Same no-enumeration semantics as magic-link: always `200`.
 { "token": "<from email>", "password": "<new password>" }
 ```
 
-Issues a fresh session and invalidates ALL prior sessions for the
-account (per the active-sessions rev). The customer is logged in
-on the device that confirmed the reset; every other device must
-re-authenticate.
+Changes the password and invalidates ALL prior sessions for the
+account. It then returns the same discriminated union as login:
+
+- without enrolled MFA, a fresh `session` is issued;
+- with enrolled MFA, `mfa_required` is returned and **no replacement
+  session** is minted until `POST /v1/auth/mfa/challenge` succeeds.
+
+Every prior device must re-authenticate. The reset-confirming device
+is logged in only after it receives the no-MFA session branch or
+successfully exchanges the MFA challenge.
 
 ## Refresh
 

@@ -187,10 +187,18 @@ Failure modes:
   same IP.
 - Token already consumed (re-use after success): `400 Bad Request`.
 
-Magic-link sign-in, password-reset confirm, and email-verification do
-NOT trigger the MFA challenge. Those flows prove ownership of the
-email address via single-use link; the MFA gate fires at the next
-`/v1/auth/login`.
+Magic-link consume, password-reset confirm, and linked-IdP/OAuth
+sign-in use the same MFA gate as password login. For an enrolled
+account, each returns the `mfa_required` challenge shape above and
+mints **no web session** until `/v1/auth/mfa/challenge` succeeds with
+TOTP or a recovery code. A mailbox or IdP assertion is the first
+factor; it never replaces the enrolled second factor.
+
+Password reset changes the password and invalidates predecessor web
+sessions before returning that challenge, so the successful MFA
+exchange is the only successor session. Email verification is the
+signup-activation flow and does not challenge an existing enrolled
+factor; a new account cannot enroll MFA before it is active.
 
 ## Step-up reauth
 

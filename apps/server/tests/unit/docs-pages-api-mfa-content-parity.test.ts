@@ -139,13 +139,22 @@ describe('W767 docs /api/mfa content parity', () => {
     expect(p).toMatch(/Token already consumed \(re-use after success\): `400 Bad Request`\./);
   });
 
-  it("CRITICAL magic-link/password-reset/email-verify do-NOT-trigger-MFA framing pinned. The 'Magic-link sign-in, password-reset confirm, and email-verification do NOT trigger the MFA challenge. Those flows prove ownership of the email address via single-use link; the MFA gate fires at the next /v1/auth/login' wording is the canonical no-MFA-on-link-flow contract.", () => {
+  it('CRITICAL recovery and linked-IDP session minting cannot bypass enrolled MFA', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Magic-link sign-in, password-reset confirm, and email-verification do\s*\n?NOT trigger the MFA challenge\./,
+      /Magic-link consume, password-reset confirm, and linked-IdP\/OAuth\s*\n?sign-in use the same MFA gate as password login\./,
     );
-    expect(p).toMatch(/the MFA gate fires at the next\s*\n?`\/v1\/auth\/login`\./);
+    expect(p).toMatch(
+      /each returns the `mfa_required` challenge shape above and\s*\n?mints \*\*no web session\*\* until `\/v1\/auth\/mfa\/challenge` succeeds/,
+    );
+    expect(p).toMatch(/A mailbox or IdP assertion is the first\s*\n?factor/);
+    expect(p).toMatch(
+      /Password reset changes the password and invalidates predecessor web\s*\n?sessions before returning that challenge/,
+    );
+    expect(p).toMatch(
+      /Email verification is the\s*\n?signup-activation flow and does not challenge an existing enrolled\s*\n?factor/,
+    );
   });
 
   it('CRITICAL step-up 403 envelope shape pinned — application/problem+json + requires_mfa_step_up: true + reason discriminator. Drift to a different problem+json type URI would break SDK error handlers.', () => {

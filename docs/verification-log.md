@@ -25716,3 +25716,31 @@ Verification:
 - focused route and team-contract coverage passes 3 files and 144 tests;
 - strict server source/test typechecking, targeted linting and formatting,
   Docs typecheck/build (61 pages, 60 indexed), and diff checks pass.
+
+## V-600 — recovery sign-in docs preserve enrolled MFA
+
+**Date:** 2026-07-14
+
+Corrected security-critical customer guidance that still described magic-link
+consume and password-reset confirm as MFA bypasses. The live authentication
+service already treats mailbox access as the first factor: when the account has
+MFA enrolled, magic-link, password-reset, and linked-IdP/OAuth web-session
+issuance return the shared short-lived `mfa_required` challenge and mint no web
+session until TOTP or a recovery code succeeds.
+
+The Auth and MFA references now document that exact discriminated union.
+Password reset additionally states the real ordering: change the credential,
+retire every predecessor web session, then either issue the no-MFA successor or
+withhold replacement until the MFA exchange succeeds. Email verification is
+identified separately as signup activation, which cannot encounter a factor
+enrolled on a not-yet-active new account.
+
+Verification:
+
+- focused documentation guards pin the session-withholding rule, first-factor
+  rationale, reset revocation ordering, and email-verification distinction;
+- the live auth-flow integration suite proves enrolled magic-link,
+  password-reset, and linked-IdP paths return MFA challenges before session
+  minting;
+- auth service and documentation coverage passes 4 files and 155 tests;
+- Docs typecheck/build, targeted formatting, diff, and hooks pass.

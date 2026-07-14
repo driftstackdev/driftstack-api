@@ -155,13 +155,31 @@ describe('W764 docs /api/auth content parity', () => {
     expect(p).toMatch(/Same no-enumeration semantics as magic-link: always `200`\./);
   });
 
-  it("CRITICAL password-reset invalidates ALL prior sessions pinned. The 'Issues a fresh session and invalidates ALL prior sessions for the account' wording is the load-bearing session-hygiene framing — drift would let stolen sessions survive a password reset.", () => {
+  it('CRITICAL magic-link consume returns the login union and withholds a session until enrolled MFA succeeds', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Issues a fresh session and invalidates ALL prior sessions for the\s*\n?account/,
+      /`POST \/v1\/auth\/magic-link\/consume`[\s\S]+?returns the same discriminated union as password login/,
     );
-    expect(p).toMatch(/every other device must\s*\n?re-authenticate\./);
+    expect(p).toMatch(
+      /The enrolled branch mints no session until\s*\n?the caller completes `POST \/v1\/auth\/mfa\/challenge`/,
+    );
+    expect(p).toMatch(/mailbox access is\s*\n?the first factor, not a bypass/);
+  });
+
+  it('CRITICAL password reset retires every predecessor and only mints a successor after the MFA branch is satisfied', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(
+      /Changes the password and invalidates ALL prior sessions for the\s*\n?account/,
+    );
+    expect(p).toMatch(
+      /with enrolled MFA, `mfa_required` is returned and \*\*no replacement\s*\n?session\*\* is minted until `POST \/v1\/auth\/mfa\/challenge` succeeds/,
+    );
+    expect(p).toMatch(/Every prior device must re-authenticate\./);
+    expect(p).toMatch(
+      /The reset-confirming device\s*\n?is logged in only after it receives the no-MFA session branch or\s*\n?successfully exchanges the MFA challenge\./,
+    );
   });
 
   it("CRITICAL refresh invalidates previous token framing pinned. The 'Issues a fresh session token with a new expires_at. The previous token is invalidated' wording is the rotation-on-refresh contract.", () => {
