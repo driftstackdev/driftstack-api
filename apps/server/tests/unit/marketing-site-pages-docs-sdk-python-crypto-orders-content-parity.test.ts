@@ -122,20 +122,27 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
   });
 
   it('6-related-doc cluster: /docs/sdk-python + /docs/sdk-typescript-crypto-orders + /docs/billing-crypto-integration-guide + /docs/idempotency-keys + /docs/webhooks-crypto-events + /docs/crypto-orders-polling-vs-webhooks — pinned so the 6-related-doc navigation surface stays complete (drift to dropping /docs/crypto-orders-polling-vs-webhooks would orphan the polling-vs-webhooks decision from the polling-fallback framing)', () => {
-    expect(body).toMatch(/<a href="\/docs\/sdk-python">Python SDK quickstart<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sdk-python\/">Python SDK quickstart<\/a>/);
     expect(body).toMatch(
-      /<a href="\/docs\/sdk-typescript-crypto-orders">TypeScript SDK crypto orders<\/a>/,
+      /<a href="\/docs\/sdk-typescript-crypto-orders\/">TypeScript SDK crypto orders<\/a>/,
     );
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/idempotency-keys">Idempotency keys<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/idempotency-keys\/">Idempotency keys<\/a>/);
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Crypto webhook events<\/a>/,
     );
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Polling vs webhooks<\/a>/,
     );
+    for (const path of [
+      '/docs/sdk-python',
+      '/docs/sdk-typescript-crypto-orders',
+      '/docs/idempotency-keys',
+    ]) {
+      expect(body).not.toContain(`href="${path}"`);
+    }
   });
 
   it('file exists at canonical path', () => {
