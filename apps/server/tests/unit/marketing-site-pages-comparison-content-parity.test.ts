@@ -129,9 +129,10 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     );
   });
 
-  it("Bottom CTA: 'Free tier — one profile, manual, perpetual.' + 'Start free' → /pricing#free — pinned so the canonical free-tier copy (one profile / manual / perpetual) + the conversion path stays consistent across pages (drift would create cross-page mechanic divergence)", () => {
+  it("Bottom CTA: 'Free tier — one profile, manual, perpetual.' + 'Start free' → canonical /pricing/#free — pinned so the free-tier copy + conversion path stay consistent", () => {
     expect(body).toMatch(/Free tier — one profile, manual, perpetual\./);
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary">Start free<\/a>/);
+    expect(body).not.toMatch(/href="\/pricing#free"/);
   });
 
   it('file exists at canonical path', () => {
