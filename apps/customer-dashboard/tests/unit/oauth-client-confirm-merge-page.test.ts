@@ -76,6 +76,18 @@ describe('OAuth client merge confirmation page', () => {
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
+  it('does not parse or reject a malformed body after merge acceptance', async () => {
+    const { window, fetchCalls } = setUpDom(
+      loadBuiltPage(),
+      () => new Response('{', { status: 200 }),
+    );
+    win = window;
+    await flush(12);
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(window.document.querySelector('[data-banner]')?.classList.contains('hidden')).toBe(true);
+  });
+
   it('turns a one-shot merge timeout into a connected-account check', async () => {
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), () => Promise.reject(timeout));

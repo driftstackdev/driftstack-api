@@ -59,5 +59,10 @@ describe('OAuth callback completion deadlines', () => {
     expect(CONFIRM).toContain('Do not reload or submit this link again.');
     expect(CONFIRM).toContain('Check connected accounts');
     expect(CONFIRM).toContain('sign in with your password and retry its IDP button from Login');
+    expect(CONFIRM).toContain('let mergeResponseAccepted = false;');
+    expect(CONFIRM).toMatch(/if \(r\.ok\) \{\s*mergeResponseAccepted = true;\s*return;\s*\}/);
+    expect(CONFIRM).toMatch(/if \(mergeResponseAccepted\) \{/);
+    expect(CONFIRM).toContain('Your identity provider was linked, but this page could not finish');
+    expect(CONFIRM).not.toMatch(/r\.ok\s*\?\s*r\.json\(\)/);
   });
 });

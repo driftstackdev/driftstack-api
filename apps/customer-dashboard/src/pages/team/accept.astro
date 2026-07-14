@@ -123,6 +123,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       const controller = new AbortController();
+      let acceptResponseAccepted = false;
       const timeout = window.setTimeout(() => controller.abort(), ACCEPT_TIMEOUT_MS);
       fetch(apiBaseUrl + '/v1/team/invites/accept', {
         method: 'POST',
@@ -135,7 +136,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         signal: controller.signal,
       })
         .then((r) => {
-          if (r.ok) return r.json();
+          // The response body is not authority for this page. Once the
+          // single-use mutation is accepted, never parse a body that could
+          // fail and incorrectly invite the consumed link to be replayed.
+          if (r.ok) {
+            acceptResponseAccepted = true;
+            return;
+          }
           if (r.status === 401) {
             return Promise.reject(
               Object.assign(new Error('You need to be signed in to accept this invite.'), {
@@ -152,6 +159,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           window.location.href = '/team/';
         })
         .catch((err) => {
+          if (acceptResponseAccepted) {
+            if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+            showBanner(
+              'Your invite was accepted, but this page could not finish opening Team. Do not reload or submit this single-use link again. Open Team to check access; if access is absent, ask the team owner for a new invite.',
+              false,
+            );
+            return;
+          }
           if (err && err.name === 'AbortError') {
             if (unknownRecovery) unknownRecovery.classList.remove('hidden');
             showBanner(

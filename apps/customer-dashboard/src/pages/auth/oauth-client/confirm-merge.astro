@@ -72,6 +72,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       const controller = new AbortController();
+      let mergeResponseAccepted = false;
       const timeout = window.setTimeout(() => controller.abort(), CONFIRM_TIMEOUT_MS);
       fetch(apiBaseUrl + '/v1/auth/oauth-client/confirm-merge', {
         method: 'POST',
@@ -80,18 +81,30 @@ const apiBaseUrl = resolveApiBaseUrl();
         body: JSON.stringify({ token: token }),
         signal: controller.signal,
       })
-        .then((r) =>
-          r.ok
-            ? r.json()
-            : r
-                .json()
-                .catch(() => ({}))
-                .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-        )
+        .then((r) => {
+          // The successful payload is unused. Treat the 2xx itself as the
+          // irreversible handoff so malformed response JSON cannot turn a
+          // consumed merge token into retry guidance.
+          if (r.ok) {
+            mergeResponseAccepted = true;
+            return;
+          }
+          return r
+            .json()
+            .catch(() => ({}))
+            .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+        })
         .then(() => {
           window.location.href = '/';
         })
         .catch((err) => {
+          if (mergeResponseAccepted) {
+            if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+            showBanner(
+              'Your identity provider was linked, but this page could not finish opening the dashboard. Do not reload or submit this one-time link again. Check connected accounts in Security before taking any other action.',
+            );
+            return;
+          }
           if (err && err.name === 'AbortError') {
             if (unknownRecovery) unknownRecovery.classList.remove('hidden');
             showBanner(

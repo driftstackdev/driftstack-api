@@ -68,6 +68,18 @@ describe('team invite acceptance page', () => {
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
+  it('does not parse or reject a malformed body after invite acceptance', async () => {
+    const { window, fetchCalls } = setUpDom(
+      loadBuiltPage(),
+      () => new Response('{', { status: 200 }),
+    );
+    win = window;
+    await flush(12);
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(window.document.querySelector('[data-banner]')?.classList.contains('hidden')).toBe(true);
+  });
+
   it('turns a single-use acceptance timeout into a check-access recovery path', async () => {
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), () => Promise.reject(timeout));

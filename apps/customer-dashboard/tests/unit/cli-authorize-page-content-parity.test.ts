@@ -98,6 +98,11 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     );
     expect(body).toContain('Do not retry this link');
     expect(body).toMatch(/if \(authorizeOutcomeUnknown\) \{\s*returnToDesktop\(0\);\s*return;/);
+    expect(body).toContain('let authorizeResponseAccepted = false;');
+    expect(body).toMatch(/if \(r\.ok\) \{\s*authorizeResponseAccepted = true;\s*return;\s*\}/);
+    expect(body).toMatch(/if \(authorizeResponseAccepted\) \{/);
+    expect(body).toContain('Authorization was accepted, but this page could not finish');
+    expect(body).not.toMatch(/if \(r\.ok\) return r\.json\(\)/);
   });
 
   it('routes activation and legal-fetch failures through the shared safe copy boundary', () => {

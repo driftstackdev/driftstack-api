@@ -199,6 +199,57 @@ describe('cli-authorize page — local integration', () => {
     await flush();
   });
 
+  it('does not parse a malformed body after the device bind is accepted', async () => {
+    const local = setUpDom(loadBuiltPage(), (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    local.setFetchPlan([() => new local.window.Response('{', { status: 200 })]);
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+
+    expect(visibleState(local.window)).toBe('success');
+    expect(
+      local.fetchCalls.filter((call) =>
+        call.url.endsWith('/v1/auth/cli-authorize/bind-device-code'),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('makes an unexpected post-acceptance handoff failure desktop-only with no second bind', async () => {
+    const local = setUpDom(loadBuiltPage(), (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    local.setFetchPlan([() => new local.window.Response('{}', { status: 200 })]);
+    const success = local.window.document.querySelector('[data-state="success"]') as HTMLElement;
+    const remove = success.classList.remove.bind(success.classList);
+    success.classList.remove = (...tokens: string[]) => {
+      if (tokens.includes('hidden')) throw new Error('post-acceptance render failed');
+      remove(...tokens);
+    };
+
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+
+    expect(visibleState(local.window)).toBe('error');
+    expect(local.window.document.querySelector('[data-error-message]')?.textContent).toMatch(
+      /authorization was accepted.*could not finish.*existing poll.*do not retry/i,
+    );
+    const retry = local.window.document.querySelector('[data-retry]') as HTMLButtonElement;
+    expect(retry.textContent).toBe('Return to desktop');
+    retry.click();
+    await flush();
+    expect(
+      local.fetchCalls.filter((call) =>
+        call.url.endsWith('/v1/auth/cli-authorize/bind-device-code'),
+      ),
+    ).toHaveLength(1);
+  });
+
   it('does not bind until a complete device verification code is entered', async () => {
     const html = loadBuiltPage();
     const local = setUpDom(html, (window) => {

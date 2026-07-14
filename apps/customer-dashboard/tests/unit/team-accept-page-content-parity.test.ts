@@ -25,6 +25,16 @@ describe('team invitation acceptance reliability', () => {
     expect(PAGE).toContain('ask the team owner for a new invite');
   });
 
+  it('treats 2xx as terminal authority without parsing a replay-producing body', () => {
+    expect(PAGE).toContain('let acceptResponseAccepted = false;');
+    expect(PAGE).toMatch(/if \(r\.ok\) \{\s*acceptResponseAccepted = true;\s*return;\s*\}/);
+    expect(PAGE).toMatch(/if \(acceptResponseAccepted\) \{/);
+    expect(PAGE).toContain(
+      'Your invite was accepted, but this page could not finish opening Team.',
+    );
+    expect(PAGE).not.toMatch(/if \(r\.ok\) return r\.json\(\)/);
+  });
+
   it('preserves the authenticated token contract and recovery routing', () => {
     expect(PAGE).toContain("localStorage.getItem('ds_web_session_token')");
     expect(PAGE).toContain("authorization: 'Bearer ' + sessionToken");

@@ -269,6 +269,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const AUTHORIZE_TIMEOUT_MS = 15_000;
       let authorizeInFlight = false;
       let authorizeOutcomeUnknown = false;
+      let authorizeResponseAccepted = false;
 
       function normalizedUserCode() {
         const compact = String(userCodeInput && userCodeInput.value ? userCodeInput.value : '')
@@ -372,6 +373,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         authorizeInFlight = true;
         authorizeOutcomeUnknown = false;
+        authorizeResponseAccepted = false;
         retryBtn.textContent = 'Try again';
         retryBtn.removeAttribute('title');
         authorizeBtn.disabled = true;
@@ -389,7 +391,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           signal: controller.signal,
         })
           .then((r) => {
-            if (r.ok) return r.json();
+            // The bind response payload is unused. A 2xx means the one-time
+            // device code may be consumed; parsing JSON after that point
+            // cannot be allowed to manufacture a retry path.
+            if (r.ok) {
+              authorizeResponseAccepted = true;
+              return;
+            }
             if (r.status === 401) {
               invalidateSession();
               return Promise.reject(new Error('__needs_signin__'));
@@ -434,6 +442,15 @@ const apiBaseUrl = resolveApiBaseUrl();
               (err.message === '__legal_accept_required__' || err.message === '__needs_signin__')
             )
               return;
+            if (authorizeResponseAccepted) {
+              authorizeOutcomeUnknown = true;
+              retryBtn.textContent = 'Return to desktop';
+              retryBtn.title = 'Check the desktop app without sending this authorization again';
+              showError(
+                'Authorization was accepted, but this page could not finish the desktop handoff. Return to the desktop app and wait for its existing poll. Do not retry this link; if the app does not connect, start a fresh browser sign-in from the desktop app.',
+              );
+              return;
+            }
             if (err && err.name === 'AbortError') {
               authorizeOutcomeUnknown = true;
               retryBtn.textContent = 'Return to desktop';
