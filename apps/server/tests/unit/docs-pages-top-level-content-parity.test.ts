@@ -129,12 +129,12 @@ describe('W784 docs top-level index + 404 content parity', () => {
     expect(p).toMatch(/an AI agent \(<a href="\/api\/agent-sessions\/">agent sessions<\/a>\)\./);
   });
 
-  it('CRITICAL S22.5 3-section heading set pinned — Pick your path + Browse the docs + Looking for something else?. Supersedes the V-257 Get started / Concept guides / Reference set.', () => {
+  it('CRITICAL current 3-section heading set pinned — Pick your path + Browse the docs + Need help?. Supersedes the V-257 Get started / Concept guides / Reference set.', () => {
     const p = read(INDEX);
 
     expect(p).toMatch(/<h2>Pick your path<\/h2>/);
     expect(p).toMatch(/<h2>Browse the docs<\/h2>/);
-    expect(p).toMatch(/<h2>Looking for something else\?<\/h2>/);
+    expect(p).toMatch(/<h2>Need help\?<\/h2>/);
   });
 
   it("CRITICAL S22.5 band lead-ins pinned. 'Three ways people arrive here. Start with the one that sounds like you.' + 'Every page on this site, grouped the same way as the sidebar tree.' — supersedes the 'If you have an API key, start here.' anchor.", () => {
