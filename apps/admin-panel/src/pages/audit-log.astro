@@ -1,18 +1,13 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
-import { MOCK_AUDIT_LOG } from '../data/mocks.ts';
 
 // V-188 — progressive-enhancement against /v1/admin/audit-log. SSG
-// renders the mock; an inline <script> reads ds_web_session_token
+// renders an inert shell; an inline <script> reads ds_web_session_token
 // from localStorage and replaces the table body with live entries.
 // Filter bar is wired: action substring (server-side `action`),
 // admin id (`admin_id`), result-only filter is client-side post-fetch
 // since the endpoint doesn't accept a result filter today. Banner
 // surfaces no-token / fetch-error / forbidden states.
-
-function fmtIso(iso: string): string {
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-}
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -43,14 +38,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           <span
             aria-hidden="true"
             data-live-dot
-            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+            class="inline-block h-2 w-2 rounded-full bg-amber-500"
           ></span>
-          <span>Live · updated <span data-live-age>just now</span></span>
+          <span data-live-status>Waiting for live data</span>
+          <span data-live-age class="hidden"></span>
         </span>
         <button
           type="button"
           data-live-refresh
-          class="text-tk-accent hover:underline"
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in"
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           Refresh now
         </button>
@@ -117,39 +116,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="audit">
-          {
-            MOCK_AUDIT_LOG.map((entry) => (
-              <tr class="hover:bg-tk-bg">
-                <td class="px-4 py-3 font-mono text-xs text-tk-ink-2">{fmtIso(entry.ts)}</td>
-                <td class="px-4 py-3 font-mono text-xs text-tk-ink-2">{entry.adminEmail}</td>
-                <td class="px-4 py-3">
-                  <code class="font-mono text-xs text-tk-accent">{entry.action}</code>
-                </td>
-                <td class="px-4 py-3">
-                  {entry.targetAccountId !== null && (
-                    <p class="font-mono text-xs text-tk-ink-2">{entry.targetAccountId}</p>
-                  )}
-                  {entry.targetResourceId !== null && (
-                    <p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">
-                      {entry.targetResourceId}
-                    </p>
-                  )}
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    class:list={[
-                      'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
-                      entry.result === 'success'
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-red-50 text-red-700',
-                    ]}
-                  >
-                    {entry.result}
-                  </span>
-                </td>
-              </tr>
-            ))
-          }
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">
+              Live audit entries are unavailable until loaded.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -172,6 +143,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       const actionEl = root.querySelector('[data-field="action"]');
       const adminIdEl = root.querySelector('[data-field="admin-id"]');
       const resultEl = root.querySelector('[data-field="result"]');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveStatus = root.querySelector('[data-live-status]');
+      const liveAge = root.querySelector('[data-live-age]');
+      const refreshBtn = root.querySelector('[data-live-refresh]');
       let token = null;
       const AUDIT_REQUEST_TIMEOUT_MS = 15_000;
       let loadController = null;
@@ -228,7 +203,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (tbody) {
           tbody.innerHTML =
             '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
-            message +
+            escapeHtml(message) +
             '</td></tr>';
         }
         // Do not retain the SSG mock's count/retention copy when the rows are
@@ -252,6 +227,28 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function fmtIso(iso) {
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+      }
+
+      function setLiveState(state, message) {
+        if (liveDot) {
+          const color =
+            state === 'ready'
+              ? 'bg-emerald-500'
+              : state === 'failed'
+                ? 'bg-red-500'
+                : 'bg-amber-500';
+          liveDot.className = 'inline-block h-2 w-2 rounded-full ' + color;
+        }
+        if (liveStatus) {
+          liveStatus.textContent = message
+            ? message
+            : state === 'ready'
+              ? 'Live · updated'
+              : state === 'failed'
+                ? 'Live refresh failed'
+                : 'Loading live data';
+        }
+        if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
       }
 
       function rowHtml(e) {
@@ -346,7 +343,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const fetched = body.data || [];
             let entries = fetched;
             const resultFilter = resultEl ? resultEl.value : '';
@@ -419,6 +416,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         token = localStorage.getItem('ds_web_session_token');
         if (!token) {
           renderUnavailable('Sign in with a staff admin account to see audit entries.');
+          setLiveState('failed', 'Sign in for live data');
           showBanner('Sign in with a staff admin account to see live data.');
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return;
@@ -427,7 +425,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       let debounce = 0;
       function scheduleLoad() {
         clearTimeout(debounce);
-        debounce = setTimeout(load, 200);
+        debounce = setTimeout(loadWithLive, 200);
       }
 
       if (actionEl) actionEl.addEventListener('input', scheduleLoad);
@@ -442,7 +440,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         clearTargetBtn.addEventListener('click', () => {
           targetIdFromUrl = '';
           syncTargetChip();
-          load();
+          loadWithLive();
         });
       }
 
@@ -464,26 +462,38 @@ const apiBaseUrl = resolveApiBaseUrl();
       // 2026-05-22 — live auto-poll. Same pattern as 580b30a7.
       let lastFetch = Date.now();
       function loadWithLive() {
-        const liveDot = root.querySelector('[data-live-dot]');
-        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        setLiveState('loading');
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-disabled', 'true');
+        }
+        const expectedReq = inFlight + 1;
         const p = load();
         if (p && typeof p.then === 'function') {
-          p.then((ok) => {
+          return p.then((ok) => {
+            if (expectedReq !== inFlight) return ok;
             if (ok) {
               lastFetch = Date.now();
-              if (liveDot)
-                liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
-            } else if (liveDot) {
-              liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+              if (liveAge) liveAge.textContent = 'just now';
+              setLiveState('ready');
+            } else {
+              setLiveState('failed');
             }
+            if (refreshBtn) {
+              refreshBtn.disabled = false;
+              refreshBtn.removeAttribute('aria-disabled');
+            }
+            return ok;
           });
         } else {
-          lastFetch = Date.now();
+          setLiveState('failed');
+          if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.removeAttribute('aria-disabled');
+          }
+          return Promise.resolve(false);
         }
       }
-      const refreshBtn = root.querySelector('[data-live-refresh]');
-      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
-      setInterval(loadWithLive, 30_000);
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -491,12 +501,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
-      const ageEl = root.querySelector('[data-live-age]');
-      setInterval(() => {
-        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
-      }, 5_000);
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.removeAttribute('aria-disabled');
+          refreshBtn.removeAttribute('title');
+          refreshBtn.addEventListener('click', loadWithLive);
+        }
+        setInterval(loadWithLive, 30_000);
+        setInterval(() => {
+          if (liveAge) liveAge.textContent = fmtAge(lastFetch);
+        }, 5_000);
 
-        void load();
+        void loadWithLive();
       }
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start, { once: true });

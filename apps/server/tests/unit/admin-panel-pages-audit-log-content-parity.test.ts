@@ -38,10 +38,18 @@ function read(p: string): string {
 describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-188 framing pinned: 'progressive-enhancement against /v1/admin/audit-log. SSG renders the mock; an inline <script> reads ds_web_session_token from localStorage and replaces the table body with live entries. Filter bar is wired: action substring (server-side `action`), admin id (`admin_id`), result-only filter is client-side post-fetch since the endpoint doesn't accept a result filter today.' — pinned so the server-side ↔ client-side filter split stays documented", () => {
+  it('V-188 framing pins an inert SSG shell and the server/client filter split', () => {
     expect(body).toMatch(
-      /\/\/ V-188 — progressive-enhancement against \/v1\/admin\/audit-log\. SSG\s*\n?\s*\/\/ renders the mock; an inline <script> reads ds_web_session_token\s*\n?\s*\/\/ from localStorage and replaces the table body with live entries\.\s*\n?\s*\/\/ Filter bar is wired: action substring \(server-side `action`\),\s*\n?\s*\/\/ admin id \(`admin_id`\), result-only filter is client-side post-fetch\s*\n?\s*\/\/ since the endpoint doesn't accept a result filter today\./,
+      /\/\/ V-188 — progressive-enhancement against \/v1\/admin\/audit-log\. SSG\s*\n?\s*\/\/ renders an inert shell; an inline <script> reads ds_web_session_token\s*\n?\s*\/\/ from localStorage and replaces the table body with live entries\./,
     );
+  });
+
+  it('ships no sample security event or green live claim before authority', () => {
+    expect(body).not.toContain('MOCK_AUDIT_LOG');
+    expect(body).toContain('Live audit entries are unavailable until loaded.');
+    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toContain('<span data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
   });
 
   it("D-025 framing pinned: 'Append-only record of every admin action. Cannot be mutated by admins (D-025). Filter by action, admin id, or target account.' — pinned so the immutability contract stays explicit on the page operators see (drift to softer phrasing weakens the compliance-review guarantee). The filter list names the REAL filters (action / admin id / target account) — it must NOT advertise a non-existent 'admin email' filter (the endpoint has no such param)", () => {
@@ -64,15 +72,15 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     expect(body).toMatch(/<option value="error">Errors only<\/option>/);
   });
 
-  it("In-flight stale-response guard: let inFlight = 0 + const myReq = ++inFlight + 'if (myReq !== inFlight) return' bail in both .then and .catch — pinned so a slow first request can't overwrite a fast second request's results (race-condition guard that prevents stale data from rendering after the user has changed filters)", () => {
+  it('In-flight stale-response guard returns false from superseded success/failure paths', () => {
     expect(body).toMatch(/let inFlight = 0;/);
     expect(body).toMatch(/const myReq = \+\+inFlight;/);
-    expect(body).toMatch(/if \(myReq !== inFlight\) return;/);
+    expect(body).toMatch(/if \(myReq !== inFlight\) return false;/);
   });
 
-  it("Debounce 200ms: clearTimeout(debounce) + debounce = setTimeout(load, 200) on input/change listeners — pinned so per-keystroke filtering doesn't fire 60 requests/sec but still feels responsive (200ms is below the 250ms perception threshold)", () => {
+  it('Debounce 200ms routes filter refreshes through the truthful live-state wrapper', () => {
     expect(body).toMatch(
-      /function scheduleLoad\(\) \{\s*\n?\s*clearTimeout\(debounce\);\s*\n?\s*debounce = setTimeout\(load, 200\);\s*\n?\s*\}/,
+      /function scheduleLoad\(\) \{\s*\n?\s*clearTimeout\(debounce\);\s*\n?\s*debounce = setTimeout\(loadWithLive, 200\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(/actionEl\.addEventListener\('input', scheduleLoad\)/);
     expect(body).toMatch(/adminIdEl\.addEventListener\('input', scheduleLoad\)/);
@@ -115,17 +123,28 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     );
   });
 
-  it('Signed-out and failed loads replace SSG audit mocks with an explicit non-authoritative row and clear the fabricated footnote', () => {
+  it('Signed-out and failed loads render an explicit non-authoritative row and success alone turns freshness green', () => {
     expect(body).toMatch(
-      /function renderUnavailable\(message\) \{[\s\S]*?tbody\.innerHTML =[\s\S]*?'<tr><td colspan="5"[\s\S]*?message \+[\s\S]*?'[^']*<\/td><\/tr>';[\s\S]*?if \(footnote\) footnote\.textContent = '';[\s\S]*?\}/,
+      /function renderUnavailable\(message\) \{[\s\S]*?tbody\.innerHTML =[\s\S]*?'<tr><td colspan="5"[\s\S]*?escapeHtml\(message\) \+[\s\S]*?'[^']*<\/td><\/tr>';[\s\S]*?if \(footnote\) footnote\.textContent = '';[\s\S]*?\}/,
     );
     expect(body).toMatch(
       /\.catch\(\(err\) => \{[\s\S]*?renderUnavailable\(\s*'Could not load live audit entries — nothing is shown as authoritative\. Resolve the error above and retry\.',\s*\);[\s\S]*?showBanner\("Couldn't load audit log \(" \+ msg \+ '\)\.'\);/,
     );
     expect(body).toMatch(
-      /if \(!token\) \{\s*renderUnavailable\('Sign in with a staff admin account to see audit entries\.'\);\s*showBanner\('Sign in with a staff admin account to see live data\.'\);/,
+      /if \(!token\) \{\s*renderUnavailable\('Sign in with a staff admin account to see audit entries\.'\);[\s\S]*?showBanner\('Sign in with a staff admin account to see live data\.'\);/,
     );
-    expect(body).not.toMatch(/Showing preview(?: data)? below\./);
+    expect(body).toMatch(/if \(expectedReq !== inFlight\) return ok;/);
+    expect(body).toMatch(/if \(ok\) \{[\s\S]*?setLiveState\('ready'\);/);
+  });
+
+  it('keeps the existing DOMContentLoaded token deferral for the AdminLayout SSO bridge', () => {
+    expect(body).toMatch(/let token = null;/);
+    expect(body).toMatch(
+      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+    );
+    expect(body).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\);/,
+    );
   });
 
   it('file exists at canonical path', () => {
