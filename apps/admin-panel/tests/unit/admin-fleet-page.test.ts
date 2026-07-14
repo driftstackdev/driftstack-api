@@ -26,6 +26,7 @@ interface MockFetchCall {
 interface SetUpOpts {
   route: (call: MockFetchCall) => Response | Promise<Response>;
   noToken?: boolean;
+  storageDenied?: boolean;
 }
 
 function setUpDom(
@@ -52,7 +53,16 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve().then(() => opts.route(call));
   };
-  if (opts.noToken !== true) window.localStorage.setItem('ds_web_session_token', 'staff-tok');
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.noToken !== true) {
+    window.localStorage.setItem('ds_web_session_token', 'staff-tok');
+  }
   installAdminDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-fleet"'));
@@ -144,6 +154,65 @@ describe('admin fleet page — operator visibility', () => {
     expect(text).not.toContain('mac-001');
   });
 
+  it('starts neutral and keeps signed-out fleet reads inert', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      noToken: true,
+      route: () => json({ data: [] }),
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    const refresh = window.document.querySelector<HTMLButtonElement>('[data-refresh]');
+    expect(refresh?.disabled).toBe(true);
+    expect(refresh?.getAttribute('aria-disabled')).toBe('true');
+    expect(refresh?.title).toContain('staff sign-in');
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('Staff sign-in required');
+    expect(text).toContain('Sign in as a staff admin to view the fleet');
+    expect(text).not.toContain('Live · updated');
+  });
+
+  it('treats storage denial as signed-out instead of stranding the loading shell', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      storageDenied: true,
+      route: () => json({ data: [] }),
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(window.document.querySelector<HTMLButtonElement>('[data-refresh]')?.disabled).toBe(true);
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('Staff sign-in required');
+    expect(text).not.toContain('Loading…');
+  });
+
+  it('keeps refresh available after a failed read and publishes live state only after retry success', async () => {
+    let calls = 0;
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: () => {
+        calls += 1;
+        return calls === 1 ? json({ detail: 'boom' }, 500) : json({ data: [] });
+      },
+    });
+    win = window;
+    await flush();
+
+    const refresh = window.document.querySelector<HTMLButtonElement>('[data-refresh]');
+    expect(refresh?.disabled).toBe(false);
+    expect(window.document.body.textContent).toContain('Live fleet state unavailable');
+    expect(window.document.body.textContent).not.toContain('Live · updated');
+
+    refresh?.click();
+    await flush();
+
+    expect(calls).toBe(2);
+    expect(refresh?.disabled).toBe(false);
+    expect(window.document.body.textContent).toContain('Live · updated');
+    expect(window.document.body.textContent).toContain('No fleet nodes registered yet');
+  });
+
   it('W630 auto-refresh: the inline script arms a 15s poll so connected state updates live during worker bring-up', async () => {
     const html = loadBuiltPage();
     expect(html).toContain('setInterval');
@@ -160,6 +229,8 @@ describe('admin fleet page — operator visibility', () => {
     expect(html).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
     );
+    expect(html).toContain("localStorage.getItem('ds_web_session_token')");
+    expect(html).toMatch(/function getToken\(\) \{[\s\S]*?try \{[\s\S]*?\} catch \{/);
   });
 
   it('locks an affected node after an unknown control outcome and blocks a blind replay', async () => {

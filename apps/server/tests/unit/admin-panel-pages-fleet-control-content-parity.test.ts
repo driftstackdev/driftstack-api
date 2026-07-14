@@ -9,6 +9,15 @@ const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/fleet.astro');
 const body = readFileSync(PAGE, 'utf8');
 
 describe('admin fleet control single-flight feedback', () => {
+  it('ships neutral freshness and a staff-gated manual refresh', () => {
+    expect(body).toContain('Waiting for live data');
+    expect(body).toContain('Live fleet state is unavailable until loaded.');
+    expect(body).toMatch(/data-refresh\s+disabled\s+aria-disabled="true"/);
+    expect(body).toMatch(/function getToken\(\) \{[\s\S]*?try \{[\s\S]*?\} catch \{/);
+    expect(body).toContain("refreshBtn.addEventListener('click', loadWithLive)");
+    expect(body).toMatch(/if \(loaded === true\) setLiveState\('ready'\)/);
+  });
+
   it('rejects overlapping control commands before opening another confirmation', () => {
     expect(body).toMatch(/if \(!token \|\| controlInFlight\) return;/);
     expect(body).toMatch(/controlInFlight = true;/);

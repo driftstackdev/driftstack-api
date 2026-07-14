@@ -9,21 +9,37 @@ import { resolveApiBaseUrl } from '../lib/api-base-url';
 // "fleet node not connected"). This page makes registered / last-seen /
 // has-LiveKit / connected visible at a glance.
 //
-// W604 discipline: NO mock rows. The table starts in a "Loading…" state
-// and is filled only from the live fetch; on failure it shows an honest
-// error, never fabricated rows.
+// W604 discipline: NO mock rows. The table starts unavailable and is filled
+// only from a successful live fetch; on failure it shows an honest error,
+// never fabricated rows or stale freshness.
 const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <AdminLayout title="Fleet">
   <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-fleet">
-    <div class="mb-6">
-      <h1 class="text-2xl font-semibold tracking-tight text-tk-ink">Fleet nodes</h1>
-      <p class="mt-1 text-sm text-tk-ink-3">
-        Mac workers registered with the control plane. A session only runs a real browser when a
-        node is both <strong>connected</strong> and has <strong>LiveKit</strong>; otherwise launches
-        land in an empty stream room (dispatch logs <code>fleet node not connected</code>).
-      </p>
+    <div class="mb-6 flex items-start justify-between gap-6">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight text-tk-ink">Fleet nodes</h1>
+        <p class="mt-1 text-sm text-tk-ink-3">
+          Mac workers registered with the control plane. A session only runs a real browser when a
+          node is both <strong>connected</strong> and has <strong>LiveKit</strong>; otherwise launches
+          land in an empty stream room (dispatch logs <code>fleet node not connected</code>).
+        </p>
+      </div>
+      <div class="flex shrink-0 items-center gap-3">
+        <span class="inline-flex items-center gap-1.5 text-xs text-tk-ink-3" data-live-state>
+          <span class="h-2 w-2 rounded-full bg-amber-400" data-live-dot></span>
+          <span data-live-label aria-live="polite">Waiting for live data</span>
+        </span>
+        <button
+          type="button"
+          data-refresh
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in."
+          class="text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
+        >Refresh now</button>
+      </div>
     </div>
 
     <div
@@ -52,7 +68,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="fleet">
           <tr>
-            <td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Loading…</td>
+            <td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">
+              Live fleet state is unavailable until loaded.
+            </td>
           </tr>
         </tbody>
       </table>
@@ -67,6 +85,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const tbody = root.querySelector('[data-list="fleet"]');
       const footnote = root.querySelector('[data-field="footnote"]');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveLabel = root.querySelector('[data-live-label]');
+      const refreshBtn = root.querySelector('[data-refresh]');
       let token = null;
       const FLEET_REQUEST_TIMEOUT_MS = 15_000;
       let loadController = null;
@@ -89,6 +110,46 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function requestErrorMessage(err, fallback = 'network error') {
         return window.driftstackRequestErrorMessage(err, fallback);
+      }
+
+      function getToken() {
+        try {
+          return localStorage.getItem('ds_web_session_token') || '';
+        } catch {
+          return '';
+        }
+      }
+
+      function setLiveState(state, message) {
+        if (liveDot) {
+          liveDot.className =
+            'h-2 w-2 rounded-full ' +
+            (state === 'ready'
+              ? 'bg-emerald-500'
+              : state === 'failed'
+                ? 'bg-red-500'
+                : 'bg-amber-400');
+        }
+        if (liveLabel) {
+          liveLabel.textContent =
+            message ||
+            (state === 'ready'
+              ? 'Live · updated'
+              : state === 'failed'
+                ? 'Live data unavailable'
+                : 'Loading live data');
+        }
+      }
+
+      function syncRefreshControl(reason) {
+        if (!refreshBtn) return;
+        const disabled = !token || Boolean(loadController) || controlInFlight;
+        refreshBtn.disabled = disabled;
+        refreshBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        if (!token) refreshBtn.title = reason || 'Available after staff sign-in.';
+        else if (controlInFlight) refreshBtn.title = 'Available after the current node command.';
+        else if (loadController) refreshBtn.title = 'Refreshing live fleet state.';
+        else refreshBtn.removeAttribute('title');
       }
 
       function showBanner(text) {
@@ -293,12 +354,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (tbody)
             tbody.innerHTML =
               '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
+          if (footnote) footnote.textContent = '';
+          hideBanner();
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
-          return Promise.resolve();
+          return Promise.resolve(false);
         }
         if (loadController) loadController.abort();
         const controller = new AbortController();
         loadController = controller;
+        syncRefreshControl();
         const generation = ++loadGeneration;
         return boundedFetch(
           apiBaseUrl + '/v1/mac-nodes',
@@ -360,6 +424,26 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
+      function loadWithLive() {
+        if (controlInFlight) return Promise.resolve(undefined);
+        setLiveState('loading', 'Loading live fleet state…');
+        syncRefreshControl();
+        return load()
+          .then((loaded) => {
+            if (loaded === true) setLiveState('ready');
+            else if (loaded === false) {
+              setLiveState(
+                'failed',
+                token ? 'Live fleet state unavailable' : 'Staff sign-in required',
+              );
+            }
+            return loaded;
+          })
+          .finally(() => {
+            syncRefreshControl();
+          });
+      }
+
       // W631 — per-node fleet control actions (founder "ship them now", 2026-06-23).
       // Cordon / uncordon / drain / restart via POST /v1/mac-nodes/:id/control (staff
       // admin scope). The harness acks 202 and applies the command on its own loop, so
@@ -400,6 +484,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         // (making btn.disabled a no-op on the visible row) and let the same command be
         // re-issued. The finally clears it on every exit path (incl. a cancel).
         controlInFlight = true;
+        syncRefreshControl();
         let controls = [];
         const originalText = btn ? btn.textContent : '';
         try {
@@ -490,6 +575,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             btn.disabled = outcomeUnknown;
           }
           controlInFlight = false;
+          syncRefreshControl();
         }
       }
       if (tbody) {
@@ -505,8 +591,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function start() {
-        token = localStorage.getItem('ds_web_session_token');
-        void load();
+        token = getToken();
+        syncRefreshControl('Available after staff sign-in.');
+        void loadWithLive();
       }
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start, { once: true });
@@ -521,8 +608,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       // interval dies with it on navigation away.
       setInterval(function () {
         if (controlInFlight) return; // W2820 — don't rebuild the table mid control-action
-        void load();
+        void loadWithLive();
       }, 15000);
+      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
     })();
   </script>
 </AdminLayout>
