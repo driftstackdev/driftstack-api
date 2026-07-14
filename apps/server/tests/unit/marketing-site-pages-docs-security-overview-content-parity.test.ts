@@ -63,12 +63,12 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     expect(body).toMatch(
       /<strong>In transit:<\/strong> TLS 1\.2\+ enforced on every\s*\n?\s*public endpoint\. HSTS is set with\s*\n?\s*<code>max-age=63072000; includeSubDomains; preload<\/code>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/api-security-headers">API security headers<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/api-security-headers\/">API security headers<\/a>/);
   });
 
   it('Object storage + profile state framing pinned. Object-storage (S3-SSE + never-publicly-listable + managed-recordings-roadmap vs desktop-local recorder) + Profile-state (encrypted-files on the driver host = the MacStadium fleet, US + Postgres-EU-metadata-only) framings exist verbatim at docs/security-overview.astro:44-56', () => {
     expect(body).toMatch(
-      /<strong>Object storage:<\/strong> Customer-generated artefacts\s*\n?\s*that land in Cloudflare R2 use server-side encryption \(S3-SSE\);\s*\n?\s*underlying objects are never publicly listable\. Managed API session\s*\n?\s*recordings in R2 are a roadmap item; the desktop app's current manual\s*\n?\s*recorder saves streamed frames locally on the operator's machine\. See\s*\n?\s*<a href="\/docs\/recordings">\/docs\/recordings<\/a> for the distinction\./,
+      /<strong>Object storage:<\/strong> Customer-generated artefacts\s*\n?\s*that land in Cloudflare R2 use server-side encryption \(S3-SSE\);\s*\n?\s*underlying objects are never publicly listable\. Managed API session\s*\n?\s*recordings in R2 are a roadmap item; the desktop app's current manual\s*\n?\s*recorder saves streamed frames locally on the operator's machine\. See\s*\n?\s*<a href="\/docs\/recordings\/">\/docs\/recordings<\/a> for the distinction\./,
     );
     expect(body).toMatch(
       /<strong>Profile state:<\/strong> Per-profile browser state\s*\n?\s*\(cookies, localStorage, IndexedDB\) lives in the WebKit driver\s*\n?\s*layer as per-profile encrypted files on disk on the driver\s*\n?\s*host \(the MacStadium fleet, US\)\. The Postgres profile row\s*\n?\s*\(EU\) holds metadata only — name, archetype, description\./,
@@ -98,10 +98,10 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
       /Postgres is managed by Neon \(EU\) with point-in-time recovery\.\s*\n?\s*Object storage \(R2\) is geo-replicated across Cloudflare's\s*\n?\s*EU \+ US regions; presigned access is location-agnostic\./,
     );
     expect(body).toMatch(
-      /Customer data egress to non-EU regions is restricted to the\s*\n?\s*subprocessors enumerated below and on the\s*\n?\s*<a href="\/legal\/sub-processors">sub-processor list<\/a>\./,
+      /Customer data egress to non-EU regions is restricted to the\s*\n?\s*subprocessors enumerated below and on the\s*\n?\s*<a href="\/legal\/sub-processors\/">sub-processor list<\/a>\./,
     );
     expect(body).toMatch(
-      /Rate-limiting is enforced application-side via token buckets\s*\n?\s*\(per-account \+ per-IP\); see\s*\n?\s*<a href="\/docs\/rate-limits">\/docs\/rate-limits<\/a> for the\s*\n?\s*bucket model\. DDoS absorption is handled at the CDN edge\./,
+      /Rate-limiting is enforced application-side via token buckets\s*\n?\s*\(per-account \+ per-IP\); see\s*\n?\s*<a href="\/docs\/rate-limits\/">\/docs\/rate-limits<\/a> for the\s*\n?\s*bucket model\. DDoS absorption is handled at the CDN edge\./,
     );
   });
 
@@ -134,7 +134,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
 
   it('Audit + observability 3-stream framing pinned: Account audit log (every mutation on your account) + Session logs (per-session navigation + console output retained per tier) + Cost ledger (every billable event, queryable via the API) — pinned so the 3-customer-readable log streams commitment survives', () => {
     expect(body).toMatch(
-      /<a href="\/docs\/audit-log">Account audit log<\/a> — every\s*\n?\s*mutation on your account \(key mints, profile changes, billing\s*\n?\s*events\)\./,
+      /<a href="\/docs\/audit-log\/">Account audit log<\/a> — every\s*\n?\s*mutation on your account \(key mints, profile changes, billing\s*\n?\s*events\)\./,
     );
     expect(body).toMatch(
       /Session logs — per-session navigation \+ console output\s*\n?\s*retained per tier\./,
@@ -150,7 +150,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
       /<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\s*\n?\s*with the details\. We respond within 1 business day\./,
     );
     expect(body).toMatch(
-      /<a href="\/legal\/vulnerability-disclosure">vulnerability\s*\n?\s*disclosure policy<\/a> covers safe-harbour for good-faith\s*\n?\s*research; please review it before testing\./,
+      /<a href="\/legal\/vulnerability-disclosure\/">vulnerability\s*\n?\s*disclosure policy<\/a> covers safe-harbour for good-faith\s*\n?\s*research; please review it before testing\./,
     );
   });
 
@@ -159,10 +159,17 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/">Data residency<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/admin-api">Admin API \+ scope<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/incident-policy">Incident policy<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/audit-log">Audit log<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/sub-processors">Sub-processors<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/admin-api\/">Admin API \+ scope<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/incident-policy\/">Incident policy<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/audit-log\/">Audit log<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/sub-processors\/">Sub-processors<\/a>/);
+
+    const slashlessOwnedHref =
+      /href="\/(?:docs\/(?:api-security-headers|recordings|rate-limits|audit-log|admin-api|incident-policy)|legal\/(?:sub-processors|vulnerability-disclosure))"/;
+    expect(body).not.toMatch(slashlessOwnedHref);
+    expect(body.replace('href="/docs/admin-api/"', 'href="/docs/admin-api"')).toMatch(
+      slashlessOwnedHref,
+    );
   });
 
   it('file exists at canonical path', () => {
