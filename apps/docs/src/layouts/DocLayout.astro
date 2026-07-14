@@ -415,20 +415,53 @@ const nextItem =
         btn.type = 'button';
         btn.setAttribute('data-copy-code', '');
         btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.setAttribute('aria-live', 'polite');
+        btn.setAttribute('aria-atomic', 'true');
         btn.textContent = 'Copy';
         btn.className =
           'absolute right-2 top-2 rounded-sm border border-tk-border bg-tk-raised ' +
           'px-2 py-1 text-xs font-medium text-tk-ink-3 opacity-70 transition ' +
           'hover:text-tk-ink hover:opacity-100 focus-visible:opacity-100';
+        var copyInFlight = false;
+        var resetTimer = null;
+        function resetCopyButton() {
+          btn.textContent = 'Copy';
+          btn.setAttribute('aria-label', 'Copy code to clipboard');
+          resetTimer = null;
+        }
+        function showCopyResult(label, ariaLabel, delayMs) {
+          if (resetTimer !== null) window.clearTimeout(resetTimer);
+          btn.textContent = label;
+          btn.setAttribute('aria-label', ariaLabel);
+          resetTimer = window.setTimeout(resetCopyButton, delayMs);
+        }
         btn.addEventListener('click', function () {
+          if (copyInFlight) return;
           var code = pre.querySelector('code');
           var text = (code ? code.textContent : pre.textContent) || '';
-          navigator.clipboard.writeText(text).then(function () {
-            btn.textContent = 'Copied';
-            window.setTimeout(function () {
-              btn.textContent = 'Copy';
-            }, 1500);
-          });
+          copyInFlight = true;
+          btn.disabled = true;
+          btn.setAttribute('aria-busy', 'true');
+          var write;
+          try {
+            write = navigator.clipboard.writeText(text);
+          } catch (error) {
+            write = Promise.reject(error);
+          }
+          Promise.resolve(write)
+            .then(
+              function () {
+                showCopyResult('Copied', 'Code copied to clipboard', 1500);
+              },
+              function () {
+                showCopyResult('Copy failed', 'Could not copy code; select it manually', 1800);
+              },
+            )
+            .finally(function () {
+              copyInFlight = false;
+              btn.disabled = false;
+              btn.setAttribute('aria-busy', 'false');
+            });
         });
         pre.appendChild(btn);
       });
@@ -451,12 +484,48 @@ const nextItem =
         a.className =
           'ml-2 inline-block font-normal text-tk-ink-3 no-underline opacity-0 ' +
           'transition-opacity hover:text-tk-accent-text focus-visible:opacity-100 group-hover:opacity-100';
+        var copyGeneration = 0;
+        var anchorResetTimer = null;
+        function showAnchorCopyResult(label, ariaLabel, title) {
+          if (anchorResetTimer !== null) window.clearTimeout(anchorResetTimer);
+          a.textContent = label;
+          a.setAttribute('aria-label', ariaLabel);
+          a.title = title;
+          anchorResetTimer = window.setTimeout(function () {
+            a.textContent = '#';
+            a.setAttribute('aria-label', 'Link to this section');
+            a.removeAttribute('title');
+            anchorResetTimer = null;
+          }, 1800);
+        }
         a.addEventListener('click', function () {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(
-              window.location.origin + window.location.pathname + '#' + h.id,
-            );
+          var generation = ++copyGeneration;
+          var write;
+          try {
+            if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+              write = Promise.reject(new Error('Clipboard API unavailable'));
+            } else {
+              write = navigator.clipboard.writeText(
+                window.location.origin + window.location.pathname + '#' + h.id,
+              );
+            }
+          } catch (error) {
+            write = Promise.reject(error);
           }
+          Promise.resolve(write).then(
+            function () {
+              if (generation !== copyGeneration) return;
+              showAnchorCopyResult('✓', 'Section link copied', 'Section link copied');
+            },
+            function () {
+              if (generation !== copyGeneration) return;
+              showAnchorCopyResult(
+                '!',
+                'Could not copy section link; use the browser address bar',
+                'Could not copy; use the browser address bar',
+              );
+            },
+          );
         });
         h.appendChild(a);
       });
