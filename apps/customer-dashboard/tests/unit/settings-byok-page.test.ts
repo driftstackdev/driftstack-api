@@ -204,6 +204,38 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
   });
 
+  it('treats a malformed accepted save body as committed and clears plaintext once', async () => {
+    const byok = newByok({ set: false });
+    const base = makeRouter(byok);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/me\/byok-anthropic-key$/.test(call.url) && method === 'PUT') {
+          byok.set = true;
+          return new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-byok-form]') as HTMLFormElement;
+    const input = window.document.querySelector('#byok-key') as HTMLInputElement;
+    input.value = 'sk-ant-api03-SECRET';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(10);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
+    expect(input.value).toBe('');
+    expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
+    expect(isHidden(window, '[data-byok-error]')).toBe(true);
+  });
+
   it('ignores a stale initial metadata response that arrives after the post-save refresh', async () => {
     let resolveInitialGet: ((response: Response) => void) | undefined;
     let byokGetCount = 0;

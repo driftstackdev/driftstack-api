@@ -151,6 +151,21 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toMatch(/The save likely completed before the response timed out/);
   });
 
+  it('does not parse unused accepted profile or BYOK save bodies', () => {
+    expect(body).toContain('The profile response body is unused. Accepted status is the');
+    expect(body).toContain('The PUT response body is unused. Trust accepted status before');
+
+    const profileStart = body.indexOf('if (profileForm) {');
+    const profileEnd = body.indexOf('function authedFetch', profileStart);
+    const profileHandler = body.slice(profileStart, profileEnd);
+    expect(profileHandler).not.toContain('? r.json()');
+
+    const byokStart = body.indexOf('if (byokForm) {');
+    const byokEnd = body.indexOf('if (byokTestBtn)', byokStart);
+    const byokHandler = body.slice(byokStart, byokEnd);
+    expect(byokHandler).not.toContain('return r.json();');
+  });
+
   it('BYOK Test is stored-key-only and serialized with Save/Clear', () => {
     expect(body).toMatch(/After saving, Test stored key/);
     expect(body).toMatch(/let byokActionInFlight = null/);

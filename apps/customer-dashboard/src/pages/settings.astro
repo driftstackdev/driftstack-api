@@ -918,14 +918,18 @@ const EMAIL_EVENTS = [
             },
             body: JSON.stringify(body),
           })
-            .then((r) =>
-              r.ok
-                ? r.json()
-                : r
-                    .json()
-                    .catch(() => ({}))
-                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-            )
+            .then((r) => {
+              if (r.ok) {
+                // The profile response body is unused. Accepted status is the
+                // save boundary; malformed JSON must not turn a committed
+                // profile update into retry guidance.
+                return;
+              }
+              return r
+                .json()
+                .catch(() => ({}))
+                .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+            })
             .then(() => {
               showProfileStatus('Saved.', 3000);
             })
@@ -1316,7 +1320,10 @@ const EMAIL_EVENTS = [
                   .json()
                   .catch(() => ({}))
                   .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
-              return r.json();
+              // The PUT response body is unused. Trust accepted status before
+              // clearing the plaintext field and refreshing authoritative
+              // metadata; malformed JSON cannot invite a duplicate secret save.
+              return;
             })
             .then(() => {
               if (byokInput) byokInput.value = '';

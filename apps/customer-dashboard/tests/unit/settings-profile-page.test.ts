@@ -191,6 +191,46 @@ describe('settings page — profile hydration and timeout reconciliation', () =>
     ).toBe(true);
   });
 
+  it('treats a malformed accepted PATCH body as saved without duplicate retry guidance', async () => {
+    const profile: ProfileState = {
+      name: 'Old Name',
+      timezone: 'UTC',
+      slug: 'old-name',
+      region: 'eu',
+    };
+    const desired = {
+      name: 'Accepted Name',
+      timezone: 'America/New_York',
+      slug: 'accepted-name',
+      region: 'us' as const,
+    };
+    const { window, fetchCalls } = setUpDom((call) => {
+      if (call.init?.method === 'PATCH' && /\/v1\/account\/me$/.test(call.url)) {
+        Object.assign(profile, JSON.parse(String(call.init.body)) as ProfileState);
+        return new Response('{', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return fallbackRoute(profile, call);
+    });
+    win = window;
+    await flush();
+    setProfileInputs(window, desired);
+    const form = window.document.querySelector('[data-form="profile"]') as HTMLFormElement;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
+    expect(window.document.querySelector('[data-field="profile-status"]')?.textContent).toBe(
+      'Saved.',
+    );
+    expect(
+      window.document.querySelector('[data-field="profile-error"]')?.classList.contains('hidden'),
+    ).toBe(true);
+  });
+
   it('preserves desired inputs when a timed-out PATCH did not commit', async () => {
     const profile: ProfileState = {
       name: 'Old Name',
