@@ -26029,3 +26029,33 @@ Verification:
   seven-page status build is green, copied `dist/_headers` is byte-identical,
   Status Astro check is 0 errors/0 warnings/6 hints, and strict server
   source/test TypeScript passes.
+
+## V-611 — permissive credentialed CORS cannot boot in production
+
+**Date:** 2026-07-14
+
+Changed the production CORS posture guard from an error-level log followed by
+normal startup to a fail-closed assertion. `PERMISSIVE_CORS=true` makes
+Fastify's CORS plugin reflect any request Origin while
+`Access-Control-Allow-Credentials: true` remains enabled, completely shadowing
+the configured first-party allow-list. Production currently runs with the flag
+disabled and the six browser origins present, but a future environment drift
+would previously have reopened the boundary without preventing service.
+
+Bootstrap now refuses the exact insecure pair
+`PERMISSIVE_CORS=true && NODE_ENV=production` with the existing non-secret,
+actionable diagnostic. Locked-down production starts normally, and permissive
+development/test retain the documented Tauri/WebView escape hatch. This closes
+the latent path without changing any route, origin matcher, or current
+production environment.
+
+Verification:
+
+- a pure truth-table test proves permissive production throws while strict
+  production and permissive development/test do not;
+- the diagnostic still identifies both the unsafe flag and the required
+  `CORS_ALLOWED_ORIGINS` boundary without containing request or credential data;
+- a bootstrap structural guard requires the fail-closed import/call, rejects
+  restoration of the former log-only branch; the focused CORS/bootstrap gate
+  passes with 4 files and 61/61 tests, plus strict server source/test
+  TypeScript, lint, formatting, diff, and hooks.

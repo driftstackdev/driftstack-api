@@ -214,7 +214,7 @@ import type { AppDeps, ReadinessCheck } from './app.js';
 import type { Config } from './config.js';
 import { decodeMasterKey } from './profile-key-hierarchy.js';
 import type { Logger } from './logger.js';
-import { corsPostureWarning } from './cors-posture.js';
+import { assertCorsPosture } from './cors-posture.js';
 
 export interface BootstrapResult {
   deps: AppDeps;
@@ -1591,15 +1591,11 @@ export async function createProductionDeps(
     readinessChecks.push(r2ReadinessCheck(r2));
   }
 
-  // CORS posture guard — surface PERMISSIVE_CORS=true-in-production loudly
-  // at boot (it echoes any Origin with credentials:true; the allow-list is
-  // the prod boundary). Non-fatal: warn rather than refuse-boot so a
-  // misconfig doesn't take prod down, but it can't pass unnoticed.
+  // CORS posture guard — PERMISSIVE_CORS=true echoes any Origin while
+  // credentials:true remains enabled. The complete first-party allow-list is
+  // the production boundary, so refuse boot if an env regression bypasses it.
   const permissiveCors = (process.env.PERMISSIVE_CORS ?? '').toLowerCase() === 'true';
-  const corsWarning = corsPostureWarning(permissiveCors, config.nodeEnv);
-  if (corsWarning !== null) {
-    logger.error({ component: 'cors' }, corsWarning);
-  }
+  assertCorsPosture(permissiveCors, config.nodeEnv);
 
   // LK.2 + V-820 — the Drizzle fleet_nodes repo backs BOTH the
   // /v1/mac-nodes/register LiveKit-credential writes AND the fleet-node

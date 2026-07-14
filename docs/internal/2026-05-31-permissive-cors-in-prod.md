@@ -1,9 +1,14 @@
 # 2026-05-31 — `PERMISSIVE_CORS=true` is live in production (Agent 2)
 
-**Status: SURFACED + a safe boot-time guard shipped this wave.** The behavior fix
-(complete the allow-list, then disable the flag) is an outward-facing prod env
-change with a confirmed breakage trap — left for the founder / a focused session.
-Found by a fresh audit of the CORS configuration (not in any audited-clean memory).
+**Status: RESOLVED 2026-07-14.** The six-origin production allow-list was completed
+and production was verified with `PERMISSIVE_CORS=false` on 2026-06-05. The
+remaining latent regression path is now closed in code: bootstrap refuses to
+start when `PERMISSIVE_CORS=true && NODE_ENV=production`. Development and test
+retain the documented WebView escape hatch.
+
+The sections below preserve the original incident evidence and sequencing
+rationale. At the time, refusing boot before the allow-list repair would have
+broken status/admin. That prerequisite is now fulfilled.
 
 ## Confirmed (empirical) — prod reflects ANY origin with credentials
 
@@ -82,7 +87,7 @@ https://admin.driftstack.dev` (the GUI's `tauri://localhost` + `localhost` are
    Doing that BEFORE step 1 would break status/admin; doing a refuse-to-boot would
    crash prod — hence the warn-only guard shipped now (below).
 
-## Shipped this wave (safe, non-breaking)
+## Original warn-only mitigation (superseded 2026-07-14)
 
 `apps/server/src/lib/cors-posture.ts` `corsPostureWarning(permissiveCors, nodeEnv)`
 
@@ -92,3 +97,12 @@ https://admin.driftstack.dev` (the GUI's `tauri://localhost` + `localhost` are
   which is exactly what let it ship unnoticed. The behavior fix waits on step 1.
 
 Recorded in memory `project_permissive_cors_in_prod`.
+
+## Final fail-closed guard (2026-07-14)
+
+`assertCorsPosture()` uses the same audited truth table but throws the existing
+non-secret diagnostic for permissive production. Bootstrap invokes it before
+constructing the serving app. A single environment regression can therefore no
+longer shadow `CORS_ALLOWED_ORIGINS` and continue serving arbitrary-origin
+credentialed CORS. Pure tests cover all four meaningful production/dev/test
+pairs and a structural guard pins the bootstrap dependency.

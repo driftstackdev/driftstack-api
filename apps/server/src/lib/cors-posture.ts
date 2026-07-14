@@ -9,9 +9,9 @@
 //
 // In production that flag must never be on: the env-configured
 // `CORS_ALLOWED_ORIGINS` allow-list is the prod boundary. This helper
-// returns a loud warning string when the insecure combination is
-// detected so the misconfiguration surfaces at boot (logged at error
-// level → log search + Sentry breadcrumbs) instead of silently shipping.
+// returns a non-secret diagnostic for the insecure combination. Bootstrap
+// passes that same truth table through assertCorsPosture(), which refuses
+// production boot instead of continuing with the allow-list bypassed.
 //
 // See docs/internal/2026-05-31-permissive-cors-in-prod.md.
 export function corsPostureWarning(permissiveCors: boolean, nodeEnv: string): string | null {
@@ -25,4 +25,11 @@ export function corsPostureWarning(permissiveCors: boolean, nodeEnv: string): st
     );
   }
   return null;
+}
+
+/** Fail closed on the one forbidden environment pair while preserving the
+ * documented development/test WebView escape hatch. */
+export function assertCorsPosture(permissiveCors: boolean, nodeEnv: string): void {
+  const diagnostic = corsPostureWarning(permissiveCors, nodeEnv);
+  if (diagnostic !== null) throw new Error(diagnostic);
 }
