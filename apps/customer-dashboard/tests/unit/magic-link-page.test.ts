@@ -17,6 +17,7 @@ interface MockFetchCall {
 function setUpDom(
   html: string,
   plan: Array<(call: MockFetchCall) => Response | Promise<Response>>,
+  storageDenied = false,
 ): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
@@ -49,6 +50,17 @@ function setUpDom(
     if (!handler) return Promise.resolve(new Response('{}', { status: 500 }));
     return Promise.resolve(handler(call));
   };
+  if (storageDenied) {
+    const storagePrototype = Object.getPrototypeOf(window.localStorage);
+    const setItem = storagePrototype.setItem;
+    Object.defineProperty(storagePrototype, 'setItem', {
+      configurable: true,
+      value(this: Storage, key: string, value: string) {
+        if (this === window.localStorage) throw new Error('storage denied');
+        return setItem.call(this, key, value);
+      },
+    });
+  }
 
   installDashboardDeadline(window);
   const pageScript = scriptBodies.find((body) => body.includes('data-page="magic-link"'));
@@ -76,6 +88,26 @@ describe('magic-link consume page', () => {
     win = null;
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('does not consume a one-time link when the resulting session cannot persist', async () => {
+    const { window, fetchCalls } = setUpDom(
+      loadBuiltPage(),
+      [() => json({ session: { token: 'must_not_be_issued' } })],
+      true,
+    );
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /enable browser site storage.*has not been consumed.*retry/i,
+    );
+    const form = window.document.querySelector('[data-form="magic-link"]') as HTMLFormElement;
+    expect(form.classList.contains('hidden')).toBe(false);
+    expect((form.querySelector('input[name="token"]') as HTMLInputElement).value).toBe(
+      'magic_tok_123',
+    );
+  });
 
   it('makes a timeout terminal and cannot POST the consumed token again', async () => {
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });

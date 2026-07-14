@@ -161,6 +161,23 @@ const apiBaseUrl = resolveApiBaseUrl();
         window.location.href = safeNextPath(params.get('next'), window.location.origin);
       }
 
+      function canPersistWebSession() {
+        const probeKey = 'ds_web_session_storage_probe';
+        try {
+          localStorage.setItem(probeKey, '1');
+          const persisted = localStorage.getItem(probeKey) === '1';
+          localStorage.removeItem(probeKey);
+          return persisted;
+        } catch {
+          try {
+            localStorage.removeItem(probeKey);
+          } catch {
+            // Storage is unavailable; there is no probe value to retain.
+          }
+          return false;
+        }
+      }
+
       function showBanner(text) {
         banner.textContent = text;
         banner.classList.remove('hidden');
@@ -321,6 +338,14 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function submitToken(token) {
         if (consumeInFlight || consumeOutcomeUnknown) return Promise.resolve(false);
+        if (!canPersistWebSession()) {
+          if (intro) intro.textContent = 'Browser storage is unavailable';
+          showBanner(
+            'Enable browser site storage before using this one-time sign-in link. It has not been consumed, so you can retry after storage is available.',
+          );
+          showFallbackForm(token);
+          return Promise.resolve(false);
+        }
         consumeInFlight = true;
         setConsumeBusy(true);
         banner.classList.add('hidden');

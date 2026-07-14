@@ -79,6 +79,15 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     );
   });
 
+  it('proves session persistence before consuming the one-time link', () => {
+    expect(body).toMatch(/function canPersistWebSession\(\)/);
+    expect(body).toMatch(/localStorage\.setItem\(probeKey, '1'\)/);
+    expect(body).toMatch(/localStorage\.getItem\(probeKey\) === '1'/);
+    expect(body).toMatch(
+      /function submitToken\(token\) \{[\s\S]*if \(!canPersistWebSession\(\)\)[\s\S]*has not been consumed[\s\S]*return Promise\.resolve\(false\);[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume'/,
+    );
+  });
+
   it('bounds consume requests and makes an ambiguous timeout terminal', () => {
     expect(body).toContain('const CONSUME_TIMEOUT_MS = 15_000;');
     expect(body).toMatch(/const controller = new AbortController\(\);/);
