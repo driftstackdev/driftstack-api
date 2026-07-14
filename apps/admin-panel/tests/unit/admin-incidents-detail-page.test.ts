@@ -129,6 +129,66 @@ describe('admin incident detail mutation lifecycle', () => {
     expect(reopenButton.disabled).toBe(false);
   });
 
+  it('does not report malformed accepted update JSON as a failed mutation', async () => {
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', () => {});
+    const dom = new JSDOM(
+      `<!doctype html><title>Incident</title>
+       <div data-banner class="hidden"></div>
+       <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
+       <div data-form-group="resolved" class="hidden">${form('reopen-form', 'Reopen')}</div>`,
+      {
+        url: 'https://admin.driftstack.dev/incidents/inc_test',
+        runScripts: 'dangerously',
+        virtualConsole,
+      },
+    );
+    windowRef = dom.window;
+    const calls: FetchCall[] = [];
+    // @ts-expect-error — jsdom's fetch global is intentionally injected.
+    dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+      const call = { url: String(input), init };
+      calls.push(call);
+      if (/\/updates$/.test(call.url)) {
+        return Promise.resolve(
+          new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.resolve(
+        response({
+          incident: {
+            id: 'inc_test',
+            title: 'Test incident',
+            severity: 'major',
+            status: 'investigating',
+            public: true,
+            affected_components: [],
+            started_at: '2026-07-12T00:00:00.000Z',
+            resolved_at: null,
+          },
+          updates: [],
+        }),
+      );
+    };
+    dom.window.localStorage.setItem('ds_web_session_token', 'tok');
+    evalPage(dom.window);
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    await flush();
+
+    const updateForm = dom.window.document.getElementById('add-update-form') as HTMLFormElement;
+    updateForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    updateForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(40);
+
+    expect(calls.filter((call) => /\/updates$/.test(call.url))).toHaveLength(1);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).not.toContain(
+      'Post failed',
+    );
+  });
+
   it('reconciles a committed timeline update after timeout without inviting a duplicate', async () => {
     const virtualConsole = new VirtualConsole();
     virtualConsole.on('jsdomError', () => {});

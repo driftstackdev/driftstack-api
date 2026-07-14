@@ -167,6 +167,14 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).toMatch(/endIncidentMutation\(submit\)/);
   });
 
+  it('does not parse unused accepted update, resolve, or reopen bodies', () => {
+    expect(body).toContain('Update/resolve/reopen success bodies are unused');
+    const start = body.indexOf('function bind(formId, urlSuffix, includeStatus)');
+    const end = body.indexOf("bind('add-update-form'", start);
+    const handler = body.slice(start, end);
+    expect(handler).not.toContain('return r.json();');
+  });
+
   it('reconciles ambiguous mutations against new exact updates and state transitions', () => {
     expect(body).toContain('let latestIncident = null;');
     expect(body).toContain('let latestUpdates = [];');

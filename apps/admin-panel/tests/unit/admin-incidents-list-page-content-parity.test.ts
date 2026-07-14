@@ -119,6 +119,14 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     expect(body).toMatch(/\.finally\(function \(\) \{\s*postingIncident = false;/);
   });
 
+  it('does not parse the unused accepted incident-create body', () => {
+    expect(body).toContain('The success body is unused; accepted status is the mutation');
+    const start = body.indexOf("boundedFetch(apiBaseUrl + '/v1/admin/incidents',");
+    const end = body.indexOf('.catch(async function (err)', start);
+    const acceptedPath = body.slice(start, end);
+    expect(acceptedPath).not.toContain('return r.json();');
+  });
+
   it('reconciles ambiguous incident creation before the operator can repost', () => {
     expect(body).toContain('let latestIncidentItems = [];');
     expect(body).toContain('let incidentOutcomeUnknown = false;');

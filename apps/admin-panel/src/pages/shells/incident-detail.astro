@@ -598,7 +598,9 @@ const isResolved = incident.status === 'resolved';
                     return Promise.reject(window.driftstackResponseError(r, b));
                   });
               }
-              return r.json();
+              // Update/resolve/reopen success bodies are unused. Once accepted,
+              // malformed JSON must not re-enable a duplicate incident action.
+              return;
             })
             .then(function () {
               window.location.reload();

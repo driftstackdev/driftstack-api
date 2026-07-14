@@ -230,6 +230,31 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     expect(submit.hasAttribute('aria-busy')).toBe(false);
   });
 
+  it('does not report a malformed accepted incident body as a failed post', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: (call) =>
+        call.init?.method === 'POST'
+          ? new Response('{', {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            })
+          : json({ data: [] }),
+    });
+    win = window;
+    await flush();
+    const form = window.document.getElementById('new-incident-form') as HTMLFormElement;
+    (form.querySelector('[name="title"]') as HTMLInputElement).value = 'API outage';
+    (form.querySelector('[name="description"]') as HTMLTextAreaElement).value =
+      'Investigating elevated failures.';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(text(window, '#form-error')).not.toContain('Failed to post incident');
+  });
+
   it('reconciles a committed incident after POST timeout instead of inviting a duplicate', async () => {
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
     let committed = false;

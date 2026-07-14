@@ -477,7 +477,10 @@ const apiBaseUrl = resolveApiBaseUrl();
                   return Promise.reject(window.driftstackResponseError(r, b));
                 });
             }
-            return r.json();
+            // The success body is unused; accepted status is the mutation
+            // boundary. Malformed JSON must not turn a posted public incident
+            // into failure copy that invites a duplicate.
+            return;
           })
           .then(function () {
             // Reload to show the new incident in the open list.
