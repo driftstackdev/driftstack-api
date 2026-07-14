@@ -173,23 +173,30 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     expect(existsSync(example), `example file ${example} must exist`).toBe(true);
   });
 
-  it('CRITICAL related-links roster pinned — 6 hyperlinks (sdk-python, sdk-typescript-crypto-orders, billing-crypto-integration-guide, idempotency-keys, webhooks-crypto-events, crypto-orders-polling-vs-webhooks).', () => {
+  it('CRITICAL related-links roster pinned — 6 canonical hyperlinks across 5 destinations (the webhook guide serves both event and polling guidance).', () => {
     const doc = read(DOC);
     const links = [
-      '/docs/sdk-python',
-      '/docs/sdk-typescript-crypto-orders',
+      '/docs/sdk-python/',
+      '/docs/sdk-typescript-crypto-orders/',
       // S47 2026-07-07 (founder-approved: mirror deprecation): the
       // integration-guide / webhooks-crypto-events /
       // polling-vs-webhooks mirrors are deleted; hrefs re-pinned to
       // the docs successors.
       'https://docs.driftstack.dev/guides/paying-with-crypto/',
-      '/docs/idempotency-keys',
+      '/docs/idempotency-keys/',
       'https://docs.driftstack.dev/webhooks/crypto-events/',
     ];
     for (const link of links) {
       const re = new RegExp(`href="${link.replace(/\//g, '\\/')}"`);
       expect(doc, `link ${link}`).toMatch(re);
     }
+    const related = doc.slice(doc.indexOf('<h2>Related</h2>'));
+    expect(
+      related.match(/href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/"/g),
+    ).toHaveLength(2);
+    expect(doc).not.toMatch(
+      /href="\/(?:docs\/sdk-python|docs\/sdk-typescript-crypto-orders|docs\/idempotency-keys)"/,
+    );
   });
 
   it('CRITICAL recommended-pagination example datetime/timedelta UTC pattern pinned. Drift to local-time would let the `created_after` filter mis-interpret across timezones.', () => {
