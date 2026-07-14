@@ -89,7 +89,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
       /<li>You sent the wrong coin to the right address \(e\.g\. USDC instead of USDT\) and our deposit detector saw partial value\.<\/li>/,
     );
     expect(body).toMatch(
-      /Partial orders need a human\. Email\s*\n?\s*<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*with your <code>order_id<\/code> \+ the TX hash\. We'll generate\s*\n?\s*a top-up invoice for the difference — that's the resolution\s*\n?\s*path\. Crypto payments are non-refundable\s*\n?\s*\(<a href="\/legal\/refunds">policy<\/a>\), so we don't send the\s*\n?\s*partial back; we complete the order via top-up instead\./,
+      /Partial orders need a human\. Email\s*\n?\s*<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*with your <code>order_id<\/code> \+ the TX hash\. We'll generate\s*\n?\s*a top-up invoice for the difference — that's the resolution\s*\n?\s*path\. Crypto payments are non-refundable\s*\n?\s*\(<a href="\/legal\/refunds\/">policy<\/a>\), so we don't send the\s*\n?\s*partial back; we complete the order via top-up instead\./,
     );
   });
 
@@ -98,7 +98,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
       /<code>failed<\/code> means one of: NowPayments rejected the\s*\n?\s*payment, the order timed out \(24h with no on-chain activity\),\s*\n?\s*or the provider declined the payment on their side\./,
     );
     expect(body).toMatch(
-      /In all\s*\n?\s*three cases the next step is the same — open a fresh order\s*\n?\s*from <a href="\/pricing">\/pricing<\/a> and try again\./,
+      /In all\s*\n?\s*three cases the next step is the same — open a fresh order\s*\n?\s*from <a href="\/pricing\/">\/pricing<\/a> and try again\./,
     );
     expect(body).toMatch(
       /<strong>If funds left your wallet but the order is failed<\/strong>:\s*\n?\s*that's a reconciliation problem — escalate to support\s*\n?\s*immediately with the TX hash\./,
@@ -131,7 +131,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
       /<li>Find the order in <strong>Billing → Crypto orders<\/strong>\s*\n?\s*and click it to re-open the address modal, or<\/li>/,
     );
     expect(body).toMatch(
-      /<li>Cancel the order \(only possible while still\s*\n?\s*<code>pending<\/code> with no payment activity\) and start\s*\n?\s*fresh from <a href="\/pricing">\/pricing<\/a>\.<\/li>/,
+      /<li>Cancel the order \(only possible while still\s*\n?\s*<code>pending<\/code> with no payment activity\) and start\s*\n?\s*fresh from <a href="\/pricing\/">\/pricing<\/a>\.<\/li>/,
     );
   });
 
@@ -165,13 +165,21 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
 
   it("3-related-doc cluster: /docs/billing-crypto-overview + /docs/billing-faq + /docs/webhooks-crypto-events (crypto.order.paid webhook events, now subscribable so no roadmap label) — pinned so the 3-related-doc navigation surface stays complete. The crypto.order.paid event was promoted to subscribable, so the previous '(roadmap)' label on the webhook cross-ref is dropped; ban its return so the not-yet-subscribable signal cannot creep back.", () => {
     expect(body).toMatch(
-      /<a href="\/docs\/billing-crypto-overview">Crypto payments — how it works<\/a>/,
+      /<a href="\/docs\/billing-crypto-overview\/">Crypto payments — how it works<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/billing-faq">Billing FAQ<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/billing-faq\/">Billing FAQ<\/a>/);
     expect(body).toMatch(
       // S47 2026-07-07 (founder-approved: mirror deprecation): the webhooks-crypto-events mirror is deleted; href re-pinned to the docs successor.
       /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/"><code>crypto\.order\.paid<\/code> webhook events<\/a>/,
     );
+    for (const path of [
+      '/legal/refunds',
+      '/pricing',
+      '/docs/billing-crypto-overview',
+      '/docs/billing-faq',
+    ]) {
+      expect(body).not.toContain(`href="${path}"`);
+    }
     // Anti-drift: the event is now subscribable; the old "(roadmap)" label
     // on this cross-ref must NOT return.
     expect(body).not.toMatch(/webhook events \(roadmap\)/);
