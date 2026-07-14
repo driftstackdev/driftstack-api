@@ -8,8 +8,9 @@
 //
 //   • V-016 centi-rate quantization framing pinned.
 //   • Service: set / clear / listAll — 3 admin-gated methods.
-//   • Set requires 'admin' scope; listAll requires
-//     'driftstack_internal_admin'.
+//   • Set / clear / listAll require the exact
+//     'driftstack_internal_admin' staff scope; legacy customer 'admin'
+//     is deliberately insufficient.
 //   • Validation cascade: capacity≥1 + finite, refillPerSecond bounds
 //     (MIN=0.01 — matches centi quantum, MAX=100_000 — enterprise
 //     global is 1000/s).
@@ -94,7 +95,7 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
     );
   });
 
-  it('set: requires "driftstack_internal_admin" scope (V-174 — matches the route gate + listAll; legacy admin still satisfies via alias)', () => {
+  it('set: requires exact "driftstack_internal_admin" staff scope; legacy customer admin is insufficient', () => {
     expect(body).toMatch(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/);
   });
 

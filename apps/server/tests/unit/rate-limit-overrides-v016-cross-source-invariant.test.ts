@@ -29,9 +29,10 @@
 //       + reason (nullable) + expiresAt + setByKeyId + createdAt
 //       + updatedAt.
 //
-//   set() requires 'admin' scope; clear() requires 'admin' scope;
-//     listAll() requires 'driftstack_internal_admin' (cross-account
-//     read is internal-admin only).
+//   set(), clear(), and listAll() require the exact
+//     'driftstack_internal_admin' scope because every operation is
+//     cross-account staff tooling; legacy customer 'admin' is not a
+//     staff-authority alias.
 //
 //   Cache invalidation graceful-degradation framing — 'Cache failure
 //     must not propagate as admin-action failure — override is
@@ -147,7 +148,7 @@ describe('W931 rate-limit-overrides V-016 centi-quantum cross-source invariant',
 
   // ─── set/clear/listAll scope requirements ────────────────────
 
-  it("CRITICAL set() + clear() + listAll() all require 'driftstack_internal_admin' (V-174 — this is staff cross-account tooling; the routes gate on driftstack_internal_admin, and a literal 'admin' check would 403 staff SSO sessions that carry driftstack_internal_admin not legacy admin). Legacy 'admin' keys still pass via the alias.", () => {
+  it("CRITICAL set() + clear() + listAll() all require exact 'driftstack_internal_admin' (V-174 staff cross-account tooling); legacy customer 'admin' cannot pass", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/rate-limit-overrides.ts'));
     // No literal-'admin' gate remains — all three methods use the staff scope.
     expect(p).not.toMatch(/throwIfMissingScope\(ctx, 'admin'\);/);
