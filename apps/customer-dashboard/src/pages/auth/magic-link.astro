@@ -459,6 +459,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       const params = new URLSearchParams(window.location.search);
       const linkToken = params.get('token');
 
+      if (linkToken) {
+        params.delete('token');
+        const retainedQuery = params.toString();
+        window.history.replaceState(
+          window.history.state,
+          '',
+          window.location.pathname +
+            (retainedQuery ? '?' + retainedQuery : '') +
+            window.location.hash,
+        );
+      }
+
       if (linkToken && linkToken.length > 0) {
         submitToken(linkToken);
       } else {

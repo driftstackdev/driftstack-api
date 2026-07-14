@@ -66,6 +66,17 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
+      if (token) {
+        params.delete('token');
+        const retainedQuery = params.toString();
+        window.history.replaceState(
+          window.history.state,
+          '',
+          window.location.pathname +
+            (retainedQuery ? '?' + retainedQuery : '') +
+            window.location.hash,
+        );
+      }
       if (!token || token.length === 0) {
         showBanner("Missing 'token' query parameter. Click the link in the verify-merge email.");
         return;

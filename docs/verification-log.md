@@ -25960,3 +25960,36 @@ Verification:
   byte-for-byte into `dist/_headers`;
 - focused cross-app header/CSP guards, strict server test TypeScript, formatting,
   diff, and commit hooks pass.
+
+## V-609 — consumed authentication credentials leave browser history
+
+**Date:** 2026-07-14
+
+The five no-auth Dashboard pages that receive one-time URL credentials now
+capture them and synchronously replace the current browser-history entry before
+storage or network work begins. Email verification, password reset, magic-link
+sign-in, and identity-provider merge confirmation remove only `token`, retaining
+non-secret continuation parameters such as `next`. The OAuth callback captures
+its complete provider query for the unchanged server request, then removes the
+query from the visible URL because its `code`, `state`, provider error fields,
+and related values belong to one indivisible exchange.
+
+Every page uses `history.replaceState`: it neither reloads the page nor adds a
+history entry. The captured values remain in memory for the existing request,
+timeout, accepted-response, MFA, and safe-redirect flows. Pages reached without
+a credential do not rewrite their URL. This keeps used, expired, or rejected
+credentials out of Back navigation, copied address-bar values, and synced
+browser history while preserving the already-hardened request behavior.
+
+Verification:
+
+- production Dashboard output builds all 23 pages, and executable built-page
+  tests prove every request receives the original captured credential after the
+  visible URL is scrubbed;
+- token pages retain an encoded `next` query exactly, while the OAuth callback
+  removes its entire captured query on both network and storage-denied paths;
+- no-token behavior leaves non-secret queries unchanged, and structural guards
+  forbid `pushState`/reload while pinning capture-before-replace-before-request;
+- the focused and surrounding auth-page gate passes with 27 files and 216/216
+  tests, including a negative mutation that removes token deletion; Dashboard
+  Astro check is 0 errors/0 warnings/15 hints and strict test TypeScript passes.

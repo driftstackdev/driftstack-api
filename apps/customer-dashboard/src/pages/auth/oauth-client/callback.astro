@@ -333,6 +333,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         showBanner('Missing callback parameters.');
         return;
       }
+      window.history.replaceState(
+        window.history.state,
+        '',
+        window.location.pathname + window.location.hash,
+      );
       if (!canPersistWebSession()) {
         showBanner(
           'Enable browser site storage before completing this one-time provider sign-in. The callback code has not been exchanged, so you can retry after storage is available.',

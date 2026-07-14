@@ -42,7 +42,13 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
 
   it("Missing-token bail: URLSearchParams + params.get('token') → if !token: form.add('hidden') + missing.remove('hidden') + early return — pinned so the form doesn't allow submission without a token (drift to leaving the form visible would let customers fill in a password and get a confusing server error instead of the clear 'No reset token in URL' explanation)", () => {
     expect(body).toMatch(
-      /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*const token = params\.get\('token'\);\s*\n?\s*\n?\s*if \(!token\) \{\s*\n?\s*form\.classList\.add\('hidden'\);\s*\n?\s*missing\.classList\.remove\('hidden'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*const token = params\.get\('token'\);/,
+    );
+    expect(body).toMatch(
+      /if \(token\) \{\s*params\.delete\('token'\);[\s\S]*?window\.history\.replaceState\([\s\S]*?window\.location\.pathname[\s\S]*?window\.location\.hash/,
+    );
+    expect(body).toMatch(
+      /if \(!token\) \{\s*\n?\s*form\.classList\.add\('hidden'\);\s*\n?\s*missing\.classList\.remove\('hidden'\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
     // S23 2026-07-06 — this link sits INSIDE the rose-wash missing-token notice
     // (bg-rose-400/10 over the auth-card surface), where accent-text measures

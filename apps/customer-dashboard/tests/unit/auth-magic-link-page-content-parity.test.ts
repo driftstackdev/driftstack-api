@@ -60,7 +60,10 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('URL-token auto-submit when ?token= present (no manual paste required)', () => {
     expect(body).toMatch(
-      /const linkToken = params\.get\('token'\);\s*\n?\s*if \(linkToken && linkToken\.length > 0\) \{\s*\n?\s*submitToken\(linkToken\);/,
+      /const linkToken = params\.get\('token'\);[\s\S]*?if \(linkToken && linkToken\.length > 0\) \{\s*\n?\s*submitToken\(linkToken\);/,
+    );
+    expect(body).toMatch(
+      /if \(linkToken\) \{\s*params\.delete\('token'\);[\s\S]*?window\.history\.replaceState\([\s\S]*?window\.location\.pathname[\s\S]*?window\.location\.hash/,
     );
     expect(body).toMatch(/showFallbackForm\(null\);/);
   });

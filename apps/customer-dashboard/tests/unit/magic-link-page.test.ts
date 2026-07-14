@@ -42,6 +42,7 @@ function setUpDom(
   html: string,
   plan: Array<(call: MockFetchCall) => Response | Promise<Response>>,
   storageFault: StorageFault = 'none',
+  pageUrl = PAGE_URL,
 ): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
@@ -56,7 +57,7 @@ function setUpDom(
     }
   });
   const dom = new JSDOM(htmlNoScripts, {
-    url: PAGE_URL,
+    url: pageUrl,
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     virtualConsole,
@@ -121,6 +122,24 @@ describe('magic-link consume page', () => {
     expect((form.querySelector('input[name="token"]') as HTMLInputElement).value).toBe(
       'magic_tok_123',
     );
+    expect(window.location.search).toBe('');
+  });
+
+  it('removes only the captured token and retains the non-secret continuation query', async () => {
+    const { window, fetchCalls } = setUpDom(
+      loadBuiltPage(),
+      [() => json({ session: { token: 'must_not_be_issued' } })],
+      'deny-all',
+      PAGE_URL + '&next=%2Fsettings%3Ftab%3Dsecurity',
+    );
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(window.location.search).toBe('?next=%2Fsettings%3Ftab%3Dsecurity');
+    expect((window.document.querySelector('input[name="token"]') as HTMLInputElement).value).toBe(
+      'magic_tok_123',
+    );
   });
 
   it('locks an accepted link when its session write is silently discarded', async () => {
@@ -133,6 +152,8 @@ describe('magic-link consume page', () => {
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
+    expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({ token: 'magic_tok_123' });
+    expect(window.location.search).toBe('');
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
     expect(
       window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),

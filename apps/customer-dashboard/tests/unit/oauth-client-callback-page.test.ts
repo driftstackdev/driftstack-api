@@ -97,6 +97,7 @@ describe('OAuth client callback page', () => {
     await flush();
 
     expect(fetchCalls).toHaveLength(0);
+    expect(window.location.search).toBe('');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
       /enable browser site storage.*callback code has not been exchanged.*retry/i,
     );
@@ -113,6 +114,7 @@ describe('OAuth client callback page', () => {
     expect(fetchCalls[0]?.url).toContain('code=oauth_code_123');
     expect(fetchCalls[0]?.url).toContain('state=state_123');
     expect(fetchCalls[0]?.url).toContain('provider=github');
+    expect(window.location.search).toBe('');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
       /outcome is unknown.*exchanged this one-time callback code.*session whose credential did not reach this browser.*account-link confirmation email.*do not reload or submit this callback URL again.*check your inbox first.*fresh provider authorization/i,
     );

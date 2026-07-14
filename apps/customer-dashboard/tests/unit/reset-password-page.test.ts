@@ -151,21 +151,25 @@ describe('reset-password page — local integration', () => {
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
   it('no ?token= in the URL: hides the form, shows the "open from your email link" state', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), { url: NO_TOKEN_URL });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), { url: NO_TOKEN_URL + '?next=%2F' });
     win = window;
     await flush();
     expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
     expect(isHidden(window, '[data-missing]')).toBe(false);
     expect(fetchCalls.length).toBe(0);
+    expect(window.location.search).toBe('?next=%2F');
   });
 
   it('password mismatch: banner "Passwords do not match." and no fetch', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), { url: TOKEN_URL });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL + '&next=%2Fsettings%3Ftab%3Dsecurity',
+    });
     win = window;
     submit(window, 'a-long-enough-password', 'different-password');
     await flush();
     expect(bannerText(window)).toMatch(/Passwords do not match\./);
     expect(fetchCalls.length).toBe(0);
+    expect(window.location.search).toBe('?next=%2Fsettings%3Ftab%3Dsecurity');
   });
 
   it('password too short (<12): banner "Password must be at least 12 characters." and no fetch', async () => {
@@ -194,6 +198,7 @@ describe('reset-password page — local integration', () => {
       token: 'reset_tok_123',
       new_password: 'a-brand-new-password',
     });
+    expect(window.location.search).toBe('');
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_AFTER_RESET');
     expect(window.localStorage.getItem('ds_act_as_account')).toBeNull();
     expect(window.localStorage.getItem('ds_is_team_user')).toBeNull();

@@ -16,7 +16,8 @@ const BUILT_PAGE = resolve(
   'confirm-merge',
   'index.html',
 );
-const PAGE_URL = 'https://app.driftstack.dev/auth/oauth-client/confirm-merge/?token=merge_tok_123';
+const PAGE_URL =
+  'https://app.driftstack.dev/auth/oauth-client/confirm-merge/?token=merge_tok_123&next=%2Fsecurity';
 
 interface MockFetchCall {
   url: string;
@@ -97,6 +98,7 @@ describe('OAuth client merge confirmation page', () => {
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]?.init?.method).toBe('POST');
     expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({ token: 'merge_tok_123' });
+    expect(window.location.search).toBe('?next=%2Fsecurity');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
       /outcome is unknown.*consumed this one-time token.*linked the identity provider.*do not reload or submit this link again.*check connected accounts.*provider is absent.*sign in with your password.*IDP button/i,
     );

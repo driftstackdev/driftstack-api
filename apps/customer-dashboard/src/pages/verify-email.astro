@@ -154,6 +154,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       //   (b) the page is reached without a token in the URL
       const params = new URLSearchParams(window.location.search);
       const linkToken = params.get('token');
+      if (linkToken) {
+        params.delete('token');
+        const retainedQuery = params.toString();
+        window.history.replaceState(
+          window.history.state,
+          '',
+          window.location.pathname +
+            (retainedQuery ? '?' + retainedQuery : '') +
+            window.location.hash,
+        );
+      }
       const debugToken = readSignupState('ds_debug_verify_token');
       const prefill = linkToken ?? debugToken;
       if (prefill && tokenInput) tokenInput.value = prefill;

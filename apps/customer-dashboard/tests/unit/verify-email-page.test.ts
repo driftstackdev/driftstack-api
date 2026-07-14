@@ -172,7 +172,7 @@ describe('verify-email page — local integration', () => {
 
   it('auto-verify success: ?token= auto-submits POST /v1/auth/verify-email {token} and stores ds_web_session_token', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
-      url: TOKEN_URL,
+      url: TOKEN_URL + '&next=%2Fsettings%3Ftab%3Dsecurity',
       fetchPlan: [() => json({ session: { token: 'ds_web_VERIFIED' } })],
     });
     win = window;
@@ -180,6 +180,7 @@ describe('verify-email page — local integration', () => {
     const post = fetchCalls.find((c) => /\/v1\/auth\/verify-email$/.test(c.url));
     expect(post?.init?.method).toBe('POST');
     expect(JSON.parse(String(post?.init?.body))).toEqual({ token: 'link_tok_123' });
+    expect(window.location.search).toBe('?next=%2Fsettings%3Ftab%3Dsecurity');
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_VERIFIED');
   });
 
