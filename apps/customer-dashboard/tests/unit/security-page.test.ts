@@ -300,6 +300,42 @@ describe('security page — web-session management (security)', () => {
     );
   });
 
+  it('treats a malformed accepted reset body as sent without inviting a duplicate email', async () => {
+    const fallback = makeRouter([]);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) =>
+        /\/v1\/auth\/password-reset\/request$/.test(call.url) && call.init?.method === 'POST'
+          ? new Response('{', {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            })
+          : fallback(call),
+    });
+    win = window;
+    await flush();
+
+    const btn = window.document.querySelector(
+      '[data-action="change-password"]',
+    ) as HTMLButtonElement;
+    btn.click();
+    await flush();
+
+    expect(
+      fetchCalls.filter(
+        (call) =>
+          /\/v1\/auth\/password-reset\/request$/.test(call.url) && call.init?.method === 'POST',
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'Password-reset email sent',
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toMatch(
+      /couldn't send|try again/i,
+    );
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+  });
+
   it('makes a password-reset timeout terminal until reload so a committed email is not duplicated', async () => {
     const base = makeRouter([]);
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });

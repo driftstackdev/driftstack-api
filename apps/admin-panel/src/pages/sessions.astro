@@ -434,7 +434,9 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             },
           );
           if (!response.ok) throw new Error('HTTP ' + response.status);
-          await response.json();
+          // The force-destroy response payload is unused. A successful status
+          // is the irreversible boundary; never let malformed response JSON
+          // turn a destroyed session into retry guidance.
           showBanner('Destroyed ' + id + '. Refreshing…');
           await load();
         } catch (err) {

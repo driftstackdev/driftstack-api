@@ -237,6 +237,53 @@ describe('admin sessions page — force-destroy (operator)', () => {
     expect(window.document.querySelector('[data-action="destroy"][data-id="agt_live"]')).toBeNull();
   });
 
+  it('treats a malformed accepted destroy body as committed and never offers a replay', async () => {
+    const sessions = [
+      mkSession({ id: 'agt_live', status: 'running' }),
+      mkSession({ id: 'agt_other', status: 'running' }),
+    ];
+    const fallback = makeRouter(sessions);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (
+          call.init?.method === 'POST' &&
+          /\/v1\/admin\/sessions\/agt_live\/destroy$/.test(call.url)
+        ) {
+          sessions[0]!.status = 'destroyed';
+          return new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    (
+      window.document.querySelector(
+        '[data-action="destroy"][data-id="agt_live"]',
+      ) as HTMLButtonElement
+    ).click();
+    await flush();
+
+    expect(
+      fetchCalls.filter(
+        (call) =>
+          call.init?.method === 'POST' &&
+          /\/v1\/admin\/sessions\/agt_live\/destroy$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-action="destroy"][data-id="agt_live"]')).toBeNull();
+    expect(
+      window.document.querySelector('[data-action="destroy"][data-id="agt_other"]'),
+    ).toBeTruthy();
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toMatch(
+      /couldn't destroy|force-destroy failed/i,
+    );
+  });
+
   it('destroy WITHOUT reason (optional): still destroys, POST body is {} (not {reason:""})', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       promptReturns: '',

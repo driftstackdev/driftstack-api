@@ -107,6 +107,11 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toMatch(/const disabled = !available \|\| addInFlight \|\| addOutcomeUnknown/);
   });
 
+  it('treats accepted force-unsubscribe status as authoritative without parsing an unused body', () => {
+    expect(body).toContain('The response body is unused. Trust the accepted status');
+    expect(body).not.toMatch(/force-unsubscribe[\s\S]{0,700}await response\.json\(\)/);
+  });
+
   it('re-rendered rows inherit and visibly explain pending or uncertain unsubscribe state', () => {
     expect(body).toMatch(/const forceUnsubPending = forceUnsubsInFlight\.has\(id\)/);
     expect(body).toMatch(/const forceUnsubDisabled = forceUnsubPending \|\| forceUnsubUnknown/);

@@ -102,6 +102,12 @@ describe('W361.C admin-panel /sessions page content parity', () => {
     expect(body).toContain('Verify the session before retrying');
   });
 
+  it('treats accepted force-destroy status as authoritative without parsing an unused body', () => {
+    expect(body).toContain('The force-destroy response payload is unused. A successful status');
+    expect(body).toContain('is the irreversible boundary; never let malformed response JSON');
+    expect(body).not.toMatch(/if \(!response\.ok\)[\s\S]{0,200}await response\.json\(\)/);
+  });
+
   it('re-rendered rows inherit and visibly explain a pending force-destroy lease', () => {
     expect(body).toMatch(/function destroyControlState\(id\)/);
     expect(body).toMatch(/destroysInFlight\.has\(String\(id\)\)/);

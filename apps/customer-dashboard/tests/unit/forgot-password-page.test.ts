@@ -165,6 +165,32 @@ describe('forgot-password page — local integration', () => {
     expect(isHidden(window, '[data-success]')).toBe(false);
   });
 
+  it('makes a malformed accepted body terminal and refuses a forced second email request', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ],
+    });
+    win = window;
+
+    submit(window, 'accepted@example.com');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(isHidden(window, '[data-form]')).toBe(true);
+    expect(isHidden(window, '[data-success]')).toBe(false);
+    expect(textOf(window, '[data-success-email]')).toBe('accepted@example.com');
+    expect(isHidden(window, '[data-banner]')).toBe(true);
+
+    submit(window, 'accepted@example.com');
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
+  });
+
   it('rate-limited error uses fixed retry guidance and keeps the form visible', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       fetchPlan: [

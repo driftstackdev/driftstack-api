@@ -117,6 +117,16 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
     expect(body).toContain('use the newest one');
   });
 
+  it('latches accepted status before optional JSON and never exposes a replay path', () => {
+    expect(body).toContain('let resetLinkResponseAccepted = false');
+    expect(body).toContain('if (resetLinkResponseAccepted) return');
+    expect(body).toMatch(
+      /if \(r\.ok\) \{\s*resetLinkResponseAccepted = true;\s*return r\.json\(\)\.catch\(\(\) => \(\{\}\)\);/,
+    );
+    expect(body).toContain('A successful status is the irreversible email boundary. If any');
+    expect(body).toContain('the terminal inbox state and never expose a replay path.');
+  });
+
   it('downstream /reset-password page exists (debug_token deep-link target)', () => {
     expect(existsSync(RESET_PAGE)).toBe(true);
   });

@@ -98,6 +98,11 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     );
   });
 
+  it('does not parse the unused anti-enumeration success payload', () => {
+    expect(body).toContain('unused. Once accepted, never parse a body that could fail');
+    expect(body).not.toMatch(/password-reset\/request[\s\S]{0,500}await response\.json\(\)/);
+  });
+
   it('serializes destructive sign-in actions and generation-binds transient banners', () => {
     expect(body).toContain('let webSessionMutationInFlight = false;');
     expect(body).toMatch(/if \(webSessionMutationInFlight\) return false;/);

@@ -413,7 +413,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                 },
               );
               if (!response.ok) throw new Error('HTTP ' + response.status);
-              await response.json();
+              // The response body is unused. Trust the accepted status so a
+              // malformed body cannot make an operator repeat a completed
+              // force-unsubscribe.
               await refreshWithLive();
             } catch (err) {
               if (err && err.name === 'AbortError') {

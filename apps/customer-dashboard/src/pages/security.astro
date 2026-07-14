@@ -1046,7 +1046,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             body: JSON.stringify({ email: accountEmail }),
           });
           if (!response.ok) throw new Error('HTTP ' + response.status);
-          await response.json();
+          // Anti-enumeration makes the success payload non-authoritative and
+          // unused. Once accepted, never parse a body that could fail and
+          // encourage a duplicate reset email.
           showBanner('Password-reset email sent. Check your inbox.');
         } catch (err) {
           if (err && err.name === 'AbortError') {

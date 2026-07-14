@@ -184,6 +184,42 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
     expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeNull();
   });
 
+  it('treats a malformed accepted unsubscribe body as committed and never offers a replay', async () => {
+    const subscribers = [
+      mkSub({ id: 'sub_active', unsubscribed_at: null }),
+      mkSub({ id: 'sub_other', unsubscribed_at: null }),
+    ];
+    const fallback = makeRouter(subscribers);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST' && /\/sub_active\/force-unsubscribe$/.test(call.url)) {
+          subscribers[0]!.unsubscribed_at = '2026-05-29T12:00:00.000Z';
+          return new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return fallback(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    (window.document.querySelector('[data-force-unsub="sub_active"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(
+      fetchCalls.filter(
+        (call) => call.init?.method === 'POST' && /\/sub_active\/force-unsubscribe$/.test(call.url),
+      ),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeNull();
+    expect(window.document.querySelector('[data-force-unsub="sub_other"]')).toBeTruthy();
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toMatch(
+      /force-unsubscribe failed|couldn't unsubscribe/i,
+    );
+  });
+
   it('keeps a refreshed replacement row visibly busy and rejects a forced second unsubscribe', async () => {
     const subscribers = [mkSub({ id: 'sub_active', unsubscribed_at: null })];
     let finishPost: (response: Response) => void = () => {};
