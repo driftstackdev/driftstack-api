@@ -101,8 +101,9 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
       /Crypto payments are quoted <em>VAT-exclusive<\/em>;\s*\n?\s*VAT for EU\/UK customers is invoiced separately in EUR after\s*\n?\s*the crypto payment confirms/,
     );
     expect(body).toMatch(
-      /B2B customers can provide a\s*\n?\s*VAT number on <a href="\/docs\/teams">\/docs\/teams<\/a> for\s*\n?\s*reverse-charge invoicing\./,
+      /B2B customers can provide a\s*\n?\s*VAT number on <a href="\/docs\/teams\/">\/docs\/teams<\/a> for\s*\n?\s*reverse-charge invoicing\./,
     );
+    expect(body).not.toMatch(/href="\/docs\/teams"/);
   });
 
   it('Cycle-end 3-phase framing: 7-day reminder + 48h grace + 7-day read-only state before Free-tier downgrade — pinned so the 3-phase cycle-end cascade survives (drift to a different reminder window would let crypto customers miss their renewal; drift to dropping the 7-day read-only-grace would force immediate downgrade)', () => {
