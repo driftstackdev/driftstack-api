@@ -26423,3 +26423,60 @@ Verification:
   three production builds are green, including the new static authorization
   route and the Docs 61-page search index. Strict server source/test TypeScript,
   targeted lint/format, diff and whitespace checks are green.
+
+## V-620 — Expired OAuth provider state has bounded, audit-safe retention
+
+**Date:** 2026-07-14
+
+Closed an unbounded-retention gap in the persistent third-party OAuth provider.
+Authorization, code and access-token reads correctly rejected expired rows, but
+that lazy filtering never removed them. Every abandoned consent request,
+consumed or expired code and expired token therefore remained in PostgreSQL
+indefinitely, increasing sensitive metadata volume and making storage growth
+proportional to lifetime traffic rather than live authority.
+
+The provider store now exposes one transactional, idempotent prune operation.
+It deletes pending authorizations and authorization codes strictly older than
+their established five-minute validity boundary, and OAuth access-token rows
+whose fixed one-hour expiry is at or before the sweep clock. Rows at a still-live
+authorization boundary survive; token deletion uses the same inclusive expiry
+semantics as authentication. The transaction and database row locking preserve
+the existing one-winner approval/exchange behavior during concurrent cleanup.
+
+Cleanup deliberately does not delete the expired backing `api_keys` authority
+row. Existing session and audit foreign keys can retain that actor UUID as
+historical truth, while its fixed expiry and unusable non-API-key credential
+format keep it unable to authenticate. Revoked and expired client metadata is
+also retained for operator and incident history.
+
+One restart-safe scheduled-job chain runs hourly. Final production tracing found
+that the scheduler's prior dedup was a non-atomic SELECT followed by INSERT;
+simultaneous bootstrap replicas could both observe no pending global job and
+seed parallel chains. Deduplicated enqueues now serialize a canonical
+`[account_id, job_type]` tuple with a transaction-scoped PostgreSQL 64-bit
+advisory lock, then recheck and insert in the same transaction. This fixes every
+existing consumer's bootstrap race without a migration. The OAuth handler
+re-arms with dedup enabled while excluding exactly its current in-flight job ID:
+the first delivery inserts one successor, while a retry after a committed or
+ambiguously acknowledged enqueue sees that distinct successor and inserts
+nothing. A database error cannot kill the cleanup chain or fan out sweep
+retries, and sweep logs include only the bounded error class rather than
+provider/SQL exception text.
+
+Verification:
+
+- the complete OAuth-named unit/content matrix passes 48 files and 502/502
+  tests; the focused retention/store/bootstrap/docs matrix passes 7 files and
+  106/106 tests; the cross-consumer scheduled-job/sweeper matrix passes 15
+  files and 159/159 tests;
+- the migrated PostgreSQL/Redis OAuth flow passes 8/8, including exact pruning
+  of one stale authorization, two stale codes and one expired OAuth token while
+  one live authorization, two live codes, one live token and both backing actor
+  rows remain, plus 20 concurrent global bootstrap enqueues yielding exactly
+  one pending job and one `enqueued:true` result; a first current-row-excluding
+  re-arm inserts one successor and its replay inserts none;
+- scheduler tests prove the exact hourly clock, bootstrap deduplication,
+  current-row-excluding retry-safe re-arms after success and failure,
+  success-count telemetry, and suppression of raw exception text;
+- strict server source/test TypeScript, targeted lint/format, diff and
+  whitespace checks are green.

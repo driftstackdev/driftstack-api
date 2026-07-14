@@ -10,6 +10,7 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { DrizzleOAuthStore } from '../../src/db/oauth-store.js';
+import { DrizzleScheduledJobsRepo } from '../../src/db/scheduled-jobs-repo.js';
 import * as schema from '../../src/db/schema.js';
 import { OAuthService } from '../../src/services/oauth.js';
 import { startTestServer, type TestServer } from './helpers/server.js';
@@ -504,4 +505,175 @@ test('GET /v1/admin/oauth/clients — lists registered clients', async ({ reques
   for (const c of body.clients) {
     expect(c).not.toHaveProperty('client_secret_hash');
   }
+});
+
+test('OAuth retention prunes only expired provider rows and retains backing actors', async ({
+  request,
+}) => {
+  const customer = await interactiveAuth(request, 'oauth-retention@driftstack.test');
+  const database = {
+    client: server.client,
+    db: drizzle(server.client, { schema }),
+    close: () => Promise.resolve(),
+  };
+  const store = new DrizzleOAuthStore(database);
+  const service = new OAuthService(store);
+  const client = await service.registerClient({
+    label: 'Retention App',
+    redirect_uris: ['https://retention.example/cb'],
+  });
+
+  async function createArtifacts(suffix: string) {
+    const pending = await service.authorize({
+      client_id: client.client_id,
+      redirect_uri: 'https://retention.example/cb',
+      state: `state_pending_${suffix}`,
+      code_challenge: s256(`${suffix}p`.padEnd(64, 'p')),
+      code_challenge_method: 'S256',
+      scope: ['read:sessions'],
+    });
+    const codeAuthorization = await service.authorize({
+      client_id: client.client_id,
+      redirect_uri: 'https://retention.example/cb',
+      state: `state_code_${suffix}`,
+      code_challenge: s256(`${suffix}c`.padEnd(64, 'c')),
+      code_challenge_method: 'S256',
+      scope: ['read:sessions'],
+    });
+    const code = await service.approveAuthorization({
+      authorization_id: codeAuthorization.authorization_id,
+      account_id: customer.accountId,
+      approverScopes: ['read'],
+    });
+    const verifier = `${suffix}t`.padEnd(64, 't');
+    const tokenAuthorization = await service.authorize({
+      client_id: client.client_id,
+      redirect_uri: 'https://retention.example/cb',
+      state: `state_token_${suffix}`,
+      code_challenge: s256(verifier),
+      code_challenge_method: 'S256',
+      scope: ['read:sessions'],
+    });
+    const tokenCode = await service.approveAuthorization({
+      authorization_id: tokenAuthorization.authorization_id,
+      account_id: customer.accountId,
+      approverScopes: ['read'],
+    });
+    const token = await service.exchangeCode({
+      code: tokenCode.code,
+      code_verifier: verifier,
+      client_id: client.client_id,
+      client_secret: client.client_secret,
+      redirect_uri: 'https://retention.example/cb',
+    });
+    return { pending, code, tokenCode, token };
+  }
+
+  const stale = await createArtifacts('stale');
+  const cutoffPast = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+  const digest = (value: string): string => createHash('sha256').update(value).digest('hex');
+  await server.client`
+    UPDATE oauth_authorizations
+       SET created_at = ${cutoffPast}
+     WHERE authorization_hash = ${digest(stale.pending.authorization_id)}
+  `;
+  await server.client`
+    UPDATE oauth_authorization_codes
+       SET created_at = ${cutoffPast}
+     WHERE code_hash IN (${digest(stale.code.code)}, ${digest(stale.tokenCode.code)})
+  `;
+  await server.client`
+    UPDATE oauth_access_tokens
+       SET expires_at = ${cutoffPast}
+     WHERE token_hash = ${digest(stale.token.access_token)}
+  `;
+  await server.client`
+    UPDATE api_keys
+       SET expires_at = ${cutoffPast}
+     WHERE id = (
+       SELECT id FROM oauth_access_tokens
+        WHERE token_hash = ${digest(stale.token.access_token)}
+     )
+  `;
+
+  await createArtifacts('live');
+  const before = await server.client<
+    Array<{ authorizations: number; codes: number; tokens: number; actors: number }>
+  >`
+    SELECT
+      (SELECT count(*)::int FROM oauth_authorizations) AS authorizations,
+      (SELECT count(*)::int FROM oauth_authorization_codes) AS codes,
+      (SELECT count(*)::int FROM oauth_access_tokens) AS tokens,
+      (SELECT count(*)::int FROM api_keys WHERE provenance = 'oauth') AS actors
+  `;
+  expect(before[0]).toEqual({ authorizations: 2, codes: 4, tokens: 2, actors: 2 });
+
+  await expect(store.pruneExpired(Date.now())).resolves.toEqual({
+    authorizations: 1,
+    codes: 2,
+    tokens: 1,
+  });
+  const after = await server.client<
+    Array<{ authorizations: number; codes: number; tokens: number; actors: number }>
+  >`
+    SELECT
+      (SELECT count(*)::int FROM oauth_authorizations) AS authorizations,
+      (SELECT count(*)::int FROM oauth_authorization_codes) AS codes,
+      (SELECT count(*)::int FROM oauth_access_tokens) AS tokens,
+      (SELECT count(*)::int FROM api_keys WHERE provenance = 'oauth') AS actors
+  `;
+  expect(after[0]).toEqual({ authorizations: 1, codes: 2, tokens: 1, actors: 2 });
+});
+
+test('OAuth retention bootstrap dedup is atomic across concurrent replicas', async () => {
+  const database = {
+    client: server.client,
+    db: drizzle(server.client, { schema }),
+    close: () => Promise.resolve(),
+  };
+  const replicas = Array.from({ length: 20 }, () => new DrizzleScheduledJobsRepo(database));
+  const results = await Promise.all(
+    replicas.map((repo) =>
+      repo.enqueue({
+        jobType: 'oauth.retention_sweep',
+        accountId: null,
+        payload: {},
+        runAt: new Date(Date.now() + 60 * 60 * 1000),
+        dedupOnAccountAndType: true,
+      }),
+    ),
+  );
+  expect(results.filter((result) => result.enqueued)).toHaveLength(1);
+  const rows = await server.client<Array<{ id: string }>>`
+    SELECT id
+      FROM scheduled_jobs
+     WHERE account_id IS NULL
+       AND job_type = 'oauth.retention_sweep'
+       AND completed_at IS NULL
+       AND failed_at IS NULL
+  `;
+  expect(rows).toHaveLength(1);
+  const currentJobId = rows[0]?.id;
+  if (currentJobId === undefined) throw new Error('expected one current retention job');
+
+  const successorInput = {
+    jobType: 'oauth.retention_sweep',
+    accountId: null,
+    payload: {},
+    runAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+    dedupOnAccountAndType: true,
+    dedupExcludeJobId: currentJobId,
+  } as const;
+  await expect(replicas[0]!.enqueue(successorInput)).resolves.toEqual({ enqueued: true });
+  await expect(replicas[1]!.enqueue(successorInput)).resolves.toEqual({ enqueued: false });
+  const successors = await server.client<Array<{ id: string }>>`
+    SELECT id
+      FROM scheduled_jobs
+     WHERE account_id IS NULL
+       AND job_type = 'oauth.retention_sweep'
+       AND id <> ${currentJobId}
+       AND completed_at IS NULL
+       AND failed_at IS NULL
+  `;
+  expect(successors).toHaveLength(1);
 });

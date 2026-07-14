@@ -117,6 +117,82 @@ describe('V-667 OAuthService — registerClient', () => {
   });
 });
 
+describe('OAuth provider retention', () => {
+  it('prunes only already-invalid handles/codes/tokens at the canonical boundaries', async () => {
+    const base = Date.now();
+    const pruneAt = base + 2 * 60 * 60 * 1000;
+    const { store } = makeService();
+    const oldService = new OAuthService(store, () => base);
+    const liveService = new OAuthService(store, () => pruneAt);
+    const client = await oldService.registerClient({
+      label: 'Retention App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+
+    async function createArtifacts(service: OAuthService, suffix: string) {
+      const pending = await service.authorize({
+        client_id: client.client_id,
+        redirect_uri: 'https://app.example/cb',
+        state: `state_pending_${suffix}`,
+        code_challenge: computeS256Challenge(makeVerifier()),
+        code_challenge_method: 'S256',
+        scope: ['read:sessions'],
+      });
+      const codeAuthorization = await service.authorize({
+        client_id: client.client_id,
+        redirect_uri: 'https://app.example/cb',
+        state: `state_code_${suffix}`,
+        code_challenge: computeS256Challenge(makeVerifier()),
+        code_challenge_method: 'S256',
+        scope: ['read:sessions'],
+      });
+      const code = await service.approveAuthorization({
+        authorization_id: codeAuthorization.authorization_id,
+        account_id: 'acc_retention',
+      });
+      const verifier = makeVerifier();
+      const tokenAuthorization = await service.authorize({
+        client_id: client.client_id,
+        redirect_uri: 'https://app.example/cb',
+        state: `state_token_${suffix}`,
+        code_challenge: computeS256Challenge(verifier),
+        code_challenge_method: 'S256',
+        scope: ['read:sessions'],
+      });
+      const tokenCode = await service.approveAuthorization({
+        authorization_id: tokenAuthorization.authorization_id,
+        account_id: 'acc_retention',
+      });
+      const token = await service.exchangeCode({
+        code: tokenCode.code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        client_secret: client.client_secret,
+        redirect_uri: 'https://app.example/cb',
+      });
+      return { pending, code, token };
+    }
+
+    const old = await createArtifacts(oldService, 'old');
+    const live = await createArtifacts(liveService, 'live');
+    await expect(store.pruneExpired(pruneAt)).resolves.toEqual({
+      authorizations: 1,
+      codes: 2,
+      tokens: 1,
+    });
+    await expect(store.getAuthorization(old.pending.authorization_id)).resolves.toBeNull();
+    await expect(store.getAuthorization(live.pending.authorization_id)).resolves.not.toBeNull();
+    await expect(store.getCode(old.code.code)).resolves.toBeNull();
+    await expect(store.getCode(live.code.code)).resolves.not.toBeNull();
+    await expect(
+      store.findTokenForAuthentication(old.token.access_token, pruneAt),
+    ).resolves.toBeNull();
+    await expect(
+      store.findTokenForAuthentication(live.token.access_token, pruneAt),
+    ).resolves.not.toBeNull();
+  });
+});
+
 describe('V-667 OAuthService — authorize', () => {
   it('returns an authorization_id + echoes scope/redirect/state', async () => {
     const { svc } = makeService();

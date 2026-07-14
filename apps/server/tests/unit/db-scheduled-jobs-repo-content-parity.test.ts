@@ -5,13 +5,12 @@
 // window (zombie workers leave jobs permanently locked).
 //
 //   • V-202d framing pinned.
-//   • enqueue dedup: when dedupOnAccountAndType=true, check for
-//     existing pending (no completedAt + no failedAt) job of same
-//     (accountId, jobType); skip insert if exists. Null-accountId
-//     branch handled via isNull() — pre-2026-05-20 prod incident
+//   • enqueue dedup: transaction-scoped advisory lock serializes the
+//     canonical (accountId, jobType) tuple across replicas before the
+//     pending-row recheck and insert. Null-accountId branch remains
+//     explicit via isNull() — pre-2026-05-20 prod incident
 //     short-circuited on `accountId !== null` and silently skipped
-//     dedup for global jobs (13 dupes of auth_tokens.sweep
-//     accumulated across service restarts).
+//     dedup for global jobs (13 dupes of auth_tokens.sweep).
 //   • claimDue atomic framing pinned: CTE + UPDATE...FROM...RETURNING;
 //     inner SELECT picks unfinished+due rows with FOR UPDATE SKIP
 //     LOCKED so concurrent workers never claim same row; outer
@@ -43,9 +42,9 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     expect(body).toMatch(/\/\/ V-202d — Drizzle implementation of ScheduledJobsRepo\./);
   });
 
-  it('imports: and/eq/isNotNull/isNull/lt/or/sql from drizzle-orm; Database; scheduledJobs schema; 3 service types (EnqueueScheduledJobInput + ScheduledJobRow + ScheduledJobsRepo)', () => {
+  it('imports the exact query primitives, Database, scheduledJobs schema and service types', () => {
     expect(body).toMatch(
-      /import \{ and, eq, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
+      /import \{ and, eq, isNotNull, isNull, lt, ne, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import \{ scheduledJobs \} from '\.\/schema\.js';/);
     expect(body).toMatch(
@@ -53,22 +52,37 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     );
   });
 
-  it('enqueue dedup framing pinned: when dedupOnAccountAndType===true (any accountId, null included), check for existing pending (completedAt IS NULL + failedAt IS NULL) of same (accountId, jobType) using isNull() for null branch and eq() for set branch; return {enqueued:false} if existing', () => {
+  it('enqueue dedup is cross-replica atomic: canonical tuple advisory lock, pending recheck, then insert in one transaction; null account uses isNull', () => {
+    expect(body).toMatch(/if \(input\.dedupOnAccountAndType === true\) \{/);
     expect(body).toMatch(
-      /if \(input\.dedupOnAccountAndType === true\) \{\s*\n?\s*\/\/ Check for an existing pending job of the same \(account_id, job_type\)\./,
+      /const dedupLockTuple = JSON\.stringify\(\[input\.accountId, input\.jobType\]\);/,
+    );
+    expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
+    expect(body).toMatch(
+      /await tx\.execute\(sql`SELECT pg_advisory_xact_lock\(hashtextextended\(\$\{dedupLockTuple\}, 0\)\)`\);/,
     );
     expect(body).toMatch(
       /input\.accountId === null\s*\n?\s*\? isNull\(scheduledJobs\.accountId\)\s*\n?\s*: eq\(scheduledJobs\.accountId, input\.accountId\),\s*\n?\s*eq\(scheduledJobs\.jobType, input\.jobType\),\s*\n?\s*isNull\(scheduledJobs\.completedAt\),\s*\n?\s*isNull\(scheduledJobs\.failedAt\),/,
     );
     expect(body).toMatch(/if \(existing\.length > 0\) return \{ enqueued: false \};/);
     expect(body).toMatch(
-      /await this\.database\.db\.insert\(scheduledJobs\)\.values\(\{\s*\n?\s*jobType: input\.jobType,\s*\n?\s*accountId: input\.accountId,\s*\n?\s*payload: input\.payload,\s*\n?\s*runAt: input\.runAt,\s*\n?\s*\}\);\s*\n?\s*return \{ enqueued: true \};/,
+      /input\.dedupExcludeJobId === undefined\s*\n?\s*\? undefined\s*\n?\s*: ne\(scheduledJobs\.id, input\.dedupExcludeJobId\),/,
+    );
+    expect(body).toMatch(
+      /await tx\.insert\(scheduledJobs\)\.values\(\{\s*\n?\s*jobType: input\.jobType,\s*\n?\s*accountId: input\.accountId,\s*\n?\s*payload: input\.payload,\s*\n?\s*runAt: input\.runAt,\s*\n?\s*\}\);\s*\n?\s*return \{ enqueued: true \};/,
+    );
+    const transaction = body.split('const dedupLockTuple')[1] ?? '';
+    expect(transaction.indexOf('await tx.execute')).toBeLessThan(
+      transaction.indexOf('const existing = await tx'),
+    );
+    expect(transaction.indexOf('const existing = await tx')).toBeLessThan(
+      transaction.indexOf('await tx.insert(scheduledJobs)'),
     );
   });
 
   it('null-accountId dedup incident comment pinned: the prod 2026-05-20 incident is documented in-source so the bug regression-tests against re-introducing the `accountId !== null` short-circuit', () => {
     expect(body).toMatch(
-      /Caught in prod 2026-05-20: 13 pending auth_tokens\.sweep rows\s*\n?\s*\/\/ accumulated across service restarts because of this missed branch\./,
+      /Caught in prod 2026-05-20: 13 pending auth_tokens\.sweep rows\s*\n?\s*\/\/ accumulated across service restarts because of a missed NULL branch\./,
     );
   });
 

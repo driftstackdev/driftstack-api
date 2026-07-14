@@ -122,7 +122,20 @@ describe('W549.A /docs/decisions.md content parity', () => {
     expect(body).toMatch(/intermediate `authorization_id` remains provider-internal/);
     expect(body).toMatch(/bounded to 2,048 characters, reject userinfo and fragments/);
     expect(body).toMatch(/existing registered query is preserved safely/);
-    expect(body).toMatch(/\*\*V-log:\*\* V-488, V-617, V-618, V-619\./);
+    expect(body).toMatch(/\*\*V-log:\*\* V-488, V-617, V-618, V-619, V-620\./);
+  });
+
+  it('pins bounded OAuth provider retention without deleting historical actor identities', () => {
+    expect(body).toMatch(/One restart-safe hourly scheduled chain deletes provider authorizations/);
+    expect(body).toMatch(/older than their five-minute validity/);
+    expect(body).toMatch(/OAuth-token rows at or past their one-hour expiry/);
+    expect(body).toMatch(/transaction-scoped PostgreSQL advisory lock/);
+    expect(body).toMatch(/concurrent bootstrap replicas cannot seed parallel chains/);
+    expect(body).toMatch(/excluding exactly its still-in-flight current job ID/);
+    expect(body).toMatch(/retry after a committed enqueue observes that successor/);
+    expect(body).toMatch(/retains the expired backing `api_keys` actor rows/);
+    expect(body).toMatch(/historical sessions and audit records may still reference those IDs/);
+    expect(body).toMatch(/V-618, V-619, V-620/);
   });
 
   it('file exists at canonical path', () => {

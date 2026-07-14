@@ -1,6 +1,6 @@
 // V-202d — Drizzle implementation of ScheduledJobsRepo.
 
-import { and, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { scheduledJobs } from './schema.js';
 import type {
@@ -14,27 +14,45 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
 
   async enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
     if (input.dedupOnAccountAndType === true) {
-      // Check for an existing pending job of the same (account_id, job_type).
-      // accountId may be null for global jobs (e.g. auth_tokens.sweep) — handle
-      // the null case explicitly via isNull() since `eq(col, null)` lowers to
-      // `col = NULL` which is always-false in SQL and would silently skip
-      // dedup. Caught in prod 2026-05-20: 13 pending auth_tokens.sweep rows
-      // accumulated across service restarts because of this missed branch.
-      const existing = await this.database.db
-        .select({ id: scheduledJobs.id })
-        .from(scheduledJobs)
-        .where(
-          and(
-            input.accountId === null
-              ? isNull(scheduledJobs.accountId)
-              : eq(scheduledJobs.accountId, input.accountId),
-            eq(scheduledJobs.jobType, input.jobType),
-            isNull(scheduledJobs.completedAt),
-            isNull(scheduledJobs.failedAt),
-          ),
-        )
-        .limit(1);
-      if (existing.length > 0) return { enqueued: false };
+      // A SELECT followed by INSERT without serialization lets two bootstrap
+      // replicas both observe an empty queue and create parallel chains. Lock
+      // the canonical tuple for this transaction, recheck, and insert before
+      // releasing it. hashtextextended supplies a stable 64-bit advisory-lock
+      // key without requiring a schema/index migration.
+      const dedupLockTuple = JSON.stringify([input.accountId, input.jobType]);
+      return this.database.db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${dedupLockTuple}, 0))`);
+        // Caught in prod 2026-05-20: 13 pending auth_tokens.sweep rows
+        // accumulated across service restarts because of a missed NULL branch.
+        // accountId may be null for global jobs (e.g. auth_tokens.sweep) —
+        // handle it explicitly because `col = NULL` is never true in SQL.
+        const existing = await tx
+          .select({ id: scheduledJobs.id })
+          .from(scheduledJobs)
+          .where(
+            and(
+              input.accountId === null
+                ? isNull(scheduledJobs.accountId)
+                : eq(scheduledJobs.accountId, input.accountId),
+              eq(scheduledJobs.jobType, input.jobType),
+              isNull(scheduledJobs.completedAt),
+              isNull(scheduledJobs.failedAt),
+              input.dedupExcludeJobId === undefined
+                ? undefined
+                : ne(scheduledJobs.id, input.dedupExcludeJobId),
+            ),
+          )
+          .limit(1);
+        if (existing.length > 0) return { enqueued: false };
+
+        await tx.insert(scheduledJobs).values({
+          jobType: input.jobType,
+          accountId: input.accountId,
+          payload: input.payload,
+          runAt: input.runAt,
+        });
+        return { enqueued: true };
+      });
     }
 
     await this.database.db.insert(scheduledJobs).values({

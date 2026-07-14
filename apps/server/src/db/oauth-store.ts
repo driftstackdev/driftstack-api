@@ -9,13 +9,14 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import type { ApiKeyScope } from '@driftstack/api-types';
-import { and, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lt, lte } from 'drizzle-orm';
 import type {
   AccessToken,
   AuthorizationCode,
   OAuthClient,
   OAuthStore,
   PendingAuthorization,
+  OAuthPruneResult,
 } from '../services/oauth.js';
 import { sha256Hex } from '../services/auth-cache.js';
 import type { Database } from './client.js';
@@ -353,6 +354,32 @@ export class DrizzleOAuthStore implements OAuthStore {
       created_at: row.createdAt.getTime(),
       expires_at: row.expiresAt.getTime(),
     };
+  }
+
+  async pruneExpired(nowMs: number): Promise<OAuthPruneResult> {
+    const now = new Date(nowMs);
+    const codeCutoff = new Date(nowMs - AUTHORIZATION_CODE_TTL_MS);
+    return this.database.db.transaction(async (tx) => {
+      const authorizations = await tx
+        .delete(oauthAuthorizations)
+        .where(lt(oauthAuthorizations.createdAt, codeCutoff))
+        .returning({ hash: oauthAuthorizations.authorizationHash });
+      const codes = await tx
+        .delete(oauthAuthorizationCodes)
+        .where(lt(oauthAuthorizationCodes.createdAt, codeCutoff))
+        .returning({ hash: oauthAuthorizationCodes.codeHash });
+      // Delete only the provider token row. The backing api_keys row remains as
+      // an expired actor identity for session/audit foreign-key integrity.
+      const tokens = await tx
+        .delete(oauthAccessTokens)
+        .where(lte(oauthAccessTokens.expiresAt, now))
+        .returning({ id: oauthAccessTokens.id });
+      return {
+        authorizations: authorizations.length,
+        codes: codes.length,
+        tokens: tokens.length,
+      };
+    });
   }
 }
 

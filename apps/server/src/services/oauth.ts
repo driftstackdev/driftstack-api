@@ -101,6 +101,12 @@ export interface AccessToken {
   expires_at: number;
 }
 
+export interface OAuthPruneResult {
+  authorizations: number;
+  codes: number;
+  tokens: number;
+}
+
 export interface OAuthStore {
   // Clients
   insertClient(client: OAuthClient): Promise<void>;
@@ -157,6 +163,14 @@ export interface OAuthStore {
    * this result, so revocation is authoritative on the next request.
    */
   findTokenForAuthentication(token: string, now: number): Promise<AccessToken | null>;
+  /**
+   * Delete provider rows that are already unusable under the canonical
+   * five-minute authorization/code and one-hour token validity checks.
+   * Persistent stores deliberately retain the backing API-key authority row:
+   * session/audit actor foreign keys may still reference it, and its expiry
+   * already makes it inert.
+   */
+  pruneExpired(now: number): Promise<OAuthPruneResult>;
 }
 
 export class InMemoryOAuthStore implements OAuthStore {
@@ -309,6 +323,32 @@ export class InMemoryOAuthStore implements OAuthStore {
     const client = this.clients.get(accessToken.client_id);
     if (client === undefined || client.revoked_at !== null) return null;
     return accessToken;
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async pruneExpired(now: number): Promise<OAuthPruneResult> {
+    const codeCutoff = now - CODE_TTL_SECONDS * 1000;
+    let authorizations = 0;
+    let codes = 0;
+    let tokens = 0;
+    for (const [id, authorization] of this.authorizations) {
+      if (authorization.created_at < codeCutoff) {
+        this.authorizations.delete(id);
+        authorizations += 1;
+      }
+    }
+    for (const [code, authorizationCode] of this.codes) {
+      if (authorizationCode.created_at < codeCutoff) {
+        this.codes.delete(code);
+        codes += 1;
+      }
+    }
+    for (const [token, accessToken] of this.tokens) {
+      if (accessToken.expires_at <= now) {
+        this.tokens.delete(token);
+        tokens += 1;
+      }
+    }
+    return { authorizations, codes, tokens };
   }
 }
 

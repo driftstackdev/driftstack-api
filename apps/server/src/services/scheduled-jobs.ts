@@ -57,6 +57,13 @@ export interface EnqueueScheduledJobInput {
    * regardless of how many times the triggering event re-fires.
    */
   dedupOnAccountAndType?: boolean;
+  /**
+   * Pending row to ignore during a deduplicated re-arm. Self-arming handlers
+   * pass their current job ID so a committed successor suppresses retries,
+   * while the still-in-flight current row does not suppress the first re-arm.
+   * Internal scheduler primitive; leave unset for ordinary/bootstrap enqueue.
+   */
+  dedupExcludeJobId?: string;
 }
 
 export interface ScheduledJobsRepo {

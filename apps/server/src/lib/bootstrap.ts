@@ -146,6 +146,11 @@ import {
   registerAuthTokensSweepJob,
 } from '../services/auth-flows-sweeper.js';
 import {
+  OAuthRetentionSweeperService,
+  enqueueNextOAuthRetentionSweep,
+  registerOAuthRetentionSweepJob,
+} from '../services/oauth-retention-sweeper.js';
+import {
   ProfileTrashPurgeSweeperService,
   enqueueNextProfileTrashPurge,
   registerProfileTrashPurgeJob,
@@ -1134,6 +1139,19 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextAuthTokensSweep({ scheduledJobs: scheduledJobsService });
+
+  // V-620 — provider-state retention. Authorization handles/codes and OAuth
+  // token rows are filtered on every read, but without active deletion those
+  // digest-only rows still grow forever. Hourly cleanup uses the exact existing
+  // 5-minute / 1-hour validity boundaries. Backing api_keys actor rows remain
+  // retained for session/audit foreign-key integrity and are expiry-inert.
+  const oauthRetentionSweeper = new OAuthRetentionSweeperService(oauthStore);
+  registerOAuthRetentionSweepJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: oauthRetentionSweeper,
+    logger,
+  });
+  await enqueueNextOAuthRetentionSweep({ scheduledJobs: scheduledJobsService });
 
   // 6.g — free-tier session-duration auto-destroy sweep. The free tier caps
   // a single session at MAX_SESSION_MINUTES_PER_TIER.free (20 min); a free

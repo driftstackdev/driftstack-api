@@ -8,10 +8,10 @@
 //   5-method surface — enqueue + claimDue + markComplete +
 //     markRetry + markFailed.
 //
-//   enqueue dedupOnAccountAndType framing — when input flag true +
-//     accountId !== null, looks for existing pending (account, type)
-//     job (and(eq(accountId), eq(jobType), isNull(completedAt),
-//     isNull(failedAt))). Returns {enqueued:false} if found.
+//   enqueue dedupOnAccountAndType framing — advisory-lock the canonical
+//     account/type tuple, then look for existing pending state while
+//     optionally excluding the current self-arming row. Returns
+//     {enqueued:false} if a distinct pending successor exists.
 //
 //   claimDue atomic CTE framing — 'Atomic claim via CTE + UPDATE ...
 //   FROM ... RETURNING. The inner SELECT picks unfinished, due rows
@@ -71,15 +71,17 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL enqueue dedup flag — input.dedupOnAccountAndType === true (post-#47 fix: null-accountId handled via isNull/eq ternary instead of short-circuit) → SELECT pending (account, jobType, isNull completedAt, isNull failedAt). Returns {enqueued:false} on match.', () => {
+  it('CRITICAL enqueue dedup is serialized across replicas and can exclude the current self-arming row', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/scheduled-jobs-repo.ts'));
     expect(p).toMatch(/if \(input\.dedupOnAccountAndType === true\) \{/);
+    expect(p).toMatch(/pg_advisory_xact_lock\(hashtextextended\(\$\{dedupLockTuple\}, 0\)\)/);
     expect(p).toMatch(
       /input\.accountId === null\s*\n?\s*\?\s*isNull\(scheduledJobs\.accountId\)\s*\n?\s*:\s*eq\(scheduledJobs\.accountId, input\.accountId\),/,
     );
     expect(p).toMatch(/eq\(scheduledJobs\.jobType, input\.jobType\),/);
     expect(p).toMatch(/isNull\(scheduledJobs\.completedAt\),/);
     expect(p).toMatch(/isNull\(scheduledJobs\.failedAt\),/);
+    expect(p).toMatch(/ne\(scheduledJobs\.id, input\.dedupExcludeJobId\),/);
     expect(p).toMatch(/if \(existing\.length > 0\) return \{ enqueued: false \};/);
   });
 
