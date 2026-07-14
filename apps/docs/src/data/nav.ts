@@ -146,6 +146,17 @@ export const DOC_NAV: DocNavSection[] = [
     items: [
       { href: '/api/', label: 'API overview' },
       { href: '/api/versioning/', label: 'Versioning policy' },
+      {
+        href: '/api/archetypes/',
+        label: 'Archetypes',
+        children: [
+          {
+            href: '/api/archetypes/#list-available-archetypes',
+            label: 'List available archetypes',
+            method: 'GET',
+          },
+        ],
+      },
       // Core automation resources.
       {
         href: '/api/sessions/',
@@ -399,13 +410,13 @@ export const DOC_NAV: DocNavSection[] = [
         label: 'OAuth (third-party clients)',
         children: [
           {
-            href: '/api/oauth/#1--stage-authorization',
-            label: '1 — Stage authorization',
+            href: '/api/oauth/#1--redirect-to-driftstack',
+            label: '1 — Redirect to Driftstack',
             method: 'GET',
           },
           {
-            href: '/api/oauth/#2--customer-approves-dashboard-internal',
-            label: '2 — Customer approves (dashboard-internal)',
+            href: '/api/oauth/#2--customer-approves-provider-internal',
+            label: '2 — Customer approves (provider-internal)',
             method: 'POST',
           },
           {

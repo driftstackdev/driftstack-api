@@ -72,6 +72,14 @@ const DISABLED_503 =
 
 const PUBLIC_EXEMPTIONS: readonly RouteExemption[] = [
   ...exactRoutes(
+    'archetypes.ts',
+    'registerArchetypeRoutes',
+    [['get', '/v1/archetypes']],
+    'inline',
+    'public',
+    'Public cacheable catalog containing only customer-selectable archetypes.',
+  ),
+  ...exactRoutes(
     'admin-incidents.ts',
     'registerAdminIncidentsRoutes',
     [
@@ -503,7 +511,7 @@ describe('all-route caller-authority invariant', () => {
   );
 
   it('discovers the complete current Fastify registration surface', () => {
-    expect(routes).toHaveLength(284);
+    expect(routes).toHaveLength(285);
     expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(214);
   });
 
@@ -516,7 +524,7 @@ describe('all-route caller-authority invariant', () => {
   });
 
   it('the anonymous/manual/disabled surface is exact, unique, and non-stale', () => {
-    expect(PUBLIC_EXEMPTIONS).toHaveLength(34);
+    expect(PUBLIC_EXEMPTIONS).toHaveLength(35);
     expect(MANUAL_AUTH_EXEMPTIONS).toHaveLength(1);
     expect(DISABLED_EXEMPTIONS).toHaveLength(35);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>

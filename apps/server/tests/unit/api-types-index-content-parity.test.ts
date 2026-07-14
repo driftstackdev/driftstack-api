@@ -9,10 +9,10 @@
 //     re-exported for SDK consumers.
 //   • Versioning rationale pinned: breaking-schema-change == public
 //     API break; server-internal shapes live elsewhere.
-//   • Re-exports pinned: 14 module barrel (common + problem +
+//   • Re-exports pinned: public module barrel (common + problem +
 //     sessions + api-keys + accounts + usage + webhooks + admin +
 //     auth + cli-authorize + incidents + profiles + billing +
-//     crypto-orders).
+//     crypto-orders + archetypes).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,7 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
     );
   });
 
-  it('16-module barrel pinned (common + problem + sessions + api-keys + accounts + usage + webhooks + admin + auth + cli-authorize + incidents + profiles + billing + crypto-orders + egress + livekit). EG-API-1.1 added egress; v2-#7 added livekit per agent-sessions live-stream signaling.', () => {
+  it('17-module core barrel pinned (common + problem + sessions + api-keys + accounts + usage + webhooks + admin + auth + cli-authorize + incidents + profiles + billing + crypto-orders + egress + livekit + archetypes). The public archetype catalog is shared with OpenAPI codegen.', () => {
     for (const mod of [
       'common',
       'problem',
@@ -60,15 +60,16 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
       'crypto-orders',
       'egress',
       'livekit',
+      'archetypes',
     ] as const) {
       expect(body).toMatch(new RegExp(`export \\* from '\\.\\/${mod}\\.js';`));
     }
   });
 
-  it('Barrel is re-exports only (no inline declarations); 22 export-star lines (one per module — agent-input-event + agent-tab-ops + agent-models + agent-sessions + agent-intents + recipes added with the api-types growth; agent-tab-ops = doc-150 §7 multi-tab GUI↔box DataChannel contract)', () => {
+  it('Barrel is re-exports only (no inline declarations); 23 export-star lines (one per module, including the public archetype catalog)', () => {
     const exportStarMatches = body.match(/^export \* from '\.\/[a-z-]+\.js';$/gm);
     expect(exportStarMatches).not.toBeNull();
-    expect((exportStarMatches ?? []).length).toBe(22);
+    expect((exportStarMatches ?? []).length).toBe(23);
   });
 
   it('agent-tab-ops barrel export pinned (doc-150 §7 — TabDescriptor / tabListUpdate / activateTab(Request|Result) / tabListRestore; GUI↔box DataChannel-only, NOT SDK-exposed)', () => {

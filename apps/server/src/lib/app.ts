@@ -103,6 +103,7 @@ import { registerErrorHandler } from '../middleware/error-handler.js';
 import { registerSessionRoutes } from '../routes/sessions.js';
 import { registerAdminRoutes } from '../routes/admin.js';
 import { registerStatusRoutes } from '../routes/status.js';
+import { registerArchetypeRoutes } from '../routes/archetypes.js';
 import { registerEgressEchoRoutes } from '../routes/egress-echo.js';
 import { registerOpenApiRoutes } from '../routes/openapi.js';
 import { registerWebhookRoutes } from '../routes/webhooks.js';
@@ -1204,6 +1205,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     readinessChecks: deps.readinessChecks ?? [],
     ...(deps.incidentsService ? { incidentsService: deps.incidentsService } : {}),
   });
+
+  // Public source of truth for customer-selectable device/iOS/Safari combinations.
+  // Derived from api-types' canonical registry; no deployment-specific dependency.
+  registerArchetypeRoutes(app);
 
   // Exit-IP echo for device-side proxy probes (proxy-probe-backend design,
   // build-order step 1). Unauthenticated by design + IP-rate-limited.

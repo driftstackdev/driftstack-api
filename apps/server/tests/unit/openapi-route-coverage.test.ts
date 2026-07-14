@@ -233,8 +233,8 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
   }
 
   it('inventories the complete current published and registered operation sets', () => {
-    expect(specOperations.size).toBe(230);
-    expect(routeOperations.size).toBe(252);
+    expect(specOperations.size).toBe(231);
+    expect(routeOperations.size).toBe(253);
   });
 
   it('documents the method-specific customer-core contract', () => {
@@ -263,6 +263,7 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
       'POST /v1/auth/login',
       'POST /v1/auth/verify-email',
       'GET /v1/status',
+      'GET /v1/archetypes',
       'GET /v1/status/incidents',
       'GET /v1/status/sla',
     ]);

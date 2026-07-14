@@ -42,6 +42,7 @@ const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', '
 const OPERATIONS_WITHOUT_OPENAPI_SECURITY = new Set([
   'GET /health',
   'GET /version',
+  'GET /v1/archetypes',
   'GET /v1/egress/echo',
   'GET /v1/oauth/authorize',
   'GET /v1/status',

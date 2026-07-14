@@ -136,6 +136,7 @@ import {
   IntentResultSchema,
   RecipeSchema,
   RecipeDetailSchema,
+  ListArchetypesResponseSchema,
 } from '@driftstack/api-types';
 // S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
 // cookie read/import routes emit + validate. Imported from the harness
@@ -5640,6 +5641,19 @@ function buildRegistry(): OpenAPIRegistry {
             }),
           },
         },
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/archetypes',
+    summary: 'List customer-selectable browser archetypes and the current default',
+    tags: ['archetypes'],
+    responses: {
+      200: {
+        description:
+          'Canonical launch + available device/iOS/Safari combinations. Internal and non-selectable entries are excluded.',
+        content: { 'application/json': { schema: ListArchetypesResponseSchema } },
       },
     },
   });

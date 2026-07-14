@@ -185,13 +185,13 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     expect(offenders).toEqual([]);
   });
 
-  it('the tree carries a substantial endpoint census (S33 2026-07-07 fable-truth-audit: 131 API + 8 webhooks = 139; was 122+8 at S27 — the 9 new sub-nodes are the previously-undocumented live endpoints: agent-sessions page-state/cookies read+import/history/files/downloads list+fetch, profiles trim, auth resend-verification. Drops mean endpoint sections went missing from the md or nav)', () => {
+  it('the tree carries a substantial endpoint census (132 API + 8 webhooks; includes the public archetype catalog endpoint)', () => {
     const apiTotal = (apiSection?.items ?? []).reduce((n, i) => n + (i.children?.length ?? 0), 0);
     const webhooksTotal = (webhooksSection?.items ?? []).reduce(
       (n, i) => n + (i.children?.length ?? 0),
       0,
     );
-    expect(apiTotal).toBe(131);
+    expect(apiTotal).toBe(132);
     expect(webhooksTotal).toBe(8);
   });
 });
