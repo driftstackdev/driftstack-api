@@ -49,7 +49,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // file objects replicate EU + US.
     expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
     expect(body).toMatch(
-      /Driftstack ships iPhone Safari sessions on demand, built on\s+real <a href="\/glossary#webkit"[^>]*>WebKit<\/a>\s+— the same engine every physical iPhone runs — with nothing\s+quietly modified while the browser is running \("patched at\s+runtime"\), so there's nothing for detection systems to spot\./,
+      /Driftstack ships iPhone Safari sessions on demand, built on\s+real <a href="\/glossary\/#webkit"[^>]*>WebKit<\/a>\s+— the same engine every physical iPhone runs — with nothing\s+quietly modified while the browser is running \("patched at\s+runtime"\), so there's nothing for detection systems to spot\./,
     );
     expect(body).toMatch(
       /Our servers and your account data live in the EU \(EU-resident\s+control plane\), and the scope stays deliberately narrow: one\s+product, two ways to use it, no land-grab\./,
@@ -65,7 +65,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // terms (rewriting JavaScript at runtime, canvas + WebGL hashes)
     // kept with inline glosses; canvas links to the glossary.
     expect(body).toMatch(
-      /Most stealth browsers fake an iPhone by patching the\s+browser's behaviour on the fly \(rewriting JavaScript at\s+runtime\)\. Detection systems are built to catch exactly that —\s+the fingerprint values those tools return, like the\s+<a href="\/glossary#canvas-hash"[^>]*>canvas<\/a>\s+and WebGL hashes \(values derived from how the browser draws\s+an invisible test image\), come out 100% unique per session:\s+the literal opposite of a real iPhone, which returns\s+the same hash as millions of other iPhones\. Driftstack takes\s+a different approach: we run Apple's WebKit source code, the\s+same engine that ships on every real iPhone\./,
+      /Most stealth browsers fake an iPhone by patching the\s+browser's behaviour on the fly \(rewriting JavaScript at\s+runtime\)\. Detection systems are built to catch exactly that —\s+the fingerprint values those tools return, like the\s+<a href="\/glossary\/#canvas-hash"[^>]*>canvas<\/a>\s+and WebGL hashes \(values derived from how the browser draws\s+an invisible test image\), come out 100% unique per session:\s+the literal opposite of a real iPhone, which returns\s+the same hash as millions of other iPhones\. Driftstack takes\s+a different approach: we run Apple's WebKit source code, the\s+same engine that ships on every real iPhone\./,
     );
   });
 
@@ -88,7 +88,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // tone (text-tk-accent-text; raw text-tk-accent fails WCAG AA as
     // text on the dark background).
     expect(body).toMatch(
-      /<a href="\/trust\/sub-processors" class="text-tk-accent-text underline">\/trust\/sub-processors<\/a>/,
+      /<a href="\/trust\/sub-processors\/" class="text-tk-accent-text underline">\/trust\/sub-processors<\/a>/,
     );
     // Vendor names must not appear in the about-page splash strip
     // (still appear in security.astro and /trust/sub-processors, both
@@ -150,10 +150,10 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).toMatch(/Disaster recovery, rehearsed before it's needed/);
     expect(body).toMatch(/30 days' warning before we change vendors — Article 28\(2\)/);
     expect(body).toMatch(/If we ever shut down, you keep the software \(source escrow\)/);
-    expect(body).toMatch(/href="\/security"/);
-    expect(body).toMatch(/href="\/trust\/incidents"/);
-    expect(body).toMatch(/href="\/trust\/sub-processors"/);
-    expect(body).toMatch(/href="\/faq#acceptable-use"/);
+    expect(body).toMatch(/href="\/security\/"/);
+    expect(body).toMatch(/href="\/trust\/incidents\/"/);
+    expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
+    expect(body).toMatch(/href="\/faq\/#acceptable-use"/);
     // F-5 — "Pre-launch" prefix must not return on these card titles.
     expect(body).not.toMatch(/Pre-launch security audit, on a cadence/);
     expect(body).not.toMatch(/Disaster recovery rehearsed pre-launch/);
@@ -209,8 +209,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).toMatch(
       /Start free — one profile, 20-minute sessions on real\s*\n?\s*iPhone Safari, no card required\. Perpetual, no expiry\./,
     );
-    expect(body).toMatch(/primaryHref="\/pricing#free"/);
+    expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/primaryLabel="Start free"/);
+    expect(body).not.toMatch(
+      /(?:href|primaryHref)="\/(?:glossary|security|trust\/incidents|trust\/sub-processors|faq|pricing)(?:#|"|$)/,
+    );
   });
 
   it('file exists at canonical path', () => {
