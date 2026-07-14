@@ -90,11 +90,26 @@ describe('W866 V-474 ComponentStatus cross-source invariant', () => {
 
   // ─── Status-page tints: dot-color matches state ──────────────
 
-  it('CRITICAL StatusBadge dot-color mapping pinned — operational=emerald-500, degraded=amber-500, major_outage=red-500, unknown=slate-300. The colors encode severity at a glance; drift would silently mislead visual readers.', () => {
+  it('CRITICAL StatusBadge visual and accessible mappings stay aligned for labeled and dot-only variants.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/marketing-site/src/components/StatusBadge.astro'));
-    expect(p).toMatch(/case 'operational':\s*\n\s*dot\.classList\.add\('bg-emerald-500'\)/);
-    expect(p).toMatch(/case 'degraded':\s*\n\s*dot\.classList\.add\('bg-amber-500'\)/);
-    expect(p).toMatch(/case 'major_outage':\s*\n\s*dot\.classList\.add\('bg-red-500'\)/);
+    const mappings = [
+      ['operational', 'All systems operational', 'bg-emerald-500'],
+      ['degraded', 'Degraded performance', 'bg-amber-500'],
+      ['major_outage', 'Major outage', 'bg-red-500'],
+    ] as const;
+    for (const [state, label, color] of mappings) {
+      expect(p).toMatch(
+        new RegExp(
+          `case '${state}':\\s*accessibleState = '${label}';\\s*dot\\.classList\\.add\\('${color}'\\);\\s*if \\(label\\) label\\.textContent = '${label}';`,
+        ),
+      );
+    }
+    expect(p).toMatch(
+      /case 'unknown':\s*\n\s*default:\s*\n\s*dot\.classList\.add\('bg-slate-300'\)/,
+    );
+    expect(p).toMatch(
+      /if \(!label\) badge\.setAttribute\('aria-label', 'Platform status: ' \+ accessibleState\);/,
+    );
   });
 
   // ─── 3-value server + 1-fallback cardinality ─────────────────
