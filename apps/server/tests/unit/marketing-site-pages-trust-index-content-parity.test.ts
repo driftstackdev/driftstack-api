@@ -1,14 +1,14 @@
 // W503.B — drift guard for apps/marketing-site/src/pages/trust/index.astro.
 // V-477 trust center landing — the bookmarkable URL for buyer
 // evaluations and ongoing GDPR/DPA reviews. Drift here either drops
-// one of the 6 trust-surface cards (would orphan that surface from
+// one of the 7 trust-surface cards (would orphan that surface from
 // the trust-center hub) or breaks the 'one bookmark for everything
 // compliance-relevant' framing.
 //
 //   • V-477 doc-comment framing.
 //   • StatusBadge import + render in hero.
-//   • 6-card grid: Security + Sub-processors + Incident history + Legal
-//     (DPA·Privacy·Terms·AUP) + Compliance + Security overview.
+//   • 7-card grid: Security + Sub-processors + Incident history + Legal
+//     (DPA·Privacy·Terms·AUP) + Compliance + Security overview + cumulative rig.
 //   • Quick-reference 6-question buyer FAQ.
 //   • CTA: 'Bring the questionnaire. We'll fill it.'
 
@@ -39,13 +39,29 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(/<StatusBadge \/>/);
   });
 
-  it('6-card trust surface grid: Security → /security + Sub-processors → /trust/sub-processors + Incident history → /trust/incidents + Legal → /legal/dpa + Compliance → /trust/compliance + Security overview → /trust/security-overview — pinned so the 6-card hub stays complete (drift to dropping any card would orphan that-surface from the trust-center navigation hub)', () => {
-    expect(body).toMatch(/<a\s*\n?\s*href="\/security"/);
-    expect(body).toMatch(/<a\s*\n?\s*href="\/trust\/sub-processors"/);
-    expect(body).toMatch(/<a\s*\n?\s*href="\/trust\/incidents"/);
-    expect(body).toMatch(/<a\s*\n?\s*href="\/legal\/dpa"/);
-    expect(body).toMatch(/<a\s*\n?\s*href="\/trust\/compliance"/);
-    expect(body).toMatch(/<a\s*\n?\s*href="\/trust\/security-overview"/);
+  it('7-card trust surface grid uses canonical routes, including the signal-by-signal cumulative rig.', () => {
+    for (const href of [
+      '/security/',
+      '/trust/sub-processors/',
+      '/trust/incidents/',
+      '/legal/dpa/',
+      '/trust/compliance/',
+      '/trust/security-overview/',
+      '/trust/cumulative-rig/',
+    ]) {
+      expect(body, `trust card ${href}`).toContain(`<a href="${href}"`);
+    }
+    for (const href of [
+      '/trust/sub-processors/',
+      '/legal/dpa/',
+      '/trust/incidents/',
+      '/docs/sla-policy/',
+    ]) {
+      expect(body, `quick-reference link ${href}`).toContain(`href="${href}"`);
+    }
+    expect(body).not.toMatch(
+      /href="\/(?:security|legal\/dpa|trust\/(?:sub-processors|incidents|compliance|security-overview|cumulative-rig)|docs\/sla-policy)"/,
+    );
   });
 
   // S26 2026-07-06 (#132) — re-pinned: the card said "Five pillars"
