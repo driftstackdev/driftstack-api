@@ -37,15 +37,17 @@ describe('W243.A incident-policy doc parity', () => {
     expect(body).not.toMatch(/incident_subscriptions/);
   });
 
-  it('does not present incident.* as subscribable webhooks when the enum is gated', () => {
+  it('identifies incident.* as internal events rather than customer webhooks', () => {
     const live = new Set(
       (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
     );
     if (!live.has('incident.created')) {
-      // Doc must say so explicitly (tolerate whitespace from HTML wrapping).
-      expect(body).toMatch(/not yet[\s\S]{0,40}SubscribableWebhookEventTypeSchema/i);
-      // And NOT describe them as webhook events for customers to receive.
+      expect(body).toMatch(
+        /are admin-audit \/ internal SSE event types, not customer webhook\s+subscription values/,
+      );
+      expect(body).toMatch(/Email subscription is the customer-facing\s+notification path/);
       expect(body).not.toMatch(/Webhook event type is\s*<code>incident\.created<\/code>/i);
+      expect(body).not.toMatch(/not yet|future webhook/i);
     }
   });
 
