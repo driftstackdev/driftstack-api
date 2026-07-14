@@ -152,8 +152,8 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
       opts.profile.meanScrollPxPerTick,
     );
     const seed = opts.seed ?? defaultSeed('scroll', opts);
-    // Constant per-tick delta (no decay) — real path applies velocity
-    // decay + occasional reversal jitter.
+    // Constant per-tick delta (no decay) except for the exact final remainder —
+    // real path applies velocity decay + occasional reversal jitter.
     const tickPx = opts.profile.meanScrollPxPerTick;
     const tickCount = Math.max(1, Math.ceil(opts.totalDistancePx / tickPx));
     if (tickCount > MAX_SCROLL_PATTERN_TICKS) {
@@ -164,12 +164,15 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
     }
     const sign = opts.direction === 'up' || opts.direction === 'left' ? -1 : 1;
     const ticks: Array<{ deltaPx: number; tMs: number }> = [];
+    let emittedDistancePx = 0;
     for (let i = 0; i < tickCount; i += 1) {
-      ticks.push({ deltaPx: sign * tickPx, tMs: i * 16 });
+      const magnitudePx = i === tickCount - 1 ? opts.totalDistancePx - emittedDistancePx : tickPx;
+      ticks.push({ deltaPx: sign * magnitudePx, tMs: i * 16 });
+      emittedDistancePx += magnitudePx;
     }
     return {
       direction: opts.direction,
-      totalDistancePx: tickCount * tickPx,
+      totalDistancePx: opts.totalDistancePx,
       ticks,
       durationMs: tickCount * 16,
       seed,

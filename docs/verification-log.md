@@ -27210,3 +27210,28 @@ The focused schema/session/content-guard matrix passes 5 files and 124/124 tests
 the connected API-key and CLI route/service matrix passes 6 files and 72/72
 tests. The api-types build, strict server source-and-test TypeScript, targeted
 ESLint/Prettier, diff and whitespace checks are green.
+
+## V-648 — Mock scroll patterns preserve the requested distance exactly
+
+**Date:** 2026-07-14
+
+The deterministic mock simulator previously rounded every requested scroll up
+to a whole number of full mean-sized ticks. With a 42-pixel mean, requests for
+1, 21 or 41 pixels therefore emitted and reported 42 pixels; every nonmultiple
+overshot by as much as almost one complete tick. Tests using the mock could hide
+distance-sensitive defects even though the realistic velocity generator was
+unaffected.
+
+The mock retains its constant 16-millisecond cadence, physical direction signs
+and full mean-sized leading ticks, but its last tick now carries the exact
+positive remainder computed from the distance already emitted. The returned
+absolute total is the caller's requested value. Exact multiples are unchanged;
+sub-tick, nonmultiple and fractional-pixel patterns reconstruct the requested
+distance exactly. Deterministic seeds and the existing 10,000-tick allocation
+ceiling are unchanged.
+
+The full behavioural package and duplicate content-guard matrix passes 28 files
+and 361/361 tests, including every direction, exact and nonmultiple boundaries,
+fractional totals, deterministic repetition and both sides of the allocation
+cap. The package build, strict server source-and-test TypeScript, targeted
+ESLint/Prettier, diff and whitespace checks are green.

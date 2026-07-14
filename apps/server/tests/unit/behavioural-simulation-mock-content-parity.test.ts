@@ -76,8 +76,10 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(
       /generateScrollPattern\(opts: GenerateScrollPatternOpts\): ScrollPattern \{/,
     );
-    expect(body).toMatch(/\/\/ Constant per-tick delta \(no decay\) — real path applies velocity/);
-    expect(body).toMatch(/\/\/ decay \+ occasional reversal jitter\./);
+    expect(body).toMatch(
+      /\/\/ Constant per-tick delta \(no decay\) except for the exact final remainder —/,
+    );
+    expect(body).toMatch(/\/\/ real path applies velocity decay \+ occasional reversal jitter\./);
     expect(body).toMatch(
       /const tickCount = Math\.max\(1, Math\.ceil\(opts\.totalDistancePx \/ tickPx\)\);/,
     );
@@ -86,7 +88,13 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(
       /const sign = opts\.direction === 'up' \|\| opts\.direction === 'left' \? -1 : 1;/,
     );
-    expect(body).toMatch(/ticks\.push\(\{ deltaPx: sign \* tickPx, tMs: i \* 16 \}\);/);
+    expect(body).toMatch(/let emittedDistancePx = 0;/);
+    expect(body).toMatch(
+      /i === tickCount - 1 \? opts\.totalDistancePx - emittedDistancePx : tickPx;/,
+    );
+    expect(body).toMatch(/ticks\.push\(\{ deltaPx: sign \* magnitudePx, tMs: i \* 16 \}\);/);
+    expect(body).toMatch(/emittedDistancePx \+= magnitudePx;/);
+    expect(body).toMatch(/totalDistancePx: opts\.totalDistancePx,/);
   });
 
   it('generateTouchEvent + generateScrollVelocityProfile delegate to real generators (mock/real parity rationale: real already deterministic+pure, callers see no behavioural shift when Phase 3 ships) + listProfiles returns the profiles array', () => {

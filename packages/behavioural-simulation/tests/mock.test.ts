@@ -209,6 +209,49 @@ describe('MockBehaviouralSimulator — determinism', () => {
     }
   });
 
+  it('generateScrollPattern preserves exact sub-tick and nonmultiple distances in every direction', () => {
+    const sim = new MockBehaviouralSimulator();
+    for (const direction of ['up', 'down', 'left', 'right'] as const) {
+      const expectedSign = direction === 'up' || direction === 'left' ? -1 : 1;
+      for (const totalDistancePx of [1, 21, 49, 51, 99, 101]) {
+        const pattern = sim.generateScrollPattern({ direction, totalDistancePx, profile: PROFILE });
+        const expectedFinalMagnitude =
+          totalDistancePx % PROFILE.meanScrollPxPerTick || PROFILE.meanScrollPxPerTick;
+
+        expect(pattern.totalDistancePx).toBe(totalDistancePx);
+        expect(pattern.ticks.at(-1)?.deltaPx).toBe(expectedSign * expectedFinalMagnitude);
+        expect(pattern.ticks.map((tick) => tick.tMs)).toEqual(
+          pattern.ticks.map((_, index) => index * 16),
+        );
+        expect(pattern.ticks.reduce((sum, tick) => sum + Math.abs(tick.deltaPx), 0)).toBe(
+          totalDistancePx,
+        );
+      }
+    }
+  });
+
+  it('generateScrollPattern remains deterministic for exact-remainder gestures', () => {
+    const sim = new MockBehaviouralSimulator();
+    const opts = {
+      direction: 'up' as const,
+      totalDistancePx: 121,
+      profile: PROFILE,
+      seed: 'exact-remainder',
+    };
+    expect(sim.generateScrollPattern(opts)).toEqual(sim.generateScrollPattern(opts));
+  });
+
+  it('generateScrollPattern reconstructs fractional-pixel totals exactly', () => {
+    const sim = new MockBehaviouralSimulator();
+    const pattern = sim.generateScrollPattern({
+      direction: 'right',
+      totalDistancePx: 0.3,
+      profile: { ...PROFILE, meanScrollPxPerTick: 0.1 },
+    });
+    expect(pattern.ticks.reduce((sum, tick) => sum + Math.abs(tick.deltaPx), 0)).toBe(0.3);
+    expect(pattern.totalDistancePx).toBe(0.3);
+  });
+
   it('generateScrollPattern rejects invalid distance and tick magnitudes', () => {
     const sim = new MockBehaviouralSimulator();
     for (const totalDistancePx of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
@@ -243,6 +286,16 @@ describe('MockBehaviouralSimulator — determinism', () => {
         profile: PROFILE,
       }).ticks,
     ).toHaveLength(MAX_SCROLL_PATTERN_TICKS);
+    const boundaryRemainder = sim.generateScrollPattern({
+      direction: 'left',
+      totalDistancePx: MAX_SCROLL_PATTERN_TICKS * PROFILE.meanScrollPxPerTick - 1,
+      profile: PROFILE,
+    });
+    expect(boundaryRemainder.ticks).toHaveLength(MAX_SCROLL_PATTERN_TICKS);
+    expect(boundaryRemainder.ticks.at(-1)?.deltaPx).toBe(-49);
+    expect(boundaryRemainder.ticks.reduce((sum, tick) => sum + Math.abs(tick.deltaPx), 0)).toBe(
+      boundaryRemainder.totalDistancePx,
+    );
   });
 
   it('listProfiles returns the default catalogue when none injected', () => {

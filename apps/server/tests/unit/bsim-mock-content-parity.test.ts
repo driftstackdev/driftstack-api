@@ -26,9 +26,8 @@
 //   • generateKeyboardCadence: 'Deterministic constant delay — real
 //     path samples around mean with profile-tuned jitter.' + delaysMs
 //     = repeat profile.meanKeyDelayMs.
-//   • generateScrollPattern: 'Constant per-tick delta (no decay) —
-//     real path applies velocity decay + occasional reversal jitter.'
-//     + tick interval 16ms.
+//   • generateScrollPattern: constant ticks plus exact final remainder,
+//     physical signs, exact requested total, and 16ms cadence.
 //   • generateTouchEvent: parity-by-reuse rationale 'mock surface
 //     re-uses it directly rather than shipping a separate constant-
 //     output stub. Mock/real parity here means callers don't see a
@@ -123,9 +122,9 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
-  it('generateScrollPattern framing pinned: constant per-tick magnitude + bounded tick count + physical direction sign + 16ms tick interval', () => {
+  it('generateScrollPattern framing pinned: constant ticks + exact final remainder + bounded count + physical sign + 16ms cadence', () => {
     expect(body).toMatch(
-      /\/\/ Constant per-tick delta \(no decay\) — real path applies velocity\s*\n?\s*\/\/ decay \+ occasional reversal jitter\./,
+      /\/\/ Constant per-tick delta \(no decay\) except for the exact final remainder —\s*\n?\s*\/\/ real path applies velocity decay \+ occasional reversal jitter\./,
     );
     expect(body).toMatch(
       /const tickPx = opts\.profile\.meanScrollPxPerTick;\s*\n?\s*const tickCount = Math\.max\(1, Math\.ceil\(opts\.totalDistancePx \/ tickPx\)\);/,
@@ -135,7 +134,10 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(
       /const sign = opts\.direction === 'up' \|\| opts\.direction === 'left' \? -1 : 1;/,
     );
-    expect(body).toMatch(/ticks\.push\(\{ deltaPx: sign \* tickPx, tMs: i \* 16 \}\);/);
+    expect(body).toMatch(
+      /let emittedDistancePx = 0;[\s\S]*?const magnitudePx =\s*\n?\s*i === tickCount - 1 \? opts\.totalDistancePx - emittedDistancePx : tickPx;\s*\n?\s*ticks\.push\(\{ deltaPx: sign \* magnitudePx, tMs: i \* 16 \}\);\s*\n?\s*emittedDistancePx \+= magnitudePx;/,
+    );
+    expect(body).toMatch(/totalDistancePx: opts\.totalDistancePx,/);
   });
 
   it("generateTouchEvent + generateScrollVelocityProfile: parity-by-reuse framing pinned 'mock surface re-uses it directly rather than shipping a separate constant-output stub. Mock/real parity here means callers don't see a behavioural shift when the real Phase 3 simulator ships behind the same interface.' + 'Same parity pattern as generateTouchEvent — the real generator is already deterministic + pure.'", () => {
