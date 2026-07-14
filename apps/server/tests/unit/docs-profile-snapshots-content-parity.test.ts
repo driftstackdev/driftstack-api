@@ -57,7 +57,9 @@ describe('docs api/profile-snapshots content parity', () => {
     expect(body).not.toMatch(/`profile_name`/);
   });
 
-  it('cross-link to /api/audit-log pinned (snapshot lifecycle events land in the customer audit log; drift to dropping would orphan the audit-trail visibility from this doc)', () => {
-    expect(body).toMatch(/\[\/api\/audit-log\]\(\/api\/audit-log\)/);
+  it('restore-only audit emission and both canonical /api/audit-log/ cross-links are pinned', () => {
+    expect(body).toMatch(/Only the restore operation surfaces in the customer audit log/);
+    expect(body.match(/\[\/api\/audit-log\]\(\/api\/audit-log\/\)/g)).toHaveLength(2);
+    expect(body).not.toMatch(/\]\(\/api\/audit-log\)/);
   });
 });
