@@ -197,6 +197,46 @@ describe('V-534.AC CryptoCheckoutFlowView', () => {
     expect(recoveredWrite).toHaveBeenCalledWith('0x123456789');
   });
 
+  it('ignores an old pending copy after reset and shows a canonical action for the next order', async () => {
+    setupFetch({
+      onCheckout: () => ({
+        order_id: 'ord_new',
+        product: 'solo_manual',
+        price_cents: 2500,
+        price_currency: 'EUR',
+        status: 'pending',
+        provider: 'nowpayments',
+        payment_address: '0x123456789',
+        pay_currency: 'usdt',
+        created_at: '2026-05-11T10:00:00.000Z',
+      }),
+    });
+    let resolveWrite: (() => void) | undefined;
+    const pendingWrite = new Promise<void>((resolvePromise) => {
+      resolveWrite = resolvePromise;
+    });
+    const writeText = vi.fn(() => pendingWrite);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    render(<CryptoCheckoutFlowView defaultProduct="solo_manual" />);
+    await screen.findByText('25.00 EUR');
+    fireEvent.click(screen.getByRole('button', { name: /Start checkout/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Copy payment address/i }));
+    expect(screen.getByText('Copying…')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Start another checkout/i }));
+    expect(await screen.findByRole('button', { name: /Start checkout/i })).toBeInTheDocument();
+    resolveWrite?.();
+    await Promise.resolve();
+    expect(screen.queryByText('Copied ✓')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Start checkout/i }));
+    const nextCopy = await screen.findByRole('button', { name: /Copy payment address/i });
+    expect(nextCopy).toHaveTextContent('Copy');
+    expect((nextCopy as HTMLButtonElement).disabled).toBe(false);
+    expect(nextCopy).toHaveAttribute('aria-busy', 'false');
+    expect(writeText).toHaveBeenCalledTimes(1);
+  });
+
   it('refetches the quote when the product selector changes', async () => {
     const fetchMock = setupFetch({});
     render(<CryptoCheckoutFlowView defaultProduct="solo_manual" />);

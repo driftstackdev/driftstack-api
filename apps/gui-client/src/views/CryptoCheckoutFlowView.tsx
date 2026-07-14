@@ -44,8 +44,10 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
   // unmounts the copy button) or a rapid re-copy can't update stale copy state
   // or stack overlapping timers (audit 2026-07-08 #19).
   const copiedTimerRef = useRef<number | null>(null);
+  const copyGenerationRef = useRef(0);
   useEffect(() => {
     return () => {
+      copyGenerationRef.current += 1;
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
     };
   }, []);
@@ -60,6 +62,10 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
   };
 
   const onReset = (): void => {
+    copyGenerationRef.current += 1;
+    if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = null;
+    setCopyState('idle');
     checkout.reset();
   };
 
@@ -67,18 +73,22 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
     // The payment address is the highest-stakes copy in the app — a truncated hand-select
     // loses funds. Give one-click copy + a transient confirm (audit 2026-07-08).
     if (copyState === 'copying') return;
+    const generation = ++copyGenerationRef.current;
     setCopyState('copying');
     void writeClipboardText(addr).then(
       () => {
+        if (generation !== copyGenerationRef.current) return;
         setCopyState('copied');
         // Clear any in-flight reset before arming a fresh one so rapid copies don't stack timers.
         if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
         copiedTimerRef.current = window.setTimeout(() => {
+          if (generation !== copyGenerationRef.current) return;
           copiedTimerRef.current = null;
           setCopyState('idle');
         }, 2000);
       },
       () => {
+        if (generation !== copyGenerationRef.current) return;
         setCopyState('failed');
       },
     );
