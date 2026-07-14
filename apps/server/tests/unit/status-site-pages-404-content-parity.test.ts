@@ -24,8 +24,8 @@ describe('status-site/pages/404 content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("StatusLayout title pinned: '404 · Driftstack status'. Drift would mis-tab-name the page in the customer's browser tab", () => {
-    expect(body).toMatch(/<StatusLayout title="404 · Driftstack status">/);
+  it('StatusLayout title + noindex pinned so the error page is named correctly without entering search indexes', () => {
+    expect(body).toMatch(/<StatusLayout title="404 · Driftstack status" noindex>/);
   });
 
   it("'Page not found.' headline + 404 section-label tag pinned. Drift to a different headline would mismatch the rest of the 404 family across the customer-dashboard / marketing-site 404 pages", () => {
