@@ -29,6 +29,8 @@
 //     Authorization Bearer + Content-Type JSON.
 //   • Error parsing: detail = body.detail ?? body.title ?? detail;
 //     kind = body.type.split('/').pop() ?? 'unknown'.
+//   • Shared 15-second request deadline + bounded diagnostic and
+//     success-body readers.
 //   • RFC 7807 type-URI framing pinned: 'Server emits RFC 7807
 //     `type` URIs like "https://errors.driftstack.dev/forbidden".'
 
@@ -87,26 +89,30 @@ describe('W464.C apps/gui-client/src/lib/gui-input.ts content parity', () => {
     );
   });
 
-  it("Request construction: trailing-slash strip baseUrl.replace(/\\/+$/, '') + encodeURIComponent(sessionId) on URL + Authorization Bearer header + Content-Type application/json", () => {
+  it('Request construction uses the shared default deadline: trailing-slash strip + encoded session id + Bearer/JSON headers', () => {
+    expect(body).toMatch(/import \{ fetchWithDeadline \} from '\.\/fetch-with-deadline';/);
     expect(body).toMatch(/const baseUrl = settings\.baseUrl\.replace\(\/\\\/\+\$\/, ''\);/);
     expect(body).toMatch(
       /const res = await fetchWithDeadline\(\s*`\$\{baseUrl\}\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/gui-input`,\s*\{\s*method: 'POST',\s*headers: \{\s*'Content-Type': 'application\/json',\s*Authorization: `Bearer \$\{settings\.apiKey\}`,\s*\},\s*body: JSON\.stringify\(\{ action \}\),\s*\},\s*\);/,
     );
-    expect(body).toMatch(/const GUI_INPUT_TIMEOUT_MS = 15_000;/);
-    expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).not.toMatch(/GUI_INPUT_TIMEOUT_MS|signal: controller\.signal/);
   });
 
-  it("Error-response parsing: detail = body.detail ?? body.title ?? detail (HTTP-status fallback) + kind = body.type.split('/').pop() ?? 'unknown' + RFC 7807 type-URI framing pinned 'Server emits RFC 7807 `type` URIs like \"https://errors.driftstack.dev/forbidden\".'", () => {
+  it('Bounded error-response parsing keeps HTTP fallback + RFC 7807 kind extraction', () => {
     expect(body).toMatch(
-      /let detail = `HTTP \$\{res\.status\}`;\s*\n?\s*let kind = 'unknown';\s*\n?\s*try \{\s*\n?\s*const body = \(await res\.json\(\)\) as \{ detail\?: string; type\?: string; title\?: string \};\s*\n?\s*detail = body\.detail \?\? body\.title \?\? detail;\s*\n?\s*\/\/ Server emits RFC 7807 `type` URIs like "https:\/\/errors\.driftstack\.dev\/forbidden"\.\s*\n?\s*if \(typeof body\.type === 'string'\) kind = body\.type\.split\('\/'\)\.pop\(\) \?\? 'unknown';/,
+      /import \{ readBoundedApiJson, readBoundedDiagnosticJson \} from '\.\/read-bounded-json';/,
+    );
+    expect(body).toMatch(
+      /let detail = `HTTP \$\{res\.status\}`;\s*\n?\s*let kind = 'unknown';\s*\n?\s*try \{[\s\S]*?const body = await readBoundedDiagnosticJson<[\s\S]*?>\(res\);\s*\n?\s*detail = body\.detail \?\? body\.title \?\? detail;\s*\n?\s*\/\/ Server emits RFC 7807 `type` URIs like "https:\/\/errors\.driftstack\.dev\/forbidden"\.\s*\n?\s*if \(typeof body\.type === 'string'\) kind = body\.type\.split\('\/'\)\.pop\(\) \?\? 'unknown';/,
     );
   });
 
-  it("Catch fallback framing pinned: 'Body wasn't JSON; keep the HTTP-status fallback.' + throw GUIInputError(detail, res.status, kind) + final return cast `await res.json() as GUIInputResponse`", () => {
+  it('Catch fallback + GUIInputError + bounded success body are pinned', () => {
     expect(body).toMatch(
       /\} catch \{\s*\n?\s*\/\/ Body wasn't JSON; keep the HTTP-status fallback\.\s*\n?\s*\}\s*\n?\s*throw new GUIInputError\(detail, res\.status, kind\);/,
     );
-    expect(body).toMatch(/return \(await res\.json\(\)\) as GUIInputResponse;/);
+    expect(body).toMatch(/return readBoundedApiJson<GUIInputResponse>\(res\);/);
+    expect(body).not.toMatch(/res\.json\(\)/);
   });
 
   it('file exists at canonical path', () => {
