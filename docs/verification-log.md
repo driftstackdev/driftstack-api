@@ -25766,3 +25766,29 @@ Verification:
   `HTTP nnn` detail, auto-resolution, pruning, response disposal, and timeouts;
 - strict server source/test typechecking, targeted linting/formatting, diff, and
   hooks pass.
+
+## V-602 — Tauri WebViews enforce a shared content policy
+
+**Date:** 2026-07-14
+
+Enabled Content Security Policy injection for both the main Driftstack desktop
+app and the separately bundled Simulator. Bundled scripts are restricted to the
+local application origin (with Tauri's build-time hashes/nonces), while objects,
+frames, frame ancestors, forms, and base-tag rewrites are denied. This adds a
+containment layer between a future render-data injection and the WebViews'
+explicit Tauri capabilities.
+
+The shared policy retains only the application requirements: Tauri IPC; local
+Vite/HMR during development; user-configurable HTTP(S) API origins; LiveKit
+WS(S); local/blob/data/HTTP(S) image and media sources; blob workers; and inline
+styles used throughout the existing UI. The fatal boot panel's inline `onclick`
+was replaced with a listener-bound reload action so script policy needs neither
+`unsafe-inline`, `unsafe-eval`, nor `unsafe-hashes`.
+
+Verification:
+
+- exact parsed-policy equality is pinned across both Tauri configurations;
+- guards reject `csp:null`, script escape hatches, and inline HTML event handlers;
+- both JSON configs parse, focused config/index suites pass, and the full GUI
+  TypeScript, jsdom, and production Vite build gates pass;
+- targeted linting/formatting, diff, and hooks pass.

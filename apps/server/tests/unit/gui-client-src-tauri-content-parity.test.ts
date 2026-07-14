@@ -16,6 +16,22 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+const DESKTOP_CSP = {
+  'default-src': "'self' customprotocol: asset:",
+  'connect-src': 'ipc: http://ipc.localhost http: https: ws: wss:',
+  'font-src': "'self' data:",
+  'img-src': "'self' asset: http://asset.localhost blob: data: http: https:",
+  'media-src': "'self' asset: http://asset.localhost blob: data: http: https:",
+  'style-src': "'self' 'unsafe-inline'",
+  'script-src': "'self'",
+  'worker-src': "'self' blob:",
+  'object-src': "'none'",
+  'base-uri': "'none'",
+  'frame-src': "'none'",
+  'frame-ancestors': "'none'",
+  'form-action': "'none'",
+} as const;
+
 describe('W617 apps/gui-client/src-tauri/ content parity', () => {
   it('build.rs: thin tauri-build invocation pinned', () => {
     const body = read(T('build.rs'));
@@ -237,7 +253,6 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"titleBarStyle": "Overlay"/);
     expect(body).toMatch(/"hiddenTitle": true/);
     expect(body).toMatch(/"backgroundColor": "#0b0f14"/);
-    expect(body).toMatch(/"csp": null/);
     expect(body).toMatch(/"targets": \["app", "dmg", "nsis", "appimage", "deb"\]/);
     expect(body).toMatch(/"category": "DeveloperTool"/);
     expect(body).toMatch(/"icons\/32x32\.png"/);
@@ -262,5 +277,23 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"desktop": \{/);
     expect(body).toMatch(/"schemes": \["driftstack"\]/);
     expect(existsSync(T('tauri.conf.json'))).toBe(true);
+  });
+
+  it('both desktop apps enforce the same Tauri CSP without script/object/frame/form escape hatches', () => {
+    const main = JSON.parse(read(T('tauri.conf.json'))) as {
+      app: { security: { csp: unknown } };
+    };
+    const simulator = JSON.parse(read(T('tauri.simulator.conf.json'))) as {
+      app: { security: { csp: unknown } };
+    };
+
+    expect(main.app.security.csp).toEqual(DESKTOP_CSP);
+    expect(simulator.app.security.csp).toEqual(DESKTOP_CSP);
+    for (const path of ['tauri.conf.json', 'tauri.simulator.conf.json']) {
+      const body = read(T(path));
+      expect(body).not.toMatch(/"csp": null/);
+      expect(body).not.toMatch(/unsafe-eval|unsafe-hashes/);
+      expect(body).not.toMatch(/"script-src"[^\n]*unsafe-inline/);
+    }
   });
 });

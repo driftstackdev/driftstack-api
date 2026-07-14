@@ -57,6 +57,16 @@ describe('W791 gui-client index.html + tests/setup.ts content parity', () => {
     expect(p).toMatch(/<script type="module" src="\/src\/main\.tsx"><\/script>/);
   });
 
+  it('CRITICAL boot/fatal UI uses listener-bound actions so the enforced desktop CSP needs no inline-handler escape hatch', () => {
+    const p = read(INDEX_HTML);
+
+    expect(p).not.toMatch(/\son[a-z]+\s*=/i);
+    expect(p).toMatch(/<button id="ds-fatal-reload"/);
+    expect(p).toMatch(
+      /reloadButton\.addEventListener\('click', function \(\) \{\s*\n?\s*location\.reload\(\);/,
+    );
+  });
+
   it('CRITICAL no extra meta-tags (no robots, no description). The gui-client is a desktop binary not a web page; SEO meta is intentionally absent.', () => {
     const p = read(INDEX_HTML);
 

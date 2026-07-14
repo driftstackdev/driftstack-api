@@ -31,7 +31,7 @@
             // never faces a raw stack trace.
             b.innerHTML =
               '<div style="max-width:640px;margin:12vh auto 0"><h1 style="font-size:17px;color:#eee;margin:0 0 8px">Driftstack hit a snag</h1><div style="color:#9a9a9a;margin:0 0 20px">The app needs to reload to recover. Your saved profiles and sessions are safe.</div>' +
-              '<button onclick="location.reload()" style="background:#c0392b;color:#fff;border:none;border-radius:7px;padding:9px 18px;cursor:pointer;font-size:13px;font-weight:600">Reload Driftstack</button>' +
+              '<button id="ds-fatal-reload" style="background:#c0392b;color:#fff;border:none;border-radius:7px;padding:9px 18px;cursor:pointer;font-size:13px;font-weight:600">Reload Driftstack</button>' +
               '<details style="margin-top:22px"><summary style="cursor:pointer;font-size:12px;color:#888;user-select:none;outline:none">Show technical details</summary>' +
               '<div style="color:#888;margin:10px 0 0">Error code: <b style="color:#ffb86b">' +
               esc(code) +
@@ -45,6 +45,12 @@
                 : '') +
               '</details></div>';
             (document.body || document.documentElement).appendChild(b);
+            var reloadButton = document.getElementById('ds-fatal-reload');
+            if (reloadButton) {
+              reloadButton.addEventListener('click', function () {
+                location.reload();
+              });
+            }
             var sp = document.getElementById('ds-boot-splash');
             if (sp) sp.remove();
           } catch (e) {
