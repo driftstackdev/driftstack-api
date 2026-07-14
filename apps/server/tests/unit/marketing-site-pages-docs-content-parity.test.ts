@@ -52,10 +52,15 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   it('5-card category grid: Quickstart (https://docs.driftstack.dev/quickstart-curl/ — S47 2026-07-07 mirror deprecation successor of the deleted /docs/api-quickstart) + API reference (/api-reference) + SDKs (/docs/sdk-typescript) + Webhooks (/docs/webhooks) + Self-hosted (/self-hosted) — pinned so the 5 main doc entry points + their canonical hrefs stay correct (drift to dropping any card would orphan customers from that documentation category; drift to a different href would break the click-through; drift BACK to /docs/api-quickstart would re-point customers at a 301 stub)', () => {
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/"/);
     expect(body).not.toMatch(/href="\/docs\/api-quickstart"/);
-    expect(body).toMatch(/href="\/api-reference"/);
-    expect(body).toMatch(/href="\/docs\/sdk-typescript"/);
-    expect(body).toMatch(/href="\/docs\/webhooks"/);
-    expect(body).toMatch(/href="\/self-hosted"/);
+    for (const path of [
+      '/api-reference',
+      '/docs/sdk-typescript',
+      '/docs/webhooks',
+      '/self-hosted',
+    ]) {
+      expect(body).toContain(`href="${path}/"`);
+      expect(body).not.toContain(`href="${path}"`);
+    }
   });
 
   it("Quickstart card framing: 'Five minutes to first session →' + 'Install the SDK in your language, paste an API key, drive your first session. No prior browser-automation experience needed.' — pinned so the 5-minute time-to-first-session promise + the no-prior-experience reassurance survive (drift to a longer time estimate would let customers expect a multi-hour onboarding; drift to dropping 'no prior experience' would lose the new-to-automation onboarding pull)", () => {
