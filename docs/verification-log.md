@@ -25056,3 +25056,27 @@ Verification:
 - the remaining integration fixtures keep `trustProxy=false`, preserving the
   spoof-resistant test default;
 - strict server test typechecking, linting, and formatting pass.
+
+## V-580 — partial invite index uses a typed null predicate
+
+**Date:** 2026-07-13
+
+Replaced the pending team-invite index's raw SQL null expression with
+Drizzle's typed `isNull` predicate. The raw schema-build interpolation was not
+a runtime Date parameter, but it was indistinguishable to the repository's
+structural safeguard from the Date-in-raw-SQL class that has previously caused
+driver serialization failures. Allow-listing it would have weakened that
+safeguard and retained unnecessary raw SQL.
+
+The schema pin now requires the typed predicate and uses bounded multiline
+separators, so both the production definition and its verifier avoid the two
+test-integrity classes found by this sweep.
+
+Verification:
+
+- the isolated runtime/service sweep was green except for the Date-parameter
+  structural guard's one finding;
+- the schema and Date-parameter guard pass with no allow-list expansion;
+- the focused team-invite schema, migration, and real-adapter proofs remain
+  green;
+- strict server typechecking, linting, and formatting pass.

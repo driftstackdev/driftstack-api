@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { isNull, sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
@@ -1956,7 +1956,7 @@ export const teamInvites = pgTable(
     uniqueIndex('team_invites_token_idx').on(t.inviteTokenHash),
     uniqueIndex('team_invites_owner_email_pending_unique')
       .on(t.ownerAccountId, t.inviteeEmail)
-      .where(sql`${t.acceptedAt} IS NULL`),
+      .where(isNull(t.acceptedAt)),
     index('team_invites_owner_idx').on(t.ownerAccountId, t.acceptedAt),
     index('team_invites_email_idx').on(t.inviteeEmail),
   ],

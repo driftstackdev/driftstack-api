@@ -15,7 +15,7 @@ const body = readFileSync(LIB, 'utf8');
 
 describe('W616 apps/server/src/db/schema.ts content parity', () => {
   it('drizzle-orm + drizzle-orm/pg-core imports + pg-core type list (bigint + boolean + index + integer + jsonb + pgEnum + pgTable + primaryKey + text + timestamp + uniqueIndex + uuid) pinned', () => {
-    expect(body).toMatch(/^import \{ sql \} from 'drizzle-orm';$/m);
+    expect(body).toMatch(/^import \{ isNull, sql \} from 'drizzle-orm';$/m);
     expect(body).toMatch(/^import \{$/m);
     expect(body).toMatch(/^\s+bigint,$/m);
     expect(body).toMatch(/^\s+boolean,$/m);
@@ -208,7 +208,7 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/export const teamMembers = pgTable\(/);
     expect(body).toMatch(/export const teamInvites = pgTable\(/);
     expect(body).toMatch(
-      /uniqueIndex\('team_invites_owner_email_pending_unique'\)\s*\n?\s*\.on\(t\.ownerAccountId, t\.inviteeEmail\)\s*\n?\s*\.where\(sql`\$\{t\.acceptedAt\} IS NULL`\)/,
+      /uniqueIndex\('team_invites_owner_email_pending_unique'\)[ \t]*(?:\r?\n[ \t]*)?\.on\(t\.ownerAccountId, t\.inviteeEmail\)[ \t]*(?:\r?\n[ \t]*)?\.where\(isNull\(t\.acceptedAt\)\)/,
     );
     expect(body).toMatch(/V-295c3 — public status-page email subscribers\./);
     expect(body).toMatch(/\/\/ Double-opt-in flow:/);
