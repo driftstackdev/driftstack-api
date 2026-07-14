@@ -337,6 +337,17 @@ describe('OpenAPI spec generation', () => {
     }
   });
 
+  it('status SLA documents its route-specific 429 response', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const operation = spec.paths?.['/v1/status/sla']?.get;
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['429']).toBeDefined();
+    expect(JSON.stringify(operation?.responses?.['429'])).toContain(
+      'Per-IP direct-request budget exceeded.',
+    );
+  });
+
   it('GET /v1/agent-sessions (list) is documented alongside POST (the GET method was missing once)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

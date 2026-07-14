@@ -12,11 +12,8 @@
 //     - GET /v1/status/sla — rolling 30-day uptime per probe target
 //       from V-295b system_health_probes.
 //
-//   Unauth + connection-posture framing — 'Both endpoints are
-//   unauthenticated (the status site is public). SLA is rate-limited
-//   globally. The SSE stream has NO app-level rate-limit or
-//   concurrent-connection cap, and Fastify/Node set no maxConnections —
-//   bounded only by the OS / Cloudflare edge TCP ceiling' (queue §4.15).
+//   Both endpoints stay unauthenticated/public. SLA has the global
+//   gate plus 60/min/IP route budget; SSE is capped at 500 total /10 IP.
 //
 //   heartbeatMs default 30_000 framing — 'Heartbeat interval in ms.
 //   Defaults to 30s — well below typical proxy idle-timeouts (60s on
@@ -35,12 +32,11 @@
 //     .unref() to not pin process.
 //
 //   cleanup on close + error events — clearInterval(heartbeat) +
-//     unsubscribe() + reply.raw.end().
+//     unsubscribe() + idempotent connection release + reply.raw.end().
 //
 //   reply.hijack() to keep Fastify from auto-completing.
 //
-//   /v1/status/sla no-extra-rate-limit framing — '~43k rows in 30d,
-//     so no extra rate-limiting needed'.
+//   /v1/status/sla is protected by statusSlaGate before aggregation.
 //
 // stays in lockstep across apps/server/src/routes/status-stream.ts.
 
@@ -71,11 +67,12 @@ describe('W1022 routes/status-stream V-295e cross-source invariant', () => {
     expect(p).toMatch(/computed from the V-295b system_health_probes table\./);
   });
 
-  it("CRITICAL unauth + connection-posture framing — 'Both endpoints are unauthenticated (the status site is public). SLA is rate-limited globally. The SSE stream has NO app-level rate-limit or concurrent-connection cap, and Fastify/Node set no maxConnections — bounded only by the OS / Cloudflare edge TCP ceiling' (queue §4.15; the prior 'connection-limited by Fastify itself' claim was inaccurate — no maxConnections is configured).", () => {
+  it('CRITICAL public posture + route-level resource bounds', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status-stream.ts'));
-    expect(p).toMatch(/Both endpoints are unauthenticated \(the status site is public\)\./);
-    expect(p).toMatch(/rate-limit or concurrent-connection cap, and Fastify\/Node set no/);
-    expect(p).toMatch(/TCP-connection ceiling at the OS \/ Cloudflare edge layer/);
+    expect(p).toContain('Both endpoints are unauthenticated (the status site is public).');
+    expect(p).toContain('60/min/IP direct-request budget');
+    expect(p).toContain('500 total connections and 10 per IP');
+    expect(p).not.toContain('NO app-level');
   });
 
   it("CRITICAL heartbeatMs default — '30_000' + framing 'well below typical proxy idle-timeouts (60s on Cloudflare, longer elsewhere)'.", () => {
@@ -113,6 +110,7 @@ describe('W1022 routes/status-stream V-295e cross-source invariant', () => {
     expect(p).toMatch(/const cleanup = \(\): void => \{/);
     expect(p).toMatch(/clearInterval\(heartbeat\);/);
     expect(p).toMatch(/unsubscribe\(\);/);
+    expect(p).toMatch(/releaseConn\(\);/);
     expect(p).toMatch(/reply\.raw\.end\(\);/);
     expect(p).toMatch(/request\.raw\.on\('close', cleanup\);/);
     expect(p).toMatch(/request\.raw\.on\('error', cleanup\);/);
@@ -124,14 +122,17 @@ describe('W1022 routes/status-stream V-295e cross-source invariant', () => {
     expect(p).toMatch(/reply\.hijack\(\);/);
   });
 
-  it("CRITICAL /v1/status/sla no-extra-rate-limit framing — '~43k rows in 30d, so no extra rate-limiting needed'.", () => {
+  it('CRITICAL /v1/status/sla has a 60/min/IP preHandler before aggregation', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status-stream.ts'));
-    expect(p).toMatch(/\/\/ \/v1\/status\/sla — same no-auth posture as \/v1\/status\/incidents\./);
-    expect(p).toMatch(/\/\/ The query is a cheap aggregate over a small table \(one probe\/min/);
-    expect(p).toMatch(/\/\/ per target = ~43k rows in 30d\), so no extra rate-limiting needed\./);
-    expect(p).toMatch(/app\.get\('\/v1\/status\/sla', async \(\) => \{/);
-    expect(p).toMatch(/const data = await sla\.report\(new Date\(\)\);/);
-    expect(p).toMatch(/return \{ data \};/);
+    expect(p).toContain("bucketPrefix: 'status_sla'");
+    expect(p).toContain('capacity: AUTH_IP_LIMITS.statusSla.capacity');
+    expect(p).toContain('refillPerSecond: AUTH_IP_LIMITS.statusSla.refillPerSecond');
+    expect(p).toContain(
+      "app.get('/v1/status/sla', { preHandler: statusSlaGate }, async (_request, reply) => {",
+    );
+    expect(p).toContain('const data = await sla.report(new Date());');
+    expect(p).toContain("reply.header('cache-control', 'public, max-age=30');");
+    expect(p).not.toContain('no extra rate-limiting needed');
   });
 
   it('test file metadata — file exists at canonical path', () => {

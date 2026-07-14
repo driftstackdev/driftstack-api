@@ -147,6 +147,7 @@ describe('GET /v1/status/sla', () => {
         lastFailureAt: string | null;
       }[];
     }>();
+    expect(res.headers['cache-control']).toBe('public, max-age=30');
     expect(body.data).toHaveLength(1);
     expect(body.data[0]!.target).toBe('api');
     expect(body.data[0]!.uptimePct).toBe(100);
@@ -246,5 +247,78 @@ describe('GET /v1/status/sla', () => {
     const res = await fx.app.inject({ method: 'GET', url: '/v1/status/sla' });
     const body = res.json<{ data: unknown[] }>();
     expect(body.data).toEqual([]);
+  });
+
+  it('allows 60 direct requests per IP and rejects request 61 before running the aggregate', async () => {
+    fx = await buildTestApp();
+
+    for (let i = 0; i < 60; i++) {
+      const allowed = await fx.app.inject({ method: 'GET', url: '/v1/status/sla' });
+      expect(allowed.statusCode).toBe(200);
+    }
+
+    const denied = await fx.app.inject({ method: 'GET', url: '/v1/status/sla' });
+    expect(denied.statusCode).toBe(429);
+    expect(denied.headers['retry-after']).toBe('1');
+    expect(denied.headers['x-ratelimit-bucket']).toBe('status_sla');
+  });
+});
+
+describe('GET /v1/status/stream capacity', () => {
+  it('rejects the 11th live connection from one IP and releases capacity on disconnect', async () => {
+    fx = await buildTestApp();
+    const address = await fx.app.listen({ host: '127.0.0.1', port: 0 });
+    const controllers: AbortController[] = [];
+    const streamResponses: Response[] = [];
+
+    try {
+      for (let i = 0; i < 10; i++) {
+        const controller = new AbortController();
+        controllers.push(controller);
+        const response = await fetch(`${address}/v1/status/stream`, {
+          signal: controller.signal,
+        });
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
+        streamResponses.push(response);
+      }
+
+      const denied = await fetch(`${address}/v1/status/stream`, {
+        headers: { connection: 'close' },
+      });
+      expect(denied.status).toBe(503);
+      expect(denied.headers.get('retry-after')).toBe('30');
+      await expect(denied.json()).resolves.toEqual({
+        error: 'Status stream at capacity; retry shortly.',
+      });
+
+      controllers.shift()!.abort();
+
+      let replacementAccepted = false;
+      for (let attempt = 0; attempt < 20 && !replacementAccepted; attempt++) {
+        const controller = new AbortController();
+        const replacement = await fetch(`${address}/v1/status/stream`, {
+          headers: { connection: 'close' },
+          signal: controller.signal,
+        });
+        if (replacement.status === 200) {
+          controllers.push(controller);
+          streamResponses.push(replacement);
+          replacementAccepted = true;
+        } else {
+          controller.abort();
+          await replacement.body?.cancel();
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      }
+      expect(replacementAccepted).toBe(true);
+    } finally {
+      for (const controller of controllers) controller.abort();
+      await Promise.allSettled(
+        streamResponses.map(async (response) => {
+          await response.body?.cancel();
+        }),
+      );
+    }
   });
 });

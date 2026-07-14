@@ -216,6 +216,10 @@ export const AUTH_IP_LIMITS = {
   // hits (bypassing CDN) still gets gated.
   statusIncidentsList: { capacity: 60, refillPerSecond: 60 / 60 },
   statusIncidentDetail: { capacity: 60, refillPerSecond: 60 / 60 },
+  // Public rolling SLA aggregation reads roughly 43k probe rows per
+  // target window. Match the adjacent public incident-read budget so
+  // direct API traffic is bounded independently of the global IP gate.
+  statusSla: { capacity: 60, refillPerSecond: 60 / 60 },
   // 2026-06-01 — OAuth-PROVIDER public dance (V-667; Driftstack issuing
   // tokens to 3rd-party apps). authorize/token/introspect/revoke are
   // unauthenticated by protocol (PKCE + client_secret + code IS the

@@ -168,6 +168,12 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     );
   });
 
+  it('public SLA aggregate has the adjacent status-read budget (60/min/IP)', () => {
+    expect(body).toContain('statusSla: { capacity: 60, refillPerSecond: 60 / 60 },');
+    expect(body).toContain('Public rolling SLA aggregation reads roughly 43k probe rows');
+    expect(body).toContain('independently of the global IP gate');
+  });
+
   it('2026-06-01 oauthProvider entry: V-667 OAuth-provider public dance (authorize/token/introspect/revoke unauth); 60/min/IP — brute-force friction on /token + oracle throttling on /introspect, generous for a client server; dormant until V-667.C wires a store', () => {
     expect(body).toMatch(/oauthProvider: \{ capacity: 60, refillPerSecond: 60 \/ 60 \},/);
     expect(body).toMatch(/OAuth-PROVIDER public dance \(V-667; Driftstack issuing/);

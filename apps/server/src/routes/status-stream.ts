@@ -9,20 +9,22 @@
 //   computed from the V-295b system_health_probes table.
 //
 // Both endpoints are unauthenticated (the status site is public).
-// SLA is rate-limited globally. The SSE stream has NO app-level
-// rate-limit or concurrent-connection cap, and Fastify/Node set no
-// maxConnections — so its connection bounding is only the per-IP
-// TCP-connection ceiling at the OS / Cloudflare edge layer (a
-// defense-in-depth gap surfaced as queue item 4.15).
+// The SLA aggregate has both the app-wide global IP gate and its own
+// 60/min/IP direct-request budget. The SSE stream is bounded per
+// process at 500 total connections and 10 per IP.
 
 import type { FastifyInstance } from 'fastify';
+import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { IncidentEvent, IncidentEventBus } from '../services/incident-event-bus.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
 import type { SlaReportingService } from '../services/sla-reporting.js';
 import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 
 export interface StatusStreamRoutesOptions {
   bus: IncidentEventBus;
   sla: SlaReportingService;
+  /** Shared token-bucket store for the public SLA aggregate's per-IP gate. */
+  rateLimitStore: RateLimitStore;
   /**
    * Heartbeat interval in ms. Defaults to 30s — well below typical
    * proxy idle-timeouts (60s on Cloudflare, longer elsewhere).
@@ -39,6 +41,11 @@ export function registerStatusStreamRoutes(
 ): void {
   const { bus, sla } = opts;
   const heartbeatMs = opts.heartbeatMs ?? 30_000;
+  const statusSlaGate = ipRateLimit(opts.rateLimitStore, {
+    bucketPrefix: 'status_sla',
+    capacity: AUTH_IP_LIMITS.statusSla.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.statusSla.refillPerSecond,
+  });
   // Concurrent-connection caps (audit #6 — the unauth SSE had no app-level bound, a
   // resource-exhaustion DoS). Global cap bounds total resource; per-IP cap stops one client
   // exhausting it. In-memory counters (SSE is single-process per node), released idempotently
@@ -111,11 +118,12 @@ export function registerStatusStreamRoutes(
     reply.hijack();
   });
 
-  // /v1/status/sla — same no-auth posture as /v1/status/incidents.
-  // The query is a cheap aggregate over a small table (one probe/min
-  // per target = ~43k rows in 30d), so no extra rate-limiting needed.
-  app.get('/v1/status/sla', async () => {
+  // /v1/status/sla — same public/no-auth posture as /v1/status/incidents.
+  // A route-specific 60/min/IP budget bounds direct requests for the
+  // rolling aggregate independently of the coarser app-wide IP gate.
+  app.get('/v1/status/sla', { preHandler: statusSlaGate }, async (_request, reply) => {
     const data = await sla.report(new Date());
+    reply.header('cache-control', 'public, max-age=30');
     return { data };
   });
 }

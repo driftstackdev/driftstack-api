@@ -5173,6 +5173,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Rolling window + uptime + target.',
         content: { 'application/json': { schema: StatusSlaResponseOpenApi } },
       },
+      429: {
+        description: 'Per-IP direct-request budget exceeded.',
+        content: problemContent,
+      },
     },
   });
   registerRoute(r, {

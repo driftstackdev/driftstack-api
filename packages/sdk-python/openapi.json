@@ -25478,6 +25478,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Per-IP direct-request budget exceeded.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }

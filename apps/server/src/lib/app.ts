@@ -1101,6 +1101,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerStatusStreamRoutes(app, {
       bus: deps.incidentEventBus,
       sla: deps.slaReportingService,
+      rateLimitStore: deps.rateLimitStore,
       cors: {
         permissiveCors: deps.permissiveCors,
         dashboardOrigin: deps.dashboardOrigin,

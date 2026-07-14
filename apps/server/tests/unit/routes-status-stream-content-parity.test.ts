@@ -17,13 +17,12 @@
 //     immediately on some proxies.
 //   • Event framing pinned: `event:` named + `data:` JSON + blank-line
 //     terminator.
-//   • Cleanup pinned: clearInterval + unsubscribe + reply.raw.end()
+//   • Cleanup pinned: clearInterval + unsubscribe + releaseConn + reply.raw.end()
 //     fires on request.raw 'close' AND 'error'.
 //   • setInterval handle .unref() (don't pin event loop).
 //   • reply.hijack() at end so Fastify doesn't complete response.
-//   • SLA framing pinned: same no-auth posture as
-//     /v1/status/incidents; cheap aggregate (~43k rows in 30d) →
-//     no extra rate-limiting.
+//   • Public-resource gates pinned: SSE allows at most 500 total / 10
+//     per IP; SLA has a route-specific 60/min/IP token bucket.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +32,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/routes/status-stream.ts');
+const APP = resolve(REPO_ROOT, 'apps/server/src/lib/app.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -51,12 +51,23 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     );
   });
 
-  it('Unauth + connection-limit posture pinned: status site is public; SSE has NO app-level cap and Fastify/Node set no maxConnections — bounded only at the OS/Cloudflare edge (surfaced gap)', () => {
-    expect(body).toMatch(/Both endpoints are unauthenticated \(the status site is public\)\./);
-    // Corrected posture: NO app-level cap + no Fastify/Node maxConnections (the
-    // prior "connection-limited by Fastify itself" claim was inaccurate).
-    expect(body).toMatch(/rate-limit or concurrent-connection cap, and Fastify\/Node set no/);
-    expect(body).toMatch(/TCP-connection ceiling at the OS \/ Cloudflare edge layer/);
+  it('Unauthenticated public posture has route-level resource bounds', () => {
+    expect(body).toContain('Both endpoints are unauthenticated (the status site is public).');
+    expect(body).toContain('60/min/IP direct-request budget');
+    expect(body).toContain('500 total connections and 10 per IP');
+    expect(body).not.toContain('NO app-level');
+  });
+
+  it('SSE capacity gate rejects before hijack and releases its counters idempotently', () => {
+    expect(body).toContain('const MAX_TOTAL_CONNECTIONS = 500;');
+    expect(body).toContain('const MAX_CONNECTIONS_PER_IP = 10;');
+    expect(body).toContain(
+      'if (openTotal >= MAX_TOTAL_CONNECTIONS || perIp >= MAX_CONNECTIONS_PER_IP)',
+    );
+    expect(body).toContain('.code(503)');
+    expect(body).toContain(".header('retry-after', '30')");
+    expect(body).toContain('if (released) return;');
+    expect(body).toContain('releaseConn();');
   });
 
   it('Heartbeat default 30_000ms with proxy-timeout rationale (Cloudflare 60s)', () => {
@@ -107,30 +118,50 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     );
   });
 
-  it('SLA endpoint: same no-auth posture; cheap aggregate ~43k rows in 30d; no extra rate-limiting; returns {data}', () => {
-    expect(body).toMatch(
-      /\/\/ \/v1\/status\/sla — same no-auth posture as \/v1\/status\/incidents\.\s*\n?\s*\/\/ The query is a cheap aggregate over a small table \(one probe\/min\s*\n?\s*\/\/ per target = ~43k rows in 30d\), so no extra rate-limiting needed\./,
+  it('SLA endpoint: public + route-specific 60/min/IP gate + {data} response', () => {
+    expect(body).toContain(
+      '// /v1/status/sla — same public/no-auth posture as /v1/status/incidents.',
     );
-    expect(body).toMatch(
-      /app\.get\('\/v1\/status\/sla', async \(\) => \{\s*\n?\s*const data = await sla\.report\(new Date\(\)\);\s*\n?\s*return \{ data \};\s*\n?\s*\}\);/,
+    expect(body).toContain("bucketPrefix: 'status_sla'");
+    expect(body).toContain('capacity: AUTH_IP_LIMITS.statusSla.capacity');
+    expect(body).toContain('refillPerSecond: AUTH_IP_LIMITS.statusSla.refillPerSecond');
+    expect(body).toContain(
+      "app.get('/v1/status/sla', { preHandler: statusSlaGate }, async (_request, reply) => {",
     );
+    expect(body).toContain('const data = await sla.report(new Date());');
+    expect(body).toContain("reply.header('cache-control', 'public, max-age=30');");
+    expect(body).toContain('return { data };');
+    expect(body).not.toContain('no extra rate-limiting needed');
   });
 
-  it('StatusStreamRoutesOptions: bus + sla + optional heartbeatMs', () => {
+  it('StatusStreamRoutesOptions: bus + sla + rateLimitStore + optional heartbeatMs', () => {
     expect(body).toMatch(/export interface StatusStreamRoutesOptions \{/);
     expect(body).toMatch(/bus: IncidentEventBus;/);
     expect(body).toMatch(/sla: SlaReportingService;/);
+    expect(body).toMatch(/rateLimitStore: RateLimitStore;/);
     expect(body).toMatch(/heartbeatMs\?: number;/);
   });
 
-  it('imports: FastifyInstance + IncidentEvent/IncidentEventBus + SlaReportingService', () => {
+  it('imports: FastifyInstance + IP limiter/config + RateLimitStore + stream/SLA services', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
+    expect(body).toContain(
+      "import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';",
+    );
     expect(body).toMatch(
       /import type \{ IncidentEvent, IncidentEventBus \} from '\.\.\/services\/incident-event-bus\.js';/,
     );
     expect(body).toMatch(
       /import type \{ SlaReportingService \} from '\.\.\/services\/sla-reporting\.js';/,
     );
+    expect(body).toContain("import type { RateLimitStore } from '../services/rate-limit.js';");
+  });
+
+  it('buildApp wires the shared production rate-limit store into status routes', () => {
+    const app = read(APP);
+    expect(app).toContain(`registerStatusStreamRoutes(app, {
+      bus: deps.incidentEventBus,
+      sla: deps.slaReportingService,
+      rateLimitStore: deps.rateLimitStore,`);
   });
 
   it('file exists at canonical path', () => {

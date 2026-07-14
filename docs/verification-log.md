@@ -25140,3 +25140,36 @@ Verification:
   path, while current Drizzle Kit still ships the flagged legacy esbuild loader
   and npm's proposed downgrade would regress the schema toolchain rather than
   install an upstream fix.
+
+## V-583 — public SLA aggregate gets an independent abuse budget
+
+**Date:** 2026-07-14
+
+Added a route-specific 60-request/minute/IP token bucket to the public rolling
+SLA endpoint. Production already applies the coarser app-wide 600/minute/IP
+gate, so this is defense in depth rather than closure of a total bypass: the
+route budget matches adjacent public incident reads and bounds direct requests
+for an aggregate over roughly 43,000 probe rows independently of other traffic
+sharing the global bucket.
+
+The endpoint remains unauthenticated and keeps the same response envelope. It
+now sets the public status surface's documented 30-second cache policy, and its
+OpenAPI operation explicitly includes the possible 429 problem response. The
+generated Python SDK input was refreshed without unrelated spec drift.
+
+The audit also corrected two stale status-stream guards that still claimed no
+application-level SSE cap. The existing runtime cap is 500 connections per
+process and 10 per client IP, with idempotent capacity release on disconnect.
+
+Verification:
+
+- an HTTP integration proof holds 10 same-IP SSE connections open, observes a
+  503 plus `Retry-After: 30` on connection 11, disconnects one stream, and
+  observes replacement capacity;
+- the SLA integration proof accepts requests 1–60, rejects request 61 with a
+  typed 429 and `status_sla` rate-limit headers, and observes
+  `Cache-Control: public, max-age=30` on success;
+- focused route, middleware-roster, OpenAPI, content, and integration coverage
+  passes 6 files and 101 tests;
+- strict server source/test typechecking, linting, formatting, and generated
+  OpenAPI parity pass.
