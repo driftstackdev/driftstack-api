@@ -16,6 +16,12 @@ This doc covers the API surface. The dashboard at `/settings → Two-factor
 authentication` wraps these endpoints into a flow most customers will
 never need to call directly.
 
+MFA credential changes are interactive-account operations. `POST /enroll`,
+`POST /verify`, both disable routes, and recovery-code regeneration require a
+web-session bearer; API keys cannot call them, even with `account_owner`.
+`GET /v1/account/mfa` remains available to appropriately scoped API keys for
+status and monitoring only.
+
 ## Enrollment
 
 Enrollment is a two-step flow: start enrollment to mint a fresh TOTP
@@ -26,7 +32,8 @@ and receive recovery codes.
 
 `POST /v1/account/mfa/enroll`
 
-No body. Generates a fresh TOTP secret on the server, encrypts it at
+Requires an interactive web-session bearer. No body. Generates a fresh TOTP
+secret on the server, encrypts it at
 rest, and returns the otpauth URI for QR rendering plus the manual-
 entry base32 secret.
 
@@ -52,6 +59,9 @@ should be re-scanned each time.
 ## Confirm + receive recovery codes
 
 `POST /v1/account/mfa/verify`
+
+Requires the same interactive web-session boundary as start enrollment; an
+API key cannot activate a pending factor.
 
 ```json
 {
@@ -229,11 +239,11 @@ The `mfa_satisfied_at` field on the calling session is updated to
 "now"; gated routes pass for the next 15 minutes. The original
 gated request can be retried.
 
-API-key callers (machine-to-machine) bypass the step-up gate
-entirely — MFA is a human-factor concept; programmatic access uses
-scope-based authorization. `POST /v1/auth/mfa/step-up` itself
-returns 403 when called with an API key bearer (no session row to
-refresh).
+The generic step-up middleware has a machine-auth carve-out because an API key
+has no human session to refresh. MFA credential-management routes do not rely
+on that carve-out: they reject API-key bearers before step-up evaluation.
+`POST /v1/auth/mfa/step-up` itself also returns 403 for an API key because
+there is no session row to refresh.
 
 ## Disabling
 
@@ -248,8 +258,8 @@ The same operation is also exposed as `POST /v1/account/mfa/disable`
 
 Both endpoints require:
 
-1. Web-session bearer (API-key callers bypass the step-up gate but
-   still need account_owner scope on the calling key).
+1. Interactive web-session bearer; API-key bearers are rejected even when the
+   key has `account_owner`.
 2. A fresh MFA proof (15-minute window). On stale, the response is
    the 403 step-up envelope above.
 3. The `confirm: "disable-mfa"` body field — defensive layer beneath
@@ -285,8 +295,8 @@ stolen web session could mint fresh recovery codes, then redeem one
 to satisfy step-up on disable — a full MFA bypass. The legitimate
 lost-device-but-logged-in flow still works: an existing recovery
 code satisfies `POST /v1/auth/mfa/step-up` before regenerating.
-API-key (machine-to-machine) callers bypass the step-up gate as
-elsewhere.
+API-key callers are rejected before the step-up gate and cannot replace the
+human account's recovery credentials.
 
 Returns `404 Not Found` when the calling account isn't enrolled.
 

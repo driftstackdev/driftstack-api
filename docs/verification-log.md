@@ -25452,3 +25452,37 @@ Verification:
   passes 3 files and 24 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-593 — MFA credential changes require an interactive session
+
+**Date:** 2026-07-14
+
+Removed the machine-credential path into human MFA control. The generic MFA
+freshness middleware intentionally treats API keys as machine credentials with
+no interactive session to refresh, but the MFA management routes inherited
+that carve-out directly. A leaked `account_owner` key could therefore start
+and activate an attacker-owned TOTP enrollment, replace recovery codes, or
+disable the account's second factor.
+
+Every MFA credential-changing entry point now requires a web-session bearer
+before its handler or freshness gate runs: enrollment start, enrollment
+verification, both disable verbs, and recovery-code regeneration. API keys
+retain read-only status access through `GET /v1/account/mfa`. The existing
+`account_owner` scope, fresh-factor requirements on disable/regeneration,
+explicit disable confirmation, recovery-code single use, and TOTP replay
+defense remain layered beneath the new boundary. Machine callers receive a
+stable correlated Forbidden problem without any state change.
+
+Verification:
+
+- a table-driven integration proof sends an API-key bearer to all five
+  mutation entry points and verifies typed 403 problem fields plus request-id
+  correlation;
+- focused route, lifecycle, step-up, source-contract, and docs coverage passes
+  5 files and 78 tests;
+- the real HTTP/Redis/PostgreSQL MFA lifecycle passes all 8 Playwright cases,
+  including API-key status access, web-session enrollment, recovery-code
+  step-up, both disable verbs, regeneration, validation, and unauthenticated
+  denials;
+- strict server source/test typechecking, docs checking/build, targeted
+  linting, formatting, diff, and hooks pass.

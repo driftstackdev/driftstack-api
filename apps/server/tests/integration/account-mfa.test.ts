@@ -34,6 +34,36 @@ interface MfaStatusResponse {
   unused_recovery_codes: number;
 }
 
+interface SignupResponse {
+  debug_token?: string;
+}
+
+interface SessionEnvelope {
+  session: { token: string };
+}
+
+async function buildInteractiveFixture(): Promise<{ authorization: string }> {
+  fx = await buildTestApp();
+  const signup = await fx.app.inject({
+    method: 'POST',
+    url: '/v1/auth/signup',
+    payload: {
+      email: 'mfa-route-owner@driftstack.local',
+      password: 'correct horse battery staple',
+    },
+  });
+  const verificationToken = signup.json<SignupResponse>().debug_token;
+  if (!verificationToken) throw new Error('fixture did not expose verification token');
+  const verify = await fx.app.inject({
+    method: 'POST',
+    url: '/v1/auth/verify-email',
+    payload: { token: verificationToken },
+  });
+  expect(verify.statusCode).toBe(200);
+  const token = verify.json<SessionEnvelope>().session.token;
+  return { authorization: `Bearer ${token}` };
+}
+
 /** Decode a base32-encoded TOTP secret back into raw bytes so the test
  *  can compute a current code with the same library function the
  *  service uses. RFC 4648 base32 (uppercase A-Z + 2-7). */
@@ -74,11 +104,11 @@ describe('GET /v1/account/mfa (V-353b)', () => {
 
 describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
   it('200 enroll returns otpauth uri + base32 secret + algorithm metadata', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<EnrollStartResponse>();
@@ -95,17 +125,17 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     const again = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     expect(again.statusCode).toBe(200);
   });
 
   it('200 verify accepts the current code, returns 10 recovery codes', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     const enroll = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     const enrollBody = enroll.json<EnrollStartResponse>();
     const secretBytes = base32Decode(enrollBody.secret_base32);
@@ -114,7 +144,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/verify',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: { code },
     });
     expect(verify.statusCode).toBe(200);
@@ -132,7 +162,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     const status = await fx.app.inject({
       method: 'GET',
       url: '/v1/account/mfa',
-      headers: auth(fx),
+      headers,
     });
     const statusBody = status.json<MfaStatusResponse>();
     expect(statusBody.enrolled).toBe(true);
@@ -141,59 +171,67 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
   });
 
   it('400 verify rejects a wrong code', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/verify',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: { code: '000000' },
     });
     expect(verify.statusCode).toBe(400);
   });
 
   it('400 verify rejects malformed code (not 6 digits)', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/verify',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: { code: '12345' },
     });
     expect(verify.statusCode).toBe(400);
   });
 
   it('409 enroll on already-enrolled account refuses; disable + re-enroll works', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     // Initial enroll + verify
     const enroll1 = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     const secret1 = base32Decode(enroll1.json<EnrollStartResponse>().secret_base32);
     const code1 = computeTotpCode(secret1, Math.floor(Date.now() / 1000));
-    await fx.app.inject({
+    const verify1 = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/verify',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: { code: code1 },
     });
+    const recoveryCode = verify1.json<EnrollCompleteResponse>().recovery_codes[0];
+    const stepUp = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/mfa/step-up',
+      headers: { ...headers, 'content-type': 'application/json' },
+      payload: { recovery_code: recoveryCode },
+    });
+    expect(stepUp.statusCode).toBe(200);
 
     // Re-enroll on already-enrolled account → 409
     const enroll2 = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     expect(enroll2.statusCode).toBe(409);
 
@@ -201,7 +239,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     const del = await fx.app.inject({
       method: 'DELETE',
       url: '/v1/account/mfa',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: { confirm: 'disable-mfa' },
     });
     expect(del.statusCode).toBe(204);
@@ -209,7 +247,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     const enroll3 = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     expect(enroll3.statusCode).toBe(200);
   });
@@ -217,22 +255,22 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
 
 describe('DELETE /v1/account/mfa (V-353b)', () => {
   it('400 without confirm body field', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     const res = await fx.app.inject({
       method: 'DELETE',
       url: '/v1/account/mfa',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: {},
     });
     expect(res.statusCode).toBe(400);
   });
 
   it('204 idempotent on never-enrolled account', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     const res = await fx.app.inject({
       method: 'DELETE',
       url: '/v1/account/mfa',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: { confirm: 'disable-mfa' },
     });
     expect(res.statusCode).toBe(204);
@@ -241,25 +279,33 @@ describe('DELETE /v1/account/mfa (V-353b)', () => {
 
 describe('POST /v1/account/mfa/recovery-codes/regenerate (V-353b)', () => {
   it('200 returns 10 fresh codes; old codes invalidated', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     const enroll = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/enroll',
-      headers: auth(fx),
+      headers,
     });
     const secretBytes = base32Decode(enroll.json<EnrollStartResponse>().secret_base32);
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/verify',
-      headers: { ...auth(fx), 'content-type': 'application/json' },
+      headers: { ...headers, 'content-type': 'application/json' },
       payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
     });
     const originalCodes = verify.json<EnrollCompleteResponse>().recovery_codes;
 
+    const stepUp = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/mfa/step-up',
+      headers: { ...headers, 'content-type': 'application/json' },
+      payload: { recovery_code: originalCodes[0] },
+    });
+    expect(stepUp.statusCode).toBe(200);
+
     const regen = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/recovery-codes/regenerate',
-      headers: auth(fx),
+      headers,
     });
     expect(regen.statusCode).toBe(200);
     const newCodes = regen.json<EnrollCompleteResponse>().recovery_codes;
@@ -272,17 +318,17 @@ describe('POST /v1/account/mfa/recovery-codes/regenerate (V-353b)', () => {
     const status = await fx.app.inject({
       method: 'GET',
       url: '/v1/account/mfa',
-      headers: auth(fx),
+      headers,
     });
     expect(status.json<MfaStatusResponse>().unused_recovery_codes).toBe(10);
   });
 
   it('404 when MFA is not enrolled', async () => {
-    fx = await buildTestApp();
+    const headers = await buildInteractiveFixture();
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/account/mfa/recovery-codes/regenerate',
-      headers: auth(fx),
+      headers,
     });
     expect(res.statusCode).toBe(404);
   });

@@ -165,14 +165,14 @@ describe('W767 docs /api/mfa content parity', () => {
     );
   });
 
-  it("CRITICAL step-up API-key-callers-bypass framing pinned. The 'API-key callers (machine-to-machine) bypass the step-up gate entirely — MFA is a human-factor concept; programmatic access uses scope-based authorization. POST /v1/auth/mfa/step-up itself returns 403 when called with an API key bearer (no session row to refresh).' wording is the load-bearing machine-vs-human separation.", () => {
+  it('CRITICAL machine-auth separation: generic step-up carve-out cannot authorize MFA credential management', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /API-key callers \(machine-to-machine\) bypass the step-up gate\s*\n?entirely — MFA is a human-factor concept; programmatic access uses\s*\n?scope-based authorization\./,
+      /The generic step-up middleware has a machine-auth carve-out because an API key\s*\n?has no human session to refresh\. MFA credential-management routes do not rely\s*\n?on that carve-out: they reject API-key bearers before step-up evaluation\./,
     );
     expect(p).toMatch(
-      /`POST \/v1\/auth\/mfa\/step-up` itself\s*\n?returns 403 when called with an API key bearer \(no session row to\s*\n?refresh\)\./,
+      /`POST \/v1\/auth\/mfa\/step-up` itself also returns 403 for an API key because\s*\n?there is no session row to refresh\./,
     );
   });
 
@@ -180,12 +180,21 @@ describe('W767 docs /api/mfa content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /1\. Web-session bearer \(API-key callers bypass the step-up gate but\s*\n?\s+still need account_owner scope on the calling key\)\./,
+      /1\. Interactive web-session bearer; API-key bearers are rejected even when the\s*\n?\s+key has `account_owner`\./,
     );
     expect(p).toMatch(/2\. A fresh MFA proof \(15-minute window\)/);
     expect(p).toMatch(
       /3\. The `confirm: "disable-mfa"` body field — defensive layer beneath\s*\n?\s+the gate so a stray client request can't accidentally disable\./,
     );
+  });
+
+  it('CRITICAL all MFA credential changes require an interactive web session while status remains machine-readable', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/MFA credential changes are interactive-account operations\./);
+    expect(p).toMatch(/API keys cannot call them, even with `account_owner`\./);
+    expect(p).toMatch(/`GET \/v1\/account\/mfa` remains available/);
+    expect(p).toMatch(/cannot replace the\s*\n?human account's recovery credentials\./);
   });
 
   it("CRITICAL disable-clears-TOTP-secret + all-unused-recovery-codes framing pinned. The 'Disabling clears the TOTP secret AND every unused recovery code. Re-enabling requires the full enrollment dance from scratch.' wording matches W759 dashboard /settings disable-confirm framing.", () => {

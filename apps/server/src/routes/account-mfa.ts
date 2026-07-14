@@ -1,12 +1,13 @@
 // V-353b — customer-facing MFA enrollment + status + disable + recovery
-// code regen. Step-up gating (account-delete + MFA-disable per V-353a
-// verdict Q3) lands in V-353e; for now, disable is gated only by web-
-// session auth + an explicit confirm body field.
+// code regen. Every operation that changes MFA credential state requires an
+// interactive web session. API keys may read status, but cannot enroll an
+// attacker-owned factor, replace recovery codes, or disable the human factor.
+// Disable and recovery-code regeneration additionally require fresh MFA.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { CompleteMfaEnrollmentRequestSchema } from '@driftstack/api-types';
 import type { MfaService } from '../services/mfa.js';
-import { BadRequestError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 
 export interface AccountMfaRoutesOptions {
   service: MfaService;
@@ -17,6 +18,20 @@ export function registerAccountMfaRoutes(
   opts: AccountMfaRoutesOptions,
 ): void {
   const { service } = opts;
+
+  // MFA configuration is a human credential-control surface, not an ordinary
+  // machine API. An account_owner API key may be broadly privileged for SDK
+  // operations, but letting it mutate MFA would allow a leaked key to enroll
+  // an attacker-controlled TOTP secret or remove the dashboard's second
+  // factor. Keep the generic requireMfaFresh machine carve-out intact for
+  // unrelated routes while this surface fails closed on non-web bearers.
+  const requireInteractiveWebSession = (request: FastifyRequest): void => {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    if (ctx.webSession === null) {
+      throw new ForbiddenError('MFA credential management requires an interactive web session.');
+    }
+  };
 
   app.get(
     '/v1/account/mfa',
@@ -36,7 +51,14 @@ export function registerAccountMfaRoutes(
 
   app.post(
     '/v1/account/mfa/enroll',
-    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('account_owner'),
+        requireInteractiveWebSession,
+        app.rateLimit('global'),
+      ],
+    },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -56,7 +78,14 @@ export function registerAccountMfaRoutes(
 
   app.post(
     '/v1/account/mfa/verify',
-    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('account_owner'),
+        requireInteractiveWebSession,
+        app.rateLimit('global'),
+      ],
+    },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -103,6 +132,7 @@ export function registerAccountMfaRoutes(
       preHandler: [
         app.requireAuth,
         app.requireScope('account_owner'),
+        requireInteractiveWebSession,
         app.requireMfaFresh(),
         app.rateLimit('global'),
       ],
@@ -118,6 +148,7 @@ export function registerAccountMfaRoutes(
       preHandler: [
         app.requireAuth,
         app.requireScope('account_owner'),
+        requireInteractiveWebSession,
         app.requireMfaFresh(),
         app.rateLimit('global'),
       ],
@@ -137,6 +168,7 @@ export function registerAccountMfaRoutes(
       preHandler: [
         app.requireAuth,
         app.requireScope('account_owner'),
+        requireInteractiveWebSession,
         app.requireMfaFresh(),
         app.rateLimit('global'),
       ],

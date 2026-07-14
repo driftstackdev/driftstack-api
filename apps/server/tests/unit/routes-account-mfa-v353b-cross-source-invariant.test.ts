@@ -2,11 +2,9 @@
 // hundred-sixty-first in the drift-guard series. Pins the apps/
 // server/src/routes/account-mfa.ts customer-facing MFA routes:
 //
-//   V-353b anchor — 'V-353b — customer-facing MFA enrollment + status
-//   + disable + recovery code regen. Step-up gating (account-delete
-//   + MFA-disable per V-353a verdict Q3) lands in V-353e; for now,
-//   disable is gated only by web-session auth + an explicit confirm
-//   body field'.
+//   V-353b anchor — status remains API-key-readable, while every MFA
+//   credential mutation requires an interactive web session. Disable and
+//   recovery-code regeneration additionally retain fresh-MFA step-up.
 //
 //   6-endpoint inventory:
 //     - GET /v1/account/mfa — status.
@@ -54,12 +52,12 @@ function read(p: string): string {
 }
 
 describe('W1035 routes/account-mfa V-353b cross-source invariant', () => {
-  it('CRITICAL V-353b anchor + step-up-deferred-to-V-353e framing.', () => {
+  it('CRITICAL V-353b interactive credential-control framing.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-mfa.ts'));
     expect(p).toMatch(/V-353b — customer-facing MFA enrollment \+ status \+ disable \+ recovery/);
-    expect(p).toMatch(/code regen\. Step-up gating \(account-delete \+ MFA-disable per V-353a/);
-    expect(p).toMatch(/verdict Q3\) lands in V-353e; for now, disable is gated only by web-/);
-    expect(p).toMatch(/session auth \+ an explicit confirm body field\./);
+    expect(p).toMatch(/Every operation that changes MFA credential state requires an/);
+    expect(p).toMatch(/API keys may read status, but cannot enroll an/);
+    expect(p).toMatch(/attacker-owned factor, replace recovery codes, or disable the human factor/);
   });
 
   it('CRITICAL 6-endpoint inventory — GET /mfa + POST /enroll + POST /verify + DELETE /mfa + POST /disable + POST /recovery-codes/regenerate.', () => {
@@ -114,6 +112,7 @@ describe('W1035 routes/account-mfa V-353b cross-source invariant', () => {
     // DELETE /mfa + POST /mfa/disable + POST /mfa/recovery-codes/regenerate
     // (the regen gate closes the mint-codes→satisfy-step-up→disable bypass).
     expect((p.match(/app\.requireMfaFresh\(\)/g) ?? []).length).toBe(3);
+    expect((p.match(/requireInteractiveWebSession,/g) ?? []).length).toBe(5);
     expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBeGreaterThanOrEqual(
       2,
     );

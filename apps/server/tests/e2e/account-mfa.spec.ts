@@ -2,12 +2,12 @@
 //
 // Exercises the full TOTP enroll → verify → status → disable cycle via
 // real HTTP against the test server, plus the recovery-codes regen
-// path and the explicit-confirm guard on disable. API-key callers
-// bypass the requireMfaFresh step-up gate per middleware/auth.ts L91-95,
-// so bearer-auth is sufficient here — the dashboard's web-session MFA
-// step-up flow is covered by separate spec(s).
+// path and the explicit-confirm guard on disable. Credential-changing
+// operations use the same web-session boundary as the dashboard; a separate
+// assertion keeps API-key status reads working without letting machine keys
+// mutate the human factor.
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { startTestServer, type TestServer } from './helpers/server.js';
 import { seedAccount, authHeader } from './helpers/seed.js';
 import { computeTotpCode } from '../../src/lib/mfa-totp.js';
@@ -65,6 +65,32 @@ interface StatusResponse {
   unused_recovery_codes: number;
 }
 
+interface SignupResponse {
+  debug_token?: string;
+}
+
+interface SessionEnvelope {
+  session: { token: string };
+}
+
+async function interactiveAuth(
+  request: APIRequestContext,
+  email: string,
+): Promise<{ Authorization: string }> {
+  const signup = await request.post(`${server.baseUrl}/v1/auth/signup`, {
+    data: { email, password: 'correct horse battery staple' },
+  });
+  expect(signup.status()).toBe(200);
+  const verificationToken = ((await signup.json()) as SignupResponse).debug_token;
+  expect(verificationToken).toBeTruthy();
+  const verify = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
+    data: { token: verificationToken },
+  });
+  expect(verify.status()).toBe(200);
+  const token = ((await verify.json()) as SessionEnvelope).session.token;
+  return authHeader(token);
+}
+
 test('GET /v1/account/mfa returns enrolled=false for fresh account', async ({ request }) => {
   const seed = await seedAccount(server.client);
   const res = await request.get(`${server.baseUrl}/v1/account/mfa`, {
@@ -78,8 +104,7 @@ test('GET /v1/account/mfa returns enrolled=false for fresh account', async ({ re
 });
 
 test('full enroll → verify → status → disable cycle', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const headers = authHeader(seed.plaintext);
+  const headers = await interactiveAuth(request, 'mfa-cycle@driftstack.test');
 
   const enrollRes = await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, {
     headers,
@@ -107,12 +132,18 @@ test('full enroll → verify → status → disable cycle', async ({ request }) 
     expect(rc).toMatch(/^[A-Z0-9-]+$/);
   }
 
+  const stepUp = await request.post(`${server.baseUrl}/v1/auth/mfa/step-up`, {
+    headers,
+    data: { recovery_code: verify.recovery_codes[0] },
+  });
+  expect(stepUp.status()).toBe(200);
+
   const statusRes = await request.get(`${server.baseUrl}/v1/account/mfa`, { headers });
   expect(statusRes.status()).toBe(200);
   const status = (await statusRes.json()) as StatusResponse;
   expect(status.enrolled).toBe(true);
   expect(status.enrolled_at).not.toBeNull();
-  expect(status.unused_recovery_codes).toBe(verify.recovery_codes.length);
+  expect(status.unused_recovery_codes).toBe(verify.recovery_codes.length - 1);
 
   const disableRes = await request.post(`${server.baseUrl}/v1/account/mfa/disable`, {
     headers,
@@ -128,8 +159,7 @@ test('full enroll → verify → status → disable cycle', async ({ request }) 
 });
 
 test('POST /v1/account/mfa/verify with wrong code returns 400', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const headers = authHeader(seed.plaintext);
+  const headers = await interactiveAuth(request, 'mfa-wrong@driftstack.test');
 
   await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, { headers });
   const verifyRes = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
@@ -140,8 +170,7 @@ test('POST /v1/account/mfa/verify with wrong code returns 400', async ({ request
 });
 
 test('POST /v1/account/mfa/verify with malformed body returns 400', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const headers = authHeader(seed.plaintext);
+  const headers = await interactiveAuth(request, 'mfa-malformed@driftstack.test');
 
   await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, { headers });
   const verifyRes = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
@@ -152,17 +181,22 @@ test('POST /v1/account/mfa/verify with malformed body returns 400', async ({ req
 });
 
 test('POST /v1/account/mfa/disable without confirm body returns 400', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const headers = authHeader(seed.plaintext);
+  const headers = await interactiveAuth(request, 'mfa-confirm@driftstack.test');
 
   const enrollRes = await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, { headers });
   const enroll = (await enrollRes.json()) as EnrollResponse;
   const secretBytes = base32Decode(enroll.secret_base32);
   const code = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-  await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
+  const verify = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
     headers,
     data: { code },
   });
+  const recoveryCodes = ((await verify.json()) as VerifyResponse).recovery_codes;
+  const stepUp = await request.post(`${server.baseUrl}/v1/auth/mfa/step-up`, {
+    headers,
+    data: { recovery_code: recoveryCodes[0] },
+  });
+  expect(stepUp.status()).toBe(200);
 
   const disableRes = await request.post(`${server.baseUrl}/v1/account/mfa/disable`, {
     headers,
@@ -177,14 +211,22 @@ test('POST /v1/account/mfa/disable without confirm body returns 400', async ({ r
 });
 
 test('DELETE /v1/account/mfa back-compat alias also disables', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const headers = authHeader(seed.plaintext);
+  const headers = await interactiveAuth(request, 'mfa-delete@driftstack.test');
 
   const enrollRes = await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, { headers });
   const enroll = (await enrollRes.json()) as EnrollResponse;
   const secretBytes = base32Decode(enroll.secret_base32);
   const code = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
-  await request.post(`${server.baseUrl}/v1/account/mfa/verify`, { headers, data: { code } });
+  const verify = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
+    headers,
+    data: { code },
+  });
+  const recoveryCodes = ((await verify.json()) as VerifyResponse).recovery_codes;
+  const stepUp = await request.post(`${server.baseUrl}/v1/auth/mfa/step-up`, {
+    headers,
+    data: { recovery_code: recoveryCodes[0] },
+  });
+  expect(stepUp.status()).toBe(200);
 
   const disableRes = await request.delete(`${server.baseUrl}/v1/account/mfa`, {
     headers,
@@ -194,8 +236,7 @@ test('DELETE /v1/account/mfa back-compat alias also disables', async ({ request 
 });
 
 test('POST /v1/account/mfa/recovery-codes/regenerate issues a fresh batch', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const headers = authHeader(seed.plaintext);
+  const headers = await interactiveAuth(request, 'mfa-regen@driftstack.test');
 
   const enrollRes = await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, { headers });
   const enroll = (await enrollRes.json()) as EnrollResponse;
@@ -207,6 +248,12 @@ test('POST /v1/account/mfa/recovery-codes/regenerate issues a fresh batch', asyn
       data: { code },
     })
   ).json()) as VerifyResponse;
+
+  const stepUp = await request.post(`${server.baseUrl}/v1/auth/mfa/step-up`, {
+    headers,
+    data: { recovery_code: firstVerify.recovery_codes[0] },
+  });
+  expect(stepUp.status()).toBe(200);
 
   const regenRes = await request.post(
     `${server.baseUrl}/v1/account/mfa/recovery-codes/regenerate`,

@@ -5,8 +5,8 @@
 // when the calling account has MFA enrolled. POST /v1/auth/mfa/step-up
 // refreshes the timestamp on the calling session.
 //
-// API-key callers bypass the gate (machine-to-machine; scope gates
-// apply instead).
+// API keys remain valid for status reads, but every MFA credential mutation
+// requires an interactive web session before the freshness gate is evaluated.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
@@ -230,43 +230,50 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
     expect(res.statusCode).toBe(204);
   });
 
-  it('API-key caller (no web session) bypasses the step-up gate', async () => {
-    fx = await buildTestApp();
-    // Default fixture is API-key authed. Enroll MFA via API key
-    // (no web-session involved); disable should pass without step-up.
-    const enroll = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/account/mfa/enroll',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-    });
-    const secretBytes = base32Decode(enroll.json<EnrollStartResponse>().secret_base32);
-    await fx.app.inject({
-      method: 'POST',
+  it.each([
+    { method: 'POST' as const, url: '/v1/account/mfa/enroll', payload: undefined },
+    {
+      method: 'POST' as const,
       url: '/v1/account/mfa/verify',
-      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
-      payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
-    });
-
-    const del = await fx.app.inject({
-      method: 'DELETE',
+      payload: { code: '123456' },
+    },
+    {
+      method: 'DELETE' as const,
       url: '/v1/account/mfa',
-      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
       payload: { confirm: 'disable-mfa' },
-    });
-    expect(del.statusCode).toBe(204);
-  });
-
-  it('account NOT enrolled: gate is a no-op (delete is idempotent 204)', async () => {
-    fx = await buildTestApp();
-    // Default API-key fixture, MFA never enrolled.
-    const res = await fx.app.inject({
-      method: 'DELETE',
-      url: '/v1/account/mfa',
-      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+    },
+    {
+      method: 'POST' as const,
+      url: '/v1/account/mfa/disable',
       payload: { confirm: 'disable-mfa' },
-    });
-    expect(res.statusCode).toBe(204);
-  });
+    },
+    {
+      method: 'POST' as const,
+      url: '/v1/account/mfa/recovery-codes/regenerate',
+      payload: undefined,
+    },
+  ])(
+    '$method $url rejects an API-key bearer before mutating MFA',
+    async ({ method, url, payload }) => {
+      fx = await buildTestApp();
+      const res = await fx.app.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.headers['content-type']).toContain('application/problem+json');
+      const problem = res.json<Record<string, unknown>>();
+      expect(problem).toMatchObject({
+        type: 'https://errors.driftstack.dev/forbidden',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'MFA credential management requires an interactive web session.',
+      });
+      expect(problem['instance']).toBe(res.headers['x-request-id']);
+    },
+  );
 });
 
 describe('POST /v1/auth/mfa/step-up validation (V-353e)', () => {

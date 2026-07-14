@@ -1,10 +1,8 @@
 // W417.A — drift guard for apps/server/src/routes/account-mfa.ts.
 // V-353b customer-facing MFA enrollment/status/disable/recovery code
-// regen + V-353e step-up gating (account-delete + MFA-disable per
-// V-353a verdict Q3) + V-353f POST disable alias. Drift here either
-// drops the requireMfaFresh step-up gate (lets stale sessions disable
-// MFA without re-verification) or breaks the defensive confirm-body
-// guard (accidental DELETEs from stray clients turn off MFA).
+// regen + V-353e step-up gating + V-353f POST disable alias. Drift here
+// must not let a machine API key control the human MFA credential, drop
+// requireMfaFresh, or break the defensive confirm-body guard.
 //
 //   • V-353b framing pinned: customer-facing MFA enrollment + status
 //     + disable + recovery code regen.
@@ -41,10 +39,17 @@ function read(p: string): string {
 describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-353b framing pinned: customer-facing MFA enrollment + status + disable + recovery code regen', () => {
+  it('V-353b framing pins interactive credential mutations and API-key-readable status', () => {
     expect(body).toMatch(
-      /V-353b — customer-facing MFA enrollment \+ status \+ disable \+ recovery\s*\n?\s*\/\/\s*code regen\. Step-up gating \(account-delete \+ MFA-disable per V-353a\s*\n?\s*\/\/\s*verdict Q3\) lands in V-353e; for now, disable is gated only by web-\s*\n?\s*\/\/\s*session auth \+ an explicit confirm body field\./,
+      /Every operation that changes MFA credential state requires an\s*\n?\s*\/\/ interactive web session\. API keys may read status, but cannot enroll an\s*\n?\s*\/\/ attacker-owned factor, replace recovery codes, or disable the human factor\./,
     );
+  });
+
+  it('machine bearers fail closed before every MFA credential mutation', () => {
+    expect(body).toMatch(/const requireInteractiveWebSession = \(request: FastifyRequest\): void/);
+    expect(body).toMatch(/if \(ctx\.webSession === null\) \{/);
+    expect(body).toMatch(/MFA credential management requires an interactive web session\./);
+    expect(body.match(/requireInteractiveWebSession,/g)).toHaveLength(5);
   });
 
   it('V-353e framing pinned in disable handler: 403 + requires_mfa_step_up extension; POST /v1/auth/mfa/step-up refresh path', () => {
@@ -68,7 +73,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
       /\/\/ V-353f — POST alias per founder-named canonical shape\. Same gate,\s*\n?\s*\/\/ same handler\. Some clients prefer POST for non-idempotent ops\./,
     );
     expect(body).toMatch(
-      /app\.post\(\s*'\/v1\/account\/mfa\/disable',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
+      /app\.post\(\s*'\/v1\/account\/mfa\/disable',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
     );
   });
 
@@ -77,7 +82,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
       /\/\/ DELETE retains the original verb for back-compat with the V-353b\s*\n?\s*\/\/ tests \+ clients\./,
     );
     expect(body).toMatch(
-      /app\.delete\(\s*'\/v1\/account\/mfa',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
+      /app\.delete\(\s*'\/v1\/account\/mfa',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
     );
   });
 
@@ -98,7 +103,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
 
   it('Enroll: POST /v1/account/mfa/enroll wire shape — otpauth_uri + secret_base32 + algorithm SHA1 + digits 6 + period_seconds 30', () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/enroll',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
+      /'\/v1\/account\/mfa\/enroll',[\s\S]{0,240}app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.rateLimit\('global'\)/,
     );
     expect(body).toMatch(
       /const result = await service\.startEnrollment\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*email: ctx\.account\.email,\s*\n?\s*\}\);/,
@@ -127,7 +132,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
     expect(body).toMatch(/Without it a stolen web session could mint fresh/);
     expect(body).toMatch(/legitimate lost-device-but-logged-in flow still/);
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},/,
+      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},/,
     );
     expect(body).toMatch(
       /const \{ recoveryCodes \} = await service\.regenerateRecoveryCodes\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*\}\);\s*\n?\s*return \{ recovery_codes: recoveryCodes \};/,
@@ -140,12 +145,14 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
     );
   });
 
-  it('imports: FastifyInstance/FastifyReply/FastifyRequest + CompleteMfaEnrollmentRequestSchema + MfaService + BadRequestError', () => {
+  it('imports: Fastify types + schema/service + typed bad-request/forbidden errors', () => {
     expect(body).toMatch(
       /import type \{ FastifyInstance, FastifyReply, FastifyRequest \} from 'fastify';/,
     );
     expect(body).toMatch(/import type \{ MfaService \} from '\.\.\/services\/mfa\.js';/);
-    expect(body).toMatch(/import \{ BadRequestError \} from '\.\.\/lib\/errors\.js';/);
+    expect(body).toMatch(
+      /import \{ BadRequestError, ForbiddenError \} from '\.\.\/lib\/errors\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {
