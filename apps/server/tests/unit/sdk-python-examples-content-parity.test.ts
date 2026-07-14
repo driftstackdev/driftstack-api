@@ -129,7 +129,7 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(existsSync(E('profile_management.py'))).toBe(true);
   });
 
-  it('webhook_receiver.py: stdlib-only http.server BaseHTTPRequestHandler + verify_webhook_signature + X-Driftstack-Signature header + 5-event-type HANDLERS map (session.completed/failed + quota.warning_80pct/exceeded + api_key.revoked) + 204 ack within 30s pinned', () => {
+  it('webhook_receiver.py: stdlib-only receiver + signature verification + emitted core-event HANDLERS map + 204 ack within 30s pinned', () => {
     const body = read(E('webhook_receiver.py'));
     expect(body).toMatch(/^"""Webhook receiver: verify the signature, dispatch by event type\.$/m);
     expect(body).toMatch(/Stdlib-only — no Flask \/ FastAPI \/ Django dependency\./);
@@ -138,15 +138,12 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(body).toMatch(/SECRET = os\.environ\.get\("DRIFTSTACK_WEBHOOK_SECRET", ""\)/);
     expect(body).toMatch(/^def handle_session_completed\(data: dict\[str, Any\]\) -> None:$/m);
     expect(body).toMatch(/^def handle_session_failed\(data: dict\[str, Any\]\) -> None:$/m);
-    expect(body).toMatch(/^def handle_quota_warning\(data: dict\[str, Any\]\) -> None:$/m);
-    expect(body).toMatch(/^def handle_quota_exceeded\(data: dict\[str, Any\]\) -> None:$/m);
     expect(body).toMatch(/^def handle_api_key_revoked\(data: dict\[str, Any\]\) -> None:$/m);
     expect(body).toMatch(/^HANDLERS = \{$/m);
     expect(body).toMatch(/"session\.completed": handle_session_completed,/);
     expect(body).toMatch(/"session\.failed": handle_session_failed,/);
-    expect(body).toMatch(/"quota\.warning_80pct": handle_quota_warning,/);
-    expect(body).toMatch(/"quota\.exceeded": handle_quota_exceeded,/);
     expect(body).toMatch(/"api_key\.revoked": handle_api_key_revoked,/);
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
     expect(body).toMatch(/def do_POST\(self\) -> None:/);
     expect(body).toMatch(/signature = self\.headers\.get\("x-driftstack-signature"\)/);
     expect(body).toMatch(

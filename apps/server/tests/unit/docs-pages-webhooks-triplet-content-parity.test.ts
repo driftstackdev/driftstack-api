@@ -117,16 +117,16 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL [LIVE]/[DECLARED]/[PLANNED] 3-status notation framing pinned. The 'events are tagged [LIVE] (declared in the enum + fired by a service emitter today), [DECLARED] (declared in the enum but no production emitter wired), [PLANNED] (not yet in the enum; queued for V-NNN)' is the load-bearing implementation-status taxonomy.", () => {
+  it('CRITICAL current-only framing is pinned without declared-but-unwired or planned event classes.', () => {
     const p = read(EV);
 
-    expect(p).toMatch(/\*\*Status notation\*\*: events are tagged/);
-    expect(p).toMatch(/\[LIVE\] \(declared in the enum \+ fired by a service emitter today\),/);
-    expect(p).toMatch(/\[DECLARED\] \(declared in the enum but no production emitter wired\),/);
-    expect(p).toMatch(/\[PLANNED\] \(not yet in the enum; queued for V-NNN\)/);
+    expect(p).toMatch(
+      /customer-facing reference for webhook events emitted by the\s*\n?\s*Driftstack control plane and the synthetic connectivity test event/,
+    );
+    expect(p).not.toMatch(/\[DECLARED\]|\[PLANNED\]|roadmap/i);
   });
 
-  it('CRITICAL quick-index catalog completeness — every WebhookEventTypeSchema value is documented as a table row (enum-derived source-of-truth guard so additive enum values cannot ship undocumented), plus the forward-looking [PLANNED] queue. Drift to dropping any row would let SDK consumers miss subscription opportunities or fail to model planned events.', () => {
+  it('CRITICAL quick-index catalog completeness — every WebhookEventTypeSchema value is documented and retired quota declarations stay absent.', () => {
     const p = read(EV);
 
     // Source of truth: every emittable event type MUST appear in the
@@ -137,25 +137,11 @@ describe('W787 docs webhooks/ triplet content parity', () => {
       expect(p, `enum event ${ev}`).toMatch(new RegExp(`\\| \`${ev.replace(/\./g, '\\.')}\``));
     }
 
-    // [PLANNED] events are intentionally not yet in the enum; pin them
-    // separately so the forward-looking catalog rows can't silently drop.
-    const plannedEvents = [
-      'session.created',
-      'session.destroyed',
-      'profile.created',
-      'profile.deleted',
-      'api_key.minted',
-      'subscription.changed',
-      'subscription.cancelled',
-      'webhook_endpoint.created',
-      'webhook_endpoint.deleted',
-    ];
+    const plannedEvents: string[] = [];
     for (const ev of plannedEvents) {
       expect(p, `planned event ${ev}`).toMatch(new RegExp(`\\| \`${ev.replace(/\./g, '\\.')}\``));
     }
-    // trial_pack.purchased / trial_pack.expired removed 2026-05-27 with the
-    // trial_pack retirement.
-    expect(p).not.toMatch(/trial_pack\./);
+    expect(p).not.toMatch(/quota\.warning_80pct|quota\.exceeded|trial_pack\./);
   });
 
   it('CRITICAL <uuid> common-envelope shape pinned — id (bare UUID, matching services/webhooks.ts randomUUID()) + type + created_at + data (the real delivered body; no account_id / emitted_at). Drift to a different envelope would break SDK type discriminators.', () => {

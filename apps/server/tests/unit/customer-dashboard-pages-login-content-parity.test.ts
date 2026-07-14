@@ -39,9 +39,9 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     );
   });
 
-  it("?next= round-trip framing pinned: 'Honors ?next= for deep-link round-trip from /cli/authorize and any future deep-link entry points; falls back to / for the typical I came here from the marketing site path.' — pinned so the post-login landing fallback ('/') stays the canonical home for marketing-site → login round-trips", () => {
+  it("?next= round-trip framing pins same-origin deep links and the canonical '/' fallback", () => {
     expect(body).toMatch(
-      /\/\/ Honors `\?next=` for deep-link round-trip from \/cli\/authorize and\s*\n?\s*\/\/ any future deep-link entry points; falls back to "\/" for the typical\s*\n?\s*\/\/ "I came here from the marketing site" path\./,
+      /\/\/ Honors `\?next=` for deep-link round-trip from \/cli\/authorize and\s*\n?\s*\/\/ other same-origin deep-link entry points; falls back to "\/" for the typical\s*\n?\s*\/\/ "I came here from the marketing site" path\./,
     );
   });
 

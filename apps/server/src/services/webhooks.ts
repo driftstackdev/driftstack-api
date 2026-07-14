@@ -21,8 +21,6 @@ import type { AccountAuditService } from './account-audit.js';
 export type WebhookEventType =
   | 'session.completed'
   | 'session.failed'
-  | 'quota.warning_80pct'
-  | 'quota.exceeded'
   | 'api_key.revoked'
   // V-356 — synthetic event sent only via POST /v1/webhooks/:id/test.
   // Customers cannot subscribe to it (Zod schemas reject it) — the

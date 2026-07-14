@@ -3,13 +3,12 @@
 // 9-value WebhookEventType closed-roster:
 //   1. session.completed
 //   2. session.failed
-//   3. quota.warning_80pct
-//   4. quota.exceeded
-//   5. api_key.revoked
-//   6. session.egress_capability_changed (Arc 5 EGRESS eg.7).
-//   7. test.ping (V-356 — server-only, not subscribable).
-//   8. crypto.order.paid (V-666 — 2026-05-22).
-//   9. crypto.order.failed (V-666 — 2026-05-22).
+//   3. api_key.revoked
+//   4. session.egress_capability_changed
+//   5. test.ping (server-only, not subscribable)
+//   6–7. crypto.order.paid / crypto.order.failed
+//   8. session.challenge_detected
+//   9. session.profile_save_failed
 // stays in lockstep across:
 //   - packages/api-types/src/webhooks.ts (Zod canonical source).
 //   - apps/server/src/db/schema.ts pgEnum (Postgres runtime enum).
@@ -42,26 +41,26 @@ function read(p: string): string {
 const ALL_WEBHOOK_EVENTS = [
   'session.completed',
   'session.failed',
-  'quota.warning_80pct',
-  'quota.exceeded',
   'api_key.revoked',
   'test.ping',
   'session.egress_capability_changed',
   // V-666 (2026-05-22) — crypto-order terminal events.
   'crypto.order.paid',
   'crypto.order.failed',
+  'session.challenge_detected',
+  'session.profile_save_failed',
 ] as const;
 
 const SUBSCRIBABLE_EVENTS = [
   'session.completed',
   'session.failed',
-  'quota.warning_80pct',
-  'quota.exceeded',
   'api_key.revoked',
   'session.egress_capability_changed',
   // V-666 (2026-05-22) — crypto-order terminal events (subscribable).
   'crypto.order.paid',
   'crypto.order.failed',
+  'session.challenge_detected',
+  'session.profile_save_failed',
 ] as const;
 
 describe('W852 WebhookEventType cross-source invariant', () => {
@@ -101,7 +100,7 @@ describe('W852 WebhookEventType cross-source invariant', () => {
 
   // ─── DB pgEnum lockstep ──────────────────────────────────────
 
-  it("CRITICAL apps/server/src/db/schema.ts webhookEventType pgEnum has the EXACT same 6 values. Postgres rejects INSERTs of values not in the pgEnum — drift to api-types-without-pgEnum would let the server crash on persist. The pgEnum name is the snake-case form: 'webhook_event_type'.", () => {
+  it('CRITICAL apps/server/src/db/schema.ts contains every current event while retaining the two historical quota values for migration compatibility.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/schema.ts'));
     expect(p).toMatch(/webhookEventType = pgEnum\('webhook_event_type', \[/);
     // Extract the body of the webhookEventType pgEnum.
@@ -113,17 +112,17 @@ describe('W852 WebhookEventType cross-source invariant', () => {
         new RegExp(`'${ev.replace(/\./g, '\\.')}'`),
       );
     }
+    expect(body).toMatch(/'quota\.warning_80pct'/);
+    expect(body).toMatch(/'quota\.exceeded'/);
   });
 
   // ─── Go SDK closed-enum consts ───────────────────────────────
 
-  it('CRITICAL packages/sdk-go/types.go declares 9 WebhookEventType consts — EventSessionCompleted + EventSessionFailed + EventQuotaWarning80Pct + EventQuotaExceeded + EventAPIKeyRevoked + EventSessionEgressCapabilityChanged + EventTestPing + EventCryptoOrderPaid + EventCryptoOrderFailed. Each maps to one canonical event string. Drift would break Go customers who pattern-match on consts.', () => {
+  it('CRITICAL packages/sdk-go/types.go declares the current 9 WebhookEventType constants.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
     expect(p).toMatch(/type WebhookEventType string/);
     expect(p).toMatch(/EventSessionCompleted +WebhookEventType = "session\.completed"/);
     expect(p).toMatch(/EventSessionFailed +WebhookEventType = "session\.failed"/);
-    expect(p).toMatch(/EventQuotaWarning80Pct WebhookEventType = "quota\.warning_80pct"/);
-    expect(p).toMatch(/EventQuotaExceeded +WebhookEventType = "quota\.exceeded"/);
     expect(p).toMatch(/EventAPIKeyRevoked +WebhookEventType = "api_key\.revoked"/);
     expect(p).toMatch(
       /EventSessionEgressCapabilityChanged +WebhookEventType = "session\.egress_capability_changed"/,
@@ -131,6 +130,13 @@ describe('W852 WebhookEventType cross-source invariant', () => {
     expect(p).toMatch(/EventTestPing WebhookEventType = "test\.ping"/);
     expect(p).toMatch(/EventCryptoOrderPaid +WebhookEventType = "crypto\.order\.paid"/);
     expect(p).toMatch(/EventCryptoOrderFailed +WebhookEventType = "crypto\.order\.failed"/);
+    expect(p).toMatch(
+      /EventSessionChallengeDetected +WebhookEventType = "session\.challenge_detected"/,
+    );
+    expect(p).toMatch(
+      /EventSessionProfileSaveFailed +WebhookEventType = "session\.profile_save_failed"/,
+    );
+    expect(p).not.toMatch(/EventQuotaWarning80Pct|EventQuotaExceeded/);
   });
 
   it("CRITICAL Go SDK 'closed enum' framing pinned. The 'closed enum of supported webhook events' comment threads the type-system intent (vs an open-string enum). Drift to weakening the framing would invite a Go SDK consumer to invent their own consts.", () => {

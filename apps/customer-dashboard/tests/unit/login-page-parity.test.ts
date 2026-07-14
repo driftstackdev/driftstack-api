@@ -94,7 +94,7 @@ describe('W351.B /login page parity', () => {
 
   it('honors ?next= on success; preserves ?next= through the /signup fallback link', () => {
     expect(body).toMatch(/window\.location\.href\s*=\s*next\s*\?\s*next\s*:\s*['"]\/['"]/);
-    expect(body).toMatch(/signupLink\.setAttribute\('href',\s*'\/signup\?next='/);
+    expect(body).toMatch(/signupLink\.setAttribute\('href',\s*'\/signup\/\?next='/);
   });
 
   it('cross-link to /forgot-password resolves', () => {

@@ -290,11 +290,9 @@ is revoked. This preserves RFC 7009 anti-enumeration behavior without
 allowing cross-client revocation. Invalid or revoked client credentials
 return `401` before mutation.
 
-Client revocation is currently handled through Driftstack support;
-self-service customer-dashboard revocation is not yet available. A
-client revoke invalidates every access token issued by that client on
-the next API request. Rotating only the client secret does not revoke
-existing bearer tokens.
+Client revocation is handled through Driftstack support. A client revoke
+invalidates every access token issued by that client on the next API request.
+Rotating only the client secret does not revoke existing bearer tokens.
 
 ## Errors at a glance
 

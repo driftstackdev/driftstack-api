@@ -97,24 +97,24 @@ describe('W799 cross-SDK webhook-receiver examples parity', () => {
     expect(read(TS)).toMatch(/res\.statusCode = 204;/);
   });
 
-  // ─── Event dispatch — 5 event types ───────────────────────────
+  // ─── Event dispatch — live quickstart subset ──────────────────
 
-  it('CRITICAL event-type set pinned in TS — session.completed + session.failed + api_key.revoked + quota.warning_80pct + quota.exceeded. The 5-event whitelist matches the canonical V-NNN webhook event types; drift would orphan event types from the docs.', () => {
+  it('CRITICAL event-type set pinned in TS — the quickstart handles three emitted core events and never advertises the removed silent quota subscriptions.', () => {
     const p = read(TS);
     expect(p).toMatch(/case 'session\.completed':/);
     expect(p).toMatch(/case 'session\.failed':/);
     expect(p).toMatch(/case 'api_key\.revoked':/);
-    expect(p).toMatch(/case 'quota\.warning_80pct':/);
-    expect(p).toMatch(/case 'quota\.exceeded':/);
+    expect(p).not.toMatch(/quota\.warning_80pct/);
+    expect(p).not.toMatch(/quota\.exceeded/);
   });
 
-  it('CRITICAL Python HANDLERS dict — 5 event types same as TS. Drift would diverge the cross-SDK event-handler set.', () => {
+  it('CRITICAL Python HANDLERS dict matches the same emitted core subset and excludes silent quota subscriptions.', () => {
     const p = read(PY);
     expect(p).toMatch(/"session\.completed": handle_session_completed,/);
     expect(p).toMatch(/"session\.failed": handle_session_failed,/);
-    expect(p).toMatch(/"quota\.warning_80pct": handle_quota_warning,/);
-    expect(p).toMatch(/"quota\.exceeded": handle_quota_exceeded,/);
     expect(p).toMatch(/"api_key\.revoked": handle_api_key_revoked,/);
+    expect(p).not.toMatch(/quota\.warning_80pct/);
+    expect(p).not.toMatch(/quota\.exceeded/);
   });
 
   it('CRITICAL Go EventXxx constants pinned — EventSessionCompleted + EventAPIKeyRevoked. The typed-constant approach is Go-idiomatic; drift to string-literals would break go vet detection of typos.', () => {

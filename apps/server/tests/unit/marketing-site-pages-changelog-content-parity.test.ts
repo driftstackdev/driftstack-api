@@ -4,8 +4,7 @@
 // re-introduces engineering-internal V-NNN tags (which rotate fast
 // and confuse customers).
 //
-//   • Hand-authored placeholder framing + Build-time generator
-//     followup.
+//   • Hand-authored customer-facing entries.
 //   • ChangelogEntry 6-category enum: launch / sdk / docs / security /
 //     pricing / self-hosted.
 //   • CATEGORY_COLOR 6-entry styling map.
@@ -16,7 +15,7 @@
 //   • 2026-05-08 entries: Team RBAC X-Driftstack-Account / Playwright
 //     driver / SDK team+rotate+replay / status page / GDPR Article 20
 //     export.
-//   • 2026-05-03 pricing: 2-ladder + crypto deferred.
+//   • 2026-05-03 pricing: 2-ladder; 2026-05-22 crypto launch.
 //   • Subscribe banner: mailto:hello@driftstack.dev + 'roughly one
 //     email every 2-4 weeks'.
 
@@ -36,10 +35,11 @@ function read(p: string): string {
 describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', () => {
   const body = read(LIB);
 
-  it("Build-time generator follow-on doc-comment framing pinned: 'Placeholder entries. Once the verification log + tagged GitHub releases stabilize, this file becomes a build-time generator that reads from a manually-maintained markdown source under apps/marketing-site/src/data/changelog.md and renders entries here. Until then, the entries below are hand-authored highlights of customer-facing changes.' — pinned so the 'this is currently hand-authored' rationale + the planned changelog.md path stay documented (drift to dropping would let a future maintainer assume the generator already exists)", () => {
+  it('pins the changelog as hand-authored customer-facing release highlights without an aspirational generator contract', () => {
     expect(body).toMatch(
-      /\/\/ Placeholder entries\. Once the verification log \+ tagged GitHub\s*\n?\s*\/\/ releases stabilize, this file becomes a build-time generator that\s*\n?\s*\/\/ reads from a manually-maintained markdown source under\s*\n?\s*\/\/ `apps\/marketing-site\/src\/data\/changelog\.md`/,
+      /\/\/ Entries below are hand-authored highlights of customer-facing changes\./,
     );
+    expect(body).not.toMatch(/placeholder|becomes a build-time generator|once .* stabiliz/i);
   });
 
   it("ChangelogEntry 6-category enum: launch / sdk / docs / security / pricing / self-hosted — pinned so the category taxonomy stays 6-state (drift to dropping any would render an entry with TypeScript's never type; drift to adding new would create an entry the CATEGORY_COLOR map doesn't cover, rendering with no styling)", () => {
@@ -108,10 +108,14 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     expect(body).toMatch(/This replaces the previous one-time \$2\.99 trial pack entirely\./);
   });
 
-  it("2026-05-03 'Crypto payment rail deferred to post-launch' security entry: 'Coinbase Commerce closed for non-US/Singapore merchants 2026-03-31. Stripe is sole launch payment rail (fiat-only). Crypto re-evaluates against actual transaction volume.' — pinned so the why-no-crypto-at-launch rationale + the Stripe-only + the post-launch re-evaluation framing all survive (drift to dropping would orphan customers asking 'why no crypto?')", () => {
-    expect(body).toMatch(/Crypto payment rail deferred to post-launch/);
+  it("2026-05-22 'Crypto checkout is live via NowPayments' entry pins the current payment and webhook contract", () => {
+    expect(body).toMatch(/title: 'Crypto checkout is live via NowPayments'/);
+    expect(body).toMatch(/BTC, LTC, USDT, USDC, ETH, or XMR through NowPayments/);
     expect(body).toMatch(
-      /Coinbase Commerce closed for non-US\/Singapore merchants 2026-03-31\. Stripe is sole launch payment rail \(fiat-only\)\. Crypto re-evaluates against actual transaction volume\./,
+      /crypto\.order\.paid and crypto\.order\.failed are emitted and subscribable/,
+    );
+    expect(body).not.toMatch(
+      /deferred to post-launch|re-evaluates against actual transaction volume/,
     );
   });
 

@@ -9,14 +9,7 @@ import PageHero from '../components/PageHero.astro';
 import Section from '../components/Section.astro';
 import IconTile from '../components/IconTile.astro';
 
-// V-127a placeholder — until the marketing-site build embeds the
-// Scalar UI bundle directly, this page links to the live API
-// server's interactive reference at api.driftstack.dev/docs (which
-// already serves Scalar against the running OpenAPI spec).
-//
-// Future iteration: build-time fetch of /openapi.json + embed
-// Scalar's standalone HTML, so the reference stays browseable even
-// when the API server is offline.
+// The live API server serves Scalar against the running OpenAPI spec.
 
 const API_DOCS_URL = 'https://api.driftstack.dev/docs';
 const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
@@ -69,6 +62,7 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
         </h3>
         <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
           <li>POST /v1/sessions</li>
+          <li>GET /v1/archetypes</li>
           <li>GET /v1/sessions</li>
           <li>GET /v1/sessions/:id</li>
           <li>POST /v1/sessions/:id/navigate</li>
@@ -398,20 +392,14 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractRequest{
     <div class="mt-12">
       <h3 class="text-xl font-semibold text-tk-ink">3. Capture a screenshot</h3>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
-        {/* S31 2026-07-07 (fable-truth-audit) — the old copy claimed a
-            fourth "recording" kind saved to R2 with a signed download
-            link; no such kind, storage, or URL exists (CaptureKindSchema
-            = screenshot | dom_snapshot | pdf; CaptureResponseSchema is
-            always inline base64 — packages/api-types/src/sessions.ts).
-            Recordings are roadmap-only. */}
+        {/* CaptureKindSchema and CaptureResponseSchema are the source of truth. */}
         <code class="font-mono">capture</code> takes one of three kinds:
         <code class="font-mono">screenshot</code>,
         <code class="font-mono">dom_snapshot</code>, or
         <code class="font-mono">pdf</code>. The response carries the
         file's contents directly as base64-encoded text (the
         <code class="font-mono">data</code> field) — nothing is stored
-        server-side. Session video recording is on the
-        <a href="/roadmap/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">roadmap</a>, not live yet.
+        server-side.
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre

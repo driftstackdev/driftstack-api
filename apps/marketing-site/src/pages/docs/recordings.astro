@@ -1,102 +1,53 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-
-// V-692 — recordings developer docs. Recordings are on the roadmap
-// (V-540 work-in-progress) but NOT yet exposed via the public API
-// today: there is no /v1/sessions/:id/recording endpoint, no
-// `record: true` body field on POST /v1/sessions, and no
-// `session.recording_ready` webhook event.
-//
-// W217.A — accuracy pass: the previous revision of this page
-// documented all three as live. This rewrite reflects reality and
-// is pinned by apps/server/tests/unit/recordings-doc-parity.test.ts
-// to fail if the page silently regrows fictional claims.
 ---
 
-<BaseLayout title="Managed recordings (roadmap) — Driftstack developer docs" description="Managed API recordings are planned; desktop-local recording is available today.">
+<BaseLayout
+  title="Local session recordings — Driftstack developer docs"
+  description="Record and replay streamed session frames locally in the Driftstack desktop app."
+>
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
-    <h1>Recordings</h1>
+    <h1>Local session recordings</h1>
 
     <p class="lead">
-      Managed session recordings are planned for a later release and not yet
-      exposed via the public API. The desktop app already offers a separate,
-      local recorder for hands-on sessions.
-      <strong>No public API endpoint, webhook event, or request body field
-      currently triggers managed recording today.</strong> This page describes
-      the planned shape so customers building toward it can budget
-      for the integration. (The W217.A parity test pins this page to
-      "planned, not live" until the server registers the endpoint.)
+      The Driftstack desktop app can record the streamed frames from a live,
+      hands-on session for local replay. The recording stays in the app's local
+      data directory and can be exported as a portable JSON envelope.
     </p>
 
-    <div class="rounded-md border border-amber-300 bg-amber-50 p-4 not-prose">
-      <p class="m-0 text-sm text-amber-900">
-        <strong>Heads up:</strong> sending
-        <code class="font-mono">"record": true</code> on
-        <code class="font-mono">POST /v1/sessions</code> today is a
-        no-op — the server silently strips unrecognised fields. Don't
-        rely on recordings landing until the feature ships.
-      </p>
-    </div>
+    <h2>Record from the desktop app</h2>
+    <ol>
+      <li>Open a live session in the Simulator.</li>
+      <li>Choose <strong>Record</strong> while the stream is connected.</li>
+      <li>Choose <strong>Stop</strong> to finalise the local recording.</li>
+      <li>Open <strong>Recordings</strong> to replay or export it.</li>
+    </ol>
 
-    <h2>What's planned</h2>
-    <ul>
-      <li><strong>Opt-in per session</strong> via a new
-        <code>record: true</code> request body field on
-        <code>POST /v1/sessions</code>. Default off.</li>
-      <li><strong>Container:</strong> WebM (VP9 video, no audio),
-        matching the session viewport, ~30 fps, ~500 kbps.</li>
-      <li><strong>Retrieval</strong> via a new
-        <code>GET /v1/sessions/:id/recording</code> endpoint
-        returning a presigned R2 URL.</li>
-      <li><strong>Webhook</strong> via a new
-        <code>session.recording_ready</code> event type added to the
-        <code>webhook_event_type</code> enum.</li>
-      <li><strong>Retention</strong> tier-dependent (sketch: 7d Trial
-        Pack, 30d Solo / API Starter, 90d Team / API Builder, 180d
-        Agency / API Scale, custom Enterprise). Final values land
-        with the rollout.</li>
-      <li><strong>Redaction</strong> for sensitive inputs — also
-        planned post-V-540.</li>
-    </ul>
-
-    <h2>What works today</h2>
     <p>
-      Choose the current option that matches how you run sessions:
+      Active recordings are finalised when their provider closes. The index is
+      restored when the app starts, while frame data is loaded only when a
+      recording is opened for playback.
     </p>
-    <ul>
-      <li><strong>Desktop-local recording:</strong> while watching a live
-        session in the Driftstack desktop app, choose <strong>Record</strong>
-        to capture streamed frames. The app saves the recording in its local
-        app-data folder for replay and can export a portable JSON envelope.
-        This is manual, local-only frame capture; it does not enable the
-        planned API field, webhook, WebM file, cloud upload, or retention
-        policy.</li>
-      <li><a href="/docs/sessions/">Sessions API</a> —
-        <code>POST /v1/sessions/:id/capture</code> with
-        <code>{`{ "kind": "screenshot" }`}</code>,
-        <code>"dom_snapshot"</code>, or <code>"pdf"</code> returns
-        inline base64 bytes you can persist on your side.</li>
-      <li>The <a href="/docs/webhooks/#event-types">webhook event
-        types</a> that fire today —
-        <code>session.completed</code>, <code>session.failed</code>,
-        <code>api_key.revoked</code>, <code>crypto.order.paid</code>,
-        <code>crypto.order.failed</code> — plus the
-        <code>test.ping</code> synthetic for endpoint verification.</li>
-    </ul>
 
-    <h2>How to be notified when recordings ship</h2>
+    <h2>API captures</h2>
     <p>
-      Subscribe to the <a href="/changelog/">API changelog</a> RSS
-      or <a href="/docs/status-subscriptions/">status-page
-      subscriptions</a>; the V-540 rollout will land as an entry on
-      both, along with the new endpoint + event type appearing on
-      <a href="/api-reference/">/api-reference</a>.
+      API sessions expose explicit screenshot, DOM snapshot, and PDF captures
+      through <code>POST /v1/sessions/:id/capture</code>. Capture bytes are
+      returned inline in the response for your application to store. See the
+      <a href="/docs/sessions/">Sessions API reference</a>.
     </p>
+
+    <h2>Storage boundary</h2>
+    <ul>
+      <li>Desktop recordings are local to the operator's machine.</li>
+      <li>They are not uploaded by the recording workflow.</li>
+      <li>API captures are returned directly and are not retained by the capture endpoint.</li>
+    </ul>
 
     <h2>Support</h2>
     <p>
-      Questions about timing or what to build toward in the meantime:
-      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+      For recording or export help, email
+      <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>.
     </p>
   </main>
 </BaseLayout>

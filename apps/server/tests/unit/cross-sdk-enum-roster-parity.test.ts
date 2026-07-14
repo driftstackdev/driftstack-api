@@ -106,7 +106,7 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
   });
 
   it('CRITICAL WebhookEventType — closed roster across api-types + Go', () => {
-    // WebhookEventType: exact 9-value roster (test.ping = V-356 synthetic;
+    // WebhookEventType: exact emitted roster (test.ping = V-356 synthetic;
     // session.egress_capability_changed = Arc 5 EGRESS eg.7; the crypto pair
     // = V-666). .toEqual (not .toContain) so a FUTURE roster addition fails
     // here — matching the other enums above + closing the subset-check gap
@@ -114,8 +114,6 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
     expect(WebhookEventTypeSchema.options).toEqual([
       'session.completed',
       'session.failed',
-      'quota.warning_80pct',
-      'quota.exceeded',
       'api_key.revoked',
       'session.egress_capability_changed',
       'test.ping',
@@ -128,8 +126,8 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
     const go = read(SDK_GO_TYPES);
     expect(go).toMatch(/"session\.completed"/);
     expect(go).toMatch(/"session\.failed"/);
-    expect(go).toMatch(/"quota\.warning_80pct"/);
-    expect(go).toMatch(/"quota\.exceeded"/);
+    expect(go).not.toMatch(/"quota\.warning_80pct"/);
+    expect(go).not.toMatch(/"quota\.exceeded"/);
     expect(go).toMatch(/"api_key\.revoked"/);
     expect(go).toMatch(/"session\.egress_capability_changed"/);
     expect(go).toMatch(/"test\.ping"/);

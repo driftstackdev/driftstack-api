@@ -7,8 +7,8 @@
 //
 //   • WebhookEndpointId = PrefixedId('whk'); WebhookDeliveryId =
 //     PrefixedId('wdl').
-//   • WebhookEventType full enum: 5 customer events + V-356
-//     test.ping (NOT subscribable).
+//   • WebhookEventType full enum: emitted customer events + V-356
+//     test.ping (NOT subscribable); silent quota placeholders excluded.
 //   • SubscribableWebhookEventType excludes test.ping (V-356
 //     rationale).
 //   • WebhookDeliveryStatus enum: pending | in_flight | delivered
@@ -44,12 +44,11 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     expect(body).toMatch(/export const WebhookDeliveryIdSchema = PrefixedId\('wdl'\);/);
   });
 
-  it('WebhookEventType enum: 5 customer events + V-356 test.ping (synthetic, NOT subscribable); UpdateSubscriptionsSchema-rejects-test-ping rationale comment', () => {
-    // A sweep-3 [DECLARED]-status comment now precedes quota.* — tolerate it
-    // between session.failed and the quota entries.
+  it('WebhookEventType enum begins with emitted session/key events; silent quota placeholders are excluded; V-356 test.ping remains synthetic and not subscribable', () => {
     expect(body).toMatch(
-      /export const WebhookEventTypeSchema = z\.enum\(\[\s*\n?\s*'session\.completed',\s*\n?\s*'session\.failed',(?:\s*\n?\s*\/\/[^\n]*)*\s*\n?\s*'quota\.warning_80pct',\s*\n?\s*'quota\.exceeded',\s*\n?\s*'api_key\.revoked',/,
+      /export const WebhookEventTypeSchema = z\.enum\(\[\s*\n?\s*'session\.completed',\s*\n?\s*'session\.failed',\s*\n?\s*'api_key\.revoked',/,
     );
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
     expect(body).toMatch(
       /\/\/ V-356 — synthetic test event, sent only via POST\s*\n?\s*\/\/ \/v1\/webhooks\/:id\/test\. Customers cannot subscribe to it\s*\n?\s*\/\/ \(UpdateSubscriptionsSchema rejects it\) — the endpoint dispatches\s*\n?\s*\/\/ a one-off delivery regardless of subscription, so the customer\s*\n?\s*\/\/ can verify their handler before relying on it for real events\.\s*\n?\s*'test\.ping',/,
     );
@@ -62,8 +61,6 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     expect(body).toMatch(/export const SubscribableWebhookEventTypeSchema = z\.enum\(\[/);
     expect(body).toMatch(/'session\.completed',/);
     expect(body).toMatch(/'session\.failed',/);
-    expect(body).toMatch(/'quota\.warning_80pct',/);
-    expect(body).toMatch(/'quota\.exceeded',/);
     expect(body).toMatch(/'api_key\.revoked',/);
     expect(body).toMatch(/'session\.egress_capability_changed',/);
     expect(body).toMatch(/'crypto\.order\.paid',/);
@@ -86,7 +83,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     expect(body).toMatch(
       /\/\*\* V-359 — when prev_secret is active, this is the timestamp at\s*\n?\s*\*\s*which dual-signing stops\. Null when no rotation in flight\. \*\/\s*\n?\s*rotation_grace_expires_at: Iso8601Schema\.nullable\(\),/,
     );
-    expect(body).toMatch(/events: z\.array\(WebhookEventTypeSchema\),/);
+    expect(body).toMatch(/events: z\.array\(SubscribableWebhookEventTypeSchema\),/);
     expect(body).toMatch(/consecutive_failures: z\.number\(\)\.int\(\)\.nonnegative\(\),/);
     expect(body).toMatch(
       /\/\*\* V-185 — aggregate per-endpoint delivery counts\. \*\/\s*\n?\s*delivery_counts: z\.object\(\{\s*\n?\s*delivered: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*failed: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*dlq: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\),/,

@@ -35,7 +35,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           Webhook endpoints
         </h1>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-          Subscribe to session lifecycle + quota events. Each endpoint gets
+          Subscribe to session lifecycle, egress, challenge, profile-save,
+          payment, and key-revocation events. Each endpoint gets
           its own signing secret; verify with the SDK's
           <code class="font-mono">verifyWebhookSignature</code> helper.
         </p>
@@ -122,18 +123,6 @@ const apiBaseUrl = resolveApiBaseUrl();
                 class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">api_key.revoked</span>
-            </label>
-            <label class="inline-flex items-center gap-2">
-              <input type="checkbox" name="event" value="quota.warning_80pct"
-                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
-              />
-              <span class="font-mono text-xs">quota.warning_80pct</span>
-            </label>
-            <label class="inline-flex items-center gap-2">
-              <input type="checkbox" name="event" value="quota.exceeded"
-                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
-              />
-              <span class="font-mono text-xs">quota.exceeded</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.egress_capability_changed"
@@ -350,18 +339,6 @@ const apiBaseUrl = resolveApiBaseUrl();
                 class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">api_key.revoked</span>
-            </label>
-            <label class="inline-flex items-center gap-2">
-              <input type="checkbox" name="event" value="quota.warning_80pct"
-                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
-              />
-              <span class="font-mono text-xs">quota.warning_80pct</span>
-            </label>
-            <label class="inline-flex items-center gap-2">
-              <input type="checkbox" name="event" value="quota.exceeded"
-                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
-              />
-              <span class="font-mono text-xs">quota.exceeded</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.egress_capability_changed"

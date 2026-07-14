@@ -83,10 +83,11 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it("Webhooks card framing: 'All ten subscribable event types — session.completed, session.failed, api_key.revoked, quota.warning_80pct, quota.exceeded, session.egress_capability_changed, crypto.order.paid, crypto.order.failed, session.challenge_detected, session.profile_save_failed — with payload shapes and HMAC-SHA256 verification examples.' — pinned so the canonical subscribable taxonomy (count = SubscribableWebhookEventTypeSchema, currently 10) + the HMAC-SHA256 signature algorithm stay consistent with the webhook-events catalog. 'subscribable' not 'LIVE': several entries are declared/not-yet-firing (quota.warning_80pct + quota.exceeded + the egress/challenge/profile-save events), so the card describes what you can subscribe to, not what fires.", () => {
+  it('Webhooks card pins the canonical eight-event roster and HMAC-SHA256 verification', () => {
     expect(body).toMatch(
-      /All ten subscribable event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked, quota\.warning_80pct, quota\.exceeded,\s*\n?\s*session\.egress_capability_changed, crypto\.order\.paid,\s*\n?\s*crypto\.order\.failed, session\.challenge_detected,\s*\n?\s*session\.profile_save_failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
+      /All eight subscribable event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked,\s*\n?\s*session\.egress_capability_changed, crypto\.order\.paid,\s*\n?\s*crypto\.order\.failed, session\.challenge_detected,\s*\n?\s*session\.profile_save_failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
     );
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
 
   it("Self-hosted card framing: 'Deploy on your own hardware →' + 'SKU comparison, hardware specs, onboarding flow. For sustained high-concurrency operations or full data sovereignty.' — pinned so the self-hosted positioning (sustained high-concurrency OR full data sovereignty) stays explicit (drift to dropping data sovereignty would hide a key compliance-driven self-host motivator; drift to dropping SKU comparison would orphan customers from the hardware-choice doc)", () => {
@@ -96,17 +97,9 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it("W210 recipe-library-removed inline comment pinned (slice 144 update — the recipe library IS now shipped at v1.0 per slice 121, so the prior 'Phase 3 deliverable' framing was stale; the marketing-site /docs/recipes MIRROR page still doesn't exist, just the apps/docs/src/pages/api/recipes.md page at docs.driftstack.dev/api/recipes/). S47 2026-07-07: the hub is no longer all-internal-anchors (the Quickstart card points at its docs successor after the mirror deprecation), so the comment now flags a docs-hosted Recipe card as a founder-call option; the card itself stays absent until that call.", () => {
-    expect(body).toMatch(
-      /\{\/\* W210 — the Recipe library card pointed at \/docs\/recipes,\s*\n?\s*which doesn't exist yet on the marketing-site \/docs\/\* mirror\./,
-    );
-    expect(body).toMatch(/The recipe library IS shipped at v1\.0 with create, list, read,/);
-    expect(body).toMatch(/recipe execution stays v1\.1/);
-    expect(body).toMatch(/apps\/docs\/src\/pages\/api\/recipes\.md page is live at/);
-    expect(body).toMatch(/docs\.driftstack\.dev\/api\/recipes\//);
-    // Drift sentinel — the pre-slice-144 "Phase 3 deliverable"
-    // framing was wrong post-slice-121 promotion. MUST NOT come back.
-    expect(body).not.toMatch(/\(Phase 3 deliverable\)\. Removed/);
+  it('points recipe readers at the live docs host without a dead marketing mirror', () => {
+    expect(body).toContain('docs.driftstack.dev/api/recipes/');
+    expect(body).not.toMatch(/href="\/docs\/recipes/);
   });
 
   it("Help banner: 'Doc not landing?' + mailto:support@driftstack.dev + 'We answer in writing, usually same business day.' + GitHub → https://github.com/driftstackdev — pinned so the support-channel + same-business-day SLA + the GitHub link all survive (drift to dropping the SLA would lose the response-time expectation; drift to a different github org would break the canonical org reference)", () => {

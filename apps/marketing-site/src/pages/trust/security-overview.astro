@@ -247,19 +247,18 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           </div>
         </li>
         <li class="flex gap-4">
-          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-amber-100 text-center text-xs font-bold leading-5 text-amber-700">○</span>
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
-            <p class="font-medium text-tk-ink">Capture retention (roadmap)</p>
+            <p class="font-medium text-tk-ink">Direct captures and local recordings</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Today, screenshots and captures are returned directly
-              inside the API response (inline bytes) and are not kept
-              on our servers afterwards — so there is no retention
-              setting to configure yet. Stored session recordings,
-              with controls over how long they're kept, are on the
-              roadmap — see
+              Screenshots and captures are returned directly inside the API
+              response as inline bytes and are not retained by the capture
+              endpoint. The desktop recorder stores streamed frames on the
+              operator's machine and does not upload them through the recording
+              workflow. See
               <a href="/docs/recordings/" class="text-tk-accent-text underline"
                 >/docs/recordings</a
-              >.
+              > for the exact storage boundary.
             </p>
           </div>
         </li>
@@ -353,8 +352,8 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <p class="mt-3 max-w-prose text-tk-ink-2">
             The
             <a href="/security/" class="text-tk-accent-text underline">architecture deep-dive at /security</a>
-            walks the six-pillar surface in detail. For pen-test
-            evidence or compliance certifications, see
+            walks the six-pillar surface in detail. For current compliance
+            status and vulnerability reporting, see
             <a href="/trust/compliance/" class="text-tk-accent-text underline"
               >/trust/compliance</a
             >. Anything else, just email.

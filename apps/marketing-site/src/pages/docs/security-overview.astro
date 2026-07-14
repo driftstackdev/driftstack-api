@@ -16,8 +16,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       This page is the entry point for a security review of
       Driftstack. It links out to the concrete controls + policy
       pages; this document is a map, not an exhaustive specification.
-      For the contract-grade detail (SOC2 reports, pen-test
-      summaries) reach out to
+      For implementation details or help completing a security review,
+      reach out to
       <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>.
     </p>
 
@@ -43,10 +43,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         <strong>Object storage:</strong> Customer-generated artefacts
         that land in Cloudflare R2 use server-side encryption (S3-SSE);
-        underlying objects are never publicly listable. Managed API session
-        recordings in R2 are a roadmap item; the desktop app's current manual
-        recorder saves streamed frames locally on the operator's machine. See
-        <a href="/docs/recordings/">/docs/recordings</a> for the distinction.
+        underlying objects are never publicly listable. The desktop app's
+        recorder saves streamed session frames locally on the operator's
+        machine; those recordings are not uploaded by the recording workflow.
+        See <a href="/docs/recordings/">/docs/recordings</a> for the boundary.
       </li>
       <li>
         <strong>Profile state:</strong> Per-profile browser state
@@ -89,11 +89,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         Driftstack runs <strong>primarily in the EU</strong> (Hetzner
         Falkenstein / Nuremberg). Customer-facing API endpoints are
-        served from the EU region today; multi-region routing is on
-        the roadmap. See
-        <a href="https://docs.driftstack.dev/reference/data-residency/">/docs/data-residency</a> for
-        the region-preference account field and the planned PoP
-        expansion.
+        served from the EU region. See
+        <a href="https://docs.driftstack.dev/reference/data-residency/">/docs/data-residency</a>
+        for the current per-category location and transfer safeguards.
       </li>
       <li>
         Postgres is managed by Neon (EU) with point-in-time recovery.

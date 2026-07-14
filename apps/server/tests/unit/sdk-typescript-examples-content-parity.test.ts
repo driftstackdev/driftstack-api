@@ -121,7 +121,7 @@ describe('W619 sdk-typescript/examples content parity', () => {
     expect(existsSync(E('rate-limit-handling.ts'))).toBe(true);
   });
 
-  it('webhook-receiver.ts: node:http server (dep-free) + RAW BYTES not parsed JSON + verifyWebhookSignature + x-driftstack-signature header + at-least-once dedupe-by-event.id + 5-event-type switch (session.completed/failed + api_key.revoked + quota.warning_80pct/exceeded) + 204 OK pinned', () => {
+  it('webhook-receiver.ts: node:http server (dep-free) + RAW BYTES + signature verification + emitted core-event switch + 204 OK pinned', () => {
     const body = read(E('webhook-receiver.ts'));
     expect(body).toMatch(
       /^\/\/ Webhook receiver example — verify the signature before processing\.$/m,
@@ -147,8 +147,7 @@ describe('W619 sdk-typescript/examples content parity', () => {
     expect(body).toMatch(/case 'session\.completed':/);
     expect(body).toMatch(/case 'session\.failed':/);
     expect(body).toMatch(/case 'api_key\.revoked':/);
-    expect(body).toMatch(/case 'quota\.warning_80pct':/);
-    expect(body).toMatch(/case 'quota\.exceeded':/);
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
     expect(body).toMatch(/res\.statusCode = 204;/);
     expect(existsSync(E('webhook-receiver.ts'))).toBe(true);
   });

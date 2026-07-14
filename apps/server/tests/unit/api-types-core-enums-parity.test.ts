@@ -128,20 +128,20 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
 
   // --- WebhookEventType + SubscribableWebhookEventType -------------
 
-  it('CRITICAL WebhookEventType 9-value closed roster pinned — session.completed + session.failed + quota.warning_80pct + quota.exceeded + api_key.revoked + session.egress_capability_changed + test.ping + crypto.order.paid + crypto.order.failed. Drift to renaming would break every customer webhook consumer.', () => {
+  it('CRITICAL WebhookEventType 9-value closed roster pins only emitted and synthetic events.', () => {
     const w = read(WEBHOOKS);
 
     expect(w).toMatch(/export const WebhookEventTypeSchema = z\.enum\(\[/);
     for (const e of [
       'session.completed',
       'session.failed',
-      'quota.warning_80pct',
-      'quota.exceeded',
       'api_key.revoked',
       'session.egress_capability_changed',
       'test.ping',
       'crypto.order.paid',
       'crypto.order.failed',
+      'session.challenge_detected',
+      'session.profile_save_failed',
     ]) {
       const escaped = e.replace(/\./g, '\\.');
       expect(w, `event ${e}`).toMatch(new RegExp(`'${escaped}'`));
@@ -165,12 +165,12 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
     for (const e of [
       'session.completed',
       'session.failed',
-      'quota.warning_80pct',
-      'quota.exceeded',
       'api_key.revoked',
       'session.egress_capability_changed',
       'crypto.order.paid',
       'crypto.order.failed',
+      'session.challenge_detected',
+      'session.profile_save_failed',
     ]) {
       const escaped = e.replace(/\./g, '\\.');
       expect(subscribableBlock, `subscribable ${e}`).toMatch(new RegExp(`'${escaped}'`));

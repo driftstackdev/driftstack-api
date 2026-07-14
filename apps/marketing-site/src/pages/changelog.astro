@@ -1,17 +1,12 @@
 ---
 // Changelog v2 (2026-07-03) — Fleet v2 re-skin (PageHero + .card entry
-// cards, AA-safe accent text) + roadmap cross-link. Every pre-existing
+// cards and AA-safe accent text. Every pre-existing
 // entry is byte-identical; the 2026-07-03 entry announces the site
 // redesign itself (which deploys together with this entry).
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 
-// Placeholder entries. Once the verification log + tagged GitHub
-// releases stabilize, this file becomes a build-time generator that
-// reads from a manually-maintained markdown source under
-// `apps/marketing-site/src/data/changelog.md` and renders entries
-// here. Until then, the entries below are hand-authored highlights
-// of customer-facing changes.
+// Entries below are hand-authored highlights of customer-facing changes.
 
 interface ChangelogEntry {
   date: string;
@@ -106,7 +101,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-22',
     category: 'pricing',
     title: 'Crypto checkout is live via NowPayments',
-    body: 'The crypto payment option (the crypto rail) we postponed at launch is now live. Self-serve paid tiers ($79/mo and up) can pay with cryptocurrency (BTC, LTC, USDT, USDC, ETH, XMR) through NowPayments — open the crypto checkout from the billing dashboard, send the displayed amount, and the order moves pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default way to pay (the default rail); Enterprise pays by bank wire. Crypto payments are non-refundable. Full reference at docs.driftstack.dev/api/billing-crypto.',
+    body: 'Crypto checkout is live for self-serve paid tiers ($79/mo and up). Pay with BTC, LTC, USDT, USDC, ETH, or XMR through NowPayments from the billing dashboard; orders move pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default way to pay; Enterprise pays by bank wire. Crypto payments are non-refundable. Full reference at docs.driftstack.dev/api/billing-crypto.',
   },
   {
     date: '2026-05-20',
@@ -136,7 +131,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-18',
     category: 'launch',
     title: 'BYOK Anthropic API keys + bundled-LLM rail for agent sessions',
-    body: 'Two ways to power the agent-session decomposer. BYOK — bring your own Anthropic key via PUT /v1/account/me/byok-anthropic-key (AES-256-GCM at rest; never echoed in responses; rotate / clear / test-connection endpoints all live; the dashboard form lands at v1.1). Bundled LLM — opt in via PATCH /v1/account/me/bundled-llm-settings and the decomposer falls back to a deployment-managed Anthropic budget (monthly soft cap surfaced in the dashboard read-only as used / remaining / refused; the opt-in toggle lands at v1.1). Per-request override via x-byok-anthropic-api-key on /v1/agent-sessions/{id}/message. Full references at docs.driftstack.dev/api/byok-anthropic and docs.driftstack.dev/api/bundled-llm.',
+    body: 'Two ways to power the agent-session decomposer. BYOK — bring your own Anthropic key via PUT /v1/account/me/byok-anthropic-key (AES-256-GCM at rest; never echoed in responses; rotate, clear, and test-connection endpoints are live). Bundled LLM — opt in via PATCH /v1/account/me/bundled-llm-settings; the decomposer then uses a deployment-managed Anthropic budget with monthly used, remaining, and refused totals. Per-request override is available through x-byok-anthropic-api-key on /v1/agent-sessions/{id}/message. Full references at docs.driftstack.dev/api/byok-anthropic and docs.driftstack.dev/api/bundled-llm.',
   },
   {
     date: '2026-05-18',
@@ -160,7 +155,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-09',
     category: 'launch',
     title: 'Account region preference (US / EU / APAC)',
-    body: 'Set a stated infrastructure region preference from /settings → Region. The selector is informational for v1 — Driftstack runs on EU-jurisdiction infrastructure for every account today (full sub-processor list at /trust/sub-processors). Recording your preference now lets us route accounts to the matching region automatically once the multi-region rollout lands; nothing about your data location changes when you set it.',
+    body: 'Set an infrastructure region preference from /settings → Region. The selector records account preference; it does not change data location. Driftstack runs on EU-jurisdiction infrastructure for every account today; the full processor and transfer details are listed at /trust/sub-processors.',
   },
   {
     date: '2026-05-09',
@@ -243,12 +238,6 @@ const ENTRIES: readonly ChangelogEntry[] = [
     title: 'Two-ladder pricing live',
     body: 'Manual ($79/mo Solo / $249/mo Team / $699/mo Agency) and API ($149/mo Starter / $499/mo Builder / $1,499/mo Scale + custom Enterprise). A free entry tier sits below both ladders.',
   },
-  {
-    date: '2026-05-03',
-    category: 'security',
-    title: 'Crypto payment rail deferred to post-launch',
-    body: 'Coinbase Commerce closed for non-US/Singapore merchants 2026-03-31. Stripe is sole launch payment rail (fiat-only). Crypto re-evaluates against actual transaction volume.',
-  },
 ];
 
 const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
@@ -278,10 +267,6 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
       self-hosted-tier adjustments. Internal engineering changes
       (code restructuring, test tooling, monitoring work) are
       tracked in our internal logs, not here.
-    </p>
-    <p class="mt-3 max-w-prose text-base text-tk-ink-2">
-      For what lands next, see the
-      <a href="/roadmap/" class="text-tk-accent-text underline">roadmap</a>.
     </p>
   </PageHero>
 

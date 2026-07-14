@@ -104,11 +104,9 @@ const DefaultBehavioralProfile = PersonaRegular
 type WebhookEventType string
 
 const (
-	EventSessionCompleted  WebhookEventType = "session.completed"
-	EventSessionFailed     WebhookEventType = "session.failed"
-	EventQuotaWarning80Pct WebhookEventType = "quota.warning_80pct"
-	EventQuotaExceeded     WebhookEventType = "quota.exceeded"
-	EventAPIKeyRevoked     WebhookEventType = "api_key.revoked"
+	EventSessionCompleted WebhookEventType = "session.completed"
+	EventSessionFailed    WebhookEventType = "session.failed"
+	EventAPIKeyRevoked    WebhookEventType = "api_key.revoked"
 	// Arc 5 EGRESS eg.7 — fired when a SOCKS5 session's egress
 	// capability report is ingested; subscribable so customers can
 	// branch on proxy-health changes without a GET.

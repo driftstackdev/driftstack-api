@@ -148,7 +148,7 @@ describe('W369.B customer-dashboard /login page content parity', () => {
   it("V-269 ?next= preserved on /signup cross-link (deep-link doesn't leak)", () => {
     expect(body).toMatch(/V-269 — preserve \?next= when bouncing the user to \/signup/);
     expect(body).toMatch(
-      /signupLink\.setAttribute\('href', '\/signup\?next=' \+ encodeURIComponent\(next\)\)/,
+      /signupLink\.setAttribute\('href', '\/signup\/\?next=' \+ encodeURIComponent\(next\)\)/,
     );
   });
 

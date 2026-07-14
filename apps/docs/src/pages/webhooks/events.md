@@ -6,40 +6,22 @@ description: Reference for every webhook event type the Driftstack API emits —
 
 # Webhook events — catalog + payload shapes
 
-— comprehensive reference for every webhook event type the
-Driftstack control plane emits (or will emit). Source-of-truth for
-the customer-facing `/api/webhook-events` docs page on the marketing
-site (when it lands as a Tier 3 visual surface).
-
-> **Status notation**: events are tagged
-> [LIVE] (declared in the enum + fired by a service emitter today),
-> [DECLARED] (declared in the enum but no production emitter wired),
-> [PLANNED] (not yet in the enum; queued for V-NNN).
+This is the customer-facing reference for webhook events emitted by the
+Driftstack control plane and the synthetic connectivity test event.
 
 ## Quick index
 
-| Event                               | Status     | When                                                                    |
-| ----------------------------------- | ---------- | ----------------------------------------------------------------------- |
-| `session.completed`                 | [LIVE]     | Session is destroyed cleanly                                            |
-| `session.failed`                    | [LIVE]     | Session terminates in `errored` state                                   |
-| `api_key.revoked`                   | [LIVE]     | API key revoked (customer or admin)                                     |
-| `quota.warning_80pct`               | [DECLARED] | Account hits 80% of tier quota                                          |
-| `quota.exceeded`                    | [DECLARED] | Account hits 100% of tier quota                                         |
-| `test.ping`                         | [LIVE]     | Synthetic test event from POST /v1/webhooks/:id/test                    |
-| `session.egress_capability_changed` | [DECLARED] | Harness emitted an egress.capability_report for a SOCKS5 session        |
-| `crypto.order.paid`                 | [LIVE]     | NowPayments-backed order transitioned to `paid` (V-666)                 |
-| `crypto.order.failed`               | [LIVE]     | Crypto order moved to terminal `failed` (timeout/refund/expired)        |
-| `session.challenge_detected`        | [DECLARED] | Harness ChallengeDetector flagged a bot-check (DataDome/Arkose/…)       |
-| `session.profile_save_failed`       | [DECLARED] | Profile save-back did not replace the stored profile (inspect `reason`) |
-| `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                                |
-| `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)                   |
-| `profile.created`                   | [PLANNED]  | New profile created                                                     |
-| `profile.deleted`                   | [PLANNED]  | Profile deleted                                                         |
-| `api_key.minted`                    | [PLANNED]  | New API key issued                                                      |
-| `subscription.changed`              | [PLANNED]  | Tier changed via Stripe                                                 |
-| `subscription.cancelled`            | [PLANNED]  | Subscription cancelled                                                  |
-| `webhook_endpoint.created`          | [PLANNED]  | New webhook endpoint registered                                         |
-| `webhook_endpoint.deleted`          | [PLANNED]  | Webhook endpoint deleted                                                |
+| Event                               | When                                                   |
+| ----------------------------------- | ------------------------------------------------------ |
+| `session.completed`                 | Session is destroyed cleanly                           |
+| `session.failed`                    | Session terminates in `errored` state                  |
+| `api_key.revoked`                   | API key is revoked by a customer or administrator      |
+| `test.ping`                         | Synthetic test event from `POST /v1/webhooks/:id/test` |
+| `session.egress_capability_changed` | A session reports a changed SOCKS5 egress capability   |
+| `crypto.order.paid`                 | A NowPayments-backed order transitions to `paid`       |
+| `crypto.order.failed`               | A crypto order moves to terminal `failed`              |
+| `session.challenge_detected`        | The session harness detects a supported bot challenge  |
+| `session.profile_save_failed`       | Profile save-back fails to replace the stored profile  |
 
 ## Common envelope
 
@@ -51,9 +33,7 @@ with the following envelope:
   "id": "<uuid>",
   "type": "<event-type>",
   "created_at": "2026-05-05T12:34:56.789Z",
-  "data": {
-    /* per-event-type shape, see below */
-  }
+  "data": {/* per-event-type shape, see below */}
 }
 ```
 
@@ -83,7 +63,7 @@ manual replay (admin tooling) or DLQ requeue.
 
 ## Event payloads
 
-### `session.completed` [LIVE]
+### `session.completed`
 
 Fires when `DELETE /v1/sessions/:id` lands on a session in a
 non-terminal state. The destroy path is idempotent; this event fires
@@ -98,7 +78,7 @@ exactly once per logical destroy.
 
 Emitter: `apps/server/src/services/sessions.ts` `destroy()`.
 
-### `session.failed` [LIVE]
+### `session.failed`
 
 Fires when a session transitions to `errored` (driver failure,
 unrecoverable error during navigate / interact / capture / etc.).
@@ -117,7 +97,7 @@ return 410.
 
 Emitter: `runWithFailureCapture()` in `services/sessions.ts`.
 
-### `api_key.revoked` [LIVE]
+### `api_key.revoked`
 
 Fires whenever an API key is revoked, regardless of who initiated
 the revocation (account_owner via `DELETE /v1/api-keys/:id` OR
@@ -135,46 +115,7 @@ audit log for full provenance.
 
 Emitter: `apps/server/src/services/api-keys.ts` `revoke()`.
 
-### `quota.warning_80pct` [DECLARED]
-
-**Will** fire when an account's metered usage hits 80% of the tier's
-quota. Currently declared in the enum but not wired to a usage-
-threshold check — see V-NNN follow-up.
-
-Planned shape:
-
-```json
-{
-  "tier": "api_builder",
-  "metric": "session_minutes",
-  "used": 4000,
-  "limit": 5000,
-  "percentage": 80,
-  "period_start": "2026-05-01T00:00:00.000Z",
-  "period_end": "2026-06-01T00:00:00.000Z"
-}
-```
-
-### `quota.exceeded` [DECLARED]
-
-**Will** fire when an account hits 100% of the tier quota. Same wiring
-gap as `quota.warning_80pct`.
-
-Planned shape:
-
-```json
-{
-  "tier": "api_builder",
-  "metric": "session_minutes",
-  "used": 5000,
-  "limit": 5000,
-  "percentage": 100,
-  "period_start": "2026-05-01T00:00:00.000Z",
-  "period_end": "2026-06-01T00:00:00.000Z"
-}
-```
-
-### `test.ping` [LIVE]
+### `test.ping`
 
 Synthetic test event emitted by `POST /v1/webhooks/:id/test`
 . Fires REGARDLESS of subscription so customers can verify
@@ -202,7 +143,7 @@ HMAC-signed, retried on failure per the standard backoff schedule,
 audit-logged as `webhook_delivery.replayed` with
 `payload.via: send_test_event`.
 
-### `session.egress_capability_changed` [DECLARED]
+### `session.egress_capability_changed`
 
 Fires when the WebKit-fork harness emits an
 `egress.capability_report` event for a SOCKS5 session and the
@@ -214,11 +155,6 @@ subscribers can branch on `udp_associate`, `dns_remote_resolve`,
 Subscribable — add it to your webhook endpoint's `events` array
 to wire proxy-health visibility into your own observability
 surface.
-
-`[DECLARED]` because the schema + pgEnum + emitter plumbing is in
-place but the harness side (Agent 1 scope per planning 133) has
-not yet shipped the event source. Once the harness emits, this
-moves to `[LIVE]`.
 
 ```json
 {
@@ -237,9 +173,9 @@ moves to `[LIVE]`.
 }
 ```
 
-### `crypto.order.paid` [LIVE]
+### `crypto.order.paid`
 
-### `crypto.order.failed` [LIVE]
+### `crypto.order.failed`
 
 V-666 — fires when a NowPayments-backed crypto checkout order
 transitions to a terminal state. Wired end-to-end 2026-05-22
@@ -291,7 +227,7 @@ order lifecycle + status state machine. The webhook event mirrors
 the same `events[]` log shape returned by `GET /v1/billing/crypto-
 orders`.
 
-### `session.challenge_detected` [DECLARED]
+### `session.challenge_detected`
 
 W393 — fires when the in-session harness ChallengeDetector flags a
 bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / … —
@@ -299,10 +235,8 @@ bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / … —
 auto-pauses the session (no further action intents run) and surfaces
 the challenge; resolve it (e.g. in the live view) and the session
 resumes. Subscribable so you can route challenge alerts into your own
-ops/notification surface. In the enum (migration 0070); the relay
-emitter is wired (resolves the owning account → enqueues this webhook)
-and fires once the fleet control plane is live (gated behind
-`FLEET_CONTROL_PLANE_ENABLED`).
+ops/notification surface. The relay resolves the owning account and
+enqueues the webhook when the session harness reports the challenge.
 
 ```json
 {
@@ -319,7 +253,7 @@ and fires once the fleet control plane is live (gated behind
 }
 ```
 
-### `session.profile_save_failed` [DECLARED]
+### `session.profile_save_failed`
 
 Fires when a profile-backed session's save-back does not replace the
 stored profile at teardown. The browsing session itself **succeeded**.
@@ -333,12 +267,9 @@ and would have clobbered a known-good prior store — the prior is
 preserved, so this one is reassuring rather than data loss), or
 `superseded` (a newer profile write won and the stale conditional save
 was safely refused; the next restore uses the newer state, so this is
-benign and not data loss). An
-unrecognized future harness reason is folded into `upload_failed`
-rather than dropping the event. Subscribable so customers relying on persisted profile
-state can alert on it. In the enum (migration 0073); the relay emitter
-is wired and fires once the fleet control plane is live (gated behind
-`FLEET_CONTROL_PLANE_ENABLED`).
+benign and not data loss). An unrecognized harness reason is folded into
+`upload_failed` rather than dropping the event. Customers relying on
+persisted profile state can subscribe and alert on it.
 
 ```json
 {
@@ -351,65 +282,6 @@ is wired and fires once the fleet control plane is live (gated behind
   }
 }
 ```
-
-## Planned events (not yet in enum)
-
-The following events are queued for future V-NNN entries. Adding a
-new event type is a Class A schema migration (additive enum value)
-plus an emitter in the relevant service plus an SDK type bump
-across TS / Python / Go.
-
-### `session.created` [PLANNED]
-
-Fires when a session transitions `creating` → `ready`. Distinct
-from the API-call response on `POST /v1/sessions`, which blocks
-through driver dispatch and returns the session already at `ready`
-— the caller doesn't need this event, but a non-calling consumer
-(a separate alerting or provisioning pipeline) could observe
-session readiness without polling.
-
-### `session.destroyed` [PLANNED]
-
-A more general counterpart to `session.completed`. Where
-`session.completed` semantically means "successful end-of-life",
-`session.destroyed` would mean "any end-of-life including
-admin-forced destroy". Worth landing if customers want the
-super-set; today the existing pair (`completed` for happy path,
-`failed` for error path) covers admin-destroy as `failed`. Defer.
-
-### `profile.created` / `profile.deleted` [PLANNED]
-
-Mirror of `api_key.revoked` for profile lifecycle. Useful when
-profiles are managed programmatically via the SDK and a separate
-system tracks them.
-
-### `api_key.minted` [PLANNED]
-
-Counterpart to `api_key.revoked`. Useful for SOC2-adjacent customer
-auditing where the customer wants every key issuance recorded
-externally.
-
-### `subscription.changed` / `subscription.cancelled` [PLANNED]
-
-Stripe webhook handler-driven. When the customer changes tier or
-cancels via the Stripe customer portal, a Driftstack-side webhook
-fires so the customer's own systems can react (e.g. update billing
-dashboards).
-
-### `webhook_endpoint.created` / `webhook_endpoint.deleted` / `webhook_endpoint.secret_rotated` [PLANNED]
-
-Self-meta events: a webhook fires when a webhook endpoint is
-registered, deleted, or its signing secret rotated .
-Useful for change-tracking systems. Recursion risk is low (the
-endpoint that fires the event is one of multiple endpoints, not
-the one being created/deleted/rotated).
-
-For now these events land in the audit log
-(`webhook_endpoint.created` / `.deleted` / `.updated` /
-`.secret_rotated`) but are not delivered as webhooks. If you want
-to react programmatically to webhook config changes today, poll
-the `GET /v1/account/audit-log?action=webhook_endpoint.created`
-filter.
 
 ## Subscribing to events
 
@@ -533,8 +405,8 @@ POST /v1/webhooks
 The endpoint receives ONLY events whose type matches the
 subscription set. Adding more events later via PATCH is a no-
 historical-replay operation — past deliveries against the old
-subscription stay delivered/failed/DLQ as they were; only future
-events count.
+subscription stay delivered/failed/DLQ as they were; only events created
+after the update use the new selection.
 
 ### Subscribing to every (subscribable) event
 
@@ -547,8 +419,6 @@ POST /v1/webhooks
   "events": [
     "session.completed",
     "session.failed",
-    "quota.warning_80pct",
-    "quota.exceeded",
     "api_key.revoked",
     "session.egress_capability_changed",
     "crypto.order.paid",
@@ -559,12 +429,8 @@ POST /v1/webhooks
 }
 ```
 
-There's no shorthand for "subscribe to all" — the explicit list
-is the only way. This is intentional: when we add a new
-subscribable event in the future (per the [PLANNED] queue
-above), existing endpoints don't auto-subscribe and start
-receiving deliveries the customer didn't expect. Customers
-opt-in to new events explicitly.
+There's no shorthand for "subscribe to all" — the explicit list is the
+only way. An endpoint receives only the event types it selected.
 
 ### `test.ping` separately
 

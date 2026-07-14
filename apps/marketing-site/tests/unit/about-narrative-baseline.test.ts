@@ -5,7 +5,7 @@
 //   • R9 hero headline (capability-led: "One engine. One product. ...")
 //   • EU-resident-by-default posture
 //   • no-behavioural-data-collection commitment
-//   • honest-scope framing (SOC 2 as future, not today's marketing)
+//   • honest-scope framing without certification promises
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -51,8 +51,8 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).toMatch(/We don't train models on your traffic/);
   });
 
-  it("honest scope: SOC 2 framed as future-revenue milestone, not today's marketing (the about page still pins this string; the parallel security.astro 'SOC 2 is on the roadmap' was reframed per F-5 to 'SOC 2 is not yet certified' but the about-page wording is independent)", () => {
-    expect(body).toMatch(/SOC 2 is a\s+future-revenue\s+milestone, not\s+today's marketing/i);
+  it('honest scope avoids certification promises', () => {
+    expect(body).not.toMatch(/SOC 2|ISO 27001/i);
   });
 
   it('F-5 (Issue 5) customer-configurable egress framing on about page: the prior "(the last is on the roadmap; see /trust/security-overview for what\'s shipped today)" parenthetical was rewritten in scoped commit 87e37383 to "(SOCKS5 · WireGuard · OpenVPN — see /trust/security-overview for the security posture)". Aspirational "on the roadmap" language is gone from this page; the honest-disclosure surface for the egress impl state is now security.astro (gated by W499.D against actual server source).', () => {

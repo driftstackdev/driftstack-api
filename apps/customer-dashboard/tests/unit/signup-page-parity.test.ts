@@ -83,7 +83,7 @@ describe('W350.B /signup page parity', () => {
 
   it('redirects to /verify-email after a successful signup', () => {
     expect(body).toMatch(/window\.location\.href\s*=\s*verificationUrl\(\)/);
-    expect(body).toContain("'/verify-email'");
+    expect(body).toContain("'/verify-email/'");
   });
 
   it('round-trips ?next= through to /verify-email + /login (deep-link preservation), open-redirect guarded', () => {
@@ -91,9 +91,9 @@ describe('W350.B /signup page parity', () => {
     // fallback and the shared /verify-email success/timeout recovery URL.
     // Both remain sanitized through inline safeNextPath() (same-origin).
     expect(body).toMatch(
-      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
+      /'\/login\/\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );
-    expect(body).toMatch(/'\/verify-email\?next='/);
+    expect(body).toMatch(/'\/verify-email\/\?next='/);
   });
 
   it('name field is optional + capped at 120 chars per SignupRequestSchema', () => {

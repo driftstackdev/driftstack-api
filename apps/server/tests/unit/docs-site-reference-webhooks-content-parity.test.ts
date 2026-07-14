@@ -110,30 +110,24 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(WE)).toBe(true);
   });
 
-  it('webhooks/events.md: catalog + LIVE/DECLARED/PLANNED status tags + quick-index table (session.completed/failed/api_key.revoked + 13 planned + test.ping) + common envelope shape pinned. Re-enabled by slice 328 post the R4 V-NNN scrub — the V-203 + V-356 anchors were stripped from customer-facing copy; the catalog now leads with a bare em-dash', () => {
+  it('webhooks/events.md: current emitted-event catalog, synthetic test event, and common envelope are pinned without speculative event rows', () => {
     const body = read(EV);
     expect(body).toMatch(/^title: Webhook events catalog$/m);
     expect(body).toMatch(/^# Webhook events — catalog \+ payload shapes$/m);
-    expect(body).toMatch(/^— comprehensive reference for every webhook event type the$/m);
-    expect(body).toMatch(/> \*\*Status notation\*\*: events are tagged/);
-    expect(body).toMatch(
-      /> \[LIVE\] \(declared in the enum \+ fired by a service emitter today\),/,
-    );
-    expect(body).toMatch(
-      /> \[DECLARED\] \(declared in the enum but no production emitter wired\),/,
-    );
-    expect(body).toMatch(/> \[PLANNED\] \(not yet in the enum; queued for V-NNN\)\./);
-    expect(body).toMatch(/\| `session\.completed`\s+\| \[LIVE\]\s+\|/);
-    expect(body).toMatch(/\| `session\.failed`\s+\| \[LIVE\]\s+\|/);
-    expect(body).toMatch(/\| `api_key\.revoked`\s+\| \[LIVE\]\s+\|/);
-    expect(body).toMatch(/\| `quota\.warning_80pct`\s+\| \[DECLARED\]\s+\|/);
-    expect(body).toMatch(/\| `quota\.exceeded`\s+\| \[DECLARED\]\s+\|/);
-    expect(body).toMatch(
-      /\| `test\.ping`\s+\| \[LIVE\]\s+\| Synthetic test event from POST \/v1\/webhooks\/:id\/test/,
-    );
-    expect(body).toMatch(/\| `session\.created`\s+\| \[PLANNED\]\s+\|/);
-    // trial_pack.purchased / .expired [PLANNED] rows removed 2026-05-27.
-    expect(body).not.toMatch(/trial_pack\./);
+    for (const event of [
+      'session.completed',
+      'session.failed',
+      'api_key.revoked',
+      'test.ping',
+      'session.egress_capability_changed',
+      'crypto.order.paid',
+      'crypto.order.failed',
+      'session.challenge_detected',
+      'session.profile_save_failed',
+    ]) {
+      expect(body).toContain(`| \`${event}\``);
+    }
+    expect(body).not.toMatch(/\[DECLARED\]|\[PLANNED\]|quota\.|trial_pack\./);
     expect(body).toMatch(/^## Common envelope$/m);
     expect(body).toMatch(/"id": "<uuid>"/);
     expect(body).toMatch(/"type": "<event-type>"/);

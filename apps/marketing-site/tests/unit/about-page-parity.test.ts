@@ -1,6 +1,6 @@
 // W262.B — drift-guard for /about page. Pins:
 // 1. EU-resident sub-processor names match the live SUB_PROCESSORS list.
-// 2. Customer-configurable egress is framed as ROADMAP, not shipped.
+// 2. Customer-configurable egress is described as shipped.
 // 3. /trust/security-overview cross-link exists.
 // 4. No fictional SOC 2 / SOC2 marketing claim.
 
@@ -40,12 +40,8 @@ describe('W262.B /about ↔ live posture parity', () => {
   });
 
   it('does not advertise SOC 2 as a live certification', () => {
-    // Marketing posture rule: SOC 2 stays a "future-revenue milestone".
-    expect(page).toMatch(/SOC 2/);
-    expect(page).toMatch(/future-revenue milestone|not today/i);
-    // No active "SOC 2 certified" / "SOC 2 compliant" claims.
-    expect(page).not.toMatch(/SOC 2 certified/i);
-    expect(page).not.toMatch(/SOC 2 compliant/i);
+    expect(page).not.toMatch(/SOC 2/i);
+    expect(page).not.toMatch(/ISO 27001/i);
   });
 
   it('cross-link /trust/security-overview resolves to a real page', () => {

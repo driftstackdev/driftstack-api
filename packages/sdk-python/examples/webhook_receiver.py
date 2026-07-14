@@ -33,16 +33,6 @@ def handle_session_failed(data: dict[str, Any]) -> None:
     print(f"session.failed: session_id={data.get('session_id')} error={data.get('error_kind')}")
 
 
-def handle_quota_warning(data: dict[str, Any]) -> None:
-    print(
-        f"quota.warning_80pct: {data.get('total')}/{data.get('quota')} ({data.get('record_type')})"
-    )
-
-
-def handle_quota_exceeded(data: dict[str, Any]) -> None:
-    print(f"quota.exceeded: {data.get('total')}/{data.get('quota')} ({data.get('record_type')})")
-
-
 def handle_api_key_revoked(data: dict[str, Any]) -> None:
     print(f"api_key.revoked: {data.get('api_key_id')}")
 
@@ -50,8 +40,6 @@ def handle_api_key_revoked(data: dict[str, Any]) -> None:
 HANDLERS = {
     "session.completed": handle_session_completed,
     "session.failed": handle_session_failed,
-    "quota.warning_80pct": handle_quota_warning,
-    "quota.exceeded": handle_quota_exceeded,
     "api_key.revoked": handle_api_key_revoked,
 }
 

@@ -29,10 +29,8 @@ function read(p: string): string {
 describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-184a framing pinned: 'onboarding flow Tier 1 scaffolding. Minimal placeholder UX; full Tier 3 visual lands as V-184b draft for founder review.' + flow: 'signup → verify-email → welcome → select-tier → dashboard. Each page uses localStorage.ds_web_session_token for cross-page state.' (2026-07-02: terminal step moved from /first-session to the dashboard home with the account-portal IA) — pinned so the canonical onboarding sequence + the cross-page state-key contract survive", () => {
-    expect(body).toMatch(
-      /\/\/ V-184a — onboarding flow Tier 1 scaffolding\. Minimal placeholder\s*\n?\s*\/\/ UX; full Tier 3 visual lands as V-184b draft for founder review\./,
-    );
+  it('pins the canonical onboarding sequence and cross-page session-state contract', () => {
+    expect(body).toMatch(/\/\/ Account onboarding flow\./);
     expect(body).toMatch(
       /\/\/ Flow: signup → verify-email → welcome → select-tier → dashboard\.\s*\n?\s*\/\/ Each page uses localStorage\.ds_web_session_token for cross-page state\./,
     );

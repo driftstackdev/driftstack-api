@@ -143,7 +143,7 @@ describe('cli-authorize page — local integration', () => {
     expect(visibleState(dom.window)).toBe('needs-signin');
     // Sign-in link wires the next= param so post-login bounce works.
     const signinLink = dom.window.document.querySelector('[data-signin-link]');
-    expect(signinLink?.getAttribute('href')).toMatch(/\/login\?next=/);
+    expect(signinLink?.getAttribute('href')).toMatch(/\/login\/\?next=/);
   });
 
   it('shows needs-signin when session storage access is denied', async () => {
@@ -160,7 +160,7 @@ describe('cli-authorize page — local integration', () => {
     expect(visibleState(dom.window)).toBe('needs-signin');
     expect(dom.fetchCalls).toHaveLength(0);
     expect(dom.window.document.querySelector('[data-signin-link]')?.getAttribute('href')).toMatch(
-      /\/login\?next=/,
+      /\/login\/\?next=/,
     );
   });
 

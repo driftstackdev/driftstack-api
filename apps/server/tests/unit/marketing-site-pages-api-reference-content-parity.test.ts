@@ -5,7 +5,7 @@
 // the V-662 error taxonomy table (which SDK retry-logic implementers
 // compare against the typed error class names).
 //
-//   • V-127a placeholder framing + future Scalar UI embed.
+//   • Live Scalar reference framing.
 //   • API_DOCS_URL = api.driftstack.dev/docs + OPENAPI_JSON_URL =
 //     api.driftstack.dev/openapi.json.
 //   • 11-group surface map: Sessions / Profiles / API keys / Webhooks /
@@ -34,13 +34,12 @@ function read(p: string): string {
 describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-127a placeholder framing pinned: 'until the marketing-site build embeds the Scalar UI bundle directly, this page links to the live API server's interactive reference at api.driftstack.dev/docs (which already serves Scalar against the running OpenAPI spec). Future iteration: build-time fetch of /openapi.json + embed Scalar's standalone HTML, so the reference stays browseable even when the API server is offline.' — pinned so the placeholder rationale + the future-Scalar-embed plan stay documented (drift to dropping would let a future maintainer assume the embed already exists)", () => {
+  it('pins the live interactive Scalar reference without placeholder or future-embed copy', () => {
     expect(body).toMatch(
-      /\/\/ V-127a placeholder — until the marketing-site build embeds the\s*\n?\s*\/\/ Scalar UI bundle directly, this page links to the live API\s*\n?\s*\/\/ server's interactive reference at api\.driftstack\.dev\/docs/,
+      /\/\/ The live API server serves Scalar against the running OpenAPI spec\./,
     );
-    expect(body).toMatch(
-      /\/\/ Future iteration: build-time fetch of \/openapi\.json \+ embed\s*\n?\s*\/\/ Scalar's standalone HTML, so the reference stays browseable even\s*\n?\s*\/\/ when the API server is offline\./,
-    );
+    expect(body).toMatch(/Interactive reference uses Scalar — try requests against your API/);
+    expect(body).not.toMatch(/placeholder|future iteration|until .* embeds/i);
   });
 
   it('API_DOCS_URL + OPENAPI_JSON_URL constants pinned: api.driftstack.dev/docs + api.driftstack.dev/openapi.json — pinned so the canonical hosted-docs + openapi-json URLs stay consistent (drift to a different subdomain would break the click-through to the live interactive reference)', () => {

@@ -10,6 +10,7 @@ import { accounts, webhookEndpoints } from './schema.js';
 import type { WebhookRotationReminderRepo } from '../services/webhook-rotation-reminder.js';
 import type { WebhookEndpointRow } from '../services/webhooks.js';
 import { readWebhookSecret } from '../lib/webhook-secret-encryption.js';
+import { sanitizePersistedWebhookEvents } from './webhooks-repo.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -90,7 +91,7 @@ export class DrizzleWebhookRotationReminderRepo implements WebhookRotationRemind
       lastReminderSentAt: r.lastReminderSentAt,
       graceWindowEndsAt: r.graceWindowEndsAt,
       forceRotatedAt: r.forceRotatedAt,
-      events: r.events,
+      events: sanitizePersistedWebhookEvents(r.events),
       description: r.description,
       active: r.active,
       consecutiveFailures: r.consecutiveFailures,

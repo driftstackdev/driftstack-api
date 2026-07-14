@@ -497,8 +497,8 @@ harness end-to-end work lands (v1.0 Mac fleet harness rollout). Until
 then, drive manual/pair-mode input through the LiveKit DataChannel
 documented in the [Live video guide](/guides/live-video/)
 (`room.localParticipant.publishData(...)`) instead of this endpoint.
-`duration_ms` (server-side dispatch latency, NOT round-trip to the
-harness) only applies once the `forwarded` branch ships.
+`duration_ms` is server-side dispatch latency, not round-trip latency to the
+session harness.
 
 Throttle the client side: the route's rate-limit bucket
 (`agent_sessions:input_event`) is sized for ≤120Hz `mouseMove` /
@@ -513,10 +513,9 @@ Errors:
 - `400 validation-failed` — event body fails the discriminated-union
   schema (unknown `type`, out-of-bounds coords, invalid `button`,
   etc.).
-- `503 feature-unavailable` — manual-mode / pair-mode-after-takeover
-  dispatch always hits this today (see callout above) — harness
-  end-to-end is not yet wired on this deployment. Pre-launch state;
-  lands with the v1.0 Mac fleet harness rollout.
+- `503 feature-unavailable` — this deployment does not expose HTTP
+  manual-input dispatch. Use the desktop Simulator's live control channel for
+  hands-on input.
 
 ## Pair-mode takeover + handback
 

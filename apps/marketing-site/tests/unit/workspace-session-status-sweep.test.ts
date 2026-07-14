@@ -39,7 +39,7 @@ const liveStatuses = new Set(SessionStatusSchema.options);
 // (excluding crypto + webhook + subscription pages which also use a
 // status enum).
 const sessionContextFiles = allFiles.filter((f) => {
-  if (/(crypto|webhook|subscription|billing|order)/i.test(f)) return false;
+  if (/(archetype|crypto|webhook|subscription|billing|order)/i.test(f)) return false;
   if (!/sessions?\b/i.test(f)) {
     // Fall back to body match — file mentions "session" + "status".
     const body = read(f);

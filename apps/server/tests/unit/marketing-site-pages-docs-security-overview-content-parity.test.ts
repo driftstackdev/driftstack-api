@@ -10,8 +10,8 @@
 //     with MFA_ENCRYPTION_KEY.
 //   • In-transit: TLS 1.2+ + HSTS max-age=63072000 + includeSubDomains
 //     + preload.
-//   • Object storage: S3-SSE on R2 + never-publicly-listable; managed
-//     recordings roadmap vs desktop-local recording distinction.
+//   • Object storage: S3-SSE on R2 + never-publicly-listable;
+//     desktop-local recording and no-upload boundary.
 //   • Profile state: per-profile encrypted files on driver-host EU.
 //   • Auth: read/write/account_owner scope ladder + least-privilege
 //     default + 'create key' defaults to read + MFA TOTP + 15-min
@@ -66,9 +66,9 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     expect(body).toMatch(/<a href="\/docs\/api-security-headers\/">API security headers<\/a>/);
   });
 
-  it('Object storage + profile state framing pinned. Object-storage (S3-SSE + never-publicly-listable + managed-recordings-roadmap vs desktop-local recorder) + Profile-state (encrypted-files on the driver host = the MacStadium fleet, US + Postgres-EU-metadata-only) framings exist verbatim at docs/security-overview.astro:44-56', () => {
+  it('Object storage + profile state framing pinned. Object-storage (S3-SSE + never-publicly-listable + desktop-local recorder/no-upload boundary) + Profile-state (encrypted-files on the driver host = the MacStadium fleet, US + Postgres-EU-metadata-only) framings exist verbatim at docs/security-overview.astro:44-56', () => {
     expect(body).toMatch(
-      /<strong>Object storage:<\/strong> Customer-generated artefacts\s*\n?\s*that land in Cloudflare R2 use server-side encryption \(S3-SSE\);\s*\n?\s*underlying objects are never publicly listable\. Managed API session\s*\n?\s*recordings in R2 are a roadmap item; the desktop app's current manual\s*\n?\s*recorder saves streamed frames locally on the operator's machine\. See\s*\n?\s*<a href="\/docs\/recordings\/">\/docs\/recordings<\/a> for the distinction\./,
+      /<strong>Object storage:<\/strong> Customer-generated artefacts\s*\n?\s*that land in Cloudflare R2 use server-side encryption \(S3-SSE\);\s*\n?\s*underlying objects are never publicly listable\. The desktop app's\s*\n?\s*recorder saves streamed session frames locally on the operator's\s*\n?\s*machine; those recordings are not uploaded by the recording workflow\.\s*\n?\s*See <a href="\/docs\/recordings\/">\/docs\/recordings<\/a> for the boundary\./,
     );
     expect(body).toMatch(
       /<strong>Profile state:<\/strong> Per-profile browser state\s*\n?\s*\(cookies, localStorage, IndexedDB\) lives in the WebKit driver\s*\n?\s*layer as per-profile encrypted files on disk on the driver\s*\n?\s*host \(the MacStadium fleet, US\)\. The Postgres profile row\s*\n?\s*\(EU\) holds metadata only — name, archetype, description\./,

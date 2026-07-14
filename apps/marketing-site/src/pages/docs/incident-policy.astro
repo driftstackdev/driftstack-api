@@ -107,20 +107,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       <strong>Note:</strong> <code>incident.created</code> /
       <code>incident.updated</code> / <code>incident.resolved</code>
-      are admin-audit / internal SSE event types — they are not yet
-      in <code>SubscribableWebhookEventTypeSchema</code>, so they
-      can't be the target of a <code>POST /v1/webhooks</code>
-      subscription. Email subscription is the customer-facing
-      notification path today.
+      are admin-audit / internal SSE event types, not customer webhook
+      subscription values. Email subscription is the customer-facing
+      notification path.
     </p>
 
     <h2>SLA + credit policy</h2>
     <p>
       Driftstack's SLA is on the <strong>API control plane</strong>
-      (session create + lifecycle endpoints). The dashboard, SDK
-      distribution, and any features marked roadmap in
-      <a href="/docs/api-versioning/">/docs/api-versioning</a> are
-      best-effort.
+      (session create + lifecycle endpoints). The dashboard and SDK
+      distribution are best-effort.
     </p>
     <p>
       Tier-by-tier SLA targets, the windowing methodology, the

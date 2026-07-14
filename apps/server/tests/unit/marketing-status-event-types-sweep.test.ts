@@ -30,40 +30,31 @@ describe('W249.B marketing-site subscribable-event-name sweep', () => {
   );
   const pages = walk(PAGES);
 
-  it('pages do not assert a not-yet-subscribable event as subscribable', () => {
-    if (live.has('crypto.order.paid') && live.has('crypto.order.failed')) {
-      return; // Surface is fully subscribable; nothing to guard.
-    }
+  it('pages do not publish the retired quota webhook declarations', () => {
     const offenders: string[] = [];
     for (const p of pages) {
       const body = readFileSync(p, 'utf8');
-      // Pages that name `crypto.order.paid` / `crypto.order.failed`
-      // must also include a roadmap caveat or "not yet" framing.
-      const mentions = /crypto\.order\.(paid|failed)/.test(body);
-      if (!mentions) continue;
-      // Allow as long as the page also flags as roadmap / not-yet /
-      // gated-by-Subscribable... .
-      const flagged =
-        /not yet/i.test(body) ||
-        /roadmap/i.test(body) ||
-        /SubscribableWebhookEventTypeSchema/.test(body) ||
-        /webhooks-crypto-events/.test(body);
-      if (!flagged) {
+      if (/quota\.warning_80pct|quota\.exceeded/.test(body)) {
         offenders.push(p.replace(REPO + '/', ''));
       }
     }
     expect(offenders).toEqual([]);
   });
 
-  it('SubscribableWebhookEventTypeSchema contains at least the 5 known live events', () => {
+  it('SubscribableWebhookEventTypeSchema contains the 8 known live events', () => {
     for (const evt of [
       'session.completed',
       'session.failed',
-      'quota.warning_80pct',
-      'quota.exceeded',
       'api_key.revoked',
+      'session.egress_capability_changed',
+      'crypto.order.paid',
+      'crypto.order.failed',
+      'session.challenge_detected',
+      'session.profile_save_failed',
     ]) {
       expect(live.has(evt)).toBe(true);
     }
+    expect(live.has('quota.warning_80pct')).toBe(false);
+    expect(live.has('quota.exceeded')).toBe(false);
   });
 });

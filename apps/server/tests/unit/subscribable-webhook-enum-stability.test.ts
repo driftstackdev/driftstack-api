@@ -1,5 +1,5 @@
 // W250.C — stability guard for SubscribableWebhookEventTypeSchema.
-// A downstream change that removed any of the ten shipped events
+// A downstream change that removed any of the eight emitted events
 // would silently break:
 //   - SDK webhook verifiers (TS/Python/Go)
 //   - /docs/webhooks event-type table
@@ -9,17 +9,10 @@
 // This guard fails fast if any current event leaves the enum and
 // forces the change to land alongside SDK + doc updates.
 //
-// Ten shipped: the original 5 (session.completed, session.failed,
-// quota.warning_80pct, quota.exceeded, api_key.revoked) plus the
+// Eight shipped: session.completed, session.failed, api_key.revoked, the
 // Arc 5 EGRESS eg.7 addition session.egress_capability_changed plus
 // the V-666 crypto-order pair (crypto.order.paid + crypto.order.failed)
 // wired end-to-end 2026-05-22 plus W393 + A3 W1364.
-//
-// NOTE (sweep-3): quota.warning_80pct / quota.exceeded stay subscribable but
-// have NO usage-threshold emitter yet (a subscription never delivers — docs
-// mark them [DECLARED]). Kept here to preserve the cross-surface contract
-// until the emitter lands + the dashboard gets a "coming soon" caveat; a
-// flagged follow-up, not silently dropped.
 
 import { describe, expect, it } from 'vitest';
 import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
@@ -33,8 +26,6 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
     for (const evt of [
       'session.completed',
       'session.failed',
-      'quota.warning_80pct',
-      'quota.exceeded',
       'api_key.revoked',
       // Arc 5 EGRESS eg.7 — subscribable so customers can hook
       // proxy-health visibility into their own observability.
@@ -53,11 +44,14 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
     }
   });
 
-  it('does NOT yet include events that are emitted server-side but customer-roadmap', () => {
-    // These are emitted by the server (W245) but not yet
-    // subscribable. The guard is dual-purpose: when they graduate,
-    // bump the array below + run a sweep of dependent docs.
-    for (const evt of ['incident.created', 'incident.updated', 'incident.resolved']) {
+  it('excludes internal incident events and silent quota placeholders', () => {
+    for (const evt of [
+      'incident.created',
+      'incident.updated',
+      'incident.resolved',
+      'quota.warning_80pct',
+      'quota.exceeded',
+    ]) {
       expect(live.has(evt), `event ${evt} graduated — review dependent docs (W245/W249)`).toBe(
         false,
       );
@@ -65,10 +59,10 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
   });
 
   it('exposes exactly the documented number of live events', () => {
-    // Ten shipped today (5 original + Arc 5 EGRESS eg.7 + V-666
+    // Eight emitted customer events (3 core + Arc 5 EGRESS eg.7 + V-666
     // crypto.order.paid/failed + W393 session.challenge_detected + A3 W1364
     // session.profile_save_failed). Increment if/when the schema grows; this
     // is intentionally tight so a silent enum addition fails CI.
-    expect(live.size).toBe(10);
+    expect(live.size).toBe(8);
   });
 });

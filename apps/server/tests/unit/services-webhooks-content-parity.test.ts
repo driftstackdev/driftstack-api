@@ -57,12 +57,10 @@ function read(p: string): string {
 describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
   const body = read(LIB);
 
-  it('WebhookEventType: 11-literal union (5 customer events + V-356 test.ping synthetic + Arc 5 EGRESS session.egress_capability_changed + V-666 crypto.order.paid/failed + W393 session.challenge_detected + A3-W1364 session.profile_save_failed). 2026-05-22 — crypto-order events (0064); W393 — challenge event (0070); 2026-06-12 — profile-save-failed event (0073).', () => {
+  it('WebhookEventType: 9-literal union (8 customer events + V-356 test.ping synthetic); retired quota declarations stay absent.', () => {
     expect(body).toMatch(/export type WebhookEventType =/);
     expect(body).toMatch(/\| 'session\.completed'/);
     expect(body).toMatch(/\| 'session\.failed'/);
-    expect(body).toMatch(/\| 'quota\.warning_80pct'/);
-    expect(body).toMatch(/\| 'quota\.exceeded'/);
     expect(body).toMatch(/\| 'api_key\.revoked'/);
     expect(body).toMatch(
       /\/\/ V-356 — synthetic event sent only via POST \/v1\/webhooks\/:id\/test\.\s*\n?\s*\/\/ Customers cannot subscribe to it \(Zod schemas reject it\)/,
@@ -73,6 +71,7 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/\| 'crypto\.order\.failed'/);
     expect(body).toMatch(/\| 'session\.challenge_detected'/);
     expect(body).toMatch(/\| 'session\.profile_save_failed';/);
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
 
   it('WebhookDeliveryStatus: 5-literal union (pending/in_flight/delivered/failed/dlq)', () => {

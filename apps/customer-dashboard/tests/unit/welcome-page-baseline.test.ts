@@ -4,7 +4,7 @@
 //     the old /first-session target was deleted — sessions run in the app)
 //   • Pick-a-tier CTA → /select-tier
 //   • What-happens-next sequence (Stripe → get the app → API key mint)
-//   • Defensive redirect to /signup when no ds_web_session_token
+//   • Defensive redirect to /signup/ when no ds_web_session_token
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -42,11 +42,11 @@ describe('W332.C /welcome onboarding baseline', () => {
     expect(body).toMatch(/API key/i);
   });
 
-  it('defensive redirect to /signup when ds_web_session_token is absent or inaccessible', () => {
+  it('defensive redirect to /signup/ when ds_web_session_token is absent or inaccessible', () => {
     expect(body).toContain('ds_web_session_token');
     expect(body).toMatch(
       /try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
     );
-    expect(body).toMatch(/window\.location\.replace\(['"]\/signup['"]\)/);
+    expect(body).toMatch(/window\.location\.replace\(['"]\/signup\/['"]\)/);
   });
 });

@@ -14,9 +14,8 @@
 //     Enterprise + free entry tier below both ladders).
 //   • Free-tier launch entry pinned (perpetual free tier
 //     replaces the one-time trial pack).
-//   • Crypto-deferred entry pinned (Coinbase Commerce closed
-//     2026-03-31 + Stripe sole launch rail) — load-bearing
-//     scope decision that defines the launch payment surface.
+//   • Live crypto-checkout entry pinned with the supported currencies,
+//     payment processor, webhook events, and default Stripe rail.
 //   • TOTP-MFA entry pinned: 10 single-use recovery codes,
 //     15-minute step-up window for disable, challenge-token
 //     architecture.
@@ -73,10 +72,11 @@ describe('W370.A marketing-site /changelog page content parity', () => {
     expect(body).toMatch(/This replaces the previous one-time \$2\.99 trial pack entirely\./);
   });
 
-  it('crypto-deferred entry pinned: Coinbase Commerce 2026-03-31 closure + Stripe sole launch rail (fiat-only)', () => {
-    expect(body).toMatch(
-      /Coinbase Commerce closed for non-US\/Singapore merchants 2026-03-31\. Stripe is sole launch payment rail \(fiat-only\)/,
-    );
+  it('live crypto checkout entry pins processor, currencies, events, and default rail', () => {
+    expect(body).toContain('Crypto checkout is live for self-serve paid tiers');
+    expect(body).toContain('BTC, LTC, USDT, USDC, ETH, or XMR through NowPayments');
+    expect(body).toContain('crypto.order.paid and crypto.order.failed');
+    expect(body).toContain('Stripe remains the default way to pay');
   });
 
   it('TOTP-MFA entry pinned: 10 single-use recovery codes + 15-min step-up + challenge-token arch', () => {

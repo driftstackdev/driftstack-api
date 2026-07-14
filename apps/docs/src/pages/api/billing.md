@@ -93,13 +93,9 @@ each time the customer clicks "Manage subscription" — don't cache.
 When Stripe fires `customer.subscription.updated` (or any of the
 ~10 lifecycle events Driftstack subscribes to), Driftstack
 records the change in the account's audit log
-(`subscription.tier_changed` with `payload.from` + `payload.to`)
-and optionally fires a customer-facing webhook event.
-
-See [Webhook events catalog](/webhooks/events/) for the planned
-`subscription.changed` / `subscription.cancelled` events; today
-the `subscription.tier_changed` audit row is the source of truth
-for programmatic consumers.
+(`subscription.tier_changed` with `payload.from` + `payload.to`).
+That audit row is the source of truth for programmatic subscription-change
+consumers; it is available through the account audit-log API.
 
 ## Auth + scoping
 

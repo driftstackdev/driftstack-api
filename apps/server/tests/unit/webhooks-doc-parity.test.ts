@@ -23,6 +23,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
 import {
   BACKOFF_MS_BY_ATTEMPT,
   DEFAULT_MAX_ATTEMPTS,
@@ -32,7 +33,6 @@ import {
 const REPO = join(__dirname, '..', '..', '..', '..');
 const DOC_PATH = join(REPO, 'apps', 'marketing-site', 'src', 'pages', 'docs', 'webhooks.astro');
 const WORKER_PATH = join(REPO, 'apps', 'server', 'src', 'services', 'webhook-worker.ts');
-const SCHEMA_PATH = join(REPO, 'apps', 'server', 'src', 'db', 'schema.ts');
 const SIGNING_PATH = join(REPO, 'apps', 'server', 'src', 'lib', 'webhook-signing.ts');
 const ROUTES_PATH = join(REPO, 'apps', 'server', 'src', 'routes', 'webhooks.ts');
 
@@ -131,24 +131,8 @@ describe('W213.B webhooks doc parity', () => {
     expect(doc).toMatch(/whsec_/);
   });
 
-  it('event-type table matches the LIVE customer-facing webhook_event_type enum (DECLARED-not-LIVE values excluded)', () => {
-    const schema = read(SCHEMA_PATH);
-    const block = schema.split("pgEnum('webhook_event_type', [")[1]!.split(']')[0]!;
-    const enumValues = Array.from(block.matchAll(/'([^']+)'/g)).map((m) => m[1]);
-    // The docs page lists customer-subscribable events; test.ping is
-    // documented separately (it's only emitted via POST /v1/webhooks/
-    // <id>/test and not a valid `events` subscription value).
-    //
-    // DECLARED-not-LIVE carve-out: Arc 5 EGRESS eg.7 added
-    // `session.egress_capability_changed` to the enum so the
-    // subscription surface accepts it, but the marketing copy
-    // intentionally lags until a concrete harness emitter is wired
-    // (see project_egress_card_contradiction). When the event
-    // graduates to LIVE, the contributor removes it from the
-    // exclusion set AND updates the marketing copy in one PR — the
-    // test exhaustively pins the LIVE subset.
-    const declaredNotLive = new Set(['test.ping', 'session.egress_capability_changed']);
-    const customerFacing = enumValues.filter((v) => !declaredNotLive.has(v as string));
+  it('event-type table matches the current customer-subscribable schema', () => {
+    const customerFacing = SubscribableWebhookEventTypeSchema.options;
     expect(customerFacing.length).toBeGreaterThan(0);
     for (const v of customerFacing) {
       expect(doc).toContain(v);
@@ -156,6 +140,7 @@ describe('W213.B webhooks doc parity', () => {
     // test.ping must still be acknowledged on the page so customers
     // know it exists when reading the testing section.
     expect(doc).toMatch(/test\.ping/);
+    expect(doc).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
 
   it('rotate-secret response field name is grace_expires_at', () => {

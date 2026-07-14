@@ -46,11 +46,9 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     expect(body).toMatch(/Interactive reference uses Scalar/);
   });
 
-  it('V-127a placeholder framing pinned (future build-time Scalar embed)', () => {
-    expect(body).toMatch(/V-127a placeholder/);
-    expect(body).toMatch(
-      /Future iteration: build-time fetch of \/openapi\.json \+ embed\s*\n?\s*\/\/\s*Scalar's standalone HTML/,
-    );
+  it('documents the live Scalar reference without deferred implementation copy', () => {
+    expect(body).toContain('The live API server serves Scalar against the running OpenAPI spec');
+    expect(body).not.toMatch(/placeholder|future iteration/i);
   });
 
   it("V-662 'Three flows, four languages' pattern: each of {create / drive / capture} × {cURL, TS, Python, Go}", () => {
@@ -132,7 +130,7 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     );
   });
 
-  it('10 surface-map sections present (Sessions / Profiles / API keys / Webhooks / Account / Team / Billing-crypto / Status / Auth / Billing)', () => {
+  it('surface map includes the primary API groups and the public archetype catalog', () => {
     for (const section of [
       'Sessions',
       'Profiles',
@@ -153,16 +151,14 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
         ),
       );
     }
+    expect(body).toContain('GET /v1/archetypes');
   });
 
-  // S31 2026-07-07 (fable-truth-audit) — the old pin locked a fictional 4th 'recording' kind
-  // with R2 storage + signed URLs; CaptureKindSchema is 3 kinds, always
-  // inline (packages/api-types/src/sessions.ts).
-  it('"Capture kind" 3-variant explainer pinned (screenshot / dom_snapshot / pdf, inline base64, recordings = roadmap)', () => {
+  it('"Capture kind" pins the three live inline capture variants only', () => {
     expect(body).toMatch(
       /capture<\/code> takes one of three kinds:\s*\n?\s*<code class="font-mono">screenshot<\/code>,\s*\n?\s*<code class="font-mono">dom_snapshot<\/code>, or\s*\n?\s*<code class="font-mono">pdf<\/code>/,
     );
-    // S20c 2026-07-06: same R2 + signed-URL facts, said plainly.
-    expect(body).toMatch(/Session video recording is on the\s*\n?\s*<a href="\/roadmap\/"/);
+    expect(body).toMatch(/nothing is stored\s+server-side/);
+    expect(body).not.toMatch(/recording|roadmap/i);
   });
 });

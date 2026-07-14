@@ -54,8 +54,6 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
       case 'session.completed':
       case 'session.failed':
       case 'api_key.revoked':
-      case 'quota.warning_80pct':
-      case 'quota.exceeded':
         // dispatch to your app's handler
         break;
       default:

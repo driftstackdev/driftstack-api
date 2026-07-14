@@ -97,10 +97,11 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it('incident.* NOT-in-SubscribableWebhookEventTypeSchema framing pinned. Re-enabled by slice 279 after verifying the 3-event-namedrop + not-yet-subscribable + email-is-customer-path framing all exist verbatim at incident-policy.astro:108-114', () => {
+  it('incident events are explicitly internal rather than advertised as deferred subscriptions', () => {
     expect(body).toMatch(
-      /<code>incident\.created<\/code> \/\s*\n?\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*\n?\s*are admin-audit \/ internal SSE event types — they are not yet\s*\n?\s*in <code>SubscribableWebhookEventTypeSchema<\/code>, so they\s*\n?\s*can't be the target of a <code>POST \/v1\/webhooks<\/code>\s*\n?\s*subscription\. Email subscription is the customer-facing\s*\n?\s*notification path today\./,
+      /<code>incident\.created<\/code> \/\s*\n?\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*\n?\s*are admin-audit \/ internal SSE event types, not customer webhook\s*\n?\s*subscription values\. Email subscription is the customer-facing\s*\n?\s*notification path\./,
     );
+    expect(body).not.toMatch(/not yet\s+in <code>SubscribableWebhookEventTypeSchema/);
   });
 
   it("/docs/sla-policy authoritative-reference framing pinned: 'Tier-by-tier SLA targets, the windowing methodology, the credit bands, and the dispute process all live in /docs/sla-policy — that is the authoritative reference. Tier identifiers used there match the AccountTier enum exactly.' — pinned so the /docs/sla-policy authoritative cross-ref + AccountTier-enum-match commitment survives (drift to dropping the AccountTier-enum-match anchor would re-create tier-name-divergence risk)", () => {

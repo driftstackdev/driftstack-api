@@ -88,15 +88,13 @@ describe('W949 webhooks service cross-source invariant', () => {
     expect(p).toMatch(/per subscribed endpoint/);
   });
 
-  // ─── WebhookEventType 10-value union ─────────────────────────
+  // ─── WebhookEventType current 9-value union ──────────────────
 
-  it('CRITICAL WebhookEventType 11 values — 5 customer-subscribable (session.completed / session.failed / quota.warning_80pct / quota.exceeded / api_key.revoked) + 1 V-356 test-only (test.ping) + 1 Arc 5 EGRESS (session.egress_capability_changed) + 2 V-666 crypto-order (crypto.order.paid / crypto.order.failed) + 1 W393 challenge-handling (session.challenge_detected) + 1 A3-W1364 profile-save-failed (session.profile_save_failed). The 5+1+1+2+1+1 split lets test pings dispatch without subscription, lets EGRESS observe capability shifts, lets customers subscribe to crypto-order terminal-state transitions, and surfaces harness-detected bot-challenges.', () => {
+  it('CRITICAL WebhookEventType pins 8 emitted customer events plus the test-only synthetic event.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'));
     expect(p).toMatch(/export type WebhookEventType =/);
     expect(p).toMatch(/\| 'session\.completed'/);
     expect(p).toMatch(/\| 'session\.failed'/);
-    expect(p).toMatch(/\| 'quota\.warning_80pct'/);
-    expect(p).toMatch(/\| 'quota\.exceeded'/);
     expect(p).toMatch(/\| 'api_key\.revoked'/);
     expect(p).toMatch(/\| 'test\.ping'/);
     expect(p).toMatch(/\| 'session\.egress_capability_changed'/);
@@ -104,6 +102,7 @@ describe('W949 webhooks service cross-source invariant', () => {
     expect(p).toMatch(/\| 'crypto\.order\.failed'/);
     expect(p).toMatch(/\| 'session\.challenge_detected'/);
     expect(p).toMatch(/\| 'session\.profile_save_failed';/);
+    expect(p).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
 
   // ─── V-356 test.ping framing ─────────────────────────────────

@@ -696,57 +696,24 @@ try {
     </div>
   </Section>
 
-  <!-- ═══ 9 · THE CONSOLE — alternating feature rows; unshipped features
-       carry their honesty chip (the guardrail). ═══ -->
+  <!-- ═══ 9 · THE CONSOLE — live product surfaces only. ═══ -->
   <Section
     label="The console"
     title="Your fleet, kept in order."
     lead="Everything below is rendered the way you'd actually use it — because the product is the interface."
   >
     <div class="mt-10 grid gap-10">
-      <FeatureRow title="The Identity Wardrobe" chip="rolling-out">
+      <FeatureRow title="The Identity Wardrobe" chip="live">
         Profiles as wearable identities: a complete iPhone — hardware, iOS,
         Safari, fonts, the way it draws (canvas), even the way it opens
         secure connections (TLS) — with its own cookies, stored data, proxy
-        and its own way of moving. Duplicate one, template one, hand one to a
-        teammate — the identity stays consistent for life.
+        and its own way of moving. Reuse the same profile across sessions and
+        its browser identity stays consistent.
         <div slot="media" class="grid min-h-[180px] place-items-center rounded-card border border-tk-border bg-tk-surface p-8">
           <div class="relative h-[150px] w-[230px]">
             <div class="absolute left-0 top-7 w-[160px] -rotate-6 rounded-xl border border-tk-border bg-tk-surface p-3 font-mono text-[9.5px] text-tk-ink-3"><b class="block font-sans text-[11px] font-semibold text-tk-ink">jp-market</b>iPhone 15 Pro · idle<br/>🇯🇵 Tokyo · own connection</div>
             <div class="absolute left-9 top-3 -rotate-1 w-[160px] rounded-xl border border-tk-border bg-tk-surface p-3 font-mono text-[9.5px] text-tk-ink-3"><b class="block font-sans text-[11px] font-semibold text-tk-ink">us-retail-qa</b>iPhone 17 · running<br/>🇺🇸 New York · own connection</div>
             <div class="absolute left-[72px] top-0 w-[160px] rounded-xl border border-tk-accent bg-tk-surface p-3 font-mono text-[9.5px] text-tk-ink-3 shadow-glow-accent"><b class="block font-sans text-[11px] font-semibold text-tk-ink">amsterdam-shopper</b>iPhone 17 · agent-driven<br/>🇳🇱 Amsterdam · own connection</div>
-          </div>
-        </div>
-      </FeatureRow>
-      <FeatureRow title="Session Replay" chip="roadmap" reverse>
-        Every session can record itself: video, taps, network and agent
-        decisions on one timeline. Scrub back to the moment a flow broke,
-        share the clip with your team, or export it as evidence that the run
-        behaved.
-        <div slot="media" class="flex min-h-[180px] items-center justify-center rounded-card border border-tk-border bg-tk-surface p-8">
-          <div class="w-full max-w-[300px]">
-            <div class="relative mb-2 h-14 overflow-hidden rounded-lg border border-tk-border bg-tk-surface">
-              <span class="absolute inset-y-0 left-0 w-[18%] bg-tk-accent/30"></span>
-              <span class="absolute inset-y-0 left-[18%] w-[30%] bg-tk-accent/35"></span>
-              <span class="absolute inset-y-0 left-[48%] w-[14%] bg-tk-busy/30"></span>
-              <span class="absolute inset-y-0 left-[62%] w-[38%] bg-tk-ready/30"></span>
-              <span class="absolute -bottom-1 -top-1 left-[62%] w-0.5 bg-tk-ink"></span>
-            </div>
-            <div class="flex justify-between font-mono text-[10px] text-tk-ink-3">
-              <span>00:00</span><span>14 taps · 3 pages · 1 challenge</span><span>12:41</span>
-            </div>
-          </div>
-        </div>
-      </FeatureRow>
-      <FeatureRow title="Warm-up Scheduler" chip="roadmap">
-        Fresh identities are suspicious identities. Schedule organic browse
-        sessions that age a profile on a curve — light touches first, deeper
-        flows later — so by the time it works, it has a history.
-        <div slot="media" class="flex min-h-[180px] items-center justify-center rounded-card border border-tk-border bg-tk-surface p-8">
-          <div class="grid w-full max-w-[260px] grid-cols-7 gap-1.5">
-            <span class="aspect-square rounded bg-tk-accent/30"></span><span class="aspect-square rounded border border-tk-border bg-tk-surface"></span><span class="aspect-square rounded bg-tk-accent/30"></span><span class="aspect-square rounded border border-tk-border bg-tk-surface"></span><span class="aspect-square rounded bg-tk-accent/30"></span><span class="aspect-square rounded border border-tk-border bg-tk-surface"></span><span class="aspect-square rounded border border-tk-border bg-tk-surface"></span>
-            <span class="aspect-square rounded bg-tk-accent/30"></span><span class="aspect-square rounded bg-tk-accent/55"></span><span class="aspect-square rounded border border-tk-border bg-tk-surface"></span><span class="aspect-square rounded bg-tk-accent/55"></span><span class="aspect-square rounded bg-tk-accent/30"></span><span class="aspect-square rounded bg-tk-accent/55"></span><span class="aspect-square rounded border border-tk-border bg-tk-surface"></span>
-            <span class="aspect-square rounded bg-tk-accent/55"></span><span class="aspect-square rounded bg-tk-accent/55"></span><span class="aspect-square rounded bg-tk-accent"></span><span class="aspect-square rounded bg-tk-accent/55"></span><span class="aspect-square rounded bg-tk-accent"></span><span class="aspect-square rounded bg-tk-accent/55"></span><span class="aspect-square rounded bg-tk-accent"></span>
           </div>
         </div>
       </FeatureRow>
@@ -805,9 +772,7 @@ try {
         </p>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
           Customer-configurable egress — attaching your own internet exit (a
-          SOCKS5 proxy, OpenVPN, or WireGuard) to each profile — is live;
-          swapping the proxy on a session that's already running is on the
-          roadmap. See the
+          SOCKS5 proxy, OpenVPN, or WireGuard) to each profile — is live. See the
           <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">security overview</a>
           for the current implementation state.
         </p>
@@ -833,8 +798,8 @@ try {
       </h3>
       <p class="mt-4 max-w-prose text-base leading-7 text-tk-ink-2">
         Driftstack is built by the people who write the WebKit patches — no
-        cold-outreach sales team (SDRs), no upsell ladder, no roadmap chosen
-        by investors.
+        cold-outreach sales team (SDRs), no upsell ladder, no product direction
+        chosen by investors.
         Customer feedback goes straight to the engineers shipping the product,
         and support replies come from the same team.
       </p>

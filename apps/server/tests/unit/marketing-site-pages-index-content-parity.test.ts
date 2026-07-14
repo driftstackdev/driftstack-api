@@ -225,14 +225,13 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/consistent motion signature across\s*\n?\s*sessions/);
   });
 
-  it("Console section pinned (v2 headline 'Your fleet, kept in order.'): the FeatureRow rows — The Identity Wardrobe (rolling-out chip) / Session Replay + Warm-up Scheduler (roadmap chips: the honesty device — unbuilt features MUST carry the badge, rendered via the HonestyChip component) / 'Exit anywhere. Leak nowhere.' egress row", () => {
+  it("Console section pins only current product surfaces: live Identity Wardrobe and live 'Exit anywhere. Leak nowhere.' egress", () => {
     expect(body).toMatch(/Your fleet, kept in order\./);
-    expect(body).toMatch(/The Identity Wardrobe/);
-    // the honesty chips are load-bearing: Replay + Warm-up are unbuilt and
-    // MUST carry the roadmap chip (FeatureRow chip="roadmap" → HonestyChip).
-    expect(body).toMatch(/title="Session Replay" chip="roadmap"/);
-    expect(body).toMatch(/title="Warm-up Scheduler" chip="roadmap"/);
+    expect(body).toMatch(/title="The Identity Wardrobe" chip="live"/);
     expect(body).toMatch(/Exit anywhere\. Leak nowhere\./);
+    expect(body).not.toMatch(/title="Session Replay"/);
+    expect(body).not.toMatch(/title="Warm-up Scheduler"/);
+    expect(body).not.toMatch(/chip="roadmap"|chip="rolling-out"/);
     // the trust-center console row folded into the trust band (§10);
     // "Sealed by architecture" is no longer a console row.
     expect(body).not.toMatch(/Run identities like infrastructure\./);

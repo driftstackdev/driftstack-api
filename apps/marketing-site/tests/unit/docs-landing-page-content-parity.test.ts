@@ -11,7 +11,7 @@
 //     Webhooks → /docs/webhooks / Self-hosted → /self-hosted.
 //   • 5 webhook event types pinned in the Webhooks card description
 //     (session.completed / session.failed / api_key.revoked /
-//     quota.warning_80pct / quota.exceeded) + HMAC-SHA256 framing.
+//     live eight-event roster) + HMAC-SHA256 framing.
 //   • W210 "Recipe library removed until ships" comment pinned
 //     (load-bearing honesty signal — drift would mean adding back a
 //     404 link).
@@ -95,19 +95,18 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
     expect(body).toMatch(/Webhook\s+signature verification/);
   });
 
-  it("Webhooks card: all 10 subscribable event types pinned + HMAC-SHA256 (count = SubscribableWebhookEventTypeSchema). 'subscribable' not 'LIVE' — several are [DECLARED], not-yet-firing (quota.warning_80pct + quota.exceeded + session.egress_capability_changed + session.challenge_detected + session.profile_save_failed); the card describes what you can subscribe to. crypto.order.paid + crypto.order.failed fire (bdb6cb7a, 2026-05-22).", () => {
+  it('Webhooks card: all eight live subscribable event types + HMAC-SHA256', () => {
     expect(body).toMatch(/Event types \+ signature verification →/);
-    expect(body).toMatch(/All ten subscribable event types/);
+    expect(body).toMatch(/All eight subscribable event types/);
     expect(body).toMatch(/session\.completed/);
     expect(body).toMatch(/session\.failed/);
     expect(body).toMatch(/api_key\.revoked/);
-    expect(body).toMatch(/quota\.warning_80pct/);
-    expect(body).toMatch(/quota\.exceeded/);
     expect(body).toMatch(/session\.egress_capability_changed/);
     expect(body).toMatch(/crypto\.order\.paid/);
     expect(body).toMatch(/crypto\.order\.failed/);
     expect(body).toMatch(/session\.challenge_detected/);
     expect(body).toMatch(/session\.profile_save_failed/);
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
     expect(body).toMatch(/HMAC-SHA256 verification examples/);
   });
 
@@ -117,17 +116,9 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
     expect(body).toMatch(/For\s+sustained high-concurrency operations or full data\s+sovereignty/);
   });
 
-  it('W210 Recipe-library-removal honesty comment pinned (no 404 link until ships)', () => {
-    expect(body).toMatch(/W210 — the Recipe library card pointed at \/docs\/recipes/);
-    // The comment block explains why this is a card-less anchor.
-    // S47 2026-07-07 (founder-approved: mirror deprecation): the hub
-    // is no longer all-internal-anchors (the Quickstart card points
-    // at its docs successor), so the comment now flags a docs-hosted
-    // Recipe card as a founder-call option; pin the card-less-anchor
-    // framing + the founder-call handoff so drift can't quietly
-    // re-add a card without that call.
-    expect(body).toMatch(/this stays a card-less anchor\./);
-    expect(body).toMatch(/legitimate future option; founder call\./);
+  it('points recipe readers at the live docs host without a dead marketing mirror', () => {
+    expect(body).toContain('docs.driftstack.dev/api/recipes/');
+    expect(body).not.toMatch(/href="\/docs\/recipes/);
   });
 
   it('help banner: "Doc not landing?" + support@driftstack.dev mailto + same-business-day claim. 2026-05-23 — h2 wrapped with help-circle icon; pin loosened to label-presence.', () => {

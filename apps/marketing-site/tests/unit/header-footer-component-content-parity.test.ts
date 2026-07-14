@@ -193,7 +193,7 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     );
   });
 
-  it('Product column 6 links pinned (F-3 — /roadmap removed from Product; 2026-07-03 S11 scoped the check to the Product column since /roadmap now lives in Company): Pricing / Comparison / Self-hosted / Docs[ext] / Sign up / Sign in', () => {
+  it('Product column pins Pricing / Comparison / Self-hosted / Docs / Sign up / Sign in', () => {
     expect(body).toMatch(/<a href="\/pricing\/" class="nav-link">Pricing<\/a>/);
     expect(body).toMatch(/<a href="\/comparison\/" class="nav-link">Comparison<\/a>/);
     const productColumn = body.slice(body.indexOf('>Product</h3>'), body.indexOf('>Company</h3>'));
@@ -208,11 +208,11 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     );
   });
 
-  it('Company column: About / FAQ / Changelog / Roadmap (2026-07-03 S11) + support@ + sales@ mailto', () => {
+  it('Company column: About / FAQ / Changelog + support@ + sales@ mailto', () => {
     expect(body).toMatch(/<a href="\/about\/" class="nav-link">About<\/a>/);
     expect(body).toMatch(/<a href="\/faq\/" class="nav-link">FAQ<\/a>/);
     expect(body).toMatch(/<a href="\/changelog\/" class="nav-link">Changelog<\/a>/);
-    expect(body).toMatch(/<a href="\/roadmap\/" class="nav-link">Roadmap<\/a>/);
+    expect(body).not.toMatch(/href="\/roadmap\/"|>Roadmap<\/a>/);
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev" class="nav-link">support@driftstack\.dev<\/a>/,
     );

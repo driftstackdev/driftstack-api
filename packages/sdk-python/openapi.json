@@ -2191,11 +2191,8 @@
               "enum": [
                 "session.completed",
                 "session.failed",
-                "quota.warning_80pct",
-                "quota.exceeded",
                 "api_key.revoked",
                 "session.egress_capability_changed",
-                "test.ping",
                 "crypto.order.paid",
                 "crypto.order.failed",
                 "session.challenge_detected",
@@ -2283,8 +2280,6 @@
               "enum": [
                 "session.completed",
                 "session.failed",
-                "quota.warning_80pct",
-                "quota.exceeded",
                 "api_key.revoked",
                 "session.egress_capability_changed",
                 "crypto.order.paid",
@@ -2332,11 +2327,8 @@
               "enum": [
                 "session.completed",
                 "session.failed",
-                "quota.warning_80pct",
-                "quota.exceeded",
                 "api_key.revoked",
                 "session.egress_capability_changed",
-                "test.ping",
                 "crypto.order.paid",
                 "crypto.order.failed",
                 "session.challenge_detected",
@@ -2435,8 +2427,6 @@
             "enum": [
               "session.completed",
               "session.failed",
-              "quota.warning_80pct",
-              "quota.exceeded",
               "api_key.revoked",
               "session.egress_capability_changed",
               "test.ping",
@@ -7871,8 +7861,6 @@
                       "enum": [
                         "session.completed",
                         "session.failed",
-                        "quota.warning_80pct",
-                        "quota.exceeded",
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "test.ping",
@@ -8030,8 +8018,6 @@
                       "enum": [
                         "session.completed",
                         "session.failed",
-                        "quota.warning_80pct",
-                        "quota.exceeded",
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "test.ping",
@@ -8215,8 +8201,6 @@
                             "enum": [
                               "session.completed",
                               "session.failed",
-                              "quota.warning_80pct",
-                              "quota.exceeded",
                               "api_key.revoked",
                               "session.egress_capability_changed",
                               "test.ping",
@@ -8371,8 +8355,6 @@
                       "enum": [
                         "session.completed",
                         "session.failed",
-                        "quota.warning_80pct",
-                        "quota.exceeded",
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "test.ping",
@@ -8543,8 +8525,6 @@
                       "enum": [
                         "session.completed",
                         "session.failed",
-                        "quota.warning_80pct",
-                        "quota.exceeded",
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "test.ping",
@@ -28437,8 +28417,6 @@
                       "enum": [
                         "session.completed",
                         "session.failed",
-                        "quota.warning_80pct",
-                        "quota.exceeded",
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "crypto.order.paid",
@@ -28498,11 +28476,8 @@
                         "enum": [
                           "session.completed",
                           "session.failed",
-                          "quota.warning_80pct",
-                          "quota.exceeded",
                           "api_key.revoked",
                           "session.egress_capability_changed",
-                          "test.ping",
                           "crypto.order.paid",
                           "crypto.order.failed",
                           "session.challenge_detected",
@@ -28695,11 +28670,8 @@
                               "enum": [
                                 "session.completed",
                                 "session.failed",
-                                "quota.warning_80pct",
-                                "quota.exceeded",
                                 "api_key.revoked",
                                 "session.egress_capability_changed",
-                                "test.ping",
                                 "crypto.order.paid",
                                 "crypto.order.failed",
                                 "session.challenge_detected",
@@ -28877,11 +28849,8 @@
                         "enum": [
                           "session.completed",
                           "session.failed",
-                          "quota.warning_80pct",
-                          "quota.exceeded",
                           "api_key.revoked",
                           "session.egress_capability_changed",
-                          "test.ping",
                           "crypto.order.paid",
                           "crypto.order.failed",
                           "session.challenge_detected",
@@ -29066,8 +29035,6 @@
                       "enum": [
                         "session.completed",
                         "session.failed",
-                        "quota.warning_80pct",
-                        "quota.exceeded",
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "crypto.order.paid",
@@ -29128,11 +29095,8 @@
                         "enum": [
                           "session.completed",
                           "session.failed",
-                          "quota.warning_80pct",
-                          "quota.exceeded",
                           "api_key.revoked",
                           "session.egress_capability_changed",
-                          "test.ping",
                           "crypto.order.paid",
                           "crypto.order.failed",
                           "session.challenge_detected",
@@ -29414,8 +29378,6 @@
                             "enum": [
                               "session.completed",
                               "session.failed",
-                              "quota.warning_80pct",
-                              "quota.exceeded",
                               "api_key.revoked",
                               "session.egress_capability_changed",
                               "test.ping",

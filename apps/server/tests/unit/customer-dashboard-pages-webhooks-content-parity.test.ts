@@ -62,12 +62,20 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
     expect(body).toMatch(/HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance/);
   });
 
-  it('5-event subscribe enum: session.completed (default-checked) + session.failed + api_key.revoked + quota.warning_80pct + quota.exceeded — pinned so the event vocabulary stays 5-event (drift to dropping quota.* would hide the cap-monitoring path; drift to dropping default-checked on session.completed would let new customers create endpoints with zero events)', () => {
+  it('8-event emitted subscribe enum is rendered in create/edit; session.completed stays default-checked and silent quota subscriptions stay absent', () => {
     expect(body).toMatch(/<input type="checkbox" name="event" value="session\.completed" checked/);
     expect(body).toMatch(/<input type="checkbox" name="event" value="session\.failed"/);
     expect(body).toMatch(/<input type="checkbox" name="event" value="api_key\.revoked"/);
-    expect(body).toMatch(/<input type="checkbox" name="event" value="quota\.warning_80pct"/);
-    expect(body).toMatch(/<input type="checkbox" name="event" value="quota\.exceeded"/);
+    expect(body).toMatch(
+      /<input type="checkbox" name="event" value="session\.egress_capability_changed"/,
+    );
+    expect(body).toMatch(/<input type="checkbox" name="event" value="crypto\.order\.paid"/);
+    expect(body).toMatch(/<input type="checkbox" name="event" value="crypto\.order\.failed"/);
+    expect(body).toMatch(/<input type="checkbox" name="event" value="session\.challenge_detected"/);
+    expect(body).toMatch(
+      /<input type="checkbox" name="event" value="session\.profile_save_failed"/,
+    );
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
 
   it('V-403 + V-443 delivery-log framing pinned. Re-enabled by slice 211 after verifying the per-endpoint pager Map + filter-resets-cursor framing exists verbatim at webhooks.astro:783-789', () => {

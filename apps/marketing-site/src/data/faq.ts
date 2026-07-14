@@ -182,7 +182,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
         q: 'Can I pick which region my data is stored in?',
         // S30 2026-07-07 (founder decision: soften) — scoped "data" to
         // "account data": R2-held files carry no EU-residency guarantee.
-        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; for v1 it\'s informational only. Every customer\'s account data sits on EU-jurisdiction infrastructure today regardless of preference selected. The preference exists so we can route you to the matching region automatically once the multi-region rollout lands; we\'ll give you 30 days\' notice before any of your data is moved — following the DPA\'s Article 28 process for changing sub-processors (the outside vendors that handle your data) — with the right to keep your data in the EU or terminate the affected portion of the service. The trust page at <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a> covers this in the same plain language as the dashboard.',
+        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; it is informational and does not change routing. Every customer\'s account data sits on EU-jurisdiction infrastructure. The <a href="/trust/sub-processors/" class="text-tk-accent-text underline">sub-processor page</a> lists the exact providers and locations, and the DPA\'s Article 28 process governs any material sub-processor change.',
       },
       {
         q: 'What does my team see when I add them to my account?',
@@ -194,7 +194,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Do you have a SOC 2 / ISO 27001 audit?',
-        a: "Not at v1. SOC 2 / ISO 27001 are roadmap items for after our first paying customer. For v1 the compliance basis is GDPR plus the EU's standard contractual clauses (SCCs) and the EU-US Data Privacy Framework (DPF) for any data leaving the EU. If you need the machines themselves certified beyond that, self-hosting on your own audited hardware is the immediate path.",
+        a: "No. Driftstack is not currently SOC 2 or ISO 27001 certified. The current compliance basis is GDPR plus the EU's standard contractual clauses (SCCs) and the EU-US Data Privacy Framework (DPF) for data leaving the EU. If your policy requires certified infrastructure, self-hosting on hardware inside your audited environment is the available option.",
       },
       {
         q: 'Where do I read the Terms / Privacy / DPA / AUP?',
@@ -218,12 +218,8 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Where do my sessions actually run?',
-        // S26 2026-07-06 (#132) — accuracy fix (audit M5): the data
-        // list previously said "session recordings", but recordings
-        // are roadmap-only (docs/recordings.astro: planned, not
-        // live). "Session metadata" is what we actually store —
-        // mirrors the truthful export list in the
-        // business-continuity answer below.
+        // S26 2026-07-06 (#132) — accuracy fix (audit M5): this lists
+        // session metadata rather than locally stored desktop recordings.
         // S30 2026-07-07 (founder decision: soften) — the listed
         // classes ARE DB-resident (EU-true), but "Everything ... EU"
         // was blanket; added the file-storage scope (R2 default
@@ -261,7 +257,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What happens if Driftstack as a business goes away?',
-        a: 'Two protections. (1) <strong>Data portability:</strong> profiles + audit logs + session metadata can be exported as CSV/JSON from the dashboard or via the API at any time, so customers can take their data with them on any timeline. (2) <strong>Self-hosted option:</strong> Enterprise + Self-hosted licensees receive source escrow — an independent third party holds a copy of our source code. If the cloud service is ever wound down, the escrow agreement releases the browser engine (the WebKit fork) and the management software (the control-plane code) so customers can keep running everything on their own hardware indefinitely. We carry no investors and no debt, so the most likely "Driftstack goes away" scenario is a planned wind-down with months of notice, not a sudden shutoff. Self-hosted on day one is the answer for customers who can\'t accept any cloud-vendor risk.',
+        a: 'Two protections. (1) <strong>Data portability:</strong> profiles + audit logs + session metadata can be exported as CSV/JSON from the dashboard or via the API at any time, so customers can take their data with them on any timeline. (2) <strong>Self-hosted option:</strong> Enterprise + Self-hosted licensees receive source escrow — an independent third party holds a copy of our source code. If the cloud service is ever wound down, the escrow agreement releases the browser engine (the WebKit fork) and the management software (the control-plane code) so customers can keep running everything on their own hardware indefinitely. We carry no investors and no debt, so the most likely "Driftstack goes away" scenario is an orderly wind-down with months of notice, not a sudden shutoff. Self-hosted on day one is the answer for customers who can\'t accept any cloud-vendor risk.',
       },
     ],
   },
@@ -279,15 +275,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What if a session fails?',
-        // S26 2026-07-06 (#132) — accuracy fix (audit M5): the answer
-        // previously said "recordings + state captures up to the
-        // failure point stay available", presenting recordings as a
-        // live feature. Recordings are roadmap-only
-        // (docs/recordings.astro: `record: true` is a no-op today;
-        // roadmap.astro lists "Workflow recording" under NEXT), and
-        // captures return inline for you to keep — we don't retain
-        // them server-side. Reworded to what exists today.
-        a: 'You can see everything a session did, start to finish, in the dashboard or from the SDK. A failed session returns a clear, machine-readable error (RFC 9457 problem-types, for developers), and any captures you took before the failure — screenshots, page snapshots, PDFs — are already in your hands, because capture results return to you the moment you take them. (Session video recording is on the <a href="/roadmap/" class="text-tk-accent-text underline">roadmap</a>, not live yet.) Sessions that fail on our side (a crash, no machine available) do not consume your concurrent slot — the slot frees immediately on failure detection.',
+        a: 'You can see everything a session did, start to finish, in the dashboard or from the SDK. A failed session returns a clear, machine-readable error (RFC 9457 problem-types, for developers), and any captures you took before the failure — screenshots, page snapshots, PDFs — are already in your hands, because capture results return to you the moment you take them. Sessions that fail on our side (a crash, no machine available) do not consume your concurrent slot — the slot frees immediately on failure detection.',
       },
       {
         q: "What's the uptime target?",

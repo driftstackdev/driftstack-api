@@ -105,7 +105,7 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
   it('V-267 ?next= preserved on verify-email redirect (deep-link resume), open-redirect guarded', () => {
     expect(body).toMatch(/function verificationUrl\(\)/);
     expect(body).toMatch(
-      /return nextRaw \? '\/verify-email\?next=' \+ encodeURIComponent\(next\) : '\/verify-email';/,
+      /return nextRaw \? '\/verify-email\/\?next=' \+ encodeURIComponent\(next\) : '\/verify-email\/';/,
     );
     expect(body).toMatch(/window\.location\.href = verificationUrl\(\)/);
     expect(body).toMatch(/V-267 — pass through the \?next= deep link/);
@@ -117,7 +117,7 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
   it('V-269 ?next= preserved on "Sign in" cross-link, sanitized through safeNextPath()', () => {
     expect(body).toMatch(/V-269 — preserve \?next= when bouncing the user to \/login/);
     expect(body).toMatch(
-      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
+      /'\/login\/\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );
   });
 

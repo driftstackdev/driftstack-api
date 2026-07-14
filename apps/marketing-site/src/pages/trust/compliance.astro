@@ -2,18 +2,11 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import IconTile from '../../components/IconTile.astro';
-
-// V-661 (V-550.C) — compliance + pen-test + vulnerability-disclosure
-// page. Honest current-state surface: no claims for certifications we
-// don't have. Where work is in progress, we name the certification
-// and the expected timeline. Where we have no plans, the page is
-// silent (positive-list-only — silence is not a no).
 ---
 
 <BaseLayout
   title="Compliance & disclosure"
-  description="Driftstack compliance posture, pen-test access, vulnerability disclosure policy, and sub-processor change SLA. Honest current state — no certifications we don't have."
+  description="Driftstack's current compliance posture, vulnerability disclosure policy, sub-processor notice process, and audit-log retention."
 >
   <PageHero label="Trust center · Compliance" title="Compliance posture & disclosure">
     <Breadcrumbs
@@ -22,273 +15,107 @@ import IconTile from '../../components/IconTile.astro';
       items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust/' }, { name: 'Compliance' }]}
     />
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
-      Where we are today, where we're going, and how to engage the
-      platform if you've found a vulnerability or need pen-test
-      evidence for a security review.
+      The controls and attestations available today, plus the private
+      disclosure channel for security findings.
     </p>
   </PageHero>
 
-  <!-- Current certifications -->
   <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
       <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Certifications &amp; attestations</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
-        We list certifications that are either in place or actively in
-        progress. We don't list certifications we have no plans to
-        pursue — silence on a certification means "not on the current
-        roadmap", not "not applicable".
+        This table lists only attestations currently in place. Driftstack is
+        not currently SOC 2 or ISO 27001 certified.
       </p>
-
       <table class="mt-8 w-full text-sm">
         <thead>
           <tr class="border-b border-tk-border text-left">
             <th class="py-2 pr-4 font-medium text-tk-ink">Standard</th>
             <th class="py-2 pr-4 font-medium text-tk-ink">Status</th>
-            <th class="py-2 font-medium text-tk-ink">Expected</th>
+            <th class="py-2 font-medium text-tk-ink">Evidence</th>
           </tr>
         </thead>
         <tbody>
-          <tr class="border-b border-tk-border">
+          <tr>
             <td class="py-3 pr-4 align-top">
               <span class="font-medium text-tk-ink">GDPR Article 28</span><br />
-              <span class="text-xs text-tk-ink-3">DPA with SCCs ready to sign</span>
+              <span class="text-xs text-tk-ink-3">DPA with SCCs available</span>
             </td>
             <td class="py-3 pr-4 align-top">
-              <span
-                class="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+              <span class="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
                 >In place</span
               >
             </td>
-            <td class="py-3 align-top text-tk-ink-2">Today — see
-              <a href="/legal/dpa/" class="text-tk-accent-text underline">/legal/dpa</a>
+            <td class="py-3 align-top text-tk-ink-2">
+              <a href="/legal/dpa/" class="text-tk-accent-text underline">Data Processing Agreement</a>
             </td>
-          </tr>
-          <tr class="border-b border-tk-border">
-            <td class="py-3 pr-4 align-top">
-              <span class="font-medium text-tk-ink">SOC 2 Type I</span><br />
-              <span class="text-xs text-tk-ink-3">A third-party audit that checks our security controls exist and are designed right, at a point in time — Trust Services Criteria (security)</span>
-            </td>
-            <td class="py-3 pr-4 align-top">
-              <span
-                class="inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
-                >In progress</span
-              >
-            </td>
-            <td class="py-3 align-top text-tk-ink-2">Q3 2026 (audit window)</td>
-          </tr>
-          <tr class="border-b border-tk-border">
-            <td class="py-3 pr-4 align-top">
-              <span class="font-medium text-tk-ink">SOC 2 Type II</span><br />
-              <span class="text-xs text-tk-ink-3">The follow-up audit that watches those same controls actually operating over a 6-month observation window</span>
-            </td>
-            <td class="py-3 pr-4 align-top">
-              <span
-                class="inline-block rounded-full border border-tk-border bg-tk-raised px-2 py-0.5 text-xs font-medium text-tk-ink-2"
-                >Planned</span
-              >
-            </td>
-            <td class="py-3 align-top text-tk-ink-2">Q1 2027</td>
-          </tr>
-          <tr>
-            <td class="py-3 pr-4 align-top">
-              <span class="font-medium text-tk-ink">Independent pen-test</span><br />
-              <span class="text-xs text-tk-ink-3">A penetration test: paid ethical hackers attack the platform to find holes before real attackers do — annual external assessment</span>
-            </td>
-            <td class="py-3 pr-4 align-top">
-              <span
-                class="inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
-                >Scheduled</span
-              >
-            </td>
-            <td class="py-3 align-top text-tk-ink-2">First engagement Q3 2026</td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <!-- Pen-test access -->
   <section class="border-t border-tk-border bg-tk-surface/40">
-    <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Pen-test report access</h2>
-      <p class="mt-3 max-w-prose text-tk-ink-2">
-        The most recent pen-test executive summary is publicly
-        downloadable below. The full report — including the fix status
-        of every finding and the complete testing method, nothing
-        blacked out — is available under NDA to prospective customers
-        who are actively evaluating us.
-      </p>
-
-      <div class="mt-8 grid gap-6 md:grid-cols-2">
-        <div class="card p-6">
-          <IconTile class="mb-3">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <path d="M14 2v6h6" />
-              <path d="M9 13h6M9 17h4" />
-            </svg>
-          </IconTile>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
-            Public summary
-          </p>
-          <h3 class="mt-2 text-lg font-semibold text-tk-ink">
-            Executive summary (PDF)
-          </h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            Findings count by severity, remediation status, scope of
-            the engagement. No sensitive technical detail.
-          </p>
-          <p class="mt-4 text-sm">
-            <span class="inline-block rounded border border-tk-border bg-tk-raised px-2 py-1 font-mono text-xs text-tk-ink-2">
-              Available after first engagement (Q3 2026)
-            </span>
-          </p>
-        </div>
-        <div class="card p-6">
-          <IconTile class="mb-3">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </IconTile>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
-            Full report (NDA-gated)
-          </p>
-          <h3 class="mt-2 text-lg font-semibold text-tk-ink">
-            Request under NDA
-          </h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            Email
-            <a href="mailto:security@driftstack.dev" class="text-tk-accent-text underline"
-              >security@driftstack.dev</a
-            > with your company name and use case. We respond within
-            one business day with the NDA. Approved requests receive a
-            private download link that works for 7 days (a signed
-            URL).
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Vulnerability disclosure -->
-  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
       <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Vulnerability disclosure policy</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
-        Found a security issue? Please report it privately. We
-        triage every disclosure within one business day and update
-        you through to resolution.
+        Report security issues privately to
+        <a href="mailto:security@driftstack.dev" class="text-tk-accent-text underline"
+          >security@driftstack.dev</a
+        >. If a report contains customer data or exploit material, use the
+        initial email to arrange an encrypted transfer channel.
       </p>
-
       <dl class="mt-8 space-y-6">
         <div>
-          <dt class="text-sm font-medium text-tk-ink">Where to report</dt>
-          <dd class="mt-1 text-sm text-tk-ink-2">
-            <a href="mailto:security@driftstack.dev" class="text-tk-accent-text underline"
-              >security@driftstack.dev</a
-            >. If your finding involves exposed customer data, encrypt
-            your report with PGP, the standard for encrypted email —
-            our public PGP key, and the fingerprint that lets you
-            verify it, will be published on this page once available.
-          </dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-tk-ink">What we commit to</dt>
+          <dt class="text-sm font-medium text-tk-ink">Response commitments</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
             <ul class="list-inside list-disc space-y-1">
               <li>Acknowledge receipt within 2 business days.</li>
-              <li>First assessment (triage) + an initial severity rating within 5 business days.</li>
-              <li>
-                Status updates at least every 14 days until resolution.
-              </li>
-              <li>
-                We ask reporters to keep the finding private for 90
-                days from the report while we fix it (the coordinated
-                disclosure window), extendable on mutual agreement.
-              </li>
-              <li>
-                Public credit on this page (with reporter consent) once
-                the finding is remediated.
-              </li>
+              <li>Provide an initial severity assessment within 5 business days.</li>
+              <li>Send status updates at least every 14 days until resolution.</li>
+              <li>Credit the reporter publicly after remediation, with consent.</li>
             </ul>
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-tk-ink">Safe-harbour</dt>
+          <dt class="text-sm font-medium text-tk-ink">Safe harbour</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            We won't pursue legal action against good-faith security
-            research on the platform's public surface (api.driftstack.dev,
-            driftstack.dev, app.driftstack.dev) provided you:
-            <ul class="mt-2 list-inside list-disc space-y-1">
-              <li>Don't access, change, or copy out (exfiltrate) other customers' data.</li>
-              <li>Don't slow down or break the service for others — no load tests against the live platform (prod).</li>
-              <li>Report findings privately before public disclosure.</li>
-            </ul>
+            We will not pursue legal action against good-faith research on the
+            public Driftstack surface when the researcher avoids customer data,
+            service disruption, and public disclosure before remediation.
           </dd>
         </div>
       </dl>
     </div>
   </section>
 
-  <!-- Sub-processor change SLA -->
-  <section class="border-t border-tk-border bg-tk-surface/40">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">How much warning you get before we change vendors (the sub-processor change SLA)</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Sub-processor change notice</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
-        Sub-processors are the outside companies that handle customer
-        data for us. Per GDPR Article 28(2) and Annex 3 of our
-        data-processing agreement (DPA), we provide 30 calendar
-        days' notice for any material change to the sub-processor list
-        (additions or replacements). Customers can object via email to
+        Under GDPR Article 28(2) and Annex 3 of our DPA, we provide 30
+        calendar days' notice for a material addition or replacement on the
+        <a href="/trust/sub-processors/" class="text-tk-accent-text underline"
+          >sub-processor list</a
+        >. Customers can object during that window by emailing
         <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline"
           >support@driftstack.dev</a
-        > during the notice window.
-      </p>
-      <p class="mt-4 max-w-prose text-tk-ink-2">
-        The live list is published at
-        <a href="/trust/sub-processors/" class="text-tk-accent-text underline"
-          >/trust/sub-processors</a
-        > and material changes will also be available as an RSS feed
-        you can subscribe to — the subscribe link appears on that
-        page once the feed ships.
+        >.
       </p>
     </div>
   </section>
 
-  <!-- Audit-log retention -->
-  <section class="border-t border-tk-border bg-tk-surface">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Audit log retention</h2>
-      <p class="mt-3 max-w-prose text-tk-ink-2">
-        Per our written retention policy (internal decision record
-        ADR-006):
-      </p>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Audit-log retention</h2>
       <ul class="mt-4 max-w-prose list-inside list-disc space-y-2 text-tk-ink-2">
         <li>
-          <span class="font-medium text-tk-ink">Customer-facing audit log</span> —
-          retained per the customer's tier (see
-          <a href="/docs/audit-log/" class="text-tk-accent-text underline"
-            >/docs/audit-log</a>),
-          surfaced via the dashboard +
+          Customer audit logs follow the account tier's published retention and
+          are available through the dashboard and
           <code class="font-mono">GET /v1/account/audit-log</code>.
-          Includes every action taken on the customer's account
-          (creating API keys, creating profiles, billing changes).
         </li>
-        <li>
-          <span class="font-medium text-tk-ink">Admin audit log</span> —
-          internal-only retention of 365 days for every privileged
-          admin action. Customer access requires legal process or
-          explicit customer consent.
-        </li>
-        <li>
-          <span class="font-medium text-tk-ink">Access logs</span> —
-          kept 90 days in quick-access storage ("hot"), then 1 year in
-          archive ("cold"), so investigators can reconstruct exactly
-          what happened if an incident is ever examined (forensic
-          timeline reconstruction).
-          Read-restricted to the on-call engineer + compliance lead.
-        </li>
+        <li>Privileged admin-action records are retained internally for 365 days.</li>
+        <li>Access logs stay in quick-access storage for 90 days, then in archive for one year.</li>
       </ul>
     </div>
   </section>

@@ -78,7 +78,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(body).toMatch(/<li><a href="\/about\/" class="nav-link">About<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/faq\/" class="nav-link">FAQ<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/changelog\/" class="nav-link">Changelog<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/roadmap\/" class="nav-link">Roadmap<\/a><\/li>/);
+    expect(body).not.toMatch(/href="\/roadmap\/"|>Roadmap<\/a>/);
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev" class="nav-link">support@driftstack\.dev<\/a>/,
     );

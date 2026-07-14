@@ -6,12 +6,10 @@
 // site-wide metaphors verbatim in spirit: profile = saved iPhone
 // identity, concurrent = browser tabs, fingerprint = what a website
 // can measure about a visitor, egress = your own internet exit.
-// Honesty: the Warm-up Scheduler stays chip-labelled Roadmap; the
-// egress entry cross-links /trust/security-overview (the canonical
+// The egress entry cross-links /trust/security-overview (the canonical
 // impl-state disclosure surface). No CtaBand — reference page.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
-import HonestyChip from '../components/HonestyChip.astro';
 
 interface GlossaryEntry {
   /** Stable anchor id — a public contract for deep links. */
@@ -19,7 +17,6 @@ interface GlossaryEntry {
   term: string;
   /** One honest paragraph; limited inline HTML (anchors, <strong>). */
   def: string;
-  chip?: 'live' | 'rolling-out' | 'roadmap';
 }
 
 const GLOSSARY: GlossaryEntry[] = [
@@ -51,7 +48,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'egress',
     term: 'Egress',
-    def: 'Your session\'s own internet exit — where its traffic actually leaves for the open web. Driftstack routes a session\'s traffic through the exit you attach (proxy or VPN), and the phone\'s language and clock (locale and timezone) follow the exit\'s location so nothing contradicts the address a website sees. What\'s live versus rolling out is documented at <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
+    def: 'Your session\'s own internet exit — where its traffic actually leaves for the open web. Driftstack routes a session\'s traffic through the exit you attach (proxy or VPN), and the phone\'s language and clock (locale and timezone) follow the exit\'s location so nothing contradicts the address a website sees. Implementation and security details are documented at <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
   },
   {
     id: 'fingerprint',
@@ -111,8 +108,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'warm-up',
     term: 'Warm-up',
-    def: "Giving a fresh profile some ordinary browsing history before it goes to work, so it doesn't look brand-new the day it matters. Driftstack's Warm-up Scheduler will automate this on a curve — light touches first, deeper flows later.",
-    chip: 'roadmap',
+    def: 'A short period of ordinary browsing before the main task, used to establish realistic page history and site state. In Driftstack this is regular session activity driven through the GUI, API, or SDK.',
   },
 ];
 ---
@@ -136,7 +132,6 @@ const GLOSSARY: GlossaryEntry[] = [
             <article id={entry.id} class="panel scroll-mt-24">
               <div class="flex flex-wrap items-center gap-3">
                 <h2 class="text-base font-semibold leading-6 text-tk-ink">{entry.term}</h2>
-                {entry.chip ? <HonestyChip state={entry.chip} /> : null}
                 <a
                   href={`#${entry.id}`}
                   class="ml-auto font-mono text-xs text-tk-ink-3 hover:text-tk-accent-text"

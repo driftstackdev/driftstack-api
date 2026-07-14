@@ -20,8 +20,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 const EVENT_TYPES = [
   { name: 'session.completed', desc: 'Fires when a session is destroyed cleanly (non-error end of life). Payload carries { session_id, duration_ms }.' },
   { name: 'session.failed', desc: 'Fires when a session ends in an errored state.' },
-  { name: 'quota.warning_80pct', desc: 'Fires when an account hits 80% of a tier-metered quota.' },
-  { name: 'quota.exceeded', desc: 'Fires when an account exceeds a tier-metered quota.' },
   { name: 'api_key.revoked', desc: 'Fires when an API key is revoked from the dashboard.' },
   { name: 'session.egress_capability_changed', desc: 'Arc 5 EGRESS eg.7.e — fires when a session\'s egress capability state changes (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.' },
   { name: 'crypto.order.paid', desc: 'V-666 — fires when a crypto order transitions to the terminal paid state (NowPayments IPN settled). Subscribe to grant entitlements server-side without polling /v1/billing/crypto-orders.' },
@@ -37,8 +35,9 @@ const EVENT_TYPES = [
 
     <p class="lead">
       Driftstack delivers event notifications to your HTTPS endpoint
-      as they happen. Use webhooks to react to session completion,
-      quota events, and key revocations without polling.
+      as they happen. Use webhooks to react to session lifecycle,
+      egress, challenge, profile-save, payment, and key-revocation events
+      without polling.
     </p>
 
     <h2 id="event-types">Event types</h2>

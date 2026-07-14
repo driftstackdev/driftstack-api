@@ -452,7 +452,7 @@ of security appropriate to the risk. Measures are layered.
    N+1 redundancy at launch tiers; higher tiers receive
    contractual SLA-backed redundancy.
 3. **Health monitoring.** Structured Pino logs; alerting on error
-   rates and latency anomalies; status page (planned: `status.driftstack.dev`).
+   rates and latency anomalies; public status page at `status.driftstack.dev`.
 4. **Incident response.** Documented runbook; on-call rotation
    capability scaled to Subscription tier.
 

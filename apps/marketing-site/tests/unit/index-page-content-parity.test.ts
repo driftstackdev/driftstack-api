@@ -129,20 +129,17 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Your data stays in the EU/);
   });
 
-  it('egress state reflected accurately in the v2 trust band (per-profile SOCKS5 / OpenVPN / WireGuard egress IS live; only the per-session "change a running session\'s proxy mid-flight" path is roadmap) + the /trust/security-overview cross-link. The page must NOT flatly claim egress itself is "(not shipped)".', () => {
+  it('egress state is current: per-profile SOCKS5 / OpenVPN / WireGuard is live, with the security cross-link and no aspirational proxy-swap copy', () => {
     expect(body).toMatch(
       /Customer-configurable egress — attaching your own internet exit \(a\s*\n?\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
     );
-    // Only the mid-flight per-session proxy swap is honestly roadmap
-    // (S20b 2026-07-06: stated in plain words, same fact).
-    expect(body).toMatch(
-      /swapping the proxy on a session that's already running is on the\s*\n?\s*roadmap/,
-    );
+    expect(body).not.toMatch(/swapping the proxy on a session that's already running/);
     expect(body).toMatch(/href="\/trust\/security-overview\/"/);
     // The stale "egress itself is not shipped" outlier must NOT return —
     // it self-contradicted every other egress surface on the site.
     expect(body).not.toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard \(not shipped\)/);
     expect(body).not.toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
+    expect(body).not.toMatch(/Session Replay|Warm-up Scheduler|chip="roadmap"/);
   });
 
   it('two-ladder pricing teaser is BOUND from src/data/pricing.ts (W292.B — no hand-typed dollars in the markup; figures derive from API_TIERS and the exact $79/$249/$699 + $149/$499/$1,499 values are guarded by the pricing-*-tier-figures baselines)', () => {

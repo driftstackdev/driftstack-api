@@ -1,8 +1,7 @@
 // W294.A — drift guard for trust pages. The trust/sub-processors
 // page must read from SUB_PROCESSORS in data/sub-processors.ts
 // (not hard-code the table), and trust/compliance must reference
-// SOC 2 framing as in-progress (matches the compliance-framing
-// sweep on the marketing copy).
+// the current certification posture without a delivery promise.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,16 +25,10 @@ describe('W294.A trust pages parity', () => {
     );
   });
 
-  it('trust/compliance frames SOC 2 as in-progress / planned, not certified', () => {
+  it('trust/compliance states the current certification posture without a roadmap', () => {
     const body = read(TRUST_COMPLIANCE);
-    // Must mention SOC 2 at all.
-    expect(body).toMatch(/SOC ?2/);
-    // Must not claim certification.
-    expect(body).not.toMatch(/SOC ?2 certified/i);
-    expect(body).not.toMatch(/SOC ?2 compliant/i);
-    expect(body).not.toMatch(/SOC ?2 audited/i);
-    // Must include an in-progress / planned framing.
-    expect(body).toMatch(/in[- ]progress|planned|future|roadmap|Q[1-4] 2026/i);
+    expect(body).toContain('not currently SOC 2 or ISO 27001 certified');
+    expect(body).not.toMatch(/in[- ]progress|planned|future|roadmap|Q[1-4] 20\d\d/i);
   });
 
   it('trust/sub-processors page cites the last-updated date from the data module', () => {

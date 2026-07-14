@@ -1,8 +1,3 @@
-// W252.D — drift-guard for docs.driftstack.dev/webhooks/events. The
-// page is the catalog reference; every value in
-// SubscribableWebhookEventTypeSchema must be documented as `[LIVE]`,
-// and no event present as `[LIVE]` may be missing from the schema.
-
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -11,48 +6,31 @@ import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const DOC = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/events.md');
+const doc = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/events.md'), 'utf8');
 
-function read(): string {
-  return readFileSync(DOC, 'utf8');
-}
-
-describe('W252.D docs/webhooks/events ↔ SubscribableWebhookEventTypeSchema parity', () => {
-  const doc = read();
-  const live = new Set(
-    (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
-  );
-
-  it('every live subscribable event has a [LIVE] or [DECLARED] catalog entry', () => {
-    // Doc convention: ### `event.name` [LIVE]  — fired today
-    //                ### `event.name` [DECLARED] — in enum, emitter pending
-    // Both are acceptable catalog presence; what would FAIL is missing
-    // entirely (drift).
-    for (const evt of live) {
-      const re = new RegExp(`\`${evt.replace(/\./g, '\\.')}\`\\s*\\[(LIVE|DECLARED)\\]`);
-      expect(doc, `missing catalog entry for ${evt}`).toMatch(re);
+describe('docs/webhooks/events current contract parity', () => {
+  it('gives every subscribable event a dedicated catalog section', () => {
+    for (const event of SubscribableWebhookEventTypeSchema.options) {
+      expect(doc, `missing catalog entry for ${event}`).toContain(`### \`${event}\``);
     }
   });
 
-  it('test.ping is tagged [LIVE] (synthetic event from /v1/webhooks/:id/test)', () => {
-    expect(doc).toMatch(/`test\.ping`\s*\[LIVE\]/);
+  it('documents test.ping as the synthetic test-endpoint event', () => {
+    expect(doc).toContain('### `test.ping`');
+    expect(doc).toMatch(/Synthetic test event emitted by `POST \/v1\/webhooks\/:id\/test`/);
   });
 
-  it('does not advertise crypto.order.* as [LIVE] while the enum is gated', () => {
-    if (!live.has('crypto.order.paid')) {
-      expect(doc).not.toMatch(/`crypto\.order\.paid`\s*\[LIVE\]/);
-    }
-    if (!live.has('crypto.order.failed')) {
-      expect(doc).not.toMatch(/`crypto\.order\.failed`\s*\[LIVE\]/);
-    }
+  it('contains no aspirational status taxonomy or silent quota subscription', () => {
+    expect(doc).not.toMatch(/\[(?:LIVE|DECLARED|PLANNED)\]/);
+    expect(doc).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
 
-  it('describes the common envelope shape with the id, type, payload fields', () => {
+  it('describes the common envelope', () => {
     expect(doc).toMatch(/"type":\s*"<event-type>"/);
-    expect(doc).toMatch(/Common envelope/);
+    expect(doc).toContain('Common envelope');
   });
 
-  it('distinguishes a benign superseded profile save from upload failure or stale state', () => {
+  it('distinguishes a superseded profile save from data loss', () => {
     expect(doc).toMatch(/`superseded` \(a newer profile write won/);
     expect(doc).toMatch(/next restore uses the newer state/);
     expect(doc).toMatch(/benign and not data loss/);

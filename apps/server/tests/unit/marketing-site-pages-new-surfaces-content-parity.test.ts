@@ -323,9 +323,11 @@ describe('W599.B /glossary (quiet reference page)', () => {
     expect(body).toMatch(/What a website can measure about a visitor/);
   });
 
-  it('warm-up entry keeps its Roadmap honesty chip (the Warm-up Scheduler is unshipped — the chip is the guardrail)', () => {
-    expect(body).toMatch(/id: 'warm-up',[\s\S]{0,500}?chip: 'roadmap',/);
-    expect(body).toMatch(/import HonestyChip from '\.\.\/components\/HonestyChip\.astro';/);
+  it('warm-up is defined as current ordinary session activity without a future-feature promise', () => {
+    expect(body).toMatch(
+      /id: 'warm-up',[\s\S]{0,500}?regular session activity driven through the GUI, API, or SDK/,
+    );
+    expect(body).not.toMatch(/chip: 'roadmap'|HonestyChip/);
   });
 
   it('egress entry cross-links /trust/security-overview (the canonical impl-state disclosure surface for egress claims, per W247.A)', () => {

@@ -1,6 +1,7 @@
 // Drizzle-backed implementation of WebhooksRepo.
 
 import { and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, or, sql } from 'drizzle-orm';
+import { WebhookEventTypeSchema } from '@driftstack/api-types';
 import {
   decodeDeliveryCursor,
   encodeDeliveryCursor,
@@ -31,6 +32,20 @@ import { accounts, webhookDeliveries, webhookEndpoints } from './schema.js';
 // reclaims it. 5 min ≫ the 10s per-attempt delivery timeout, so a slow (not
 // crashed) delivery is never reclaimed out from under an active worker.
 const RECLAIM_STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
+
+const HISTORICAL_SILENT_WEBHOOK_EVENTS = new Set(['quota.warning_80pct', 'quota.exceeded']);
+
+/**
+ * The PostgreSQL enum retains two never-emitted quota values for migration
+ * compatibility. They are not part of the current customer contract and must
+ * be removed whenever a persisted endpoint is materialized. Any other unknown
+ * value fails closed through the canonical schema instead of being cast.
+ */
+export function sanitizePersistedWebhookEvents(events: readonly string[]): WebhookEventType[] {
+  return events
+    .filter((event) => !HISTORICAL_SILENT_WEBHOOK_EVENTS.has(event))
+    .map((event) => WebhookEventTypeSchema.parse(event));
+}
 
 /**
  * Composite (created_at DESC, id DESC) keyset predicate for the delivery
@@ -478,7 +493,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       lastReminderSentAt: r.lastReminderSentAt,
       graceWindowEndsAt: r.graceWindowEndsAt,
       forceRotatedAt: r.forceRotatedAt,
-      events: r.events,
+      events: sanitizePersistedWebhookEvents(r.events),
       description: r.description,
       active: r.active,
       consecutiveFailures: r.consecutiveFailures,
@@ -568,7 +583,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       lastReminderSentAt: r.lastReminderSentAt,
       graceWindowEndsAt: r.graceWindowEndsAt,
       forceRotatedAt: r.forceRotatedAt,
-      events: r.events,
+      events: sanitizePersistedWebhookEvents(r.events),
       description: r.description,
       active: r.active,
       consecutiveFailures: r.consecutiveFailures,
@@ -1012,7 +1027,7 @@ function toEndpointRow(
     // Arc 3 sub-slice 28.1 (v2-#28) — force-rotation columns.
     graceWindowEndsAt: r.graceWindowEndsAt,
     forceRotatedAt: r.forceRotatedAt,
-    events: r.events,
+    events: sanitizePersistedWebhookEvents(r.events),
     description: r.description,
     active: r.active,
     consecutiveFailures: r.consecutiveFailures,
@@ -1029,7 +1044,7 @@ function toDeliveryRow(r: typeof webhookDeliveries.$inferSelect): WebhookDeliver
     id: r.id,
     webhookId: r.webhookId,
     eventId: r.eventId,
-    eventType: r.eventType,
+    eventType: WebhookEventTypeSchema.parse(r.eventType),
     payload: r.payload ?? {},
     status: r.status,
     attempts: r.attempts,

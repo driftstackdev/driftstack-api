@@ -9,14 +9,6 @@ export const WebhookDeliveryIdSchema = PrefixedId('wdl');
 export const WebhookEventTypeSchema = z.enum([
   'session.completed',
   'session.failed',
-  // quota.warning_80pct / quota.exceeded are DECLARED in the contract +
-  // subscribable, but NOT yet wired to a usage-threshold emitter (no
-  // enqueueEvent call site exists). The docs mark them [DECLARED]; the
-  // dashboard should carry the same "coming soon" caveat (cross-agent
-  // follow-up) + a usage-threshold emitter is the founder-review feature
-  // that makes them actually fire (sweep-3 flagged).
-  'quota.warning_80pct',
-  'quota.exceeded',
   'api_key.revoked',
   // Arc 5 EGRESS eg.7 (v2-#3) — fires when the harness emits an
   // `egress.capability_report` event for a SOCKS5 session and the
@@ -58,19 +50,10 @@ export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
  * endpoint (subscribing to it would be meaningless — the test
  * endpoint dispatches regardless of subscription).
  *
- * NOTE (sweep-3): `quota.warning_80pct` / `quota.exceeded` are subscribable
- * here but have NO usage-threshold emitter yet (no enqueueEvent call site), so
- * a subscription to them currently never delivers — the docs mark them
- * [DECLARED]. Kept subscribable to preserve the cross-surface contract
- * (marketing/docs/dashboard) until the metered-usage threshold emitter lands
- * (founder-review feature) + the dashboard gets a matching "coming soon"
- * caveat. Tracked as a flagged follow-up rather than silently removed.
  */
 export const SubscribableWebhookEventTypeSchema = z.enum([
   'session.completed',
   'session.failed',
-  'quota.warning_80pct',
-  'quota.exceeded',
   'api_key.revoked',
   // Arc 5 EGRESS eg.7 — subscribable so customers can hook
   // proxy-health visibility into their own observability surface.
@@ -112,7 +95,7 @@ export const WebhookEndpointSchema = z.object({
   /** V-359 — when prev_secret is active, this is the timestamp at
    *  which dual-signing stops. Null when no rotation in flight. */
   rotation_grace_expires_at: Iso8601Schema.nullable(),
-  events: z.array(WebhookEventTypeSchema),
+  events: z.array(SubscribableWebhookEventTypeSchema),
   description: z.string().nullable(),
   active: z.boolean(),
   consecutive_failures: z.number().int().nonnegative(),

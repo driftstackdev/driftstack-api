@@ -152,17 +152,12 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     );
   });
 
-  it('Capture retention roadmap (V-540) pinned. Re-enabled by slice 277 after restoring V-540 anchor at trust/security-overview.astro:225 (anchor was stripped from "land with — see" to bare space)', () => {
-    expect(body).toMatch(/Capture retention \(roadmap\)/);
-    // S20c 2026-07-06 plain-language pass (founder jargon audit):
-    // the V-540 internal ticket anchor is deliberately REMOVED from
-    // customer-facing copy ("on the roadmap" carries the state);
-    // grammatical, deliberate — not the stripped-anchor corruption
-    // slice 277 fixed. The nothing-retained-today honesty survives.
+  it('pins direct API captures and operator-local desktop recordings', () => {
+    expect(body).toMatch(/Direct captures and local recordings/);
     expect(body).toMatch(
-      /Today, screenshots and captures are returned directly\s+inside the API response \(inline bytes\) and are not kept\s+on our servers afterwards — so there is no retention\s+setting to configure yet\. Stored session recordings,\s+with controls over how long they're kept, are on the\s+roadmap/,
+      /Screenshots and captures are returned directly inside the API\s+response as inline bytes and are not retained by the capture\s+endpoint\. The desktop recorder stores streamed frames on the\s+operator's machine and does not upload them through the recording\s+workflow/,
     );
-    expect(body).not.toMatch(/V-540/);
+    expect(body).not.toMatch(/roadmap|V-540/i);
   });
 
   it("Account deletion claim pinned: 'Account deletion: 30-day grace, then hard delete' + 'Cancellation triggers soft-delete with 30 days of recovery. After that: hard delete of profile data, sessions, captures. Per our DPA.' — pinned so the 30-day grace + hard-delete scope (profile/sessions/captures) + DPA anchor all survive (drift to changing the 30-day window would create marketing↔DPA divergence; drift to dropping 'hard delete' would soften the deletion commitment)", () => {
@@ -203,13 +198,13 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
   // /security renders SIX pillars (01 Transport / 02 Egress / 03 API
   // keys / 04 Webhooks / 05 Team roles / 06 No-customer-data-access);
   // the old pin locked a stale count.
-  it("Cross-link to /security + /trust/compliance pinned: 'The architecture deep-dive at /security walks the six-pillar surface in detail. For pen-test evidence or compliance certifications, see /trust/compliance.' — pinned so the 3-page navigation (security-overview → security deep-dive → compliance) survives (drift to dropping either cross-link would orphan that page from the security-evaluation walk). Fleet v2 (S10): link tone moved to the AA-safe text-tk-accent-text", () => {
+  it('cross-links the architecture deep-dive and current compliance/disclosure page', () => {
     expect(body).toMatch(
       /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>\s*\n?\s*walks the six-pillar surface in detail\./,
     );
     expect(body).not.toMatch(/five-pillar/);
     expect(body).toMatch(
-      /For pen-test\s*\n?\s*evidence or compliance certifications, see\s*\n?\s*<a href="\/trust\/compliance\/" class="text-tk-accent-text underline"\s*\n?\s*>\/trust\/compliance<\/a\s*\n?\s*>\./,
+      /For current compliance\s*\n?\s*status and vulnerability reporting, see\s*\n?\s*<a href="\/trust\/compliance\/" class="text-tk-accent-text underline"\s*\n?\s*>\/trust\/compliance<\/a\s*\n?\s*>\./,
     );
   });
 

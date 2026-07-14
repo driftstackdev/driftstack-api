@@ -6,7 +6,7 @@
 // marketing↔webhook-worker.ts divergence).
 //
 //   • V-684 doc-comment framing + W213.A 5-source-file accuracy pass.
-//   • EVENT_TYPES array: 5 customer-subscribable types + test.ping
+//   • EVENT_TYPES array: 8 customer-subscribable types + test.ping
 //     bypass-event.
 //   • Endpoint cap: 10 active per account + narrow-purpose-over-mega.
 //   • POST /v1/webhooks 201 with secret-shown-ONCE + secret_prefix
@@ -15,7 +15,7 @@
 //   • 4-header delivery: X-Driftstack-Event-Id / -Event-Type /
 //     -Emitted-At / -Signature.
 //   • HMAC-SHA256(secret, ts + "." + raw body) + ts inside header.
-//   • 5-attempt retry: 1m + 5m + 15m + 30m + DLQ.
+//   • 6-attempt retry: 1m + 5m + 15m + 30m + 60m + DLQ.
 //   • 50-consecutive-failures auto-disable + 10s timeout.
 //   • 24h secret-rotation grace window + dual-header (-Signature + -Signature-Prev).
 //   • test.ping bypass via POST /v1/webhooks/<id>/test.
@@ -45,12 +45,16 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     );
   });
 
-  it('EVENT_TYPES 5-customer-subscribable array pinned: session.completed + session.failed + quota.warning_80pct + quota.exceeded + api_key.revoked — pinned so the 5-customer-subscribable enum stays consistent with SubscribableWebhookEventTypeSchema (drift to dropping any event would create marketing↔schema divergence)', () => {
+  it('pins the current 8 customer-subscribable event types and excludes retired quota declarations', () => {
     expect(body).toMatch(/name: 'session\.completed'/);
     expect(body).toMatch(/name: 'session\.failed'/);
-    expect(body).toMatch(/name: 'quota\.warning_80pct'/);
-    expect(body).toMatch(/name: 'quota\.exceeded'/);
     expect(body).toMatch(/name: 'api_key\.revoked'/);
+    expect(body).toMatch(/name: 'session\.egress_capability_changed'/);
+    expect(body).toMatch(/name: 'crypto\.order\.paid'/);
+    expect(body).toMatch(/name: 'crypto\.order\.failed'/);
+    expect(body).toMatch(/name: 'session\.challenge_detected'/);
+    expect(body).toMatch(/name: 'session\.profile_save_failed'/);
+    expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
   });
 
   it("test.ping bypass-only framing pinned: 'test.ping is an additional event type that exists only for the POST /v1/webhooks/<id>/test endpoint; it bypasses subscriptions, so you don't list it under events when creating an endpoint.' — pinned so the test.ping-bypass + don't-list-on-create commitment survives (drift to claiming test.ping is subscribable would create marketing↔schema divergence)", () => {

@@ -8,7 +8,7 @@
 //   • 'A small Dutch company building one product well.' positioning.
 //   • WebKit C++ source-level vs. JS runtime-patching framing.
 //   • 3-card Posture: EU-resident-by-default sub-processors + no
-//     behavioural data + Honest scope (no SOC 2 hype).
+//     behavioural data + Honest scope without certification promises.
 //   • V-506 4-card Operating commitments: security audit cadence /
 //     DR rehearsed / sub-processor change-log Article 28(2) /
 //     source escrow.
@@ -108,21 +108,19 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it("'Honest scope' posture (the behavioural INPUT engine ships at v1.0 — index.astro markets touch/scroll/typing/persona live + packages/behavioural-simulation is prod-wired as a per-session persona — so the line now reads 'The behavioural input engine … ships at v1.0', NOT the stale 'Behavioural simulation is Phase 3'. Recipe library shipped at v1.0 with create/list/read/delete — only execution stays v1.1. SOC 2 stays a future-revenue milestone. Drift to claiming SOC 2 still trips the integrity check; drift to re-Phase-3-ing recipes OR behavioural simulation OR back to a 'write-only form' claim would reopen the marketing-vs-reality gap)", () => {
+  it("'Honest scope' posture pins shipped behavioural input and recipes without certification promises", () => {
     // S20c 2026-07-06 plain-language pass: plain words lead (touch/
     // scroll/typing from real human recordings; save/view/list/delete
     // a recipe), precise terms (behavioural input engine, per-profile
     // persona, recipe execution) kept in parens. Same v1.0/v1.1 facts.
     expect(body).toMatch(
-      /We say no to things we can't ship well\. Touch, scroll, and\s+typing that come from real human recordings and move like a\s+real hand — each profile keeping its own habits \(the\s+behavioural input engine, with a per-profile persona\) — ship\s+at v1\.0;/,
+      /We say no to things we can't ship well\. Touch, scroll, and\s+typing that come from real human recordings and move like a\s+real hand — each profile keeping its own habits \(the\s+behavioural input engine, with a per-profile persona\) — ship\s+at v1\.0\./,
     );
     expect(body).toMatch(
       /recipe library\s+is live at v1\.0: save a finished agent-session as a\s+replayable step-by-step recipe, then view, list, or delete\s+your saved recipes\./,
     );
-    expect(body).toMatch(/Running a saved recipe \(recipe\s+execution\) lands at v1\.1/);
-    expect(body).toMatch(
-      /SOC 2 is a future-revenue\s*\n?\s*milestone, not today's marketing line\./,
-    );
+    expect(body).not.toMatch(/Running a saved recipe[\s\S]{0,80}v1\.1/);
+    expect(body).not.toMatch(/SOC 2|ISO 27001/i);
     // Drift sentinel — the pre-slice-143 "recipe libraries are Phase 3"
     // shape was wrong (contradicted slice 121's roadmap NOW promotion
     // + the live docs/api/recipes.md page). MUST NOT come back.
