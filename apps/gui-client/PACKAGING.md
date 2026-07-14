@@ -99,3 +99,39 @@ right-click → Open → Open bypasses the warning for local QA.
   Mac App Store we'd need to re-architect for sandbox compatibility,
   primarily around the proxy config and self-hosted server
   connectivity — non-trivial.
+
+## Local build + install without repeated Keychain prompts
+
+The main GUI and Simulator read protected credentials from macOS Keychain. Never
+work around a prompt by moving API, proxy, or per-session control keys into a file,
+environment variable, Tauri store, or browser storage.
+
+An ad-hoc signature (`codesign --sign -`) has no stable signer identity. Its
+designated requirement is the executable's CDHash, which changes on every rebuild;
+Keychain therefore treats every rebuilt main and Simulator app as new code and asks
+again. The canonical installer refuses that unsafe and annoying state.
+
+For local-only development on a Mac without an Apple signing certificate, run once:
+
+```bash
+scripts/setup-local-gui-signing.sh
+```
+
+The script creates `Driftstack Local Development Signing` in the user's login
+keychain, grants its private key only to `/usr/bin/codesign`, and deletes its
+owner-only temporary key material on exit. macOS may ask once to unlock the login
+keychain or approve the trust record. The identity is local development trust only;
+it cannot replace Developer ID signing/notarisation for a distributed build.
+
+Then use only the canonical installer:
+
+```bash
+scripts/build-install-gui.sh --preflight
+scripts/build-install-gui.sh
+```
+
+`--preflight` resolves a valid stable identity without compiling. The full command
+builds and signs both bundles with the same certificate anchor, rejects CDHash-only
+requirements, checks each bundle identifier, and proves the installed copy retained
+the exact designated requirement. `APPLE_SIGNING_IDENTITY` overrides local discovery
+for real Developer ID builds and is validated against the login keychain first.
