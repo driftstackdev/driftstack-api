@@ -15,7 +15,8 @@
 //   • V-534.AW cursor pagination wiring (V-666.AM 'Load more').
 //   • V-534.AX 'Download CSV' button wired to V-666.AC.
 //   • V-534.BC exact-match payment_id filter (V-666.AS).
-//   • V-534.BL note-modal a11y (Escape + textarea autofocus).
+//   • V-534.BL note-modal a11y through the shared focus trap, with
+//     unsaved-note confirmation on every close path.
 //   • 'Crypto payments are non-refundable' framing.
 //   • STATUS_OPTIONS 7-entry (all + 6 statuses).
 //   • Note dialog: maxLength 2000 + 'Leave empty + save to clear'
@@ -84,15 +85,24 @@ describe('W484.B apps/gui-client/src/views/CryptoOrdersAdminView.tsx content par
     );
   });
 
-  it("Internal-note save flow: useEffect on internalNote.state.kind === 'succeeded' → refetch().then(reset + setNoteTarget(null) + setNoteInput('')) — pinned so the new note flows into the table + dialog state clears for the next edit; V-534.BL modal a11y: Escape closes + clears note state + textarea autofocus on open", () => {
+  it('Internal-note save refreshes and clears state; every dirty close path uses one shared discard confirmation authority', () => {
     expect(body).toMatch(
       /if \(internalNote\.state\.kind === 'succeeded'\) \{\s*\n?\s*void refetch\(\)\.then\(\(\) => \{\s*\n?\s*internalNote\.reset\(\);\s*\n?\s*setNoteTarget\(null\);\s*\n?\s*setNoteInput\(''\);\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
+    expect(body).toMatch(/import \{ useConfirm \} from '\.\.\/components\/ConfirmProvider';/);
+    expect(body).toMatch(/import \{ useFocusTrap \} from '\.\.\/lib\/use-focus-trap';/);
+    expect(body).toMatch(/const noteDiscardConfirmOpenRef = useRef\(false\);/);
     expect(body).toMatch(
-      /\/\/ V-534\.BL — modal a11y: escape closes the note dialog; the textarea\s*\n?\s*\/\/ receives focus on open\./,
+      /noteTarget === null \|\|\s*\n?\s*internalNote\.state\.kind === 'submitting' \|\|\s*\n?\s*noteDiscardConfirmOpenRef\.current/,
     );
     expect(body).toMatch(
-      /if \(e\.key === 'Escape'\) \{\s*\n?\s*setNoteTarget\(null\);\s*\n?\s*setNoteInput\(''\);\s*\n?\s*\}\s*\n?\s*\};\s*\n?\s*window\.addEventListener\('keydown', onKey\);\s*\n?\s*noteTextareaRef\.current\?\.focus\(\);/,
+      /if \(noteInput === \(noteTarget\.internal_note \?\? ''\)\) \{\s*\n?\s*closeNoteEditor\(\);\s*\n?\s*return;/,
+    );
+    expect(body).toMatch(
+      /void confirm\('Discard this unsaved internal note\?', \{\s*\n?\s*confirmLabel: 'Discard note',\s*\n?\s*tone: 'danger',\s*\n?\s*\}\)\.then\(\(discard\) => \{/,
+    );
+    expect(body).toMatch(
+      /useFocusTrap\(noteTarget !== null, noteDialogRef, requestCloseNoteEditor\);/,
     );
   });
 
@@ -105,13 +115,17 @@ describe('W484.B apps/gui-client/src/views/CryptoOrdersAdminView.tsx content par
 
   it("Note dialog: maxLength 2000 + rows 5 + placeholder 'VIP — manual outreach scheduled / fraud signal / etc.' + framing 'Admin-only context for order ... This note is never shown to the customer. Leave empty + save to clear.' + save normalization noteInput.trim().length === 0 ? null : noteInput (empty saves null, not empty string) — pinned so empty-input clears the note correctly", () => {
     expect(body).toMatch(
-      /<textarea\s*\n?\s*ref=\{noteTextareaRef\}\s*\n?\s*value=\{noteInput\}\s*\n?\s*onChange=\{\(e\) => setNoteInput\(e\.target\.value\)\}\s*\n?\s*rows=\{5\}\s*\n?\s*maxLength=\{2000\}\s*\n?\s*placeholder="VIP — manual outreach scheduled \/ fraud signal \/ etc\."/,
+      /<textarea\s*\n?\s*value=\{noteInput\}\s*\n?\s*onChange=\{\(e\) => setNoteInput\(e\.target\.value\)\}\s*\n?\s*disabled=\{internalNote\.state\.kind === 'submitting'\}\s*\n?\s*rows=\{5\}\s*\n?\s*maxLength=\{2000\}\s*\n?\s*placeholder="VIP — manual outreach scheduled \/ fraud signal \/ etc\."/,
     );
     expect(body).toMatch(
       /Admin-only context for order\{' '\}\s*\n?\s*<span className="font-mono text-xs">\{noteTarget\.order_id\}<\/span>\. This note is never\s*\n?\s*shown to the customer\. Leave empty \+ save to clear\./,
     );
     expect(body).toMatch(
       /const next = noteInput\.trim\(\)\.length === 0 \? null : noteInput;\s*\n?\s*void internalNote\.save\(noteTarget\.order_id, next\);/,
+    );
+    expect(body).toMatch(/if \(e\.target === e\.currentTarget\) requestCloseNoteEditor\(\);/);
+    expect(body).toMatch(
+      /onClick=\{requestCloseNoteEditor\}\s*\n?\s*disabled=\{internalNote\.state\.kind === 'submitting'\}/,
     );
   });
 
