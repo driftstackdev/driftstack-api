@@ -25385,3 +25385,44 @@ Verification:
   passes 24 files and 348 tests, plus 3 real-PostgreSQL concurrency tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-591 — API-key cache writes retain pre-revocation generations
+
+**Date:** 2026-07-14
+
+Closed a late positive-cache write that could briefly resurrect a revoked API
+key. Authentication previously read and verified an active database row, while
+cache insertion independently read account and key generations only at the end
+of the slow path. If revocation committed and incremented the key generation in
+between, the stale context could read that new value and write itself as a
+current entry after invalidation had already completed.
+
+Authentication now captures both account and key generations before a second
+authoritative lookup. The recheck requires the same key id and hash and applies
+the current revoked/expiry state. Cache insertion retains those captured
+generations rather than rereading them. A revoke or rotation that has already
+invalidated is therefore visible to the recheck; one that wins afterward makes
+the eventual cache entry stale. An already-linearized request may complete, but
+its late write cannot authorize another request. If a cache cannot provide the
+generation capture, authentication remains database-authoritative and skips
+positive slow-path caching.
+
+The same two-generation protocol now backs web-session caching from V-590,
+without adding another Redis round trip: production captures both counters in
+one `MGET`, and a supplied generation lets insertion skip its former version
+reads. Cache hits and their existing two-counter `MGET` are unchanged.
+
+Verification:
+
+- an adversarial repository returns a stale active key, completes revocation
+  and cache invalidation, then returns the revoked row on the mandatory
+  recheck; authentication rejects and writes no cache entry;
+- a second ordering revokes after the recheck but before insertion; the
+  already-linearized request completes while the physically present late entry
+  is an immediate cache miss;
+- in-memory and Redis-shaped tests directly prove late entries preserve both
+  captured counters across subsequent account/key increments;
+- focused key lifecycle, rotation, cache, web-session, service, repository,
+  and structural coverage passes 21 files and 231 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

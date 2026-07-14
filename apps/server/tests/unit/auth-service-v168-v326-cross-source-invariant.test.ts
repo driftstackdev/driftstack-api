@@ -256,7 +256,7 @@ describe('W951 auth service V-168 + V-326 + V-352 + V-353e cross-source invarian
 
   it('CRITICAL imports type AuthCache + sha256Hex from auth-cache + type AuthCoalescer from auth-coalescer — wires D-020 cache + V-012/V-015 single-flight into the central auth path.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth.ts'));
-    expect(p).toMatch(/import type \{ AuthCache \} from '\.\/auth-cache\.js';/);
+    expect(p).toMatch(/import type \{ AuthCache, AuthCacheVersions \} from '\.\/auth-cache\.js';/);
     expect(p).toMatch(/import \{ sha256Hex \} from '\.\/auth-cache\.js';/);
     expect(p).toMatch(/import type \{ AuthCoalescer \} from '\.\/auth-coalescer\.js';/);
   });

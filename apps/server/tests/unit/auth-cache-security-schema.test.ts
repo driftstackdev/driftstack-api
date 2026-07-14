@@ -124,12 +124,13 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
     });
   });
 
-  it('tags a late write with its captured account generation', async () => {
+  it('tags a late write with its captured account and key generations', async () => {
     const redis = new FakeRedis();
     const { cache } = makeCache(redis);
-    const captured = await cache.captureAccountVersion('acc-security');
-    expect(captured).toBe(0);
+    const captured = await cache.captureVersions('acc-security', 'key-security');
+    expect(captured).toEqual({ accountVersion: 0, keyVersion: 0 });
     redis.values.set('auth:account:acc-security:v', '1');
+    redis.values.set('auth:keyid:key-security:v', '1');
 
     await cache.set(
       TOKEN_SHA,
@@ -142,8 +143,10 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
 
     const stored = JSON.parse(redis.values.get(entryKey()) ?? '{}') as {
       accountVersion?: unknown;
+      keyVersion?: unknown;
     };
     expect(stored.accountVersion).toBe(0);
+    expect(stored.keyVersion).toBe(0);
     await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
   });
 

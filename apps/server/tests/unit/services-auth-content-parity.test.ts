@@ -142,7 +142,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
   });
 
   it('slowPathApiKey: 5-failure-mode cascade (InvalidKey × 3 + RevokedKey + ExpiredKey + Forbidden suspended + deleted=InvalidKey)', () => {
-    expect(body).toMatch(/const apiKey = await repo\.findApiKeyByPrefix\(prefix\);/);
+    expect(body).toMatch(/let apiKey = await repo\.findApiKeyByPrefix\(prefix\);/);
     // C4 — prefix miss returns null (dispatcher falls through to the web
     // session) when the caller allows it, else throws InvalidKeyError.
     expect(body).toMatch(
@@ -163,6 +163,18 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(
       /if \(account\.status === 'deleted'\) \{\s*\n?\s*throw new InvalidKeyError\(\);/,
     );
+  });
+
+  it('slowPathApiKey captures cache generations, then revalidates exact key authority before caching', () => {
+    expect(body).toMatch(
+      /capturedVersions = await cache\.captureVersions\(apiKey\.accountId, apiKey\.id\)/,
+    );
+    expect(body).toMatch(/const revalidated = await repo\.findApiKeyByPrefix\(prefix\);/);
+    expect(body).toMatch(
+      /revalidated\.id !== apiKey\.id \|\| revalidated\.keyHash !== apiKey\.keyHash/,
+    );
+    expect(body).toMatch(/if \(revalidated\.revokedAt !== null\) throw new RevokedKeyError\(\);/);
+    expect(body).toMatch(/ctx, ttl, capturedVersions/);
   });
 
   it('Cache write: TTL capped at expiresAt remaining seconds (min 1); try/catch swallow for graceful degradation', () => {
@@ -257,7 +269,9 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(
       /import \{ keyPrefixFromPlaintext, verifyApiKey \} from '\.\.\/lib\/api-keys\.js';/,
     );
-    expect(body).toMatch(/import type \{ AuthCache \} from '\.\/auth-cache\.js';/);
+    expect(body).toMatch(
+      /import type \{ AuthCache, AuthCacheVersions \} from '\.\/auth-cache\.js';/,
+    );
     expect(body).toMatch(/import \{ sha256Hex \} from '\.\/auth-cache\.js';/);
     expect(body).toMatch(/import type \{ AuthCoalescer \} from '\.\/auth-coalescer\.js';/);
     expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);

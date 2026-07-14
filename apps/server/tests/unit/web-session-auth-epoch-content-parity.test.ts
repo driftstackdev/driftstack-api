@@ -62,14 +62,12 @@ describe('V-590 web-session credential epoch', () => {
   });
 
   it('prevents a pre-reset slow path from repopulating a current cache entry after invalidation', () => {
-    expect(auth).toMatch(/capturedAccountVersion = await cache\.captureAccountVersion/);
+    expect(auth).toMatch(/capturedVersions = await cache\.captureVersions/);
     expect(auth).toMatch(/const revalidated = await repo\.findActiveWebSession/);
     expect(auth).toMatch(/revalidated\.id !== session\.id/);
-    expect(auth).toMatch(/ctx, ttl, capturedAccountVersion/);
-    expect(authCache).toMatch(/capturedAccountVersion\?: number/);
-    expect(authCache).toMatch(
-      /capturedAccountVersion \?\? \(accountVersionRaw \? Number\(accountVersionRaw\) : 0\)/,
-    );
+    expect(auth).toMatch(/ctx, ttl, capturedVersions/);
+    expect(authCache).toMatch(/capturedVersions\?: AuthCacheVersions/);
+    expect(authCache).toMatch(/capturedVersions\?\.accountVersion/);
   });
 
   it('requires epoch equality on refresh/list and runtime authentication reads', () => {

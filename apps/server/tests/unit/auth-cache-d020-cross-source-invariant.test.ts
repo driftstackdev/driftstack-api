@@ -160,20 +160,22 @@ describe('W924 D-020 auth-cache cross-source invariant', () => {
 
   // ─── AuthCache authority-generation interface ───────────────
 
-  it('CRITICAL AuthCache interface includes an optional account-generation capture for race-safe web-session writes.', () => {
+  it('CRITICAL AuthCache interface includes optional account+key generation capture for race-safe credential writes.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-cache.ts'));
     expect(p).toMatch(/export interface AuthCache \{/);
     expect(p).toMatch(/get\(plaintextSha256: string\): Promise<AccountContext \| null>;/);
-    expect(p).toMatch(/captureAccountVersion\?\(accountId: string\): Promise<number \| null>;/);
+    expect(p).toMatch(
+      /captureVersions\?\(accountId: string, keyId: string\): Promise<AuthCacheVersions \| null>;/,
+    );
     expect(p).toMatch(/set\(/);
     expect(p).toMatch(/invalidateKey\(keyId: string\): Promise<void>;/);
     expect(p).toMatch(/invalidateAccount\(accountId: string\): Promise<void>;/);
   });
 
-  it('CRITICAL set() optionally accepts the account generation captured before authoritative recheck.', () => {
+  it('CRITICAL set() optionally accepts both generations captured before authoritative recheck.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-cache.ts'));
     expect(p).toMatch(
-      /set\(\s*\n\s*plaintextSha256: string,\s*\n\s*keyId: string,\s*\n\s*accountId: string,\s*\n\s*context: AccountContext,\s*\n\s*ttlSec: number,\s*\n\s*capturedAccountVersion\?: number,\s*\n\s*\): Promise<void>;/,
+      /set\(\s*\n\s*plaintextSha256: string,\s*\n\s*keyId: string,\s*\n\s*accountId: string,\s*\n\s*context: AccountContext,\s*\n\s*ttlSec: number,\s*\n\s*capturedVersions\?: AuthCacheVersions,\s*\n\s*\): Promise<void>;/,
     );
   });
 

@@ -12,7 +12,7 @@ import {
   UnauthorizedError,
 } from '../lib/errors.js';
 import { keyPrefixFromPlaintext, verifyApiKey } from '../lib/api-keys.js';
-import type { AuthCache } from './auth-cache.js';
+import type { AuthCache, AuthCacheVersions } from './auth-cache.js';
 import { sha256Hex } from './auth-cache.js';
 import type { AuthCoalescer } from './auth-coalescer.js';
 import type { NegativeAuthCache } from './negative-auth-cache.js';
@@ -368,7 +368,7 @@ async function slowPathApiKey(
   opts: { fallThroughOnPrefixMiss?: boolean } = {},
 ): Promise<AccountContext | null> {
   const prefix = keyPrefixFromPlaintext(plaintext);
-  const apiKey = await repo.findApiKeyByPrefix(prefix);
+  let apiKey = await repo.findApiKeyByPrefix(prefix);
   if (!apiKey) {
     // No API key carries this prefix. Normally an invalid credential, but
     // when the caller allows it we return null so the dispatcher can try
@@ -386,6 +386,31 @@ async function slowPathApiKey(
   if (apiKey.revokedAt !== null) throw new RevokedKeyError();
   if (apiKey.expiresAt !== null && apiKey.expiresAt.getTime() <= now.getTime()) {
     throw new ExpiredKeyError();
+  }
+
+  // Capture both cache generations, then re-read the exact key authority.
+  // Revoke/rotation commits its DB mutation before invalidating the key
+  // generation. If invalidation already won, this recheck observes the
+  // mutation; if it wins later, the eventual cache entry keeps the captured
+  // older generation and is therefore an immediate miss.
+  let capturedVersions: AuthCacheVersions | null = null;
+  if (cache?.captureVersions) {
+    try {
+      capturedVersions = await cache.captureVersions(apiKey.accountId, apiKey.id);
+    } catch {
+      capturedVersions = null;
+    }
+    if (capturedVersions !== null) {
+      const revalidated = await repo.findApiKeyByPrefix(prefix);
+      if (!revalidated || revalidated.id !== apiKey.id || revalidated.keyHash !== apiKey.keyHash) {
+        throw new InvalidKeyError();
+      }
+      if (revalidated.revokedAt !== null) throw new RevokedKeyError();
+      if (revalidated.expiresAt !== null && revalidated.expiresAt.getTime() <= now.getTime()) {
+        throw new ExpiredKeyError();
+      }
+      apiKey = revalidated;
+    }
   }
 
   const account = await repo.getAccount(apiKey.accountId);
@@ -416,14 +441,14 @@ async function slowPathApiKey(
   };
 
   // Cap TTL at expiresAt so the cache entry can never outlive the key.
-  if (cache) {
+  if (cache && capturedVersions !== null) {
     let ttl = CACHE_TTL_SEC;
     if (apiKey.expiresAt !== null) {
       const remaining = Math.floor((apiKey.expiresAt.getTime() - now.getTime()) / 1000);
       if (remaining < ttl) ttl = Math.max(1, remaining);
     }
     try {
-      await cache.set(sha, apiKey.id, account.id, ctx, ttl);
+      await cache.set(sha, apiKey.id, account.id, ctx, ttl, capturedVersions);
     } catch {
       // Cache write failed — auth still completed via scrypt path. Drop on
       // the floor; next request will retry the cache write.
@@ -476,19 +501,19 @@ async function slowPathWebSession(
   if (session.revokedAt !== null) throw new RevokedKeyError();
   if (session.expiresAt.getTime() <= now.getTime()) throw new ExpiredKeyError();
 
-  // Capture the cache's account generation, then re-read the authoritative
-  // session. Password reset commits its DB epoch change before invalidating
-  // this generation. The ordering closes both sides of a late-write race:
+  // Capture the cache generations, then re-read the authoritative session.
+  // Password reset commits its DB epoch change before invalidating the account
+  // generation. The ordering closes both sides of a late-write race:
   // an invalidation already observed here makes the second DB read reject,
   // while an invalidation after it makes the captured generation stale.
-  let capturedAccountVersion: number | null = null;
-  if (cache?.captureAccountVersion) {
+  let capturedVersions: AuthCacheVersions | null = null;
+  if (cache?.captureVersions) {
     try {
-      capturedAccountVersion = await cache.captureAccountVersion(session.accountId);
+      capturedVersions = await cache.captureVersions(session.accountId, `wsk_${session.id}`);
     } catch {
-      capturedAccountVersion = null;
+      capturedVersions = null;
     }
-    if (capturedAccountVersion !== null) {
+    if (capturedVersions !== null) {
       const revalidated = await repo.findActiveWebSession({ tokenHash: sha, now });
       if (!revalidated || revalidated.id !== session.id) throw new InvalidKeyError();
       session = revalidated;
@@ -567,12 +592,12 @@ async function slowPathWebSession(
 
   // Cap TTL at session expiry so the cache entry can never outlive the
   // session token. Same shape as the API key path.
-  if (cache && capturedAccountVersion !== null) {
+  if (cache && capturedVersions !== null) {
     let ttl = CACHE_TTL_SEC;
     const remaining = Math.floor((session.expiresAt.getTime() - now.getTime()) / 1000);
     if (remaining < ttl) ttl = Math.max(1, remaining);
     try {
-      await cache.set(sha, syntheticKey.id, account.id, ctx, ttl, capturedAccountVersion);
+      await cache.set(sha, syntheticKey.id, account.id, ctx, ttl, capturedVersions);
     } catch {
       // Same graceful-degradation as the API key path.
     }
