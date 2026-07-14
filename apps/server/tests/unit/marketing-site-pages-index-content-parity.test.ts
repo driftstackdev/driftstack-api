@@ -80,11 +80,11 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(
       /rendering pipeline produce your fingerprint the way Apple wrote\s*\n?\s*them, in the order Apple intended\./,
     );
-    expect(body).toMatch(/href="\/comparison"/);
+    expect(body).toMatch(/href="\/comparison\/"/);
   });
 
-  it("Hero CTAs + free-tier subline (R5: 'Start free' → /pricing#free + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). The 2026-05-19 polish stripped the mobile-responsive w-full sm:w-auto wrappers since the hero already uses flex-wrap; the buttons relax to their natural width on small screens via the parent container.", () => {
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
+  it("Hero CTAs + free-tier subline (R5: 'Start free' → /pricing/#free + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). The 2026-05-19 polish stripped the mobile-responsive w-full sm:w-auto wrappers since the hero already uses flex-wrap; the buttons relax to their natural width on small screens via the parent container.", () => {
+    expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary">Start free<\/a>/);
     // v2 2026-07-03: the hero secondary CTA anchors to the in-page
     // how-it-works section (the /comparison deep link moved into the proof
     // section as the tool-by-tool "comparison page" link).
@@ -129,7 +129,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(
       /Customer-configurable egress — attaching your own internet exit \(a\s*\n?\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
     );
-    expect(body).toMatch(/href="\/trust\/security-overview"/);
+    expect(body).toMatch(/href="\/trust\/security-overview\/"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
     expect(body).not.toMatch(
@@ -175,7 +175,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
 
   it('Self-hosted teaser pinned (v2 compact band): "Run Driftstack on your own infrastructure." + /self-hosted link', () => {
     expect(body).toMatch(/Run Driftstack on your own infrastructure\./);
-    expect(body).toMatch(/href="\/self-hosted"/);
+    expect(body).toMatch(/href="\/self-hosted\/"/);
   });
 
   it('use-case section pinned (v2 Band-A personas, operators first): "Built for the work you actually do." headline + 3 persona cards (Run many accounts, safely apart / Test on the real thing / See what iPhone users see)', () => {
@@ -210,7 +210,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Most tools dress up a desktop browser to look like a phone/);
     expect(body).toMatch(/What detection systems see/);
     expect(body).toMatch(/Same signals as a physical iPhone\. Not "close enough"\./);
-    expect(body).toMatch(/href="\/comparison"/);
+    expect(body).toMatch(/href="\/comparison\/"/);
     // the retired standalone teaser table headline must not return
     expect(body).not.toMatch(/Not another anti-detect browser\./);
   });
