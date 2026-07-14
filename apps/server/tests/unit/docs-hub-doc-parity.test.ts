@@ -13,7 +13,7 @@
 // concrete impl lands. This test honours that by excluding the
 // DECLARED set from the strict-equality count + listing checks.
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
@@ -38,6 +38,15 @@ const DECLARED_NOT_LIVE = new Set<string>([
 
 function read(): string {
   return readFileSync(DOC_PATH, 'utf8');
+}
+
+function sourcePageForInternalHref(href: string): string | null {
+  const pathname = href.split('#')[0]!.replace(/\/+$/, '');
+  if (pathname === '') return null;
+  if (pathname.startsWith('/docs/')) {
+    return join(DOCS_DIR, `${pathname.slice('/docs/'.length)}.astro`);
+  }
+  return join(PAGES_DIR, `${pathname.slice(1)}.astro`);
 }
 
 describe('W247.D /docs hub doc parity', () => {
@@ -66,23 +75,19 @@ describe('W247.D /docs hub doc parity', () => {
   });
 
   it('every internal href the hub uses resolves to a real page', () => {
-    const docFiles = new Set(readdirSync(DOCS_DIR));
-    // Pull every href="/docs/foo" + href="/foo" out of the hub.
+    // Pull every href="/docs/foo/" + href="/foo/" out of the hub.
     const hrefs = Array.from(doc.matchAll(/href="(\/[a-z0-9-/]+)"/g)).map((m) => m[1]!);
-    const missing: string[] = [];
-    for (const href of hrefs) {
-      if (href.startsWith('/docs/')) {
-        const slug = href.slice('/docs/'.length).split('#')[0];
-        if (!docFiles.has(`${slug}.astro`)) missing.push(href);
-      } else {
-        // top-level slug, e.g. /self-hosted, /api-reference.
-        const slug = href.slice(1).split('#')[0];
-        if (slug === '') continue;
-        if (!existsSync(join(PAGES_DIR, `${slug}.astro`))) {
-          missing.push(href);
-        }
-      }
-    }
+    const missing = hrefs.filter((href) => {
+      const sourcePage = sourcePageForInternalHref(href);
+      return sourcePage !== null && !existsSync(sourcePage);
+    });
     expect(missing).toEqual([]);
+
+    // Canonical directory URLs map to their Astro source file; a fabricated
+    // destination remains missing so this guard cannot become a false-green.
+    expect(sourcePageForInternalHref('/docs/sdk-typescript/')).toBe(
+      join(DOCS_DIR, 'sdk-typescript.astro'),
+    );
+    expect(existsSync(sourcePageForInternalHref('/docs/definitely-not-a-page/')!)).toBe(false);
   });
 });
