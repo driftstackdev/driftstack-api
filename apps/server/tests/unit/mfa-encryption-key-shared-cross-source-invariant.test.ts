@@ -53,9 +53,9 @@ describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
     );
   });
 
-  it("gui-control-key-encryption header explicitly cross-references the BYOK envelope + Q2=C verdict: 'Same AES-256-GCM scheme + canonical [IV | tag | ciphertext] blob as the BYOK Anthropic crypto (lib/byok-anthropic-encryption.ts). Re-uses MFA_ENCRYPTION_KEY per Q2=C (24h-TTL, MFA-key pattern).' — pinned so the 4-class Q2=C-locked shared-key contract stays documented", () => {
+  it('gui-control-key-encryption pins the versioned envelope, context-bound AAD, and shared host-key contract', () => {
     expect(gck).toMatch(
-      /Same AES-256-GCM\s*\n?\s*\/\/ scheme \+ canonical `\[IV \| tag \| ciphertext\]` blob as the BYOK\s*\n?\s*\/\/ Anthropic crypto \(lib\/byok-anthropic-encryption\.ts\)\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
+      /AES-256-GCM uses a\s*\n?\s*\/\/ versioned `\[magic \| IV \| tag \| ciphertext\]` envelope and canonical\s*\n?\s*\/\/ additional authenticated data \(AAD\) that binds the ciphertext to its\s*\n?\s*\/\/ purpose, owning account, and one agent-session\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
     );
   });
 });
