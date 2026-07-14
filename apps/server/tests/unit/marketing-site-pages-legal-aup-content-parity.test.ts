@@ -41,8 +41,10 @@ describe('W505.C apps/marketing-site/src/pages/legal/aup.md content parity', () 
   it('Version 1.0 effective 2026-05-07 + Terms incorporation — pinned so the version-tracked AUP + the Terms-of-Service incorporation survive (drift to dropping the Terms-incorporation would orphan the AUP from contractual force; drift to changing the version without updating downstream Terms would create cross-doc divergence)', () => {
     expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
     expect(body).toMatch(
-      /The AUP is incorporated into the \[Terms of Service\]\(terms\.md\) by reference/,
+      /The AUP is incorporated into the \[Terms of Service\]\(\/legal\/terms\/\) by reference/,
     );
+    expect(body.match(/\[Terms of Service\]\(\/legal\/terms\/\)/g)).toHaveLength(4);
+    expect(body).not.toMatch(/\[Terms of Service\]\(terms\.md\)/);
   });
 
   it("General-purpose-infrastructure framing pinned: 'The AUP exists because the Service is general-purpose infrastructure that can be misused. Customer is the party closest to the lawfulness of any given Session: Customer chooses the target site, supplies the authentication credentials' + 'Driftstack is the infrastructure provider; Driftstack does not pre-screen target sites and does not assess the legality of Customer's specific use under Customer's own law.' — pinned so the infrastructure-not-arbiter posture survives (drift to claiming pre-screening would mislead customers into thinking Driftstack vets targets; drift to dropping the 'Customer closest to lawfulness' framing would weaken the lawful-basis-is-Customer's-call commitment)", () => {
