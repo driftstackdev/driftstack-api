@@ -638,6 +638,6 @@ describe('login page — local integration', () => {
     win = window;
     await flush();
     const link = window.document.querySelector('[data-signup-link]') as HTMLAnchorElement | null;
-    expect(link?.getAttribute('href')).toBe('/signup?next=' + encodeURIComponent('/profiles'));
+    expect(link?.getAttribute('href')).toBe('/signup/?next=' + encodeURIComponent('/profiles'));
   });
 });

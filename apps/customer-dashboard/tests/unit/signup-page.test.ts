@@ -308,7 +308,7 @@ describe('signup page — local integration', () => {
     ).toBe(false);
     expect(
       window.document.querySelector('[data-continue-verification]')?.getAttribute('href'),
-    ).toBe('/verify-email');
+    ).toBe('/verify-email/');
 
     submitSignup(window, 'newbie@example.com', 'a-very-long-password');
     const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
@@ -336,7 +336,7 @@ describe('signup page — local integration', () => {
 
     expect(
       window.document.querySelector('[data-continue-verification]')?.getAttribute('href'),
-    ).toBe('/verify-email?next=' + encodeURIComponent('/cli/authorize'));
+    ).toBe('/verify-email/?next=' + encodeURIComponent('/cli/authorize'));
   });
 
   it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start', async () => {
@@ -429,6 +429,6 @@ describe('signup page — local integration', () => {
     win = window;
     await flush();
     const link = window.document.querySelector('[data-login-link]') as HTMLAnchorElement | null;
-    expect(link?.getAttribute('href')).toBe('/login?next=' + encodeURIComponent('/cli/authorize'));
+    expect(link?.getAttribute('href')).toBe('/login/?next=' + encodeURIComponent('/cli/authorize'));
   });
 });

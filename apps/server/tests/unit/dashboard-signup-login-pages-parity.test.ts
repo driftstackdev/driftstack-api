@@ -17,6 +17,13 @@ function read(p: string): string {
 
 const SIGNUP = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/signup.astro');
 const LOGIN = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/login.astro');
+const AUTH_ROUTE_PAGES = [
+  SIGNUP,
+  LOGIN,
+  resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/verify-email.astro'),
+  resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/team/accept.astro'),
+  resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/cli/authorize.astro'),
+];
 
 describe('W737 dashboard signup + login pages V-079 parity', () => {
   it('both pages exist at canonical paths', () => {
@@ -49,42 +56,45 @@ describe('W737 dashboard signup + login pages V-079 parity', () => {
     expect(s).toMatch(/12\+ characters\. Use a passphrase\./);
   });
 
-  it('CRITICAL signup stashes ds_signup_email + ds_debug_verify_token into sessionStorage on success. Drift to dropping would break the W735 verify-email page email-prefill + W735 debug-token back-compat path.', () => {
+  it('CRITICAL signup safely persists ds_signup_email + ds_debug_verify_token before continuing. Drift to dropping would break the W735 verify-email page email-prefill + W735 debug-token back-compat path.', () => {
     const s = read(SIGNUP);
 
-    expect(s).toMatch(/sessionStorage\.setItem\('ds_signup_email', payload\.email\)/);
     expect(s).toMatch(
-      /if \(body\.debug_token\) \{\s*\n\s+sessionStorage\.setItem\('ds_debug_verify_token', body\.debug_token\)/,
+      /function persistSignupState\(email, debugToken\) \{\s*if \(!writeSignupState\('ds_signup_email', email\)\) return false;\s*if \(typeof debugToken === 'string' && debugToken\.length > 0\) \{\s*return writeSignupState\('ds_debug_verify_token', debugToken\);\s*\}\s*return removeSignupState\('ds_debug_verify_token'\);/,
+    );
+    expect(s).toMatch(/if \(!persistSignupState\(payload\.email, body\.debug_token\)\) \{/);
+    expect(s.replace('persistSignupState(payload.email, body.debug_token)', 'true')).not.toMatch(
+      /persistSignupState\(payload\.email, body\.debug_token\)/,
     );
   });
 
-  it("CRITICAL signup V-267 ?next= deep-link round-trip pinned. The `verifyUrl = rawNext ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email'` redirect threads the deep-link through verify-email (next = sanitized via safeNextPath). Matches W735 verify-email ?next= consumption.", () => {
+  it('CRITICAL signup V-267 ?next= deep-link round-trip pinned. The canonical `/verify-email/?next=` redirect threads the deep-link through verify-email (next = sanitized via safeNextPath). Matches W735 verify-email ?next= consumption.', () => {
     const s = read(SIGNUP);
 
     expect(s).toMatch(
       /V-267 — pass through the \?next= deep link so flows that\s*\n\s+\/\/ brought the user to signup \(e\.g\. GUI activation at\s*\n\s+\/\/ \/cli\/authorize\) can resume after verify-email completes/,
     );
     expect(s).toMatch(
-      /const verifyUrl = rawNext\s*\n\s+\? '\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n\s+: '\/verify-email'/,
+      /return nextRaw \? '\/verify-email\/\?next=' \+ encodeURIComponent\(next\) : '\/verify-email\/'/,
     );
     // Open-redirect guard — ?next= sanitized via inline safeNextPath() before forward.
     expect(s).toMatch(/function safeNextPath\(next, origin\) \{/);
-    expect(s).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\)/);
+    expect(s).toMatch(/const next = safeNextPath\(nextRaw, window\.location\.origin\)/);
   });
 
   it('CRITICAL signup V-269 login-link ?next= preservation pinned. The "preserve ?next= when bouncing to /login" pattern keeps GUI-activation round-trips alive when a user clicks "Sign in" instead of completing signup — now sanitized through safeNextPath() to close the open-redirect.', () => {
     const s = read(SIGNUP);
     expect(s).toMatch(/V-269 — preserve \?next= when bouncing the user to \/login/);
     expect(s).toMatch(
-      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
+      /'\/login\/\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );
   });
 
   it('CRITICAL signup verify-page redirect is `/verify-email` (NOT `/auth/verify-email`). Matches V-079.C canonical path + W735 + W734 .env.example fix. Drift would re-introduce the 2026-05-12 customer-incident class of bug.', () => {
     const s = read(SIGNUP);
 
-    expect(s).toMatch(/'\/verify-email\?next='/);
-    expect(s).toMatch(/: '\/verify-email'/);
+    expect(s).toMatch(/'\/verify-email\/\?next='/);
+    expect(s).toMatch(/: '\/verify-email\/'/);
 
     // NO legacy /auth/verify-email path.
     expect(s).not.toMatch(/'\/auth\/verify-email'/);
@@ -138,21 +148,37 @@ describe('W737 dashboard signup + login pages V-079 parity', () => {
 
     expect(l).toMatch(/V-269 — preserve \?next= when bouncing the user to \/signup/);
     expect(l).toMatch(
-      /signupLink\.setAttribute\('href', '\/signup\?next=' \+ encodeURIComponent\(next\)\)/,
+      /signupLink\.setAttribute\('href', '\/signup\/\?next=' \+ encodeURIComponent\(next\)\)/,
     );
   });
 
   it('CRITICAL login forgot-password link pinned. The /forgot-password page is the entry to the W736 reset-password flow.', () => {
     const l = read(LOGIN);
-    expect(l).toMatch(/<a href="\/forgot-password"/);
+    expect(l).toMatch(/<a\s+href="\/forgot-password\/"/);
     expect(l).toMatch(/Forgot your password\?/);
   });
 
-  it("CRITICAL login on-success — localStorage `ds_web_session_token` + redirect to `next ? next : '/'`. Matches W735+W736 ds_web_session_token key convention.", () => {
+  it("CRITICAL login on-success — hardened `persistWebSession(body)` + redirect to `next ? next : '/'`. Matches W735+W736 ds_web_session_token key convention.", () => {
     const l = read(LOGIN);
 
-    expect(l).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
+    expect(l).toMatch(
+      /function persistWebSession\(body\) \{[\s\S]*?localStorage\.removeItem\(key\);[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.getItem\('ds_web_session_token'\) !== session\.token[\s\S]*?function completeSession/,
+    );
+    expect(l).toMatch(/function completeSession\(body\) \{\s*persistWebSession\(body\);/);
+    expect(l.replace('persistWebSession(body);', '')).not.toMatch(
+      /function completeSession\(body\) \{\s*persistWebSession\(body\);/,
+    );
     expect(l).toMatch(/window\.location\.href = next \? next : '\/'/);
+  });
+
+  it('CRITICAL dynamic dashboard auth links use canonical trailing-slash routes without changing encoded next targets', () => {
+    const slashlessAuthRoute = /['"]\/(?:login|signup|verify-email)\?next=/;
+    for (const path of AUTH_ROUTE_PAGES) {
+      expect(read(path), `${path} slashless dynamic auth route`).not.toMatch(slashlessAuthRoute);
+    }
+
+    const mutated = read(SIGNUP).replace('/login/?next=', '/login?next=');
+    expect(mutated).toMatch(slashlessAuthRoute);
   });
 
   // --- Shared invariants -------------------------------------------

@@ -12,7 +12,7 @@
 //   • 6-state UI machine: loading / missing / needs-signin /
 //     confirm / success / error.
 //   • ?code= + ?state= URL-param parsing + missing-state branch.
-//   • Sign-in gate redirect: /login?next= + /signup?next= both
+//   • Sign-in gate redirect: /login/?next= + /signup/?next= both
 //     encode the current URL (pathname + search), so deep-link
 //     resumes cleanly after auth.
 //   • POST /v1/auth/cli-authorize/bind-device-code registered server-side
@@ -66,12 +66,12 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/if \(!code \|\| !state\) \{\s*\n?\s*show\('missing'\);/);
   });
 
-  it('sign-in gate redirect: /login?next= + /signup?next= encode current URL (deep-link resume)', () => {
+  it('sign-in gate redirect: canonical /login/?next= + /signup/?next= encode current URL', () => {
     expect(body).toMatch(
       /const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);/,
     );
-    expect(body).toMatch(/signinLink\.setAttribute\('href', '\/login\?next=' \+ next\)/);
-    expect(body).toMatch(/signupLink\.setAttribute\('href', '\/signup\?next=' \+ next\)/);
+    expect(body).toMatch(/signinLink\.setAttribute\('href', '\/login\/\?next=' \+ next\)/);
+    expect(body).toMatch(/signupLink\.setAttribute\('href', '\/signup\/\?next=' \+ next\)/);
   });
 
   it('POST /v1/auth/cli-authorize/bind-device-code wired client + server-side (Bearer-token)', () => {

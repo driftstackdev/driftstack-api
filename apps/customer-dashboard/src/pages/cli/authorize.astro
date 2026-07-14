@@ -244,8 +244,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         const signinLink = sections.needsSignin.querySelector('[data-signin-link]');
         const signupLink = sections.needsSignin.querySelector('[data-signup-link]');
         const next = encodeURIComponent(window.location.pathname + window.location.search);
-        if (signinLink) signinLink.setAttribute('href', '/login?next=' + next);
-        if (signupLink) signupLink.setAttribute('href', '/signup?next=' + next);
+        if (signinLink) signinLink.setAttribute('href', '/login/?next=' + next);
+        if (signupLink) signupLink.setAttribute('href', '/signup/?next=' + next);
         show('needs-signin');
       }
 

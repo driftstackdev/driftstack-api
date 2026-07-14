@@ -315,7 +315,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const rawNext = params.get('next');
       const next = safeNextPath(rawNext, window.location.origin);
       if (rawNext && signupLink) {
-        signupLink.setAttribute('href', '/signup?next=' + encodeURIComponent(next));
+        signupLink.setAttribute('href', '/signup/?next=' + encodeURIComponent(next));
       }
 
       // Prefill the email from ?email= (carried over from the signup
@@ -443,7 +443,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (verifyLink) {
           verifyLink.setAttribute(
             'href',
-            next && next !== '/' ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email',
+            next && next !== '/'
+              ? '/verify-email/?next=' + encodeURIComponent(next)
+              : '/verify-email/',
           );
         }
         if (verifyPrompt) verifyPrompt.classList.remove('hidden');

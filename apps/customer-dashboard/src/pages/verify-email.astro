@@ -298,7 +298,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (unknownLoginLink) {
                 unknownLoginLink.setAttribute(
                   'href',
-                  rawNext ? '/login?next=' + encodeURIComponent(next) : '/login',
+                  rawNext ? '/login/?next=' + encodeURIComponent(next) : '/login/',
                 );
               }
               showBanner(
@@ -317,7 +317,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (unknownLoginLink) {
                 unknownLoginLink.setAttribute(
                   'href',
-                  rawNext ? '/login?next=' + encodeURIComponent(next) : '/login',
+                  rawNext ? '/login/?next=' + encodeURIComponent(next) : '/login/',
                 );
               }
               showBanner(

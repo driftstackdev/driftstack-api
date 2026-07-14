@@ -85,8 +85,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         const next = encodeURIComponent(here);
         const signinLink = root.querySelector('[data-link="signin"]');
         const signupLink = root.querySelector('[data-link="signup"]');
-        if (signinLink) signinLink.setAttribute('href', '/login?next=' + next);
-        if (signupLink) signupLink.setAttribute('href', '/signup?next=' + next);
+        if (signinLink) signinLink.setAttribute('href', '/login/?next=' + next);
+        if (signupLink) signupLink.setAttribute('href', '/signup/?next=' + next);
       } catch (_) {
         /* leave the bare /login + /signup fallbacks in place */
       }

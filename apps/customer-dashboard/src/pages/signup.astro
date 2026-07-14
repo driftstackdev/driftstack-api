@@ -228,13 +228,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (nextRaw && loginLink) {
         loginLink.setAttribute(
           'href',
-          '/login?next=' + encodeURIComponent(safeNextPath(nextRaw, window.location.origin)),
+          '/login/?next=' + encodeURIComponent(safeNextPath(nextRaw, window.location.origin)),
         );
       }
 
       function verificationUrl() {
         const next = safeNextPath(nextRaw, window.location.origin);
-        return nextRaw ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email';
+        return nextRaw ? '/verify-email/?next=' + encodeURIComponent(next) : '/verify-email/';
       }
 
       function showBanner(text) {

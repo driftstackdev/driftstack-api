@@ -278,7 +278,7 @@ describe('verify-email page — local integration', () => {
     );
     expect(
       window.document.querySelector('[data-link="verify-timeout-login"]')?.getAttribute('href'),
-    ).toBe('/login');
+    ).toBe('/login/');
 
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();

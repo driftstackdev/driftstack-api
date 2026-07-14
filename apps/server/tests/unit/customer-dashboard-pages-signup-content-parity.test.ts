@@ -79,16 +79,16 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
     expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
     expect(body).toMatch(/const nextRaw = params\.get\('next'\);/);
     expect(body).toMatch(
-      /function verificationUrl\(\) \{\s*\n?\s*const next = safeNextPath\(nextRaw, window\.location\.origin\);\s*\n?\s*return nextRaw \? '\/verify-email\?next=' \+ encodeURIComponent\(next\) : '\/verify-email';\s*\n?\s*\}/,
+      /function verificationUrl\(\) \{\s*\n?\s*const next = safeNextPath\(nextRaw, window\.location\.origin\);\s*\n?\s*return nextRaw \? '\/verify-email\/\?next=' \+ encodeURIComponent\(next\) : '\/verify-email\/';\s*\n?\s*\}/,
     );
     expect(body).toMatch(/window\.location\.href = verificationUrl\(\);/);
   });
 
-  it("V-269 next= preservation on /login fallback link: nextRaw → loginLink href becomes '/login?next=' + encodeURIComponent(safeNextPath(nextRaw, …)) — pinned so customers who click 'Already have an account? Sign in' from a deep-linked signup still hit their intended (same-origin) destination after sign-in (drift would lose the next= or reopen the open-redirect)", () => {
+  it("V-269 next= preservation on canonical /login/ fallback link — pinned so customers who click 'Already have an account? Sign in' from a deep-linked signup still hit their intended (same-origin) destination after sign-in", () => {
     expect(body).toMatch(/\/\/ V-269 — preserve \?next= when bouncing the user to \/login\./);
     expect(body).toMatch(/if \(nextRaw && loginLink\) \{/);
     expect(body).toMatch(
-      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
+      /'\/login\/\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );
   });
 

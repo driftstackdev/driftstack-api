@@ -40,7 +40,7 @@ describe('team invitation acceptance reliability', () => {
     expect(PAGE).toContain("authorization: 'Bearer ' + sessionToken");
     expect(PAGE).toContain('body: JSON.stringify({ token: token })');
     expect(PAGE).toContain("window.location.href = '/team/'");
-    expect(PAGE).toContain("'/login?next=' + next");
-    expect(PAGE).toContain("'/signup?next=' + next");
+    expect(PAGE).toContain("'/login/?next=' + next");
+    expect(PAGE).toContain("'/signup/?next=' + next");
   });
 });
