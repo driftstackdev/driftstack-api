@@ -113,11 +113,18 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
   });
 
   it('5-related-doc cluster: /api-reference + /docs/sdk-typescript-crypto-orders + /docs/webhooks + /docs/cost-monitoring + /docs/error-codes — pinned so the 5-related-doc navigation surface stays complete (drift to dropping /docs/error-codes would orphan the RFC-7807-type cross-reference from the typed-errors framing)', () => {
-    expect(body).toMatch(/<a href="\/api-reference">Full API reference<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/sdk-typescript-crypto-orders">SDK — crypto orders<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/webhooks">Webhooks<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/cost-monitoring">Cost monitoring<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/error-codes">Error codes<\/a>/);
+    const relatedDocs = [
+      ['/api-reference', 'Full API reference'],
+      ['/docs/sdk-typescript-crypto-orders', 'SDK — crypto orders'],
+      ['/docs/webhooks', 'Webhooks'],
+      ['/docs/cost-monitoring', 'Cost monitoring'],
+      ['/docs/error-codes', 'Error codes'],
+    ] as const;
+
+    for (const [path, label] of relatedDocs) {
+      expect(body).toContain(`<a href="${path}/">${label}</a>`);
+      expect(body).not.toContain(`<a href="${path}">${label}</a>`);
+    }
   });
 
   it('file exists at canonical path', () => {
