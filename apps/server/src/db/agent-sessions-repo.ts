@@ -7,8 +7,9 @@
 //   - jsonb transcript stores a versioned application-encrypted envelope and
 //     grows append-only via appendTranscript (full-row UPDATE rewrites the
 //     encrypted jsonb; OK at the expected per-session volume — a transcript
-//     with 100 messages is ~few KB jsonb). Legacy plaintext arrays remain
-//     readable and are converted on their next append.
+//     with 100 messages is ~few KB jsonb). Ordinary reads accept only the
+//     purpose/account/session-bound v2 envelope; bootstrap CAS-converts every
+//     plaintext/v1 row to v2 before the app starts serving.
 //   - debitTokens floors remaining at 0 (matches the in-memory
 //     `Math.max(0, ...)`); the CHECK constraint `remaining <= total`
 //     prevents the opposite drift.
@@ -30,7 +31,7 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
 import type { Database } from './client.js';
@@ -38,9 +39,15 @@ import { agentSessions, sessions } from './schema.js';
 import { profileSessionAdvisoryLockKey } from './profile-session-lock.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
 import {
-  encryptAgentTranscript,
+  AGENT_TRANSCRIPT_ENVELOPE_KIND,
   readAgentTranscript,
 } from '../services/agent-transcript-encryption.js';
+import {
+  AGENT_SESSION_TRANSCRIPT_ENVELOPE_KIND,
+  convertLegacyAgentSessionTranscript,
+  encryptAgentSessionTranscript,
+  readAgentSessionTranscript,
+} from '../services/agent-session-transcript-encryption.js';
 import {
   AgentSessionErrorEventSchema,
   type AgentSessionErrorEvent,
@@ -55,6 +62,14 @@ import {
 // anchor lookup only runs for a well-formed id (guards a hand-crafted cursor;
 // a non-matching value falls through to a first-page response).
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_TRANSCRIPT_MIGRATION_BATCH = 500;
+
+function transcriptIsNotV2(): SQL {
+  return sql`(
+    (${agentSessions.transcript}->>'kind') IS DISTINCT FROM ${AGENT_SESSION_TRANSCRIPT_ENVELOPE_KIND}
+    OR (${agentSessions.transcript}->>'version') IS DISTINCT FROM '2'
+  )`;
+}
 
 function readLastErrorEvent(value: unknown): AgentSessionErrorEvent | null {
   const parsed = AgentSessionErrorEventSchema.safeParse(value);
@@ -70,7 +85,10 @@ function rowToRecord(
     accountId: row.accountId,
     driftstackSessionId: row.driftstackSessionId,
     status: row.status as AgentSessionStatus,
-    transcript: readAgentTranscript(row.transcript, transcriptEncryptionKeyBase64),
+    transcript: readAgentSessionTranscript(row.transcript, transcriptEncryptionKeyBase64, {
+      accountId: row.accountId,
+      sessionId: row.id,
+    }),
     tokenBudgetTotal: row.tokenBudgetTotal,
     tokenBudgetRemaining: row.tokenBudgetRemaining,
     closedReason: row.closedReason,
@@ -116,7 +134,145 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     this.transcriptEncryptionKeyBase64 = options.transcriptEncryptionKeyBase64;
   }
 
+  private requireTranscriptEncryptionKey(): string {
+    if (this.transcriptEncryptionKeyBase64 === undefined) {
+      throw new Error('Agent transcript encryption key is unavailable.');
+    }
+    return this.transcriptEncryptionKeyBase64;
+  }
+
+  /**
+   * Authenticate the configured key before rewriting anything, then convert a
+   * bounded stable page of plaintext/v1 rows with exact-json compare-and-set.
+   * Ordinary repository reads never call this legacy path.
+   */
+  async migrateTranscriptEnvelopes(
+    limit = MAX_TRANSCRIPT_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TRANSCRIPT_MIGRATION_BATCH) {
+      throw new Error(
+        `Agent transcript migration limit must be an integer from 1 to ${MAX_TRANSCRIPT_MIGRATION_BATCH}.`,
+      );
+    }
+    const key = this.requireTranscriptEncryptionKey();
+
+    // Unknown/malformed objects must fail before any plaintext write. Exact v1
+    // and v2 objects are separately authenticated below; arrays are the only
+    // accepted plaintext legacy representation.
+    const [malformedObject] = await this.database.db
+      .select({ id: agentSessions.id })
+      .from(agentSessions)
+      .where(
+        sql`
+        jsonb_typeof(${agentSessions.transcript}) = 'object'
+        AND NOT (
+          (
+            (${agentSessions.transcript}->>'kind') IS NOT DISTINCT FROM ${AGENT_TRANSCRIPT_ENVELOPE_KIND}
+            AND (${agentSessions.transcript}->>'version') IS NOT DISTINCT FROM '1'
+          )
+          OR (
+            (${agentSessions.transcript}->>'kind') IS NOT DISTINCT FROM ${AGENT_SESSION_TRANSCRIPT_ENVELOPE_KIND}
+            AND (${agentSessions.transcript}->>'version') IS NOT DISTINCT FROM '2'
+          )
+        )
+      `,
+      )
+      .limit(1);
+    if (malformedObject !== undefined) {
+      throw new Error('Agent-session transcript storage contains a malformed envelope.');
+    }
+
+    // Production's first cutover has v1 envelopes but no v2 rows. Authenticate
+    // one v1 before converting any arrays so an incorrect operator key cannot
+    // partially rewrite plaintext under the wrong key.
+    const [v1Probe] = await this.database.db
+      .select({ transcript: agentSessions.transcript })
+      .from(agentSessions)
+      .where(
+        sql`
+        jsonb_typeof(${agentSessions.transcript}) = 'object'
+        AND (${agentSessions.transcript}->>'kind') IS NOT DISTINCT FROM ${AGENT_TRANSCRIPT_ENVELOPE_KIND}
+        AND (${agentSessions.transcript}->>'version') IS NOT DISTINCT FROM '1'
+      `,
+      )
+      .limit(1);
+    if (v1Probe !== undefined) readAgentTranscript(v1Probe.transcript, key);
+
+    // On successor boots, authenticate one already-bound envelope with its
+    // exact database identity before selecting the remaining legacy page.
+    const [v2Probe] = await this.database.db
+      .select({
+        id: agentSessions.id,
+        accountId: agentSessions.accountId,
+        transcript: agentSessions.transcript,
+      })
+      .from(agentSessions)
+      .where(
+        sql`
+        jsonb_typeof(${agentSessions.transcript}) = 'object'
+        AND (${agentSessions.transcript}->>'kind') IS NOT DISTINCT FROM ${AGENT_SESSION_TRANSCRIPT_ENVELOPE_KIND}
+        AND (${agentSessions.transcript}->>'version') IS NOT DISTINCT FROM '2'
+      `,
+      )
+      .limit(1);
+    if (v2Probe !== undefined) {
+      readAgentSessionTranscript(v2Probe.transcript, key, {
+        accountId: v2Probe.accountId,
+        sessionId: v2Probe.id,
+      });
+    }
+
+    const rows = await this.database.db
+      .select({
+        id: agentSessions.id,
+        accountId: agentSessions.accountId,
+        transcript: agentSessions.transcript,
+      })
+      .from(agentSessions)
+      .where(transcriptIsNotV2())
+      // Authenticate/convert encrypted legacy rows before plaintext arrays,
+      // then use immutable created/id identity for deterministic pagination.
+      .orderBy(
+        sql`CASE WHEN jsonb_typeof(${agentSessions.transcript}) = 'object' THEN 0 ELSE 1 END`,
+        asc(agentSessions.createdAt),
+        asc(agentSessions.id),
+      )
+      .limit(limit);
+
+    // Parse/decrypt the entire selected page before the first UPDATE. One bad
+    // legacy array/envelope therefore cannot leave a partially converted page.
+    const prepared = rows.map((row) => ({
+      row,
+      nextTranscript: convertLegacyAgentSessionTranscript(row.transcript, key, {
+        accountId: row.accountId,
+        sessionId: row.id,
+      }),
+    }));
+
+    let converted = 0;
+    for (const { row, nextTranscript } of prepared) {
+      const updated = await this.database.db
+        .update(agentSessions)
+        .set({ transcript: nextTranscript })
+        .where(
+          and(
+            eq(agentSessions.id, row.id),
+            sql`${agentSessions.transcript} IS NOT DISTINCT FROM ${JSON.stringify(row.transcript)}::jsonb`,
+          ),
+        )
+        .returning({ id: agentSessions.id });
+      if (updated.length === 1) converted += 1;
+    }
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
+      .from(agentSessions)
+      .where(transcriptIsNotV2());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
+  }
+
   async create(args: CreateAgentSessionArgs): Promise<AgentSessionRecord> {
+    const key = this.requireTranscriptEncryptionKey();
     const id = `agt_${randomUUID()}`;
     const now = this.clock();
     const inserted = await this.database.db
@@ -126,10 +282,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         accountId: args.accountId,
         driftstackSessionId: args.driftstackSessionId ?? null,
         status: 'active',
-        transcript:
-          this.transcriptEncryptionKeyBase64 !== undefined
-            ? encryptAgentTranscript([], this.transcriptEncryptionKeyBase64)
-            : [],
+        transcript: encryptAgentSessionTranscript([], key, {
+          accountId: args.accountId,
+          sessionId: id,
+        }),
         tokenBudgetTotal: args.tokenBudgetTotal,
         tokenBudgetRemaining: args.tokenBudgetTotal,
         // v2-#19 hardening columns — partial unique index on
@@ -156,7 +312,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     if (!row) {
       throw new Error('AgentSession insert returned no rows');
     }
-    return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+    return rowToRecord(row, key);
   }
 
   async createIfUnderActiveCap(
@@ -181,6 +337,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     // diverge, then both save back). A create WITHOUT a profile_id never takes the
     // profile lock or runs the check. The account cap lock is taken first, then the
     // profile lock (stable accountId-before-profileId acquisition order).
+    const key = this.requireTranscriptEncryptionKey();
     const id = `agt_${randomUUID()}`;
     const now = this.clock();
     return this.database.db.transaction(async (tx) => {
@@ -237,10 +394,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
           accountId: args.accountId,
           driftstackSessionId: args.driftstackSessionId ?? null,
           status: 'active',
-          transcript:
-            this.transcriptEncryptionKeyBase64 !== undefined
-              ? encryptAgentTranscript([], this.transcriptEncryptionKeyBase64)
-              : [],
+          transcript: encryptAgentSessionTranscript([], key, {
+            accountId: args.accountId,
+            sessionId: id,
+          }),
           tokenBudgetTotal: args.tokenBudgetTotal,
           tokenBudgetRemaining: args.tokenBudgetTotal,
           idempotencyKey: args.idempotencyKey ?? null,
@@ -256,7 +413,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       if (!row) {
         throw new Error('AgentSession insert returned no rows');
       }
-      return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+      return rowToRecord(row, key);
     });
   }
 
@@ -354,6 +511,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     // second blocks until the first commits, then appends to the up-to-date
     // transcript. (Was a bare read-modify-write whose later UPDATE clobbered
     // the earlier → a dropped transcript entry.)
+    const key = this.requireTranscriptEncryptionKey();
     const now = this.clock();
     return this.database.db.transaction(async (tx) => {
       const rows = await tx
@@ -366,18 +524,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       if (!existing) {
         throw new Error(`AgentSession ${id} not found`);
       }
-      if (this.transcriptEncryptionKeyBase64 === undefined) {
-        throw new Error('Agent transcript encryption key is unavailable.');
-      }
-      const currentTranscript = readAgentTranscript(
-        existing.transcript,
-        this.transcriptEncryptionKeyBase64,
-      );
+      const context = { accountId: existing.accountId, sessionId: existing.id };
+      const currentTranscript = readAgentSessionTranscript(existing.transcript, key, context);
       const nextTranscript = [...currentTranscript, entry];
-      const encryptedTranscript = encryptAgentTranscript(
-        nextTranscript,
-        this.transcriptEncryptionKeyBase64,
-      );
+      const encryptedTranscript = encryptAgentSessionTranscript(nextTranscript, key, context);
       const updated = await tx
         .update(agentSessions)
         .set({ transcript: encryptedTranscript, updatedAt: now })
@@ -387,7 +537,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       if (!row) {
         throw new Error(`AgentSession ${id} disappeared mid-transaction`);
       }
-      return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+      return rowToRecord(row, key);
     });
   }
 

@@ -2154,9 +2154,10 @@ export const agentSessions = pgTable(
     }),
     status: text('status').notNull(),
     // jsonb transcript — production stores a versioned AES-GCM envelope;
-    // legacy plaintext arrays remain readable and are encrypted on the next
-    // append. Drizzle returns jsonb as `unknown`; the repo validates both
-    // representations before exposing `ReadonlyArray<TranscriptEntry>`.
+    // bootstrap synchronously CAS-converts legacy plaintext/v1 rows into a
+    // purpose/account/session-bound v2 envelope before serving. Ordinary repo
+    // reads accept only v2; Drizzle returns jsonb as `unknown` and the repo
+    // validates/decrypts it before exposing `ReadonlyArray<TranscriptEntry>`.
     transcript: jsonb('transcript')
       .notNull()
       .default(sql`'[]'::jsonb`),

@@ -27090,3 +27090,39 @@ and in-memory behavior remain green. The expanded focused matrix passes 7 files
 and 64/64 tests against the reachable migrated PostgreSQL schema. Strict server
 source/test TypeScript, targeted lint/format, diff and whitespace checks are
 green.
+
+## V-644 — Live agent transcripts are encrypted and bound to their database row
+
+**Date:** 2026-07-14
+
+Production classification found 431 agent-session rows: 423 plaintext JSON
+arrays and eight generic v1 encrypted envelopes. Seven plaintext rows contained
+17 customer/model transcript entries; the other 416 arrays were empty. The
+repository converted a plaintext row only on its next append, so historical
+sessions could remain unencrypted indefinitely, and the generic v1 envelope
+authenticated bytes but not the owning account/session identity.
+
+Live agent sessions now use a distinct v2 envelope whose GCM authenticated data
+binds a dedicated purpose, account ID and session ID. Create and append require
+the encryption key before database work; ordinary reads accept only v2. Moving
+a valid envelope between rows, changing either context field, using the wrong
+key, tampering with ciphertext, or presenting a plaintext/v1 value after boot
+fails closed. Immutable recipe snapshots retain their separate legacy codec and
+cannot be confused with live-session storage.
+
+Bootstrap first rejects malformed objects and authenticates an existing v1
+envelope before any plaintext write, preventing a wrong configured key from
+partially rewriting production history. It also authenticates a v2 probe on
+successor boots, then parses/decrypts each bounded page before the first write
+and converts with an exact id+JSONB compare-and-set. Startup drains to zero
+legacy rows before serving, refuses no-progress or more than 10,000 scanned
+rows, does not change semantic `updated_at`, and logs aggregate counts only.
+
+The connected agent/bootstrap unit and invariant suite passes 44 files and
+657/657 tests. The real-PostgreSQL matrix passes 5 files and 19/19 tests,
+including wrong-key preflight with unchanged plaintext, exact owner-visible
+preservation, all-v2 storage, cross-row relocation refusal, missing-key
+pre-insert rejection, malformed-object preflight, concurrent append retention,
+and a blocked-update CAS race that preserves a newer transcript. Strict server
+source/test TypeScript, targeted lint/format, diff and whitespace checks are
+green.

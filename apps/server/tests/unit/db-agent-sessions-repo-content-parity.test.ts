@@ -33,10 +33,10 @@ describe('db/agent-sessions-repo content parity', () => {
     );
   });
 
-  it('4-key-shape rules framing pinned: text PK agt_<uuid> + encrypted jsonb transcript append-only via full-row UPDATE rewrite + debitTokens floors remaining at 0 with CHECK remaining<=total + closeWithReason atomic status+closed_reason flip. Legacy arrays convert on append; drift on any invariant would risk plaintext, lost appends, or budget breakage', () => {
+  it('4-key-shape rules framing pinned: text PK agt_<uuid> + record-bound v2 jsonb transcript append-only via full-row UPDATE rewrite + debitTokens floors remaining at 0 with CHECK remaining<=total + closeWithReason atomic status+closed_reason flip. Bootstrap drains legacy rows before serving; drift on any invariant would risk plaintext, relocation, lost appends, or budget breakage', () => {
     expect(body).toMatch(/\/\/\s+- text PK `agt_<uuid>` minted at create\./);
     expect(body).toMatch(
-      /\/\/\s+- jsonb transcript stores a versioned application-encrypted envelope and\s*\n?\s*\/\/\s+grows append-only via appendTranscript \(full-row UPDATE rewrites the\s*\n?\s*\/\/\s+encrypted jsonb; OK at the expected per-session volume — a transcript\s*\n?\s*\/\/\s+with 100 messages is ~few KB jsonb\)\. Legacy plaintext arrays remain\s*\n?\s*\/\/\s+readable and are converted on their next append\./,
+      /\/\/\s+- jsonb transcript stores a versioned application-encrypted envelope and\s*\n?\s*\/\/\s+grows append-only via appendTranscript \(full-row UPDATE rewrites the\s*\n?\s*\/\/\s+encrypted jsonb; OK at the expected per-session volume — a transcript\s*\n?\s*\/\/\s+with 100 messages is ~few KB jsonb\)\. Ordinary reads accept only the\s*\n?\s*\/\/\s+purpose\/account\/session-bound v2 envelope; bootstrap CAS-converts every\s*\n?\s*\/\/\s+plaintext\/v1 row to v2 before the app starts serving\./,
     );
     expect(body).toMatch(
       /\/\/\s+- debitTokens floors remaining at 0 \(matches the in-memory\s*\n?\s*\/\/\s+`Math\.max\(0, \.\.\.\)`\); the CHECK constraint `remaining <= total`\s*\n?\s*\/\/\s+prevents the opposite drift\./,
@@ -46,16 +46,23 @@ describe('db/agent-sessions-repo content parity', () => {
     );
   });
 
-  it('encrypts every production transcript write, converts legacy arrays under the existing FOR UPDATE lock, and fails closed when the key is unavailable', () => {
-    expect(body).toMatch(/encryptAgentTranscript\(\[\], this\.transcriptEncryptionKeyBase64\)/);
+  it('binds every production write/read to account+session, keeps ordinary reads v2-only, and CAS-migrates legacy rows before serving', () => {
     expect(body).toMatch(
-      /const currentTranscript = readAgentTranscript\(\s*existing\.transcript,\s*this\.transcriptEncryptionKeyBase64,\s*\);/,
+      /encryptAgentSessionTranscript\(\[\], key, \{\s*accountId: args\.accountId,\s*sessionId: id,\s*\}\)/,
     );
-    expect(body).toMatch(
-      /const encryptedTranscript = encryptAgentTranscript\(\s*nextTranscript,\s*this\.transcriptEncryptionKeyBase64,\s*\);/,
-    );
+    expect(body).toMatch(/readAgentSessionTranscript\(existing\.transcript, key, context\)/);
+    expect(body).toMatch(/encryptAgentSessionTranscript\(nextTranscript, key, context\)/);
     expect(body).toMatch(/\.set\(\{ transcript: encryptedTranscript, updatedAt: now \}\)/);
     expect(body).toMatch(/throw new Error\('Agent transcript encryption key is unavailable\.'\)/);
+    expect(body).toMatch(/async migrateTranscriptEnvelopes\(/);
+    expect(body).toMatch(/readAgentTranscript\(v1Probe\.transcript, key\)/);
+    expect(body).toMatch(/readAgentSessionTranscript\(v2Probe\.transcript, key,/);
+    expect(body).toMatch(/const prepared = rows\.map\(\(row\) => \(\{/);
+    expect(body).toMatch(
+      /\$\{agentSessions\.transcript\} IS NOT DISTINCT FROM \$\{JSON\.stringify\(row\.transcript\)\}::jsonb/,
+    );
+    expect(body).toMatch(/\.set\(\{ transcript: nextTranscript \}\)/);
+    expect(body).not.toMatch(/readAgentTranscript\(\s*existing\.transcript/);
   });
 
   it('Concurrency note framing pinned (race CLOSED): debitTokens AND appendTranscript run their read-modify-write inside a db.transaction() that SELECTs the row FOR UPDATE first (mirrors setAccountTier), so the row lock SERIALISES concurrent same-session debits/appends — no debit lost (no under-billing), no transcript entry dropped (no data loss). Pinned so the atomic FOR-UPDATE approach stays documented, the false "single statement … serialize at the row level" claim cannot return, AND the now-fixed code cannot silently regress to a bare read-modify-write without this pin failing.', () => {

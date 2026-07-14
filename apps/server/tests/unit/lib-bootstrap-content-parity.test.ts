@@ -73,6 +73,16 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it('authenticates and synchronously drains legacy agent transcripts to v2 before serving', () => {
+    expect(body).toMatch(/const MAX_AGENT_TRANSCRIPT_BOOT_MIGRATION_ROWS = 10_000;/);
+    expect(body).toMatch(/await agentSessionsRepo\.migrateTranscriptEnvelopes\(500\)/);
+    expect(body).toMatch(/while \(remaining > 0\);/);
+    expect(body).toMatch(/batch\.scanned === 0 \|\| batch\.converted === 0/);
+    expect(body).toMatch(/scanned >= MAX_AGENT_TRANSCRIPT_BOOT_MIGRATION_ROWS/);
+    expect(body).toMatch(/record-bound v2 before serving/);
+    expect(body).toMatch(/new writes fail closed/);
+  });
+
   it('wires recipe payload encryption, runs a bounded boot conversion, and drains legacy rows without overlapping', () => {
     expect(body).toMatch(
       /const recipesRepo = new DrizzleRecipesRepo\(dbHandle, \{[\s\S]*?payloadEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\);/,

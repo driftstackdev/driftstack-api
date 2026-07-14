@@ -31,6 +31,15 @@ const TranscriptEntrySchema = z
   .passthrough();
 const TranscriptSchema = z.array(TranscriptEntrySchema);
 
+/**
+ * Validate and normalize a decrypted/plaintext transcript value. Exported so
+ * record-bound stores can share the exact entry codec without accepting this
+ * legacy envelope format on their ordinary read path.
+ */
+export function parseAgentTranscript(value: unknown): ReadonlyArray<TranscriptEntry> {
+  return TranscriptSchema.parse(value);
+}
+
 export function encryptAgentTranscript(
   transcript: ReadonlyArray<TranscriptEntry>,
   encryptionKeyBase64: string,
@@ -48,7 +57,7 @@ export function readAgentTranscript(
   stored: unknown,
   encryptionKeyBase64: string | undefined,
 ): ReadonlyArray<TranscriptEntry> {
-  if (Array.isArray(stored)) return TranscriptSchema.parse(stored);
+  if (Array.isArray(stored)) return parseAgentTranscript(stored);
   if (!isEncryptedAgentTranscript(stored)) {
     throw new Error('Agent transcript storage is malformed.');
   }
@@ -59,7 +68,7 @@ export function readAgentTranscript(
     Buffer.from(stored.ciphertext, 'base64'),
     encryptionKeyBase64,
   );
-  return TranscriptSchema.parse(JSON.parse(plaintext) as unknown);
+  return parseAgentTranscript(JSON.parse(plaintext) as unknown);
 }
 
 export function isEncryptedAgentTranscript(value: unknown): value is EncryptedAgentTranscript {

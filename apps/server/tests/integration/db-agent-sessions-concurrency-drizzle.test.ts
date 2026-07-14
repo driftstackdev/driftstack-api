@@ -126,10 +126,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         await client`SELECT transcript::text AS transcript FROM agent_sessions WHERE id = ${session.id}`;
       expect(stored?.transcript).not.toContain('msg-A');
       expect(stored?.transcript).not.toContain('msg-B');
-      expect(stored?.transcript).toContain('driftstack.agent-transcript');
+      expect(stored?.transcript).toContain('driftstack.agent-session-transcript');
     });
 
-    it('legacy plaintext transcript arrays remain readable and convert to ciphertext on append', async () => {
+    it('legacy plaintext arrays fail ordinary reads, then migrate before append', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleAgentSessionsRepo(
@@ -144,6 +144,13 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const legacy = [{ at: 't0', role: 'user', body: 'legacy-secret' }];
       await client`UPDATE agent_sessions SET transcript = ${JSON.stringify(legacy)}::jsonb WHERE id = ${session.id}`;
 
+      await expect(repo.get(session.id)).rejects.toThrow(/not a v2/i);
+      await expect(
+        repo.appendTranscript(session.id, { at: 'blocked', role: 'agent', body: 'x' }),
+      ).rejects.toThrow(/not a v2/i);
+
+      const migrated = await repo.migrateTranscriptEnvelopes(500);
+      expect(migrated).toMatchObject({ converted: 1, remaining: 0 });
       const before = await repo.get(session.id);
       expect(before?.transcript).toEqual(legacy);
       await repo.appendTranscript(session.id, { at: 't1', role: 'agent', body: 'new-secret' });
@@ -153,7 +160,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         await client`SELECT transcript::text AS transcript FROM agent_sessions WHERE id = ${session.id}`;
       expect(stored?.transcript).not.toContain('legacy-secret');
       expect(stored?.transcript).not.toContain('new-secret');
-      expect(stored?.transcript).toContain('driftstack.agent-transcript');
+      expect(stored?.transcript).toContain('driftstack.agent-session-transcript');
     });
 
     it('pair-mode compare-and-set preserves the first state/mode winner (real Postgres)', async () => {

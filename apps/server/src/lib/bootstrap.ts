@@ -957,6 +957,39 @@ export async function createProductionDeps(
       ? { transcriptEncryptionKeyBase64: config.mfaEncryptionKey }
       : {}),
   });
+  if (config.mfaEncryptionKey !== undefined) {
+    const MAX_AGENT_TRANSCRIPT_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await agentSessionsRepo.migrateTranscriptEnvelopes(500);
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `Agent transcript migration made no progress with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_AGENT_TRANSCRIPT_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `Agent transcript migration exceeded the ${MAX_AGENT_TRANSCRIPT_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
+      logger.info(
+        { component: 'agent-session-transcript-encryption', scanned, converted, remaining },
+        'legacy agent-session transcripts migrated to record-bound v2 before serving',
+      );
+    }
+  } else {
+    logger.warn(
+      { component: 'agent-session-transcript-encryption' },
+      'MFA_ENCRYPTION_KEY not set — encrypted agent transcripts are unreadable and new writes fail closed',
+    );
+  }
   const agentTurnReceiptsRepo =
     config.mfaEncryptionKey === undefined
       ? undefined
