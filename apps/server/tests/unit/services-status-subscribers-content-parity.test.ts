@@ -71,8 +71,9 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
     );
     expect(body).toMatch(/const expiresAt = new Date\(now\.getTime\(\) \+ CONFIRM_TOKEN_TTL_MS\);/);
     expect(body).toMatch(
-      /const confirmLink = `\$\{this\.baseUrl\}\/subscribe\/confirm\?token=\$\{encodeURIComponent\(plaintext\)\}`;/,
+      /const confirmLink = `\$\{this\.baseUrl\}\/subscribe\/confirm\/\?token=\$\{encodeURIComponent\(plaintext\)\}`;/,
     );
+    expect(body).not.toMatch(/\/subscribe\/confirm\?token=/);
     expect(body).toMatch(
       /await this\.email\.sendStatusSubscriptionConfirmation\(\{\s*\n?\s*to: normalized,\s*\n?\s*confirmLink,\s*\n?\s*expiresAt,\s*\n?\s*\}\);/,
     );
@@ -97,6 +98,8 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
     expect(body).toMatch(
       /await this\.email\.sendStatusSubscriptionWelcome\(\{\s*\n?\s*to: email,\s*\n?\s*statusPageUrl: this\.baseUrl,\s*\n?\s*unsubscribeLink,\s*\n?\s*\}\);/,
     );
+    expect(body.match(/\/subscribe\/unsubscribe\/\?token=/g)).toHaveLength(2);
+    expect(body).not.toMatch(/\/subscribe\/unsubscribe\?token=/);
   });
 
   it('unsubscribe: NotFoundError on unknown/stale hash + atomic exact-hash transition', () => {
