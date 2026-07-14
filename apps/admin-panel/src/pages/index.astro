@@ -352,14 +352,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             <span
               aria-hidden="true"
               data-live-dot
-              class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+              class="inline-block h-2 w-2 rounded-full bg-amber-500"
             ></span>
-            <span data-live-status>Live · updated <span data-live-age>just now</span></span>
+            <span data-live-status>Waiting for live data</span>
+            <span data-live-age class="hidden"></span>
           </span>
           <button
             type="button"
             data-live-refresh
-            class="text-tk-accent hover:underline"
+            disabled
+            aria-disabled="true"
+            title="Available after staff sign-in."
+            class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
           >
             Refresh now
           </button>
@@ -410,12 +414,26 @@ const apiBaseUrl = resolveApiBaseUrl();
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl, tierOrder: TIER_ORDER, tierLabels: TIER_LABELS }}>
-    (function () {
+    (async function () {
+      if (document.readyState === 'loading') {
+        await new Promise((resolve) => {
+          document.addEventListener('DOMContentLoaded', resolve, { once: true });
+        });
+      }
       const root = document.querySelector('[data-page="admin-overview"]');
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const list = root.querySelector('[data-list="recent-audits"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveStatus = root.querySelector('[data-live-status]');
+      const ageEl = root.querySelector('[data-live-age]');
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      let token = '';
+      try {
+        token = localStorage.getItem('ds_web_session_token') || '';
+      } catch (_) {
+        token = '';
+      }
 
       function showBanner(text) {
         if (!banner) return;
@@ -425,6 +443,22 @@ const apiBaseUrl = resolveApiBaseUrl();
       function hideBanner() {
         if (!banner) return;
         banner.classList.add('hidden');
+      }
+      function setAuditLiveState(state, message) {
+        if (liveDot) {
+          const color =
+            state === 'success'
+              ? 'bg-emerald-500'
+              : state === 'error'
+                ? 'bg-red-500'
+                : 'bg-amber-500';
+          liveDot.className = 'inline-block h-2 w-2 rounded-full ' + color;
+        }
+        if (liveStatus) liveStatus.textContent = message;
+        if (ageEl) {
+          ageEl.classList.toggle('hidden', state !== 'success');
+          if (state === 'success') ageEl.textContent = '· updated just now';
+        }
       }
       function setText(field, text) {
         const el = root.querySelector('[data-field="' + field + '"]');
@@ -622,6 +656,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         showBanner('Sign in with a staff admin account to see live data.');
         if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
         return;
+      }
+      if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.setAttribute('aria-disabled', 'false');
+        refreshBtn.removeAttribute('title');
       }
 
       // 2026-05-22 — overview fetch extracted into a function so the
@@ -1310,10 +1349,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       // extracted so we can refresh it on a 30s timer + bind to the
       // "Refresh now" button. Each refresh updates `lastAuditFetch`
       // for the "Live · updated <N> ago" indicator.
-      let lastAuditFetch = Date.now();
+      let lastAuditFetch = null;
       function fetchAudit() {
-        const liveDot = root.querySelector('[data-live-dot]');
-        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        setAuditLiveState('loading', 'Loading live activity…');
         return authedFetch('/v1/admin/audit-log?limit=5')
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
@@ -1322,10 +1360,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((body) => {
             renderAudits(body.data || []);
             lastAuditFetch = Date.now();
-            if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+            setAuditLiveState('success', 'Live');
           })
           .catch((err) => {
-            if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+            setAuditLiveState('error', 'Live activity unavailable');
             renderAuditsUnavailable('Could not load recent admin activity. Refresh to try again.');
             throw err;
           });
@@ -1363,12 +1401,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       // so a transient overview-fetch failure doesn't break the
       // audit-feed indicator.
       let refreshAllInFlight = false;
-      const refreshBtn = root.querySelector('[data-live-refresh]');
       function refreshAll() {
         if (refreshAllInFlight) return Promise.resolve();
         refreshAllInFlight = true;
         if (refreshBtn) {
           refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-disabled', 'true');
           refreshBtn.setAttribute('aria-busy', 'true');
           refreshBtn.textContent = 'Refreshing…';
         }
@@ -1384,6 +1422,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           refreshAllInFlight = false;
           if (refreshBtn) {
             refreshBtn.disabled = false;
+            refreshBtn.setAttribute('aria-disabled', 'false');
             refreshBtn.removeAttribute('aria-busy');
             refreshBtn.textContent = 'Refresh now';
           }
@@ -1392,15 +1431,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);
       setInterval(refreshAll, 30_000);
       function fmtAge(ms) {
+        if (!ms) return '';
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
         if (s < 60) return s.toString() + 's ago';
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
-      const ageEl = root.querySelector('[data-live-age]');
       setInterval(() => {
-        if (ageEl) ageEl.textContent = fmtAge(lastAuditFetch);
+        if (ageEl && lastAuditFetch) {
+          ageEl.textContent = '· updated ' + fmtAge(lastAuditFetch);
+        }
       }, 5_000);
     })();
   </script>

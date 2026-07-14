@@ -89,7 +89,9 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
   });
 
   it("Token storage key 'ds_web_session_token' + authedFetch helper: apiBaseUrl + path + 'authorization: Bearer ' + credentials:'include' — pinned so the customer-dashboard ↔ admin-panel token-storage key stays in sync and the credentials-include flag carries the session cookie (required for V-269 dual-cookie session model on cross-origin admin requests)", () => {
-    expect(body).toMatch(/const token = localStorage\.getItem\('ds_web_session_token'\);/);
+    expect(body).toMatch(
+      /let token = '';\s*\n?\s*try \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\) \|\| '';\s*\n?\s*\} catch \(_\) \{\s*\n?\s*token = '';/,
+    );
     // 2026-06-05: authedFetch gained an optional `init` (so the owner pricing
     // PATCH can issue a non-GET) — it still injects the bearer + credentials.
     // Pinned as discrete facts rather than a brittle full-body regex.
@@ -98,6 +100,38 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toContain("credentials: 'include'");
     expect(body).toMatch(/\.driftstackFetchWithDeadline\(\s*apiBaseUrl \+ path,/);
     expect(body).toMatch(/15_000,/);
+  });
+
+  it('starts recent-activity freshness neutral and keeps manual refresh inert before staff identity is available', () => {
+    expect(body).toContain('data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-age class="hidden"/);
+    expect(body).toMatch(
+      /data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"\s*\n?\s*title="Available after staff sign-in\."/,
+    );
+    expect(body).not.toMatch(/data-live-dot[\s\S]{0,120}bg-emerald-500/);
+    expect(body).not.toContain('Live · updated <span data-live-age>just now</span>');
+  });
+
+  it('waits for AdminLayout SSO handoff before acquiring token authority or starting overview reads', () => {
+    expect(body).toMatch(
+      /\(async function \(\) \{\s*\n?\s*if \(document\.readyState === 'loading'\) \{\s*\n?\s*await new Promise\(\(resolve\) => \{\s*\n?\s*document\.addEventListener\('DOMContentLoaded', resolve, \{ once: true \}\);/,
+    );
+    expect(body.indexOf("localStorage.getItem('ds_web_session_token')")).toBeGreaterThan(
+      body.indexOf("document.addEventListener('DOMContentLoaded', resolve"),
+    );
+  });
+
+  it('publishes activity freshness only after the audit read succeeds and visibly revokes it on failure', () => {
+    expect(body).toMatch(
+      /function fetchAudit\(\) \{\s*\n?\s*setAuditLiveState\('loading', 'Loading live activity…'\);/,
+    );
+    expect(body).toMatch(
+      /renderAudits\(body\.data \|\| \[\]\);\s*\n?\s*lastAuditFetch = Date\.now\(\);\s*\n?\s*setAuditLiveState\('success', 'Live'\);/,
+    );
+    expect(body).toMatch(
+      /\.catch\(\(err\) => \{\s*\n?\s*setAuditLiveState\('error', 'Live activity unavailable'\);\s*\n?\s*renderAuditsUnavailable\('Could not load recent admin activity\. Refresh to try again\.'\);/,
+    );
+    expect(body).toContain('let lastAuditFetch = null;');
   });
 
   it("Endpoint contract: GET /v1/admin/overview reads body.accounts.{active,suspended,total} + body.webhooks.dlq_depth into the live tiles + GET /v1/admin/audit-log?limit=5 reads body.data[] into the recent-activity list — pinned so the field names match the server response shape (drift to body.active_accounts or body.dlq would silently zero out the tile). Slice 136 added a 'of N total' annotation under the Active-accounts tile, surfacing the V-515 server-returned `body.accounts.total` field (with a defensive a+s+d fallback if total is missing)", () => {
