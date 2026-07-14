@@ -109,10 +109,11 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     );
   });
 
-  it('No-token guard: hard-redirect to /login?return_to=<current path> (2026-05-19) — pinned so unauthed visitors never see the SSG placeholder UI in prod (drift to a banner-over-placeholder would surface mock UI as broken)', () => {
+  it('No-token guard: canonical /login/?next=<encoded current path> preserves the deep link through login and keeps unauthed visitors away from the SSG placeholder UI', () => {
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*\/\/ 2026-05-19 — dashboard hard-redirects to \/login when there's\s*\n?\s*\/\/ no session token,[\s\S]*?const ret = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\?return_to=' \+ ret\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{\s*\n?\s*\/\/ 2026-05-19 — dashboard hard-redirects to \/login when there's\s*\n?\s*\/\/ no session token,[\s\S]*?const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\/\?next=' \+ next\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
+    expect(body).not.toContain('/login?return_to=');
   });
 
   it('file exists at canonical path', () => {

@@ -95,7 +95,7 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
 
   it('CRITICAL forgot-password back-to-login link pinned. Drift would leave users stuck on the success screen with no easy way back.', () => {
     const f = read(FORGOT);
-    expect(f).toMatch(/Remembered it\? <a\s*\n\s+href="\/login"/);
+    expect(f).toMatch(/Remembered it\? <a\s*\n\s+href="\/login\/"/);
   });
 
   // --- welcome.astro ----------------------------------------------
@@ -116,7 +116,7 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
 
     // Paid-tier card.
     expect(w).toMatch(/<h2 class="text-lg font-semibold text-tk-ink">Pick a tier<\/h2>/);
-    expect(w).toMatch(/<a href="\/select-tier" class="btn-secondary/);
+    expect(w).toMatch(/<a href="\/select-tier\/" class="btn-secondary/);
   });
 
   it('CRITICAL welcome 3-step what-happens-next ordered list pinned. The 3 steps (Stripe payment + get the desktop app + create an API key) tell customers what to expect post-tier-select (2026-07-02 account-portal IA — step 2 funnels into the desktop app instead of creating a session in the web dashboard).', () => {
@@ -134,15 +134,16 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     );
   });
 
-  it('CRITICAL welcome defensive redirect to /signup when no ds_web_session_token. The redirect prevents direct-nav to /welcome without an active session (would confuse the onboarding flow). Drift would let unauthenticated users hit /welcome.', () => {
+  it('CRITICAL welcome defensive redirect to canonical /signup/ when no ds_web_session_token. The redirect prevents direct-nav to /welcome without an active session and avoids a static-host redirect hop.', () => {
     const w = read(WELCOME);
 
     expect(w).toMatch(
-      /Defensive redirect: if user lands here without a token, send to\s*\n\s+\/\/ \/signup\. \(Direct nav to \/welcome shouldn't normally happen\.\)/,
+      /Defensive redirect: if user lands here without a token, send to\s*\n\s+\/\/ \/signup\/\. \(Direct nav to \/welcome shouldn't normally happen\.\)/,
     );
     expect(w).toMatch(
-      /const token = localStorage\.getItem\('ds_web_session_token'\);\s*\n\s+if \(!token\) window\.location\.replace\('\/signup'\)/,
+      /token = localStorage\.getItem\('ds_web_session_token'\);[\s\S]*?if \(!token\) window\.location\.replace\('\/signup\/'\)/,
     );
+    expect(w).not.toContain("window.location.replace('/signup')");
   });
 
   it('CRITICAL welcome canonical positioning pinned (W501 noob-friendly + honesty pass): "Driftstack gives you an iPhone Safari browser running in the cloud — every website it visits sees a genuine iPhone, not a bot." Plain-language for the new-user screen; honesty pass preserved — says "an iPhone Safari browser" (NOT "real iPhone Safari" — we run WebKit built from source, not the Safari binary).', () => {

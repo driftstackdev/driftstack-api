@@ -483,8 +483,8 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         // live account data" banner over the page's placeholder
         // mock-data UI. Mock-data UI is a development affordance only;
         // production-side it reads as broken to unauthed visitors.
-        const ret = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.replace('/login?return_to=' + ret);
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.replace('/login/?next=' + next);
         return;
       }
       // Fleet v2 (2026-07-02) — post-checkout landing. /select-tier's

@@ -78,12 +78,13 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
     );
   });
 
-  it('CRITICAL no-token hard-redirect framing pinned (2026-05-19 dashboard polish replaced the inline banner-over-placeholder with a /login?return_to=… hard-redirect — production-side the SSG placeholder reads as broken to unauthed visitors).', () => {
+  it('CRITICAL no-token hard-redirect framing pinned (canonical /login/?next= preserves the encoded deep link through the login page while avoiding a static-host redirect hop).', () => {
     const i = read(INDEX);
 
     expect(i).toMatch(
-      /if \(!token\) \{[\s\S]*?const ret = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\?return_to=' \+ ret\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{[\s\S]*?const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\/\?next=' \+ next\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
+    expect(i).not.toContain('/login?return_to=');
   });
 
   it('CRITICAL escapeHtml() XSS guard pinned for session row interpolation. Drift to dropping would let a malicious session id (e.g. via API-key compromise) inject HTML into the dashboard.', () => {

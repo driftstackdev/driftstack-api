@@ -73,10 +73,11 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     );
   });
 
-  it('defensive redirect: no ds_web_session_token → /signup (no orphan landings)', () => {
+  it('defensive redirect: no ds_web_session_token → canonical /signup/ (no orphan landings or static-host redirect hop)', () => {
     expect(body).toMatch(
-      /let token = null;\s*try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;\s*\}\s*if \(!token\) window\.location\.replace\('\/signup'\);/,
+      /let token = null;\s*try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;\s*\}\s*if \(!token\) window\.location\.replace\('\/signup\/'\);/,
     );
+    expect(body).not.toContain("window.location.replace('/signup')");
   });
 
   it('CTAs go to the dashboard home (free start) + /select-tier (upgrade) — destinations exist (2026-07-02: free CTA moved off the deleted /first-session)', () => {
