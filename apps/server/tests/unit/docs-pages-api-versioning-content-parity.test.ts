@@ -201,13 +201,16 @@ describe('W772 docs /api/versioning content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Webhook event catalog: \[`docs\.driftstack\.dev\/webhooks\/events`\]\(\/webhooks\/events\)/,
+      /Webhook event catalog: \[`docs\.driftstack\.dev\/webhooks\/events`\]\(\/webhooks\/events\/\)/,
     );
     expect(p).toMatch(
-      /Rate-limit policy: \[`docs\.driftstack\.dev\/reference\/rate-limits`\]\(\/reference\/rate-limits\)/,
+      /Rate-limit policy: \[`docs\.driftstack\.dev\/reference\/rate-limits`\]\(\/reference\/rate-limits\/\)/,
     );
     expect(p).toMatch(
-      /Error handling: \[`docs\.driftstack\.dev\/sdk\/error-handling`\]\(\/sdk\/error-handling\)/,
+      /Error handling: \[`docs\.driftstack\.dev\/sdk\/error-handling`\]\(\/sdk\/error-handling\/\)/,
+    );
+    expect(p).not.toMatch(
+      /\]\(\/(?:webhooks\/events|reference\/rate-limits|sdk\/error-handling)\)/,
     );
     expect(p).toMatch(/`api\.driftstack\.dev\/openapi\.json`/);
     expect(p).toMatch(/Scalar UI at `api\.driftstack\.dev\/docs`/);
