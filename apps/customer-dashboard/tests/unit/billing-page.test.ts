@@ -27,7 +27,8 @@ interface MockFetchCall {
 }
 
 interface SetUpOpts {
-  token?: string;
+  token?: string | null;
+  storageDenied?: boolean;
   portalTimeoutImmediately?: boolean;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
@@ -35,7 +36,11 @@ interface SetUpOpts {
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -59,9 +64,21 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve(opts.route(call));
   };
-  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== undefined && opts.token !== null) {
+    window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
+  let hydrated = 0;
   // @ts-expect-error — injected by DashboardLayout
-  window.dashboardHydrated = () => {};
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   // @ts-expect-error — injected by DashboardLayout
   window.driftstackActAsHeaders = () => ({});
   if (opts.portalTimeoutImmediately) {
@@ -82,7 +99,11 @@ function setUpDom(
   installDashboardDeadline(window);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function text(window: JSDOM['window'], selector: string): string {
@@ -113,8 +134,12 @@ afterEach(() => {
 });
 
 describe('customer-dashboard Billing (billing.astro) behaviour', () => {
-  it('no session token: shows the sign-in banner and skips the /v1/billing fetch', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+  it.each([
+    ['signed out', {}],
+    ['storage denied', { storageDenied: true }],
+  ])('%s: shows sign-in, skips network, and releases hydration', async (_label, auth) => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
+      ...auth,
       route: () => {
         throw new Error('must not fetch when unauthenticated');
       },
@@ -122,8 +147,15 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     win = window;
     await flush();
     expect(fetchCalls.length).toBe(0);
+    expect(hydratedCount()).toBe(1);
     expect(isHidden(window, '[data-banner]')).toBe(false);
     expect(text(window, '[data-banner]')).toContain('Sign in to see live billing state');
+    expect(
+      (window.document.querySelector('[data-action="portal"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (window.document.querySelector('[data-action="cancel"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('active auto-renewing subscription: renders tier label, renew summary, status badge, cancel button shown', async () => {

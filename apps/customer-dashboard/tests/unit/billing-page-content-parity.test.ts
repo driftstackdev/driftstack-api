@@ -99,11 +99,16 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     expect(body).toContain('ds_web_session_token');
+    expect(body).toMatch(/try\s*\{\s*return localStorage\.getItem\('ds_web_session_token'\);/);
+    expect(body).toMatch(/catch\s*\{\s*return null;/);
+    expect(body).toMatch(
+      /if \(!token\)[\s\S]*?showBanner\('Sign in to see live billing state\.'\)[\s\S]*?window\.dashboardHydrated\(\);[\s\S]*?return;/,
+    );
   });
 
   it('cancel-subscription button hidden when cancel_at_period_end (avoid double-cancel)', () => {
     expect(body).toMatch(
-      /MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION\.cancel_at_period_end \? '' : 'hidden'/,
+      /if \(sub\.cancel_at_period_end\) cancelBtn\.classList\.add\('hidden'\);\s*else cancelBtn\.classList\.remove\('hidden'\);/,
     );
   });
 

@@ -196,7 +196,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       const root = document.querySelector('[data-page="billing"]');
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const token = (() => {
+        try {
+          return localStorage.getItem('ds_web_session_token');
+        } catch {
+          return null;
+        }
+      })();
 
       function showBanner(text) {
         if (!banner) return;
@@ -380,6 +386,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           cryptoEmpty.classList.remove('hidden');
         }
         showBanner('Sign in to see live billing state.');
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
         return;
       }
 

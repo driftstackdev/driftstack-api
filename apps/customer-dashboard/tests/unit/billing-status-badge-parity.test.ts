@@ -4,8 +4,8 @@
 // that status (e.g. a `past_due` row paints in default colour).
 //
 // The page also uses one "virtual" status — 'no_subscription' —
-// for the case where MOCK_SUBSCRIPTION (or the live billing
-// response) carries no subscription object. That's deliberate and
+// for the neutral SSR state and when the live billing response carries
+// no subscription object. That's deliberate and
 // is allowed to coexist with the schema values; the test pins
 // that exception explicitly so the cause is documented.
 
@@ -64,8 +64,9 @@ describe('W344.B /billing STATUS_BADGE_CLASS ↔ SubscriptionStatusSchema parity
     expect(block![1]!).toMatch(/incomplete:\s*'[^']*tk-accent[^']*'/);
   });
 
-  it("page falls back to 'no_subscription' when MOCK_SUBSCRIPTION is null", () => {
-    expect(page).toMatch(/MOCK_SUBSCRIPTION\?\.status\s*\?\?\s*'no_subscription'/);
+  it("page uses 'no_subscription' for neutral SSR and live empty billing", () => {
+    expect(page).toMatch(/STATUS_BADGE_CLASS\.no_subscription/);
+    expect(page).toMatch(/setStatusBadge\('no subscription', 'no_subscription'\)/);
   });
 
   it("page narrative pins the 'Stripe portal' redirect framing for payment changes", () => {
