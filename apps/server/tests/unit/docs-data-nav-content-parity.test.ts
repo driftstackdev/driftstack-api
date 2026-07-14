@@ -180,7 +180,7 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  // S22.4 — the 24 resource entries became multi-line objects carrying
+  // S22.4 — the resource entries are multi-line objects carrying
   // `children`, so the three grouped-order pins below extract the ordered
   // TOP-LEVEL hrefs of the API-reference section (children anchors all
   // contain '#' and are filtered out) instead of regexing single-line
@@ -193,10 +193,11 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     .map((m) => m[1]!)
     .filter((h) => !h.includes('#'));
 
-  it('API reference: 26 top-level entries in the S22.2 grouped order (overview pair → core automation resources → account + access control → billing + spend → remaining surfaces), group comments intact', () => {
+  it('API reference: 27 top-level entries in grouped order, including the public archetype catalog', () => {
     expect(apiTopHrefs).toEqual([
       '/api/',
       '/api/versioning/',
+      '/api/archetypes/',
       '/api/sessions/',
       '/api/agent-sessions/',
       '/api/recipes/',
@@ -232,10 +233,11 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     }
   });
 
-  it('API reference labels pinned (plain-words rule; page slugs frozen): overview pair + the 24 resource labels', () => {
+  it('API reference labels pinned (plain-words rule; page slugs frozen)', () => {
     for (const [href, label] of [
       ['/api/', 'API overview'],
       ['/api/versioning/', 'Versioning policy'],
+      ['/api/archetypes/', 'Archetypes'],
       ['/api/sessions/', 'Sessions'],
       ['/api/agent-sessions/', 'Agent sessions'],
       ['/api/recipes/', 'Recipes'],
