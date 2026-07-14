@@ -13,7 +13,7 @@
 //   • Default fallback dot: bg-slate-300 (slate-300 = 'checking…' /
 //     'unknown' / fetch-error).
 //   • https://status.driftstack.dev anchor with noopener noreferrer
-//     + target=_blank + aria-label='Platform status'.
+//     + target=_blank + honest dynamic dot-only aria-label.
 //   • 4-state applyState: operational (emerald-500 + 'All systems
 //     operational') / degraded (amber-500 + 'Degraded performance') /
 //     major_outage (red-500 + 'Major outage') / unknown-default
@@ -59,15 +59,16 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(/const \{ className = '', withLabel = true \} = Astro\.props;/);
   });
 
-  it('apiBaseUrl + status.driftstack.dev anchor framing pinned: \'const apiBaseUrl = "https://api.driftstack.dev"\' + a href="https://status.driftstack.dev" + target="_blank" + rel="noopener noreferrer" + aria-label="Platform status" — pinned so the production API base URL + status.driftstack.dev external-link + noopener/noreferrer safety + aria-label commitment survives', () => {
+  it('apiBaseUrl + status.driftstack.dev anchor framing pinned with honest dot-only checking label and external-link safety', () => {
     expect(body).toMatch(/const apiBaseUrl = 'https:\/\/api\.driftstack\.dev';/);
     expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"/);
     expect(body).toMatch(/target="_blank"/);
     expect(body).toMatch(/rel="noopener noreferrer"/);
     // S17 2026-07-04 (Lighthouse label-content-name-mismatch): the labeled
     // variant's VISIBLE text is its accessible name; the static aria-label
-    // applies only to the dot-only variant (withLabel=false).
-    expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status'\}/);
+    // applies only to the dot-only variant (withLabel=false), where it starts
+    // with the same checking state as the visible variant.
+    expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status: checking'\}/);
   });
 
   it("Initial-render dot + 'checking…' label framing pinned: 'driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300' + aria-hidden=\"true\" + '<span class=\"driftstack-status-label\">checking…</span>' (withLabel ? render : null) — pinned so the initial slate-300 dot + checking… loading-state label + aria-hidden-on-dot + withLabel-conditional commitment survives", () => {
@@ -76,7 +77,7 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     );
     expect(body).toMatch(/aria-hidden="true"/);
     expect(body).toMatch(
-      /\{withLabel \? <span class="driftstack-status-label">checking…<\/span> : null\}/,
+      /\{withLabel \? <span class="driftstack-status-label" aria-live="polite">checking…<\/span> : null\}/,
     );
   });
 
@@ -93,6 +94,13 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(/case 'unknown':\s*\n?\s*default:/);
     expect(body).toMatch(/dot\.classList\.add\('bg-slate-300'\);/);
     expect(body).toMatch(/if \(label\) label\.textContent = 'Status unavailable';/);
+    expect(body).toMatch(/let accessibleState = 'Status unavailable';/);
+    expect(body).toMatch(/accessibleState = 'All systems operational';/);
+    expect(body).toMatch(/accessibleState = 'Degraded performance';/);
+    expect(body).toMatch(/accessibleState = 'Major outage';/);
+    expect(body).toMatch(
+      /if \(!label\) badge\.setAttribute\('aria-label', 'Platform status: ' \+ accessibleState\);/,
+    );
   });
 
   it("Reset-color-classes-before-add framing pinned: 4-classList.remove (bg-slate-300, bg-emerald-500, bg-amber-500, bg-red-500) + '// Reset color classes.' comment — pinned so the reset-before-add pattern (prevents stale color classes from sticking) survives", () => {
@@ -102,7 +110,7 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     );
   });
 
-  it("4-second AbortController + fetch + then-chain framing pinned: '// 4-second hard timeout — a slow status endpoint shouldn't keep the badge spinning forever.' + 'const controller = new AbortController();' + 'const timeout = window.setTimeout(() => controller.abort(), 4000);' + 'fetch(apiBaseUrl + \"/v1/status\", { signal: controller.signal })' + '.then((r) => (r.ok ? r.json() : Promise.reject(new Error(\"HTTP \" + r.status))))' + 'window.clearTimeout(timeout)' on both success + catch + applyState(state) extraction from body.overall_status — pinned so the 4-second-hard-timeout + AbortController + body.overall_status extraction + clearTimeout-on-both-paths commitment survives", () => {
+  it('4-second AbortController + shared fetch chain + exact-once finally cleanup + body.overall_status extraction are pinned', () => {
     expect(body).toMatch(
       /\/\/ 4-second hard timeout — a slow status endpoint shouldn't keep\s*\n?\s*\/\/ the badge spinning forever\./,
     );
@@ -114,10 +122,13 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(
       /\.then\(\(r\) => \(r\.ok \? r\.json\(\) : Promise\.reject\(new Error\('HTTP ' \+ r\.status\)\)\)\)/,
     );
-    expect(body).toMatch(/window\.clearTimeout\(timeout\);/);
+    expect(body).toMatch(/\.finally\(\(\) => window\.clearTimeout\(timeout\)\);/);
     expect(body).toMatch(
-      /const state =\s*\n?\s*body && typeof body\.overall_status === 'string'\s*\n?\s*\? body\.overall_status\s*\n?\s*: 'unknown';/,
+      /body && typeof body\.overall_status === 'string' \? body\.overall_status : 'unknown'/,
     );
+    expect(body).toMatch(/const promiseKey = '__driftstackStatusStatePromise';/);
+    expect(body).toMatch(/if \(!window\[promiseKey\]\) \{/);
+    expect(body).toMatch(/window\[promiseKey\]\.then\(applyState\);/);
   });
 
   it("script is:inline + IIFE + early-return-if-no-badges framing pinned: '<script is:inline define:vars={{ apiBaseUrl }}>' + '(function () {' IIFE + 'const badges = document.querySelectorAll(\".driftstack-status-badge\")' + 'if (badges.length === 0) return;' — pinned so the inline-script + define:vars apiBaseUrl pass-through + IIFE-pattern + early-return-on-empty-NodeList commitment survives (drift to non-inline would let CSP block; drift to dropping early-return would error on pages without the badge)", () => {
