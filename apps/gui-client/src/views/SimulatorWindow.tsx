@@ -3055,7 +3055,7 @@ export function SimulatorWindow(): JSX.Element {
   // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
   // overlay (the founder keeps reporting streaming/latency issues and needs the
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
-  // clipboard write mirrors the address-bar copyUrl idiom (silent on failure).
+  // clipboard write mirrors the address-bar copyUrl recovery feedback.
   const [diagCopied, setDiagCopied] = useState(false);
   const [diagCopyFailed, setDiagCopyFailed] = useState(false);
   const copyDiagnostics = (): void => {
@@ -3081,12 +3081,7 @@ export function SimulatorWindow(): JSX.Element {
       setDiagCopyFailed(true);
       window.setTimeout(() => setDiagCopyFailed(false), 1600);
     };
-    const write = navigator.clipboard?.writeText(text);
-    if (write === undefined) {
-      flagFailed();
-      return;
-    }
-    void write.then(() => {
+    void writeClipboardText(text).then(() => {
       setDiagCopyFailed(false);
       setDiagCopied(true);
       window.setTimeout(() => setDiagCopied(false), 1200);

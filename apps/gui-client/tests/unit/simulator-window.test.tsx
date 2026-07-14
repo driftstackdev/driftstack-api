@@ -4,7 +4,7 @@
 // device). Mocks the livekit wrapper so no real WebRTC spins up in jsdom.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
@@ -276,6 +276,52 @@ describe('SimulatorWindow — floating iPhone', () => {
     fireEvent.click(panel?.querySelector('[data-component="sim-rail-diagnostics"]') as Element);
     expect(panel?.querySelector('[data-component="drawer-diagnostics"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Close drawer"]')).not.toBeNull();
+  });
+
+  it('reports a synchronous diagnostics clipboard failure and retries the exact snapshot', async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const throwingWrite = vi.fn(() => {
+      throw new Error('clipboard denied');
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: throwingWrite },
+      configurable: true,
+    });
+    try {
+      window.history.pushState(
+        {},
+        '',
+        '/?window=simulator&ws=wss://lk&token=tok&session=agt_diagnostics',
+      );
+      const { container } = render(
+        <RecordingsProvider>
+          <SimulatorWindow />
+        </RecordingsProvider>,
+      );
+      const drawer = container.querySelector('[data-component="simulator-drawer"]');
+      fireEvent.click(drawer?.querySelector('[data-component="sim-rail-diagnostics"]') as Element);
+      const copyButton = drawer?.querySelector('[data-action="copy-diagnostics"]') as Element;
+      fireEvent.click(copyButton);
+
+      await waitFor(() => expect(copyButton.textContent).toContain("Couldn't copy"));
+      expect(throwingWrite).toHaveBeenCalledTimes(1);
+      const attemptedSnapshot = throwingWrite.mock.calls[0]?.[0];
+      expect(attemptedSnapshot).toContain('session: agt_diagnostics');
+
+      const recoveredWrite = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: recoveredWrite },
+        configurable: true,
+      });
+      fireEvent.click(copyButton);
+
+      await waitFor(() => expect(recoveredWrite).toHaveBeenCalledWith(attemptedSnapshot));
+      expect(recoveredWrite).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(copyButton.textContent).toContain('Copied ✓'));
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else delete (navigator as Partial<Navigator>).clipboard;
+    }
   });
 
   it('the drawer rail persistently labels every section without relying on hover', () => {
