@@ -148,10 +148,11 @@ describe('W784 docs top-level index + 404 content parity', () => {
     );
   });
 
-  it("CRITICAL repo-docs/-tree fallback pinned. The 'The canonical source for anything not yet rendered here is the repository docs/ tree' wording matches W780 guides/index pre-launch in-repo cross-reference.", () => {
+  it('CRITICAL supported public contract + repository architecture/deployment cross-link pinned.', () => {
     const p = read(INDEX);
 
-    expect(p).toMatch(/The canonical source for anything not yet rendered here is the/);
+    expect(p).toMatch(/The public API reference in this site is the supported customer contract\./);
+    expect(p).toMatch(/The repository also contains architecture and deployment material in its/);
     expect(p).toMatch(
       /href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/tree\/main\/docs"/,
     );
@@ -167,11 +168,11 @@ describe('W784 docs top-level index + 404 content parity', () => {
     expect(p).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security|self-hosted)"/);
   });
 
-  it("CRITICAL support email + 'prioritized' framing pinned. Matches W780 guides/index support@driftstack.dev contact channel.", () => {
+  it('CRITICAL support email + account-specific-help framing pinned.', () => {
     const p = read(INDEX);
 
     expect(p).toMatch(/<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>/);
-    expect(p).toMatch(/if you need a specific\s*\n?\s+page prioritized\./);
+    expect(p).toMatch(/for account-specific help\./);
   });
 
   it('CRITICAL DocLayout used with title="Driftstack docs".', () => {
