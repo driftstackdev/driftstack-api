@@ -40,8 +40,9 @@ describe('W599 apps/docs foundation modules content parity', () => {
       /Reference \+ guides for the Driftstack API, SDKs, and self-hosted client\./,
     );
     expect(body).toMatch(/href="https:\/\/driftstack\.dev"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing\/"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security\/"/);
+    expect(body).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security)"/);
     expect(body).toMatch(/href="mailto:support@driftstack\.dev"/);
     expect(body).toMatch(/&copy; \{year\} Driftstack\./);
     expect(existsSync(FOOTER)).toBe(true);
