@@ -1,7 +1,7 @@
 // W240.A — drift-guard for /trust/compliance. The previous revision
 // linked the customer audit log at /v1/account/audit (404) via a
-// docs.driftstack.dev URL that may or may not exist. Pin both to
-// the real endpoint path + the /docs/audit-log reference.
+// docs.driftstack.dev URL that may or may not exist. Pin the current
+// dashboard + real API endpoint access paths.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,8 +24,10 @@ describe('W240.A trust/compliance doc parity', () => {
     expect(doc).not.toMatch(/\/v1\/account\/audit(?!-log)/);
   });
 
-  it('uses the /docs/audit-log reference, not the docs.driftstack.dev placeholder', () => {
-    expect(doc).toMatch(/\/docs\/audit-log/);
+  it('describes dashboard and API access without a placeholder docs link', () => {
+    expect(doc).toMatch(/available through the dashboard and/);
+    expect(doc).toMatch(/GET \/v1\/account\/audit-log/);
+    expect(doc).not.toMatch(/\/docs\/audit-log/);
     expect(doc).not.toMatch(/https:\/\/docs\.driftstack\.dev\/api\/audit/);
   });
 });
