@@ -342,6 +342,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (loginInFlight) return;
         if (oauthStartInFlight || mfaInFlight) return;
         banner.classList.add('hidden');
+        if (!canPersistWebSession()) {
+          showBanner(
+            'Enable browser site storage before signing in. No sign-in request was sent, so your entries are still here and you can retry after storage is available.',
+          );
+          return;
+        }
         loginInFlight = true;
         setSubmitting(true);
         setOauthButtonsDisabled(true);
@@ -390,6 +396,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             completeSession(body);
           })
           .catch((err) => {
+            if (err && err.sessionPersistenceFailure) {
+              showBanner(
+                'Sign-in succeeded, but this browser could not persist the session. Enable site storage, then sign in again.',
+              );
+              return;
+            }
             // Email-not-verified (403): surface the resend path instead of
             // a dead banner. Stash the entered email so /verify-email and
             // the resend action prefill it.
@@ -478,18 +490,51 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       // Shared session-completion path: plain login + MFA challenge both
       // land here with { session: { token } }.
-      function completeSession(body) {
-        const session = (body && body.session) || {};
-        if (session.token) {
-          localStorage.setItem('ds_web_session_token', session.token);
-          // audit w2flmiw48 #2 — a fresh session must not inherit the PREVIOUS user's
-          // per-session overrides (acting-as account + cached staff/team flags); on a
-          // shared browser that leaks User A's x-driftstack-account header + staff
-          // shortcut to User B until /account/me corrects it. Clear them on every login.
-          localStorage.removeItem('ds_act_as_account');
-          localStorage.removeItem('ds_is_team_user');
-          localStorage.removeItem('ds_is_staff_user');
+      function canPersistWebSession() {
+        const probeKey = 'ds_web_session_storage_probe';
+        try {
+          localStorage.setItem(probeKey, '1');
+          if (localStorage.getItem(probeKey) !== '1') return false;
+          localStorage.removeItem(probeKey);
+          return localStorage.getItem(probeKey) === null;
+        } catch (_) {
+          try {
+            localStorage.removeItem(probeKey);
+          } catch (_) {
+            // Storage is unavailable; there is no probe value to retain.
+          }
+          return false;
         }
+      }
+
+      function persistWebSession(body) {
+        const session = (body && body.session) || {};
+        if (typeof session.token !== 'string' || session.token.length === 0) {
+          throw Object.assign(new Error('Session token missing from sign-in response.'), {
+            sessionPersistenceFailure: true,
+          });
+        }
+        const staleKeys = ['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user'];
+        try {
+          staleKeys.forEach((key) => {
+            localStorage.removeItem(key);
+            if (localStorage.getItem(key) !== null) {
+              throw new Error('Previous session authority could not be cleared.');
+            }
+          });
+          localStorage.setItem('ds_web_session_token', session.token);
+          if (localStorage.getItem('ds_web_session_token') !== session.token) {
+            throw new Error('Session token could not be persisted.');
+          }
+        } catch (err) {
+          throw Object.assign(err instanceof Error ? err : new Error('Session persistence failed.'), {
+            sessionPersistenceFailure: true,
+          });
+        }
+      }
+
+      function completeSession(body) {
+        persistWebSession(body);
         // Honor ?next= round-trip; fall back to / for the typical
         // post-login landing.
         window.location.href = next ? next : '/';
@@ -508,6 +553,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       let mfaOutcomeUnknown = false;
 
       function startMfaChallenge(challengeToken) {
+        if (typeof challengeToken !== 'string' || challengeToken.length === 0) {
+          throw Object.assign(new Error('MFA challenge missing from sign-in response.'), {
+            sessionPersistenceFailure: true,
+          });
+        }
         mfaChallengeToken = challengeToken;
         mfaOutcomeUnknown = false;
         form.classList.add('hidden');
@@ -566,6 +616,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             return;
           }
+          if (!canPersistWebSession()) {
+            showBanner(
+              'Enable browser site storage before submitting this one-time MFA challenge. It has not been consumed, so you can retry after storage is available.',
+            );
+            return;
+          }
           mfaInFlight = true;
           setOauthButtonsDisabled(true);
           if (mfaSubmit) {
@@ -575,21 +631,32 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), MFA_REQUEST_TIMEOUT_MS);
+          let mfaAccepted = false;
           fetch(apiBaseUrl + '/v1/auth/mfa/challenge', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(payload),
             signal: controller.signal,
           })
-            .then((r) =>
-              r.ok
-                ? r.json()
-                : r
-                    .json()
-                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-            )
+            .then((r) => {
+              if (r.ok) {
+                mfaAccepted = true;
+                return r.json();
+              }
+              return r
+                .json()
+                .catch(() => ({}))
+                .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+            })
             .then((body) => completeSession(body))
             .catch((err) => {
+              if (mfaAccepted) {
+                recoverFromUnknownMfaOutcome();
+                showBanner(
+                  'Two-factor verification was accepted, but this browser could not finish the session. Do not submit this challenge or recovery code again. Enter your password below to start a fresh sign-in and MFA challenge.',
+                );
+                return;
+              }
               if (controller.signal.aborted) {
                 recoverFromUnknownMfaOutcome();
                 showBanner(

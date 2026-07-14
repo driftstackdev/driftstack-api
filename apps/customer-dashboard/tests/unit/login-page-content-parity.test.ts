@@ -47,7 +47,14 @@ describe('W369.B customer-dashboard /login page content parity', () => {
   });
 
   it('session-token persistence: localStorage key ds_web_session_token (matches signup convention)', () => {
+    expect(body).toContain('function canPersistWebSession()');
+    expect(body).toMatch(/localStorage\.getItem\(probeKey\) !== '1'/);
+    expect(body).toMatch(/localStorage\.getItem\(probeKey\) === null/);
+    expect(body).toContain('function persistWebSession(body)');
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
+    expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) !== session\.token/);
+    expect(body).toContain("['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user']");
+    expect(body.match(/if \(!canPersistWebSession\(\)\)/g)).toHaveLength(2);
   });
 
   it('password login has a real single-flight lease and bounded network deadline', () => {
@@ -91,6 +98,10 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/function recoverFromUnknownMfaOutcome\(\)/);
     expect(body).toMatch(/mfaChallengeToken = null/);
     expect(body).toMatch(/MFA sign-in outcome is unknown after the request timed out/);
+    expect(body).toMatch(/let mfaAccepted = false/);
+    expect(body).toMatch(/if \(r\.ok\) \{\s*mfaAccepted = true/);
+    expect(body).toMatch(/if \(mfaAccepted\) \{\s*recoverFromUnknownMfaOutcome\(\)/);
+    expect(body).toMatch(/Two-factor verification was accepted/);
   });
 
   it('verification resend has a real single-flight lease and bounded network deadline', () => {

@@ -34,6 +34,28 @@ interface SetUpOpts {
   requestTimeoutImmediately?: boolean;
   requestTimeoutOnCall?: number;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
+  storageFault?: 'deny-all' | 'drop-session-write';
+}
+
+function faultLocalStorage(window: JSDOM['window'], mode: 'deny-all' | 'drop-session-write'): void {
+  const storage = window.localStorage;
+  const proto = Object.getPrototypeOf(storage) as Storage;
+  const nativeGet = proto.getItem;
+  const nativeSet = proto.setItem;
+  const nativeRemove = proto.removeItem;
+  proto.getItem = function (key: string): string | null {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    return nativeGet.call(this, key);
+  };
+  proto.setItem = function (key: string, value: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    if (this === storage && mode === 'drop-session-write' && key === 'ds_web_session_token') return;
+    nativeSet.call(this, key, value);
+  };
+  proto.removeItem = function (key: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    nativeRemove.call(this, key);
+  };
 }
 
 function setUpDom(
@@ -75,6 +97,7 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  if (opts.storageFault) faultLocalStorage(window as JSDOM['window'], opts.storageFault);
   if (opts.requestTimeoutImmediately) {
     let requestTimerCount = 0;
     const nativeSetTimeout = window.setTimeout.bind(window);
@@ -140,6 +163,9 @@ describe('login page — local integration', () => {
       fetchPlan: [() => json({ session: { token: 'ds_web_THE_TOKEN' } })],
     });
     win = window;
+    window.localStorage.setItem('ds_act_as_account', 'acct_previous');
+    window.localStorage.setItem('ds_is_team_user', 'true');
+    window.localStorage.setItem('ds_is_staff_user', 'true');
     submitLogin(window, 'alice@example.com', 'hunter2');
     await flush();
     const post = fetchCalls.find((c) => /\/v1\/auth\/login$/.test(c.url));
@@ -149,6 +175,45 @@ describe('login page — local integration', () => {
       password: 'hunter2',
     });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_THE_TOKEN');
+    expect(window.localStorage.getItem('ds_act_as_account')).toBeNull();
+    expect(window.localStorage.getItem('ds_is_team_user')).toBeNull();
+    expect(window.localStorage.getItem('ds_is_staff_user')).toBeNull();
+  });
+
+  it('does not send credentials when persistent browser storage is unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      storageFault: 'deny-all',
+      fetchPlan: [() => json({ session: { token: 'must-not-be-issued' } })],
+    });
+    win = window;
+    submitLogin(window, 'alice@example.com', 'hunter2');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    const form = window.document.querySelector('[data-form="login"]') as HTMLFormElement;
+    expect((form.querySelector('input[name="email"]') as HTMLInputElement).value).toBe(
+      'alice@example.com',
+    );
+    expect((form.querySelector('input[name="password"]') as HTMLInputElement).value).toBe(
+      'hunter2',
+    );
+    expect(bannerText(window)).toMatch(/enable browser site storage.*no sign-in request was sent/i);
+  });
+
+  it('detects a silently discarded session and does not navigate as signed in', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      storageFault: 'drop-session-write',
+      fetchPlan: [() => json({ session: { token: 'lost-login-session' } })],
+    });
+    win = window;
+    submitLogin(window, 'alice@example.com', 'hunter2');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    expect(bannerText(window)).toMatch(
+      /sign-in succeeded.*could not persist the session.*enable site storage.*sign in again/i,
+    );
   });
 
   it('V-353d/W528 MFA-required branch: opens the MFA challenge form (login form hides), stores NO token yet, does not redirect', async () => {
@@ -187,6 +252,57 @@ describe('login page — local integration', () => {
       code: '123456',
     });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MFA_TOKEN');
+  });
+
+  it('does not consume an MFA challenge when storage becomes unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => json({ mfa_required: true, challenge_token: 'chal_retryable' })],
+    });
+    win = window;
+    submitLogin(window, 'mfa@example.com', 'pw');
+    await flush();
+    const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
+    const codeInput = window.document.querySelector('#login-mfa-code') as HTMLInputElement;
+    codeInput.value = '123456';
+    faultLocalStorage(window, 'deny-all');
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(mfaForm.classList.contains('hidden')).toBe(false);
+    expect(codeInput.value).toBe('123456');
+    expect(bannerText(window)).toMatch(
+      /enable browser site storage.*one-time MFA challenge.*has not been consumed/i,
+    );
+  });
+
+  it('locks an accepted MFA response whose session is missing and requires fresh sign-in', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () => json({ mfa_required: true, challenge_token: 'chal_accepted' }),
+        () => json({ via: 'totp' }),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'mfa@example.com', 'secret-password');
+    await flush();
+    const codeInput = window.document.querySelector('#login-mfa-code') as HTMLInputElement;
+    codeInput.value = '123456';
+    const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(mfaForm.classList.contains('hidden')).toBe(true);
+    const loginForm = window.document.querySelector('[data-form="login"]') as HTMLFormElement;
+    expect(loginForm.classList.contains('hidden')).toBe(false);
+    expect(codeInput.value).toBe('');
+    expect(bannerText(window)).toMatch(
+      /two-factor verification was accepted.*do not submit this challenge.*fresh sign-in/i,
+    );
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
   });
 
   it('makes an ambiguous MFA challenge timeout terminal and returns to fresh sign-in', async () => {
