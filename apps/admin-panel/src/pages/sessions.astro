@@ -532,7 +532,11 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         return Math.floor(s / 3600).toString() + 'h ago';
       }
       function start() {
-        token = localStorage.getItem('ds_web_session_token');
+        try {
+          token = localStorage.getItem('ds_web_session_token');
+        } catch {
+          token = null;
+        }
         if (!token) {
           renderSessionsUnavailable('Sign in with a staff admin account to see live sessions.');
           setLiveState('failed', 'Sign in for live data');

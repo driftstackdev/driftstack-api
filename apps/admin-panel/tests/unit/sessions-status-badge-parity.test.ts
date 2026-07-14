@@ -24,7 +24,7 @@ describe('W344.C admin /sessions STATUS_BADGE ↔ SessionStatusSchema parity', (
     (SessionStatusSchema._def as { values: readonly string[] }).values,
   );
 
-  const block = page.match(/STATUS_BADGE:[^={]*=?\s*\{([\s\S]*?)\};/);
+  const block = page.match(/const\s+STATUS_BADGE\s*=\s*\{([\s\S]*?)\};/);
   expect(block).not.toBeNull();
   const keys = [...block![1]!.matchAll(/^\s*([a-z_]+):\s*'[^']+',/gm)].map((m) => m[1]!).sort();
 
@@ -32,17 +32,11 @@ describe('W344.C admin /sessions STATUS_BADGE ↔ SessionStatusSchema parity', (
     expect(keys).toEqual([...statuses].sort());
   });
 
-  it('MockAdminSession.status union also matches SessionStatusSchema', () => {
-    // The TS interface explicitly enumerates the 5 statuses. Pin
-    // both the literal type-union and the union order doesn't
-    // matter (we sort).
-    const unionMatch = page.match(/status:\s*((?:'[a-z_]+'\s*\|\s*)*'[a-z_]+');/);
-    expect(unionMatch).not.toBeNull();
-    const union = unionMatch![1]!
-      .split('|')
-      .map((s) => s.trim().replace(/^'|'$/g, ''))
+  it('status filter options also match SessionStatusSchema', () => {
+    const options = [...page.matchAll(/<option value="([a-z_]+)">\1<\/option>/g)]
+      .map((match) => match[1]!)
       .sort();
-    expect(union).toEqual([...statuses].sort());
+    expect(options).toEqual([...statuses].sort());
   });
 
   it("'ready' uses emerald, 'errored' uses red, 'busy' uses blue (semantic colour pin)", () => {
@@ -63,11 +57,9 @@ describe('W344.C admin /sessions STATUS_BADGE ↔ SessionStatusSchema parity', (
     expect(page).toMatch(/Force-destroy is\s+the only mutation surfaced here/);
   });
 
-  it('page narrative cites the canonical iPhone 17 / iOS 18.7 / Safari 26.4 archetype', () => {
-    // V-LOCKED_ARCHETYPE drift guard: every mock row uses the
-    // single locked archetype id. If we ever rename the
-    // archetype, this catches the stale mock.
-    expect(page).toMatch(/iphone17_ios18_7_safari26_4/);
+  it('device labels derive from the registry instead of one hard-coded mock archetype', () => {
+    expect(page).toMatch(/ARCHETYPE_REGISTRY\.map/);
+    expect(page).toMatch(/archetypeDisplayLabel\(a\.id\)/);
   });
 
   it('admin endpoints surface: GET /v1/admin/sessions + POST /v1/admin/sessions/:id/destroy', () => {

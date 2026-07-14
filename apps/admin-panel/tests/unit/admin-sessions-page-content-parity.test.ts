@@ -10,8 +10,7 @@
 //     admin-force-actions.ts (separate route file).
 //   • Force-destroy audit action 'session.destroyed_by_admin'
 //     pinned ↔ the action emitted by the route handler.
-//   • Page-side mock archetype slug 'iphone17_ios18_7_safari26_4'
-//     pinned (matches LOCKED_ARCHETYPE_ID server-side).
+//   • Device labels derive from the complete archetype registry.
 //   • Filter wiring: status + account_id text input.
 //   • "Force-destroy is the only mutation surfaced here" framing
 //     pinned (intentional surface scope — replay/recording live
@@ -21,7 +20,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SessionStatusSchema, LOCKED_ARCHETYPE_ID } from '@driftstack/api-types';
+import { SessionStatusSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -64,9 +63,11 @@ describe('W361.C admin-panel /sessions page content parity', () => {
     expect(forceRoute).toContain("'session.destroyed_by_admin'");
   });
 
-  it('page-side mock archetype slug matches LOCKED_ARCHETYPE_ID server-side', () => {
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
-    expect(body).toContain("archetype: 'iphone17_ios18_7_safari26_4'");
+  it('device labels derive from the complete archetype registry', () => {
+    expect(body).toMatch(
+      /ARCHETYPE_REGISTRY\.map\(\(a\) => \[a\.id, archetypeDisplayLabel\(a\.id\)\]\)/,
+    );
+    expect(body).toMatch(/define:vars=\{\{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS \}\}/);
   });
 
   it('filter wiring: status select + account_id text input', () => {
@@ -83,16 +84,13 @@ describe('W361.C admin-panel /sessions page content parity', () => {
 
   it('localStorage key ds_web_session_token (admin-panel convention)', () => {
     expect(body).toContain('ds_web_session_token');
+    expect(body).toMatch(
+      /try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
+    );
   });
 
-  it('MockAdminSession.status type literal stays in sync with SessionStatusSchema', () => {
-    // The page-side mock interface declares the same union as the
-    // schema enum. A schema-side enum bump must also extend this
-    // type literal, otherwise the mock won't be assignable to
-    // future API responses + the table rows render unstyled.
-    expect(body).toMatch(
-      /status:\s*'creating'\s*\|\s*'ready'\s*\|\s*'busy'\s*\|\s*'destroyed'\s*\|\s*'errored'/,
-    );
+  it('live rows select their status badge from the schema-pinned map', () => {
+    expect(body).toMatch(/STATUS_BADGE\[s\.status\] \|\| ''/);
   });
 
   it('reconciles ambiguous force-destroy timeouts against the refreshed action state', () => {
