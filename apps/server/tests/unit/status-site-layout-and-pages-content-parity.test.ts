@@ -26,6 +26,30 @@ const PAGE_INDEX = resolve(REPO_ROOT, 'apps/status-site/src/pages/index.astro');
 const PAGE_SUB = resolve(REPO_ROOT, 'apps/status-site/src/pages/subscribe.astro');
 const PAGE_HIST = resolve(REPO_ROOT, 'apps/status-site/src/pages/history.astro');
 
+function hasStatusMetadataBoundary(source: string): boolean {
+  return (
+    /interface Props \{\s*title: string;\s*description\?: string;[\s\S]*?noindex\?: boolean;\s*\}/.test(
+      source,
+    ) &&
+    /description = 'Driftstack service status and incident updates\.',\s*noindex = false,/.test(
+      source,
+    ) &&
+    /<meta name="robots" content=\{noindex \? 'noindex,nofollow' : 'index,follow'\} \/>/.test(
+      source,
+    ) &&
+    /\{!noindex && canonicalUrl && <link rel="canonical" href=\{canonicalUrl\} \/>\}/.test(source)
+  );
+}
+
+function hasSafeStatusFetchBoundary(source: string): boolean {
+  return (
+    /fetchWithDeadline\(`\$\{API_BASE\}\/v1\/status\/incidents`, \{/.test(source) &&
+    /fetchWithDeadline\(R2_FALLBACK_URL, \{/.test(source) &&
+    /throw new Error\('status-feed-unavailable'\);/.test(source) &&
+    !/throw new Error\(`API \$\{/.test(source)
+  );
+}
+
 describe('W790 status-site src content parity bundle', () => {
   it('all 5 files exist at canonical paths', () => {
     expect(existsSync(LAYOUT)).toBe(true);
@@ -37,16 +61,22 @@ describe('W790 status-site src content parity bundle', () => {
 
   // ─── StatusLayout.astro ───────────────────────────────────────
 
-  it('CRITICAL StatusLayout Props shape pinned — title (string, required). Drift to a different shape would break each page.', () => {
+  it('CRITICAL StatusLayout Props and metadata boundary pinned — required title, optional description/noindex, canonical only on indexable pages.', () => {
     const p = read(LAYOUT);
 
-    expect(p).toMatch(/interface Props \{\s*\n\s+title: string;\s*\n\}/);
-  });
+    expect(hasStatusMetadataBoundary(p)).toBe(true);
+    expect(p).toMatch(/<meta property="og:title" content=\{title\} \/>/);
+    expect(p).toMatch(/<meta name="twitter:description" content=\{description\} \/>/);
 
-  it("CRITICAL StatusLayout robots:index,follow framing pinned. The 'index, follow' value is opposite of admin-panel (W789) — drift would either hide the public status page from search OR leak the admin to search.", () => {
-    const p = read(LAYOUT);
-
-    expect(p).toMatch(/<meta name="robots" content="index, follow" \/>/);
+    const alwaysIndexedMutant = p.replace(
+      "noindex ? 'noindex,nofollow' : 'index,follow'",
+      "'index,follow'",
+    );
+    const utilityCanonicalMutant = p.replace('!noindex && canonicalUrl', 'canonicalUrl');
+    expect(alwaysIndexedMutant).not.toBe(p);
+    expect(utilityCanonicalMutant).not.toBe(p);
+    expect(hasStatusMetadataBoundary(alwaysIndexedMutant)).toBe(false);
+    expect(hasStatusMetadataBoundary(utilityCanonicalMutant)).toBe(false);
   });
 
   it("CRITICAL StatusLayout brand-mark + 'Driftstack · status' header framing pinned. The wordmark + middle-dot + 'status' suffix is the canonical status-site branding.", () => {
@@ -73,7 +103,7 @@ describe('W790 status-site src content parity bundle', () => {
       /<a href="https:\/\/driftstack\.dev" class="text-ink-muted hover:text-ink-primary">\s*\n\s+driftstack\.dev\s*\n\s+<\/a>/,
     );
     expect(p).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-ink-primary">\s*\n\s+Privacy\s*\n\s+<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-ink-primary">\s*\n\s+Privacy\s*\n\s+<\/a>/,
     );
   });
 
@@ -133,15 +163,19 @@ describe('W790 status-site src content parity bundle', () => {
     expect(p).toMatch(/unknown: 'Status currently unavailable'/);
   });
 
-  it("CRITICAL index live-API-first then R2-snapshot fallback fetch chain pinned. The try/catch over API + try/catch over R2 + 'API <msg>; R2 fallback <msg>' combined-error framing matches V-295c2 dual-source design.", () => {
+  it('CRITICAL index live-API-first then R2-snapshot fallback is deadline-bounded and exposes only a stable public failure class.', () => {
     const p = read(PAGE_INDEX);
 
-    expect(p).toMatch(
-      /try \{\s*\n\s+const res = await fetch\(`\$\{API_BASE\}\/v1\/status\/incidents`/,
-    );
+    expect(hasSafeStatusFetchBoundary(p)).toBe(true);
     expect(p).toMatch(/return \{ source: 'live', body: await res\.json\(\) \};/);
     expect(p).toMatch(/return \{ source: 'snapshot', body: await r2\.json\(\) \};/);
-    expect(p).toMatch(/throw new Error\(`API \$\{apiMsg\}; R2 fallback \$\{r2Msg\}`\)/);
+
+    const rawDiagnosticMutant = p.replace(
+      "throw new Error('status-feed-unavailable');",
+      'throw new Error(`API ${apiMsg}; R2 fallback ${r2Msg}`);',
+    );
+    expect(rawDiagnosticMutant).not.toBe(p);
+    expect(hasSafeStatusFetchBoundary(rawDiagnosticMutant)).toBe(false);
   });
 
   it("CRITICAL 60s-stale-snapshot framing pinned. The 'API temporarily unreachable; showing the last cached snapshot (≤60s old)' wording matches V-295c2 poller cadence — explains why customers may see stale data during outages.", () => {
@@ -184,9 +218,9 @@ describe('W790 status-site src content parity bundle', () => {
     const p = read(PAGE_INDEX);
 
     expect(p).toMatch(/V-657 — quick-nav to subscription \+ history views\./);
-    expect(p).toMatch(/<a\s*\n\s+href="\/subscribe"/);
+    expect(p).toMatch(/<a\s*\n\s+href="\/subscribe\/"/);
     expect(p).toMatch(/Subscribe to incident emails/);
-    expect(p).toMatch(/<a\s*\n\s+href="\/history"/);
+    expect(p).toMatch(/<a\s*\n\s+href="\/history\/"/);
     expect(p).toMatch(/Full incident history \(90 days\)/);
   });
 
@@ -252,7 +286,7 @@ describe('W790 status-site src content parity bundle', () => {
     const p = read(PAGE_HIST);
 
     expect(p).toMatch(
-      /const res = await fetch\(`\$\{API_BASE\}\/v1\/status\/incidents\?window=90d`/,
+      /const res = await fetchWithDeadline\(`\$\{API_BASE\}\/v1\/status\/incidents\?window=90d`/,
     );
   });
 
