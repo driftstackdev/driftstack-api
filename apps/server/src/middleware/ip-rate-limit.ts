@@ -53,11 +53,10 @@ export interface IpRateLimitConfig {
  * Behavior:
  *   - `req.ip` extracted via Fastify's resolution (honors trust-proxy
  *     when set; falls back to socket).
- *   - When `req.ip` is null/empty (unusual: only happens on Unix-socket
- *     setups in some Fastify configs), the request is **allowed**.
- *     Rationale: the IP gate is defense-in-depth on top of the
- *     auth-flow's existing account-keyed protections (V-049 etc.); a
- *     missing IP shouldn't lock out legitimate customers.
+ *   - When `req.ip` is empty (unusual: only happens on Unix-socket or
+ *     misconfigured proxy setups), requests share one non-sensitive
+ *     `unresolved-client` identity. That preserves a bounded availability
+ *     budget without letting a missing identity bypass the gate.
  *   - On limit hit, throws `RateLimitedError` which the global
  *     error handler maps to RFC 7807 with `Retry-After` set.
  */
@@ -70,13 +69,8 @@ export function ipRateLimit(
   metrics?: MetricsRegistry,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const ip = typeof req.ip === 'string' && req.ip.length > 0 ? req.ip : null;
-    if (ip === null) {
-      // Misconfigured trust-proxy or test harness without an IP. Skip
-      // the gate; document this as a known soft-fail mode in the V-251
-      // V-log entry.
-      return;
-    }
+    const ip =
+      typeof req.ip === 'string' && req.ip.trim().length > 0 ? req.ip : 'unresolved-client';
 
     const consumeArgs = {
       key: `${cfg.bucketPrefix}:${ip}`,
@@ -106,10 +100,20 @@ export function ipRateLimit(
       }
       try {
         result = await ipFallbackStore.consume(consumeArgs);
-      } catch {
-        // The in-process fallback cannot realistically throw; if it somehow
-        // does, fail open as a last resort rather than 500 the request.
-        return;
+      } catch (fallbackErr) {
+        // Keep ordinary Redis outages available through the bounded fallback,
+        // but never admit a request when BOTH enforcement stores failed. The
+        // state is unknown, so a short retryable denial is the safe outcome.
+        req.log.warn(
+          { component: 'ip-rate-limit', bucket_prefix: cfg.bucketPrefix, err: fallbackErr },
+          'ip rate-limit fallback store error — failing CLOSED',
+        );
+        const retryAfterSec = 60;
+        reply.header('retry-after', retryAfterSec.toString());
+        throw new RateLimitedError(
+          retryAfterSec,
+          'Request rate limiting is temporarily unavailable. Retry shortly.',
+        );
       }
     }
 

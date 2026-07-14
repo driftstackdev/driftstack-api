@@ -93,11 +93,22 @@ function rateLimitPlugin(
         }
         try {
           result = await rateLimitConsume(fallbackStore, consumeInput);
-        } catch {
-          // The in-process fallback cannot realistically throw, but if it
-          // somehow does, fail open as a last resort (availability over a
-          // hard 500) rather than error the request.
-          return;
+        } catch (fallbackErr) {
+          // A failed primary store is an availability event; the bounded
+          // fallback keeps normal Redis outages available. A failure of BOTH
+          // stores is different: admitting the request would remove the last
+          // abuse/resource-exhaustion guard precisely while its state is
+          // unknown. Fail closed with a bounded, retryable 429 instead.
+          request.log.warn(
+            { component: 'rate-limit', bucket: bucketKey, err: fallbackErr },
+            'rate-limit fallback store error — failing CLOSED',
+          );
+          const retryAfterSec = 60;
+          reply.header('retry-after', retryAfterSec.toString());
+          throw new RateLimitedError(
+            retryAfterSec,
+            'Rate limiting is temporarily unavailable. Retry shortly.',
+          );
         }
       }
 

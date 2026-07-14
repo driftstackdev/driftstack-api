@@ -74,13 +74,18 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     expect(body).toContain('overrides: ctx ? ctx.rateLimitOverrides : {},');
   });
 
-  it('W384 store-error degrade: rateLimitConsume wrapped in try/catch; on error → warn + fallback-metric + serve from the bounded per-instance memory store (NOT a blanket allow, NOT a 500). Only the store call is wrapped so a legit limit-hit RateLimitedError still propagates', () => {
+  it('W384 store-error degrade: primary failure uses bounded memory; dual failure denies with a retryable 429 instead of admitting unmetered work', () => {
     expect(body).toContain('const fallbackStore = new BoundedMemoryRateLimitStore();');
     expect(body).toMatch(
       /\} catch \(err\) \{[\s\S]*?'rate-limit store error — degrading to bounded in-process fallback',/,
     );
     expect(body).toMatch(/result = await rateLimitConsume\(fallbackStore, consumeInput\);/);
     expect(body).toContain("METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'account' }");
+    expect(body).toContain("'rate-limit fallback store error — failing CLOSED'");
+    expect(body).toContain("'Rate limiting is temporarily unavailable. Retry shortly.'");
+    expect(body).not.toMatch(
+      /fallbackStore, consumeInput\);[\s\S]{0,240}catch \{[\s\S]{0,240}return;/,
+    );
   });
 
   it('W199 framing pinned: full RateLimit-header set documented at /docs/rate-limits', () => {

@@ -8,8 +8,8 @@
 // the gate or, worse, leaks the resolved IP through response headers.
 //
 //   • V-251 + V-246-P1-004 framing pinned + 2026-05-07 founder override.
-//   • IP null → allow (defense-in-depth, never lock out legitimate
-//     customers — auth-flow has account-keyed protections too).
+//   • Missing IP → one shared unresolved-client bucket (bounded
+//     availability without an identity-bypass lane).
 //   • W200 RateLimit-* headers (mirrors W199): bucket = prefix only
 //     (NOT the full key — avoid leaking IP into response).
 //   • Token-bucket via shared RateLimitStore primitive (memory in
@@ -74,14 +74,14 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     );
   });
 
-  it('IP null → allowed framing: defense-in-depth on top of account-keyed protections', () => {
+  it('Missing IP → shared unresolved-client identity instead of bypass', () => {
     expect(body).toMatch(
-      /When `req\.ip` is null\/empty \(unusual: only happens on Unix-socket\s*\n?\s*\*\s*setups in some Fastify configs\), the request is \*\*allowed\*\*\.\s*\n?\s*\*\s*Rationale: the IP gate is defense-in-depth on top of the\s*\n?\s*\*\s*auth-flow's existing account-keyed protections \(V-049 etc\.\); a\s*\n?\s*\*\s*missing IP shouldn't lock out legitimate customers/,
+      /When `req\.ip` is empty[\s\S]{0,240}`unresolved-client` identity[\s\S]{0,180}without letting a missing identity bypass the gate/,
     );
     expect(body).toMatch(
-      /const ip = typeof req\.ip === 'string' && req\.ip\.length > 0 \? req\.ip : null;/,
+      /const ip =\s*\n?\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
     );
-    expect(body).toMatch(/if \(ip === null\) \{[\s\S]+?return;\s*\n?\s*\}/);
+    expect(body).not.toMatch(/if \(ip === null\)/);
   });
 
   it('store.consume: bucketKey = `${prefix}:${ip}`, cost=1, now=Date.now() (hoisted into consumeArgs so the same args feed the bounded fallback on a store error)', () => {
@@ -91,13 +91,18 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     expect(body).toContain('result = await store.consume(consumeArgs);');
   });
 
-  it('W384 store-error degrade: consume wrapped in try/catch; on error → warn + fallback-metric + serve from the bounded module-level memory store (NOT a blanket allow, NOT a 500)', () => {
+  it('W384 store-error degrade: primary failure uses bounded memory; dual failure denies with a retryable 429 instead of admitting unmetered work', () => {
     expect(body).toContain('const ipFallbackStore = new BoundedMemoryRateLimitStore();');
     expect(body).toMatch(
       /\} catch \(err\) \{[\s\S]*?'ip rate-limit store error — degrading to bounded in-process fallback',/,
     );
     expect(body).toContain('result = await ipFallbackStore.consume(consumeArgs);');
     expect(body).toContain("METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'ip' }");
+    expect(body).toContain("'ip rate-limit fallback store error — failing CLOSED'");
+    expect(body).toContain("'Request rate limiting is temporarily unavailable. Retry shortly.'");
+    expect(body).not.toMatch(
+      /ipFallbackStore\.consume\(consumeArgs\);[\s\S]{0,240}catch \{[\s\S]{0,240}return;/,
+    );
   });
 
   it('W200 framing pinned: mirrors W199 + bucket=prefix only (avoid leaking IP through response)', () => {

@@ -31,13 +31,10 @@
 //   ipRateLimit factory signature — '(store: RateLimitStore, cfg:
 //     IpRateLimitConfig) => preHandler'.
 //
-//   Null-IP soft-fail framing — 'req.ip extracted via Fastify's
+//   Unresolved-IP framing — 'req.ip extracted via Fastify's
 //   resolution (honors trust-proxy when set; falls back to socket).
-//   When req.ip is null/empty (unusual: only happens on Unix-socket
-//   setups in some Fastify configs), the request is **allowed**.
-//   Rationale: the IP gate is defense-in-depth on top of the auth-
-//   flow's existing account-keyed protections (V-049 etc.); a
-//   missing IP shouldn't lock out legitimate customers'.
+//   When req.ip is empty, requests share one non-sensitive sentinel
+//   bucket so missing identity cannot bypass enforcement'.
 //
 //   W200 4-header set — x-ratelimit-bucket (prefix-only) +
 //     x-ratelimit-limit + x-ratelimit-remaining + x-ratelimit-reset.
@@ -137,24 +134,21 @@ describe('W982 ip-rate-limit V-251 cross-source invariant', () => {
     expect(p).toMatch(/key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,/);
   });
 
-  // ─── Null-IP soft-fail framing ───────────────────────────────
+  // ─── Unresolved-IP framing ───────────────────────────────────
 
-  it("CRITICAL null-IP soft-fail framing — 'When req.ip is null/empty (unusual: only happens on Unix-socket setups in some Fastify configs), the request is **allowed**. Rationale: the IP gate is defense-in-depth on top of the auth-flow's existing account-keyed protections (V-049 etc.); a missing IP shouldn't lock out legitimate customers'. The defense-in-depth + soft-fail-on-no-IP design is the V-251 availability contract.", () => {
+  it('CRITICAL unresolved-IP framing — missing identity shares one non-sensitive bucket, preserving a bounded availability budget without bypassing enforcement.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/ip-rate-limit.ts'));
-    expect(p).toMatch(/When `req\.ip` is null\/empty \(unusual: only happens on Unix-socket/);
-    expect(p).toMatch(/setups in some Fastify configs\), the request is \*\*allowed\*\*\./);
-    expect(p).toMatch(/Rationale: the IP gate is defense-in-depth on top of the/);
-    expect(p).toMatch(/auth-flow's existing account-keyed protections \(V-049 etc\.\); a/);
-    expect(p).toMatch(/missing IP shouldn't lock out legitimate customers\./);
+    expect(p).toMatch(/When `req\.ip` is empty/);
+    expect(p).toMatch(/`unresolved-client` identity/);
+    expect(p).toMatch(/without letting a missing identity bypass the gate\./);
   });
 
-  it("CRITICAL null-IP guard — 'const ip = typeof req.ip === string && req.ip.length > 0 ? req.ip : null;' + 'if (ip === null) return;'. The typeof+length-check + early-return is the soft-fail mechanism.", () => {
+  it('CRITICAL unresolved-IP guard uses trimmed non-empty req.ip or the shared sentinel and has no early-return bypass.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/ip-rate-limit.ts'));
     expect(p).toMatch(
-      /const ip = typeof req\.ip === 'string' && req\.ip\.length > 0 \? req\.ip : null;/,
+      /const ip =\s*\n?\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
     );
-    expect(p).toMatch(/if \(ip === null\) \{/);
-    expect(p).toMatch(/return;/);
+    expect(p).not.toMatch(/if \(ip === null\)/);
   });
 
   // ─── W200 4-header set ───────────────────────────────────────

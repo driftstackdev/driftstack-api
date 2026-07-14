@@ -24824,3 +24824,25 @@ Verification:
 - native Rust tests: 19/19 pass, including bounded scheme/argv forwarding;
 - native Clippy passes with only two unrelated pre-existing lint classes in the
   same legacy file explicitly allowed for the verification run.
+
+## V-571 — rate-limit safety layers fail closed
+
+**Date:** 2026-07-13
+
+Closed two bypasses at the rate-limit enforcement boundary without turning an
+ordinary Redis outage into an API outage:
+
+- primary-store failures still degrade to the bounded per-process token-bucket
+  store, preserving coarse enforcement and request availability;
+- if both the primary and bounded stores fail, account and IP gates now deny
+  with a 60-second retry hint instead of admitting unmetered work;
+- an empty or whitespace-only Fastify client IP now shares one non-sensitive
+  `unresolved-client` bucket instead of skipping the pre-auth gate entirely.
+
+Verification:
+
+- behavioral fault injection replaces the bounded store with a throwing test
+  double and proves both limiter families return the typed retryable denial;
+- empty and whitespace-only identities are proven to consume the shared bucket;
+- ordinary primary-store outage/fallback enforcement, daily-ceiling, metrics,
+  headers, and source-invariant suites remain green.

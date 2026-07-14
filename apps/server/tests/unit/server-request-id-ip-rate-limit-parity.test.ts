@@ -18,8 +18,8 @@
 // CRITICAL invariants:
 //   1. Request-id flows out on EVERY response (success + error) so
 //      customers can correlate logs.
-//   2. IP-rate-limit is FAIL-OPEN on missing req.ip — defense-in-
-//      depth, not the only gate.
+//   2. Missing req.ip shares one bounded unresolved-client bucket —
+//      no identity means less precision, never no enforcement.
 //   3. AUTH_IP_LIMITS 6 entries match documented capacities:
 //      login 10/min, signup 5/min, verifyEmail 10/min,
 //      passwordResetRequest 3/min, resendVerification 3/min,
@@ -86,15 +86,15 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     );
   });
 
-  it('CRITICAL FAIL-OPEN behavior on missing req.ip pinned. The fail-open is defense-in-depth (V-049 + others still apply); drift to fail-closed would lock out legitimate customers on Unix-socket / test-harness setups without resolved IPs.', () => {
+  it('CRITICAL unresolved-IP behavior pinned: missing identity shares a bounded sentinel bucket instead of bypassing enforcement.', () => {
     const src = read(IP_RATE_LIMIT);
 
     // Documented behavior comment.
-    expect(src).toMatch(/When `req\.ip` is null\/empty[\s\S]{0,200}the request is \*\*allowed\*\*/);
+    expect(src).toMatch(/When `req\.ip` is empty[\s\S]{0,240}`unresolved-client` identity/);
 
     // Implementation matches.
     expect(src).toMatch(
-      /const ip = typeof req\.ip === 'string' && req\.ip\.length > 0 \? req\.ip : null;\s*\n?\s*if \(ip === null\) \{[\s\S]{0,200}return;/,
+      /const ip =\s*\n?\s*typeof req\.ip === 'string' && req\.ip\.trim\(\)\.length > 0 \? req\.ip : 'unresolved-client';/,
     );
   });
 
@@ -210,7 +210,7 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     expect(src).toMatch(/import \{ RateLimitedError \} from '\.\.\/lib\/errors\.js'/);
   });
 
-  it('Server pre-auth middleware 5-invariant cluster — request-id onSend + fp wrap + V-251 anchor + fail-open + AUTH_IP_LIMITS 6-entry roster + ip-not-leaked + retry-after-seconds. Drift on any would fragment the pre-auth-layer middleware.', () => {
+  it('Server pre-auth middleware invariant cluster — request-id onSend + fp wrap + V-251 anchor + unresolved-IP bucket + AUTH_IP_LIMITS roster + ip-not-leaked + retry-after-seconds.', () => {
     const rid = read(REQUEST_ID);
     const ipRl = read(IP_RATE_LIMIT);
 
