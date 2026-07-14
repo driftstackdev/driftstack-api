@@ -86,7 +86,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         class="btn-primary disabled:cursor-not-allowed disabled:opacity-60">Add subscriber</button
       >
     </form>
-    <div data-add-result class="mb-6 hidden rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs"></div>
+    <div
+      data-add-result
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      class="mb-6 hidden rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs"
+    ></div>
 
     <div class="rounded-lg border border-tk-border bg-tk-surface">
       <ul data-list class="divide-y divide-slate-100">

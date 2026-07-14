@@ -205,6 +205,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             </div>
             <p
               data-field="mfa-error"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
               class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err-text"
             ></p>
           </div>
@@ -313,6 +316,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <p
           data-field="mfa-step-up-error"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
           class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err-text"
         ></p>
       </div>

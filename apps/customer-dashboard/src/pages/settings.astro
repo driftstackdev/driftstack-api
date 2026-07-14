@@ -143,10 +143,15 @@ const EMAIL_EVENTS = [
             <p
               data-field="avatar-status"
               role="status"
+              aria-live="polite"
+              aria-atomic="true"
               class="hidden rounded border border-tk-border bg-tk-raised px-2 py-1 text-xs text-tk-ink-2"
             ></p>
             <p
               data-field="avatar-error"
+              role="alert"
+              aria-live="assertive"
+              aria-atomic="true"
               class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err-text"
             ></p>
           </div>
@@ -228,6 +233,9 @@ const EMAIL_EVENTS = [
         </div>
         <p
           data-field="profile-error"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
           class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err-text"
         ></p>
         <div class="flex items-center justify-between border-t border-tk-border pt-4">

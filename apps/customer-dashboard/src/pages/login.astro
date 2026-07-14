@@ -79,7 +79,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             >Enter a verification code</a
           >
         </div>
-        <p data-resend-status class="mt-2 text-xs text-tk-ink-3"></p>
+        <p
+          data-resend-status
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          class="mt-2 text-xs text-tk-ink-3"
+        ></p>
       </div>
 
       <form data-form="login" class="space-y-5">

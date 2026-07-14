@@ -53,6 +53,90 @@ const LIVE_REGIONS: LiveRegion[] = [
     role: 'status',
     live: 'polite',
   },
+  {
+    file: 'apps/customer-dashboard/src/pages/cli/authorize.astro',
+    marker: 'data-state="success"',
+    role: 'status',
+    live: 'polite',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/cli/authorize.astro',
+    marker: 'data-error-message',
+    role: 'alert',
+    live: 'assertive',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/cli/authorize.astro',
+    marker: 'data-legal-status',
+    role: 'status',
+    live: 'polite',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/login.astro',
+    marker: 'data-resend-status',
+    role: 'status',
+    live: 'polite',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/api-keys.astro',
+    marker: 'data-created-copy-feedback',
+    role: 'status',
+    live: 'polite',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/api-keys.astro',
+    marker: 'data-rotate-copy-feedback',
+    role: 'status',
+    live: 'polite',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/select-tier.astro',
+    marker: 'data-crypto-modal-error',
+    role: 'alert',
+    live: 'assertive',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/settings.astro',
+    marker: 'data-field="avatar-error"',
+    role: 'alert',
+    live: 'assertive',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/settings.astro',
+    marker: 'data-field="avatar-status"',
+    role: 'status',
+    live: 'polite',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/settings.astro',
+    marker: 'data-field="profile-error"',
+    role: 'alert',
+    live: 'assertive',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/team.astro',
+    marker: 'data-invite-error',
+    role: 'alert',
+    live: 'assertive',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/security.astro',
+    marker: 'data-field="mfa-error"',
+    role: 'alert',
+    live: 'assertive',
+  },
+  {
+    file: 'apps/customer-dashboard/src/pages/security.astro',
+    marker: 'data-field="mfa-step-up-error"',
+    role: 'alert',
+    live: 'assertive',
+  },
+  {
+    file: 'apps/admin-panel/src/pages/status-subscribers.astro',
+    marker: 'data-add-result',
+    role: 'status',
+    live: 'polite',
+  },
 ];
 
 function openingTagContaining(source: string, marker: string): string {

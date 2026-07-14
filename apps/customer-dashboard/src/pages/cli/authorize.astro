@@ -113,7 +113,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </div>
 
-    <div data-state="success" class="mt-8 hidden">
+    <div
+      data-state="success"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      class="mt-8 hidden"
+    >
       <div class="rounded-lg border border-tk-ready/30 bg-tk-ready/10 px-4 py-4 text-center text-sm text-tk-ready-text">
         <p class="font-medium">Desktop client authorized.</p>
         <p class="mt-1 text-tk-ready-text" data-deep-link-status>
@@ -132,6 +138,9 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div data-state="error" class="mt-8 hidden">
       <div
         data-error-message
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
         class="rounded-lg border border-tk-err/30 bg-tk-err/10 px-4 py-3 text-sm text-tk-err-text"
       ></div>
       <button
@@ -157,7 +166,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button type="button" data-legal-accept-all class="btn-primary">
           Accept all and authorize
         </button>
-        <span data-legal-status class="text-xs text-tk-ink-3"></span>
+        <span
+          data-legal-status
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          class="text-xs text-tk-ink-3"
+        ></span>
       </div>
     </div>
   </div>
