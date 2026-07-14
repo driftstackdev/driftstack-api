@@ -1,8 +1,15 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    projects: ['./vitest.node.config.ts', './apps/gui-client/vitest.config.ts'],
+    // Vitest resolves plain project strings against process.cwd(), which is
+    // apps/server when invoked through that workspace. Anchor both configs to
+    // this file so root, workspace, IDE, and CI entry points run the same suite.
+    projects: [
+      fileURLToPath(new URL('./vitest.node.config.ts', import.meta.url)),
+      fileURLToPath(new URL('./apps/gui-client/vitest.config.ts', import.meta.url)),
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],

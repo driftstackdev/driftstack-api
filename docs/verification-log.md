@@ -24955,3 +24955,28 @@ Verification:
   and proves the public accept flow returns its normal used/not-found result;
 - repository and service source guards pin exact-hash CAS and consumed-row
   authority.
+
+## V-576 — workspace test entry points cannot resolve projects from cwd
+
+**Date:** 2026-07-13
+
+Repaired a false-green test-runner boundary. The root Vitest orchestrator
+listed its node and GUI project configs with relative strings. Vitest resolves
+those strings from the invoking process's current directory, so launching the
+documented server workspace test script searched for a nonexistent
+`apps/server/vitest.node.config.ts`, printed a startup error, and nevertheless
+returned success without executing a test.
+
+Both project paths are now converted from URLs relative to the root config
+file itself. Root, npm-workspace, IDE, and CI callers therefore resolve the
+same two config files regardless of current directory; project order and
+coverage ownership are unchanged.
+
+Verification:
+
+- the workspace sentinel reproduced the nonexistent-project startup error and
+  zero-test success before repair;
+- the root sentinel executes 3/3 after repair;
+- the same sentinel invoked through the server workspace executes 3/3;
+- the source invariant pins config-relative URL resolution for both project
+  targets so plain cwd-relative strings cannot return.

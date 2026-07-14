@@ -5,6 +5,7 @@
 // or removes the .ts vs .tsx discriminator (would double-run tests
 // in both environments).
 //
+//   • Project paths resolve from this config's URL, never process cwd.
 //   • Two projects:
 //     1. vitest.node.config.ts (node, .test.ts).
 //     2. apps/gui-client/vitest.config.ts (jsdom, .test.tsx).
@@ -26,10 +27,11 @@ function read(p: string): string {
 describe('W528.B /vitest.config.ts project orchestration parity', () => {
   const body = read(LIB);
 
-  it('registers the node and GUI projects in order', () => {
+  it('registers cwd-independent absolute node and GUI projects in order', () => {
     expect(body).toMatch(/import \{ defineConfig \} from 'vitest\/config';/);
+    expect(body).toMatch(/import \{ fileURLToPath \} from 'node:url';/);
     expect(body).toMatch(
-      /projects: \[\s*'\.\/vitest\.node\.config\.ts',\s*'\.\/apps\/gui-client\/vitest\.config\.ts',?\s*\],/,
+      /projects: \[\s*fileURLToPath\(new URL\('\.\/vitest\.node\.config\.ts', import\.meta\.url\)\),\s*fileURLToPath\(\s*new URL\('\.\/apps\/gui-client\/vitest\.config\.ts', import\.meta\.url\),?\s*\),?\s*\],/,
     );
   });
 
