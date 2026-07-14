@@ -26,11 +26,7 @@ const OWNER_TOKEN = 'ds_live_oooooooooooooooooooooooooooooooo';
 const STAFF_TOKEN = 'ds_live_ssssssssssssssssssssssssssssssss';
 const SECRET_VALUE = 'sk-live-SUPERSECRET-AAA';
 
-function makeRepo(): AccountAuthRepo {
-  return { findApiKeyByPrefix: () => Promise.resolve(null) } as unknown as AccountAuthRepo;
-}
-
-function ctxFor(id: string, email: string): AccountContext {
+function ctxFor(id: string, email: string, sessionId: string): AccountContext {
   return {
     account: {
       id,
@@ -46,7 +42,7 @@ function ctxFor(id: string, email: string): AccountContext {
       updatedAt: new Date('2026-01-01T00:00:00Z'),
     },
     apiKey: {
-      id: `key-${id}`,
+      id: `wsk_${sessionId}`,
       accountId: id,
       name: 'web-session',
       keyPrefix: 'web_session',
@@ -59,18 +55,56 @@ function ctxFor(id: string, email: string): AccountContext {
     },
     rateLimitOverrides: {},
     teams: [],
-    webSession: { id: 'ws-1', mfaSatisfiedAt: null },
+    webSession: { id: sessionId, mfaSatisfiedAt: null },
   };
+}
+
+const OWNER_CTX = ctxFor('acc-owner', OWNER_EMAIL, 'ws-owner');
+const STAFF_CTX = ctxFor('acc-staff', 'staff@driftstack.test', 'ws-staff');
+
+function makeRepo(retiredTokenHash: string | null = null): AccountAuthRepo {
+  const sessions = new Map([
+    [sha256Hex(OWNER_TOKEN), { ctx: OWNER_CTX, id: 'ws-owner' }],
+    [sha256Hex(STAFF_TOKEN), { ctx: STAFF_CTX, id: 'ws-staff' }],
+  ]);
+  return {
+    findApiKeyByPrefix: () => Promise.resolve(null),
+    findActiveWebSession: ({ tokenHash }: { tokenHash: string }) => {
+      if (tokenHash === retiredTokenHash) return Promise.resolve(null);
+      const entry = sessions.get(tokenHash);
+      return Promise.resolve(
+        entry
+          ? {
+              id: entry.id,
+              accountId: entry.ctx.account.id,
+              expiresAt: new Date('2027-01-01T00:00:00Z'),
+              revokedAt: null,
+              lastUsedAt: null,
+              mfaSatisfiedAt: null,
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+            }
+          : null,
+      );
+    },
+    getAccount: (id: string) =>
+      Promise.resolve(
+        id === OWNER_CTX.account.id
+          ? OWNER_CTX.account
+          : id === STAFF_CTX.account.id
+            ? STAFF_CTX.account
+            : null,
+      ),
+    findTeamMemberships: () => Promise.resolve([]),
+    findActiveRateLimitOverrides: () => Promise.resolve([]),
+  } as unknown as AccountAuthRepo;
 }
 
 function makeCache(): AuthCache {
   const ownerSha = sha256Hex(OWNER_TOKEN);
   const staffSha = sha256Hex(STAFF_TOKEN);
-  const owner = ctxFor('acc-owner', OWNER_EMAIL);
-  const staff = ctxFor('acc-staff', 'staff@driftstack.test');
   return {
     get: (sha: string) =>
-      Promise.resolve(sha === ownerSha ? owner : sha === staffSha ? staff : null),
+      Promise.resolve(sha === ownerSha ? OWNER_CTX : sha === staffSha ? STAFF_CTX : null),
     set: () => Promise.resolve(),
     invalidateKey: () => Promise.resolve(),
     invalidateAccount: () => Promise.resolve(),
@@ -80,11 +114,12 @@ function makeCache(): AuthCache {
 async function buildApp(
   /** Pass `null` to build a DISABLED-secrets deployment (MFA_ENCRYPTION_KEY unset). */
   encryptionKeyBase64: string | null = randomBytes(32).toString('base64'),
+  authRepo: AccountAuthRepo = makeRepo(),
 ): Promise<{ app: FastifyInstance; auditRepo: InMemoryAdminAuditLogRepo }> {
   const app = Fastify();
   registerErrorHandler(app);
   await app.register(authPlugin, {
-    authRepo: makeRepo(),
+    authRepo,
     authCache: makeCache(),
     authCoalescer: null,
     ownerEmail: OWNER_EMAIL,
@@ -199,6 +234,19 @@ describe('owner secrets-management routes (secrets Phase A slice 2)', () => {
     });
     expect(bad.statusCode).toBe(400);
     expect(auditRepo.getAll()).toHaveLength(0);
+  });
+
+  it('rejects a cached owner session after live authority retires it', async () => {
+    const { app, auditRepo } = await buildApp(undefined, makeRepo(sha256Hex(OWNER_TOKEN)));
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/stripe_secret_key',
+      headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+      payload: { value: SECRET_VALUE },
+    });
+    expect(response.statusCode).toBe(401);
+    expect(auditRepo.getAll()).toHaveLength(0);
+    await app.close();
   });
 });
 
