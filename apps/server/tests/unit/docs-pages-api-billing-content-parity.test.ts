@@ -146,12 +146,13 @@ describe('W765 docs /api/billing content parity', () => {
     );
   });
 
-  it('CRITICAL planned subscription.changed / subscription.cancelled webhook events framing pinned. The "today the subscription.tier_changed audit row is the source of truth for programmatic consumers" wording sets the right SDK-consumer expectation.', () => {
+  it('CRITICAL current subscription-change programmatic source is the audit-log API', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /the planned\s*\n?`subscription\.changed` \/ `subscription\.cancelled` events; today\s*\n?the `subscription\.tier_changed` audit row is the source of truth/,
+      /That audit row is the source of truth for programmatic subscription-change\s*\n?consumers; it is available through the account audit-log API\./,
     );
+    expect(p).not.toMatch(/planned|subscription\.changed|subscription\.cancelled/i);
   });
 
   it("CRITICAL billing act-as framing pinned — GET /v1/billing DOES honor X-Driftstack-Account (V-326c), mutations do NOT. S36 2026-07-07 (fable-truth-audit): the old blanket 'they do NOT honor the header / team members never see the owner's billing state' claim was FALSE — routes/billing.ts GET /v1/billing calls resolveEffectiveAccount(readEffectiveAccountHeader(req)) and returns the OWNER's subscription state to an acting-as team member; only checkout-session / portal-session / billing-portal ignore the header.", () => {
