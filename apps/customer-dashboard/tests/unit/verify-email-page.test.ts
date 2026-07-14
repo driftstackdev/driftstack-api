@@ -373,4 +373,38 @@ describe('verify-email page — local integration', () => {
       /check inbox before retrying/i,
     );
   });
+
+  it('treats a malformed accepted resend body as sent and keeps the cooldown lease', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: NO_TOKEN_URL,
+      signupEmail: 'pending@example.com',
+      fetchPlan: [
+        () =>
+          new Response('{', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ],
+    });
+    win = window;
+    const resendBtn = window.document.querySelector('[data-action="resend"]') as HTMLButtonElement;
+
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(
+      fetchCalls.filter((call) => /\/v1\/auth\/resend-verification$/.test(call.url)),
+    ).toHaveLength(1);
+    expect(resendBtn.disabled).toBe(true);
+    expect(resendBtn.getAttribute('aria-busy')).toBe('false');
+    expect(window.document.querySelector('[data-field="resend-status"]')?.textContent).toMatch(
+      /sent.*check your inbox/i,
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toMatch(
+      /resend failed|try again/i,
+    );
+  });
 });

@@ -394,13 +394,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             body: JSON.stringify({ email: resendEmail }),
             signal: controller.signal,
           })
-            .then((r) =>
-              r.ok
-                ? r.json()
-                : r
-                    .json()
-                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-            )
+            .then((r) => {
+              if (r.ok) {
+                // The success body is unused. Delivery may already be
+                // committed, so accepted status starts the same cooldown even
+                // when a proxy truncates or replaces the response body.
+                return;
+              }
+              return r
+                .json()
+                .catch(() => ({}))
+                .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+            })
             .then(() => {
               if (resendStatus) {
                 resendStatus.textContent = 'Sent — check your inbox.';

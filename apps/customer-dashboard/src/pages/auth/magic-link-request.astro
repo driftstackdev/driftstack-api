@@ -122,6 +122,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let requestInFlight = false;
       let requestOutcomeUnknown = false;
+      let requestResponseAccepted = false;
       function showUnknownOutcome(email) {
         requestOutcomeUnknown = true;
         successEmail.textContent = email;
@@ -144,6 +145,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         // mints a NEW valid magic-link token, so the customer's inbox got
         // two working sign-in links instead of one.
         if (requestOutcomeUnknown) return;
+        if (requestResponseAccepted) return;
         if (requestInFlight) return;
         requestInFlight = true;
         setSubmitting(true);
@@ -157,14 +159,19 @@ const apiBaseUrl = resolveApiBaseUrl();
           body: JSON.stringify({ email: email }),
           signal: controller.signal,
         })
-          .then((r) =>
-            r.ok
-              ? r.json()
-              : r
-                  .json()
-                  .catch(() => ({}))
-                  .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-          )
+          .then((r) => {
+            // Expiry and the dev-only token are optional presentation fields.
+            // Latch 2xx before their non-fatal parse because the one-shot
+            // email may already be delivered.
+            if (r.ok) {
+              requestResponseAccepted = true;
+              return r.json().catch(() => ({}));
+            }
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+          })
           .then((body) => {
             successEmail.textContent = email;
             if (body.expires_at) {
@@ -185,6 +192,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             success.classList.remove('hidden');
           })
           .catch((err) => {
+            if (requestResponseAccepted) {
+              successEmail.textContent = email;
+              form.classList.add('hidden');
+              success.classList.remove('hidden');
+              return;
+            }
             if (controller.signal.aborted) {
               showUnknownOutcome(email);
               return;
@@ -199,7 +212,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .finally(() => {
             window.clearTimeout(timeout);
             requestInFlight = false;
-            if (!requestOutcomeUnknown) setSubmitting(false);
+            if (!requestOutcomeUnknown && !requestResponseAccepted) setSubmitting(false);
           });
       });
     })();

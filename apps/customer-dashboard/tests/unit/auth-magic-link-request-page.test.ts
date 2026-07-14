@@ -13,7 +13,10 @@ interface MockFetchCall {
   init: RequestInit | undefined;
 }
 
-function setUpDom(html: string): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+function setUpDom(
+  html: string,
+  acceptedResponse?: Response,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
   const scripts: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scripts.push(body);
@@ -30,13 +33,14 @@ function setUpDom(html: string): { window: JSDOM['window']; fetchCalls: MockFetc
   window.fetch = (input: string, init: RequestInit | undefined) => {
     const call = { url: String(input), init };
     fetchCalls.push(call);
+    if (acceptedResponse) return Promise.resolve(acceptedResponse);
     return new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
     });
   };
   const nativeSetTimeout = window.setTimeout.bind(window);
   window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-    if (timeout === 15_000) {
+    if (timeout === 15_000 && !acceptedResponse) {
       window.queueMicrotask(() => {
         if (typeof handler === 'function') handler(...args);
       });
@@ -96,5 +100,37 @@ describe('magic-link request page', () => {
     submit();
     await flush();
     expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('treats malformed accepted JSON as delivered and blocks forced replay', async () => {
+    const html = readFileSync(BUILT_PAGE, 'utf8');
+    const { window, fetchCalls } = setUpDom(
+      html,
+      new Response('{', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    win = window;
+    const form = window.document.querySelector('[data-form]') as HTMLFormElement;
+    (form.querySelector('input[name="email"]') as HTMLInputElement).value = 'magic@example.com';
+    const submit = (): void =>
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+
+    submit();
+    submit();
+    await flush();
+    submit();
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(form.classList.contains('hidden')).toBe(true);
+    expect(window.document.querySelector('[data-success]')?.classList.contains('hidden')).toBe(
+      false,
+    );
+    expect(window.document.querySelector('[data-success-email]')?.textContent).toBe(
+      'magic@example.com',
+    );
+    expect(window.document.querySelector('[data-banner]')?.classList.contains('hidden')).toBe(true);
   });
 });

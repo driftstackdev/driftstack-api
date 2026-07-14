@@ -37,4 +37,16 @@ describe('customer-dashboard magic-link request reliability', () => {
     expect(body).toContain('Do not request another link on this page.');
     expect(body).toContain('use the newest one');
   });
+
+  it('latches accepted delivery before optional non-fatal JSON parsing', () => {
+    expect(body).toContain('let requestResponseAccepted = false;');
+    expect(body).toContain('if (requestResponseAccepted) return;');
+    expect(body).toMatch(
+      /if \(r\.ok\) \{\s*requestResponseAccepted = true;\s*return r\.json\(\)\.catch\(\(\) => \(\{\}\)\);/,
+    );
+    expect(body).toContain('if (requestResponseAccepted) {');
+    expect(body).toMatch(
+      /if \(!requestOutcomeUnknown && !requestResponseAccepted\) setSubmitting\(false\)/,
+    );
+  });
 });

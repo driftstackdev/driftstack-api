@@ -129,6 +129,12 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     );
   });
 
+  it('starts the resend cooldown from accepted status without parsing an unused body', () => {
+    expect(body).toContain('The success body is unused. Delivery may already be');
+    expect(body).toContain('accepted status starts the same cooldown');
+    expect(body).not.toMatch(/r\.ok\s*\?\s*r\.json\(\)/);
+  });
+
   it('token input autocomplete="one-time-code" (a11y + mobile UX)', () => {
     expect(body).toMatch(/<input[^>]*id="verify-token"[\s\S]*?autocomplete="one-time-code"/);
     expect(body).toMatch(/<input[^>]*id="verify-token"[\s\S]*?required/);
