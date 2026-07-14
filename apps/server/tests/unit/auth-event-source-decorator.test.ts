@@ -20,14 +20,6 @@ import { MetricsRegistry, METRIC_NAMES } from '../../src/services/metrics-regist
 import type { AccountAuthRepo, AccountContext } from '../../src/services/auth.js';
 import { type AuthCache, sha256Hex } from '../../src/services/auth-cache.js';
 
-function makeRepo(): AccountAuthRepo {
-  // Always-null repo: every test here errors before any repo call
-  // (missing token, or token too short for authenticate's length gate).
-  return {
-    findApiKeyByPrefix: () => Promise.resolve(null),
-  } as unknown as AccountAuthRepo;
-}
-
 function makeRegistry(): MetricsRegistry {
   const m = new MetricsRegistry();
   m.registerCounter(METRIC_NAMES.authTotal, 'Auth resolution outcomes.', ['outcome']);
@@ -70,6 +62,20 @@ const CTX: AccountContext = {
   webSession: null,
 };
 
+function makeRepo(liveAuthority = true): AccountAuthRepo {
+  // Positive cache hits deliberately re-read the exact credential, account,
+  // team grants, and rate policy. Missing/short tokens still fail before these
+  // methods run; `liveAuthority=false` proves cached data alone cannot pass.
+  return {
+    findApiKeyByPrefix: (prefix: string) =>
+      Promise.resolve(liveAuthority && prefix === CTX.apiKey.keyPrefix ? CTX.apiKey : null),
+    getAccount: (id: string) =>
+      Promise.resolve(liveAuthority && id === CTX.account.id ? CTX.account : null),
+    findTeamMemberships: () => Promise.resolve([]),
+    findActiveRateLimitOverrides: () => Promise.resolve([]),
+  } as unknown as AccountAuthRepo;
+}
+
 // Cache that returns CTX only for the valid token's sha (a fresh hit), null
 // for anything else. Only `get` is exercised on the hit fast path; the rest
 // are no-op stubs to satisfy the AuthCache interface.
@@ -86,10 +92,11 @@ function makeHitCache(): AuthCache {
 async function buildApp(
   metrics: MetricsRegistry,
   cache: AuthCache | null = null,
+  repo: AccountAuthRepo = makeRepo(),
 ): Promise<FastifyInstance> {
   const app = Fastify();
   await app.register(authPlugin, {
-    authRepo: makeRepo(),
+    authRepo: repo,
     authCache: cache,
     authCoalescer: null,
     metrics,
@@ -178,6 +185,16 @@ describe('requireAuthEventSource — ds_token query fallback', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, accountId: 'acc-1', scopes: ['read', 'write'] });
     expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'ok' })).toBe(1);
+    await app.close();
+  });
+
+  it('rejects a cached query token when the live credential authority is gone', async () => {
+    const metrics = makeRegistry();
+    const app = await buildApp(metrics, makeHitCache(), makeRepo(false));
+    const res = await app.inject({ method: 'GET', url: `/sse?ds_token=${VALID_TOKEN}` });
+    expect(res.statusCode).toBe(401);
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'invalid' })).toBe(1);
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'ok' })).toBe(0);
     await app.close();
   });
 });
