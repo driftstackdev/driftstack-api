@@ -140,7 +140,7 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
   it('defers the SSO token read until AdminLayout has consumed the sign-in hash', () => {
     expect(body).toMatch(/let token = null;/);
     expect(body).toMatch(
-      /function start\(\) \{[\s\S]*token = localStorage\.getItem\('ds_web_session_token'\)/,
+      /function start\(\) \{[\s\S]*try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
     );
     expect(body).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\)/,
@@ -188,7 +188,9 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
 
   it('quota override apply is single-flight and locks the whole form accessibly', () => {
     expect(body).toMatch(/let overrideSubmitting = false;/);
-    expect(body).toMatch(/if \(!token \|\| overrideSubmitting \|\| accountMutationInFlight\)/);
+    expect(body).toMatch(
+      /if \(\s*!token \|\|\s*!accountDataAvailable \|\|\s*overrideSubmitting \|\|\s*accountMutationInFlight\s*\)/,
+    );
     expect(body).toMatch(/overrideSubmitting = true;/);
     expect(body).toMatch(/form\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/const controls = Array\.from\(form\.elements\)/);
@@ -199,12 +201,14 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
 
   it('all account mutations share one accessible request lease', () => {
     expect(body).toMatch(/let accountMutationInFlight = false;/);
-    expect(body).toMatch(/if \(accountMutationInFlight\) return false;/);
+    expect(body).toMatch(/if \(!accountDataAvailable \|\| accountMutationInFlight\) return false;/);
     expect(body).toMatch(/actionRow\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(
       /accountActionButtons\.forEach\(\(button\) => \{\s*button\.disabled = true;/,
     );
-    expect(body).toMatch(/if \(!token \|\| overrideSubmitting \|\| accountMutationInFlight\)/);
+    expect(body).toMatch(
+      /if \(\s*!token \|\|\s*!accountDataAvailable \|\|\s*overrideSubmitting \|\|\s*accountMutationInFlight\s*\)/,
+    );
     expect(body).toMatch(/if \(!beginAccountMutation\(submit\)\) return;/);
     expect(body).toMatch(/if \(!beginAccountMutation\(btn\)\) return;/);
     expect(body).toMatch(/mutationHandler\(\)\.finally\(\(\) => endAccountMutation\(btn\)\)/);
@@ -235,7 +239,7 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toMatch(/const blockedAuditActions = new Set\(\)/);
     expect(body).toMatch(/blockedAuditActions\.add\(action\)/);
     expect(body).toMatch(
-      /button\.disabled = blockedAuditActions\.has\(button\.getAttribute\('data-action'\)\)/,
+      /button\.disabled =\s*unavailable \|\| accountMutationInFlight \|\| auditBlocked/,
     );
     expect(body).toMatch(/if \(blockedAuditActions\.has\(action\)\)/);
     expect(body).toMatch(/if \(blockedAuditActions\.has\('add-note'\)\)/);

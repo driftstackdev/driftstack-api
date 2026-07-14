@@ -64,16 +64,16 @@ describe('W341.C admin /accounts/[id] detail endpoint parity', () => {
     expect(auditRoute).toContain("'/v1/admin/audit-log'");
   });
 
-  it('STATUS_BADGE keys match AccountStatusSchema exactly', () => {
-    const sevMatch = page.match(/STATUS_BADGE:[^={]*=?\s*\{([\s\S]*?)\};/);
-    expect(sevMatch).not.toBeNull();
-    const keys = [...sevMatch![1]!.matchAll(/^\s*([a-z_]+):\s*'[^']+',/gm)]
-      .map((m) => m[1]!)
-      .sort();
+  it('live STATUS_BADGE keys match the schema and neutral SSR adds only unavailable', () => {
+    const maps = [...page.matchAll(/const STATUS_BADGE[^=]*=\s*\{([\s\S]*?)\};/g)];
+    expect(maps).toHaveLength(2);
+    const keysOf = (body: string): string[] =>
+      [...body.matchAll(/^\s*([a-z_]+):\s*'[^']+',/gm)].map((m) => m[1]!).sort();
     const schemaValues = [
       ...(AccountStatusSchema._def as { values: readonly string[] }).values,
     ].sort();
-    expect(keys).toEqual(schemaValues);
+    expect(keysOf(maps[0]![1]!)).toEqual([...schemaValues, 'unavailable'].sort());
+    expect(keysOf(maps[1]![1]!)).toEqual(schemaValues);
   });
 
   it('static shell rewrite keeps arbitrary UUID deep links without SSR', () => {
@@ -84,7 +84,12 @@ describe('W341.C admin /accounts/[id] detail endpoint parity', () => {
 
   it('displays the acc_ id prefix convention from the requested URL', () => {
     expect(page).toContain("const prefixedId = 'acc_' + accountUuid");
-    expect(page).toContain("setText('account-id', accountUuid ? prefixedId : '—')");
+    expect(page).toMatch(
+      /function markAccountAvailable\(\)[\s\S]*setText\('account-id', prefixedId\)/,
+    );
+    expect(page).toMatch(
+      /function renderUnavailable\(message\)[\s\S]*setText\('account-id', '—'\)/,
+    );
   });
 
   it('"Back to accounts" breadcrumb resolves to the list page', () => {

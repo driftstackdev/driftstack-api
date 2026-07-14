@@ -47,6 +47,81 @@ describe('admin account detail mutation reconciliation', () => {
     windowRef = null;
   });
 
+  it.each([
+    ['signed out', false],
+    ['storage denied', true],
+  ])('%s: keeps every account action inert without network', async (_label, storageDenied) => {
+    const dom = new JSDOM(
+      `<!doctype html><title>Account</title>
+       <main data-page="admin-account-detail">
+         <div data-banner class="hidden"></div>
+         <span data-field="title-name"></span><span data-field="title-email"></span>
+         <span data-field="tier"></span><span data-field="status"></span>
+         <span data-field="created"></span><span data-field="updated"></span>
+         <span data-field="account-id"></span><a data-field="full-audit-link"></a>
+         <span data-field="status-badge"></span>
+         <div data-field="action-row">
+           <button data-action="change-tier">Change tier</button>
+           <button data-action="suspend">Suspend</button>
+           <button data-action="unsuspend">Unsuspend</button>
+           <button data-action="set-override">Set override</button>
+           <button data-action="add-note">Add note</button>
+           <button data-action="record-refund">Record refund</button>
+         </div>
+         <form data-field="override-form" class="hidden"></form>
+         <ul data-list="account-audit"></ul>
+         <div data-account-cost-body></div>
+       </main>`,
+      {
+        url: 'https://admin.driftstack.dev/accounts/1234',
+        runScripts: 'dangerously',
+      },
+    );
+    windowRef = dom.window;
+    const fetchCalls: FetchCall[] = [];
+    // @ts-expect-error -- jsdom's fetch global is intentionally injected.
+    dom.window.fetch = (input: string, init: RequestInit | undefined) => {
+      fetchCalls.push({ url: String(input), init });
+      throw new Error('must not fetch without a bearer');
+    };
+    if (storageDenied) {
+      Object.defineProperty(dom.window.localStorage, 'getItem', {
+        configurable: true,
+        value: () => {
+          throw new Error('storage denied');
+        },
+      });
+    }
+    let hydrated = 0;
+    // @ts-expect-error -- injected by AdminLayout.
+    dom.window.dashboardHydrated = () => {
+      hydrated += 1;
+    };
+
+    evalPage(dom.window);
+    dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(hydrated).toBe(1);
+    expect(dom.window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'Sign in with a staff admin account',
+    );
+    expect(dom.window.document.querySelector('[data-field="title-name"]')?.textContent).toBe(
+      'Account unavailable',
+    );
+    expect(dom.window.document.querySelector('[data-field="account-id"]')?.textContent).toBe('—');
+    for (const button of dom.window.document.querySelectorAll<HTMLButtonElement>(
+      '[data-field="action-row"] [data-action]',
+    )) {
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+    }
+    const auditLink = dom.window.document.querySelector('[data-field="full-audit-link"]');
+    expect(auditLink?.hasAttribute('href')).toBe(false);
+    expect(auditLink?.getAttribute('aria-disabled')).toBe('true');
+  });
+
   it('refreshes committed tier/suspend transitions before advising another mutation', async () => {
     const virtualConsole = new VirtualConsole();
     virtualConsole.on('jsdomError', () => {});

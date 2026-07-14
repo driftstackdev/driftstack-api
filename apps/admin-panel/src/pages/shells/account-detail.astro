@@ -1334,7 +1334,11 @@ const accountId = account.id;
         // AdminLayout consumes the SSO hash and writes this token in its trailing
         // script. Defer the read until parsing completes so a fresh sign-in does
         // not permanently capture null in this page's earlier slotted script.
-        token = localStorage.getItem('ds_web_session_token');
+        try {
+          token = localStorage.getItem('ds_web_session_token');
+        } catch {
+          token = null;
+        }
         if (!token) {
           renderUnavailable('Sign in with a staff admin account to load this account.');
           showBanner('Sign in with a staff admin account to see live data.');
