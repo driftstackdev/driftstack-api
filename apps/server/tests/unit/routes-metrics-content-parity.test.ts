@@ -1,7 +1,7 @@
 // Drift guard for apps/server/src/routes/metrics.ts. Pins the Arc 4
 // Wave 2.B sub-slice 8.18 GET /metrics Prometheus scrape — exposition-
 // format content-type + METRICS_SCRAPE_TOKEN bearer auth + 503-on-
-// missing-token + 401-on-mismatch. Drift to a different content-type
+// missing-token + 401-on-mismatch + no-store on every outcome. Drift to a different content-type
 // would make Prometheus / VictoriaMetrics scrapers reject the
 // response; drift to a default-public-on-missing-token would leak
 // internal counters.
@@ -53,18 +53,28 @@ describe('routes/metrics content parity', () => {
     expect(body).toMatch(/readonly scrapeToken: string \| null;/);
   });
 
-  it('503 fail-closed branch pinned: scrapeToken null OR empty-string → 503 metrics scrape token not configured. + 401 wrong-bearer branch via CONSTANT-TIME compare (timingSafeEqual + length-guard, matching lib/internal-fleet-auth + the timing-safe cross-source invariant) → 401 unauthorized. Drift to dropping the empty-string branch would let a literally-empty token pass; drift back to a plain !== / === compare would reintroduce a token-recovery timing side-channel on the scrape bearer', () => {
-    expect(body).toMatch(
-      /if \(deps\.scrapeToken === null \|\| deps\.scrapeToken\.length === 0\) \{\s*\n?\s*reply\.code\(503\);\s*\n?\s*return \{ error: 'metrics scrape token not configured' \};/,
+  it('typed 503/401 branches retain constant-time comparison and Bearer challenge', () => {
+    expect(body).toContain("reply.header('cache-control', 'no-store');");
+    expect(body).toContain(
+      "import { FeatureUnavailableError, UnauthorizedError } from '../lib/errors.js';",
+    );
+    expect(body).toContain('if (deps.scrapeToken === null || deps.scrapeToken.length === 0) {');
+    expect(body).toContain(
+      "throw new FeatureUnavailableError('Metrics scraping is not configured.');",
     );
     expect(body).toMatch(/import \{ timingSafeEqual \} from 'node:crypto';/);
     expect(body).toMatch(/const authz = req\.headers\.authorization;/);
     expect(body).toMatch(/const expected = `Bearer \$\{deps\.scrapeToken\}`;/);
-    expect(body).toMatch(
-      /if \(authzBuf\.length !== expectedBuf\.length \|\| !timingSafeEqual\(authzBuf, expectedBuf\)\) \{\s*\n?\s*reply\.code\(401\);\s*\n?\s*return \{ error: 'unauthorized' \};/,
+    expect(body).toContain(
+      'if (authzBuf.length !== expectedBuf.length || !timingSafeEqual(authzBuf, expectedBuf)) {',
+    );
+    expect(body).toContain("reply.header('www-authenticate', 'Bearer realm=\"metrics\"');");
+    expect(body).toContain(
+      "throw new UnauthorizedError('Metrics scrape token missing or invalid.');",
     );
     // Regression guard: the plain non-constant-time compare must not return.
     expect(body).not.toMatch(/if \(authz !== expected\)/);
+    expect(body).not.toContain("return { error: 'unauthorized' };");
   });
 
   it("exposition-format content-type pinned: 'text/plain; version=0.0.4; charset=utf-8'. Drift to dropping the `version=0.0.4` parameter would make some scrapers reject the response (Prometheus checks the version parameter for protocol-version negotiation)", () => {

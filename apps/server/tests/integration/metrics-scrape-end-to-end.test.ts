@@ -24,6 +24,16 @@ describe('GET /metrics Prometheus scrape end-to-end', () => {
     // Test fixture hardcodes metricsScrapeToken='test-scrape-token'
     // → route is registered + auth-gated. Missing Bearer → 401.
     expect(res.statusCode).toBe(401);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['www-authenticate']).toBe('Bearer realm="metrics"');
+    expect(res.headers['content-type']).toContain('application/problem+json');
+    expect(res.json()).toMatchObject({
+      type: 'https://errors.driftstack.dev/unauthorized',
+      title: 'Unauthorized',
+      status: 401,
+      detail: 'Metrics scrape token missing or invalid.',
+      instance: res.headers['x-request-id'],
+    });
   });
 
   it('with the WRONG Bearer → 401 (NOT 200)', async () => {
@@ -34,6 +44,24 @@ describe('GET /metrics Prometheus scrape end-to-end', () => {
       headers: { authorization: 'Bearer not-the-scrape-token' },
     });
     expect(res.statusCode).toBe(401);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['www-authenticate']).toBe('Bearer realm="metrics"');
+    expect(res.headers['content-type']).toContain('application/problem+json');
+  });
+
+  it('without a configured scrape token → typed fail-closed 503', async () => {
+    fx = await buildTestApp({ tier: 'api_builder', metricsScrapeToken: null });
+    const res = await fx.app.inject({ method: 'GET', url: '/metrics' });
+    expect(res.statusCode).toBe(503);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['content-type']).toContain('application/problem+json');
+    expect(res.json()).toMatchObject({
+      type: 'https://errors.driftstack.dev/feature-unavailable',
+      title: 'Feature unavailable',
+      status: 503,
+      detail: 'Metrics scraping is not configured.',
+      instance: res.headers['x-request-id'],
+    });
   });
 
   it('with the correct Bearer → 200 + text/plain version=0.0.4 content-type', async () => {
@@ -44,6 +72,7 @@ describe('GET /metrics Prometheus scrape end-to-end', () => {
       headers: { authorization: 'Bearer test-scrape-token' },
     });
     expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['content-type']).toMatch(/text\/plain/);
     expect(res.headers['content-type']).toMatch(/version=0\.0\.4/);
   });

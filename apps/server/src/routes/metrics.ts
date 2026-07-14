@@ -16,6 +16,7 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import { FeatureUnavailableError, UnauthorizedError } from '../lib/errors.js';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 
 export interface MetricsRoutesDeps {
@@ -25,9 +26,12 @@ export interface MetricsRoutesDeps {
 
 export function registerMetricsRoutes(app: FastifyInstance, deps: MetricsRoutesDeps): void {
   app.get('/metrics', async (req, reply) => {
+    // Internal counters must never persist in browser/proxy caches, including
+    // authenticated success responses (the app-wide /v1 hook does not cover
+    // this infrastructure path).
+    reply.header('cache-control', 'no-store');
     if (deps.scrapeToken === null || deps.scrapeToken.length === 0) {
-      reply.code(503);
-      return { error: 'metrics scrape token not configured' };
+      throw new FeatureUnavailableError('Metrics scraping is not configured.');
     }
     const authz = req.headers.authorization;
     const expected = `Bearer ${deps.scrapeToken}`;
@@ -38,8 +42,8 @@ export function registerMetricsRoutes(app: FastifyInstance, deps: MetricsRoutesD
     const authzBuf = Buffer.from(typeof authz === 'string' ? authz : '', 'utf8');
     const expectedBuf = Buffer.from(expected, 'utf8');
     if (authzBuf.length !== expectedBuf.length || !timingSafeEqual(authzBuf, expectedBuf)) {
-      reply.code(401);
-      return { error: 'unauthorized' };
+      reply.header('www-authenticate', 'Bearer realm="metrics"');
+      throw new UnauthorizedError('Metrics scrape token missing or invalid.');
     }
     reply.header('content-type', 'text/plain; version=0.0.4; charset=utf-8');
     return deps.registry.render();

@@ -419,6 +419,12 @@ export interface TestAppOptions {
    */
   globalIpRateLimit?: { capacity: number; refillPerSecond: number } | null;
   /**
+   * Override the protected Prometheus scrape token. `null` models the
+   * fail-closed production posture when METRICS_SCRAPE_TOKEN is absent;
+   * omitted retains the fixture's historical test token.
+   */
+  metricsScrapeToken?: string | null;
+  /**
    * Fastify's trusted-proxy boundary. Securely defaults to false just like
    * buildApp; route-level tests that intentionally exercise an authoritative
    * forwarded client IP must opt into the production-shaped hop count.
@@ -1580,11 +1586,13 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // can replay the same flow without re-paying decompose cost.
     recipesRepo,
     // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
-    // registry + scrape token. Always wired in tests so the /metrics
-    // route registers + pair-mode + bundled-llm counters can be
-    // asserted.
+    // registry + scrape token. Wired by default so /metrics + pair-mode
+    // counters can be asserted; an explicit null exercises fail-closed
+    // missing-config behavior.
     metricsRegistry,
-    metricsScrapeToken: 'test-scrape-token',
+    ...(opts.metricsScrapeToken === null
+      ? {}
+      : { metricsScrapeToken: opts.metricsScrapeToken ?? 'test-scrape-token' }),
     // Stub deployment fallback key — only used when a test seeds
     // opts.enableBundledLlm with consent=true so the bundled-LLM leg
     // can actually resolve. Otherwise harmless; default-fallback

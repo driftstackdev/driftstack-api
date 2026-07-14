@@ -25220,3 +25220,31 @@ Verification:
 - the team route and both structural guards pass 3 files and 45 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-586 — protected metrics responses are typed and non-cacheable
+
+**Date:** 2026-07-14
+
+Hardened the public-network `/metrics` authentication boundary while preserving
+its Prometheus success protocol and constant-time bearer comparison. Every
+outcome now carries `Cache-Control: no-store`, preventing internal counter
+payloads from persisting in private browser or intermediary caches outside the
+app's `/v1`-only cache hook.
+
+Missing or invalid credentials now return a typed Unauthorized problem with a
+fixed `WWW-Authenticate: Bearer realm="metrics"` challenge. A missing deployment
+token still fails closed with 503, now as a typed FeatureUnavailable problem.
+Both errors include request-id correlation; neither reflects credential input.
+Authenticated success remains Prometheus text with the exact 0.0.4 content type.
+
+Verification:
+
+- integration tests cover missing, wrong, absent-configuration, and valid-token
+  outcomes, including status, cache policy, challenge, problem type/detail,
+  and request-id instance;
+- constant-time length checking plus `timingSafeEqual` remains structurally
+  pinned and plain string comparison remains forbidden;
+- the metrics route, pair-mode scrape, and content guard pass 3 files and 13
+  tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.
