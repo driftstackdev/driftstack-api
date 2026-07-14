@@ -7,9 +7,9 @@
 //
 //   • frontmatter-title fallback chain: Astro.props.title ?? frontmatter.title ?? 'Legal'.
 //   • frontmatter-description fallback chain: ... ?? 'Driftstack legal documents.'.
-//   • 5-item legalLinks: /legal/terms + /legal/privacy + /legal/dpa +
-//     /legal/aup + /trust/sub-processors.
-//   • prose styling: prose-h1:hidden + prose-a:text-tk-accent +
+//   • 5-item canonical legalLinks: /legal/terms/ + /legal/privacy/ + /legal/dpa/ +
+//     /legal/aup/ + /trust/sub-processors/.
+//   • prose styling: tokenized headings + prose-a:text-tk-accent +
 //     prose-blockquote:border-l-tk-accent.
 //   • aria-label="Other legal documents" navigation label.
 
@@ -48,12 +48,15 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     );
   });
 
-  it("5-item legalLinks framing pinned: '/legal/terms' Terms of Service + '/legal/privacy' Privacy Policy + '/legal/dpa' Data Processing Agreement + '/legal/aup' Acceptable Use Policy + '/trust/sub-processors' Sub-processors — pinned so the 5-legal-doc surface (4 legal/ + 1 trust/sub-processors) commitment survives (drift to dropping any legal page from the legalLinks nav would orphan it from cross-doc discovery)", () => {
-    expect(body).toMatch(/\{ href: '\/legal\/terms', label: 'Terms of Service' \},/);
-    expect(body).toMatch(/\{ href: '\/legal\/privacy', label: 'Privacy Policy' \},/);
-    expect(body).toMatch(/\{ href: '\/legal\/dpa', label: 'Data Processing Agreement' \},/);
-    expect(body).toMatch(/\{ href: '\/legal\/aup', label: 'Acceptable Use Policy' \},/);
-    expect(body).toMatch(/\{ href: '\/trust\/sub-processors', label: 'Sub-processors' \},/);
+  it('5-item canonical legalLinks framing keeps every legal/trust document discoverable without an edge redirect.', () => {
+    expect(body).toMatch(/\{ href: '\/legal\/terms\/', label: 'Terms of Service' \},/);
+    expect(body).toMatch(/\{ href: '\/legal\/privacy\/', label: 'Privacy Policy' \},/);
+    expect(body).toMatch(/\{ href: '\/legal\/dpa\/', label: 'Data Processing Agreement' \},/);
+    expect(body).toMatch(/\{ href: '\/legal\/aup\/', label: 'Acceptable Use Policy' \},/);
+    expect(body).toMatch(/\{ href: '\/trust\/sub-processors\/', label: 'Sub-processors' \},/);
+    expect(body).not.toMatch(
+      /href: '\/(?:legal\/(?:terms|privacy|dpa|aup)|trust\/sub-processors)'/,
+    );
   });
 
   it("BaseLayout wrap + header section framing pinned: '<BaseLayout title={title} description={description}>' + 'Legal' mono-uppercase eyebrow (S24 2026-07-06: eyebrow is TEXT → the AA-safe tk-accent-text tone; raw accent is ~3.0:1 on the dark bg) + title h1 (3xl→4xl on md) + optional description prose-paragraph — pinned so the BaseLayout-pass-through + Legal-eyebrow + responsive-h1 + conditional-description commitment survives", () => {
@@ -70,9 +73,12 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     );
   });
 
-  it("Prose styling framing pinned (dark-theme): 'prose max-w-none' + 'prose-h1:hidden' + 'prose-a:text-tk-accent-text prose-a:no-underline hover:prose-a:underline hover:prose-a:text-tk-accent-2' (S24 2026-07-06: link base tone is TEXT → the AA-safe accent-text pair, matching the S23 link pattern; accent-2 stays the hover) + 'prose-blockquote:border-l-tk-accent prose-blockquote:not-italic prose-blockquote:text-tk-ink-2' — Fleet rework: prose-invert dropped (light default) + token anchors.", () => {
+  it('Prose styling pins tokenized headings, AA-safe links and blockquotes while the layout hero owns the page h1.', () => {
     expect(body).toMatch(/prose max-w-none/);
-    expect(body).toMatch(/prose-h1:hidden/);
+    expect(body).toMatch(
+      /prose-headings:scroll-mt-20 prose-headings:font-semibold prose-headings:text-tk-ink/,
+    );
+    expect(body).toMatch(/prose-h2:mt-12 prose-h2:text-2xl prose-h3:text-xl/);
     expect(body).toMatch(/prose-a:text-tk-accent-text prose-a:no-underline/);
     expect(body).toMatch(/prose-a:text-tk-accent-2/);
     expect(body).toMatch(/prose-a:no-underline/);
