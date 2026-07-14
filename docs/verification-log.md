@@ -26735,3 +26735,27 @@ registrations, with zero phantom or undocumented admin operation and an exact
 source-parity and generated-spec evidence passes 7 files and 42/42 tests; all
 workspace builds, strict server test TypeScript, targeted lint/format, diff and
 whitespace checks are green.
+
+## V-630 — OpenAPI path templates always declare required parameters
+
+**Date:** 2026-07-14
+
+The repository's validity invariant checked only OpenAPI version, operation ID
+uniqueness and reference resolution. A standards audit found 36 published
+operations with `{id}`, `{name}` or `{archetype}` in their path but no matching
+`in: path`, `required: true` parameter. Source/snapshot parity remained green
+because both sides generated the same invalid document; stricter validators
+and SDK generators can reject or mis-generate these operations.
+
+The central route-registration wrapper now derives otherwise-unspecified path
+parameters from template expressions and emits each as a required, non-empty,
+bounded string. Explicit per-route parameter schemas remain authoritative and
+are never replaced. The validity invariant now checks every operation for one
+required parameter per template expression and rejects missing, duplicate,
+optional and orphan path parameters.
+
+Verification finds zero parameter defects across all 230 published operations,
+including the former 36-operation gap. Focused validity, operation coverage,
+snapshot, source-parity and generated-spec evidence passes 5 files and 33/33
+tests; all workspace builds, strict server source/test TypeScript, targeted
+lint/format, diff and whitespace checks are green.

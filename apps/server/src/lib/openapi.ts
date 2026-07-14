@@ -6602,7 +6602,34 @@ function buildRegistry(): OpenAPIRegistry {
 }
 
 function registerRoute(r: OpenAPIRegistry, config: RouteConfig): void {
-  r.registerPath(config);
+  const pathParameterNames = [
+    ...new Set(
+      [...config.path.matchAll(/\{([^}]+)\}/g)]
+        .map((match) => match[1])
+        .filter((name): name is string => name !== undefined),
+    ),
+  ];
+  if (pathParameterNames.length === 0 || config.request?.params !== undefined) {
+    r.registerPath(config);
+    return;
+  }
+
+  // OpenAPI 3.1 requires every path-template expression to have a matching
+  // `in: path`, `required: true` parameter. zod-to-openapi emits those fields
+  // from request.params, but historically accepted template paths without a
+  // schema and generated an invalid operation. Preserve any explicit schema;
+  // otherwise supply a conservative non-empty URL-component boundary.
+  const paramsShape: Record<string, z.ZodString> = {};
+  for (const name of pathParameterNames) {
+    paramsShape[name] = z.string().min(1).max(2048);
+  }
+  r.registerPath({
+    ...config,
+    request: {
+      ...(config.request ?? {}),
+      params: z.object(paramsShape),
+    },
+  });
 }
 
 // ───────────────────────────────────────────────────────────────────────────

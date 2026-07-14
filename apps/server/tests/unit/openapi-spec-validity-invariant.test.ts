@@ -81,4 +81,48 @@ describe('OpenAPI spec validity invariant (packages/sdk-python/openapi.json)', (
     }
     expect(dangling, `dangling $ref(s): ${dangling.join(', ')}`).toEqual([]);
   });
+
+  it('declares exactly one required path parameter for every template expression', () => {
+    const issues: string[] = [];
+    for (const [path, pathItem] of Object.entries(spec.paths ?? {})) {
+      const templateNames = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
+      const pathLevelParameters = Array.isArray(pathItem.parameters) ? pathItem.parameters : [];
+
+      for (const [method, rawOperation] of Object.entries(pathItem)) {
+        if (
+          !HTTP_METHODS.has(method) ||
+          typeof rawOperation !== 'object' ||
+          rawOperation === null
+        ) {
+          continue;
+        }
+        const operation = rawOperation as { parameters?: unknown };
+        const operationParameters = Array.isArray(operation.parameters) ? operation.parameters : [];
+        const pathParameters = [...pathLevelParameters, ...operationParameters].filter(
+          (parameter): parameter is { in: string; name: string; required?: boolean } =>
+            typeof parameter === 'object' &&
+            parameter !== null &&
+            (parameter as { in?: unknown }).in === 'path' &&
+            typeof (parameter as { name?: unknown }).name === 'string',
+        );
+        const operationLabel = `${method.toUpperCase()} ${path}`;
+
+        for (const name of templateNames) {
+          const matches = pathParameters.filter((parameter) => parameter.name === name);
+          if (matches.length !== 1) {
+            issues.push(`${operationLabel}: {${name}} has ${matches.length} path parameters`);
+          } else if (matches[0]?.required !== true) {
+            issues.push(`${operationLabel}: {${name}} is not required`);
+          }
+        }
+        for (const parameter of pathParameters) {
+          if (!templateNames.includes(parameter.name)) {
+            issues.push(`${operationLabel}: orphan path parameter ${parameter.name}`);
+          }
+        }
+      }
+    }
+
+    expect(issues, `invalid path parameter(s):\n${issues.join('\n')}`).toEqual([]);
+  });
 });
