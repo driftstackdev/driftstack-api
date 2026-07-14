@@ -40,8 +40,8 @@
 //   V-326c GET /v1/team/owners reads from ctx.teams (no DB call) —
 //   mirrors V-326e effective-account info.
 //
-//   DELETE /v1/team/members/:id returns RFC 7807 problem body on
-//   404, 204 No Content on success.
+//   DELETE /v1/team/members/:id throws typed NotFoundError on 404,
+//   204 No Content on success.
 //
 // stays in lockstep across apps/server/src/routes/team.ts.
 
@@ -167,13 +167,11 @@ describe('W1050 routes/team V-298c + V-326c cross-source invariant', () => {
 
   // ─── DELETE /v1/team/members/:id ─────────────────────────────
 
-  it('CRITICAL DELETE /v1/team/members/:id — 204 on success, RFC 7807 problem body on 404 with type/title/status/detail. The explicit 7807-shape returned inline (not via thrown NotFoundError) lets the route control the exact wire shape.', () => {
+  it('CRITICAL DELETE /v1/team/members/:id — 204 on success, typed NotFoundError on 404', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/team.ts'));
     expect(p).toMatch(/return reply\.code\(204\)\.send\(\);/);
-    expect(p).toMatch(/type: 'about:blank',/);
-    expect(p).toMatch(/title: 'Not Found',/);
-    expect(p).toMatch(/status: 404,/);
-    expect(p).toMatch(/detail: `Membership \$\{request\.params\.id\} not found\.`,/);
+    expect(p).toContain('throw new NotFoundError(`Membership ${request.params.id} not found.`);');
+    expect(p).not.toContain("type: 'about:blank'");
   });
 
   // ─── Auth + rate-limit on every route ────────────────────────

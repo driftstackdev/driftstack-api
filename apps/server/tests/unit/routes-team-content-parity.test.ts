@@ -15,7 +15,7 @@
 //   • Public-id prefixes: mem_<uuid> + inv_<uuid> + acc_<uuid>.
 //   • V-326c GET /v1/team/owners: read straight from ctx.teams (no DB
 //     call); mirror of GET /v1/team/members ("teams I am ON").
-//   • DELETE 404 uses problem+json shape (type/title/status/detail).
+//   • DELETE 404 throws canonical NotFoundError through the RFC 7807 handler.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -52,10 +52,10 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
     );
   });
 
-  it('imports: FastifyInstance + zod + ValidationError + TeamInviteRow/TeamMemberRow/TeamMembersService', () => {
+  it('imports: FastifyInstance + zod + NotFoundError/ValidationError + team service types', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
-    expect(body).toMatch(/import \{ ValidationError \} from '\.\.\/lib\/errors\.js';/);
+    expect(body).toContain("import { NotFoundError, ValidationError } from '../lib/errors.js';");
     expect(body).toMatch(
       /import type \{ TeamInviteRow, TeamMemberRow, TeamMembersService \} from '\.\.\/services\/team-members\.js';/,
     );
@@ -124,10 +124,15 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
     );
   });
 
-  it('DELETE /v1/team/members/:id: 404 returns problem+json shape (type "about:blank" + title "Not Found" + status 404 + detail with membership id); 204 on successful removal', () => {
-    expect(body).toMatch(
-      /const removed = await service\.removeMember\(\{\s*\n?\s*membershipId: id,\s*\n?\s*ownerAccountId: ctx\.account\.id,\s*\n?\s*\}\);\s*\n?\s*if \(!removed\) \{\s*\n?\s*return reply\.code\(404\)\.send\(\{\s*\n?\s*type: 'about:blank',\s*\n?\s*title: 'Not Found',\s*\n?\s*status: 404,\s*\n?\s*detail: `Membership \$\{request\.params\.id\} not found\.`,\s*\n?\s*\}\);\s*\n?\s*\}\s*\n?\s*return reply\.code\(204\)\.send\(\);/,
+  it('DELETE /v1/team/members/:id: typed 404 with membership detail; 204 on success', () => {
+    expect(body).toContain('const removed = await service.removeMember({');
+    expect(body).toContain('membershipId: id,');
+    expect(body).toContain('ownerAccountId: ctx.account.id,');
+    expect(body).toContain(
+      'throw new NotFoundError(`Membership ${request.params.id} not found.`);',
     );
+    expect(body).toContain('return reply.code(204).send();');
+    expect(body).not.toContain("type: 'about:blank'");
   });
 
   it('file exists at canonical path', () => {

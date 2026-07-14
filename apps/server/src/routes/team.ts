@@ -14,7 +14,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ValidationError } from '../lib/errors.js';
+import { NotFoundError, ValidationError } from '../lib/errors.js';
 import type { TeamInviteRow, TeamMemberRow, TeamMembersService } from '../services/team-members.js';
 
 const InviteBodySchema = z.object({
@@ -164,12 +164,7 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
         ownerAccountId: ctx.account.id,
       });
       if (!removed) {
-        return reply.code(404).send({
-          type: 'about:blank',
-          title: 'Not Found',
-          status: 404,
-          detail: `Membership ${request.params.id} not found.`,
-        });
+        throw new NotFoundError(`Membership ${request.params.id} not found.`);
       }
       return reply.code(204).send();
     },

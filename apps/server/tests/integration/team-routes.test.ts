@@ -237,6 +237,14 @@ describe('DELETE /v1/team/members/:id', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).toContain('application/problem+json');
+    expect(res.json()).toMatchObject({
+      type: 'https://errors.driftstack.dev/not-found',
+      title: 'Not Found',
+      status: 404,
+      detail: 'Membership mem_00000000-0000-4000-8000-000000000999 not found.',
+      instance: res.headers['x-request-id'],
+    });
   });
 
   it('400 on malformed id', async () => {

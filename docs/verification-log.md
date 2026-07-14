@@ -25198,3 +25198,25 @@ Verification:
   and 39 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-585 — team member deletion 404 uses the API problem contract
+
+**Date:** 2026-07-14
+
+Replaced the inline 404 object in `DELETE /v1/team/members/:id` with the
+canonical typed NotFound error. The previous body resembled RFC 7807 but used
+`about:blank`, retained Fastify's ordinary JSON content type, and omitted the
+request-id instance because it bypassed the global error handler.
+
+The route still removes only a tenant-scoped membership and returns 204 on
+success. An absent membership still returns the same non-sensitive detail and
+404 status, now with the stable Driftstack not-found problem type,
+`application/problem+json`, and an `instance` matching `x-request-id`.
+
+Verification:
+
+- the integration route test proves status, content type, stable type/title,
+  membership detail, and request-id correlation;
+- the team route and both structural guards pass 3 files and 45 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.
