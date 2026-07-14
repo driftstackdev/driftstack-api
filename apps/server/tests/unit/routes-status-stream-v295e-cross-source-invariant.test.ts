@@ -75,6 +75,15 @@ describe('W1022 routes/status-stream V-295e cross-source invariant', () => {
     expect(p).not.toContain('NO app-level');
   });
 
+  it('CRITICAL capacity rejection uses the typed RFC 7807 error path', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status-stream.ts'));
+    expect(p).toContain("reply.header('retry-after', '30');");
+    expect(p).toContain(
+      "throw new FeatureUnavailableError('Status stream at capacity; retry shortly.');",
+    );
+    expect(p).not.toContain("send({ error: 'Status stream at capacity");
+  });
+
   it("CRITICAL heartbeatMs default — '30_000' + framing 'well below typical proxy idle-timeouts (60s on Cloudflare, longer elsewhere)'.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status-stream.ts'));
     expect(p).toMatch(/Heartbeat interval in ms\. Defaults to 30s — well below typical/);

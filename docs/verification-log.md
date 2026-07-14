@@ -25173,3 +25173,28 @@ Verification:
   passes 6 files and 101 tests;
 - strict server source/test typechecking, linting, formatting, and generated
   OpenAPI parity pass.
+
+## V-584 — SSE capacity denial uses the API problem contract
+
+**Date:** 2026-07-14
+
+Moved the public status stream's capacity rejection onto the server's typed
+error path. The old branch sent an ad-hoc `{error}` object directly from the
+route, bypassing the mandatory RFC 7807 middleware and losing both a stable
+problem type and request-id correlation.
+
+The connection limits and backoff semantics are unchanged: a saturated stream
+still returns 503 with `Retry-After: 30`. It now uses the existing
+FeatureUnavailable problem type, `application/problem+json`, stable title and
+detail fields, and an `instance` matching the response request id. No accepted
+SSE response, event framing, heartbeat, or cleanup behavior changed.
+
+Verification:
+
+- the real HTTP capacity test holds 10 streams, checks the 11th denial's status,
+  Retry-After, problem content type/body, and request-id correlation, then
+  confirms disconnect capacity is reusable;
+- focused route behavior and both status-stream contract guards pass 3 files
+  and 39 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

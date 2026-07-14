@@ -14,6 +14,7 @@
 // process at 500 total connections and 10 per IP.
 
 import type { FastifyInstance } from 'fastify';
+import { FeatureUnavailableError } from '../lib/errors.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { IncidentEvent, IncidentEventBus } from '../services/incident-event-bus.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
@@ -61,11 +62,8 @@ export function registerStatusStreamRoutes(
     const ip = request.ip;
     const perIp = openPerIp.get(ip) ?? 0;
     if (openTotal >= MAX_TOTAL_CONNECTIONS || perIp >= MAX_CONNECTIONS_PER_IP) {
-      reply
-        .code(503)
-        .header('retry-after', '30')
-        .send({ error: 'Status stream at capacity; retry shortly.' });
-      return;
+      reply.header('retry-after', '30');
+      throw new FeatureUnavailableError('Status stream at capacity; retry shortly.');
     }
     openTotal += 1;
     openPerIp.set(ip, perIp + 1);

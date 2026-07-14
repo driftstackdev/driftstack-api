@@ -288,9 +288,15 @@ describe('GET /v1/status/stream capacity', () => {
       });
       expect(denied.status).toBe(503);
       expect(denied.headers.get('retry-after')).toBe('30');
-      await expect(denied.json()).resolves.toEqual({
-        error: 'Status stream at capacity; retry shortly.',
+      expect(denied.headers.get('content-type')).toContain('application/problem+json');
+      const problem = (await denied.json()) as Record<string, unknown>;
+      expect(problem).toMatchObject({
+        type: 'https://errors.driftstack.dev/feature-unavailable',
+        title: 'Feature unavailable',
+        status: 503,
+        detail: 'Status stream at capacity; retry shortly.',
       });
+      expect(problem['instance']).toBe(denied.headers.get('x-request-id'));
 
       controllers.shift()!.abort();
 

@@ -64,8 +64,10 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     expect(body).toContain(
       'if (openTotal >= MAX_TOTAL_CONNECTIONS || perIp >= MAX_CONNECTIONS_PER_IP)',
     );
-    expect(body).toContain('.code(503)');
-    expect(body).toContain(".header('retry-after', '30')");
+    expect(body).toContain("reply.header('retry-after', '30');");
+    expect(body).toContain(
+      "throw new FeatureUnavailableError('Status stream at capacity; retry shortly.');",
+    );
     expect(body).toContain('if (released) return;');
     expect(body).toContain('releaseConn();');
   });
@@ -147,6 +149,7 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     expect(body).toContain(
       "import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';",
     );
+    expect(body).toContain("import { FeatureUnavailableError } from '../lib/errors.js';");
     expect(body).toMatch(
       /import type \{ IncidentEvent, IncidentEventBus \} from '\.\.\/services\/incident-event-bus\.js';/,
     );
