@@ -10,6 +10,8 @@ const HEADER = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/components/Header.
 const FOOTER = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/components/Footer.astro'), 'utf8');
 const LAYOUT = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/layouts/BaseLayout.astro'), 'utf8');
 const BUILT_HOME = resolve(REPO_ROOT, 'apps/docs/dist/index.html');
+const BUILT_API_ACCOUNT = resolve(REPO_ROOT, 'apps/docs/dist/api/account/index.html');
+const BUILT_GUIDE = resolve(REPO_ROOT, 'apps/docs/dist/guides/concurrency/index.html');
 
 describe('docs global control accessibility', () => {
   it('exposes all three theme controls with synchronized next-action labels', () => {
@@ -76,5 +78,33 @@ describe('docs global control accessibility', () => {
     expect(LAYOUT).toMatch(/event\.key !== 'Escape' \|\| !menu\.open/);
     expect(LAYOUT).toMatch(/!menu\.contains\(event\.target\)/);
     expect(LAYOUT).toMatch(/trigger\.focus\(\)/);
+  });
+
+  it('marks the active top-level section without changing navigation weight', () => {
+    expect(
+      HEADER.match(/aria-current=\{isActive\(item\.href\) \? 'page' : undefined\}/g),
+    ).toHaveLength(2);
+    expect(HEADER).toContain(
+      "class:list={['nav-link font-medium', isActive(item.href) && 'text-tk-accent-text']}",
+    );
+    expect(HEADER).toContain(
+      "'rounded-sm px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover'",
+    );
+    expect(HEADER).not.toContain("isActive(item.href) && 'text-tk-accent-text font-medium'");
+
+    for (const [builtPath, expectedHref] of [
+      [BUILT_API_ACCOUNT, '/api/'],
+      [BUILT_GUIDE, '/guides/'],
+    ]) {
+      const dom = new JSDOM(readFileSync(builtPath, 'utf8'));
+      const activeLinks = Array.from(
+        dom.window.document.querySelectorAll<HTMLAnchorElement>(
+          'header nav a[aria-current="page"]',
+        ),
+      );
+      expect(activeLinks).toHaveLength(2);
+      expect(activeLinks.every((link) => link.getAttribute('href') === expectedHref)).toBe(true);
+      dom.window.close();
+    }
   });
 });

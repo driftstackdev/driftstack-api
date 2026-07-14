@@ -49,7 +49,8 @@ function isActive(href: string): boolean {
         navItems.map((item) => (
           <a
             href={item.href}
-            class:list={['nav-link', isActive(item.href) && 'text-tk-accent-text font-medium']}
+            aria-current={isActive(item.href) ? 'page' : undefined}
+            class:list={['nav-link font-medium', isActive(item.href) && 'text-tk-accent-text']}
             target={item.external ? '_blank' : undefined}
             rel={item.external ? 'noopener noreferrer' : undefined}
           >
@@ -156,9 +157,10 @@ function isActive(href: string): boolean {
             navItems.map((item) => (
               <a
                 href={item.href}
+                aria-current={isActive(item.href) ? 'page' : undefined}
                 class:list={[
-                  'rounded-sm px-3 py-2 text-sm text-tk-ink-2 hover:bg-tk-hover',
-                  isActive(item.href) && 'text-tk-accent-text font-medium',
+                  'rounded-sm px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover',
+                  isActive(item.href) && 'text-tk-accent-text',
                 ]}
                 target={item.external ? '_blank' : undefined}
                 rel={item.external ? 'noopener noreferrer' : undefined}
