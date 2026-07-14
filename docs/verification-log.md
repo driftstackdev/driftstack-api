@@ -24871,3 +24871,32 @@ Verification:
 - the raw-Date structural scanner is green after allow-listing only audited
   Drizzle column references in MFA and schema checks;
 - connected MFA service/repository, typecheck, lint, and format gates pass.
+
+## V-573 — status-subscriber authority survives anonymous refreshes
+
+**Date:** 2026-07-13
+
+Closed a public status-subscription denial-of-service and two token races at
+the mailbox-authority boundary:
+
+- anonymous re-subscribe now refreshes only the pending confirmation proof;
+  it cannot remove an active recipient from incident fan-out, invalidate the
+  recipient's current unsubscribe link, or reactivate an opted-out recipient;
+- confirmation and unsubscribe transitions compare-and-swap the exact token
+  hash presented by the caller, so only one pooled API process can consume a
+  credential and stale links cannot win after token replacement;
+- only the winning confirmation sends a welcome email and publishes its
+  unsubscribe credential;
+- admin force-subscribe consumes its temporary confirmation credential even
+  when re-adding an already-active recipient, while preserving the original
+  confirmation timestamp.
+
+Verification:
+
+- real PostgreSQL adapter coverage proves active-state preservation, a
+  single concurrent confirmation winner, and rejection of replaced confirm
+  and unsubscribe hashes;
+- route/service coverage proves anonymous refresh cannot suppress an active
+  recipient or silently reactivate an opted-out recipient before mailbox
+  proof;
+- source-invariant guards pin the preservation and exact-hash predicates.

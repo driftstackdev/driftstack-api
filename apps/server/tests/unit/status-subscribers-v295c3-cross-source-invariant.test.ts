@@ -24,10 +24,9 @@
 //   column but keeps row (so re-subscription kicks off fresh
 //   double-opt-in flow rather than re-confirming a tombstoned email).
 //
-//   Re-subscribe semantics — 'if the email already exists, we update
-//   the existing row with a fresh confirm_token + cleared
-//   confirmed_at / unsubscribed_at. The double-opt-in is the gate;
-//   abandoned signups don't ever get put on the notification list'.
+//   Re-subscribe semantics — refresh only the pending confirmation
+//   credential. Existing confirmed/unsubscribed state stays authoritative
+//   until the mailbox owner consumes that proof.
 //
 //   listConfirmed() returns rows the incident-notification dispatcher
 //   uses to fan-out emails on public incidents.
@@ -108,12 +107,12 @@ describe('W930 V-295c3 status-subscribers cross-source invariant', () => {
 
   // ─── Re-subscribe semantics framing ──────────────────────────
 
-  it("CRITICAL re-subscribe semantics framing — 'if the email already exists, we update the existing row with a fresh confirm_token + cleared confirmed_at / unsubscribed_at. The double-opt-in is the gate; abandoned signups don't ever get put on the notification list'. The fresh-confirm-token-on-resubscribe + cleared-status is the gating contract.", () => {
+  it('CRITICAL re-subscribe semantics preserve active and opted-out authority until fresh mailbox proof is consumed', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/status-subscribers.ts'));
-    expect(p).toMatch(/Re-subscribe semantics: if the email already exists, we update the/);
-    expect(p).toMatch(/existing row with a fresh confirm_token \+ cleared confirmed_at \//);
-    expect(p).toMatch(/unsubscribed_at\. The double-opt-in is the gate; abandoned signups/);
-    expect(p).toMatch(/don't ever get put on the notification list/);
+    expect(p).toMatch(/Re-subscribe semantics: if the email already exists, we update only the/);
+    expect(p).toMatch(/pending confirm token\. Existing confirmed\/unsubscribed state remains/);
+    expect(p).toMatch(/authoritative until the mailbox owner uses that token/);
+    expect(p).toMatch(/anonymous submitter who knows an active recipient's address could suppress/);
   });
 
   // ─── listConfirmed for fan-out ───────────────────────────────
@@ -149,7 +148,10 @@ describe('W930 V-295c3 status-subscribers cross-source invariant', () => {
     );
     expect(p).toMatch(/markConfirmed\(input: \{/);
     expect(p).toMatch(
-      /markUnsubscribed\(input: \{ id: string; unsubscribedAt: Date \}\): Promise<StatusSubscriberRow>;/,
+      /expectedConfirmTokenHash: string;[\s\S]*?\}\): Promise<StatusSubscriberRow \| null>;/,
+    );
+    expect(p).toMatch(
+      /expectedUnsubscribeTokenHash: string \| null;[\s\S]*?\}\): Promise<StatusSubscriberRow \| null>;/,
     );
     expect(p).toMatch(/listConfirmed\(\): Promise<StatusSubscriberRow\[\]>;/);
   });

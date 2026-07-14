@@ -19,9 +19,6 @@ export class InMemoryStatusSubscribersRepo implements StatusSubscribersRepo {
     if (existing) {
       existing.confirmTokenHash = input.confirmTokenHash;
       existing.confirmExpiresAt = input.confirmExpiresAt;
-      existing.confirmedAt = null;
-      existing.unsubscribeTokenHash = null;
-      existing.unsubscribedAt = null;
       return existing;
     }
     const row: StatusSubscriberRow = {
@@ -51,11 +48,15 @@ export class InMemoryStatusSubscribersRepo implements StatusSubscribersRepo {
   // eslint-disable-next-line @typescript-eslint/require-await
   async markConfirmed(input: {
     id: string;
+    expectedConfirmTokenHash: string;
     confirmedAt: Date;
     unsubscribeTokenHash: string;
-  }): Promise<StatusSubscriberRow> {
-    const row = this.rows.find((r) => r.id === input.id);
-    if (!row) throw new Error(`status_subscribers ${input.id} not found`);
+  }): Promise<StatusSubscriberRow | null> {
+    const row = this.rows.find(
+      (candidate) =>
+        candidate.id === input.id && candidate.confirmTokenHash === input.expectedConfirmTokenHash,
+    );
+    if (!row) return null;
     row.confirmedAt = input.confirmedAt;
     row.confirmTokenHash = null;
     row.confirmExpiresAt = null;
@@ -67,10 +68,16 @@ export class InMemoryStatusSubscribersRepo implements StatusSubscribersRepo {
   // eslint-disable-next-line @typescript-eslint/require-await
   async markUnsubscribed(input: {
     id: string;
+    expectedUnsubscribeTokenHash: string | null;
     unsubscribedAt: Date;
-  }): Promise<StatusSubscriberRow> {
-    const row = this.rows.find((r) => r.id === input.id);
-    if (!row) throw new Error(`status_subscribers ${input.id} not found`);
+  }): Promise<StatusSubscriberRow | null> {
+    const row = this.rows.find(
+      (candidate) =>
+        candidate.id === input.id &&
+        (input.expectedUnsubscribeTokenHash === null ||
+          candidate.unsubscribeTokenHash === input.expectedUnsubscribeTokenHash),
+    );
+    if (!row) return null;
     row.unsubscribedAt = input.unsubscribedAt;
     return row;
   }

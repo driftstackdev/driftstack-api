@@ -10,20 +10,10 @@
 //     + listConfirmed + listAll + getById + listPurgeCandidates +
 //     purgeEmails.
 //
-//   upsertPending framing — 'INSERT ... ON CONFLICT (email) DO
-//   UPDATE — re-subscribe path resets confirmation state. Drizzle's
-//   onConflictDoUpdate covers this without a separate select'.
+//   upsertPending conflict SET refreshes only confirmTokenHash +
+//     confirmExpiresAt. It preserves confirmation/unsubscribe authority.
 //
-//   upsertPending re-subscribe-reset framing — 'Reset confirmation
-//   state on re-subscribe so a previously unsubscribed user starts a
-//   fresh double-opt-in'.
-//
-//   upsertPending onConflictDoUpdate target = email; SET clears 3
-//     state fields (confirmedAt + unsubscribeTokenHash +
-//     unsubscribedAt → null) + sets 2 fresh-confirm fields
-//     (confirmTokenHash + confirmExpiresAt).
-//
-//   markConfirmed 5-field SET — confirmedAt + confirmTokenHash:null
+//   markConfirmed exact-hash CAS + 5-field SET — confirmedAt + confirmTokenHash:null
 //     + confirmExpiresAt:null + unsubscribeTokenHash + unsubscribedAt:
 //     null. The 'clear-tokens-after-use' design + V-295c3 unsubscribe-
 //     token issuance happens here.
@@ -70,36 +60,48 @@ describe('W1012 db/status-subscribers-repo V-295c3 cross-source invariant', () =
     );
   });
 
-  it("CRITICAL upsertPending re-subscribe framing — 'INSERT ... ON CONFLICT (email) DO UPDATE — re-subscribe path resets confirmation state. Drizzle's onConflictDoUpdate covers this without a separate select'.", () => {
+  it('CRITICAL upsertPending framing preserves current authority during pending proof refresh', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/status-subscribers-repo.ts'));
-    expect(p).toMatch(/\/\/ INSERT \.\.\. ON CONFLICT \(email\) DO UPDATE — re-subscribe path/);
-    expect(p).toMatch(/\/\/ resets confirmation state\. Drizzle's onConflictDoUpdate covers/);
-    expect(p).toMatch(/\/\/ this without a separate select\./);
+    expect(p).toMatch(
+      /\/\/ INSERT \.\.\. ON CONFLICT \(email\) DO UPDATE — re-subscribe refreshes only/,
+    );
+    expect(p).toMatch(
+      /\/\/ the pending proof\. Preserve confirmed\/unsubscribed authority until the/,
+    );
+    expect(p).toMatch(/\/\/ mailbox owner consumes that proof/);
   });
 
-  it("CRITICAL upsertPending reset-state framing — 'Reset confirmation state on re-subscribe so a previously unsubscribed user starts a fresh double-opt-in'.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/status-subscribers-repo.ts'));
-    expect(p).toMatch(/\/\/ Reset confirmation state on re-subscribe so a previously/);
-    expect(p).toMatch(/\/\/ unsubscribed user starts a fresh double-opt-in\./);
-  });
-
-  it('CRITICAL upsertPending onConflictDoUpdate target=email + SET 3-null + 2-fresh fields.', () => {
+  it('CRITICAL upsertPending conflict SET has exactly the two pending-proof fields', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/status-subscribers-repo.ts'));
     expect(p).toMatch(/target: statusSubscribers\.email,/);
     expect(p).toMatch(/confirmTokenHash: input\.confirmTokenHash,/);
     expect(p).toMatch(/confirmExpiresAt: input\.confirmExpiresAt,/);
-    expect(p).toMatch(/confirmedAt: null,/);
-    expect(p).toMatch(/unsubscribeTokenHash: null,/);
-    expect(p).toMatch(/unsubscribedAt: null,/);
+    expect(p).toMatch(
+      /set: \{\s*\n?\s*confirmTokenHash: input\.confirmTokenHash,\s*\n?\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\n?\s*\},/,
+    );
+    expect(p).not.toMatch(/set: \{[^}]*confirmedAt: null/s);
+    expect(p).not.toMatch(/set: \{[^}]*unsubscribeTokenHash: null/s);
+    expect(p).not.toMatch(/set: \{[^}]*unsubscribedAt: null/s);
   });
 
-  it('CRITICAL markConfirmed 5-field SET — confirmedAt + confirmTokenHash:null + confirmExpiresAt:null + unsubscribeTokenHash + unsubscribedAt:null. Clear-after-use + issue-unsubscribe-token design.', () => {
+  it('CRITICAL markConfirmed exact-hash CAS + 5-field state transition', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/status-subscribers-repo.ts'));
     expect(p).toMatch(/confirmedAt: input\.confirmedAt,/);
     expect(p).toMatch(/confirmTokenHash: null,/);
     expect(p).toMatch(/confirmExpiresAt: null,/);
     expect(p).toMatch(/unsubscribeTokenHash: input\.unsubscribeTokenHash,/);
     expect(p).toMatch(/unsubscribedAt: null,/);
+    expect(p).toMatch(/eq\(statusSubscribers\.confirmTokenHash, input\.expectedConfirmTokenHash\)/);
+    expect(p).toMatch(/return row \? toRow\(row\) : null;/);
+  });
+
+  it('CRITICAL markUnsubscribed binds public transitions to the exact current token hash', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/status-subscribers-repo.ts'));
+    expect(p).toMatch(/expectedUnsubscribeTokenHash: string \| null;/);
+    expect(p).toMatch(
+      /eq\(statusSubscribers\.unsubscribeTokenHash, input\.expectedUnsubscribeTokenHash\)/,
+    );
+    expect(p).toMatch(/\.where\(predicate\)/);
   });
 
   it('CRITICAL listConfirmed filter — and(isNotNull(confirmedAt), isNull(unsubscribedAt)). The confirmed-and-not-unsubscribed cohort is the broadcast audience.', () => {

@@ -58,8 +58,6 @@ function makeRepo(initial: StatusSubscriberRow[] = []): {
       if (existing) {
         existing.confirmTokenHash = input.confirmTokenHash;
         existing.confirmExpiresAt = input.confirmExpiresAt;
-        existing.confirmedAt = null;
-        existing.unsubscribedAt = null;
         return Promise.resolve(existing);
       }
       const row: StatusSubscriberRow = {
@@ -79,17 +77,27 @@ function makeRepo(initial: StatusSubscriberRow[] = []): {
       Promise.resolve(rows.find((r) => r.confirmTokenHash === hash) ?? null),
     findByUnsubscribeTokenHash: (hash) =>
       Promise.resolve(rows.find((r) => r.unsubscribeTokenHash === hash) ?? null),
-    markConfirmed: ({ id, confirmedAt, unsubscribeTokenHash }) => {
-      const row = rows.find((r) => r.id === id);
-      if (!row) throw new Error('row not found');
+    markConfirmed: ({ id, expectedConfirmTokenHash, confirmedAt, unsubscribeTokenHash }) => {
+      const row = rows.find(
+        (candidate) =>
+          candidate.id === id && candidate.confirmTokenHash === expectedConfirmTokenHash,
+      );
+      if (!row) return Promise.resolve(null);
       row.confirmedAt = confirmedAt;
       row.unsubscribeTokenHash = unsubscribeTokenHash;
       row.confirmTokenHash = null;
+      row.confirmExpiresAt = null;
+      row.unsubscribedAt = null;
       return Promise.resolve(row);
     },
-    markUnsubscribed: ({ id, unsubscribedAt }) => {
-      const row = rows.find((r) => r.id === id);
-      if (!row) throw new Error('row not found');
+    markUnsubscribed: ({ id, expectedUnsubscribeTokenHash, unsubscribedAt }) => {
+      const row = rows.find(
+        (candidate) =>
+          candidate.id === id &&
+          (expectedUnsubscribeTokenHash === null ||
+            candidate.unsubscribeTokenHash === expectedUnsubscribeTokenHash),
+      );
+      if (!row) return Promise.resolve(null);
       row.unsubscribedAt = unsubscribedAt;
       return Promise.resolve(row);
     },
@@ -156,21 +164,25 @@ describe('V-553.B-10 StatusSubscribersService.subscribe', () => {
     expect(link).not.toContain('driftstack.dev//');
   });
 
-  it('re-subscription resets the row (clears prior confirmation + unsub state)', async () => {
-    const { service: email } = makeEmail();
+  it('keeps an active subscription and its unsubscribe credential live until re-confirmation', async () => {
+    const { service: email, sends } = makeEmail();
     const { repo, rows } = makeRepo();
     const svc = new StatusSubscribersService(repo, email, CONFIG);
     await svc.subscribe('user@example.com', NOW);
-    // Manually mark the row confirmed so we can verify reset.
-    const row = rows[0];
-    if (row) {
-      row.confirmedAt = new Date();
-      row.unsubscribedAt = new Date();
-    }
+    const firstToken = new URL(String(sends[0]?.payload.confirmLink)).searchParams.get('token');
+    await svc.confirm(firstToken ?? '', NOW);
+    const confirmedAt = rows[0]?.confirmedAt;
+    const unsubscribeTokenHash = rows[0]?.unsubscribeTokenHash;
+
+    // An anonymous re-subscribe starts a new pending proof, but must not let
+    // the submitter suppress incident notifications or invalidate the
+    // mailbox owner's current unsubscribe link before that proof is used.
     await svc.subscribe('user@example.com', NOW);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.confirmedAt).toBeNull();
+    expect(rows[0]?.confirmedAt).toEqual(confirmedAt);
     expect(rows[0]?.unsubscribedAt).toBeNull();
+    expect(rows[0]?.unsubscribeTokenHash).toBe(unsubscribeTokenHash);
+    await expect(svc.listConfirmed()).resolves.toHaveLength(1);
   });
 });
 
@@ -214,6 +226,23 @@ describe('V-553.B-10 StatusSubscribersService.confirm', () => {
     expect(sends).toHaveLength(2);
     expect(sends[1]?.template).toBe('welcome');
     expect(sends[1]?.payload.unsubscribeLink).toMatch(/\/subscribe\/unsubscribe\?token=/);
+  });
+
+  it('atomically claims a confirmation token so only one concurrent caller sends welcome', async () => {
+    const { service: email, sends } = makeEmail();
+    const { repo } = makeRepo();
+    const svc = new StatusSubscribersService(repo, email, CONFIG);
+    await svc.subscribe('race@example.com', NOW);
+    const plaintext = new URL(String(sends[0]?.payload.confirmLink)).searchParams.get('token');
+
+    const results = await Promise.allSettled([
+      svc.confirm(plaintext ?? '', NOW),
+      svc.confirm(plaintext ?? '', NOW),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(sends.filter((send) => send.template === 'welcome')).toHaveLength(1);
   });
 });
 
@@ -337,11 +366,7 @@ describe('V-553.B-10 StatusSubscribersService — admin + housekeeping', () => {
     expect(rows[0]?.unsubscribeTokenHash).toBe(tokenHash(token ?? ''));
   });
 
-  it('adminForceSubscribe (re-adding an existing subscriber): re-confirms + mints a fresh WORKING /subscribe/unsubscribe link, invalidating the old token', async () => {
-    // upsertPending clears confirmed_at (re-subscribe semantics), so the
-    // already-confirmed fast-path in adminForceSubscribe is unreachable —
-    // a re-add always flows through markConfirmed, re-confirming at `now`
-    // and minting a fresh unsubscribe token.
+  it('adminForceSubscribe (re-adding an active subscriber): preserves confirmation + mints a fresh WORKING unsubscribe link', async () => {
     const { service: email } = makeEmail();
     const row: StatusSubscriberRow = {
       id: 'sub_1',
@@ -356,7 +381,9 @@ describe('V-553.B-10 StatusSubscribersService — admin + housekeeping', () => {
     const { repo, rows } = makeRepo([row]);
     const svc = new StatusSubscribersService(repo, email, CONFIG);
     const out = await svc.adminForceSubscribe('admin@example.com', NOW);
-    expect(out.confirmedAt).toEqual(NOW);
+    expect(out.confirmedAt).toEqual(new Date('2026-04-01Z'));
+    expect(rows[0]?.confirmTokenHash).toBeNull();
+    expect(rows[0]?.confirmExpiresAt).toBeNull();
     const url = new URL(out.unsubscribeLink);
     expect(url.pathname).toBe('/subscribe/unsubscribe');
     const token = url.searchParams.get('token');

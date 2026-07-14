@@ -6,18 +6,18 @@
 // (regulatory tombstone risk).
 //
 //   • V-295c3 framing pinned: 3-flow (subscribe / confirm /
-//     unsubscribe); double-opt-in gate; re-subscribe refreshes
-//     confirm-token + clears confirmed_at/unsubscribed_at; abandoned
-//     signups never get on list.
+//     unsubscribe); double-opt-in gate; re-subscribe refreshes only
+//     pending proof and preserves current notification/opt-out authority.
 //   • V-295c3-tombstone framing: 90d post-unsubscribe email purge
 //     (NULLs email column); row persists for re-subscription fresh
 //     double-opt-in.
 //   • CONFIRM_TOKEN_TTL_MS = 24h.
 //   • subscribe: lowercase + @-check (BadRequestError); upsertPending
 //     with 24h TTL; sendStatusSubscriptionConfirmation.
-//   • confirm: NotFoundError on unknown hash; BadRequestError on
-//     expired; fresh unsubscribe token minted + welcome email.
-//   • unsubscribe: NotFoundError on unknown hash; markUnsubscribed.
+//   • confirm: NotFoundError on unknown/stale hash; BadRequestError on
+//     expired; atomic hash-bound claim, then one welcome email.
+//   • unsubscribe: NotFoundError on unknown/stale hash; atomic
+//     hash-bound transition.
 //   • V-295c3-followup rotateUnsubscribeToken: per-email fresh
 //     token; old token invalidated as soon as new one issued
 //     (one-click unsub targets most recent email).
@@ -50,7 +50,7 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
       /1\. subscribe\(email\) — generates confirm token, stores sha256 hash \+\s*\n?\s*\/\/\s*24h expiry, returns the plaintext token to the caller \(route\s*\n?\s*\/\/\s*hands it to email\.sendStatusSubscriptionConfirmation\)\./,
     );
     expect(body).toMatch(
-      /Re-subscribe semantics: if the email already exists, we update the\s*\n?\s*\/\/\s*existing row with a fresh confirm_token \+ cleared confirmed_at \/\s*\n?\s*\/\/\s*unsubscribed_at\. The double-opt-in is the gate; abandoned signups\s*\n?\s*\/\/\s*don't ever get put on the notification list\./,
+      /Re-subscribe semantics: if the email already exists, we update only the\s*\n?\s*\/\/\s*pending confirm token\. Existing confirmed\/unsubscribed state remains\s*\n?\s*\/\/\s*authoritative until the mailbox owner uses that token\./,
     );
   });
 
@@ -78,7 +78,7 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
     );
   });
 
-  it('confirm: NotFoundError on unknown hash; BadRequestError on expired; fresh unsubscribe token + sendStatusSubscriptionWelcome', () => {
+  it('confirm: validates expiry and atomically consumes the exact hash before sending one welcome', () => {
     expect(body).toMatch(
       /if \(!row\) \{\s*\n?\s*throw new NotFoundError\('Confirmation link is invalid or has been used\.'\);/,
     );
@@ -89,17 +89,23 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
       /\/\/ V-295c3-tombstone — purged rows clear confirmTokenHash, so this\s*\n?\s*\/\/ branch should be unreachable\. Guard for type-narrowing only\./,
     );
     expect(body).toMatch(
+      /const confirmed = await this\.repo\.markConfirmed\(\{\s*\n?\s*id: row\.id,\s*\n?\s*expectedConfirmTokenHash: hash,/,
+    );
+    expect(body).toMatch(
+      /if \(confirmed === null\) \{[\s\S]*?throw new NotFoundError\('Confirmation link is invalid or has been used\.'\);/,
+    );
+    expect(body).toMatch(
       /await this\.email\.sendStatusSubscriptionWelcome\(\{\s*\n?\s*to: email,\s*\n?\s*statusPageUrl: this\.baseUrl,\s*\n?\s*unsubscribeLink,\s*\n?\s*\}\);/,
     );
   });
 
-  it('unsubscribe: NotFoundError on unknown hash + same purge-row defensive guard', () => {
+  it('unsubscribe: NotFoundError on unknown/stale hash + atomic exact-hash transition', () => {
     expect(body).toMatch(
       /if \(!row\) \{\s*\n?\s*throw new NotFoundError\('Unsubscribe link is invalid\.'\);/,
     );
     expect(body).toMatch(/\/\/ Same purge-row defensive guard as confirm\(\) above\./);
     expect(body).toMatch(
-      /await this\.repo\.markUnsubscribed\(\{ id: row\.id, unsubscribedAt: now \}\);/,
+      /const unsubscribed = await this\.repo\.markUnsubscribed\(\{\s*\n?\s*id: row\.id,\s*\n?\s*expectedUnsubscribeTokenHash: hash,\s*\n?\s*unsubscribedAt: now,\s*\n?\s*\}\);\s*\n?\s*if \(unsubscribed === null\) \{\s*\n?\s*throw new NotFoundError\('Unsubscribe link is invalid\.'\);/,
     );
   });
 
@@ -151,7 +157,10 @@ describe('W409.A apps/server/src/services/status-subscribers.ts content parity',
     );
     expect(body).toMatch(/markConfirmed\(input: \{/);
     expect(body).toMatch(
-      /markUnsubscribed\(input: \{ id: string; unsubscribedAt: Date \}\): Promise<StatusSubscriberRow>;/,
+      /expectedConfirmTokenHash: string;[\s\S]*?\}\): Promise<StatusSubscriberRow \| null>;/,
+    );
+    expect(body).toMatch(
+      /markUnsubscribed\(input: \{\s*\n?\s*id: string;[\s\S]*?expectedUnsubscribeTokenHash: string \| null;[\s\S]*?\}\): Promise<StatusSubscriberRow \| null>;/,
     );
     expect(body).toMatch(
       /V-295c3-followup — replaces ONLY `unsubscribe_token_hash` for an\s*\n?\s*\*\s*already-confirmed row\. Used by the fan-out path to issue a fresh\s*\n?\s*\*\s*per-email unsubscribe token\. Does NOT touch confirmed_at\./,

@@ -11,10 +11,11 @@
 // listConfirmed() returns rows the incident-notification dispatcher
 // uses to fan-out emails when a public incident is created or resolved.
 //
-// Re-subscribe semantics: if the email already exists, we update the
-// existing row with a fresh confirm_token + cleared confirmed_at /
-// unsubscribed_at. The double-opt-in is the gate; abandoned signups
-// don't ever get put on the notification list.
+// Re-subscribe semantics: if the email already exists, we update only the
+// pending confirm token. Existing confirmed/unsubscribed state remains
+// authoritative until the mailbox owner uses that token. Otherwise an
+// anonymous submitter who knows an active recipient's address could suppress
+// its incident notifications before proving mailbox control.
 
 import { generateAuthToken, tokenHash } from '../lib/auth-tokens.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
@@ -44,10 +45,16 @@ export interface StatusSubscribersRepo {
   findByUnsubscribeTokenHash(hash: string): Promise<StatusSubscriberRow | null>;
   markConfirmed(input: {
     id: string;
+    expectedConfirmTokenHash: string;
     confirmedAt: Date;
     unsubscribeTokenHash: string;
-  }): Promise<StatusSubscriberRow>;
-  markUnsubscribed(input: { id: string; unsubscribedAt: Date }): Promise<StatusSubscriberRow>;
+  }): Promise<StatusSubscriberRow | null>;
+  markUnsubscribed(input: {
+    id: string;
+    /** null is reserved for the authenticated admin force-action path. */
+    expectedUnsubscribeTokenHash: string | null;
+    unsubscribedAt: Date;
+  }): Promise<StatusSubscriberRow | null>;
   /**
    * V-295c3-followup — replaces ONLY `unsubscribe_token_hash` for an
    * already-confirmed row. Used by the fan-out path to issue a fresh
@@ -128,11 +135,18 @@ export class StatusSubscribersService {
     const email = row.email;
     const unsubPlaintext = generateAuthToken();
     const unsubHash = tokenHash(unsubPlaintext);
-    await this.repo.markConfirmed({
+    const confirmed = await this.repo.markConfirmed({
       id: row.id,
+      expectedConfirmTokenHash: hash,
       confirmedAt: now,
       unsubscribeTokenHash: unsubHash,
     });
+    if (confirmed === null) {
+      // A concurrent confirmation or re-subscribe replaced/consumed the
+      // credential after our lookup. Only the atomic hash-bound update winner
+      // may send a welcome email or publish its unsubscribe token.
+      throw new NotFoundError('Confirmation link is invalid or has been used.');
+    }
     const unsubscribeLink = `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(unsubPlaintext)}`;
     await this.email.sendStatusSubscriptionWelcome({
       to: email,
@@ -153,7 +167,14 @@ export class StatusSubscribersService {
       // Same purge-row defensive guard as confirm() above.
       throw new NotFoundError('Unsubscribe link is invalid.');
     }
-    await this.repo.markUnsubscribed({ id: row.id, unsubscribedAt: now });
+    const unsubscribed = await this.repo.markUnsubscribed({
+      id: row.id,
+      expectedUnsubscribeTokenHash: hash,
+      unsubscribedAt: now,
+    });
+    if (unsubscribed === null) {
+      throw new NotFoundError('Unsubscribe link is invalid.');
+    }
     return { email: row.email };
   }
 
@@ -199,39 +220,29 @@ export class StatusSubscribersService {
       throw new BadRequestError('Invalid email address.');
     }
     // upsertPending mints / refreshes the row with a confirm token we
-    // immediately discard — admin authority replaces customer-side
-    // proof-of-control. The confirmTokenHash field is left populated
-    // but unused after markConfirmed clears the confirm_token_hash
-    // column in the standard flow's SQL.
+    // immediately consume — admin authority replaces customer-side
+    // proof-of-control. The same atomic transition clears the pending
+    // credential even when this is an already-active subscriber.
     const confirmPlaintext = generateAuthToken();
     const pending = await this.repo.upsertPending({
       email: normalized,
       confirmTokenHash: tokenHash(confirmPlaintext),
       confirmExpiresAt: new Date(now.getTime() + CONFIRM_TOKEN_TTL_MS),
     });
-    if (pending.confirmedAt !== null) {
-      // Already-confirmed subscriber — admin re-adding is a no-op
-      // beyond rotating their unsubscribe token so the audit trail
-      // captures the action.
-      const fresh = generateAuthToken();
-      await this.repo.rotateUnsubscribeTokenHash({ id: pending.id, hash: tokenHash(fresh) });
-      // pending.email is non-null here — upsertPending always writes
-      // the normalized email; the only way email becomes null is
-      // after the 90d purge sweep, which we can't hit on a row we
-      // just inserted/refreshed in this call.
-      return {
-        id: pending.id,
-        email: pending.email ?? normalized,
-        confirmedAt: pending.confirmedAt,
-        unsubscribeLink: `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(fresh)}`,
-      };
+    if (pending.confirmTokenHash === null) {
+      throw new Error('status_subscribers admin force-subscribe lost its pending token');
     }
     const unsubPlaintext = generateAuthToken();
     const confirmed = await this.repo.markConfirmed({
       id: pending.id,
-      confirmedAt: now,
+      expectedConfirmTokenHash: pending.confirmTokenHash,
+      confirmedAt:
+        pending.confirmedAt !== null && pending.unsubscribedAt === null ? pending.confirmedAt : now,
       unsubscribeTokenHash: tokenHash(unsubPlaintext),
     });
+    if (confirmed === null) {
+      throw new Error('status_subscribers admin force-subscribe lost its atomic claim');
+    }
     return {
       id: confirmed.id,
       email: confirmed.email ?? normalized,
@@ -253,7 +264,14 @@ export class StatusSubscribersService {
       // so the audit-log entry is still informative.
       return { email: row.email };
     }
-    await this.repo.markUnsubscribed({ id: subscriberId, unsubscribedAt: now });
+    const unsubscribed = await this.repo.markUnsubscribed({
+      id: subscriberId,
+      expectedUnsubscribeTokenHash: null,
+      unsubscribedAt: now,
+    });
+    if (unsubscribed === null) {
+      throw new NotFoundError(`Subscriber ${subscriberId} not found.`);
+    }
     return { email: row.email };
   }
 

@@ -1,23 +1,19 @@
 // W447.B — drift guard for apps/server/src/db/status-subscribers-repo.ts.
-// V-295c3 StatusSubscribersRepo. Drift here either drops the
-// double-opt-in reset on re-subscribe (previously-unsubscribed
-// user re-confirms without fresh email click → bypass) or breaks
+// V-295c3 StatusSubscribersRepo. Drift here can let anonymous
+// re-subscribe suppress an active recipient, reactivate an opted-out
+// recipient without proof, permit token replay, or break
 // the V-295c3-tombstone purge contract (email NULL + tokens
 // cleared so the row preserves audit shape without retaining PII).
 //
 //   • V-295c3 framing pinned.
 //   • toRow: 8-field StatusSubscriberRow (email + confirm/
 //     unsubscribe token hashes + 3 timestamps).
-//   • upsertPending framing pinned: INSERT ... ON CONFLICT (email)
-//     DO UPDATE — re-subscribe path RESETS confirmation state
-//     (confirmedAt:null, unsubscribeTokenHash:null, unsubscribedAt:
-//     null) so previously-unsubscribed user starts FRESH
-//     double-opt-in.
+//   • upsertPending conflict updates only pending proof fields; current
+//     confirmation, unsubscribe credential, and opt-out stay authoritative.
 //   • findByConfirmTokenHash + findByUnsubscribeTokenHash: limit 1
 //     lookups.
-//   • markConfirmed: clears confirm fields + sets unsubscribeTokenHash
-//     for future opt-out + resets unsubscribedAt.
-//   • markUnsubscribed: sets unsubscribedAt only.
+//   • markConfirmed/markUnsubscribed bind updates to the presented token hash
+//     and return null when a concurrent caller has replaced/consumed it.
 //   • rotateUnsubscribeTokenHash: per-email rotation.
 //   • listConfirmed: where and(isNotNull(confirmedAt), isNull
 //     (unsubscribedAt)) — active confirmed only.
@@ -63,19 +59,22 @@ describe('W447.B apps/server/src/db/status-subscribers-repo.ts content parity', 
     );
   });
 
-  it("upsertPending framing pinned: 'INSERT ... ON CONFLICT (email) DO UPDATE — re-subscribe path resets confirmation state. Drizzle's onConflictDoUpdate covers this without a separate select.'", () => {
+  it('upsertPending framing pins anonymous refresh to pending proof only', () => {
     expect(body).toMatch(
-      /\/\/ INSERT \.\.\. ON CONFLICT \(email\) DO UPDATE — re-subscribe path\s*\n?\s*\/\/ resets confirmation state\. Drizzle's onConflictDoUpdate covers\s*\n?\s*\/\/ this without a separate select\./,
+      /\/\/ INSERT \.\.\. ON CONFLICT \(email\) DO UPDATE — re-subscribe refreshes only\s*\n?\s*\/\/ the pending proof\. Preserve confirmed\/unsubscribed authority until the/,
     );
   });
 
-  it("upsertPending: insert values seed (email + confirmTokenHash + confirmExpiresAt + null on confirmedAt/unsubscribeTokenHash/unsubscribedAt); onConflict reset comment 'Reset confirmation state on re-subscribe so a previously unsubscribed user starts a fresh double-opt-in.'", () => {
+  it('upsertPending seeds a new row, while conflict SET contains only fresh confirmation fields', () => {
     expect(body).toMatch(
       /\.values\(\{\s*\n?\s*email: input\.email,\s*\n?\s*confirmTokenHash: input\.confirmTokenHash,\s*\n?\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\n?\s*confirmedAt: null,\s*\n?\s*unsubscribeTokenHash: null,\s*\n?\s*unsubscribedAt: null,\s*\n?\s*\}\)/,
     );
     expect(body).toMatch(
-      /\/\/ Reset confirmation state on re-subscribe so a previously\s*\n?\s*\/\/ unsubscribed user starts a fresh double-opt-in\./,
+      /set: \{\s*\n?\s*confirmTokenHash: input\.confirmTokenHash,\s*\n?\s*confirmExpiresAt: input\.confirmExpiresAt,\s*\n?\s*\},/,
     );
+    expect(body).not.toMatch(/set: \{[^}]*confirmedAt: null/s);
+    expect(body).not.toMatch(/set: \{[^}]*unsubscribeTokenHash: null/s);
+    expect(body).not.toMatch(/set: \{[^}]*unsubscribedAt: null/s);
     expect(body).toMatch(
       /if \(!row\) throw new Error\('status_subscribers upsert returned no row'\);/,
     );
@@ -90,18 +89,22 @@ describe('W447.B apps/server/src/db/status-subscribers-repo.ts content parity', 
     );
   });
 
-  it('markConfirmed: clears confirmTokenHash + confirmExpiresAt; sets new unsubscribeTokenHash; resets unsubscribedAt null; returning() + throws on no-row', () => {
+  it('markConfirmed atomically consumes the expected hash and returns null to a loser', () => {
     expect(body).toMatch(
       /\.set\(\{\s*\n?\s*confirmedAt: input\.confirmedAt,\s*\n?\s*confirmTokenHash: null,\s*\n?\s*confirmExpiresAt: null,\s*\n?\s*unsubscribeTokenHash: input\.unsubscribeTokenHash,\s*\n?\s*unsubscribedAt: null,\s*\n?\s*\}\)/,
     );
     expect(body).toMatch(
-      /if \(!row\) throw new Error\('status_subscribers markConfirmed returned no row'\);/,
+      /eq\(statusSubscribers\.id, input\.id\),\s*\n?\s*eq\(statusSubscribers\.confirmTokenHash, input\.expectedConfirmTokenHash\)/,
     );
+    expect(body).toMatch(/return row \? toRow\(row\) : null;/);
   });
 
-  it('markUnsubscribed sets unsubscribedAt only; rotateUnsubscribeTokenHash sets unsubscribeTokenHash only', () => {
+  it('markUnsubscribed supports exact-hash public CAS and explicit admin id-only authority; rotation touches only its token', () => {
     expect(body).toMatch(
-      /\.set\(\{ unsubscribedAt: input\.unsubscribedAt \}\)\s*\n?\s*\.where\(eq\(statusSubscribers\.id, input\.id\)\)\s*\n?\s*\.returning\(\);/,
+      /input\.expectedUnsubscribeTokenHash === null\s*\n?\s*\? eq\(statusSubscribers\.id, input\.id\)\s*\n?\s*: and\(\s*\n?\s*eq\(statusSubscribers\.id, input\.id\),\s*\n?\s*eq\(statusSubscribers\.unsubscribeTokenHash, input\.expectedUnsubscribeTokenHash\)/,
+    );
+    expect(body).toMatch(
+      /\.set\(\{ unsubscribedAt: input\.unsubscribedAt \}\)\s*\n?\s*\.where\(predicate\)\s*\n?\s*\.returning\(\);/,
     );
     expect(body).toMatch(
       /async rotateUnsubscribeTokenHash\(input: \{ id: string; hash: string \}\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(statusSubscribers\)\s*\n?\s*\.set\(\{ unsubscribeTokenHash: input\.hash \}\)\s*\n?\s*\.where\(eq\(statusSubscribers\.id, input\.id\)\);\s*\n?\s*\}/,

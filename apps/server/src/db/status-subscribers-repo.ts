@@ -28,9 +28,10 @@ export class DrizzleStatusSubscribersRepo implements StatusSubscribersRepo {
     confirmTokenHash: string;
     confirmExpiresAt: Date;
   }): Promise<StatusSubscriberRow> {
-    // INSERT ... ON CONFLICT (email) DO UPDATE — re-subscribe path
-    // resets confirmation state. Drizzle's onConflictDoUpdate covers
-    // this without a separate select.
+    // INSERT ... ON CONFLICT (email) DO UPDATE — re-subscribe refreshes only
+    // the pending proof. Preserve confirmed/unsubscribed authority until the
+    // mailbox owner consumes that proof; anonymous POST must not suppress an
+    // active recipient or reactivate an unsubscribed one.
     const [row] = await this.database.db
       .insert(statusSubscribers)
       .values({
@@ -46,11 +47,6 @@ export class DrizzleStatusSubscribersRepo implements StatusSubscribersRepo {
         set: {
           confirmTokenHash: input.confirmTokenHash,
           confirmExpiresAt: input.confirmExpiresAt,
-          // Reset confirmation state on re-subscribe so a previously
-          // unsubscribed user starts a fresh double-opt-in.
-          confirmedAt: null,
-          unsubscribeTokenHash: null,
-          unsubscribedAt: null,
         },
       })
       .returning();
@@ -78,9 +74,10 @@ export class DrizzleStatusSubscribersRepo implements StatusSubscribersRepo {
 
   async markConfirmed(input: {
     id: string;
+    expectedConfirmTokenHash: string;
     confirmedAt: Date;
     unsubscribeTokenHash: string;
-  }): Promise<StatusSubscriberRow> {
+  }): Promise<StatusSubscriberRow | null> {
     const [row] = await this.database.db
       .update(statusSubscribers)
       .set({
@@ -90,23 +87,34 @@ export class DrizzleStatusSubscribersRepo implements StatusSubscribersRepo {
         unsubscribeTokenHash: input.unsubscribeTokenHash,
         unsubscribedAt: null,
       })
-      .where(eq(statusSubscribers.id, input.id))
+      .where(
+        and(
+          eq(statusSubscribers.id, input.id),
+          eq(statusSubscribers.confirmTokenHash, input.expectedConfirmTokenHash),
+        ),
+      )
       .returning();
-    if (!row) throw new Error('status_subscribers markConfirmed returned no row');
-    return toRow(row);
+    return row ? toRow(row) : null;
   }
 
   async markUnsubscribed(input: {
     id: string;
+    expectedUnsubscribeTokenHash: string | null;
     unsubscribedAt: Date;
-  }): Promise<StatusSubscriberRow> {
+  }): Promise<StatusSubscriberRow | null> {
+    const predicate =
+      input.expectedUnsubscribeTokenHash === null
+        ? eq(statusSubscribers.id, input.id)
+        : and(
+            eq(statusSubscribers.id, input.id),
+            eq(statusSubscribers.unsubscribeTokenHash, input.expectedUnsubscribeTokenHash),
+          );
     const [row] = await this.database.db
       .update(statusSubscribers)
       .set({ unsubscribedAt: input.unsubscribedAt })
-      .where(eq(statusSubscribers.id, input.id))
+      .where(predicate)
       .returning();
-    if (!row) throw new Error('status_subscribers markUnsubscribed returned no row');
-    return toRow(row);
+    return row ? toRow(row) : null;
   }
 
   async rotateUnsubscribeTokenHash(input: { id: string; hash: string }): Promise<void> {

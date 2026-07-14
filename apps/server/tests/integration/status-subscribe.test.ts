@@ -63,7 +63,7 @@ describe('POST /v1/status/subscribe', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('re-subscribe resets confirmation state for the same email', async () => {
+  it('re-subscribe cannot suppress an already-confirmed recipient before mailbox proof', async () => {
     fx = await buildTestApp();
     await fx.app.inject({
       method: 'POST',
@@ -72,6 +72,14 @@ describe('POST /v1/status/subscribe', () => {
       payload: { email: 'user@example.test' },
     });
     const firstToken = getConfirmTokenFromLastEmail(fx);
+    const confirmed = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/subscribe/confirm?token=${encodeURIComponent(firstToken)}`,
+    });
+    expect(confirmed.statusCode).toBe(200);
+    const before = fx.statusSubscribersRepo.getAll()[0]!;
+    const confirmedAt = before.confirmedAt;
+    const unsubscribeTokenHash = before.unsubscribeTokenHash;
 
     await fx.app.inject({
       method: 'POST',
@@ -83,6 +91,10 @@ describe('POST /v1/status/subscribe', () => {
 
     expect(secondToken).not.toBe(firstToken);
     expect(fx.statusSubscribersRepo.getAll()).toHaveLength(1); // same row, fresh token
+    const after = fx.statusSubscribersRepo.getAll()[0]!;
+    expect(after.confirmedAt).toEqual(confirmedAt);
+    expect(after.unsubscribeTokenHash).toBe(unsubscribeTokenHash);
+    await expect(fx.statusSubscribersService.listConfirmed()).resolves.toHaveLength(1);
   });
 
   it('lowercases + trims the email before storage', async () => {
@@ -218,5 +230,41 @@ describe('GET /v1/status/subscribe/unsubscribe', () => {
       url: `/v1/status/subscribe/unsubscribe?token=${'b'.repeat(40)}`,
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it('re-subscribe preserves opt-out until the mailbox owner confirms again', async () => {
+    fx = await buildTestApp();
+    // Seed through the service so the public route budget remains available
+    // for the anonymous re-subscribe action this regression targets.
+    await fx.statusSubscribersService.subscribe('opted-out@example.test', new Date());
+    const firstConfirmToken = getConfirmTokenFromLastEmail(fx);
+    await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/subscribe/confirm?token=${encodeURIComponent(firstConfirmToken)}`,
+    });
+    const firstUnsubscribeToken = getUnsubscribeTokenFromLastEmail(fx);
+    await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/subscribe/unsubscribe?token=${encodeURIComponent(firstUnsubscribeToken)}`,
+    });
+    const optedOutAt = fx.statusSubscribersRepo.getAll()[0]!.unsubscribedAt;
+    expect(optedOutAt).not.toBeNull();
+
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/status/subscribe',
+      headers,
+      payload: { email: 'opted-out@example.test' },
+    });
+    const secondConfirmToken = getConfirmTokenFromLastEmail(fx);
+    expect(fx.statusSubscribersRepo.getAll()[0]!.unsubscribedAt).toEqual(optedOutAt);
+    await expect(fx.statusSubscribersService.listConfirmed()).resolves.toHaveLength(0);
+
+    // The three route actions above consume this fixture's public limiter;
+    // finish through the same service transition to prove mailbox proof is
+    // what reactivates the row.
+    await fx.statusSubscribersService.confirm(secondConfirmToken, new Date());
+    expect(fx.statusSubscribersRepo.getAll()[0]!.unsubscribedAt).toBeNull();
+    await expect(fx.statusSubscribersService.listConfirmed()).resolves.toHaveLength(1);
   });
 });
