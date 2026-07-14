@@ -211,10 +211,12 @@ describe('W765 docs /api/billing content parity', () => {
     );
   });
 
-  it("CRITICAL webhook-events cross-reference pinned. The '[Webhook events catalog](/webhooks/events/)' link routes SDK consumers to the inbound-Stripe→Driftstack mapping.", () => {
+  it('CRITICAL Stripe-to-Driftstack lifecycle section points consumers to the account audit-log API', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\[Webhook events catalog\]\(\/webhooks\/events\/\)/);
+    expect(p).toMatch(/## Webhook events from Stripe → Driftstack → Customer/);
+    expect(p).toMatch(/available through the account audit-log API/);
+    expect(p).not.toMatch(/\[Webhook events catalog\]\(\/webhooks\/events\/\)/);
   });
 
   it('test file metadata — file exists at canonical path', () => {
