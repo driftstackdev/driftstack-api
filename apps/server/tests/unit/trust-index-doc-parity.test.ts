@@ -48,11 +48,21 @@ describe('W245.D trust/index doc parity', () => {
     }
   });
 
-  it('links the four hub destinations expected on this surface', () => {
-    expect(doc).toMatch(/href="\/security"|href="\/trust\/security-overview"/);
-    expect(doc).toMatch(/href="\/trust\/sub-processors"/);
-    expect(doc).toMatch(/href="\/trust\/incidents"/);
-    expect(doc).toMatch(/href="\/legal\/dpa"/);
+  it('links every trust hub destination at its canonical trailing-slash route', () => {
+    for (const href of [
+      '/security/',
+      '/trust/security-overview/',
+      '/trust/sub-processors/',
+      '/trust/incidents/',
+      '/legal/dpa/',
+    ]) {
+      expect(doc).toContain(`href="${href}"`);
+    }
+
+    const slashlessOwnedHref =
+      /href="\/(?:security|trust\/(?:security-overview|sub-processors|incidents)|legal\/dpa)"/;
+    expect(doc).not.toMatch(slashlessOwnedHref);
+    expect(doc.replace('href="/security/"', 'href="/security"')).toMatch(slashlessOwnedHref);
   });
 
   it('renders the live StatusBadge component', () => {
