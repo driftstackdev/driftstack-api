@@ -7,8 +7,8 @@
 //   • ApiKeySchema shape pinned: 8 fields; plaintext NEVER included
 //     in list/get returns; key_prefix display hint; last_used_at +
 //     revoked_at + expires_at all nullable ISO8601.
-//   • CreateApiKeyRequest: name 1..120 + non-empty scopes array +
-//     optional expires_at.
+//   • CreateApiKeyRequest: name 1..120 + bounded unique request-only
+//     scopes list + optional expires_at.
 //   • CreateApiKeyResponse extends ApiKeySchema with plaintext
 //     (shown ONCE at creation; never retrievable later).
 
@@ -28,10 +28,10 @@ function read(p: string): string {
 describe('W432.C packages/api-types/src/api-keys.ts content parity', () => {
   const body = read(LIB);
 
-  it("imports: z from 'zod' + ApiKeyIdSchema + ApiKeyScopeSchema + Iso8601Schema from './common.js'", () => {
+  it("imports: z from 'zod' + ApiKeyIdSchema + request-list + response scope + Iso8601Schema from './common.js'", () => {
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
-      /import \{ ApiKeyIdSchema, ApiKeyScopeSchema, Iso8601Schema \} from '\.\/common\.js';/,
+      /import \{\s*ApiKeyIdSchema,\s*ApiKeyScopeListRequestSchema,\s*ApiKeyScopeSchema,\s*Iso8601Schema,\s*\} from '\.\/common\.js';/,
     );
   });
 
@@ -45,10 +45,10 @@ describe('W432.C packages/api-types/src/api-keys.ts content parity', () => {
     expect(body).toMatch(/export type ApiKey = z\.infer<typeof ApiKeySchema>;/);
   });
 
-  it('CreateApiKeyRequestSchema: name min 1 max 120 + scopes array .min(1) non-empty + optional expires_at; framing comment "Create-key request: name + scopes"', () => {
+  it('CreateApiKeyRequestSchema: name min 1 max 120 + bounded unique request scope schema + optional expires_at; response scope array remains tolerant', () => {
     expect(body).toMatch(/\/\/ Create-key request: name \+ scopes\./);
     expect(body).toMatch(
-      /export const CreateApiKeyRequestSchema = z\.object\(\{\s*\n?\s*name: z\.string\(\)\.min\(1\)\.max\(120\),\s*\n?\s*scopes: z\.array\(ApiKeyScopeSchema\)\.min\(1\),\s*\n?\s*expires_at: Iso8601Schema\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CreateApiKeyRequestSchema = z\.object\(\{\s*\n?\s*name: z\.string\(\)\.min\(1\)\.max\(120\),\s*\n?\s*scopes: ApiKeyScopeListRequestSchema,\s*\n?\s*expires_at: Iso8601Schema\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export type CreateApiKeyRequest = z\.infer<typeof CreateApiKeyRequestSchema>;/,

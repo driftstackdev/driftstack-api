@@ -76,11 +76,16 @@ export const DEFAULT_BEHAVIORAL_PROFILE: BehavioralProfile = 'regular';
  * enforced. Free-form key/value object otherwise (opaque to the server).
  */
 export const SESSION_METADATA_MAX_BYTES = 8192;
+const sessionMetadataUtf8Encoder = new TextEncoder();
 export const SessionMetadataSchema = z
   .record(z.unknown())
-  .refine((v) => JSON.stringify(v).length <= SESSION_METADATA_MAX_BYTES, {
-    message: `metadata too large (max ${SESSION_METADATA_MAX_BYTES.toString()} bytes serialized)`,
-  });
+  .refine(
+    (v) =>
+      sessionMetadataUtf8Encoder.encode(JSON.stringify(v)).byteLength <= SESSION_METADATA_MAX_BYTES,
+    {
+      message: `metadata too large (max ${SESSION_METADATA_MAX_BYTES.toString()} bytes serialized)`,
+    },
+  );
 
 export const SessionSchema = z.object({
   id: SessionIdSchema,

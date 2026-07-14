@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { ApiKeyIdSchema, ApiKeyScopeSchema, Iso8601Schema } from './common.js';
+import {
+  ApiKeyIdSchema,
+  ApiKeyScopeListRequestSchema,
+  ApiKeyScopeSchema,
+  Iso8601Schema,
+} from './common.js';
 
 // API key as returned in list / get responses (NEVER includes plaintext).
 export const ApiKeySchema = z.object({
@@ -19,7 +24,7 @@ export type ApiKey = z.infer<typeof ApiKeySchema>;
 // Create-key request: name + scopes.
 export const CreateApiKeyRequestSchema = z.object({
   name: z.string().min(1).max(120),
-  scopes: z.array(ApiKeyScopeSchema).min(1),
+  scopes: ApiKeyScopeListRequestSchema,
   expires_at: Iso8601Schema.optional(),
 });
 

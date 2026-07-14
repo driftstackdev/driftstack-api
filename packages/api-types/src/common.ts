@@ -1388,6 +1388,19 @@ export const ApiKeyScopeSchema = z.enum([
 export type ApiKeyScope = z.infer<typeof ApiKeyScopeSchema>;
 
 /**
+ * Request-only API-key scope list. The response schema intentionally remains
+ * tolerant of historic stored arrays, while new writes must use each member of
+ * the closed canonical roster at most once.
+ */
+export const ApiKeyScopeListRequestSchema = z
+  .array(ApiKeyScopeSchema)
+  .min(1)
+  .max(ApiKeyScopeSchema.options.length)
+  .refine((scopes) => new Set(scopes).size === scopes.length, {
+    message: 'scopes must not contain duplicates',
+  });
+
+/**
  * V-481 — split a granular scope into `[verb, resource]`. Returns
  * null for non-granular scopes (the broad ones don't have a colon).
  */

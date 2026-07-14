@@ -27184,3 +27184,29 @@ the whole page untouched, account relocation fails, successor wrong-key probing
 fails, and a deterministic blocked-update race proves an exact-tuple CAS loser
 cannot overwrite a newer v2 credential. Strict server source/test TypeScript,
 targeted lint/format, diff and whitespace checks are green.
+
+## V-647 — Scope requests are finite and unique; metadata limits count UTF-8 bytes
+
+**Date:** 2026-07-14
+
+API-key creation and browser-based CLI binding previously accepted arbitrarily
+long arrays containing repeated valid scopes. A 10,000-element array of only
+`read` therefore passed the public contract despite the canonical scope roster
+having only 19 possible values. New-write requests now share one schema that
+requires at least one scope, caps the array at the canonical enum length and
+rejects duplicates. The CLI path still permits omission so its established
+server-side `account_owner` default is unchanged. API-key response parsing keeps
+the prior tolerant array schema so historic stored rows cannot make reads fail.
+
+Session metadata also advertised an 8,192-byte serialized limit while measuring
+JavaScript UTF-16 code units. Multi-byte text could therefore exceed the claimed
+wire/storage bound while passing validation. The shared browser-compatible schema
+now measures `JSON.stringify` output through `TextEncoder` and compares the true
+UTF-8 byte length. Exact 8,192-byte ASCII and emoji-bearing objects pass; an
+8,193-byte object fails both direct schema validation and the real session-create
+route.
+
+The focused schema/session/content-guard matrix passes 5 files and 124/124 tests;
+the connected API-key and CLI route/service matrix passes 6 files and 72/72
+tests. The api-types build, strict server source-and-test TypeScript, targeted
+ESLint/Prettier, diff and whitespace checks are green.

@@ -7,10 +7,12 @@ import { describe, expect, it } from 'vitest';
 import {
   AccountIdSchema,
   AccountTierSchema,
+  ApiKeySchema,
   ApiKeyScopeSchema,
   ARCHETYPE_DISPLAY_LABEL,
   archetypeDisplayLabel,
   CaptureRequestSchema,
+  CliAuthorizeBindRequestSchema,
   CreateApiKeyRequestSchema,
   CreateSessionRequestSchema,
   InteractActionSchema,
@@ -23,6 +25,7 @@ import {
   PROFILES_PER_TIER,
   ProblemSchema,
   SessionIdSchema,
+  SESSION_METADATA_MAX_BYTES,
   SessionSchema,
   TIER_CONCURRENT_SESSION_LIMITS,
   UsagePeriodSummarySchema,
@@ -116,6 +119,30 @@ describe('CreateSessionRequestSchema', () => {
   it('rejects archetype with uppercase', () => {
     const r = CreateSessionRequestSchema.safeParse({ archetype: 'iPhone16Pro' });
     expect(r.success).toBe(false);
+  });
+
+  it('measures the exact serialized UTF-8 byte boundary for ASCII and emoji metadata', () => {
+    const overheadBytes = new TextEncoder().encode(JSON.stringify({ note: '' })).byteLength;
+    const exactAscii = { note: 'a'.repeat(SESSION_METADATA_MAX_BYTES - overheadBytes) };
+    const exactEmoji = {
+      note: `${'a'.repeat(SESSION_METADATA_MAX_BYTES - overheadBytes - 4)}😀`,
+    };
+    const overByOneByte = {
+      note: `${'a'.repeat(SESSION_METADATA_MAX_BYTES - overheadBytes - 3)}😀`,
+    };
+
+    expect(new TextEncoder().encode(JSON.stringify(exactAscii))).toHaveLength(
+      SESSION_METADATA_MAX_BYTES,
+    );
+    expect(new TextEncoder().encode(JSON.stringify(exactEmoji))).toHaveLength(
+      SESSION_METADATA_MAX_BYTES,
+    );
+    expect(new TextEncoder().encode(JSON.stringify(overByOneByte))).toHaveLength(
+      SESSION_METADATA_MAX_BYTES + 1,
+    );
+    expect(CreateSessionRequestSchema.safeParse({ metadata: exactAscii }).success).toBe(true);
+    expect(CreateSessionRequestSchema.safeParse({ metadata: exactEmoji }).success).toBe(true);
+    expect(CreateSessionRequestSchema.safeParse({ metadata: overByOneByte }).success).toBe(false);
   });
 });
 
@@ -225,6 +252,66 @@ describe('CreateApiKeyRequestSchema', () => {
       scopes: ['read', 'write', 'admin'],
     });
     expect(r.scopes).toEqual(['read', 'write', 'admin']);
+  });
+
+  it('accepts every canonical scope exactly once', () => {
+    const scopes = [...ApiKeyScopeSchema.options];
+    const r = CreateApiKeyRequestSchema.parse({ name: 'all-scopes', scopes });
+    expect(r.scopes).toEqual(scopes);
+    expect(r.scopes).toHaveLength(19);
+  });
+
+  it('rejects duplicate, over-roster and abusive scope arrays', () => {
+    const allScopes = [...ApiKeyScopeSchema.options];
+    expect(
+      CreateApiKeyRequestSchema.safeParse({ name: 'duplicate', scopes: ['read', 'read'] }).success,
+    ).toBe(false);
+    expect(
+      CreateApiKeyRequestSchema.safeParse({
+        name: 'over-roster',
+        scopes: [...allScopes, 'read'],
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateApiKeyRequestSchema.safeParse({
+        name: 'abusive',
+        scopes: Array.from({ length: 10_000 }, () => 'read'),
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateApiKeyRequestSchema.safeParse({ name: 'invalid', scopes: ['superadmin'] }).success,
+    ).toBe(false);
+  });
+
+  it('keeps stored response scope arrays backward-compatible', () => {
+    expect(ApiKeySchema.shape.scopes.parse(['read', 'read'])).toEqual(['read', 'read']);
+    expect(ApiKeySchema.shape.scopes.parse(Array.from({ length: 20 }, () => 'read'))).toHaveLength(
+      20,
+    );
+  });
+});
+
+describe('CliAuthorizeBindRequestSchema', () => {
+  const validBind = {
+    code: 'c'.repeat(16),
+    state: 's'.repeat(16),
+    user_code: 'ABCD-EFGH',
+  };
+
+  it('preserves omitted server-default scopes', () => {
+    expect(CliAuthorizeBindRequestSchema.parse(validBind).scopes).toBeUndefined();
+  });
+
+  it('uses the same bounded unique scope-list contract', () => {
+    expect(
+      CliAuthorizeBindRequestSchema.safeParse({ ...validBind, scopes: ['read', 'read'] }).success,
+    ).toBe(false);
+    expect(
+      CliAuthorizeBindRequestSchema.safeParse({
+        ...validBind,
+        scopes: ApiKeyScopeSchema.options,
+      }).success,
+    ).toBe(true);
   });
 });
 

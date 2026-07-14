@@ -60,6 +60,14 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
+  it('SessionMetadataSchema enforces the advertised serialized UTF-8 byte cap with browser-safe TextEncoder', () => {
+    expect(body).toMatch(/export const SESSION_METADATA_MAX_BYTES = 8192;/);
+    expect(body).toMatch(/const sessionMetadataUtf8Encoder = new TextEncoder\(\);/);
+    expect(body).toMatch(
+      /sessionMetadataUtf8Encoder\.encode\(JSON\.stringify\(v\)\)\.byteLength <=\s*\n?\s*SESSION_METADATA_MAX_BYTES/,
+    );
+  });
+
   it('V-169 SessionPurpose framing pinned: harness config driver lives in WebKit driver; production_customer ephemeral+ATFP; cumulative_rig_validation persistent matches V-179 baseline; test_domain_probe tracker-context adversarial; MockDriver accepts but no-ops', () => {
     expect(body).toMatch(
       /\*\s*V-169 — session purpose drives harness configuration in the WebKit\s*\n?\s*\*\s*driver \(per AFP Layer 1 design from Agent 1's Phase 3 work; see\s*\n?\s*\*\s*`docs\/architecture\/afp-harness-configuration\.md` once Agent 1 lands\s*\n?\s*\*\s*the cross-reference doc\)\./,

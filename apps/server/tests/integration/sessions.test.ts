@@ -3,7 +3,11 @@
 // ownership scoping, and concurrency limits.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { PROBLEM_TYPES, TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
+import {
+  PROBLEM_TYPES,
+  SESSION_METADATA_MAX_BYTES,
+  TIER_STORAGE_BYTES_CAP,
+} from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
@@ -95,25 +99,54 @@ describe('POST /v1/sessions', () => {
     expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
-  it('201 accepts a bounded metadata blob (under the 8 KiB cap)', async () => {
+  it('201 accepts metadata at the exact 8 KiB serialized ASCII boundary', async () => {
     fx = await buildTestApp();
+    const overheadBytes = new TextEncoder().encode(JSON.stringify({ note: '' })).byteLength;
+    const metadata = { note: 'a'.repeat(SESSION_METADATA_MAX_BYTES - overheadBytes) };
+    expect(new TextEncoder().encode(JSON.stringify(metadata))).toHaveLength(
+      SESSION_METADATA_MAX_BYTES,
+    );
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/sessions',
       headers: auth(fx),
-      payload: { metadata: { tag: 'a'.repeat(1000) } },
+      payload: { metadata },
     });
     expect(res.statusCode).toBe(201);
   });
 
-  it('400 rejects an over-cap metadata blob (> 8 KiB serialized)', async () => {
+  it('201 accepts metadata at the exact 8 KiB serialized UTF-8 emoji boundary', async () => {
     fx = await buildTestApp();
+    const overheadBytes = new TextEncoder().encode(JSON.stringify({ note: '' })).byteLength;
+    const metadata = {
+      note: `${'a'.repeat(SESSION_METADATA_MAX_BYTES - overheadBytes - 4)}😀`,
+    };
+    expect(new TextEncoder().encode(JSON.stringify(metadata))).toHaveLength(
+      SESSION_METADATA_MAX_BYTES,
+    );
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/sessions',
       headers: auth(fx),
-      // ~9 KiB serialized — past SESSION_METADATA_MAX_BYTES.
-      payload: { metadata: { blob: 'x'.repeat(9000) } },
+      payload: { metadata },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('400 rejects metadata one UTF-8 byte over the 8 KiB serialized cap', async () => {
+    fx = await buildTestApp();
+    const overheadBytes = new TextEncoder().encode(JSON.stringify({ note: '' })).byteLength;
+    const metadata = {
+      note: `${'a'.repeat(SESSION_METADATA_MAX_BYTES - overheadBytes - 3)}😀`,
+    };
+    expect(new TextEncoder().encode(JSON.stringify(metadata))).toHaveLength(
+      SESSION_METADATA_MAX_BYTES + 1,
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { metadata },
     });
     expect(res.statusCode).toBe(400);
     const body = res.json<Record<string, unknown>>();

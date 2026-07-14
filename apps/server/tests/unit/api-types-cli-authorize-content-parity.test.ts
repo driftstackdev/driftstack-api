@@ -15,7 +15,7 @@
 //   • CliAuthorizeInitiateRequest: state 16..128 + optional
 //     client_label 1..120.
 //   • CliAuthorizeBindRequest (web-session-auth): code 16..128 +
-//     state 16..128 + required user_code + optional scopes .min(1); defaults to
+//     state 16..128 + required user_code + optional bounded unique scopes; defaults to
 //     ["account_owner"] server-side.
 //   • CliAuthorizeBindResponse: ok:true literal + account_id (no
 //     plaintext key — only via /exchange).
@@ -64,9 +64,11 @@ describe('W433.B packages/api-types/src/cli-authorize.ts content parity', () => 
     );
   });
 
-  it("imports: z + ApiKeyScopeSchema + Iso8601Schema from './common.js'", () => {
+  it("imports: z + ApiKeyScopeListRequestSchema + Iso8601Schema from './common.js'", () => {
     expect(body).toMatch(/import \{ z \} from 'zod';/);
-    expect(body).toMatch(/import \{ ApiKeyScopeSchema, Iso8601Schema \} from '\.\/common\.js';/);
+    expect(body).toMatch(
+      /import \{ ApiKeyScopeListRequestSchema, Iso8601Schema \} from '\.\/common\.js';/,
+    );
   });
 
   it('CliAuthorizeInitiateRequest: state 16..128 (CSRF nonce) + optional client_label 1..120 ("Driftstack desktop app on John\'s MacBook Pro" rationale)', () => {
@@ -89,7 +91,7 @@ describe('W433.B packages/api-types/src/cli-authorize.ts content parity', () => 
       /\/\/ ─── \/v1\/auth\/cli-authorize\/bind-device-code \(web-session auth required\) ───/,
     );
     expect(body).toMatch(
-      /export const CliAuthorizeBindRequestSchema = z\.object\(\{\s*\n?\s*code: z\.string\(\)\.min\(16\)\.max\(128\),\s*\n?\s*state: z\.string\(\)\.min\(16\)\.max\(128\),[\s\S]*?user_code: CliAuthorizeUserCodeSchema,[\s\S]*?scopes: z\.array\(ApiKeyScopeSchema\)\.min\(1\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CliAuthorizeBindRequestSchema = z\.object\(\{\s*\n?\s*code: z\.string\(\)\.min\(16\)\.max\(128\),\s*\n?\s*state: z\.string\(\)\.min\(16\)\.max\(128\),[\s\S]*?user_code: CliAuthorizeUserCodeSchema,[\s\S]*?scopes: ApiKeyScopeListRequestSchema\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 

@@ -23,7 +23,7 @@
 // is never placed in the URL and proves access to the initiating device.
 
 import { z } from 'zod';
-import { ApiKeyScopeSchema, Iso8601Schema } from './common.js';
+import { ApiKeyScopeListRequestSchema, Iso8601Schema } from './common.js';
 
 /** RFC 8628-style device verification code. Ambiguous I/O/0/1 symbols are
  * excluded; input is normalized so customers can type lowercase safely. */
@@ -70,7 +70,7 @@ export const CliAuthorizeBindRequestSchema = z.object({
   user_code: CliAuthorizeUserCodeSchema,
   /** Scopes to attach to the minted API key. Defaults to
    *  ["account_owner"] server-side if omitted. */
-  scopes: z.array(ApiKeyScopeSchema).min(1).optional(),
+  scopes: ApiKeyScopeListRequestSchema.optional(),
 });
 export type CliAuthorizeBindRequest = z.infer<typeof CliAuthorizeBindRequestSchema>;
 
