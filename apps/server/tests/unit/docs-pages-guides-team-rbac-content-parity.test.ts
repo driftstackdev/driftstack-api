@@ -84,8 +84,9 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The teammate signs up at <https:\/\/app\.driftstack\.dev\/signup> using\s*\n?the invitee email address \(must match exactly\), then clicks the\s*\n?accept link from the invite email\./,
+      /The teammate signs up at <https:\/\/app\.driftstack\.dev\/signup\/> using\s*\n?the invitee email address \(must match exactly\), then clicks the\s*\n?accept link from the invite email\./,
     );
+    expect(p).not.toMatch(/<https:\/\/app\.driftstack\.dev\/signup>/);
   });
 
   it('CRITICAL accept POST endpoint + /team/accept page route pinned. Matches W766 /api/team /v1/team/invites/accept.', () => {
