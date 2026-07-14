@@ -23,11 +23,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LAYOUT = resolve(REPO_ROOT, 'apps/marketing-site/src/layouts/BaseLayout.astro');
+const BUILT_HOME = resolve(REPO_ROOT, 'apps/marketing-site/dist/index.html');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -133,8 +135,50 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/localStorage\.setItem\('ds_theme_mode', next\);/);
     expect(body).toMatch(/function syncThemeControls\(mode\)/);
     expect(body).toMatch(/control\.setAttribute\('aria-pressed', light \? 'true' : 'false'\)/);
-    expect(body).toMatch(/light \? 'Switch to dark theme' : 'Switch to light theme'/);
+    expect(body).toMatch(
+      /var actionLabel = light \? 'Switch to dark theme' : 'Switch to light theme'/,
+    );
+    expect(body).toMatch(/control\.setAttribute\('aria-label', actionLabel\)/);
+    expect(body).toMatch(/control\.setAttribute\('title', actionLabel\)/);
     expect(body).not.toMatch(/<script is:inline>\s*\{`/);
+  });
+
+  it('built theme controls announce the next action before and after a mode change', () => {
+    const html = read(BUILT_HOME);
+    const script = Array.from(html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))
+      .map((match) => match[1] ?? '')
+      .find((candidate) => candidate.includes('function syncThemeControls(mode)'));
+    expect(script).toBeDefined();
+
+    const dom = new JSDOM(html, {
+      url: 'https://driftstack.dev/',
+      runScripts: 'outside-only',
+    });
+    dom.window.eval(script!);
+    const controls = Array.from(
+      dom.window.document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]'),
+    );
+    expect(controls).toHaveLength(2);
+    expect(
+      controls.every(
+        (control) =>
+          control.getAttribute('aria-label') === 'Switch to light theme' &&
+          control.getAttribute('title') === 'Switch to light theme' &&
+          control.getAttribute('aria-pressed') === 'false',
+      ),
+    ).toBe(true);
+
+    controls[0]?.click();
+    expect(dom.window.document.documentElement.getAttribute('data-mode')).toBe('light');
+    expect(
+      controls.every(
+        (control) =>
+          control.getAttribute('aria-label') === 'Switch to dark theme' &&
+          control.getAttribute('title') === 'Switch to dark theme' &&
+          control.getAttribute('aria-pressed') === 'true',
+      ),
+    ).toBe(true);
+    dom.window.close();
   });
 
   it('progressively enhances the native mobile menu with state sync and expected dismissal paths', () => {

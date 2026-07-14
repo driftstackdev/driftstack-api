@@ -224,9 +224,11 @@ const structuredData = {
       (function () {
         function syncThemeControls(mode) {
           var light = mode === 'light';
+          var actionLabel = light ? 'Switch to dark theme' : 'Switch to light theme';
           document.querySelectorAll('[data-theme-toggle]').forEach(function (control) {
             control.setAttribute('aria-pressed', light ? 'true' : 'false');
-            control.setAttribute('title', light ? 'Switch to dark theme' : 'Switch to light theme');
+            control.setAttribute('aria-label', actionLabel);
+            control.setAttribute('title', actionLabel);
           });
         }
 
