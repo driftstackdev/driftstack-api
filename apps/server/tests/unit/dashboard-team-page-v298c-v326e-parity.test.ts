@@ -90,21 +90,29 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it('CRITICAL parallel-fetch /v1/team/members + /v1/team/invites pinned. The Promise.all([members, invites]) shape is what threads the 2-list page render.', () => {
+  it('CRITICAL deadline-bound parallel /v1/team/members + /v1/team/invites lifecycle pins abort and generation authority.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/team\/members', \{/);
-    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{/);
+    expect(p).toMatch(/const TEAM_TIMEOUT_MS = 15_000;/);
+    expect(p).toMatch(
+      /window\.driftstackFetchWithDeadline\(url, init, TEAM_TIMEOUT_MS, controller\)/,
+    );
+    expect(p).toMatch(/const generation = \+\+refreshGeneration;/);
+    expect(p).toMatch(/refreshControllers\.forEach\(function \(controller\) \{/);
+    expect(p).toMatch(/boundedFetch\(\s*\n\s+apiBaseUrl \+ '\/v1\/team\/members'/);
+    expect(p).toMatch(/boundedFetch\(\s*\n\s+apiBaseUrl \+ '\/v1\/team\/invites'/);
     expect(p).toMatch(/Promise\.all\(\[/);
+    expect(p).toMatch(/if \(generation !== refreshGeneration\) return false;/);
     expect(p).toMatch(/'members HTTP ' \+ r\.status/);
     expect(p).toMatch(/'invites HTTP ' \+ r\.status/);
+    expect(p).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/team\//);
   });
 
   it('CRITICAL POST /v1/team/invites body shape — { email, role }. Drift to a different field name would break the V-326e invite flow.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{\s*\n\s+authorization: 'Bearer ' \+ token,\s*\n\s+'content-type': 'application\/json',\s*\n\s+\},\s*\n\s+body: JSON\.stringify\(\{ email: email, role: role \}\),/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/invites', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{\s*\n\s+authorization: 'Bearer ' \+ token,\s*\n\s+'content-type': 'application\/json',\s*\n\s+\},\s*\n\s+body: JSON\.stringify\(\{ email: email, role: role \}\),/,
     );
   });
 
@@ -118,7 +126,7 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/team\/members\/' \+ encodeURIComponent\(id\), \{\s*\n\s+method: 'DELETE',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/team\/members\/' \+ encodeURIComponent\(id\), \{\s*\n\s+method: 'DELETE',/,
     );
     expect(p).toMatch(
       /if \(!r\.ok && r\.status !== 204\) throw new Error\('HTTP ' \+ r\.status\);/,
@@ -159,10 +167,15 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it("CRITICAL invite-error error parses body.detail fallback. Drift to bare HTTP-status would lose server-provided framing (e.g. 'already a team member').", () => {
+  it('CRITICAL invite errors use the shared structured response and stable request classifiers.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/throw new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)/);
+    expect(p).toMatch(/throw window\.driftstackResponseError\(r, b\);/);
+    expect(p).toMatch(
+      /window\.driftstackRequestErrorMessage\(\s*\n\s+err,\s*\n\s+'Could not send the invite\. Try again\.',/,
+    );
+    expect(p).toMatch(/if \(inviteInFlight\) return;/);
+    expect(p).toMatch(/inviteSubmit\.textContent = 'Sending…';/);
   });
 
   it('CRITICAL no-token branches show distinct messages for members vs invites lists. Drift to a single banner would force customers to scroll between two identical messages.', () => {
@@ -197,8 +210,9 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/api\/team" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.dev\/api\/team<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.dev\/api\/team\/" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.dev\/api\/team<\/a>/,
     );
+    expect(p).not.toMatch(/href="https:\/\/docs\.driftstack\.dev\/api\/team"/);
   });
 
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used.', () => {
