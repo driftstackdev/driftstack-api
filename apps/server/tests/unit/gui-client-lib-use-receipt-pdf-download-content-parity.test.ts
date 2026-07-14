@@ -9,8 +9,7 @@
 //   • V-534.BM + V-534.BN dual-framing pinned: 'useReceiptPdfDownload
 //     hook.' + 'extended to also handle the plain-text variant
 //     (/receipt.txt, V-666.P). Both endpoints are auth-gated, so
-//     the blob-fetch + synthesized anchor click pattern is required
-//     either way.'
+//     bounded authenticated download path is required either way.'
 //   • ReceiptDownloadFormat 2-value union ('pdf'|'txt').
 //   • FORMAT_ACCEPT Record: pdf → 'application/pdf' + txt → 'text/plain'.
 //   • State: idle | downloading | failed{message}.
@@ -18,7 +17,7 @@
 //     + reset() with same V-534.AX-style action-hook reset pattern.
 //   • Download flow: single-flight + shared deadline + sequence gating,
 //     trailing-slash strip + encodeURIComponent + per-format Accept,
-//     blob + synthesized anchor click + unconditional resource cleanup.
+//     bounded body + shared native/browser download helper.
 //   • reset/unmount abort and invalidate the active request.
 //   • Filename: `receipt-${orderId}.${format}`.
 
@@ -38,14 +37,15 @@ function read(p: string): string {
 describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-534.BM + V-534.BN dual-framing pinned: 'V-534.BM — useReceiptPdfDownload hook.' + 'V-534.BN — extended to also handle the plain-text variant (/receipt.txt, V-666.P). Both endpoints are auth-gated, so the blob-fetch + synthesized anchor click pattern is required either way.' + 'Fetches /v1/billing/crypto-orders/:id/receipt.{pdf,txt} with the auth header attached and triggers a browser download via a synthesized anchor click.'", () => {
+  it('V-534.BM/.BN dual framing pins auth-gated PDF/text receipts plus bounded native-capable saves', () => {
     expect(body).toMatch(/\/\/ V-534\.BM — useReceiptPdfDownload hook\./);
     expect(body).toMatch(
       /\/\/ V-534\.BN — extended to also handle the plain-text variant\s*\n?\s*\/\/\s+\(\/receipt\.txt, V-666\.P\)\. Both endpoints are auth-gated,\s*\n?\s*\/\/\s+so the blob-fetch \+ synthesized anchor click pattern is\s*\n?\s*\/\/\s+required either way\./,
     );
     expect(body).toMatch(
-      /\/\/ Fetches \/v1\/billing\/crypto-orders\/:id\/receipt\.\{pdf,txt\} with the\s*\n?\s*\/\/ auth header attached and triggers a browser download via a\s*\n?\s*\/\/ synthesized anchor click\./,
+      /\/\/ Fetches \/v1\/billing\/crypto-orders\/:id\/receipt\.\{pdf,txt\} with the\s*\n?\s*\/\/ auth header attached, bounds the body, then uses the shared Tauri\s*\n?\s*\/\/ filesystem\/browser fallback so desktop downloads are real writes\./,
     );
+    expect(body).toMatch(/import \{ downloadBlob, readBoundedDownloadBlob \} from '\.\/download';/);
   });
 
   it("ReceiptDownloadFormat 2-value union ('pdf'|'txt') + FORMAT_ACCEPT Record (pdf → 'application/pdf', txt → 'text/plain') — pinned so the .txt variant doesn't silently fall back to PDF bytes", () => {
@@ -76,12 +76,17 @@ describe('W472.A apps/gui-client/src/lib/use-receipt-pdf-download.ts content par
     );
   });
 
-  it('sequence-gates response side effects and always removes the anchor and revokes its object URL', () => {
+  it('bounds the body, sequence-gates both save phases, delegates native/browser writing, and reports refused saves', () => {
     expect(body).toMatch(
-      /const blob = await res\.blob\(\);\s*\n?\s*if \(sequence !== sequenceRef\.current\) return;\s*\n?\s*objectUrl = URL\.createObjectURL\(blob\);\s*\n?\s*anchor = document\.createElement\('a'\);[\s\S]*?anchor\.download = `receipt-\$\{orderId\}\.\$\{format\}`;[\s\S]*?anchor\.click\(\);\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'idle' \}\);/,
+      /const blob = await readBoundedDownloadBlob\(res\);\s*\n?\s*if \(sequence !== sequenceRef\.current\) return;\s*\n?\s*const saved = await downloadBlob\(`receipt-\$\{orderId\}\.\$\{format\}`, blob\);\s*\n?\s*if \(sequence !== sequenceRef\.current\) return;/,
     );
     expect(body).toMatch(
-      /\} finally \{[\s\S]*?anchor\.parentNode\.removeChild\(anchor\);[\s\S]*?URL\.revokeObjectURL\(objectUrl\);[\s\S]*?if \(requestRef\.current === controller\) \{\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;/,
+      /saved\s*\n?\s*\? \{ kind: 'idle' \}\s*\n?\s*: \{\s*\n?\s*kind: 'failed',\s*\n?\s*format,\s*\n?\s*message: 'The receipt could not be saved\. Check Downloads access and try again\.',/,
+    );
+    expect(body).not.toMatch(/await res\.blob\(\)/);
+    expect(body).not.toMatch(/URL\.createObjectURL/);
+    expect(body).toMatch(
+      /\} finally \{\s*\n?\s*if \(requestRef\.current === controller\) \{\s*\n?\s*requestRef\.current = null;\s*\n?\s*inFlightRef\.current = false;/,
     );
   });
 
