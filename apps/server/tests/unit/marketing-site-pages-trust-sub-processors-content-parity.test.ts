@@ -60,8 +60,9 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
 
   it("Article 28(2) GDPR + 30-day-notice + /legal/dpa Annex 3 cross-reference framing pinned: 'This page is the customer-facing source of truth for sub-processor changes. Adding or removing an entry triggers a 30-day notice to all customers per Article 28(2) of the GDPR; the same content also lives in Annex 3 of the Data Processing Agreement' — pinned so the source-of-truth + Article 28(2) + 30-day-notice + DPA-Annex-3 4-state framing survives (drift to dropping Article 28(2) would lose the GDPR-anchored legal basis; drift to dropping the Annex 3 cross-reference would let the customer view drift from the contractual register)", () => {
     expect(body).toMatch(
-      /This page is the customer-facing source of truth for sub-processor\s*\n?\s*changes\. Adding or removing an entry triggers a 30-day notice to all\s*\n?\s*customers per Article 28\(2\) of the GDPR; the same content also lives\s*\n?\s*in <a href="\/legal\/dpa" class="text-tk-accent-text underline"\s*\n?\s*>Annex 3 of the Data Processing Agreement<\/a\s*\n?\s*>/,
+      /This page is the customer-facing source of truth for sub-processor\s*\n?\s*changes\. Adding or removing an entry triggers a 30-day notice to all\s*\n?\s*customers per Article 28\(2\) of the GDPR; the same content also lives\s*\n?\s*in <a href="\/legal\/dpa\/" class="text-tk-accent-text underline"\s*\n?\s*>Annex 3 of the Data Processing Agreement<\/a\s*\n?\s*>/,
     );
+    expect(body).not.toContain('href="/legal/dpa"');
   });
 
   it("Last-updated stamp pinned: 'Last updated: {SUB_PROCESSOR_REGISTER_LAST_UPDATED}' — pinned so the register-freshness signal stays bound to the canonical timestamp (drift to a hardcoded date would let the page go stale without a code change; drift to dropping the stamp would hide the freshness signal customers use to verify the register is current)", () => {
