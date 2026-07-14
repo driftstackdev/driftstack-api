@@ -25110,3 +25110,33 @@ Verification:
 - the focused API-key service, route, repository, in-memory adapter, structural,
   and real-database lane passes 12 files and 125 tests;
 - strict server typechecking plus focused ESLint and Prettier checks pass.
+
+## V-582 — unused HTTP test stack removed from the dependency graph
+
+**Date:** 2026-07-13
+
+Removed `supertest` and `@types/supertest` from the server development
+manifest after a registry advisory exposed their transitive `qs` dependency.
+A repository-wide import and usage search found no consumer of either package:
+server HTTP integration tests use Fastify injection and the end-to-end lane
+uses Playwright. Keeping a second, unused request stack added install and audit
+surface without providing coverage.
+
+The lockfile now drops 24 unused packages, including Superagent, `qs`, its
+side-channel helpers, multipart parsing, cookie handling, and their type
+packages. No production dependency changed.
+
+Verification:
+
+- `npm ls supertest qs @types/supertest` is empty;
+- the server manifest guard explicitly pins the packages absent and retains the
+  actual Playwright, AJV, Drizzle, and SDK test stack;
+- the focused manifest plus authentication route lane passes 4 files and 94
+  tests, and strict server source/test typechecking passes;
+- `npm audit --omit=dev` reports zero advisories across 669 production
+  dependencies;
+- remaining audit findings are development-only: Autocannon reaches the flagged
+  UUID package only through `uuid.v4()` without the advisory's supplied-buffer
+  path, while current Drizzle Kit still ships the flagged legacy esbuild loader
+  and npm's proposed downgrade would regress the schema toolchain rather than
+  install an upstream fix.

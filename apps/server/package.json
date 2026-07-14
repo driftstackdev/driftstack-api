@@ -41,12 +41,10 @@
     "@driftstack/sdk": "*",
     "@playwright/test": "^1.60.0",
     "@types/node": "^22.10.0",
-    "@types/supertest": "^6.0.0",
     "@types/ws": "^8.5.13",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "drizzle-kit": "^0.31.10",
-    "supertest": "^7.0.0",
     "ws": "^8.21.0"
   }
 }

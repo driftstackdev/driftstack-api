@@ -16,8 +16,9 @@
 //     ioredis + @aws-sdk/client-s3 + @aws-sdk/s3-request-presigner +
 //     @sentry/node + scrypt-kdf + postmark + @driftstack/api-types +
 //     @scalar/fastify-api-reference + @asteasolutions/zod-to-openapi.
-//   • Critical devDeps: playwright + supertest + drizzle-kit + ajv +
-//     ajv-formats + @driftstack/sdk.
+//   • Critical devDeps: playwright + drizzle-kit + ajv + ajv-formats +
+//     @driftstack/sdk. HTTP integration uses Fastify injection; unused
+//     Supertest is deliberately absent to keep its transitive tree out.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -92,10 +93,10 @@ describe('W530.A apps/server/package.json content parity', () => {
     expect(pkg.dependencies).toHaveProperty('@driftstack/api-types');
   });
 
-  it("devDeps framing pinned: '@playwright/test' (e2e suite) + 'supertest' + '@types/supertest' (HTTP assertion) + 'ajv' + 'ajv-formats' (OpenAPI schema validation in tests) + 'drizzle-kit' (workspace-shared but listed here for migration generation locally) + '@driftstack/sdk' (server tests use the SDK to exercise its own surface) — pinned so the test-tooling commitment (playwright + supertest + ajv-validation + SDK-loop-back-test pattern) survives", () => {
+  it('devDeps framing pinned: Playwright + AJV + drizzle-kit + SDK loop-back; unused Supertest tree remains absent', () => {
     expect(pkg.devDependencies).toHaveProperty('@playwright/test');
-    expect(pkg.devDependencies).toHaveProperty('supertest');
-    expect(pkg.devDependencies).toHaveProperty('@types/supertest');
+    expect(pkg.devDependencies).not.toHaveProperty('supertest');
+    expect(pkg.devDependencies).not.toHaveProperty('@types/supertest');
     expect(pkg.devDependencies).toHaveProperty('ajv');
     expect(pkg.devDependencies).toHaveProperty('ajv-formats');
     expect(pkg.devDependencies).toHaveProperty('drizzle-kit');
