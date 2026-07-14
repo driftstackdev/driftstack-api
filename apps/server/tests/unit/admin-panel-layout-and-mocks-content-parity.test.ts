@@ -41,26 +41,33 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
     expect(p).toMatch(/const fullTitle = `\$\{title\} · Driftstack admin`;/);
   });
 
-  it('CRITICAL 10-row navItems set pinned — Overview/Accounts/Audit log/Incidents/Status subs/Leads/Sessions/API keys/Webhook DLQ/Rate limits. Drift to dropping any row would lose admin nav.', () => {
+  it('CRITICAL exact 12-row live nav catalog pins Cost/Fleet/Atlas priority and keeps the unwired Leads surface absent', () => {
     const p = read(LAYOUT);
 
     const expectedNav: Array<[string, string]> = [
       ['/', 'Overview'],
       ['/accounts', 'Accounts'],
+      ['/cost', 'Cost'],
       ['/audit-log', 'Audit log'],
       ['/incidents', 'Incidents'],
       ['/status-subscribers', 'Status subs'],
-      ['/leads', 'Leads'],
       ['/sessions', 'Sessions'],
+      ['/fleet', 'Fleet'],
       ['/api-keys', 'API keys'],
       ['/webhook-dlq', 'Webhook DLQ'],
       ['/rate-limit-overrides', 'Rate limits'],
+      ['/atlas-priority-queue', 'Atlas priority'],
     ];
-    for (const [href, label] of expectedNav) {
-      expect(p, `navItem ${href} / ${label}`).toMatch(
-        new RegExp(`\\{ href: '${href.replace(/\//g, '\\/')}', label: '${label}' \\}`),
-      );
-    }
+    const navSection = p.slice(
+      p.indexOf('const navItems = ['),
+      p.indexOf('];', p.indexOf('const navItems = [')),
+    );
+    const actualNav = [...navSection.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)].map(
+      ([, href, label]) => [href, label],
+    );
+    expect(actualNav).toEqual(expectedNav);
+    expect(navSection).not.toMatch(/\/leads|Leads/);
+    expect(p).toMatch(/href=\{item\.href === '\/' \? '\/' : `\$\{item\.href\}\/`\}/);
   });
 
   it('CRITICAL noindex/nofollow meta pinned. The admin-panel must NEVER be crawled — drift to indexable would leak staff-only surface to public search.', () => {
@@ -122,8 +129,9 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
   it('CRITICAL desktop-only sidebar pinned — hidden + md:block on w-56 aside. Drift to mobile-visible would leak admin nav on phones. 2026-05-21 — aside also carries `data-mobile-nav` so the md:hidden hamburger can flip it to a fullscreen overlay via html[data-mobile-nav-open=true] CSS. hidden+md:block default still holds for desktop posture.', () => {
     const p = read(LAYOUT);
 
+    expect(p).toMatch(/<aside\s+id="admin-mobile-navigation"\s+data-mobile-nav/);
     expect(p).toMatch(
-      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block">/,
+      /class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block"/,
     );
   });
 
