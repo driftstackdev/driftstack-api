@@ -117,11 +117,10 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(/getClient\(client_id: string\): Promise<OAuthClient \| null>;/);
     expect(body).toMatch(/listClients\(\): Promise<readonly OAuthClient\[\]>;/);
     expect(body).toMatch(/revokeClient\(client_id: string, at: number\): Promise<void>;/);
+    expect(body).toMatch(/atomically swap `client_secret_hash` only while the client/);
+    expect(body).toMatch(/part of the same conditional UPDATE as the hash swap/);
     expect(body).toMatch(
-      /V-667\.E — atomically swap `client_secret_hash` for a client without\s*\n?\s*\*\s*touching client_id or revoked_at\. Existing access tokens stay\s*\n?\s*\*\s*valid \(they're bearer-authenticated; the secret is consulted only\s*\n?\s*\*\s*on \/token exchange\)\./,
-    );
-    expect(body).toMatch(
-      /rotateClientSecretHash\(client_id: string, new_hash: string\): Promise<void>;/,
+      /rotateClientSecretHash\(client_id: string, new_hash: string\): Promise<boolean>;/,
     );
     expect(body).toMatch(/insertCode\(code: AuthorizationCode\): Promise<void>;/);
     expect(body).toMatch(/getCode\(code: string\): Promise<AuthorizationCode \| null>;/);
@@ -219,7 +218,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
       /V-667\.E — rotate the client_secret in place\. Returns the NEW\s*\n?\s*\*\s*plaintext \(shown ONCE — the store keeps only the hash\)\. The\s*\n?\s*\*\s*client_id stays the same so existing redirect URIs \+ customer\s*\n?\s*\*\s*consent records carry over\./,
     );
     expect(body).toMatch(
-      /async rotateClientSecret\(client_id: string\): Promise<\{ client_secret: string \}> \{\s*\n?\s*const c = await this\.store\.getClient\(client_id\);\s*\n?\s*if \(c === null \|\| c\.revoked_at !== null\) \{\s*\n?\s*throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
+      /const rotated = await this\.store\.rotateClientSecretHash\(\s*\n?\s*client_id,\s*\n?\s*this\.secretHasher\(client_secret\),\s*\n?\s*\);\s*\n?\s*if \(!rotated\) throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
     );
   });
 

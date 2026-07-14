@@ -25278,3 +25278,31 @@ Verification:
   44 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-588 — OAuth client-secret rotation is conditional on live authority
+
+**Date:** 2026-07-14
+
+Made the OAuth store's client-secret swap conditional on the client still
+existing and remaining unrevoked at the authoritative write. The service
+previously checked `revoked_at` in a separate read, then unconditionally asked
+the store to replace the hash. A concurrent revocation could win between those
+operations while rotation still returned a new one-time plaintext as if it had
+succeeded.
+
+The store operation now returns whether it changed an active client. A future
+persistent implementation must combine `revoked_at IS NULL` with the hash
+update in one statement. The service returns `invalid_client` when that
+conditional write loses; a rotation that wins first remains a valid serial
+outcome. Client id, redirect URIs, existing bearer tokens, and PKCE behavior are
+unchanged. Production still intentionally omits this pre-launch provider store,
+but its persistence contract no longer embeds the race.
+
+Verification:
+
+- an adversarial store revokes the client immediately before the secret swap;
+  rotation rejects and the original hash remains unchanged on the revoked row;
+- ordinary rotation, revoked/unknown rejection, old-secret denial, existing
+  token validity, and admin-route behavior remain covered;
+- focused OAuth behavior/content guards, strict server source/test
+  typechecking, targeted linting, formatting, diff, and hooks pass.

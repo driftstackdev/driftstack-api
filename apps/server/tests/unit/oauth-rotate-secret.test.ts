@@ -17,6 +17,13 @@ import { registerOAuthRoutes } from '../../src/routes/oauth.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
 
+class RevokeBeforeRotateStore extends InMemoryOAuthStore {
+  override async rotateClientSecretHash(id: string, newHash: string): Promise<boolean> {
+    await this.revokeClient(id, Date.now());
+    return super.rotateClientSecretHash(id, newHash);
+  }
+}
+
 function s256(verifier: string): string {
   return createHash('sha256').update(verifier).digest('base64url');
 }
@@ -94,6 +101,25 @@ describe('V-667.E OAuthService.rotateClientSecret — service layer', () => {
     await svc.revokeClient(reg.client_id);
     await expect(svc.rotateClientSecret(reg.client_id)).rejects.toThrow(
       /unknown or revoked client_id/,
+    );
+  });
+
+  it('rejects when revocation wins at the authoritative secret-swap boundary', async () => {
+    const store = new RevokeBeforeRotateStore();
+    const svc = new OAuthService(store);
+    const reg = await svc.registerClient({
+      label: 'App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+
+    await expect(svc.rotateClientSecret(reg.client_id)).rejects.toThrow(
+      /unknown or revoked client_id/,
+    );
+
+    const after = await store.getClient(reg.client_id);
+    expect(after?.revoked_at).not.toBeNull();
+    expect(after?.client_secret_hash).toBe(
+      createHash('sha256').update(reg.client_secret).digest('hex'),
     );
   });
 

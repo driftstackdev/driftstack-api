@@ -83,12 +83,15 @@ export interface OAuthStore {
   listClients(): Promise<readonly OAuthClient[]>;
   revokeClient(client_id: string, at: number): Promise<void>;
   /**
-   * V-667.E — atomically swap `client_secret_hash` for a client without
-   * touching client_id or revoked_at. Existing access tokens stay
-   * valid (they're bearer-authenticated; the secret is consulted only
-   * on /token exchange).
+   * V-667.E — atomically swap `client_secret_hash` only while the client
+   * exists and remains unrevoked. Return true iff this call changed the
+   * active row. A persistent implementation must make the revoked-at check
+   * part of the same conditional UPDATE as the hash swap so a concurrent
+   * revoke cannot authorize a successor secret from a stale read. Existing
+   * access tokens stay valid (they're bearer-authenticated; the secret is
+   * consulted only on /token exchange).
    */
-  rotateClientSecretHash(client_id: string, new_hash: string): Promise<void>;
+  rotateClientSecretHash(client_id: string, new_hash: string): Promise<boolean>;
   // Authorization codes
   insertCode(code: AuthorizationCode): Promise<void>;
   getCode(code: string): Promise<AuthorizationCode | null>;
@@ -139,9 +142,11 @@ export class InMemoryOAuthStore implements OAuthStore {
     return [...this.clients.values()];
   }
   // eslint-disable-next-line @typescript-eslint/require-await
-  async rotateClientSecretHash(id: string, new_hash: string): Promise<void> {
+  async rotateClientSecretHash(id: string, new_hash: string): Promise<boolean> {
     const c = this.clients.get(id);
-    if (c) this.clients.set(id, { ...c, client_secret_hash: new_hash });
+    if (c === undefined || c.revoked_at !== null) return false;
+    this.clients.set(id, { ...c, client_secret_hash: new_hash });
+    return true;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async revokeClient(id: string, at: number): Promise<void> {
@@ -333,12 +338,12 @@ export class OAuthService {
    *     better to register a fresh one).
    */
   async rotateClientSecret(client_id: string): Promise<{ client_secret: string }> {
-    const c = await this.store.getClient(client_id);
-    if (c === null || c.revoked_at !== null) {
-      throw new OAuthError('invalid_client', 'unknown or revoked client_id');
-    }
     const client_secret = `oas_${randomBytes(32).toString('base64url')}`;
-    await this.store.rotateClientSecretHash(client_id, this.secretHasher(client_secret));
+    const rotated = await this.store.rotateClientSecretHash(
+      client_id,
+      this.secretHasher(client_secret),
+    );
+    if (!rotated) throw new OAuthError('invalid_client', 'unknown or revoked client_id');
     return { client_secret };
   }
 
