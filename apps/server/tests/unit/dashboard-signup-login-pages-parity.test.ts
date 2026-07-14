@@ -33,9 +33,9 @@ describe('W737 dashboard signup + login pages V-079 parity', () => {
 
   // --- signup.astro -----------------------------------------------
 
-  it('CRITICAL signup V-184a anchor + onboarding-flow framing pinned. The "signup → verify-email → welcome → select-tier → dashboard" sequence is the canonical onboarding shape (2026-07-02: the terminal step moved from /first-session to the dashboard home with the account-portal IA — sessions are launched in the desktop app).', () => {
+  it('CRITICAL current signup onboarding-flow framing pinned. The "signup → verify-email → welcome → select-tier → dashboard" sequence is the canonical onboarding shape.', () => {
     const s = read(SIGNUP);
-    expect(s).toMatch(/V-184a — onboarding flow Tier 1 scaffolding/);
+    expect(s).toMatch(/\/\/ Account onboarding flow\./);
     expect(s).toMatch(/Flow: signup → verify-email → welcome → select-tier → dashboard/);
     expect(s).toMatch(/Each page uses localStorage\.ds_web_session_token for cross-page state/);
   });
