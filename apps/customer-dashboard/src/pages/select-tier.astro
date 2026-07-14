@@ -515,8 +515,11 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
                   // "Redirecting…" forever if the 200 body is malformed
                   // and has no portal_url; throw so withBusy's .catch
                   // restores the button and the banner shows an error.
-                  if (!body.portal_url) throw new Error('No portal URL returned.');
-                  window.location.href = body.portal_url;
+                  const portalUrl = window.driftstackTrustedRedirectUrl(body.portal_url, [
+                    'https://billing.stripe.com',
+                  ]);
+                  if (!portalUrl) throw new Error('No valid portal URL returned.');
+                  window.location.href = portalUrl;
                 }),
             ).catch((err) => {
               showBanner(
@@ -582,8 +585,11 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
                 // altered response) must not leave the button stuck on
                 // "Redirecting…" with no way to retry; throw so
                 // withBusy's .catch resets it and shows an error.
-                if (!body.checkout_url) throw new Error('No checkout URL returned.');
-                window.location.href = body.checkout_url;
+                const checkoutUrl = window.driftstackTrustedRedirectUrl(body.checkout_url, [
+                  'https://checkout.stripe.com',
+                ]);
+                if (!checkoutUrl) throw new Error('No valid checkout URL returned.');
+                window.location.href = checkoutUrl;
               }),
           ).catch((err) => {
             showBanner(

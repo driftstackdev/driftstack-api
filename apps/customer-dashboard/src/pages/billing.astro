@@ -357,8 +357,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
           if (!response.ok) throw new Error('portal unavailable');
           const body = await response.json();
-          if (!body || !body.portal_url) throw new Error('portal URL missing');
-          window.location.href = body.portal_url;
+          const portalUrl = window.driftstackTrustedRedirectUrl(body && body.portal_url, [
+            'https://billing.stripe.com',
+          ]);
+          if (!portalUrl) throw new Error('portal URL invalid');
+          window.location.href = portalUrl;
         } catch {
           showBanner("Couldn't open Stripe right now — check your connection and try again.");
         } finally {

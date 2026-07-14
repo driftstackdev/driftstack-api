@@ -381,6 +381,16 @@ const navSections: NavSection[] = [
             },
           );
         };
+        window.driftstackTrustedRedirectUrl = function (value, allowedOrigins) {
+          if (typeof value !== 'string' || !Array.isArray(allowedOrigins)) return null;
+          try {
+            var parsed = new URL(value);
+            if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null;
+            return allowedOrigins.indexOf(parsed.origin) !== -1 ? parsed.toString() : null;
+          } catch (_) {
+            return null;
+          }
+        };
       })();
     </script>
   </head>

@@ -546,10 +546,14 @@ const apiBaseUrl = resolveApiBaseUrl();
                     .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
             )
             .then((body) => {
-              if (body.authorize_url) {
-                window.location.href = body.authorize_url;
+              const authorizeUrl = window.driftstackTrustedRedirectUrl(body.authorize_url, [
+                'https://accounts.google.com',
+                'https://github.com',
+              ]);
+              if (authorizeUrl) {
+                window.location.href = authorizeUrl;
               } else {
-                showBanner('OAuth start returned no authorize URL.');
+                showBanner('OAuth start returned an invalid authorize URL.');
               }
             })
             .catch((err) => {
