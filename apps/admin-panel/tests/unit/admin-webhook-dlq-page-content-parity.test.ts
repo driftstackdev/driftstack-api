@@ -71,6 +71,9 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
 
   it('localStorage key ds_web_session_token (admin-panel convention)', () => {
     expect(body).toContain("'ds_web_session_token'");
+    expect(body).toMatch(
+      /try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
+    );
   });
 
   it('V-189 enriched-display caveat pinned (account email + webhook URL not in DLQ shape today)', () => {

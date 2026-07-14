@@ -31,6 +31,8 @@ interface DlqEntry {
   created_at: string;
 }
 interface SetUpOpts {
+  token?: string | null;
+  storageDenied?: boolean;
   confirmReturns?: boolean;
   confirmCalls?: unknown[];
   route: (call: MockFetchCall) => Response | Promise<Response>;
@@ -39,7 +41,11 @@ interface SetUpOpts {
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -60,7 +66,21 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve(opts.route(call));
   };
-  window.localStorage.setItem('ds_web_session_token', 'staff-tok');
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== null) {
+    window.localStorage.setItem('ds_web_session_token', opts.token ?? 'staff-tok');
+  }
+  let hydrated = 0;
+  // @ts-expect-error — injected by AdminLayout
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   const cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by AdminLayout
   window.driftstackConfirm = (_message: string, confirmOpts: unknown) => {
@@ -73,7 +93,11 @@ function setUpDom(
   if (!pageScript) throw new Error('admin webhook-dlq inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function json(obj: unknown, status = 200): Response {
@@ -120,6 +144,34 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
     win = null;
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it.each([
+    ['signed out', { token: null }],
+    ['storage denied', { storageDenied: true }],
+  ])('%s: renders a fail-closed shell without network', async (_label, auth) => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
+      ...auth,
+      route: () => {
+        throw new Error('must not fetch without a bearer');
+      },
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(hydratedCount()).toBe(1);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
+      'Sign in with a staff admin account',
+    );
+    expect(window.document.querySelector('[data-list="dlq"]')?.textContent).toContain(
+      'Sign in with a staff admin account',
+    );
+    expect(
+      (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(window.document.querySelector('[data-action="discard"]')).toBeNull();
+    expect(window.document.querySelector('[data-action="requeue"]')).toBeNull();
+  });
 
   it('renders DLQ entries with Requeue + Discard actions', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
