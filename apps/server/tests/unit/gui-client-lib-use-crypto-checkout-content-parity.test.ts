@@ -99,14 +99,16 @@ describe('W471.B apps/gui-client/src/lib/use-crypto-checkout.ts content parity',
     );
   });
 
-  it("idempotencyKeyRef: useRef<string>(newIdempotencyKey()) at hook init; 'idempotency-key' header lowercased on POST; body JSON.stringify(args); replayed = res.headers.get('idempotent-replayed') === '1' literal check", () => {
+  it('idempotencyKeyRef + lowercased header + bounded response parsing + replayed header literal check', () => {
     expect(body).toMatch(/const idempotencyKeyRef = useRef<string>\(newIdempotencyKey\(\)\);/);
     expect(body).toMatch(
       /'idempotency-key': idempotencyKeyRef\.current,\s*\n?\s*\},\s*\n?\s*body: JSON\.stringify\(args\),/,
     );
     expect(body).toMatch(
-      /const order = \(await res\.json\(\)\) as CryptoCheckoutResponse;\s*\n?\s*const replayed = res\.headers\.get\('idempotent-replayed'\) === '1';\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', order, replayed \}\);/,
+      /const order = await readBoundedApiJson<CryptoCheckoutResponse>\(res\);\s*\n?\s*const replayed = res\.headers\.get\('idempotent-replayed'\) === '1';\s*\n?\s*if \(sequence === sequenceRef\.current\) setState\(\{ kind: 'ready', order, replayed \}\);/,
     );
+    expect(body).toMatch(/import \{ readBoundedApiJson \} from '\.\/read-bounded-json';/);
+    expect(body).not.toMatch(/\bres\.json\(\)/);
     expect(body).toMatch(/fetchWithDeadline\(`\$\{baseUrl\}\/v1\/billing\/crypto-checkout`, \{/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/if \(inFlightRef\.current\) return;/);
