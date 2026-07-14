@@ -25,8 +25,8 @@
 //     the Driftstack control plane.'
 //   • ProxyForm: validateDraft on submit + 1-65535 port range +
 //     username/password optional with empty→null normalization.
-//   • friendlyError: Error instanceof → message else 'unknown
-//     error'.
+//   • friendlyError delegates to shared humanizeError with an
+//     operation-specific actionable fallback.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -135,10 +135,17 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).not.toMatch(/\{p\.password\}/);
   });
 
-  it("friendlyError: Error instanceof → .message / fallback 'unknown error' — pinned so non-Error throws don't render as '[object Object]'; Field subcomponent: label + optional error + children — consistent form-field convention", () => {
+  it('friendlyError delegates to shared safe humanization with operation-specific actionable fallbacks; Field subcomponent keeps label + optional error + children', () => {
+    expect(body).toMatch(/import \{ humanizeError \} from '\.\.\/lib\/humanize-error';/);
     expect(body).toMatch(
-      /function friendlyError\(err: unknown\): string \{\s*\n?\s*if \(err instanceof Error\) return err\.message;\s*\n?\s*return 'unknown error';\s*\n?\s*\}/,
+      /function friendlyError\(err: unknown, fallback: string\): string \{\s*\n?\s*return humanizeError\(err, fallback\);\s*\n?\s*\}/,
     );
+    expect(body).toContain('friendlyError(err, "Couldn\'t load proxies. Try again.")');
+    expect(body).toContain(
+      'friendlyError(err, "Couldn\'t save this proxy. Check the details and try again.")',
+    );
+    expect(body).toContain('friendlyError(err, "Couldn\'t remove this proxy. Try again.")');
+    expect(body).not.toContain("return 'unknown error'");
     expect(body).toMatch(
       /function Field\(\{\s*\n?\s*label,\s*\n?\s*error,\s*\n?\s*children,\s*\n?\s*\}: \{\s*\n?\s*label: string;\s*\n?\s*error\?: string;\s*\n?\s*children: React\.ReactNode;\s*\n?\s*\}\): JSX\.Element \{/,
     );
