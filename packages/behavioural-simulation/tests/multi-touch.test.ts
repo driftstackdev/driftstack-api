@@ -235,6 +235,177 @@ describe('BSIM-2 — samples ceiling on the multi-touch gesture generators', () 
   });
 });
 
+describe('BSIM-5 — fail-closed multi-touch input domain', () => {
+  it('rejects fractional, non-finite, and fewer-than-two sample counts', () => {
+    for (const samples of [1, 2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        generatePinchGesture({
+          startCentre: { x: 0, y: 0 },
+          startSpanPx: 100,
+          endSpanPx: 200,
+          samples,
+          seed: 'invalid-samples',
+        }),
+      ).toThrow(/samples must be an integer >= 2|samples must be <= 1000/);
+    }
+  });
+
+  it('rejects non-positive and non-finite durations in every generator', () => {
+    for (const durationMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        generatePinchGesture({
+          startCentre: { x: 0, y: 0 },
+          startSpanPx: 100,
+          endSpanPx: 200,
+          durationMs,
+          seed: 'bad-duration-pinch',
+        }),
+      ).toThrow(/durationMs/);
+      expect(() =>
+        generateTwoFingerScrollGesture({
+          start: { x: 0, y: 0 },
+          direction: 'down',
+          distancePx: 100,
+          durationMs,
+          seed: 'bad-duration-scroll',
+        }),
+      ).toThrow(/durationMs/);
+      expect(() =>
+        generateThreeFingerSwipeGesture({
+          start: { x: 0, y: 0 },
+          direction: 'right',
+          distancePx: 100,
+          durationMs,
+          seed: 'bad-duration-swipe',
+        }),
+      ).toThrow(/durationMs/);
+    }
+  });
+
+  it('rejects impossible pinch spans', () => {
+    for (const span of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() =>
+        generatePinchGesture({
+          startCentre: { x: 0, y: 0 },
+          startSpanPx: span,
+          endSpanPx: 100,
+          seed: 'bad-start-span',
+        }),
+      ).toThrow(/startSpanPx/);
+      expect(() =>
+        generatePinchGesture({
+          startCentre: { x: 0, y: 0 },
+          startSpanPx: 100,
+          endSpanPx: span,
+          seed: 'bad-end-span',
+        }),
+      ).toThrow(/endSpanPx/);
+    }
+  });
+
+  it('rejects non-positive travel distance and finger separation', () => {
+    expect(() =>
+      generateTwoFingerScrollGesture({
+        start: { x: 0, y: 0 },
+        direction: 'down',
+        distancePx: -100,
+        seed: 'negative-scroll',
+      }),
+    ).toThrow(/distancePx/);
+    expect(() =>
+      generateTwoFingerScrollGesture({
+        start: { x: 0, y: 0 },
+        direction: 'down',
+        distancePx: 100,
+        fingerSeparationPx: 0,
+        seed: 'zero-scroll-separation',
+      }),
+    ).toThrow(/fingerSeparationPx/);
+    expect(() =>
+      generateThreeFingerSwipeGesture({
+        start: { x: 0, y: 0 },
+        direction: 'right',
+        distancePx: 0,
+        seed: 'zero-swipe',
+      }),
+    ).toThrow(/distancePx/);
+    expect(() =>
+      generateThreeFingerSwipeGesture({
+        start: { x: 0, y: 0 },
+        direction: 'right',
+        distancePx: 100,
+        fingerSeparationPx: Number.NaN,
+        seed: 'nan-swipe-separation',
+      }),
+    ).toThrow(/fingerSeparationPx/);
+  });
+
+  it('rejects non-finite gesture coordinates', () => {
+    expect(() =>
+      generatePinchGesture({
+        startCentre: { x: Number.NaN, y: 0 },
+        startSpanPx: 100,
+        endSpanPx: 200,
+        seed: 'nan-centre',
+      }),
+    ).toThrow(/startCentre\.x/);
+    expect(() =>
+      generateTwoFingerScrollGesture({
+        start: { x: 0, y: Number.POSITIVE_INFINITY },
+        direction: 'down',
+        distancePx: 100,
+        seed: 'infinite-scroll-start',
+      }),
+    ).toThrow(/start\.y/);
+    expect(() =>
+      generateThreeFingerSwipeGesture({
+        start: { x: Number.NEGATIVE_INFINITY, y: 0 },
+        direction: 'right',
+        distancePx: 100,
+        seed: 'infinite-swipe-start',
+      }),
+    ).toThrow(/start\.x/);
+  });
+
+  it('keeps replay endpoints exact and every valid timeline non-negative and monotonic', () => {
+    const gestures = [
+      generatePinchGesture({
+        startCentre: { x: 200, y: 300 },
+        startSpanPx: 100,
+        endSpanPx: 200,
+        seed: 'valid-pinch-boundaries',
+      }),
+      generateTwoFingerScrollGesture({
+        start: { x: 100, y: 100 },
+        direction: 'down',
+        distancePx: 200,
+        seed: 'valid-scroll-boundaries',
+      }),
+      generateThreeFingerSwipeGesture({
+        start: { x: 200, y: 300 },
+        direction: 'right',
+        distancePx: 150,
+        seed: 'valid-swipe-boundaries',
+      }),
+    ];
+
+    for (const gesture of gestures) {
+      for (const finger of gesture.fingers) {
+        const first = finger.samples[0];
+        const last = finger.samples[finger.samples.length - 1];
+        expect(first).toMatchObject({ x: finger.start.x, y: finger.start.y });
+        expect(last).toMatchObject({ x: finger.end.x, y: finger.end.y });
+        for (let i = 0; i < finger.samples.length; i += 1) {
+          expect(finger.samples[i]?.tMs).toBeGreaterThanOrEqual(0);
+          if (i > 0) {
+            expect(finger.samples[i]?.tMs).toBeGreaterThanOrEqual(finger.samples[i - 1]?.tMs ?? 0);
+          }
+        }
+      }
+    }
+  });
+});
+
 describe('V-530.E interleaveGestureStream', () => {
   it('returns a time-sorted stream with fingerId tagged', () => {
     const g = generatePinchGesture({

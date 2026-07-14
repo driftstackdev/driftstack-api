@@ -26627,3 +26627,29 @@ is detected despite misleading handler text, a public-looking status path gets
 no implicit exemption, and a real options gate passes. Focused evidence passes
 1 file and 6/6 tests; strict server test TypeScript, targeted lint/format, diff
 and whitespace checks are green.
+
+## V-626 — Multi-touch generators reject physically impossible tracks
+
+**Date:** 2026-07-14
+
+The behavioural-simulation multi-touch boundary capped very large sample
+counts but did not validate the rest of its numeric domain. A fractional count
+of 2.5 iterated three times with a denominator of 1.5, placing the final replay
+sample one-third past the declared endpoint. `NaN` yielded empty finger tracks;
+negative duration yielded decreasing negative timestamps; negative distance
+silently reversed the declared gesture direction. Non-finite coordinates,
+non-positive spans and invalid finger separation also crossed the boundary.
+
+All three generators now reject non-finite coordinates, non-positive or
+non-finite duration, fractional/fewer-than-two samples, and invalid physical
+dimensions before allocating a track. Pinch spans, scroll/swipe distances and
+finger separation must be finite and positive; the existing 1,000-sample
+ceiling remains. Positional jitter now applies only to interior samples, so the
+first and final replayed coordinates exactly equal the track's declared start
+and end while preserving seeded path variation between them.
+
+Verification covers every invalid numeric class across pinch, two-finger
+scroll and three-finger swipe, plus exact replay endpoints and non-negative,
+monotonic timelines for all valid gesture families. The focused multi-touch
+suite passes 1 file and 25/25 tests; strict package TypeScript, targeted
+lint/format, diff and whitespace checks are green.

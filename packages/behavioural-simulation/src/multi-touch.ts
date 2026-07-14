@@ -158,6 +158,24 @@ function fingerStartLagMs(rng: () => number): number {
  */
 export const MAX_SAMPLES_PER_FINGER = 1000;
 
+function requireFinite(name: string, value: number): void {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${name} must be finite (got ${String(value)})`);
+  }
+}
+
+function requirePositiveFinite(name: string, value: number): void {
+  requireFinite(name, value);
+  if (value <= 0) {
+    throw new Error(`${name} must be > 0 (got ${String(value)})`);
+  }
+}
+
+function requireFinitePoint(name: string, point: { x: number; y: number }): void {
+  requireFinite(`${name}.x`, point.x);
+  requireFinite(`${name}.y`, point.y);
+}
+
 /** Gesture duration = the latest sample tMs across all fingers (per the
  *  MultiTouchGesture.durationMs contract), with `floor` as a lower bound. */
 function gestureDurationMs(fingers: readonly FingerTrack[], floor: number): number {
@@ -203,20 +221,30 @@ function buildLinearTrack(opts: {
   samples: number;
   rng: () => number;
 }): FingerTrack {
+  requireFinitePoint('buildLinearTrack: start', opts.start);
+  requireFinitePoint('buildLinearTrack: end', opts.end);
+  requirePositiveFinite('buildLinearTrack: durationMs', opts.durationMs);
+  if (!Number.isInteger(opts.samples) || opts.samples < 2) {
+    throw new Error(
+      `buildLinearTrack: samples must be an integer >= 2 (got ${String(opts.samples)})`,
+    );
+  }
   if (opts.samples > MAX_SAMPLES_PER_FINGER) {
     throw new Error(
       `buildLinearTrack: samples must be <= ${MAX_SAMPLES_PER_FINGER} (got ${opts.samples})`,
     );
   }
   const samples: FingerSample[] = [];
-  // Ensure samples >= 2 so start + end are both present.
-  const n = Math.max(2, opts.samples);
+  const n = opts.samples;
   for (let i = 0; i < n; i += 1) {
     const fraction = i / (n - 1);
     // Light positional jitter so back-to-back gestures don't reproduce
-    // pixel-perfect identical tracks (detectors love that).
-    const jitterX = (opts.rng() - 0.5) * 1.5;
-    const jitterY = (opts.rng() - 0.5) * 1.5;
+    // pixel-perfect identical tracks (detectors love that). The first and
+    // final samples must remain the declared touchstart/touchend coordinates;
+    // jitter only the interior path or replay disagrees with track metadata.
+    const isEndpoint = i === 0 || i === n - 1;
+    const jitterX = isEndpoint ? 0 : (opts.rng() - 0.5) * 1.5;
+    const jitterY = isEndpoint ? 0 : (opts.rng() - 0.5) * 1.5;
     const x = opts.start.x + (opts.end.x - opts.start.x) * fraction + jitterX;
     const y = opts.start.y + (opts.end.y - opts.start.y) * fraction + jitterY;
     // Pressure ramps up briefly then plateaus.
@@ -237,6 +265,9 @@ function buildLinearTrack(opts: {
 }
 
 export function generatePinchGesture(opts: GeneratePinchOpts): MultiTouchGesture {
+  requireFinitePoint('generatePinchGesture: startCentre', opts.startCentre);
+  requirePositiveFinite('generatePinchGesture: startSpanPx', opts.startSpanPx);
+  requirePositiveFinite('generatePinchGesture: endSpanPx', opts.endSpanPx);
   const seed = opts.seed ?? `pinch:${opts.startSpanPx}->${opts.endSpanPx}`;
   const rng = mulberry32(hashSeed(seed));
   const duration = opts.durationMs ?? 320;
@@ -279,6 +310,14 @@ export function generatePinchGesture(opts: GeneratePinchOpts): MultiTouchGesture
 export function generateTwoFingerScrollGesture(
   opts: GenerateTwoFingerScrollOpts,
 ): MultiTouchGesture {
+  requireFinitePoint('generateTwoFingerScrollGesture: start', opts.start);
+  requirePositiveFinite('generateTwoFingerScrollGesture: distancePx', opts.distancePx);
+  if (opts.fingerSeparationPx !== undefined) {
+    requirePositiveFinite(
+      'generateTwoFingerScrollGesture: fingerSeparationPx',
+      opts.fingerSeparationPx,
+    );
+  }
   const seed = opts.seed ?? `two-finger-scroll:${opts.direction}:${String(opts.distancePx)}`;
   const rng = mulberry32(hashSeed(seed));
   const duration = opts.durationMs ?? 220;
@@ -330,6 +369,14 @@ export function generateTwoFingerScrollGesture(
 export function generateThreeFingerSwipeGesture(
   opts: GenerateThreeFingerSwipeOpts,
 ): MultiTouchGesture {
+  requireFinitePoint('generateThreeFingerSwipeGesture: start', opts.start);
+  requirePositiveFinite('generateThreeFingerSwipeGesture: distancePx', opts.distancePx);
+  if (opts.fingerSeparationPx !== undefined) {
+    requirePositiveFinite(
+      'generateThreeFingerSwipeGesture: fingerSeparationPx',
+      opts.fingerSeparationPx,
+    );
+  }
   const seed = opts.seed ?? `three-finger-swipe:${opts.direction}:${String(opts.distancePx)}`;
   const rng = mulberry32(hashSeed(seed));
   const duration = opts.durationMs ?? 280;
