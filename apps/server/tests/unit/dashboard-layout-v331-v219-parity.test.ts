@@ -104,9 +104,12 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(logoCount, 'driftstack-mark.svg?v=4 references').toBeGreaterThanOrEqual(2);
   });
 
-  it('CRITICAL noindex robots meta pinned. The dashboard MUST NOT be indexed by search engines (per V-204+ standard for authenticated surfaces). Drift to dropping would let Google index customer URLs.', () => {
+  it('CRITICAL noindex,nofollow robots meta pinned. The authenticated dashboard must neither be indexed nor contribute followed customer-URL links.', () => {
     const l = read(LAYOUT);
-    expect(l).toMatch(/<meta name="robots" content="noindex" \/>/);
+    const exactRobotsPolicy = /<meta name="robots" content="noindex,nofollow" \/>/;
+    expect(l).toMatch(exactRobotsPolicy);
+    expect(l.replace('noindex,nofollow', 'noindex')).not.toMatch(exactRobotsPolicy);
+    expect(l.replace('noindex,nofollow', 'nofollow')).not.toMatch(exactRobotsPolicy);
   });
 
   it('CRITICAL theme-color #060608 pinned (the token layer dark --bg; Fleet v2 2026-07-02 aligned the meta to the actual dark surface — the old #0b0f14 predated the token layer). The pre-paint theme script + themer rewrite it to #f2f3f6 when light mode is active. Drift to a different color would mismatch the splash screen + browser chrome on mobile.', () => {
@@ -200,15 +203,15 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     );
   });
 
-  it('CRITICAL footer 5-link roster pinned — Privacy + Terms + DPA + AUP + Sub-processors, all on https://driftstack.dev/legal/* (NOT relative paths). Cross-app URL parity with marketing-site.', () => {
+  it('CRITICAL footer 5-link roster pinned — Privacy + Terms + DPA + AUP + Sub-processors use canonical absolute marketing-site URLs (never dashboard-relative or redirecting paths).', () => {
     const l = read(LAYOUT);
 
     const links: Array<[string, string]> = [
-      ['Privacy', 'https://driftstack.dev/legal/privacy'],
-      ['Terms', 'https://driftstack.dev/legal/terms'],
-      ['DPA', 'https://driftstack.dev/legal/dpa'],
-      ['AUP', 'https://driftstack.dev/legal/aup'],
-      ['Sub-processors', 'https://driftstack.dev/trust/sub-processors'],
+      ['Privacy', 'https://driftstack.dev/legal/privacy/'],
+      ['Terms', 'https://driftstack.dev/legal/terms/'],
+      ['DPA', 'https://driftstack.dev/legal/dpa/'],
+      ['AUP', 'https://driftstack.dev/legal/aup/'],
+      ['Sub-processors', 'https://driftstack.dev/trust/sub-processors/'],
     ];
 
     for (const [label, href] of links) {
@@ -219,6 +222,9 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
       const re = new RegExp(`<a href="${escaped}"[\\s\\S]{0,150}>${label}<\\/a`);
       expect(l, `footer link ${label} → ${href}`).toMatch(re);
     }
+    expect(l).not.toMatch(
+      /href="https:\/\/driftstack\.dev\/(?:legal\/(?:privacy|terms|dpa|aup)|trust\/sub-processors)"/,
+    );
   });
 
   it('CRITICAL DashboardLayout imports resolveApiBaseUrl helper (matches W742 single-source-of-truth pattern). Drift to inlining PUBLIC_API_BASE_URL would skip the prod-throw guard.', () => {
