@@ -25030,3 +25030,29 @@ Verification:
 - the post-fix file returns its intentionally stale content assertion as a
   normal failure in under one second instead of wedging the suite;
 - the guard contains no remaining `\s*\n?\s*` separator.
+
+## V-579 — route tests declare their trusted-proxy boundary
+
+**Date:** 2026-07-13
+
+Repaired two account-audit privacy proofs whose raw-row preconditions expected
+an injected `X-Forwarded-For` value while the shared Fastify fixture correctly
+used its secure `trustProxy=false` default. That mismatch made the route record
+the injection peer (`127.0.0.1`) and failed before either test reached its
+cross-actor redaction assertion.
+
+The shared fixture now exposes the same typed trusted-proxy option as the real
+application while retaining an explicit false default. Only the two tests that
+model a deployment behind one trusted proxy opt into one hop. Runtime client-IP
+parsing remains unchanged and raw forwarding headers are still ignored unless
+Fastify has authenticated their proxy boundary.
+
+Verification:
+
+- the broad server sweep reproduced both stale preconditions against the
+  default fixture;
+- the focused account-audit integration suite passes with the two intentional
+  one-hop fixtures;
+- the remaining integration fixtures keep `trustProxy=false`, preserving the
+  spoof-resistant test default;
+- strict server test typechecking, linting, and formatting pass.

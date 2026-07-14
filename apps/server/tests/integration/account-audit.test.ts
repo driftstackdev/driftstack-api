@@ -613,7 +613,7 @@ describe('GET /v1/account/audit-log — per-row actor-privacy redaction (cross-a
   });
 
   it('REAL end-to-end: a driftstack-staff admin-note on a customer account no longer leaks the staff IP on the customer self-view', async () => {
-    fx = await buildTestApp();
+    fx = await buildTestApp({ trustProxy: 1 });
     // A distinct account plays the "staff" side of admin.support_note —
     // POST /v1/admin/accounts/:id/audit-note writes accountId = the
     // CUSTOMER (fx.accountId) but actorAccountId = ctx.account.id (the
@@ -669,7 +669,7 @@ describe('GET /v1/account/audit-log — per-row actor-privacy redaction (cross-a
   // PUT route end-to-end (not a direct repo insert) so it would have
   // caught the gap the direct-insert-based tests above could not.
   it('REAL end-to-end: a team-admin changing the owner email preferences no longer leaks the admin IP on the owner self-view', async () => {
-    fx = await buildTestApp();
+    fx = await buildTestApp({ trustProxy: 1 });
     const OWNER_ACCOUNT_ID = '00000000-0000-4000-8000-000000000c21';
     const owner = await seedAdditionalAccount(fx, {
       accountId: OWNER_ACCOUNT_ID,

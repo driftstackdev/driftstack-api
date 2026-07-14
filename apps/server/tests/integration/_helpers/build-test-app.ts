@@ -418,6 +418,12 @@ export interface TestAppOptions {
    * tiny capacity to trip the gate with a handful of requests from one IP.
    */
   globalIpRateLimit?: { capacity: number; refillPerSecond: number } | null;
+  /**
+   * Fastify's trusted-proxy boundary. Securely defaults to false just like
+   * buildApp; route-level tests that intentionally exercise an authoritative
+   * forwarded client IP must opt into the production-shaped hop count.
+   */
+  trustProxy?: boolean | number | string;
 }
 
 export interface SeedAdditionalOpts {
@@ -1422,6 +1428,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const app = await buildApp({
     logger: testLogger,
+    trustProxy: opts.trustProxy ?? false,
     authRepo,
     authCache,
     authCoalescer,
