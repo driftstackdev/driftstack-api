@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { writeClipboardText } from '../lib/clipboard';
 import { formatCents, formatProduct } from '../lib/crypto-format';
 import { useCryptoCheckout } from '../lib/use-crypto-checkout';
 import { useCryptoOrder } from '../lib/use-crypto-order';
@@ -67,7 +68,7 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
     // loses funds. Give one-click copy + a transient confirm (audit 2026-07-08).
     if (copyState === 'copying') return;
     setCopyState('copying');
-    void navigator.clipboard.writeText(addr).then(
+    void writeClipboardText(addr).then(
       () => {
         setCopyState('copied');
         // Clear any in-flight reset before arming a fresh one so rapid copies don't stack timers.

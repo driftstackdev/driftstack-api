@@ -147,7 +147,23 @@ describe('V-534.AC CryptoCheckoutFlowView', () => {
     });
   });
 
-  it('surfaces payment-address clipboard denial and offers an explicit retry', async () => {
+  it.each([
+    [
+      'the write promise rejects',
+      { clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) } },
+    ],
+    ['the Clipboard API is absent', {}],
+    [
+      'the WebView throws synchronously',
+      {
+        clipboard: {
+          writeText: vi.fn(() => {
+            throw new Error('synchronous denial');
+          }),
+        },
+      },
+    ],
+  ])('surfaces payment-address failure and recovers when %s', async (_label, navigatorStub) => {
     setupFetch({
       onCheckout: () => ({
         order_id: 'ord_new',
@@ -161,16 +177,24 @@ describe('V-534.AC CryptoCheckoutFlowView', () => {
         created_at: '2026-05-11T10:00:00.000Z',
       }),
     });
-    vi.stubGlobal('navigator', {
-      clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) },
-    });
+    vi.stubGlobal('navigator', navigatorStub);
     render(<CryptoCheckoutFlowView defaultProduct="solo_manual" />);
     await screen.findByText('25.00 EUR');
     fireEvent.click(screen.getByRole('button', { name: /Start checkout/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Copy payment address/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/clipboard permission/i);
-    expect(screen.getByRole('button', { name: /Retry copy/i })).toBeInTheDocument();
+    const retry = screen.getByRole('button', { name: /Retry copy/i });
+    expect(retry).toBeInTheDocument();
+    expect((retry as HTMLButtonElement).disabled).toBe(false);
+    expect(retry).toHaveAttribute('aria-busy', 'false');
+
+    const recoveredWrite = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { clipboard: { writeText: recoveredWrite } });
+    fireEvent.click(retry);
+    expect(await screen.findByText('Copied ✓')).toBeInTheDocument();
+    expect(recoveredWrite).toHaveBeenCalledTimes(1);
+    expect(recoveredWrite).toHaveBeenCalledWith('0x123456789');
   });
 
   it('refetches the quote when the product selector changes', async () => {
