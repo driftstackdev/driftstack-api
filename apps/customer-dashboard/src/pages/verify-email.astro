@@ -125,7 +125,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       const unknownRecovery = root.querySelector('[data-verify-unknown]');
       const unknownLoginLink = root.querySelector('[data-link="verify-timeout-login"]');
 
-      const email = sessionStorage.getItem('ds_signup_email');
+      function readSignupState(key) {
+        try {
+          return sessionStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      }
+
+      function removeSignupState(key) {
+        try {
+          sessionStorage.removeItem(key);
+        } catch {
+          // Signup hints are best-effort; session authority lives in localStorage.
+        }
+      }
+
+      const email = readSignupState('ds_signup_email');
       if (email && emailEl) emailEl.textContent = email;
       const formEl = root.querySelector('[data-form-fallback]');
       const spinnerEl = root.querySelector('[data-field="auto-verify-spinner"]');
@@ -138,7 +154,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       //   (b) the page is reached without a token in the URL
       const params = new URLSearchParams(window.location.search);
       const linkToken = params.get('token');
-      const debugToken = sessionStorage.getItem('ds_debug_verify_token');
+      const debugToken = readSignupState('ds_debug_verify_token');
       const prefill = linkToken ?? debugToken;
       if (prefill && tokenInput) tokenInput.value = prefill;
       if (linkToken) {
@@ -166,6 +182,42 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      function canPersistWebSession() {
+        const probeKey = 'ds_web_session_storage_probe';
+        try {
+          localStorage.setItem(probeKey, '1');
+          const persisted = localStorage.getItem(probeKey) === '1';
+          localStorage.removeItem(probeKey);
+          return persisted;
+        } catch {
+          try {
+            localStorage.removeItem(probeKey);
+          } catch {
+            // Storage is unavailable; there is no probe value to retain.
+          }
+          return false;
+        }
+      }
+
+      function persistVerifiedSession(session) {
+        if (!session || typeof session.token !== 'string' || session.token.length === 0) {
+          throw new Error('Verification response did not include a session token.');
+        }
+        // Clear the previous user's per-session overrides before installing
+        // new authority, and verify storage did not silently discard either.
+        const staleKeys = ['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user'];
+        staleKeys.forEach((key) => {
+          localStorage.removeItem(key);
+          if (localStorage.getItem(key) !== null) {
+            throw new Error('Previous session state could not be cleared.');
+          }
+        });
+        localStorage.setItem('ds_web_session_token', session.token);
+        if (localStorage.getItem('ds_web_session_token') !== session.token) {
+          throw new Error('Verified session could not be persisted.');
+        }
+      }
+
       const verifySubmit = form.querySelector('button[type="submit"]');
       const verifySubmitText = verifySubmit ? verifySubmit.textContent : '';
       const VERIFY_REQUEST_TIMEOUT_MS = 15_000;
@@ -186,11 +238,20 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function submitToken(token) {
         if (verifyInFlight || verifyOutcomeUnknown) return Promise.resolve(false);
+        if (!canPersistWebSession()) {
+          showFallback();
+          if (introEl) introEl.textContent = 'Browser storage is unavailable';
+          showBanner(
+            'Enable browser site storage before using this one-time verification link. It has not been consumed, so you can retry after storage is available.',
+          );
+          return Promise.resolve(false);
+        }
         verifyInFlight = true;
         setVerifyBusy(true);
         banner.classList.add('hidden');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), VERIFY_REQUEST_TIMEOUT_MS);
+        let verificationAccepted = false;
 
         return fetch(apiBaseUrl + '/v1/auth/verify-email', {
           method: 'POST',
@@ -199,27 +260,22 @@ const apiBaseUrl = resolveApiBaseUrl();
           credentials: 'include',
           signal: controller.signal,
         })
-          .then((r) =>
-            r.ok
-              ? r.json()
-              : r
-                  .json()
-                  .catch(() => ({}))
-                  .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-          )
+          .then((r) => {
+            if (r.ok) {
+              verificationAccepted = true;
+              return r.json();
+            }
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+          })
           .then((body) => {
             const session = body.session || {};
-            if (session.token) {
-              localStorage.setItem('ds_web_session_token', session.token);
-              // audit w2flmiw48 #2 — clear the previous user's per-session overrides
-              // (acting-as + staff/team flags) so a fresh session can't inherit them.
-              localStorage.removeItem('ds_act_as_account');
-              localStorage.removeItem('ds_is_team_user');
-              localStorage.removeItem('ds_is_staff_user');
-            }
+            persistVerifiedSession(session);
             // Cleanup signup-stage state.
-            sessionStorage.removeItem('ds_signup_email');
-            sessionStorage.removeItem('ds_debug_verify_token');
+            removeSignupState('ds_signup_email');
+            removeSignupState('ds_debug_verify_token');
             // V-267 — honor ?next= round-trip from /cli/authorize and
             // any other deep-link entry. Falls back to /welcome for the
             // first-time onboarding flow.
@@ -231,6 +287,25 @@ const apiBaseUrl = resolveApiBaseUrl();
             window.location.href = rawNext ? next : '/welcome';
           })
           .catch((err) => {
+            if (verificationAccepted) {
+              verifyOutcomeUnknown = true;
+              if (formEl) formEl.hidden = true;
+              if (spinnerEl) spinnerEl.hidden = true;
+              if (unknownRecovery) unknownRecovery.hidden = false;
+              if (introEl) introEl.textContent = 'Email verified — sign in to continue';
+              const rawNext = params.get('next');
+              const next = safeNextPath(rawNext, window.location.origin);
+              if (unknownLoginLink) {
+                unknownLoginLink.setAttribute(
+                  'href',
+                  rawNext ? '/login?next=' + encodeURIComponent(next) : '/login',
+                );
+              }
+              showBanner(
+                'Your email was verified, but the new session could not be saved in this browser. Do not submit this token again. Continue to sign in instead.',
+              );
+              return;
+            }
             if (controller.signal.aborted) {
               verifyOutcomeUnknown = true;
               if (formEl) formEl.hidden = true;
@@ -293,7 +368,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           resendBtn.disabled = true;
           resendBtn.setAttribute('aria-busy', 'true');
           banner.classList.add('hidden');
-          let resendEmail = sessionStorage.getItem('ds_signup_email');
+          let resendEmail = readSignupState('ds_signup_email');
           if (!resendEmail) {
             resendEmail =
               (await window.driftstackPrompt('Email address used at signup:', {

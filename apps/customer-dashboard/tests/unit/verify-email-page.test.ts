@@ -33,6 +33,8 @@ interface SetUpOpts {
   url?: string;
   requestTimeoutImmediately?: boolean;
   signupEmail?: string;
+  storageDenied?: boolean;
+  webSessionWriteLost?: boolean;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
@@ -87,6 +89,47 @@ function setUpDom(
       return nativeSetTimeout(handler, timeout, ...args);
     }) as typeof window.setTimeout;
   }
+  if (opts.storageDenied || opts.webSessionWriteLost) {
+    const storagePrototype = Object.getPrototypeOf(window.localStorage);
+    const getItem = storagePrototype.getItem;
+    const setItem = storagePrototype.setItem;
+    const removeItem = storagePrototype.removeItem;
+    if (opts.storageDenied) {
+      Object.defineProperty(storagePrototype, 'getItem', {
+        configurable: true,
+        value(this: Storage, key: string) {
+          if (this === window.localStorage || this === window.sessionStorage) {
+            throw new Error('storage denied');
+          }
+          return getItem.call(this, key);
+        },
+      });
+      Object.defineProperty(storagePrototype, 'removeItem', {
+        configurable: true,
+        value(this: Storage, key: string) {
+          if (this === window.localStorage || this === window.sessionStorage) {
+            throw new Error('storage denied');
+          }
+          return removeItem.call(this, key);
+        },
+      });
+    }
+    Object.defineProperty(storagePrototype, 'setItem', {
+      configurable: true,
+      value(this: Storage, key: string, value: string) {
+        if (
+          opts.storageDenied &&
+          (this === window.localStorage || this === window.sessionStorage)
+        ) {
+          throw new Error('storage denied');
+        }
+        if (this === window.localStorage) {
+          if (opts.webSessionWriteLost && key === 'ds_web_session_token') return;
+        }
+        return setItem.call(this, key, value);
+      },
+    });
+  }
   if (opts.signupEmail) window.sessionStorage.setItem('ds_signup_email', opts.signupEmail);
 
   installDashboardDeadline(window);
@@ -138,6 +181,43 @@ describe('verify-email page — local integration', () => {
     expect(post?.init?.method).toBe('POST');
     expect(JSON.parse(String(post?.init?.body))).toEqual({ token: 'link_tok_123' });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_VERIFIED');
+  });
+
+  it('does not consume a one-time verification token when session storage is unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      storageDenied: true,
+      fetchPlan: [() => json({ session: { token: 'must_not_be_issued' } })],
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(attrHidden(window, '[data-form="verify"]')).toBe(false);
+    expect((window.document.querySelector('#verify-token') as HTMLInputElement).value).toBe(
+      'link_tok_123',
+    );
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /enable browser site storage.*one-time verification link.*has not been consumed.*retry/i,
+    );
+  });
+
+  it('does not navigate or invite token replay when a verified session write is silently lost', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      webSessionWriteLost: true,
+      fetchPlan: [() => json({ session: { token: 'ds_web_LOST' } })],
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    expect(attrHidden(window, '[data-form="verify"]')).toBe(true);
+    expect(attrHidden(window, '[data-verify-unknown]')).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /email was verified.*session could not be saved.*do not submit this token again.*sign in/i,
+    );
   });
 
   it('auto-verify failure uses stable fixed copy and reveals the manual fallback', async () => {

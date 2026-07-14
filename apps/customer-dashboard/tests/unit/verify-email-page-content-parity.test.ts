@@ -93,8 +93,8 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
   });
 
   it('token-stash cleanup on success (ds_signup_email + ds_debug_verify_token removed)', () => {
-    expect(body).toMatch(/sessionStorage\.removeItem\('ds_signup_email'\)/);
-    expect(body).toMatch(/sessionStorage\.removeItem\('ds_debug_verify_token'\)/);
+    expect(body).toMatch(/removeSignupState\('ds_signup_email'\)/);
+    expect(body).toMatch(/removeSignupState\('ds_debug_verify_token'\)/);
   });
 
   it('#187 self-service POST /v1/auth/resend-verification wired with email-fallback prompt', () => {
@@ -153,6 +153,15 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
 
   it('session-token persistence on success: localStorage ds_web_session_token (matches /login + /signup)', () => {
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
+  });
+
+  it('preflights one-time verification storage and verifies the final session write', () => {
+    expect(body).toContain('function canPersistWebSession()');
+    expect(body).toContain("const probeKey = 'ds_web_session_storage_probe'");
+    expect(body).toMatch(/if \(!canPersistWebSession\(\)\) \{/);
+    expect(body).toContain('It has not been consumed');
+    expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) !== session\.token/);
+    expect(body).toContain('Do not submit this token again. Continue to sign in');
   });
 
   it('withSidebar={false} pre-auth surface', () => {
