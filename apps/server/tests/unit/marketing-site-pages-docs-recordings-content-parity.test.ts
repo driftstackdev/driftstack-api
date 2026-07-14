@@ -91,11 +91,12 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
 
   it('Subscribe-to-shipping framing pinned. Re-enabled by slice 248 after verifying the 3-channel framing (API changelog RSS + status-page subscriptions + /api-reference) still exists at recordings.astro:83+', () => {
     expect(body).toMatch(
-      /Subscribe to the <a href="\/changelog">API changelog<\/a> RSS\s*\n?\s*or <a href="\/docs\/status-subscriptions">status-page\s*\n?\s*subscriptions<\/a>/,
+      /Subscribe to the <a href="\/changelog\/">API changelog<\/a> RSS\s*\n?\s*or <a href="\/docs\/status-subscriptions\/">status-page\s*\n?\s*subscriptions<\/a>/,
     );
     expect(body).toMatch(
-      /the V-540 rollout will land as an entry on\s*\n?\s*both, along with the new endpoint \+ event type appearing on\s*\n?\s*<a href="\/api-reference">\/api-reference<\/a>/,
+      /the V-540 rollout will land as an entry on\s*\n?\s*both, along with the new endpoint \+ event type appearing on\s*\n?\s*<a href="\/api-reference\/">\/api-reference<\/a>/,
     );
+    expect(body).not.toMatch(/href="\/(?:changelog|docs\/status-subscriptions|api-reference)"/);
   });
 
   it('developers@driftstack.dev support contact pinned — pinned so the developer-specific routing tag survives (drift to support@ would lose the developer-team routing on recording-specific questions)', () => {
