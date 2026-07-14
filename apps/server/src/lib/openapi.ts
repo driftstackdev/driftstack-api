@@ -206,6 +206,20 @@ function buildRegistry(): OpenAPIRegistry {
     scheme: 'bearer',
     bearerFormat: 'API key',
   });
+  r.registerComponent('securitySchemes', 'FleetNodeBearer', {
+    type: 'http',
+    scheme: 'bearer',
+    bearerFormat: 'short-lived Ed25519 JWT',
+    description:
+      'Fleet-node JWT signed by the provisioned node key. The token lifetime is at most five minutes, its nonce is single-use, and the production fleet edge additionally enforces mutual TLS.',
+  });
+  r.registerComponent('securitySchemes', 'FleetNodeQueryToken', {
+    type: 'apiKey',
+    in: 'query',
+    name: 'ds_token',
+    description:
+      'URLSessionWebSocketTask-compatible alternative to Authorization: Bearer. Carries the same short-lived, single-use fleet-node JWT; the production fleet edge additionally enforces mutual TLS.',
+  });
 
   // Reusable schemas — promote to components.schemas so codegen
   // produces named types (Pydantic, Go structs, etc.) instead of
@@ -263,6 +277,10 @@ function buildRegistry(): OpenAPIRegistry {
   r.register('GetBillingStateResponse', GetBillingStateResponseSchema);
 
   const auth = [{ BearerAuth: [] }];
+  const fleetAuth: NonNullable<RouteConfig['security']> = [
+    { FleetNodeBearer: [] },
+    { FleetNodeQueryToken: [] },
+  ];
 
   const problemContent = {
     'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } },
@@ -4690,28 +4708,46 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // ── V-820 — fleet events stream (operator-only; not customer-facing) ──
-  // Currently registers as a 503 FeatureUnavailable stub regardless of
-  // AppDeps wiring — the WebSocket handler + fastify-websocket plugin +
-  // Cloudflare AOP layer are pending. SDK code generators reading this
-  // surface should NOT generate a customer-facing fleet client; the
-  // intended consumer is the Mac fleet itself (Agent 1 / harness).
+  // Bootstrap wires the live WebSocket handler when fleet auth, nonce-cache
+  // and control-registry dependencies are present; the activation-off variant
+  // returns 503. This is a fleet-node protocol, not a customer API-key surface.
   registerRoute(r, {
     method: 'get',
     path: '/v1/fleet/events',
     summary:
       'Fleet-node WebSocket event stream (operator-only; mTLS + signed Ed25519 JWT at handshake; customer API keys have no role here)',
     tags: ['fleet'],
-    // No `security: auth` — fleet auth runs via signed JWT in a custom
-    // header at WebSocket handshake, gated by mTLS at the edge. The
-    // customer-API Bearer token has no role here.
+    servers: [
+      { url: 'wss://fleet.driftstack.dev', description: 'Fleet control-plane WebSocket edge' },
+    ],
+    security: fleetAuth,
+    request: {
+      headers: z.object({
+        'x-driftstack-mac-node-id': z.string().min(1).max(128).optional().openapi({
+          description:
+            'Node identifier. Must equal the signed JWT iss/sub. Required unless the equivalent node_id query parameter is used.',
+        }),
+      }),
+      query: z.object({
+        node_id: z.string().min(1).max(128).optional().openapi({
+          description:
+            'URLSession-compatible alternative to X-Driftstack-Mac-Node-Id. Must equal the signed JWT iss/sub.',
+        }),
+      }),
+    },
     responses: {
       101: {
         description:
-          'WebSocket protocol upgrade — handshake authenticated via mTLS + signed Ed25519 JWT in the `x-fleet-jwt` header. Currently NOT IMPLEMENTED; see 503 below.',
+          'WebSocket protocol upgrade. JWT authentication accepts Authorization: Bearer or the ds_token query alternative; the declared node ID must match its signed iss/sub.',
+      },
+      401: {
+        description:
+          'Fleet-node authentication failed before upgrade. Unknown node, revocation, expiry, bad signature, replayed nonce and node-ID mismatch share a uniform response.',
+        content: problemContent,
       },
       503: {
         description:
-          'Fleet events stream not yet implemented. Both the AppDeps-wired path and the activation-gate-off path return 503 — the WebSocket handler + Cloudflare AOP + fleet_nodes SQL migration are pending. This endpoint is operator-only (fleet nodes auth via mTLS); customer API keys have no role here.',
+          'Fleet events stream is disabled because one or more control-plane dependencies are not wired on this deployment.',
         content: problemContent,
       },
     },

@@ -24,6 +24,18 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "API key"
+      },
+      "FleetNodeBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "short-lived Ed25519 JWT",
+        "description": "Fleet-node JWT signed by the provisioned node key. The token lifetime is at most five minutes, its nonce is single-use, and the production fleet edge additionally enforces mutual TLS."
+      },
+      "FleetNodeQueryToken": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "ds_token",
+        "description": "URLSessionWebSocketTask-compatible alternative to Authorization: Bearer. Carries the same short-lived, single-use fleet-node JWT; the production fleet edge additionally enforces mutual TLS."
       }
     },
     "schemas": {
@@ -23450,12 +23462,60 @@
       "get": {
         "summary": "Fleet-node WebSocket event stream (operator-only; mTLS + signed Ed25519 JWT at handshake; customer API keys have no role here)",
         "tags": ["fleet"],
+        "servers": [
+          {
+            "url": "wss://fleet.driftstack.dev",
+            "description": "Fleet control-plane WebSocket edge"
+          }
+        ],
+        "security": [
+          {
+            "FleetNodeBearer": []
+          },
+          {
+            "FleetNodeQueryToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "URLSession-compatible alternative to X-Driftstack-Mac-Node-Id. Must equal the signed JWT iss/sub."
+            },
+            "required": false,
+            "name": "node_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Node identifier. Must equal the signed JWT iss/sub. Required unless the equivalent node_id query parameter is used."
+            },
+            "required": false,
+            "name": "x-driftstack-mac-node-id",
+            "in": "header"
+          }
+        ],
         "responses": {
           "101": {
-            "description": "WebSocket protocol upgrade — handshake authenticated via mTLS + signed Ed25519 JWT in the `x-fleet-jwt` header. Currently NOT IMPLEMENTED; see 503 below."
+            "description": "WebSocket protocol upgrade. JWT authentication accepts Authorization: Bearer or the ds_token query alternative; the declared node ID must match its signed iss/sub."
+          },
+          "401": {
+            "description": "Fleet-node authentication failed before upgrade. Unknown node, revocation, expiry, bad signature, replayed nonce and node-ID mismatch share a uniform response.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Fleet events stream not yet implemented. Both the AppDeps-wired path and the activation-gate-off path return 503 — the WebSocket handler + Cloudflare AOP + fleet_nodes SQL migration are pending. This endpoint is operator-only (fleet nodes auth via mTLS); customer API keys have no role here.",
+            "description": "Fleet events stream is disabled because one or more control-plane dependencies are not wired on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {

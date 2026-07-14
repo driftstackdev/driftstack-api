@@ -26759,3 +26759,28 @@ including the former 36-operation gap. Focused validity, operation coverage,
 snapshot, source-parity and generated-spec evidence passes 5 files and 33/33
 tests; all workspace builds, strict server source/test TypeScript, targeted
 lint/format, diff and whitespace checks are green.
+
+## V-631 — Fleet WebSocket OpenAPI describes its live authentication
+
+**Date:** 2026-07-14
+
+The bootstrap-wired `/v1/fleet/events` WebSocket authenticates every upgrade,
+but its OpenAPI operation still said the route always returned 503, named a
+nonexistent `x-fleet-jwt` header and had no security requirement. Generated
+clients and security inventory therefore saw a public, unimplemented endpoint
+instead of the live operator-only control plane.
+
+The spec now publishes the actual `wss://fleet.driftstack.dev` host and the two
+accepted JWT transports: `Authorization: Bearer` or the URLSession-compatible
+`ds_token` query security scheme. Both document the additional mutual-TLS fleet
+edge, five-minute JWT ceiling and single-use nonce. The node ID header/query
+alternatives and signed iss/sub equality requirement are explicit; 101, uniform
+pre-upgrade 401 and dependency-gated 503 responses match the route. False
+`x-fleet-jwt` and always-unimplemented claims are gone.
+
+The validity suite now also resolves every operation security requirement to a
+declared scheme and pins the exact 29 public or protocol-self-authenticating
+operations allowed to omit an OpenAPI security object. Focused fleet-auth,
+OpenAPI validity/coverage/snapshot/source/generated-spec evidence passes 7
+files and 55/55 tests; all workspace builds, strict server source/test
+TypeScript, targeted lint/format, diff and whitespace checks are green.
