@@ -55,19 +55,19 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(body).toMatch(
       /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Product<\/h3>/,
     );
-    expect(body).toMatch(/<li><a href="\/pricing" class="nav-link">Pricing<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/comparison" class="nav-link">Comparison<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/pricing\/" class="nav-link">Pricing<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/comparison\/" class="nav-link">Comparison<\/a><\/li>/);
     const productColumn = body.slice(body.indexOf('>Product</h3>'), body.indexOf('>Company</h3>'));
     expect(productColumn).not.toMatch(/<li><a href="\/roadmap"/);
-    expect(body).toMatch(/<li><a href="\/self-hosted" class="nav-link">Self-hosted<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/self-hosted\/" class="nav-link">Self-hosted<\/a><\/li>/);
     expect(body).toMatch(
       /<a\s*\n?\s*href="https:\/\/docs\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer">Docs<\/a/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/signup" class="nav-link">Sign up<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/signup\/" class="nav-link">Sign up<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
     );
   });
 
@@ -75,10 +75,10 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(body).toMatch(
       /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Company<\/h3>/,
     );
-    expect(body).toMatch(/<li><a href="\/about" class="nav-link">About<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/faq" class="nav-link">FAQ<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/changelog" class="nav-link">Changelog<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/roadmap" class="nav-link">Roadmap<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/about\/" class="nav-link">About<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/faq\/" class="nav-link">FAQ<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/changelog\/" class="nav-link">Changelog<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/roadmap\/" class="nav-link">Roadmap<\/a><\/li>/);
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev" class="nav-link">support@driftstack\.dev<\/a>/,
     );
@@ -97,16 +97,22 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     );
     // But the links must still be present as nav-links somewhere
     // (the meta-link row).
-    expect(body).toMatch(/<a href="\/legal\/privacy" class="nav-link">Privacy<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/terms" class="nav-link">Terms<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/dpa" class="nav-link">DPA<\/a>/);
-    expect(body).toMatch(/<a href="\/legal\/aup" class="nav-link">Acceptable Use<\/a>/);
-    expect(body).toMatch(/<a href="\/trust" class="nav-link">Trust<\/a>/);
-    expect(body).toMatch(/<a href="\/security" class="nav-link">Security<\/a>/);
-    expect(body).toMatch(/<a href="\/trust\/sub-processors" class="nav-link">Sub-processors<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/privacy\/" class="nav-link">Privacy<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/terms\/" class="nav-link">Terms<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/dpa\/" class="nav-link">DPA<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/aup\/" class="nav-link">Acceptable Use<\/a>/);
+    expect(body).toMatch(/<a href="\/trust\/" class="nav-link">Trust<\/a>/);
+    expect(body).toMatch(/<a href="\/security\/" class="nav-link">Security<\/a>/);
+    expect(body).toMatch(
+      /<a href="\/trust\/sub-processors\/" class="nav-link">Sub-processors<\/a>/,
+    );
     expect(body).toMatch(
       /<a\s*\n?\s*href="https:\/\/status\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer">Status<\/a/,
     );
+    expect(body).not.toMatch(
+      /href="\/(?:pricing|comparison|self-hosted|about|faq|changelog|roadmap|legal\/privacy|legal\/terms|legal\/dpa|legal\/aup|trust|security|trust\/sub-processors)"/,
+    );
+    expect(body).not.toMatch(/href="https:\/\/app\.driftstack\.dev\/(?:signup|login)"/);
   });
 
   it("F-3 product-focused signal strip replaces R7 compliance-badge strip: 'Bit-identical iPhone Safari fingerprint' + 'SOCKS5 · WireGuard · OpenVPN proxies' + 'API · SDK · GUI access' + 'EU-hosted'. Stripe-billed/GDPR-aware/Article 28(2) badges removed from the splash row (legal copy lives on /trust + /legal pages).", () => {
