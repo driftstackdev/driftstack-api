@@ -231,7 +231,13 @@ const EMAIL_EVENTS = [
           class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err-text"
         ></p>
         <div class="flex items-center justify-between border-t border-tk-border pt-4">
-          <span data-field="profile-status" class="text-xs text-tk-ink-3"></span>
+          <span
+            data-field="profile-status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            class="text-xs text-tk-ink-3"
+          ></span>
           <button
             type="submit"
             data-button="profile-save"
@@ -310,7 +316,13 @@ const EMAIL_EVENTS = [
         </p>
       </div>
 
-      <div data-byok-error class="mt-6 hidden rounded-md bg-tk-accent/10 px-3 py-2 text-sm text-tk-accent-text"></div>
+      <div
+        data-byok-error
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        class="mt-6 hidden rounded-md bg-tk-accent/10 px-3 py-2 text-sm text-tk-accent-text"
+      ></div>
 
       <form data-byok-form class="mt-6 flex flex-wrap items-center gap-3" autocomplete="off">
         <label for="byok-key" class="sr-only">Anthropic API key</label>
@@ -392,7 +404,13 @@ const EMAIL_EVENTS = [
           ))
         }
       </div>
-      <p class="mt-4 text-xs text-tk-ink-3" data-field="email-prefs-status">
+      <p
+        class="mt-4 text-xs text-tk-ink-3"
+        data-field="email-prefs-status"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         Sign in to load live preferences.
       </p>
     </section>
