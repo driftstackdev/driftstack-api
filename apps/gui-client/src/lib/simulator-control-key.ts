@@ -9,6 +9,9 @@
 
 const CONTROL_SECRET_PREFIX = 'gui_control:';
 const LEGACY_GCK_STORE_PREFIX = 'ds-gck-';
+const protectedControlKeys = new Map<string, string>();
+const protectedLoadFailures = new Map<string, { message: string; retryAfter: number }>();
+const PROTECTED_LOAD_RETRY_MS = 30_000;
 
 function isSafeControlSessionId(sessionId: string): boolean {
   return sessionId.length > 0 && sessionId.length <= 64 && /^[A-Za-z0-9._-]+$/.test(sessionId);
@@ -42,15 +45,37 @@ function takeLegacyControlKeys(): Map<string, string> {
 
 export async function loadProtectedControlKey(sessionId: string): Promise<string> {
   if (!isSafeControlSessionId(sessionId)) return '';
+  const cached = protectedControlKeys.get(sessionId);
+  if (cached !== undefined) return cached;
+
+  const priorFailure = protectedLoadFailures.get(sessionId);
+  if (priorFailure !== undefined && Date.now() < priorFailure.retryAfter) {
+    throw new Error(priorFailure.message);
+  }
+
   const { invoke } = await import('@tauri-apps/api/core');
-  const value = await invoke<unknown>('secret_load', { key: controlSecretName(sessionId) });
-  return typeof value === 'string' ? value : '';
+  let value: unknown;
+  try {
+    value = await invoke<unknown>('secret_load', { key: controlSecretName(sessionId) });
+  } catch (error) {
+    protectedLoadFailures.set(sessionId, {
+      message: error instanceof Error ? error.message : 'Protected session credential unavailable.',
+      retryAfter: Date.now() + PROTECTED_LOAD_RETRY_MS,
+    });
+    throw error;
+  }
+  protectedLoadFailures.delete(sessionId);
+  const key = typeof value === 'string' ? value : '';
+  if (key !== '') protectedControlKeys.set(sessionId, key);
+  return key;
 }
 
 export async function persistControlKey(sessionId: string, key: string): Promise<void> {
   if (!isSafeControlSessionId(sessionId) || key === '') return;
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('secret_save', { key: controlSecretName(sessionId), value: key });
+  protectedControlKeys.set(sessionId, key);
+  protectedLoadFailures.delete(sessionId);
 }
 
 export async function migrateLegacyControlKeys(
@@ -77,6 +102,8 @@ export async function migrateLegacyControlKeys(
 /** Drop protected + legacy copies before explicitly ending the session. */
 export async function clearPersistedControlKey(sessionId: string): Promise<void> {
   if (!isSafeControlSessionId(sessionId)) return;
+  protectedControlKeys.delete(sessionId);
+  protectedLoadFailures.delete(sessionId);
   try {
     localStorage.removeItem(LEGACY_GCK_STORE_PREFIX + sessionId);
   } catch {

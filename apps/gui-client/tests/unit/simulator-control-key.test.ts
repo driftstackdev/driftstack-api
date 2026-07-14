@@ -67,6 +67,7 @@ describe('simulator control-key protected storage', () => {
     expect(keychain.get('gui_control:agt_safe-1')).toBe('gck_secret');
     expect(storage.length).toBe(0);
     await expect(loadProtectedControlKey('agt_safe-1')).resolves.toBe('gck_secret');
+    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(0);
   });
 
   it('purges every legacy value but migrates only the active session', async () => {
@@ -93,9 +94,11 @@ describe('simulator control-key protected storage', () => {
     storage.setItem('ds-gck-agt_same', 'gck_stale');
 
     await migrateLegacyControlKeys('agt_same');
+    await expect(loadProtectedControlKey('agt_same')).resolves.toBe('gck_current');
 
     expect(keychain.get('gui_control:agt_same')).toBe('gck_current');
     expect(storage.getItem('ds-gck-agt_same')).toBeNull();
+    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
   });
 
   it('a sessionless upgrade purges historical plaintext without creating stale Keychain entries', async () => {
@@ -115,10 +118,12 @@ describe('simulator control-key protected storage', () => {
     credentialStoreLocked = true;
 
     const legacy = await migrateLegacyControlKeys('agt_locked');
+    await expect(loadProtectedControlKey('agt_locked')).rejects.toThrow('credential store locked');
 
     expect(legacy.get('agt_locked')).toBe('gck_memory_only');
     expect(storage.getItem('ds-gck-agt_locked')).toBeNull();
     expect(keychain.size).toBe(0);
+    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
   });
 
   it('deletes protected and stale legacy copies on explicit session end', async () => {
