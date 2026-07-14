@@ -55,7 +55,7 @@ describe('W346.C admin /accounts list filter parity', () => {
   });
 
   it('STATUS_BADGE keys match AccountStatusSchema exactly', () => {
-    const block = page.match(/STATUS_BADGE:[^={]*=?\s*\{([\s\S]*?)\};/);
+    const block = page.match(/const STATUS_BADGE\s*=\s*\{([\s\S]*?)\};/);
     expect(block).not.toBeNull();
     const keys = [...block![1]!.matchAll(/^\s*([a-z_]+):\s*'[^']+',/gm)].map((m) => m[1]!).sort();
     expect(keys).toEqual([...statuses].sort());

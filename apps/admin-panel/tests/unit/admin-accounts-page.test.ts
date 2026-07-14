@@ -25,13 +25,18 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
+  storageDenied?: boolean;
   route: (call: MockFetchCall) => Response;
 }
 
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -55,16 +60,32 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve(opts.route(call));
   };
-  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== undefined) {
+    window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
+  let hydrated = 0;
   // @ts-expect-error — injected by AdminLayout
-  window.dashboardHydrated = () => {};
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   installAdminDeadline(window);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-accounts"'));
   if (!pageScript) throw new Error('admin-accounts inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function text(window: JSDOM['window'], selector: string): string {
@@ -99,8 +120,12 @@ afterEach(() => {
 });
 
 describe('admin-panel Accounts (accounts.astro) behaviour', () => {
-  it('no session token: shows the staff-admin sign-in banner and makes no API call', async () => {
-    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+  it.each([
+    ['signed out', {}],
+    ['storage denied', { storageDenied: true }],
+  ])('%s: renders an inert staff sign-in shell without network', async (_label, auth) => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      ...auth,
       route: () => {
         throw new Error('must not fetch when unauthenticated');
       },
@@ -108,7 +133,17 @@ describe('admin-panel Accounts (accounts.astro) behaviour', () => {
     win = window;
     await flush();
     expect(fetchCalls.length).toBe(0);
+    expect(hydratedCount()).toBe(1);
     expect(text(window, '[data-banner]')).toContain('Sign in with a staff admin account');
+    expect(text(window, '[data-list="accounts"]')).toContain('Sign in with a staff admin account');
+    expect(
+      (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    const loadMore = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+    expect(loadMore.disabled).toBe(true);
+    expect(loadMore.classList.contains('hidden')).toBe(true);
   });
 
   it('renders an account row with identity, tier, status, dates, and an acc_-stripped Open link', async () => {
