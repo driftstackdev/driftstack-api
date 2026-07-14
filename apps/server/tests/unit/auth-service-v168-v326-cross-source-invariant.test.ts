@@ -32,7 +32,8 @@
 //   V-326 findTeamMemberships framing — 'load team memberships
 //   where this account is a MEMBER (not the owner). Each row
 //   exposes the owner's account id + the member's role. Returns an
-//   empty array when the account is on no teams'.
+//   empty array when the account is on no teams. Positive cache hits
+//   refresh live authority; inactive owners are excluded'.
 //
 //   V-352 updateAccountBasics — 'patch self-editable basics
 //   (name, timezone). Email + tier + status + stripeCustomerId are
@@ -149,14 +150,14 @@ describe('W951 auth service V-168 + V-326 + V-352 + V-353e cross-source invarian
 
   // ─── V-326 findTeamMemberships framing ───────────────────────
 
-  it("CRITICAL V-326 findTeamMemberships JSDoc — 'V-326 — load team memberships where this account is a MEMBER (not the owner). Each row exposes the owner's account id + the member's role. Returns an empty array when the account is on no teams. Cached inside AccountContext.teams across the auth-cache TTL; cache-invalidated on membership changes via the team-members service's accept / removeMember paths'. The MEMBER-not-OWNER + empty-array-default + cache-invalidate-on-membership-change framing is the V-326 contract.", () => {
+  it('CRITICAL V-326 findTeamMemberships JSDoc pins MEMBER-not-owner, empty-array default, live cache-hit refresh, and inactive-owner exclusion', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth.ts'));
     expect(p).toMatch(/V-326 — load team memberships where this account is a MEMBER/);
     expect(p).toMatch(/\(not the owner\)\. Each row exposes the owner's account id \+ the/);
     expect(p).toMatch(/member's role\. Returns an empty array when the account is on no/);
-    expect(p).toMatch(/teams\. Cached inside AccountContext\.teams across the auth-cache/);
-    expect(p).toMatch(/TTL; cache-invalidated on membership changes via the team-members/);
-    expect(p).toMatch(/service's accept \/ removeMember paths\./);
+    expect(p).toMatch(/teams\. Positive auth-cache hits refresh this live authority; cache/);
+    expect(p).toMatch(/invalidation remains an accelerator, not the security boundary\./);
+    expect(p).toMatch(/Memberships whose owner account is no longer active are excluded\./);
   });
 
   // ─── V-352 updateAccountBasics framing ───────────────────────

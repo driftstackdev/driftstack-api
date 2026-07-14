@@ -141,17 +141,20 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     const rows = this.teamMemberships.get(memberAccountId) ?? [];
     // Mirror the DB repo's join: enrich ownerEmail/ownerName from the owner
     // account when present, so a test that seeds memberships + accounts gets
-    // the same shape the Drizzle path produces. Falls back to whatever the
-    // membership already carries (or a synthetic email) when the owner account
-    // wasn't seeded into the map.
+    // the same shape the Drizzle path produces, including exclusion of known
+    // inactive owners. Falls back to whatever the membership already carries
+    // (or a synthetic email) when the owner account wasn't seeded into the map.
     return Promise.resolve(
-      rows.map((r) => {
+      rows.flatMap<TeamMembership>((r) => {
         const owner = this.accounts.get(r.ownerAccountId);
-        return {
-          ...r,
-          ownerEmail: owner?.email ?? r.ownerEmail ?? `${r.ownerAccountId}@example.test`,
-          ownerName: owner ? owner.name : (r.ownerName ?? null),
-        };
+        if (owner && owner.status !== 'active') return [];
+        return [
+          {
+            ...r,
+            ownerEmail: owner?.email ?? r.ownerEmail ?? `${r.ownerAccountId}@example.test`,
+            ownerName: owner ? owner.name : (r.ownerName ?? null),
+          },
+        ];
       }),
     );
   }

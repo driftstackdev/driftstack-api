@@ -16,7 +16,7 @@
 //       IS NULL).
 //     - touchWebSessionLastUsed(id, at): lastUsedAt write.
 //     - findTeamMemberships(memberAccountId): membership join with
-//       3-field select projection.
+//       owner identity projection + active-owner authority filter.
 //     - updateAccountBasics(id, patch): 5-field partial update +
 //       V-298a slug-unique-violation translation.
 //
@@ -129,7 +129,7 @@ describe('W993 db/auth-repo V-016 + V-298a cross-source invariant', () => {
     expect(p).toMatch(/createdAt: row\.createdAt,/);
   });
 
-  // ─── findTeamMemberships 3-field select projection ───────────
+  // ─── findTeamMemberships live-owner grant projection ─────────
 
   it('CRITICAL findTeamMemberships projects 3 fields — id + ownerAccountId + role. The narrow projection avoids fetching createdAt/invitedAt/etc on every authenticated request.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-repo.ts'));
@@ -144,6 +144,13 @@ describe('W993 db/auth-repo V-016 + V-298a cross-source invariant', () => {
     expect(p).toMatch(/membershipId: r\.id,/);
     expect(p).toMatch(/ownerAccountId: r\.ownerAccountId,/);
     expect(p).toMatch(/role: r\.role,/);
+  });
+
+  it('CRITICAL findTeamMemberships requires an active owner account so suspended/deleted owners cannot retain cross-account grants', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-repo.ts'));
+    expect(p).toMatch(
+      /and\(eq\(teamMembers\.memberAccountId, memberAccountId\), eq\(accounts\.status, 'active'\)\)/,
+    );
   });
 
   // ─── updateAccountBasics 5-field patch ───────────────────────

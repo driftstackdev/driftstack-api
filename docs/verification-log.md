@@ -25610,3 +25610,41 @@ Verification:
 - the widened cache/auth/coalescer gate passes 19 files and 186 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-597 — cached team grants revalidate live tenant authority
+
+**Date:** 2026-07-14
+
+Closed the remaining cross-tenant authorization window in positive auth-cache
+entries. Team membership removal, role demotion, and owner-account suspension
+commit in PostgreSQL before their best-effort Redis invalidation. If that bump
+was lost, a cached member context could previously retain owner-account access
+or an obsolete admin role for up to 30 seconds.
+
+Every positive API-key and web-session cache hit now loads the authenticated
+account's live team memberships alongside its exact credential and account.
+The returned context replaces the cached grant array before effective-account
+resolution. The production membership query also joins the owner account and
+returns grants only while that owner remains active, preventing a member from
+reaching a suspended or deleted tenant through cached delegation. Cache
+invalidation remains useful for eviction but is no longer the authority
+boundary for membership existence, role, or owner status.
+
+The three authority reads run in parallel and remain indexed. API-key hits
+still bypass scrypt, retaining the expensive portion of the positive-cache
+benefit while failing closed if PostgreSQL authority is unavailable.
+
+Verification:
+
+- unit proofs warm a positive entry, remove its live membership or demote its
+  admin role without invalidation, and observe the refreshed authorization
+  result immediately;
+- an adapter-seam proof excludes known suspended and deleted owners, matching
+  the production query's active-owner predicate;
+- a real HTTP/Redis/PostgreSQL spec warms physical Redis, mutates SQL directly,
+  and proves membership deletion returns 403, admin-to-member demotion blocks
+  an owner-scoped session write with zero inserted session rows, and owner
+  suspension returns 403 (6/6 combined cache-authority cases);
+- widened auth, repository, and Team RBAC coverage passes 18 files and 198 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

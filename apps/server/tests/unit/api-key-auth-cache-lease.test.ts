@@ -3,9 +3,11 @@ import { hashApiKey, keyPrefixFromPlaintext } from '../../src/lib/api-keys.js';
 import { ForbiddenError, InvalidKeyError, RevokedKeyError } from '../../src/lib/errors.js';
 import {
   authenticate,
+  resolveEffectiveAccount,
   type AccountAuthRepo,
   type AccountRow,
   type ApiKeyRow,
+  type TeamMembership,
 } from '../../src/services/auth.js';
 import { InMemoryAuthCache, sha256Hex } from '../../src/services/auth-cache.js';
 
@@ -231,5 +233,71 @@ describe('API-key positive-cache generation lease', () => {
     await expect(
       authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
     ).rejects.toThrow('authority unavailable');
+  });
+
+  it('drops a removed team grant from a positive cache hit without invalidation', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    const membership: TeamMembership = {
+      membershipId: 'mem_cache_authority',
+      ownerAccountId: 'owner_cache_authority',
+      ownerEmail: 'owner@example.test',
+      ownerName: null,
+      role: 'admin',
+    };
+    let liveTeams = [membership];
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(key),
+      findTeamMemberships: () => Promise.resolve(liveTeams),
+    });
+
+    const warmed = await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    expect(resolveEffectiveAccount(warmed, 'acc_owner_cache_authority')).toMatchObject({
+      kind: 'team',
+      role: 'admin',
+    });
+    await expect(cache.get(SHA)).resolves.not.toBeNull();
+
+    liveTeams = [];
+    const refreshed = await authenticate(
+      repo,
+      PLAINTEXT,
+      cache,
+      new Date('2026-07-14T00:00:01.000Z'),
+    );
+    expect(refreshed.teams).toEqual([]);
+    expect(() => resolveEffectiveAccount(refreshed, 'acc_owner_cache_authority')).toThrow(
+      ForbiddenError,
+    );
+  });
+
+  it('replaces a cached admin team role with the live member role', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let liveTeams: TeamMembership[] = [
+      {
+        membershipId: 'mem_role_authority',
+        ownerAccountId: 'owner_role_authority',
+        role: 'admin',
+      },
+    ];
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(key),
+      findTeamMemberships: () => Promise.resolve(liveTeams),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    liveTeams = [{ ...liveTeams[0]!, role: 'member' }];
+
+    const refreshed = await authenticate(
+      repo,
+      PLAINTEXT,
+      cache,
+      new Date('2026-07-14T00:00:01.000Z'),
+    );
+    expect(resolveEffectiveAccount(refreshed, 'acc_owner_role_authority')).toMatchObject({
+      kind: 'team',
+      role: 'member',
+    });
   });
 });

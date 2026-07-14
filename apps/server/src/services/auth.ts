@@ -119,9 +119,9 @@ export interface AccountAuthRepo {
    * V-326 — load team memberships where this account is a MEMBER
    * (not the owner). Each row exposes the owner's account id + the
    * member's role. Returns an empty array when the account is on no
-   * teams. Cached inside AccountContext.teams across the auth-cache
-   * TTL; cache-invalidated on membership changes via the team-members
-   * service's accept / removeMember paths.
+   * teams. Positive auth-cache hits refresh this live authority; cache
+   * invalidation remains an accelerator, not the security boundary.
+   * Memberships whose owner account is no longer active are excluded.
    */
   findTeamMemberships(memberAccountId: string): Promise<TeamMembership[]>;
   /**
@@ -175,11 +175,12 @@ export interface RateLimitOverride {
 
 /**
  * V-326 — team membership the authenticated account belongs to as a
- * MEMBER (not as the owner). Loaded alongside rate-limit overrides on
- * auth-cache miss; cache-invalidated whenever the membership row
- * changes (accept / remove). Used by the effective-account resolver
- * (`resolveEffectiveAccount` below) so a member can act on the
- * owner's resources by passing `X-Driftstack-Account: acc_<owner>`.
+ * MEMBER (not as the owner). Loaded on auth-cache misses and refreshed
+ * on every positive cache hit, so membership/role/owner-status changes
+ * remain authoritative even if distributed invalidation is lost. Used
+ * by the effective-account resolver (`resolveEffectiveAccount` below)
+ * so a member can act on the owner's resources by passing
+ * `X-Driftstack-Account: acc_<owner>`.
  */
 export interface TeamMembership {
   membershipId: string;
@@ -301,17 +302,18 @@ export async function authenticate(
       }
 
       // Redis generation bumps are cache accelerators, not authority. Every
-      // positive hit re-reads the live account plus exact credential in
-      // parallel, so a process crash or Redis failure after a PostgreSQL
-      // revoke/rotate/reset/MFA/status mutation cannot extend authorization to
-      // the cache TTL. These are indexed reads; API-key hits still avoid the
-      // expensive scrypt verification and all ancillary context queries.
+      // positive hit re-reads the live account, exact credential, and team
+      // grants in parallel, so a process crash or Redis failure after a
+      // PostgreSQL revoke/rotate/reset/MFA/status/membership mutation cannot
+      // extend authorization to the cache TTL. These are indexed reads;
+      // API-key hits still avoid the expensive scrypt verification.
       if (cached.webSession !== null) {
         // findActiveWebSession joins the session to the account's current auth
         // epoch and filters revocation/expiry.
-        const [liveSession, liveAccount] = await Promise.all([
+        const [liveSession, liveAccount, liveTeams] = await Promise.all([
           repo.findActiveWebSession({ tokenHash: sha, now }),
           repo.getAccount(cached.account.id),
+          repo.findTeamMemberships(cached.account.id),
         ]);
         if (
           liveSession === null ||
@@ -342,6 +344,7 @@ export async function authenticate(
         return {
           ...cached,
           account: liveAccount,
+          teams: liveTeams,
           apiKey: {
             ...cached.apiKey,
             scopes,
@@ -356,9 +359,10 @@ export async function authenticate(
         };
       }
 
-      const [liveApiKey, liveAccount] = await Promise.all([
+      const [liveApiKey, liveAccount, liveTeams] = await Promise.all([
         repo.findApiKeyByPrefix(cached.apiKey.keyPrefix),
         repo.getAccount(cached.account.id),
+        repo.findTeamMemberships(cached.account.id),
       ]);
       if (
         liveApiKey === null ||
@@ -382,9 +386,9 @@ export async function authenticate(
       if (liveAccount.status === 'deleted') throw new InvalidKeyError();
 
       // last_used_at remains sampled at cache TTL granularity. Live key scopes,
-      // provenance, expiry, and account tier/status/profile authority are
-      // refreshed even if distributed invalidation was lost.
-      return { ...cached, account: liveAccount, apiKey: liveApiKey };
+      // provenance, expiry, account tier/status/profile authority, and team
+      // roles are refreshed even if distributed invalidation was lost.
+      return { ...cached, account: liveAccount, apiKey: liveApiKey, teams: liveTeams };
     }
   }
 

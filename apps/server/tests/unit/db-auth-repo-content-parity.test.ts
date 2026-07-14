@@ -97,12 +97,15 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
     );
   });
 
-  it('touchWebSessionLastUsed: 1-field set lastUsedAt where id; findTeamMemberships: select {id, ownerAccountId, ownerEmail, ownerName, role} via innerJoin accounts → map to {membershipId, ownerAccountId, ownerEmail, ownerName, role}', () => {
+  it('touchWebSessionLastUsed: 1-field set lastUsedAt where id; findTeamMemberships joins active owners and maps the five-field grant', () => {
     expect(body).toMatch(
       /async touchWebSessionLastUsed\(id: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(webSessions\)\s*\n?\s*\.set\(\{ lastUsedAt: at \}\)\s*\n?\s*\.where\(eq\(webSessions\.id, id\)\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /\.select\(\{\s*\n?\s*id: teamMembers\.id,\s*\n?\s*ownerAccountId: teamMembers\.ownerAccountId,\s*\n?\s*ownerEmail: accounts\.email,\s*\n?\s*ownerName: accounts\.name,\s*\n?\s*role: teamMembers\.role,\s*\n?\s*\}\)[\s\S]*?\.innerJoin\(accounts, eq\(accounts\.id, teamMembers\.ownerAccountId\)\)[\s\S]*?return rows\.map\(\(r\) => \(\{\s*\n?\s*membershipId: r\.id,\s*\n?\s*ownerAccountId: r\.ownerAccountId,\s*\n?\s*ownerEmail: r\.ownerEmail,\s*\n?\s*ownerName: r\.ownerName,\s*\n?\s*role: r\.role,\s*\n?\s*\}\)\);/,
+    );
+    expect(body).toMatch(
+      /and\(eq\(teamMembers\.memberAccountId, memberAccountId\), eq\(accounts\.status, 'active'\)\)/,
     );
   });
 
