@@ -211,8 +211,16 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
   });
 
-  it('WebhooksAdminService: driftstack_internal_admin scope-gated everywhere (V-174 — matches the /v1/admin route gate; legacy admin still satisfies via alias); requeueFromDlq refuses non-DLQ status via ConflictError', () => {
+  it('WebhooksAdminService: all six operations require exact driftstack_internal_admin; legacy customer admin is insufficient; requeueFromDlq refuses non-DLQ status', () => {
     expect(body).toMatch(/export class WebhooksAdminService \{/);
+    const adminService = body.slice(
+      body.indexOf('export class WebhooksAdminService'),
+      body.indexOf('function parseHttpsUrl'),
+    );
+    expect(
+      adminService.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g) ?? [],
+    ).toHaveLength(6);
+    expect(adminService).not.toMatch(/throwIfMissingScope\(ctx, 'admin'\);/);
     expect(body).toMatch(
       /async requeueFromDlq\(ctx: AccountContext, deliveryId: string\): Promise<WebhookDeliveryRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/,
     );
