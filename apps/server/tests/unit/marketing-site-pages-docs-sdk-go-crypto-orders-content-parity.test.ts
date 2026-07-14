@@ -98,7 +98,7 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
 
   it("Non-refundable + cancel-pending-halts-pay-window framing pinned: 'Crypto payments are non-refundable. Cancelling a pending order halts its pay window; cancelling a paid order is not supported — past billing periods stay billed.' + /legal/refunds cross-ref — pinned so the non-refundable + halt-pay-window + paid-not-cancellable + /legal/refunds anchor commitment survives", () => {
     expect(body).toMatch(
-      /Crypto payments are non-refundable\. Cancelling a pending order\s*\n?\s*halts its pay window; cancelling a paid order is not supported —\s*\n?\s*past billing periods stay billed\. See\s*\n?\s*<a href="\/legal\/refunds">\/legal\/refunds<\/a>\./,
+      /Crypto payments are non-refundable\. Cancelling a pending order\s*\n?\s*halts its pay window; cancelling a paid order is not supported —\s*\n?\s*past billing periods stay billed\. See\s*\n?\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a>\./,
     );
   });
 
@@ -121,23 +121,26 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
     );
   });
 
-  it('7-related-doc cluster: /docs/sdk-go + /docs/sdk-typescript-crypto-orders + /docs/sdk-python-crypto-orders + /docs/billing-crypto-integration-guide + /docs/idempotency-keys + /docs/webhooks-crypto-events + /docs/crypto-orders-polling-vs-webhooks — pinned so the 7-related-doc navigation surface stays complete (drift to dropping any sister-SDK crypto-orders cross-ref would orphan the trilogy)', () => {
-    expect(body).toMatch(/<a href="\/docs\/sdk-go">Go SDK quickstart<\/a>/);
+  it('7-related-doc cluster pins canonical Go, TypeScript, Python, integration, idempotency and duplicated webhook-guidance destinations so the sister-SDK trilogy stays discoverable', () => {
+    expect(body).toMatch(/<a href="\/docs\/sdk-go\/">Go SDK quickstart<\/a>/);
     expect(body).toMatch(
-      /<a href="\/docs\/sdk-typescript-crypto-orders">TypeScript SDK crypto orders<\/a>/,
+      /<a href="\/docs\/sdk-typescript-crypto-orders\/">TypeScript SDK crypto orders<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="\/docs\/sdk-python-crypto-orders">Python SDK crypto orders<\/a>/,
+      /<a href="\/docs\/sdk-python-crypto-orders\/">Python SDK crypto orders<\/a>/,
     );
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/idempotency-keys">Idempotency keys<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/idempotency-keys\/">Idempotency keys<\/a>/);
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Crypto webhook events<\/a>/,
     );
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Polling vs webhooks<\/a>/,
+    );
+    expect(body).not.toMatch(
+      /href="\/(?:legal\/refunds|docs\/sdk-go|docs\/sdk-typescript-crypto-orders|docs\/sdk-python-crypto-orders|docs\/idempotency-keys)"/,
     );
   });
 
