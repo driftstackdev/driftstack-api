@@ -3,9 +3,9 @@
 // dashboardUrlFor mapping (the 'Manage billing' link points at
 // the wrong host — local dev redirects users to prod app, or
 // prod app redirects them to localhost:5173 which they don't
-// have) or breaks the cancelled-flag cleanup (a fast unmount
-// during an in-flight fetch sets state on an unmounted
-// component and React logs the dev warning).
+// have) or breaks the effect-owned abort/body-disposal boundary
+// (a fast unmount sets state on an unmounted component, or an
+// ignored response keeps its connection body unread).
 //
 //   • V-534.L framing pinned: 'account-info card surfaced in
 //     SettingsView.' + 'Shows the connected account id (read
@@ -21,7 +21,7 @@
 //     ready{account}); AccountMeResponse {account:{id+email+tier}}.
 //   • dashboardUrlFor: localhost / driftstack.local →
 //     http://localhost:5173, otherwise https://app.driftstack.dev.
-//   • cancelled-flag cleanup pattern in useEffect.
+//   • effect-owned abort + unread-response disposal in useEffect.
 //   • Render: <section aria-label='Account info'> + 'Manage
 //     billing →' anchor + dt/dd dl on ready state.
 
@@ -74,23 +74,23 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
       /if \(!settings\.apiKey\) \{\s*\n?\s*setState\(\{ kind: 'error', message: 'No API key configured\.' \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'loading' \}\);\s*\n?\s*const controller = new AbortController\(\);/,
     );
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{ authorization: `Bearer \$\{settings\.apiKey \?\? ''\}`, accept: 'application\/json' \},\s*\n?\s*\}\);\s*\n?\s*if \(controller\.signal\.aborted\) return;\s*\n?\s*if \(!res\.ok\) \{\s*\n?\s*setState\(\{ kind: 'error', message: errorMessageForStatus\(res\.status\) \}\);/,
+      /const res = await fetchWithDeadline\(`\$\{baseUrl\}\/v1\/account\/me`, \{\s*\n?\s*signal: controller\.signal,\s*\n?\s*headers: \{ authorization: `Bearer \$\{settings\.apiKey \?\? ''\}`, accept: 'application\/json' \},\s*\n?\s*\}\);\s*\n?\s*if \(controller\.signal\.aborted\) \{\s*\n?\s*await disposeResponseBody\(res\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(!res\.ok\) \{\s*\n?\s*const status = res\.status;\s*\n?\s*await disposeResponseBody\(res\);\s*\n?\s*setState\(\{ kind: 'error', message: errorMessageForStatus\(status\) \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*const body = await readBoundedApiJson<AccountMeResponse>\(res\);\s*\n?\s*if \(controller\.signal\.aborted\) return;\s*\n?\s*setState\(\{ kind: 'ready', account: body\.account \}\);/,
     );
     expect(body).toMatch(
       /return \(\) => \{\s*\n?\s*controller\.abort\(\);\s*\n?\s*\};\s*\n?\s*\}, \[settings\.apiKey, settings\.baseUrl, retryNonce\]\);/,
     );
     // errorMessageForStatus maps 401/403/other into actionable copy — no bare "HTTP 401".
     expect(body).toMatch(
-      /function errorMessageForStatus\(status: number\): string \{\s*\n?\s*if \(status === 401\) return "Your API key wasn't accepted\. Check the key above, then retry\.";\s*\n?\s*if \(status === 403\) return "This API key doesn't have access to account info\.";\s*\n?\s*return `Couldn't load account info \(HTTP \$\{status\.toString\(\)\}\)\.`;\s*\n?\s*\}/,
+      /function errorMessageForStatus\(status: number\): string \{\s*\n?\s*if \(status === 401\) return "Your API key wasn't accepted\. Check the key above, then retry\.";\s*\n?\s*if \(status === 403\) return "This API key doesn't have access to account info\.";\s*\n?\s*if \(status === 404\) return 'Account info is not available for this key\.';\s*\n?\s*if \(status === 429\) return 'Too many requests\. Wait a moment, then retry\.';\s*\n?\s*if \(status >= 500\) return 'The account service is temporarily unavailable\. Try again shortly\.';\s*\n?\s*return "Couldn't load account info\. Check the server URL, then retry\.";\s*\n?\s*\}/,
     );
   });
 
-  it("Render: <section aria-label='Account info'> (Panel-idiom rounded-xl shadow-sm) + 'Manage billing →' anchor with `${dashboardUrl}/billing` href + target='_blank' + rel='noreferrer'; loading state role='status'; error state is now a role='alert' <div> with the mapped {state.message} + a Retry button (bumps retryNonce); ready state dl with a click-to-copy Account id <button title='Copy account id'> + Email + humanizeTier(tier) rows", () => {
+  it("Render: <section aria-label='Account info'> (Panel-idiom rounded-xl shadow-sm) + 'Manage billing →' anchor with canonical `${dashboardUrl}/billing/` href + target='_blank' + rel='noreferrer'; loading state role='status'; error state is now a role='alert' <div> with the mapped {state.message} + a Retry button (bumps retryNonce); ready state dl with a click-to-copy Account id <button title='Copy account id'> + Email + humanizeTier(tier) rows", () => {
     expect(body).toMatch(
       /<section\s*\n?\s*aria-label="Account info"\s*\n?\s*className="rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm space-y-2"\s*\n?\s*>/,
     );
     expect(body).toMatch(
-      /<a\s*\n?\s*href=\{`\$\{dashboardUrl\}\/billing`\}\s*\n?\s*target="_blank"\s*\n?\s*rel="noreferrer"\s*\n?\s*className="text-sm text-accent underline"\s*\n?\s*>\s*\n?\s*Manage billing →\s*\n?\s*<\/a>/,
+      /<a\s*\n?\s*href=\{`\$\{dashboardUrl\}\/billing\/`\}\s*\n?\s*target="_blank"\s*\n?\s*rel="noreferrer"\s*\n?\s*className="text-sm text-accent underline"\s*\n?\s*>\s*\n?\s*Manage billing →\s*\n?\s*<\/a>/,
     );
     expect(body).toMatch(
       /\{state\.kind === 'loading' && \(\s*\n?\s*<p className="text-sm text-ink-secondary" role="status">\s*\n?\s*Loading account…\s*\n?\s*<\/p>\s*\n?\s*\)\}/,

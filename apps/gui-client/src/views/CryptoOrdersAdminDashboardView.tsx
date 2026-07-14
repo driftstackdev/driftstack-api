@@ -84,7 +84,7 @@ function IdempotencyMetricsStrip(): JSX.Element {
 
 export function CryptoOrdersAdminDashboardView(): JSX.Element {
   // W212 — the API spec lives on the configured API host (Scalar UI
-  // at `${baseUrl}/docs`), NOT on the Tauri app's own origin.
+  // at `${baseUrl}/docs/`), NOT on the Tauri app's own origin.
   // `href="/docs"` from a Tauri WebView resolves to tauri://localhost/docs
   // (404). Pull baseUrl from SettingsContext when available; fall
   // back to the DEFAULT_SETTINGS baseUrl when the context is
@@ -92,7 +92,7 @@ export function CryptoOrdersAdminDashboardView(): JSX.Element {
   // <SettingsProvider>).
   const ctx = useContext(SettingsContext);
   const baseUrl = ctx?.settings.baseUrl ?? DEFAULT_SETTINGS.baseUrl;
-  const docsUrl = `${baseUrl.replace(/\/+$/, '')}/docs`;
+  const docsUrl = `${baseUrl.replace(/\/+$/, '')}/docs/`;
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">

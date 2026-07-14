@@ -84,7 +84,7 @@ describe('V-534.AJ CryptoOrdersAdminDashboardView', () => {
   });
 
   it('V-534.BH includes a footer link to the API spec', () => {
-    // W212 — link must point at the API host's /docs, not the Tauri
+    // W212 — link must point at the API host's /docs/, not the Tauri
     // app's own origin (tauri://localhost/docs is 404). When the
     // component renders without a <SettingsProvider> wrapper (as in
     // this test), it falls back to DEFAULT_SETTINGS.baseUrl.
@@ -95,7 +95,7 @@ describe('V-534.AJ CryptoOrdersAdminDashboardView', () => {
     // with the SDK client default. CryptoOrdersAdminDashboardView's
     // API-spec link derives from the same fallback when rendered
     // without a SettingsProvider wrapper.
-    expect(link.getAttribute('href')).toBe('http://localhost:3000/docs');
+    expect(link.getAttribute('href')).toBe('http://localhost:3000/docs/');
     expect(link.getAttribute('target')).toBe('_blank');
   });
 

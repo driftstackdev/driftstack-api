@@ -20,7 +20,7 @@
 //     tone shareClass + body_mismatches ?? 0 fallback + warning
 //     tint when > 0.
 //   • W212 docs URL fix framing pinned: 'API spec lives on the
-//     configured API host (Scalar UI at `${baseUrl}/docs`), NOT
+//     configured API host (Scalar UI at `${baseUrl}/docs/`), NOT
 //     on the Tauri app's own origin.' + SettingsContext fallback
 //     to DEFAULT_SETTINGS for unmounted tests.
 //   • Dashboard composition: CryptoOrdersStatsCard +
@@ -82,12 +82,12 @@ describe('W480.B apps/gui-client/src/views/CryptoOrdersAdminDashboardView.tsx co
     );
   });
 
-  it("W212 docs URL fix framing pinned: 'the API spec lives on the configured API host (Scalar UI at `${baseUrl}/docs`), NOT on the Tauri app's own origin. `href=\"/docs\"` from a Tauri WebView resolves to tauri://localhost/docs (404). Pull baseUrl from SettingsContext when available; fall back to the DEFAULT_SETTINGS baseUrl when the context is unmounted (tests render this component in isolation without <SettingsProvider>).'", () => {
+  it("W212 docs URL fix framing pinned: 'the API spec lives on the configured API host (Scalar UI at `${baseUrl}/docs/`), NOT on the Tauri app's own origin. `href=\"/docs\"` from a Tauri WebView resolves to tauri://localhost/docs (404). Pull baseUrl from SettingsContext when available; fall back to the DEFAULT_SETTINGS baseUrl when the context is unmounted (tests render this component in isolation without <SettingsProvider>).'", () => {
     expect(body).toMatch(
-      /\/\/ W212 — the API spec lives on the configured API host \(Scalar UI\s*\n?\s*\/\/ at `\$\{baseUrl\}\/docs`\), NOT on the Tauri app's own origin\.\s*\n?\s*\/\/ `href="\/docs"` from a Tauri WebView resolves to tauri:\/\/localhost\/docs\s*\n?\s*\/\/ \(404\)\. Pull baseUrl from SettingsContext when available; fall\s*\n?\s*\/\/ back to the DEFAULT_SETTINGS baseUrl when the context is\s*\n?\s*\/\/ unmounted \(tests render this component in isolation without\s*\n?\s*\/\/ <SettingsProvider>\)\./,
+      /\/\/ W212 — the API spec lives on the configured API host \(Scalar UI\s*\n?\s*\/\/ at `\$\{baseUrl\}\/docs\/`\), NOT on the Tauri app's own origin\.\s*\n?\s*\/\/ `href="\/docs"` from a Tauri WebView resolves to tauri:\/\/localhost\/docs\s*\n?\s*\/\/ \(404\)\. Pull baseUrl from SettingsContext when available; fall\s*\n?\s*\/\/ back to the DEFAULT_SETTINGS baseUrl when the context is\s*\n?\s*\/\/ unmounted \(tests render this component in isolation without\s*\n?\s*\/\/ <SettingsProvider>\)\./,
     );
     expect(body).toMatch(
-      /const ctx = useContext\(SettingsContext\);\s*\n?\s*const baseUrl = ctx\?\.settings\.baseUrl \?\? DEFAULT_SETTINGS\.baseUrl;\s*\n?\s*const docsUrl = `\$\{baseUrl\.replace\(\/\\\/\+\$\/, ''\)\}\/docs`;/,
+      /const ctx = useContext\(SettingsContext\);\s*\n?\s*const baseUrl = ctx\?\.settings\.baseUrl \?\? DEFAULT_SETTINGS\.baseUrl;\s*\n?\s*const docsUrl = `\$\{baseUrl\.replace\(\/\\\/\+\$\/, ''\)\}\/docs\/`;/,
     );
   });
 

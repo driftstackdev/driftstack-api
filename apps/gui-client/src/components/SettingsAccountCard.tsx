@@ -145,7 +145,7 @@ export function SettingsAccountCard(): JSX.Element | null {
       <header className="flex items-baseline justify-between">
         <span className="section-label">Account</span>
         <a
-          href={`${dashboardUrl}/billing`}
+          href={`${dashboardUrl}/billing/`}
           target="_blank"
           rel="noreferrer"
           className="text-sm text-accent underline"

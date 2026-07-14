@@ -74,7 +74,7 @@ describe('V-534.L SettingsAccountCard — fetch happy path', () => {
     );
     render(<SettingsAccountCard />);
     const link = screen.getByRole('link', { name: /manage billing/i });
-    expect(link.getAttribute('href')).toBe('https://app.driftstack.dev/billing');
+    expect(link.getAttribute('href')).toBe('https://app.driftstack.dev/billing/');
   });
 
   it('points "Manage billing" at localhost for local dev baseUrls', () => {
@@ -93,7 +93,7 @@ describe('V-534.L SettingsAccountCard — fetch happy path', () => {
     );
     render(<SettingsAccountCard />);
     const link = screen.getByRole('link', { name: /manage billing/i });
-    expect(link.getAttribute('href')).toBe('http://localhost:5173/billing');
+    expect(link.getAttribute('href')).toBe('http://localhost:5173/billing/');
   });
 });
 
