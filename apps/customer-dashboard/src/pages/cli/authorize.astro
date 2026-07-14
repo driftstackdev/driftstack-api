@@ -169,8 +169,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
       const state = params.get('state');
-      const sessionToken =
-        window.localStorage.getItem('ds_web_session_token') ?? null;
+      let sessionToken = (() => {
+        try {
+          return window.localStorage.getItem('ds_web_session_token') ?? null;
+        } catch {
+          return null;
+        }
+      })();
 
       const sections = {
         loading: root.querySelector('[data-state="loading"]'),
@@ -227,6 +232,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (signinLink) signinLink.setAttribute('href', '/login?next=' + next);
         if (signupLink) signupLink.setAttribute('href', '/signup?next=' + next);
         show('needs-signin');
+      }
+
+      function invalidateSession() {
+        sessionToken = null;
+        try {
+          window.localStorage.removeItem('ds_web_session_token');
+        } catch {
+          /* storage may be unavailable; the in-memory gate still closes */
+        }
+        showNeedsSignin();
       }
 
       // 2. Sign-in gate (token absent locally → straight to sign-in).
@@ -343,6 +358,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function authorize() {
+        if (!sessionToken) {
+          showNeedsSignin();
+          return;
+        }
         if (authorizeInFlight) return;
         const userCode = normalizedUserCode();
         if (!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(userCode)) {
@@ -371,6 +390,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         })
           .then((r) => {
             if (r.ok) return r.json();
+            if (r.status === 401) {
+              invalidateSession();
+              return Promise.reject(new Error('__needs_signin__'));
+            }
             return r.json().then((b) => {
               // 2026-05-20 — surface the legal-acceptance gate as a
               // first-class flow instead of a raw error message. The
@@ -406,7 +429,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             returnToDesktop(600);
           })
           .catch((err) => {
-            if (err && err.message === '__legal_accept_required__') return;
+            if (
+              err &&
+              (err.message === '__legal_accept_required__' || err.message === '__needs_signin__')
+            )
+              return;
             if (err && err.name === 'AbortError') {
               authorizeOutcomeUnknown = true;
               retryBtn.textContent = 'Return to desktop';

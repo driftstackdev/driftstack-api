@@ -171,7 +171,15 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
   });
 
   it('localStorage ds_web_session_token read for sign-in gate', () => {
-    expect(body).toMatch(/window\.localStorage\.getItem\('ds_web_session_token'\) \?\? null/);
+    expect(body).toMatch(
+      /try\s*\{\s*return window\.localStorage\.getItem\('ds_web_session_token'\) \?\? null/,
+    );
+    expect(body).toMatch(/catch\s*\{\s*return null;/);
+    expect(body).toMatch(/if \(r\.status === 401\) \{\s*invalidateSession\(\)/);
+    expect(body).toMatch(
+      /sessionToken = null;[\s\S]*?localStorage\.removeItem\('ds_web_session_token'\)/,
+    );
+    expect(body).toMatch(/if \(!sessionToken\) \{\s*showNeedsSignin\(\);\s*return;/);
   });
 
   it('withSidebar={false} pre-pair layout (CLI flow is its own surface)', () => {

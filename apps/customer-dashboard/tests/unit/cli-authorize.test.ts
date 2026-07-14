@@ -146,6 +146,24 @@ describe('cli-authorize page — local integration', () => {
     expect(signinLink?.getAttribute('href')).toMatch(/\/login\?next=/);
   });
 
+  it('shows needs-signin when session storage access is denied', async () => {
+    const html = loadBuiltPage();
+    dom = setUpDom(html, (window) => {
+      Object.defineProperty(window.localStorage, 'getItem', {
+        configurable: true,
+        value: () => {
+          throw new Error('storage denied');
+        },
+      });
+    });
+    await flush();
+    expect(visibleState(dom.window)).toBe('needs-signin');
+    expect(dom.fetchCalls).toHaveLength(0);
+    expect(dom.window.document.querySelector('[data-signin-link]')?.getAttribute('href')).toMatch(
+      /\/login\?next=/,
+    );
+  });
+
   it('shows confirm when a session token is present', async () => {
     const html = loadBuiltPage();
     dom = setUpDom(html, (window) => {
@@ -288,6 +306,34 @@ describe('cli-authorize page — local integration', () => {
         call.url.endsWith('/v1/auth/cli-authorize/bind-device-code'),
       ),
     ).toHaveLength(2);
+  });
+
+  it('invalidates a stale bearer on bind 401 and does not send a second bind', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-expired');
+    });
+    dom = local;
+    local.setFetchPlan([
+      () =>
+        new local.window.Response(JSON.stringify({ detail: 'Session expired.' }), {
+          status: 401,
+          headers: { 'content-type': 'application/problem+json' },
+        }),
+    ]);
+
+    const authorize = local.window.document.querySelector('[data-authorize]') as HTMLButtonElement;
+    authorize.click();
+    await flush();
+    await flush();
+
+    expect(visibleState(local.window)).toBe('needs-signin');
+    expect(local.window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    expect(local.fetchCalls).toHaveLength(1);
+    authorize.click();
+    await flush();
+    expect(local.fetchCalls).toHaveLength(1);
+    expect(visibleState(local.window)).toBe('needs-signin');
   });
 
   it('on 409 LegalAcceptanceRequired with top-level pending_acceptances, surfaces legal-accept UI with mapped slugs + friendly labels (regression for .extensions.* shape AND tos→terms URL slug)', async () => {
