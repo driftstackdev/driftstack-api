@@ -121,6 +121,27 @@ function submit(window: JSDOM['window'], password: string, confirm: string): voi
   form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 }
 
+function faultLocalStorage(window: JSDOM['window'], mode: 'deny-all' | 'drop-session-write'): void {
+  const storage = window.localStorage;
+  const proto = Object.getPrototypeOf(storage) as Storage;
+  const nativeGet = proto.getItem;
+  const nativeSet = proto.setItem;
+  const nativeRemove = proto.removeItem;
+  proto.getItem = function (key: string): string | null {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    return nativeGet.call(this, key);
+  };
+  proto.setItem = function (key: string, value: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    if (this === storage && mode === 'drop-session-write' && key === 'ds_web_session_token') return;
+    nativeSet.call(this, key, value);
+  };
+  proto.removeItem = function (key: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    nativeRemove.call(this, key);
+  };
+}
+
 describe('reset-password page — local integration', () => {
   let win: JSDOM['window'] | null = null;
   afterEach(() => {
@@ -162,6 +183,9 @@ describe('reset-password page — local integration', () => {
       fetchPlan: [() => json({ session: { token: 'ds_web_AFTER_RESET' } })],
     });
     win = window;
+    window.localStorage.setItem('ds_act_as_account', 'acct_previous');
+    window.localStorage.setItem('ds_is_team_user', 'true');
+    window.localStorage.setItem('ds_is_staff_user', 'true');
     submit(window, 'a-brand-new-password', 'a-brand-new-password');
     await flush();
     const post = fetchCalls.find((c) => /\/v1\/auth\/password-reset\/confirm$/.test(c.url));
@@ -171,6 +195,92 @@ describe('reset-password page — local integration', () => {
       new_password: 'a-brand-new-password',
     });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_AFTER_RESET');
+    expect(window.localStorage.getItem('ds_act_as_account')).toBeNull();
+    expect(window.localStorage.getItem('ds_is_team_user')).toBeNull();
+    expect(window.localStorage.getItem('ds_is_staff_user')).toBeNull();
+  });
+
+  it('does not consume the reset link when persistent browser storage is unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [() => json({ session: { token: 'must-not-be-issued' } })],
+    });
+    win = window;
+    faultLocalStorage(window, 'deny-all');
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    const form = window.document.querySelector('[data-form="reset-password"]') as HTMLFormElement;
+    expect((form.querySelector('input[name="password"]') as HTMLInputElement).value).toBe(
+      'a-brand-new-password',
+    );
+    expect((form.querySelector('input[name="confirm"]') as HTMLInputElement).value).toBe(
+      'a-brand-new-password',
+    );
+    expect(form.classList.contains('hidden')).toBe(false);
+    expect(bannerText(window)).toMatch(
+      /enable browser site storage.*one-time reset link.*has not been consumed.*entries are still here/i,
+    );
+  });
+
+  it('makes an accepted reset terminal when the session write is silently discarded', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [() => json({ session: { token: 'lost-after-reset' } })],
+    });
+    win = window;
+    faultLocalStorage(window, 'drop-session-write');
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
+    expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    expect(bannerText(window)).toMatch(
+      /password was changed.*could not finish sign-in.*do not submit this link again.*new password.*fresh reset link/i,
+    );
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('never replays a reset after an accepted response has malformed JSON', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [() => new Response('{not-json', { status: 200 })],
+    });
+    win = window;
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
+    expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
+    expect(bannerText(window)).toMatch(/password was changed.*do not submit this link again/i);
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('makes an accepted reset terminal when its MFA challenge is missing', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [() => json({ mfa_required: true })],
+    });
+    win = window;
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
+    expect(isHidden(window, '[data-form="reset-mfa"]')).toBe(true);
+    expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
+    expect(bannerText(window)).toMatch(/password was changed.*do not submit this link again/i);
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
   });
 
   it('expired token uses stable fixed copy and stores no token', async () => {
@@ -269,6 +379,68 @@ describe('reset-password page — local integration', () => {
       code: '654321',
     });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('web_after_reset_mfa');
+  });
+
+  it('does not consume the one-time MFA challenge when storage becomes unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [
+        () =>
+          json({
+            mfa_required: true,
+            challenge_token: 'reset-challenge-retryable',
+            challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+          }),
+      ],
+    });
+    win = window;
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    const mfaForm = window.document.querySelector('[data-form="reset-mfa"]') as HTMLFormElement;
+    const code = mfaForm.querySelector('#reset-mfa-code') as HTMLInputElement;
+    code.value = '654321';
+    faultLocalStorage(window, 'deny-all');
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(mfaForm.classList.contains('hidden')).toBe(false);
+    expect(code.value).toBe('654321');
+    expect(bannerText(window)).toMatch(
+      /enable browser site storage.*one-time MFA challenge.*has not been consumed/i,
+    );
+  });
+
+  it('makes a successful MFA exchange terminal when no session is returned', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [
+        () =>
+          json({
+            mfa_required: true,
+            challenge_token: 'reset-challenge-accepted',
+            challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+          }),
+        () => json({ via: 'totp' }),
+      ],
+    });
+    win = window;
+    submit(window, 'a-brand-new-password', 'a-brand-new-password');
+    await flush();
+    const mfaForm = window.document.querySelector('[data-form="reset-mfa"]') as HTMLFormElement;
+    (mfaForm.querySelector('#reset-mfa-code') as HTMLInputElement).value = '654321';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(mfaForm.classList.contains('hidden')).toBe(true);
+    expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
+    expect(bannerText(window)).toMatch(
+      /password was changed.*two-factor verification was accepted.*do not submit this code again.*new password/i,
+    );
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
   });
 
   it('never replays an MFA challenge after an ambiguous exchange timeout', async () => {

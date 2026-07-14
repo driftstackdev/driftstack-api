@@ -78,7 +78,7 @@ describe('W350.B /signup page parity', () => {
     // The companion verify-email page reads the same key for the
     // resend button — pin both ends.
     const verify = read(VERIFY_PAGE);
-    expect(verify).toContain("sessionStorage.getItem('ds_signup_email')");
+    expect(verify).toContain("readSignupState('ds_signup_email')");
   });
 
   it('redirects to /verify-email after a successful signup', () => {

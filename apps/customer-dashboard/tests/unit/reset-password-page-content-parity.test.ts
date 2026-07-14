@@ -91,8 +91,15 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
     expect(body).toMatch(/<input[^>]*id="reset-confirm-input"[\s\S]*?autocomplete="new-password"/);
   });
 
-  it('session-token persistence on success: localStorage ds_web_session_token + redirect to "/"', () => {
+  it('session-token persistence on success is preflighted, verified, and clears stale authority', () => {
+    expect(body).toContain('function canPersistWebSession()');
+    expect(body).toMatch(/localStorage\.setItem\(probeKey, '1'\)/);
+    expect(body).toMatch(/localStorage\.getItem\(probeKey\) !== '1'/);
+    expect(body).toMatch(/localStorage\.getItem\(probeKey\) === null/);
+    expect(body).toContain('function persistWebSession(session)');
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
+    expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) !== session\.token/);
+    expect(body).toContain("['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user']");
     expect(body).toMatch(/window\.location\.href = '\/'/);
   });
 
@@ -129,7 +136,21 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
     expect(body).toMatch(/if \(resetInFlight \|\| resetOutcomeUnknown\) return;/);
     expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), RESET_REQUEST_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
+    expect(body).toMatch(/let resetAccepted = false;/);
+    expect(body).toMatch(/if \(r\.ok\) \{\s*resetAccepted = true;/);
+    expect(body).toMatch(/if \(resetAccepted\) \{\s*showResetTerminal\(/);
     expect(body).toMatch(/clearTimeout\(timeoutId\);\s*resetInFlight = false;/);
+  });
+
+  it('preflights reset and MFA persistence and terminally handles every accepted response failure', () => {
+    expect(body.match(/if \(!canPersistWebSession\(\)\)/g)).toHaveLength(2);
+    expect(body).toContain('It has not been consumed, so your password entries are still here');
+    expect(body).toContain('It has not been consumed, so you can retry after storage is available');
+    expect(body).toMatch(/let mfaAccepted = false;/);
+    expect(body).toMatch(/if \(response\.ok\) \{\s*mfaAccepted = true;/);
+    expect(body).toMatch(/if \(mfaAccepted\) \{\s*showMfaTerminal\(/);
+    expect(body).toContain('Do not submit this link again. Sign in with your new password');
+    expect(body).toContain('Do not submit this code again. Sign in afresh with your new password');
   });
 
   it('never replays a consumed reset link after an ambiguous timeout', () => {

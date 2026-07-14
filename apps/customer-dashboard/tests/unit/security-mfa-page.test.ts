@@ -736,6 +736,9 @@ describe('security page — MFA (2FA) enroll start guard', () => {
     expect(startBtn.disabled).toBe(false);
     expect(startBtn.textContent).toBe('Set up two-factor authentication');
     expect(window.document.querySelector('[data-field="mfa-error"]')?.textContent).toMatch(
+      /service is temporarily unavailable/i,
+    );
+    expect(window.document.querySelector('[data-field="mfa-error"]')?.textContent).not.toMatch(
       /enroll blew up/,
     );
   });
