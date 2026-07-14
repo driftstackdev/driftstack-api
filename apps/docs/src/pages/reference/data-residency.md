@@ -91,12 +91,12 @@ PATCH /v1/account/me
 
 For v1 the preference is **informational only**: every customer's
 account data sits on EU-jurisdiction infrastructure regardless of
-the value. It exists so that we can route accounts to a matching
-region automatically once a multi-region rollout lands. Before any
-of your data moves, you get 30 days' notice under the DPA's
-Article 28 sub-processor change process, with the right to keep
-your data in the EU or terminate the affected portion of the
-service.
+the value. Setting it does not route execution or move stored data.
+The locations in the table above, the published sub-processor
+register, and the DPA are the authoritative physical-location
+contract. Any material location or sub-processor change follows the
+DPA's Article 28 process, including at least 30 days' notice and the
+documented objection rights.
 
 ## Deletion + data subject requests
 

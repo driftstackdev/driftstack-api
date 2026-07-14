@@ -48,7 +48,7 @@ describe('W229.A security-overview doc parity', () => {
     expect(doc).not.toMatch(/MFA[\s\S]{0,80}SHA-256 hashes/);
   });
 
-  it('region claim matches data-residency (single EU today, multi-region roadmap)', () => {
+  it('region claim matches the current data-residency contract without rollout promises', () => {
     const residency = read(RESIDENCY_DOC);
     // S47 re-pin: the docs successor states the same EU-control-plane
     // posture in its own (deliberately softened) canonical wording.
@@ -58,6 +58,9 @@ describe('W229.A security-overview doc parity', () => {
     expect(doc).not.toMatch(/three regions \(EU, US-East/);
     expect(doc).not.toMatch(/GeoDNS-routed/);
     expect(doc).not.toMatch(/cross-region failover is automatic/);
+    expect(residency).toMatch(/Setting it does not route execution or move stored data\./);
+    expect(residency).toMatch(/the authoritative physical-location\s*\n?\s*contract\./i);
+    expect(residency).not.toMatch(/multi-region rollout|once .* lands/i);
   });
 
   it('does not claim session recordings are live', () => {
