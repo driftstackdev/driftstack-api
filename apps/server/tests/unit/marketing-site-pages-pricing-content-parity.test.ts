@@ -185,7 +185,8 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/Why concurrent caps and not hours\?/);
     expect(body).toMatch(/Can I switch tiers mid-month\?/);
     expect(body).toMatch(/Does the free tier expire\?/);
-    expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See full FAQ<\/a>/);
+    expect(body).toMatch(/<a href="\/faq\/" class="btn-secondary">See full FAQ<\/a>/);
+    expect(body).not.toContain('<a href="/faq" class="btn-secondary">See full FAQ</a>');
   });
 
   it("VAT framing pinned: 'All prices in USD. Sales tax (VAT — called BTW in the Netherlands) is added where EU rules require it. No setup fees on any tier. Annual contracts billed up front.' (S20b plain words) — pinned so the USD-base + VAT/BTW + no-setup-fee + annual-prepay 4-state commitment survives (drift to dropping VAT/BTW would surprise EU customers at checkout; drift to dropping 'no setup fees' would let prospects assume hidden onboarding charges)", () => {
