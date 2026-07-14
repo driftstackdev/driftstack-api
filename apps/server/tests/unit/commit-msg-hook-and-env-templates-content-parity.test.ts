@@ -216,19 +216,29 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
     );
   });
 
-  it('CRITICAL prod env CORS_ALLOWED_ORIGINS pinned to the 6 browser-app origins — app + admin + status + driftstack.dev + www + docs (admin/status added 2026-06-05 when prod flipped PERMISSIVE_CORS→false; both apps make cross-origin API fetches). Drift to adding a wildcard would break the V-278 CORS allow-list contract.', () => {
+  it('CRITICAL CORS_ALLOWED_ORIGINS pins the exact production and staging browser surfaces without a wildcard', () => {
+    expect(read(ENV_PROD)).toMatch(
+      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+    );
+    expect(read(ENV_STG)).toMatch(
+      /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+    );
     for (const f of [ENV_PROD, ENV_STG]) {
-      expect(read(f)).toMatch(
-        /CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev/,
-      );
+      expect(read(f)).not.toMatch(/^CORS_ALLOWED_ORIGINS=.*\*/m);
+      expect(read(f)).not.toMatch(/^CORS_ALLOWED_ORIGINS=.*,,/m);
     }
   });
 
-  it('CRITICAL prod-env DASHBOARD_BASE_URL = https://app.driftstack.dev vs staging-env = https://staging.driftstack.dev. The split is what makes the dashboard host-routable per V-278 + the dashboard-origin single-source-of-truth memory rule.', () => {
+  it('CRITICAL environment base URLs pin production hosts and the live staging API plus stable Dashboard Pages alias', () => {
     expect(read(ENV_PROD)).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.dev$/m);
-    expect(read(ENV_STG)).toMatch(/^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+    expect(read(ENV_STG)).toMatch(
+      /^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
+    );
     expect(read(ENV_PROD)).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.driftstack\.dev$/m);
-    expect(read(ENV_STG)).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.staging\.driftstack\.dev$/m);
+    expect(read(ENV_STG)).toMatch(/^PUBLIC_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+    expect(read(ENV_STG)).toMatch(
+      /^DASHBOARD_ORIGIN=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
+    );
   });
 
   it('CRITICAL both env-templates declare GIT_SHA=PLACEHOLDER_GIT_SHA + TRUST_PROXY=1. The placeholder gets sed-replaced by deploy-api.sh; TRUST_PROXY=1 lets Fastify read X-Forwarded-* headers from the nginx upstream.', () => {
