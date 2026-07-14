@@ -26571,3 +26571,28 @@ cases prove an unprotected generic route is detected even when its handler body
 contains misleading limiter text, while a limiter in the options argument is
 accepted. Focused evidence passes 1 file and 5/5 tests; strict server test
 TypeScript, targeted lint/format, diff and whitespace checks are green.
+
+## V-624 — Acting-account isolation guard follows imported authority
+
+**Date:** 2026-07-14
+
+The cross-route `X-Driftstack-Account` authorization invariant previously
+counted exact source substrings. Importing `readEffectiveAccountHeader` under a
+local name made both its read count and validated-read count zero for that
+module, so an unvalidated acting-account read could be invisible while other
+routes kept the suite's global non-vacuity assertion green. Equivalent safe
+multiline composition also failed the text-shape assumption.
+
+The invariant now parses every route with the TypeScript AST and resolves both
+the parser and membership validator from their imports, including named and
+namespace aliases. Every parser invocation must be the direct second argument
+to `resolveEffectiveAccount`; indirect parser references are rejected rather
+than becoming an untracked call path. Exact raw acting-account header literals
+in routes remain forbidden independently of the helper inventory.
+
+Verification discovers all 31 current parser calls across nine route modules,
+finds no live unvalidated or raw-header access, detects an unsafe aliased import
+and a hidden local function alias, accepts safe aliased multiline composition,
+and detects direct raw-header access. Focused evidence passes 1 file and 7/7
+tests; strict server test TypeScript, targeted lint/format, diff and whitespace
+checks are green.
