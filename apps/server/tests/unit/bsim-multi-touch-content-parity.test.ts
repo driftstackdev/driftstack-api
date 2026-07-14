@@ -120,15 +120,19 @@ describe('W454.A packages/behavioural-simulation/src/multi-touch.ts content pari
     );
   });
 
-  it("buildLinearTrack framing pinned: 'Ensure samples >= 2 so start + end are both present' + positional jitter rationale 'Light positional jitter so back-to-back gestures don't reproduce pixel-perfect identical tracks (detectors love that)' + pressure ramp 'fraction < 0.15 ? fraction / 0.15 : 1'", () => {
+  it('buildLinearTrack validates an integer 2..MAX sample count, preserves exact endpoints, jitters only the interior path and ramps pressure', () => {
     expect(body).toMatch(
-      /\/\/ Ensure samples >= 2 so start \+ end are both present\.\s*\n?\s*const n = Math\.max\(2, opts\.samples\);/,
+      /if \(!Number\.isInteger\(opts\.samples\) \|\| opts\.samples < 2\) \{\s*\n?\s*throw new Error\(\s*\n?\s*`buildLinearTrack: samples must be an integer >= 2 \(got \$\{String\(opts\.samples\)\}\)`,\s*\n?\s*\);\s*\n?\s*\}/,
     );
+    expect(body).toMatch(
+      /if \(opts\.samples > MAX_SAMPLES_PER_FINGER\) \{\s*\n?\s*throw new Error\(\s*\n?\s*`buildLinearTrack: samples must be <= \$\{MAX_SAMPLES_PER_FINGER\} \(got \$\{opts\.samples\}\)`,\s*\n?\s*\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/const n = opts\.samples;/);
     expect(body).toMatch(
       /\/\/ Light positional jitter so back-to-back gestures don't reproduce\s*\n?\s*\/\/ pixel-perfect identical tracks \(detectors love that\)\./,
     );
     expect(body).toMatch(
-      /const jitterX = \(opts\.rng\(\) - 0\.5\) \* 1\.5;\s*\n?\s*const jitterY = \(opts\.rng\(\) - 0\.5\) \* 1\.5;/,
+      /const isEndpoint = i === 0 \|\| i === n - 1;\s*\n?\s*const jitterX = isEndpoint \? 0 : \(opts\.rng\(\) - 0\.5\) \* 1\.5;\s*\n?\s*const jitterY = isEndpoint \? 0 : \(opts\.rng\(\) - 0\.5\) \* 1\.5;/,
     );
     expect(body).toMatch(
       /\/\/ Pressure ramps up briefly then plateaus\.\s*\n?\s*const pressure = fraction < 0\.15 \? fraction \/ 0\.15 : 1;/,
