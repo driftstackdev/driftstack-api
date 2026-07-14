@@ -129,8 +129,9 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("Cross-link to glanceable /pricing pinned: 'Looking for the glanceable view? /pricing has the headline cards.' — pinned so the back-link to the glanceable page survives (drift to dropping would orphan buyers who land on /pricing/comparison first and want the simpler overview)", () => {
     expect(body).toMatch(
-      /Looking for the glanceable view\?\s*\n?\s*<a href="\/pricing" class="text-tk-accent-text underline">\/pricing<\/a>\s*\n?\s*has the headline cards\./,
+      /Looking for the glanceable view\?\s*\n?\s*<a href="\/pricing\/" class="text-tk-accent-text underline">\/pricing<\/a>\s*\n?\s*has the headline cards\./,
     );
+    expect(body).not.toMatch(/href="\/pricing"/);
   });
 
   it('file exists at canonical path', () => {
