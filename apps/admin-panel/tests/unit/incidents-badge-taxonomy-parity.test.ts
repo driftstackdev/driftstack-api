@@ -29,8 +29,8 @@ describe('W340.C admin /incidents badge taxonomy parity', () => {
     (IncidentStatusSchema._def as { values: readonly string[] }).values,
   );
 
-  const sevMatch = page.match(/SEVERITY_BADGE:[^={]*=?\s*\{([\s\S]*?)\};/);
-  const statMatch = page.match(/STATUS_BADGE:[^={]*=?\s*\{([\s\S]*?)\};/);
+  const sevMatch = page.match(/const SEVERITY_BADGE(?:\s*:[^=]+)?\s*=\s*\{([\s\S]*?)\};/);
+  const statMatch = page.match(/const STATUS_BADGE(?:\s*:[^=]+)?\s*=\s*\{([\s\S]*?)\};/);
 
   it('SEVERITY_BADGE + STATUS_BADGE blocks are present in the page', () => {
     expect(sevMatch).not.toBeNull();

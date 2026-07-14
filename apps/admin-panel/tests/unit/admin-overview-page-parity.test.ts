@@ -6,10 +6,9 @@
 //   • The Open-leads tile is honest about its mock-only status
 //     (no leads endpoint yet) — pin the disclaimer copy so a
 //     future "polish pass" can't quietly drop it.
-//   • Four tile data-fields exist: active-accounts /
-//     suspended-accounts / dlq-depth (Open leads is mock-only,
-//     no data-field hook). Active/suspended tile values come from
-//     filtering MOCK_ACCOUNTS by AccountStatusSchema values.
+//   • Four live tile data-fields exist: active-accounts /
+//     suspended-accounts / open incidents / dlq-depth. Account
+//     counts hydrate from the canonical overview response.
 //   • Recent-audit list links to the full /audit-log page.
 
 import { readFileSync } from 'node:fs';
@@ -96,9 +95,10 @@ describe('W347.C admin /index overview parity', () => {
     expect(page).not.toMatch(/mock — leads endpoint TBD/);
   });
 
-  it('active/suspended tiles filter MOCK_ACCOUNTS by canonical AccountStatusSchema values', () => {
-    expect(page).toMatch(/MOCK_ACCOUNTS\.filter\(\(a\) => a\.status === 'active'\)/);
-    expect(page).toMatch(/MOCK_ACCOUNTS\.filter\(\(a\) => a\.status === 'suspended'\)/);
+  it('active/suspended tiles hydrate from live canonical account counts', () => {
+    expect(page).toMatch(/setText\('active-accounts',\s*String\(body\.accounts\.active\)\)/);
+    expect(page).toMatch(/setText\('suspended-accounts',\s*String\(body\.accounts\.suspended\)\)/);
+    expect(page).not.toContain('MOCK_ACCOUNTS');
     const statuses = new Set<string>(
       (AccountStatusSchema._def as { values: readonly string[] }).values,
     );

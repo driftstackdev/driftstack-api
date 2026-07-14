@@ -3,12 +3,9 @@
 // test pins frontmatter SEVERITY_BADGE / STATUS_BADGE byte-
 // identical to the /incidents/[id] detail page. This guard adds:
 //
-//   • SEVERITY_BADGE in the inline <script> is byte-identical
-//     to the frontmatter SEVERITY_BADGE on this same page (the
-//     page duplicates the map across SSG + progressive-
-//     enhancement render paths — drift here would show
-//     different colours pre- and post-fetch).
-//   • Same for STATUS_BADGE.
+//   • SEVERITY_BADGE + STATUS_BADGE are each defined once in
+//     the live-render script. The inert SSG shell deliberately
+//     carries no fake incident rows or duplicate badge maps.
 //   • V-338 POST /v1/admin/incidents + V-338b GET on mount
 //     wired against the same route file.
 //   • Audit-action `incident.created` is emitted by the route
@@ -36,13 +33,6 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-// Normalise whitespace for byte-identical comparison.
-function extractFrontmatterBadge(src: string, name: string): string {
-  const m = src.match(new RegExp(`const ${name}: Record<string, string> = \\{([\\s\\S]*?)\\};`));
-  if (m === null) throw new Error(`frontmatter ${name} literal not found`);
-  return m[1]!.replace(/\s+/g, ' ').trim();
-}
-
 function extractInlineBadge(src: string, name: string): string {
   const m = src.match(new RegExp(`const ${name} = \\{([\\s\\S]*?)\\};`));
   if (m === null) throw new Error(`inline ${name} literal not found`);
@@ -53,19 +43,14 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
   const body = read(PAGE);
   const route = read(ROUTE);
 
-  it('frontmatter SEVERITY_BADGE matches inline-script SEVERITY_BADGE byte-identical', () => {
-    // Same const name lives twice on this page (frontmatter +
-    // inline script). Drift between them would show different
-    // colours pre- vs post-fetch.
-    expect(extractInlineBadge(body, 'SEVERITY_BADGE')).toEqual(
-      extractFrontmatterBadge(body, 'SEVERITY_BADGE'),
-    );
+  it('defines SEVERITY_BADGE once in the authoritative live-render script', () => {
+    expect(extractInlineBadge(body, 'SEVERITY_BADGE')).toContain("outage: 'bg-red-50");
+    expect(body.match(/const SEVERITY_BADGE(?:\s*:[^=]+)?\s*=/g)).toHaveLength(1);
   });
 
-  it('frontmatter STATUS_BADGE matches inline-script STATUS_BADGE byte-identical', () => {
-    expect(extractInlineBadge(body, 'STATUS_BADGE')).toEqual(
-      extractFrontmatterBadge(body, 'STATUS_BADGE'),
-    );
+  it('defines STATUS_BADGE once in the authoritative live-render script', () => {
+    expect(extractInlineBadge(body, 'STATUS_BADGE')).toContain("resolved: 'bg-emerald-50");
+    expect(body.match(/const STATUS_BADGE(?:\s*:[^=]+)?\s*=/g)).toHaveLength(1);
   });
 
   it('V-338 POST /v1/admin/incidents + V-338b GET on mount wired against the route', () => {

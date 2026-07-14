@@ -1,7 +1,7 @@
 // W353.C — drift guard for admin /incidents (list page). The
-// companion of /incidents/[id]. Critically, this page DEFINES its
-// own SEVERITY_BADGE + STATUS_BADGE constants — and so does
-// /incidents/[id]. If those two maps drift, the list and the detail
+// companion of /incidents/[id]. The list's live-render script and
+// detail shell both define SEVERITY_BADGE + STATUS_BADGE. If they drift,
+// the list and the detail
 // pages will show different colours for the same severity / status,
 // which is a high-confusion bug. Pin them as byte-identical.
 //
@@ -9,9 +9,8 @@
 //   • The new-incident form's Severity dropdown lists exactly
 //     {minor, major, outage} = IncidentSeveritySchema.
 //   • POST /v1/admin/incidents is the registered server route.
-//   • SSG fallback uses MOCK_INCIDENTS + split by status into
-//     open / resolved sections — pin the bisection so a future copy
-//     change doesn't silently merge them.
+//   • The SSG shell is inert/unavailable; only fetched live rows
+//     are split by status into open / resolved sections.
 //   • Form fields: title (required), description (required),
 //     severity (default 'major'), affected components (optional),
 //     public checkbox (default checked).
@@ -34,7 +33,7 @@ function read(p: string): string {
 }
 
 function extractBadge(src: string, name: string): string {
-  const m = src.match(new RegExp(`const ${name}: Record<string, string> = \\{([\\s\\S]*?)\\};`));
+  const m = src.match(new RegExp(`const ${name}(?:\\s*:[^=]+)?\\s*=\\s*\\{([\\s\\S]*?)\\};`));
   if (m === null) throw new Error(`${name} literal not found`);
   // Normalise whitespace for byte-identical comparison.
   return m[1]!.replace(/\s+/g, ' ').trim();
@@ -76,9 +75,15 @@ describe('W353.C admin /incidents list page parity', () => {
     expect(route).toContain("'/v1/admin/incidents'");
   });
 
-  it('list bisects MOCK_INCIDENTS into open (status !== resolved) + resolved', () => {
-    expect(body).toMatch(/MOCK_INCIDENTS\.filter\(\(i\) => i\.status !== 'resolved'\)/);
-    expect(body).toMatch(/MOCK_INCIDENTS\.filter\(\(i\) => i\.status === 'resolved'\)/);
+  it('splits only fetched live incidents into open + resolved sections', () => {
+    expect(body).toMatch(
+      /const open = items\.filter\(function \(i\) \{\s*return i\.status !== 'resolved';/,
+    );
+    expect(body).toMatch(
+      /const resolved = items\.filter\(function \(i\) \{\s*return i\.status === 'resolved';/,
+    );
+    expect(body).toContain('Live incident state unavailable until loaded.');
+    expect(body).not.toContain('MOCK_INCIDENTS');
   });
 
   it('form fields required posture: title + description required; affected + public optional', () => {

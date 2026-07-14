@@ -128,7 +128,8 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     // No-token isn't a load failure — retrying won't help until sign-in, so
     // no retry affordance.
     expect(retryVisible(window)).toBe(false);
-    expect(text(window, '[data-incidents-list]')).toContain('All systems operational');
+    expect(text(window, '[data-incidents-list]')).toContain('Sign in to load live incident state');
+    expect(text(window, '[data-incidents-list]')).not.toContain('All systems operational');
   });
 
   it('genuinely empty: zero incidents renders the operational message with NO error banner', async () => {
@@ -176,10 +177,8 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     expect(bannerHidden(window)).toBe(false);
     expect(text(window, '[data-banner]')).toContain("Couldn't load incidents");
     expect(retryVisible(window)).toBe(true);
-    // The list still falls back to the empty-state markup (no stale/fake
-    // data shown), but it's no longer indistinguishable — the banner is the
-    // signal that this ISN'T a confirmed all-clear.
-    expect(text(window, '[data-incidents-list]')).toContain('All systems operational');
+    expect(text(window, '[data-incidents-list]')).toContain('Could not load live incident state');
+    expect(text(window, '[data-incidents-list]')).not.toContain('All systems operational');
   });
 
   it('retry button re-fetches and clears the error banner on success', async () => {
