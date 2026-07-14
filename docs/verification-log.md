@@ -24846,3 +24846,28 @@ Verification:
 - empty and whitespace-only identities are proven to consume the shared bucket;
 - ordinary primary-store outage/fallback enforcement, daily-ceiling, metrics,
   headers, and source-invariant suites remain green.
+
+## V-572 — MFA raw timestamp parameters serialize safely
+
+**Date:** 2026-07-13
+
+Repaired a same-day regression in the Drizzle-backed MFA repository. The TOTP
+single-use counter update and the subsequent last-used touch both placed a
+JavaScript `Date` directly inside a raw `sql` template. The installed
+Drizzle/postgres-js adapter bypasses the timestamp column serializer on that
+path, so a valid verification deterministically failed in
+`Buffer.byteLength(Date)` before replay state could persist.
+
+Both raw timestamp arguments are now converted to ISO strings at the SQL
+boundary and explicitly cast to `timestamptz`; the normal typed `lastUsedAt`
+write remains a `Date`. The monotonic `GREATEST(previous + 1ms, now)` contract
+is unchanged.
+
+Verification:
+
+- a new real-Postgres adapter test was red on the exact
+  `ERR_INVALID_ARG_TYPE` before the repair, then persisted the TOTP counter and
+  exact last-used timestamp after it;
+- the raw-Date structural scanner is green after allow-listing only audited
+  Drizzle column references in MFA and schema checks;
+- connected MFA service/repository, typecheck, lint, and format gates pass.

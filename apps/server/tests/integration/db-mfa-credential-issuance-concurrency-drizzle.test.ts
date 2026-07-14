@@ -114,5 +114,42 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           hashes.every((hash) => replacementB.includes(hash)),
       ).toBe(true);
     });
+
+    it('persists a single-use TOTP counter and last-used timestamp through the real adapter', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleMfaRepo({ client, db, close: async () => {} });
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`mfa-use-${accountId}@test.local`})`;
+
+      const pending = await repo.startEnrollmentIfNotEnrolled({
+        accountId,
+        ciphertext: 'ciphertext',
+        iv: 'iv',
+        tag: 'tag',
+        now: new Date(),
+      });
+      expect(pending).not.toBeNull();
+      expect(
+        await repo.completeEnrollmentIfPending({
+          accountId,
+          expectedUpdatedAt: pending!.updatedAt,
+          hashes: [],
+          now: new Date(),
+        }),
+      ).toBe(true);
+
+      const counterUsedAt = new Date();
+      await expect(
+        repo.consumeTotpCounter({ accountId, counter: 123_456, now: counterUsedAt }),
+      ).resolves.toBe(true);
+      const touchedAt = new Date(counterUsedAt.getTime() + 10);
+      await expect(repo.touchLastUsed(accountId, touchedAt)).resolves.toBeUndefined();
+
+      const persisted = await repo.findByAccount(accountId);
+      expect(persisted?.lastUsedTotpCounter).toBe(123_456);
+      expect(persisted?.lastUsedAt?.getTime()).toBe(touchedAt.getTime());
+    });
   },
 );

@@ -116,7 +116,14 @@ const ALLOW_LIST: Record<string, string[]> = {
     // C1 crypto_entitlements expiry-sweep partial index predicate
     // `expired_processed_at IS NULL` — a column REFERENCE, not a JS Date value.
     't.expiredProcessedAt',
+    // Agent-turn receipt terminal-shape CHECK references this timestamp
+    // COLUMN twice (IS NULL / IS NOT NULL); it is never a bound Date value.
+    't.completedAt',
   ],
+  // MFA monotonic timestamp expressions bind pre-serialized nowIso strings.
+  // The remaining Date-looking expressions are Drizzle COLUMN references,
+  // rendered as identifiers rather than postgres-js parameters.
+  'apps/server/src/db/mfa-repo.ts': ['accountMfa.updatedAt', 'accountMfa.enrolledAt'],
   // usage-repo aggregates by day via `date_trunc('day', <column>)` —
   // `usageRecords.recordedAt` is a column REFERENCE (Drizzle's typed
   // accessor), not a JS Date.

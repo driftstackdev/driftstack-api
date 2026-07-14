@@ -60,9 +60,10 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
 
   it('consumeTotpCounter: atomic strict-monotonic conditional UPDATE (TOTP replay defence, migration 0090)', () => {
     expect(body).toMatch(/async consumeTotpCounter\(args: \{/);
+    expect(body).toMatch(/const nowIso = args\.now\.toISOString\(\);/);
     expect(body).toMatch(/lastUsedTotpCounter: args\.counter,/);
     expect(body).toMatch(
-      /updatedAt: sql`GREATEST\(\$\{accountMfa\.updatedAt\} \+ INTERVAL '1 millisecond', \$\{args\.now\}\)`,/,
+      /updatedAt: sql`GREATEST\(\$\{accountMfa\.updatedAt\} \+ INTERVAL '1 millisecond', \$\{nowIso\}::timestamptz\)`,/,
     );
     expect(body).toMatch(/isNull\(accountMfa\.lastUsedTotpCounter\)/);
     expect(body).toMatch(/sql`\$\{accountMfa\.lastUsedTotpCounter\} < \$\{args\.counter\}`/);
@@ -99,9 +100,10 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
 
   it('touchLastUsed: update set lastUsedAt + updatedAt where accountId', () => {
     expect(body).toMatch(/async touchLastUsed\(accountId: string, now: Date\): Promise<void> \{/);
+    expect(body).toMatch(/const nowIso = now\.toISOString\(\);/);
     expect(body).toMatch(/lastUsedAt: now,/);
     expect(body).toMatch(
-      /updatedAt: sql`GREATEST\(\$\{accountMfa\.updatedAt\} \+ INTERVAL '1 millisecond', \$\{now\}\)`,/,
+      /updatedAt: sql`GREATEST\(\$\{accountMfa\.updatedAt\} \+ INTERVAL '1 millisecond', \$\{nowIso\}::timestamptz\)`,/,
     );
     expect(body).toMatch(/\.where\(eq\(accountMfa\.accountId, accountId\)\);/);
   });

@@ -134,11 +134,16 @@ export class DrizzleMfaRepo implements MfaRepo {
   }
 
   async touchLastUsed(accountId: string, now: Date): Promise<void> {
+    // Raw drizzle `sql` parameters bypass the timestamp column serializer;
+    // binding a Date reaches postgres-js's Buffer.byteLength and throws.
+    // Keep lastUsedAt on the typed update path, but serialize the value used
+    // inside GREATEST explicitly (see drizzle-date-param-workaround.md).
+    const nowIso = now.toISOString();
     await this.database.db
       .update(accountMfa)
       .set({
         lastUsedAt: now,
-        updatedAt: sql`GREATEST(${accountMfa.updatedAt} + INTERVAL '1 millisecond', ${now})`,
+        updatedAt: sql`GREATEST(${accountMfa.updatedAt} + INTERVAL '1 millisecond', ${nowIso}::timestamptz)`,
       })
       .where(eq(accountMfa.accountId, accountId));
   }
@@ -153,11 +158,13 @@ export class DrizzleMfaRepo implements MfaRepo {
     counter: number;
     now: Date;
   }): Promise<boolean> {
+    // Same raw-SQL boundary as touchLastUsed: never bind a Date directly.
+    const nowIso = args.now.toISOString();
     const result = await this.database.db
       .update(accountMfa)
       .set({
         lastUsedTotpCounter: args.counter,
-        updatedAt: sql`GREATEST(${accountMfa.updatedAt} + INTERVAL '1 millisecond', ${args.now})`,
+        updatedAt: sql`GREATEST(${accountMfa.updatedAt} + INTERVAL '1 millisecond', ${nowIso}::timestamptz)`,
       })
       .where(
         and(
