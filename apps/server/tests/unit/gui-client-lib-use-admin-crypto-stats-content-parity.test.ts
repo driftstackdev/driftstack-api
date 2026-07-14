@@ -34,6 +34,11 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+function adminCryptoStatsStatuses(source: string): string[] {
+  const declaration = source.match(/export type AdminCryptoStatsStatus\s*=([\s\S]*?);/)?.[1] ?? '';
+  return [...declaration.matchAll(/'([^']+)'/g)].map((match) => match[1] ?? '');
+}
+
 describe('W471.A apps/gui-client/src/lib/use-admin-crypto-stats.ts content parity', () => {
   const body = read(LIB);
 
@@ -45,9 +50,15 @@ describe('W471.A apps/gui-client/src/lib/use-admin-crypto-stats.ts content parit
   });
 
   it("AdminCryptoStatsStatus 6-value union ('pending'|'confirming'|'paid'|'failed'|'partial'|'cancelled')", () => {
-    expect(body).toMatch(
-      /export type AdminCryptoStatsStatus =\s*\n?\s*'?pending'?\s*\| '?confirming'?\s*\| '?paid'?\s*\| '?failed'?\s*\| '?partial'?\s*\| '?cancelled'?;/,
-    );
+    const expected = ['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'];
+    expect(adminCryptoStatsStatuses(body)).toEqual(expected);
+
+    const missingStatus = body.replace("  | 'cancelled';", ';');
+    const extraStatus = body.replace("  | 'cancelled';", "  | 'cancelled'\n  | 'refunded';");
+    expect(missingStatus).not.toBe(body);
+    expect(extraStatus).not.toBe(body);
+    expect(adminCryptoStatsStatuses(missingStatus)).not.toEqual(expected);
+    expect(adminCryptoStatsStatuses(extraStatus)).not.toEqual(expected);
   });
 
   it("AdminCryptoStatsData 8-field: total + by_status Record<AdminCryptoStatsStatus, number> + paid_revenue_cents Record<string, number> + avg_time_to_paid_ms nullable + paid_sample + paid_revenue_by_product optional (V-666.AE 'paid revenue keyed by product → currency → cents.') + paid_count_by_product optional (V-666.AE 'paid-order count keyed by product.') + truncated + scanned", () => {
