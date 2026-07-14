@@ -23,6 +23,9 @@ const { title, copyTargetId } = Astro.props;
           type="button"
           class="ml-auto rounded border border-white/15 px-2 py-0.5 text-[11px] text-white/70 transition-colors hover:text-white"
           data-copy-target={copyTargetId}
+          aria-label="Copy code to clipboard"
+          aria-live="polite"
+          aria-atomic="true"
         >
           Copy
         </button>
@@ -39,31 +42,82 @@ const { title, copyTargetId } = Astro.props;
   // multiple CodeWindow instances on a page don't double-bind.
   if (!window.__dsCopyWired) {
     window.__dsCopyWired = true;
+    var copyStates = new WeakMap();
+
+    function stateFor(btn) {
+      var state = copyStates.get(btn);
+      if (!state) {
+        state = { inFlight: false, generation: 0, resetTimer: null };
+        copyStates.set(btn, state);
+      }
+      return state;
+    }
+
+    function resetCopyButton(btn, state) {
+      if (state.resetTimer !== null) window.clearTimeout(state.resetTimer);
+      state.resetTimer = null;
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
+    }
+
+    function showCopyResult(btn, state, generation, label, ariaLabel, delayMs) {
+      if (generation !== state.generation) return;
+      resetCopyButton(btn, state);
+      btn.textContent = label;
+      btn.setAttribute('aria-label', ariaLabel);
+      state.resetTimer = window.setTimeout(function () {
+        if (generation === state.generation) resetCopyButton(btn, state);
+      }, delayMs);
+    }
+
+    function writeClipboard(value) {
+      try {
+        if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+          return Promise.reject(new Error('clipboard unavailable'));
+        }
+        return Promise.resolve(navigator.clipboard.writeText(value));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+
     document.addEventListener('click', function (e) {
       var btn = e.target instanceof Element ? e.target.closest('[data-copy-target]') : null;
-      if (!btn) return;
+      if (!(btn instanceof HTMLButtonElement)) return;
+      var state = stateFor(btn);
+      if (state.inFlight) return;
       var target = document.getElementById(btn.getAttribute('data-copy-target') || '');
-      if (!target || !navigator.clipboard) return;
-      // S34 2026-07-07 (fable-frontend-audit) — two execution-proven bugs fixed: (1) the
-      // restore timer captured the CURRENT label, so a second click
-      // within 1.2s captured 'Copied' and the button never returned to
-      // 'Copy'; restore to the constant instead. (2) a rejected
-      // clipboard write (permission denied / focus lost) was a silent
-      // unhandled rejection — surface it briefly.
-      navigator.clipboard
-        .writeText(target.textContent || '')
-        .then(function () {
-          btn.textContent = 'Copied';
-          window.setTimeout(function () {
-            btn.textContent = 'Copy';
-          }, 1200);
-        })
-        .catch(function () {
-          btn.textContent = 'Copy failed';
-          window.setTimeout(function () {
-            btn.textContent = 'Copy';
-          }, 1800);
-        });
+      var generation = ++state.generation;
+      state.inFlight = true;
+      resetCopyButton(btn, state);
+      btn.textContent = 'Copying…';
+      btn.setAttribute('aria-label', 'Copying code');
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+      var write = target
+        ? writeClipboard(target.textContent || '')
+        : Promise.reject(new Error('copy target unavailable'));
+      write.then(
+        function () {
+          showCopyResult(btn, state, generation, 'Copied', 'Code copied to clipboard', 1200);
+        },
+        function () {
+          showCopyResult(
+            btn,
+            state,
+            generation,
+            'Copy failed',
+            'Could not copy code; select it manually',
+            1800,
+          );
+        },
+      ).finally(function () {
+        if (generation === state.generation) {
+          state.inFlight = false;
+          btn.disabled = false;
+          btn.setAttribute('aria-busy', 'false');
+        }
+      });
     });
   }
 </script>
