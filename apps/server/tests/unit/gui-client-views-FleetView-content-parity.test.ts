@@ -67,12 +67,13 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     );
   });
 
-  it('Lib delegation: listFleetMembers + addFleetMember + updateFleetMember + removeFleetMember + pingFleetMember + validateDraft imports from ../lib/fleet-members; refresh = useCallback wrapping listFleetMembers in try/catch/finally (catch→setLoadError, finally→setLoading(false)) so a failed read never sticks on a blank loading screen; ping useCallback sets pings[id]=pending then sets final result', () => {
+  it('Lib delegation: listFleetMembers + addFleetMember + updateFleetMember + removeFleetMember + pingFleetMember + validateDraft imports from ../lib/fleet-members; refresh = useCallback wrapping listFleetMembers in try/catch/finally (catch→humanized setLoadError, finally→setLoading(false)) so a failed read never leaks internals or sticks on a blank loading screen; ping useCallback sets pings[id]=pending then sets final result', () => {
     expect(body).toMatch(
       /import \{\s*\n?\s*addFleetMember,\s*\n?\s*listFleetMembers,\s*\n?\s*pingFleetMember,\s*\n?\s*removeFleetMember,\s*\n?\s*updateFleetMember,\s*\n?\s*validateDraft,/,
     );
+    expect(body).toContain("import { humanizeError } from '../lib/humanize-error';");
     expect(body).toMatch(
-      /const refresh = useCallback\(async \(\) => \{\s*\n?\s*setLoadError\(null\);\s*\n?\s*try \{\s*\n?\s*const all = await listFleetMembers\(\);\s*\n?\s*setMembers\(all\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*setLoadError\(\s*\n?\s*err instanceof Error \? err\.message : 'Could not read the fleet registry from disk\.',\s*\n?\s*\);\s*\n?\s*\} finally \{\s*\n?\s*setLoading\(false\);\s*\n?\s*\}\s*\n?\s*\}, \[\]\);/,
+      /const refresh = useCallback\(async \(\) => \{\s*\n?\s*setLoadError\(null\);\s*\n?\s*try \{\s*\n?\s*const all = await listFleetMembers\(\);\s*\n?\s*setMembers\(all\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*setLoadError\(\s*\n?\s*humanizeError\(\s*\n?\s*err,\s*\n?\s*"Couldn't read the saved fleet\. Check the app's file permissions and try again\.",\s*\n?\s*\),\s*\n?\s*\);\s*\n?\s*\} finally \{\s*\n?\s*setLoading\(false\);\s*\n?\s*\}\s*\n?\s*\}, \[\]\);/,
     );
     expect(body).toMatch(
       /const ping = useCallback\(async \(member: FleetMember\) => \{\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: 'pending' \}\)\);[\s\S]*?const result = await pingFleetMember\(member\);\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: result \}\)\);[\s\S]*?\}, \[\]\);/,
