@@ -94,14 +94,16 @@ describe('W901 V-296 + V-359 24h rotate-grace cross-source invariant', () => {
     expect(p).toMatch(/opts\.gracePeriodMs \?\? 24 \* 60 \* 60 \* 1000/);
   });
 
-  // ─── setExpiresAt repo method ────────────────────────────────
+  // ─── atomic repository transition ───────────────────────────
 
-  it("CRITICAL V-296 uses setExpiresAt repo method (NOT a new column) — 'set expires_at on an existing key. Used by rotate() to schedule the old key's automatic revocation at the end of the grace period. Idempotent — last write wins'. The pattern reuses existing infrastructure.", () => {
+  it('CRITICAL V-296 rotation atomically locks old-key authority, inserts one successor, and shortens the old key without extending an earlier expiry', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
-    expect(p).toMatch(/V-296 — set expires_at on an existing key/);
-    expect(p).toMatch(/Used by rotate\(\) to/);
-    expect(p).toMatch(/schedule the old key's automatic revocation/);
-    expect(p).toMatch(/Idempotent — last write wins\./);
+    expect(p).toMatch(/Rotation must use\s*\n\s*\*\s*rotateApiKeyAtomic\(\)/);
+    expect(p).toMatch(/rotateApiKeyAtomic\(input: RotateApiKeyInput\)/);
+    expect(p).toMatch(/const result = await this\.repo\.rotateApiKeyAtomic\(\{/);
+    expect(p).toMatch(/successor and shorten the old key to the grace boundary in one transaction/);
+    expect(p).toMatch(/capped at the EARLIER of \(existing,\s*\n\s*\*\s*now\+grace\)/);
+    expect(p).not.toMatch(/await this\.repo\.setExpiresAt\(/);
   });
 
   // ─── 2-rotation-flow + 24h-default parallel ──────────────────
