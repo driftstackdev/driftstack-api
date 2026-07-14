@@ -118,8 +118,9 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Pricing source of truth: \[driftstack\.dev\/pricing\]\(https:\/\/driftstack\.dev\/pricing\)\./,
+      /Pricing source of truth: \[driftstack\.dev\/pricing\]\(https:\/\/driftstack\.dev\/pricing\/\)\./,
     );
+    expect(p).not.toMatch(/\]\(https:\/\/driftstack\.dev\/pricing\)/);
   });
 
   it('CRITICAL 3-tier-error pinned on create — 429 concurrency-limit / 429 tier-limit / 403 forbidden. Matches W776 /sdk/error-handling 15-row error-class table.', () => {
