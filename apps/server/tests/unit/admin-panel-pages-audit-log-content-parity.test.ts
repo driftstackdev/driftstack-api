@@ -137,10 +137,10 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     expect(body).toMatch(/if \(ok\) \{[\s\S]*?setLiveState\('ready'\);/);
   });
 
-  it('keeps the existing DOMContentLoaded token deferral for the AdminLayout SSO bridge', () => {
+  it('keeps DOMContentLoaded token deferral and treats denied localStorage as signed out for the AdminLayout SSO bridge', () => {
     expect(body).toMatch(/let token = null;/);
     expect(body).toMatch(
-      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+      /function start\(\) \{\s*\n?\s*try \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\n?\s*\} catch \{\s*\n?\s*token = null;\s*\n?\s*\}\s*\n?\s*if \(!token\) \{/,
     );
     expect(body).toMatch(
       /document\.addEventListener\('DOMContentLoaded', start, \{ once: true \}\);/,
