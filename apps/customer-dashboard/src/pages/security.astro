@@ -103,7 +103,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">Password + recovery options.</p>
       <div class="mt-6 space-y-3">
-        <button type="button" data-action="change-password" class="btn-secondary inline-flex">
+        <button
+          type="button"
+          data-action="change-password"
+          class="btn-secondary inline-flex"
+          disabled
+          title="Sign in and wait for your account email to load"
+        >
           Change password
         </button>
         <p class="text-xs text-tk-ink-3">
@@ -429,7 +435,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       const root = document.querySelector('[data-page="security"]');
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const token = (() => {
+        try {
+          return localStorage.getItem('ds_web_session_token');
+        } catch {
+          return null;
+        }
+      })();
       const SECURITY_TIMEOUT_MS = 15_000;
       let passwordResetInFlight = false;
       let passwordResetOutcomeUnknown = false;
@@ -438,7 +450,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       // could mistype (a typo silently fails — the server returns
       // { sent: true } for ANY address as anti-enumeration).
       let accountEmail = null;
+      let passwordResetAvailable = false;
       let bannerGeneration = 0;
+      const changePasswordBtn = root.querySelector('[data-action="change-password"]');
+
+      function syncPasswordResetAvailability(reason = '') {
+        if (!changePasswordBtn) return;
+        changePasswordBtn.disabled =
+          !passwordResetAvailable || passwordResetInFlight || passwordResetOutcomeUnknown;
+        if (passwordResetAvailable && !passwordResetInFlight && !passwordResetOutcomeUnknown) {
+          changePasswordBtn.removeAttribute('title');
+        } else if (reason) {
+          changePasswordBtn.title = reason;
+        }
+      }
+
+      syncPasswordResetAvailability(
+        token ? 'Wait for your account email to load' : 'Sign in to change your password',
+      );
 
       function showBanner(text) {
         const generation = ++bannerGeneration;
@@ -519,12 +548,23 @@ const apiBaseUrl = resolveApiBaseUrl();
         boundedFetch(apiBaseUrl + '/v1/account/me', {
           headers: { authorization: 'Bearer ' + token },
         })
-          .then((r) => (r.ok ? r.json() : null))
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((body) => Promise.reject(responseError(r, body))),
+          )
           .then((me) => {
-            if (!me) return;
+            if (!me || typeof me.email !== 'string' || me.email.trim().length === 0) {
+              throw new Error('The account response did not include an email address.');
+            }
             // Capture the account email for the change-password flow so we
             // don't re-prompt the customer for an address we already know.
-            if (me.email) accountEmail = me.email;
+            accountEmail = me.email.trim();
+            passwordResetAvailable = true;
+            syncPasswordResetAvailability();
             // Populate the header account-id from live data (mirrors
             // settings.astro — audit w2flmiw48 #3).
             if (me.id) {
@@ -532,8 +572,16 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (headerAcct) headerAcct.textContent = 'Account · ' + me.id.slice(0, 16) + '…';
             }
           })
-          .catch(() => {
-            /* leave the header as-is */
+          .catch((err) => {
+            accountEmail = null;
+            passwordResetAvailable = false;
+            syncPasswordResetAvailability('Reload to try loading your account email again');
+            showBanner(
+              securityErrorMessage(
+                err,
+                "Couldn't load your account email. Password reset is unavailable; reload to try again.",
+              ),
+            );
           });
       }
 
@@ -973,6 +1021,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Sign in to change password.');
           return;
         }
+        if (!passwordResetAvailable || !accountEmail) {
+          showBanner('Wait for your account email to load. Reload Security if loading failed.');
+          return;
+        }
         if (passwordResetInFlight || passwordResetOutcomeUnknown) return;
         passwordResetInFlight = true;
         const idleLabel = btn ? btn.textContent || 'Change password' : '';
@@ -985,29 +1037,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         // it — no re-prompt. Re-prompting was a footgun: the server returns
         // { sent: true } for ANY address (anti-enumeration), so a typo'd
         // email silently "succeeds" but no usable email ever arrives.
-        // Defensive fallback: if /account/me hasn't resolved yet (e.g. the
-        // profile inputs were absent so the load was gated out), prompt
-        // with whatever email we have pre-filled.
         try {
-          let email = accountEmail;
-          if (!email) {
-            const entered = await window.driftstackPrompt(
-              'Confirm your account email to send the password-reset link:',
-              {
-                placeholder: 'you@example.com',
-                confirmLabel: 'Send link',
-                defaultValue: accountEmail || '',
-              },
-            );
-            if (!entered || !entered.trim()) return;
-            email = entered.trim();
-          }
           if (btn) btn.textContent = 'Sending…';
           showBanner('Sending password-reset email…');
           const response = await boundedFetch(apiBaseUrl + '/v1/auth/password-reset/request', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ email: email }),
+            body: JSON.stringify({ email: accountEmail }),
           });
           if (!response.ok) throw new Error('HTTP ' + response.status);
           await response.json();
@@ -1027,7 +1063,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         } finally {
           passwordResetInFlight = false;
           if (btn) {
-            btn.disabled = passwordResetOutcomeUnknown;
+            syncPasswordResetAvailability(
+              passwordResetOutcomeUnknown ? 'Reload before requesting another reset email' : '',
+            );
             btn.setAttribute('aria-busy', 'false');
             if (!passwordResetOutcomeUnknown) btn.textContent = idleLabel;
           }
@@ -1897,6 +1935,9 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       if (!token) {
         showBanner('Sign in to see live security status + recent activity.');
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
         return;
       }
 

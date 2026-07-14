@@ -39,13 +39,19 @@ interface WebSession {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
+  token?: string | null;
+  storageDenied?: boolean;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -66,7 +72,21 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve(opts.route(call));
   };
-  window.localStorage.setItem('ds_web_session_token', 'tok');
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== null) {
+    window.localStorage.setItem('ds_web_session_token', opts.token ?? 'tok');
+  }
+  let hydrated = 0;
+  // @ts-expect-error — injected by DashboardLayout
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   const cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout
   window.driftstackConfirm = () => Promise.resolve(cr);
@@ -77,7 +97,11 @@ function setUpDom(
   installDashboardDeadline(window);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function json(obj: unknown, status = 200): Response {
@@ -154,6 +178,88 @@ describe('security page — web-session management (security)', () => {
     vi.useRealTimers();
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it.each([
+    ['signed out', { token: null }],
+    ['storage denied', { storageDenied: true }],
+  ])(
+    '%s: releases hydration without requests and keeps password reset inert',
+    async (_label, auth) => {
+      const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
+        ...auth,
+        route: () => {
+          throw new Error('must not fetch without a bearer');
+        },
+      });
+      win = window;
+      await flush();
+
+      const btn = window.document.querySelector(
+        '[data-action="change-password"]',
+      ) as HTMLButtonElement;
+      expect(fetchCalls).toHaveLength(0);
+      expect(hydratedCount()).toBe(1);
+      expect(btn.disabled).toBe(true);
+      expect(btn.title).toMatch(/Sign in/i);
+      expect(window.document.querySelector('[data-banner]')?.textContent).toContain('Sign in');
+    },
+  );
+
+  it('requires a current account email before accepting password-reset actions', async () => {
+    let resolveAccount: ((response: Response) => void) | undefined;
+    const base = makeRouter([]);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (/\/v1\/account\/me$/.test(call.url)) {
+          return new Promise<Response>((resolve) => {
+            resolveAccount = resolve;
+          });
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush(2);
+
+    const btn = window.document.querySelector(
+      '[data-action="change-password"]',
+    ) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(2);
+    expect(fetchCalls.some((call) => /password-reset\/request$/.test(call.url))).toBe(false);
+
+    resolveAccount?.(json({ email: 'authoritative@example.com' }));
+    await flush();
+    expect(btn.disabled).toBe(false);
+    btn.click();
+    await flush();
+    const reset = fetchCalls.find((call) => /password-reset\/request$/.test(call.url));
+    expect(JSON.parse(String(reset?.init?.body))).toEqual({
+      email: 'authoritative@example.com',
+    });
+  });
+
+  it('keeps reset authority revoked when the account identity read fails', async () => {
+    const base = makeRouter([]);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) =>
+        /\/v1\/account\/me$/.test(call.url)
+          ? json({ detail: 'identity unavailable' }, 503)
+          : base(call),
+    });
+    win = window;
+    await flush();
+
+    const btn = window.document.querySelector(
+      '[data-action="change-password"]',
+    ) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.title).toMatch(/Reload/i);
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(2);
+    expect(fetchCalls.some((call) => /password-reset\/request$/.test(call.url))).toBe(false);
+  });
 
   it('coalesces forced duplicate password-reset actions into one bounded request', async () => {
     const baseRouter = makeRouter([]);

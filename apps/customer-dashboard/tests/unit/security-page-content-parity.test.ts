@@ -54,14 +54,24 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toMatch(/old sessions stay signed in until they naturally expire/);
   });
 
-  it('change-password uses the known account email (captured from /account/me), no re-prompt that a typo could silently fail', () => {
+  it('change-password requires the known account email and never re-prompts a typo-prone address', () => {
     // me.email captured into a module-scoped var on the /account/me load.
     expect(body).toMatch(/let accountEmail = null/);
-    expect(body).toMatch(/if \(me\.email\) accountEmail = me\.email/);
-    // The reset is sent to the known email directly when available; the
-    // prompt is only a defensive fallback (pre-filled with the email).
-    expect(body).toMatch(/let email = accountEmail/);
-    expect(body).toMatch(/defaultValue: accountEmail/);
+    expect(body).toMatch(/accountEmail = me\.email\.trim\(\)/);
+    expect(body).toMatch(/if \(!passwordResetAvailable \|\| !accountEmail\)/);
+    expect(body).toMatch(/body: JSON\.stringify\(\{ email: accountEmail \}\)/);
+    expect(body).not.toMatch(/driftstackPrompt\(/);
+  });
+
+  it('fails closed before auth/email authority and releases signed-out hydration', () => {
+    const buttonStart = body.indexOf('data-action="change-password"');
+    expect(buttonStart).toBeGreaterThanOrEqual(0);
+    expect(body.slice(buttonStart, body.indexOf('>', buttonStart))).toMatch(/disabled/);
+    expect(body).toMatch(/try \{\s*return localStorage\.getItem\('ds_web_session_token'\)/);
+    expect(body).toMatch(/passwordResetAvailable = true;\s*syncPasswordResetAvailability\(\)/);
+    expect(body).toMatch(
+      /showBanner\('Sign in to see live security status \+ recent activity\.'\);\s*if \(typeof window\.dashboardHydrated === 'function'\) \{\s*window\.dashboardHydrated\(\);\s*\}\s*return;/,
+    );
   });
 
   it('bounds every authenticated request and serializes password-reset before prompting', () => {
@@ -83,7 +93,9 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toContain('Password-reset outcome is unknown after the request timed out.');
     expect(body).toContain('Check your inbox and spam before doing anything');
     expect(body).toContain('Reload Security to request another only if no message arrives.');
-    expect(body).toContain('btn.disabled = passwordResetOutcomeUnknown;');
+    expect(body).toMatch(
+      /syncPasswordResetAvailability\(\s*passwordResetOutcomeUnknown \? 'Reload before requesting another reset email'/,
+    );
   });
 
   it('serializes destructive sign-in actions and generation-binds transient banners', () => {
