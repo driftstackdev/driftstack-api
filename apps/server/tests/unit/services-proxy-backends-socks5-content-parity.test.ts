@@ -64,7 +64,7 @@ describe('services/proxy-backends/socks5 content parity', () => {
     expect(body).toMatch(/probeTimeoutMs\?: number;/);
   });
 
-  it('defaultTcpProbe (exported for tests) Promise-resolve-on-connect + reject-on-timeout + reject-on-socket-error framing pinned: connect() → [W372 connection-time SSRF peer-IP check] → end() on success + setTimeout reject with "egress-tunnel-unreachable: timed out connecting to ${host}:${port}" + socket.on(error) reject with "egress-tunnel-unreachable: ${err.message}". Drift to swallowing the host:port from the error message would lose actionable customer-facing detail', () => {
+  it('defaultTcpProbe (exported for tests) retains actionable server-side diagnostics while customer routes map them to stable copy', () => {
     expect(body).toMatch(
       /export function defaultTcpProbe\(host: string, port: number, timeoutMs: number\): Promise<void> \{\s*\n?\s*return new Promise\(\(resolve, reject\) => \{\s*\n?\s*const socket: Socket = connect\(\{ host, port \}, \(\) => \{\s*\n?\s*clearTimeout\(timer\);[\s\S]*?socket\.end\(\);\s*\n?\s*resolve\(\);/,
     );

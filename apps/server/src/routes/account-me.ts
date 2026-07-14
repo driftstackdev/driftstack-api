@@ -646,8 +646,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       try {
         await proxyTcpProbe(row.host, row.port, 8_000);
         return { ok: true as const, latency_ms: Date.now() - startedAt };
-      } catch (err) {
-        return { ok: false as const, reason: err instanceof Error ? err.message : 'unreachable' };
+      } catch {
+        // The probe can surface Node socket/TLS details (and a remote endpoint
+        // can influence some protocol text). Keep the public discriminated
+        // result stable; raw transport diagnostics never belong in an API body.
+        return {
+          ok: false as const,
+          reason: 'Proxy unreachable. Check the host, port, and firewall.',
+        };
       }
     },
   );

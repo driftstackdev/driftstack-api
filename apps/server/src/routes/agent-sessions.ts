@@ -1320,7 +1320,6 @@ export async function runProxyPrelaunchGate(args: {
     );
     throw new ProxyValidationFailedError({
       reason: result.reason ?? 'unreachable',
-      ...(result.detail !== undefined ? { detail: result.detail } : {}),
     });
   }
   // #128 — the probe observed the exit identity the world sees THROUGH this proxy

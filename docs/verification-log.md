@@ -25248,3 +25248,33 @@ Verification:
   tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-587 — proxy failures expose stable local guidance only
+
+**Date:** 2026-07-14
+
+Closed two customer-facing raw diagnostic paths. The saved-proxy reachability
+route previously returned a rejected socket probe's `Error.message` verbatim.
+The session launch preflight copied the live probe's optional detail into its
+422 problem response. A remote HTTP proxy can control its CONNECT status line
+up to the probe reader's 256 KiB cap, while Node socket, DNS, and TLS errors can
+carry runtime-specific endpoint prose.
+
+The saved-proxy test still returns a 200 discriminated result, but unreachable
+responses now use one fixed actionable reason. The launch gate still retains
+the machine reason enum, one transient retry, fail-closed 422, and zero session
+dispatch; customer detail now comes only from the local reason-to-copy map.
+Host/port/reason classification remains available in bounded structured server
+logs without reflecting remote text or credentials.
+
+Verification:
+
+- a saved-proxy integration test injects a socket error containing an internal
+  address and credential-like marker, then proves neither enters the response;
+- a launch-gate unit test supplies a remote-controlled diagnostic larger than
+  the reader cap and proves the resulting problem uses the fixed
+  `egress_blocked` copy with none of the hostile text;
+- focused saved-proxy, prelaunch, and SOCKS diagnostic guards pass 3 files and
+  44 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

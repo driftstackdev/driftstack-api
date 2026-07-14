@@ -331,6 +331,9 @@ export interface TestAppOptions {
    * The gate tests pass a stub whose `.probe()` returns pass/fail/timeout.
    */
   proxyConnectivityProbe?: ProxyConnectivityProbe;
+  /** Override the legacy saved-proxy TCP test probe. Omitted keeps the
+   * deterministic TEST-NET fixture behavior. */
+  proxyTcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
   /**
    * Founder directive #63 — override the pre-launch probe on/off flag in tests
    * (default true in the route, ON in prod). Lets a test assert the disable path.
@@ -1619,8 +1622,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // ARC A slice 4b — deterministic probe so the proxy test endpoint doesn't
     // open real sockets: TEST-NET hosts (203.0.113.x) resolve, anything else
     // rejects (unreachable).
-    proxyTcpProbe: (host: string) =>
-      host.startsWith('203.0.113.') ? Promise.resolve() : Promise.reject(new Error('unreachable')),
+    proxyTcpProbe:
+      opts.proxyTcpProbe ??
+      ((host: string) =>
+        host.startsWith('203.0.113.')
+          ? Promise.resolve()
+          : Promise.reject(new Error('unreachable'))),
     // V-352b — fake R2 public bucket so /v1/account/me/avatar can be
     // exercised in integration tests without touching real Cloudflare.
     r2Public: r2PublicFake,

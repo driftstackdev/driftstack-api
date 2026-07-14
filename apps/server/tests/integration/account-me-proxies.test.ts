@@ -218,7 +218,29 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
       headers: auth(fx),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json<{ ok: boolean }>().ok).toBe(false);
+    expect(res.json()).toEqual({
+      ok: false,
+      reason: 'Proxy unreachable. Check the host, port, and firewall.',
+    });
+  });
+
+  it('does not reflect raw socket diagnostics in the unreachable result', async () => {
+    const hostile = 'connect ECONNREFUSED 10.0.0.7:5432 password=do-not-reflect';
+    fx = await buildTestApp({
+      proxyTcpProbe: () => Promise.reject(new Error(hostile)),
+    });
+    const id = await makeProxy('198.51.100.9');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      ok: false,
+      reason: 'Proxy unreachable. Check the host, port, and firewall.',
+    });
+    expect(res.body).not.toContain(hostile);
   });
 
   it('404 testing an unknown id', async () => {

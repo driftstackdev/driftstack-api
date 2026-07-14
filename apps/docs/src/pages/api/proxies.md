@@ -153,8 +153,11 @@ an error):
 ```
 
 ```json
-{ "ok": false, "reason": "egress-tunnel-unreachable: timed out connecting to ..." }
+{ "ok": false, "reason": "Proxy unreachable. Check the host, port, and firewall." }
 ```
+
+Failure reasons are stable customer guidance. Raw socket, DNS, TLS, and remote
+proxy response text is kept out of the API response.
 
 This confirms the proxy port is reachable; SOCKS5 authentication is not
 exercised by the probe.

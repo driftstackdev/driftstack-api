@@ -209,4 +209,36 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     ).rejects.toBeInstanceOf(ProxyValidationFailedError);
     expect(cache.size()).toBe(0);
   });
+
+  it('never forwards remote-controlled probe detail into the customer 422', async () => {
+    const hostile = `HTTP/1.1 599 ${'remote prose '.repeat(30_000)}secret=do-not-reflect`;
+    const probeFn = vi.fn().mockResolvedValue({
+      ok: false,
+      reason: 'egress_blocked',
+      detail: hostile,
+    });
+    const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+
+    try {
+      await runProxyPrelaunchGate({
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_hostile',
+        accountId: 'acc_1',
+        logger: logger(),
+      });
+      throw new Error('expected a throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ProxyValidationFailedError);
+      const problem = (err as ProxyValidationFailedError).toProblem();
+      expect(problem.detail).toBe(
+        'The proxy connected but could not reach the internet — its upstream egress is blocked.',
+      );
+      expect(JSON.stringify(problem)).not.toContain('remote prose');
+      expect(JSON.stringify(problem)).not.toContain('do-not-reflect');
+    }
+    expect(probeFn).toHaveBeenCalledTimes(1);
+  });
 });
