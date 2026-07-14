@@ -207,6 +207,9 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/V-298d: customer-dashboard \/team UI \(currently mock data only\)\./);
     expect(body).toMatch(/export const teamMembers = pgTable\(/);
     expect(body).toMatch(/export const teamInvites = pgTable\(/);
+    expect(body).toMatch(
+      /uniqueIndex\('team_invites_owner_email_pending_unique'\)\s*\n?\s*\.on\(t\.ownerAccountId, t\.inviteeEmail\)\s*\n?\s*\.where\(sql`\$\{t\.acceptedAt\} IS NULL`\)/,
+    );
     expect(body).toMatch(/V-295c3 — public status-page email subscribers\./);
     expect(body).toMatch(/\/\/ Double-opt-in flow:/);
     expect(body).toMatch(/\/\/ Tokens are sha256-hashed at rest \(auth-tokens\.ts pattern\)\./);

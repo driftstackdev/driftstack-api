@@ -10,12 +10,11 @@
 //     markInviteAccepted + listMembers + listPendingInvites +
 //     removeMember.
 //
-//   upsertInvite framing — 'Look for an existing pending invite (not
-//   yet accepted) for the (owner, email) pair. If found, refresh the
-//   token + expiry. Otherwise insert a new row'.
+//   upsertInvite framing — the partial unique pending key is the live
+//   authority and one INSERT ... ON CONFLICT is its serialization point.
 //
-//   upsertInvite pending lookup — and(eq(ownerAccountId), eq
-//   (inviteeEmail), isNull(acceptedAt)) + limit(1).
+//   upsertInvite conflict target — (ownerAccountId, inviteeEmail)
+//   WHERE acceptedAt IS NULL, matching the schema's partial index.
 //
 //   upsertInvite refresh sets 4 fields — inviteTokenHash +
 //   inviteExpiresAt + role + invitedByAccountId.
@@ -90,18 +89,23 @@ describe('W1000 db/team-members-repo V-298c cross-source invariant', () => {
 
   // ─── upsertInvite framing ────────────────────────────────────
 
-  it("CRITICAL upsertInvite framing — 'Look for an existing pending invite (not yet accepted) for the (owner, email) pair. If found, refresh the token + expiry. Otherwise insert a new row'. The refresh-or-insert design is the V-298c idempotent-invite contract.", () => {
+  it('CRITICAL upsertInvite framing — partial unique live authority plus one-statement serialization prevents conflicting concurrent role credentials.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
-    expect(p).toMatch(/\/\/ Look for an existing pending invite \(not yet accepted\) for the/);
-    expect(p).toMatch(/\/\/ \(owner, email\) pair\. If found, refresh the token \+ expiry\./);
-    expect(p).toMatch(/\/\/ Otherwise insert a new row\./);
+    expect(p).toMatch(
+      /\/\/ The partial unique index permits accepted history while making the live/,
+    );
+    expect(p).toMatch(
+      /\/\/ \(owner, email\) authority singular\. One INSERT \.\.\. ON CONFLICT statement/,
+    );
+    expect(p).toMatch(
+      /\/\/ is the serialization point: concurrent mixed-role refreshes cannot both/,
+    );
   });
 
-  it('CRITICAL upsertInvite pending lookup — and(eq(owner), eq(inviteeEmail), isNull(acceptedAt)) + limit(1). The 3-cond ensures only pending-non-accepted invites match.', () => {
+  it('CRITICAL upsertInvite conflict target — composite owner/email plus acceptedAt IS NULL partial predicate matches the singular pending authority index.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
-    expect(p).toMatch(/eq\(teamInvites\.ownerAccountId, input\.ownerAccountId\),/);
-    expect(p).toMatch(/eq\(teamInvites\.inviteeEmail, input\.inviteeEmail\),/);
-    expect(p).toMatch(/isNull\(teamInvites\.acceptedAt\),/);
+    expect(p).toMatch(/target: \[teamInvites\.ownerAccountId, teamInvites\.inviteeEmail\],/);
+    expect(p).toMatch(/targetWhere: isNull\(teamInvites\.acceptedAt\),/);
   });
 
   it('CRITICAL upsertInvite refresh 4-field set — inviteTokenHash + inviteExpiresAt + role + invitedByAccountId. The 4-field refresh is the V-298c reinvite contract.', () => {
@@ -110,7 +114,7 @@ describe('W1000 db/team-members-repo V-298c cross-source invariant', () => {
     expect(p).toMatch(/inviteExpiresAt: input\.inviteExpiresAt,/);
     expect(p).toMatch(/role: input\.role,/);
     expect(p).toMatch(/invitedByAccountId: input\.invitedByAccountId,/);
-    expect(p).toMatch(/if \(!updated\) throw new Error\('team_invites refresh returned no row'\);/);
+    expect(p).toMatch(/if \(!row\) throw new Error\('team_invites upsert returned no row'\);/);
   });
 
   // ─── upsertMembership onConflictDoUpdate (security fix 2026-06-30) ──

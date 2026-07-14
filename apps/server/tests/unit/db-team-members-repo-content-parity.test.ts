@@ -1,8 +1,8 @@
 // W448.C — drift guard for apps/server/src/db/team-members-repo.ts.
 // V-298c DrizzleTeamMembersRepo. Drift here either drops the
-// refresh-on-existing-pending-invite path on upsertInvite (every
-// re-invite would create a new row → email gets multiple unique
-// invite links + accept-flow ambiguity) or breaks the
+// atomic pending-invite upsert (a read-then-write sequence permits
+// concurrent re-invites to create conflicting live role credentials)
+// or breaks the
 // onConflictDoUpdate on upsertMembership (2026-06-30, audit
 // w76s5l9nb — re-accepting same invite must idempotently UPDATE the
 // role, not just return the stale pre-existing row, or a role
@@ -10,9 +10,9 @@
 //
 //   • V-298c framing pinned.
 //   • toInviteRow: 9-field TeamInviteRow.
-//   • upsertInvite: select existing pending (acceptedAt IS NULL)
-//     for (ownerAccountId, inviteeEmail); UPDATE if found (refresh
-//     token+expiry+role+invitedByAccountId); else INSERT new row.
+//   • upsertInvite: one INSERT … onConflictDoUpdate against the
+//     partial unique (ownerAccountId, inviteeEmail) pending key;
+//     refresh token+expiry+role+invitedByAccountId on conflict.
 //   • findInviteByTokenHash + findAccountEmail: limit 1 lookups.
 //   • upsertMembership: INSERT … onConflictDoUpdate on (owner,
 //     member) composite, SET role/invitedAt/invitedByAccountId so a
@@ -61,23 +61,20 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
     );
   });
 
-  it("upsertInvite framing pinned: 'Look for an existing pending invite (not yet accepted) for the (owner, email) pair. If found, refresh the token + expiry. Otherwise insert a new row.'", () => {
+  it('upsertInvite framing pins the partial unique authority and one-statement serialization point', () => {
     expect(body).toMatch(
-      /\/\/ Look for an existing pending invite \(not yet accepted\) for the\s*\n?\s*\/\/ \(owner, email\) pair\. If found, refresh the token \+ expiry\.\s*\n?\s*\/\/ Otherwise insert a new row\./,
+      /\/\/ The partial unique index permits accepted history while making the live\s*\n?\s*\/\/ \(owner, email\) authority singular\. One INSERT \.\.\. ON CONFLICT statement\s*\n?\s*\/\/ is the serialization point: concurrent mixed-role refreshes cannot both\s*\n?\s*\/\/ leave consumable credentials behind\./,
     );
   });
 
-  it("upsertInvite: select existing where and(ownerAccountId, inviteeEmail, isNull(acceptedAt)) + limit 1; refresh-path .set(4 fields) + throws 'team_invites refresh returned no row'; insert-path 6-field values + throws 'team_invites insert returned no row'", () => {
+  it("upsertInvite: one 6-field INSERT + partial-key onConflictDoUpdate refreshes 4 authority fields and throws 'team_invites upsert returned no row'", () => {
     expect(body).toMatch(
-      /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(teamInvites\.ownerAccountId, input\.ownerAccountId\),\s*\n?\s*eq\(teamInvites\.inviteeEmail, input\.inviteeEmail\),\s*\n?\s*isNull\(teamInvites\.acceptedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);/,
+      /\.insert\(teamInvites\)\s*\n?\s*\.values\(\{\s*\n?\s*ownerAccountId: input\.ownerAccountId,\s*\n?\s*inviteeEmail: input\.inviteeEmail,\s*\n?\s*role: input\.role,\s*\n?\s*inviteTokenHash: input\.inviteTokenHash,\s*\n?\s*inviteExpiresAt: input\.inviteExpiresAt,\s*\n?\s*invitedByAccountId: input\.invitedByAccountId,\s*\n?\s*\}\)/,
     );
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*inviteTokenHash: input\.inviteTokenHash,\s*\n?\s*inviteExpiresAt: input\.inviteExpiresAt,\s*\n?\s*role: input\.role,\s*\n?\s*invitedByAccountId: input\.invitedByAccountId,\s*\n?\s*\}\)/,
+      /\.onConflictDoUpdate\(\{\s*\n?\s*target: \[teamInvites\.ownerAccountId, teamInvites\.inviteeEmail\],\s*\n?\s*targetWhere: isNull\(teamInvites\.acceptedAt\),\s*\n?\s*set: \{\s*\n?\s*inviteTokenHash: input\.inviteTokenHash,\s*\n?\s*inviteExpiresAt: input\.inviteExpiresAt,\s*\n?\s*role: input\.role,\s*\n?\s*invitedByAccountId: input\.invitedByAccountId,\s*\n?\s*\},\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
     );
-    expect(body).toMatch(
-      /if \(!updated\) throw new Error\('team_invites refresh returned no row'\);/,
-    );
-    expect(body).toMatch(/if \(!row\) throw new Error\('team_invites insert returned no row'\);/);
+    expect(body).toMatch(/if \(!row\) throw new Error\('team_invites upsert returned no row'\);/);
   });
 
   it('findInviteByTokenHash is SINGLE-USE (isNull(acceptedAt) filter) + findAccountEmail: limit 1 lookups; findAccountEmail returns row?.email ?? null', () => {

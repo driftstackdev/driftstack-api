@@ -38,36 +38,10 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
     inviteExpiresAt: Date;
     invitedByAccountId: string | null;
   }): Promise<TeamInviteRow> {
-    // Look for an existing pending invite (not yet accepted) for the
-    // (owner, email) pair. If found, refresh the token + expiry.
-    // Otherwise insert a new row.
-    const [existing] = await this.database.db
-      .select()
-      .from(teamInvites)
-      .where(
-        and(
-          eq(teamInvites.ownerAccountId, input.ownerAccountId),
-          eq(teamInvites.inviteeEmail, input.inviteeEmail),
-          isNull(teamInvites.acceptedAt),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      const [updated] = await this.database.db
-        .update(teamInvites)
-        .set({
-          inviteTokenHash: input.inviteTokenHash,
-          inviteExpiresAt: input.inviteExpiresAt,
-          role: input.role,
-          invitedByAccountId: input.invitedByAccountId,
-        })
-        .where(eq(teamInvites.id, existing.id))
-        .returning();
-      if (!updated) throw new Error('team_invites refresh returned no row');
-      return toInviteRow(updated);
-    }
-
+    // The partial unique index permits accepted history while making the live
+    // (owner, email) authority singular. One INSERT ... ON CONFLICT statement
+    // is the serialization point: concurrent mixed-role refreshes cannot both
+    // leave consumable credentials behind.
     const [row] = await this.database.db
       .insert(teamInvites)
       .values({
@@ -78,8 +52,18 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
         inviteExpiresAt: input.inviteExpiresAt,
         invitedByAccountId: input.invitedByAccountId,
       })
+      .onConflictDoUpdate({
+        target: [teamInvites.ownerAccountId, teamInvites.inviteeEmail],
+        targetWhere: isNull(teamInvites.acceptedAt),
+        set: {
+          inviteTokenHash: input.inviteTokenHash,
+          inviteExpiresAt: input.inviteExpiresAt,
+          role: input.role,
+          invitedByAccountId: input.invitedByAccountId,
+        },
+      })
       .returning();
-    if (!row) throw new Error('team_invites insert returned no row');
+    if (!row) throw new Error('team_invites upsert returned no row');
     return toInviteRow(row);
   }
 

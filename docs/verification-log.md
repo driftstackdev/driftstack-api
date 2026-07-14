@@ -24900,3 +24900,30 @@ Verification:
   recipient or silently reactivate an opted-out recipient before mailbox
   proof;
 - source-invariant guards pin the preservation and exact-hash predicates.
+
+## V-574 — pending team-invite authority is singular under concurrency
+
+**Date:** 2026-07-13
+
+Closed a concurrent re-invite race that could leave two live credentials for
+the same owner and mailbox with conflicting roles. The repository's former
+read-then-update-or-insert sequence let two transactions both observe no
+pending invite and then insert independently because the database constrained
+only token hashes.
+
+The schema now has a partial unique index on owner plus normalized invitee
+email while `accepted_at IS NULL`. Re-invites use one `INSERT ... ON CONFLICT
+DO UPDATE` statement against that key, so the database serializes concurrent
+refreshes while accepted invite history remains append-only. The migration
+deterministically retains the newest pending row before creating the index.
+
+Verification:
+
+- a forced two-transaction real-PostgreSQL reproduction was red with two live
+  rows carrying `admin` and `member` authority before the repair;
+- concurrent mixed-role repository calls now return one row id and leave
+  exactly one pending credential;
+- the real adapter test proves an accepted historical row remains and the next
+  invite creates one new pending row;
+- schema and repository source guards pin the partial index, conflict target,
+  partial predicate, and four-field authority refresh.
