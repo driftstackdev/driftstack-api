@@ -21,7 +21,8 @@
 //   • doOnce: context cancellation surfaces as ctx.Err() not
 //     TransportError; 8MB body cap; Authorization Bearer + Accept
 //     + Content-Type when body + User-Agent + per-request extra
-//     headers (V-666.AO Idempotency-Key path).
+//     headers (V-666.AO Idempotency-Key path); terminal SSE response
+//     envelopes become the authoritative status/body.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -171,11 +172,19 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
       /if len\(body\) > maxBodyBytes \{\s*\n\s*return transportErrorFromHTTP\(\s*\n\s*fmt\.Sprintf\("response body exceeds %d-byte limit", maxBodyBytes\),/,
     );
     expect(body).toMatch(
-      /if resp\.StatusCode == http\.StatusNoContent \|\| len\(body\) == 0 \|\| opts\.out == nil \{\s*\n\s*return nil\s*\n\s*\}/,
+      /statusCode := resp\.StatusCode\s*\n\s*retryAfter := resp\.Header\.Get\("Retry-After"\)/,
     );
     expect(body).toMatch(
-      /return errorFromResponse\(resp\.StatusCode, body, resp\.Header\.Get\("Retry-After"\)\)/,
+      /if opts\.eventStream && statusCode >= 200 && statusCode < 300 &&\s*\n\s*strings\.EqualFold\(strings\.TrimSpace\(strings\.SplitN\(resp\.Header\.Get\("Content-Type"\), ";", 2\)\[0\]\), "text\/event-stream"\) \{\s*\n\s*statusCode, body, err = parseTerminalEventStream\(body\)/,
     );
+    expect(body).toMatch(/retryAfter = ""/);
+    expect(body).toMatch(
+      /if statusCode >= 200 && statusCode < 300 \{\s*\n\s*if statusCode == http\.StatusNoContent \|\| len\(body\) == 0 \|\| opts\.out == nil \{\s*\n\s*return nil/,
+    );
+    expect(body).toMatch(/return errorFromResponse\(statusCode, body, retryAfter\)/);
+    expect(body).toMatch(/func parseTerminalEventStream\(body \[\]byte\) \(int, \[\]byte, error\)/);
+    expect(body).toMatch(/if event != "response" \{\s*\n\s*continue/);
+    expect(body).toMatch(/if found \{\s*\n\s*return 0, nil, transportErrorFromHTTP/);
   });
 
   it('file exists at canonical path', () => {
