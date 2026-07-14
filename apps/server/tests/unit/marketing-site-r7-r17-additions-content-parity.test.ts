@@ -96,8 +96,9 @@ describe('W627 R7-R17 marketing additions content parity', () => {
         /Driftstack is built by the people who write the WebKit\s*\n?\s*patches/,
       );
       expect(body).toMatch(
-        /no\s*\n?\s*cold-outreach sales team \(SDRs\), no upsell ladder, no roadmap chosen/,
+        /no\s*\n?\s*cold-outreach sales team \(SDRs\), no upsell ladder, no product direction\s*\n?\s*chosen by investors/,
       );
+      expect(body).not.toMatch(/roadmap chosen/i);
     });
 
     it('3-card posture grid pinned (Design partner direct-engineer-access + Honest pricing one-concurrent-metric + Sovereignty your-account-data-stays-in-EU) — each card has its eyebrow label + headline + sub-processors cross-link in the Sovereignty card. S30 2026-07-07 (founder decision: soften): the Sovereignty card title scoped to "Your account data" and the body discloses that R2-held uploaded files can replicate outside the EU.', () => {
