@@ -106,7 +106,18 @@ export interface OAuthStore {
    */
   consumeCodeIfUnconsumed(code: string, at: number): Promise<boolean>;
   // Access tokens
-  insertToken(token: AccessToken): Promise<void>;
+  /**
+   * Insert a token only while its client is unrevoked and still carries the
+   * exact secret hash authenticated by this exchange. Return true iff the
+   * token was inserted. A persistent implementation must bind both client
+   * predicates to the insert atomically (for example, INSERT … SELECT from the
+   * matching live client) so concurrent revoke or secret rotation cannot mint
+   * authority from a stale client read.
+   */
+  insertTokenIfClientAuthorityMatches(args: {
+    token: AccessToken;
+    expectedClientSecretHash: string;
+  }): Promise<boolean>;
   getToken(token: string): Promise<AccessToken | null>;
   revokeToken(token: string): Promise<void>;
 }
@@ -178,8 +189,20 @@ export class InMemoryOAuthStore implements OAuthStore {
     return true;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
-  async insertToken(t: AccessToken): Promise<void> {
-    this.tokens.set(t.token, t);
+  async insertTokenIfClientAuthorityMatches(args: {
+    token: AccessToken;
+    expectedClientSecretHash: string;
+  }): Promise<boolean> {
+    const client = this.clients.get(args.token.client_id);
+    if (
+      client === undefined ||
+      client.revoked_at !== null ||
+      !constantTimeStringEqual(client.client_secret_hash, args.expectedClientSecretHash)
+    ) {
+      return false;
+    }
+    this.tokens.set(args.token.token, args.token);
+    return true;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async getToken(token: string): Promise<AccessToken | null> {
@@ -420,9 +443,8 @@ export class OAuthService {
     if (client === null || client.revoked_at !== null) {
       throw new OAuthError('invalid_client', 'unknown or revoked client_id');
     }
-    if (
-      !constantTimeStringEqual(client.client_secret_hash, this.secretHasher(args.client_secret))
-    ) {
+    const presentedSecretHash = this.secretHasher(args.client_secret);
+    if (!constantTimeStringEqual(client.client_secret_hash, presentedSecretHash)) {
       throw new OAuthError('invalid_client', 'client_secret mismatch');
     }
     const code = await this.store.getCode(args.code);
@@ -451,14 +473,18 @@ export class OAuthService {
 
     const token = `oat_${randomBytes(32).toString('base64url')}`;
     const now = this.nowFn();
-    await this.store.insertToken({
-      token,
-      client_id: client.client_id,
-      account_id: code.account_id,
-      scope: code.scope,
-      created_at: now,
-      expires_at: now + TOKEN_TTL_SECONDS * 1000,
+    const inserted = await this.store.insertTokenIfClientAuthorityMatches({
+      token: {
+        token,
+        client_id: client.client_id,
+        account_id: code.account_id,
+        scope: code.scope,
+        created_at: now,
+        expires_at: now + TOKEN_TTL_SECONDS * 1000,
+      },
+      expectedClientSecretHash: presentedSecretHash,
     });
+    if (!inserted) throw new OAuthError('invalid_client', 'unknown or revoked client_id');
     return {
       access_token: token,
       token_type: 'Bearer',

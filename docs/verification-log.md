@@ -25306,3 +25306,34 @@ Verification:
   token validity, and admin-route behavior remain covered;
 - focused OAuth behavior/content guards, strict server source/test
   typechecking, targeted linting, formatting, diff, and hooks pass.
+
+## V-589 — OAuth token mint revalidates exact client authority
+
+**Date:** 2026-07-14
+
+Closed the remaining stale-client window in authorization-code exchange. The
+service previously authenticated an active client and its secret, claimed the
+one-time code, then inserted a bearer token without rechecking the client. A
+concurrent client revocation could therefore commit before token insertion and
+still be followed by a new live bearer token. A concurrent secret rotation had
+the same defect: the superseded secret could mint after rotation won.
+
+Token insertion is now conditional on the exact client remaining unrevoked and
+its current secret hash matching the hash authenticated by the exchange. A
+future persistent store must bind both predicates to insertion atomically. If
+authority changes after authentication, exchange returns `invalid_client`, the
+single-use code remains consumed, and no attempted token exists. This avoids
+replay without letting stale client authority mint a successor. Exchange-first
+remains the valid serial outcome; existing bearer-token lifetime policy is
+unchanged.
+
+Verification:
+
+- adversarial stores force revocation and secret rotation independently after
+  client authentication but immediately before token insertion;
+- both exchanges reject, their generated token identifiers are absent from the
+  store, and the authorization code remains consumed;
+- ordinary exchange, concurrent code single-use, PKCE, rotation, revocation,
+  introspection, route, and content guards remain covered;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

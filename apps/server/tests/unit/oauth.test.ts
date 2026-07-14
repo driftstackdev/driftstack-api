@@ -2,7 +2,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
-import { InMemoryOAuthStore, OAuthError, OAuthService } from '../../src/services/oauth.js';
+import {
+  InMemoryOAuthStore,
+  OAuthError,
+  OAuthService,
+  type AccessToken,
+} from '../../src/services/oauth.js';
 import { computeS256Challenge } from '../../src/lib/oauth-pkce.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 
@@ -15,6 +20,30 @@ function makeService(): { svc: OAuthService; store: InMemoryOAuthStore } {
 function makeVerifier(): string {
   // RFC 7636 alphabet, 43..128 chars.
   return randomBytes(48).toString('base64url').slice(0, 64);
+}
+
+class ClientAuthorityChangeBeforeTokenStore extends InMemoryOAuthStore {
+  attemptedToken: string | null = null;
+
+  constructor(private readonly change: 'revoke' | 'rotate') {
+    super();
+  }
+
+  override async insertTokenIfClientAuthorityMatches(args: {
+    token: AccessToken;
+    expectedClientSecretHash: string;
+  }): Promise<boolean> {
+    this.attemptedToken = args.token.token;
+    if (this.change === 'revoke') {
+      await this.revokeClient(args.token.client_id, Date.now());
+    } else {
+      await this.rotateClientSecretHash(
+        args.token.client_id,
+        createHash('sha256').update('replacement-secret').digest('hex'),
+      );
+    }
+    return super.insertTokenIfClientAuthorityMatches(args);
+  }
 }
 
 describe('V-667 OAuthService — registerClient', () => {
@@ -244,13 +273,13 @@ describe('V-667 OAuthService — granted scope restriction (the cross-account/es
 });
 
 describe('V-667 OAuthService — exchangeCode rejection paths', () => {
-  async function setup(): Promise<{
+  async function setup(store: InMemoryOAuthStore = new InMemoryOAuthStore()): Promise<{
     svc: OAuthService;
     reg: { client_id: string; client_secret: string };
     code: string;
     verifier: string;
   }> {
-    const { svc } = makeService();
+    const svc = new OAuthService(store);
     const reg = await svc.registerClient({
       label: 'App',
       redirect_uris: ['https://app.example/cb'],
@@ -341,6 +370,28 @@ describe('V-667 OAuthService — exchangeCode rejection paths', () => {
       (fulfilled[0] as PromiseFulfilledResult<{ access_token: string }>).value.access_token,
     ).toMatch(/^oat_/);
   });
+
+  it.each(['revoke', 'rotate'] as const)(
+    'does not mint when client %s wins after authentication',
+    async (change) => {
+      const store = new ClientAuthorityChangeBeforeTokenStore(change);
+      const { svc, reg, code, verifier } = await setup(store);
+
+      await expect(
+        svc.exchangeCode({
+          code,
+          code_verifier: verifier,
+          client_id: reg.client_id,
+          client_secret: reg.client_secret,
+          redirect_uri: 'https://app.example/cb',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_client' });
+
+      expect(store.attemptedToken).toMatch(/^oat_/);
+      expect(await store.getToken(store.attemptedToken!)).toBeNull();
+      expect((await store.getCode(code))?.consumed_at).not.toBeNull();
+    },
+  );
 
   it('rejects redirect_uri mismatch (binding check)', async () => {
     const { svc, reg, code, verifier } = await setup();

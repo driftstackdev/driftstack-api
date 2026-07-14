@@ -125,7 +125,9 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(/insertCode\(code: AuthorizationCode\): Promise<void>;/);
     expect(body).toMatch(/getCode\(code: string\): Promise<AuthorizationCode \| null>;/);
     expect(body).toMatch(/consumeCodeIfUnconsumed\(code: string, at: number\): Promise<boolean>;/);
-    expect(body).toMatch(/insertToken\(token: AccessToken\): Promise<void>;/);
+    expect(body).toMatch(/insertTokenIfClientAuthorityMatches\(args: \{/);
+    expect(body).toMatch(/expectedClientSecretHash: string;/);
+    expect(body).toMatch(/INSERT … SELECT from the/);
     expect(body).toMatch(/getToken\(token: string\): Promise<AccessToken \| null>;/);
     expect(body).toMatch(/revokeToken\(token: string\): Promise<void>;/);
   });
@@ -189,7 +191,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
 
   it('exchangeCode: 4 invariants pinned (client revoked, consumed_at, client_id mismatch, redirect_uri mismatch, PKCE failure) all → OAuthError', () => {
     expect(body).toMatch(
-      /if \(\s*\n?\s*!constantTimeStringEqual\(client\.client_secret_hash, this\.secretHasher\(args\.client_secret\)\)\s*\n?\s*\) \{\s*\n?\s*throw new OAuthError\('invalid_client', 'client_secret mismatch'\);/,
+      /const presentedSecretHash = this\.secretHasher\(args\.client_secret\);\s*\n?\s*if \(!constantTimeStringEqual\(client\.client_secret_hash, presentedSecretHash\)\) \{\s*\n?\s*throw new OAuthError\('invalid_client', 'client_secret mismatch'\);/,
     );
     expect(body).toMatch(
       /if \(code === null\) throw new OAuthError\('invalid_grant', 'code unknown or expired'\);/,
@@ -209,6 +211,11 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     // Atomic single-use gate: claim-or-reject (no blind unconditional consume).
     expect(body).toMatch(
       /if \(!\(await this\.store\.consumeCodeIfUnconsumed\(args\.code, this\.nowFn\(\)\)\)\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'code already exchanged'\);/,
+    );
+    expect(body).toMatch(/this\.store\.insertTokenIfClientAuthorityMatches\(\{/);
+    expect(body).toMatch(/expectedClientSecretHash: presentedSecretHash,/);
+    expect(body).toMatch(
+      /if \(!inserted\) throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
     );
     expect(body).toMatch(/const token = `oat_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
   });
