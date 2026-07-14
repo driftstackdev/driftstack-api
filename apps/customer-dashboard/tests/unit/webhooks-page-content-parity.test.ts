@@ -49,6 +49,30 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toMatch(/setAttribute\('aria-busy', 'true'\)/);
   });
 
+  it('gates refresh, create, and stale row actions on current list authority', () => {
+    expect(body).toMatch(/data-refresh\s+disabled\s+aria-disabled="true"/);
+    expect(
+      body.match(/data-show-create[\s\S]*?disabled[\s\S]*?aria-disabled="true"/g)?.length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(body).toMatch(/let endpointDataAvailable = false;/);
+    expect(body).toMatch(/let endpointListLoading = false;/);
+    expect(body).toMatch(/if \(!endpointDataAvailable\) \{[\s\S]*?Refresh the live endpoint list/);
+    expect(body).toMatch(/endpointDataAvailable = false;\s*syncEndpointAuthority/);
+    expect(body).toMatch(/endpointDataAvailable = true;\s*syncEndpointAuthority/);
+    expect(body).toContain(
+      "refreshBtn.addEventListener('click', () => void refreshEndpointList())",
+    );
+    expect(body).toContain('button[data-edit], button[data-delete], button[data-rotate]');
+  });
+
+  it('handles storage denial as signed-out and releases the layout gate', () => {
+    expect(body).toMatch(/try \{\s*token = localStorage\.getItem\('ds_web_session_token'\)/);
+    expect(body).toMatch(/catch \{\s*token = '';/);
+    expect(body).toMatch(
+      /showBanner\('Sign in to see and manage your webhook endpoints\.'\);\s*if \(typeof window\.dashboardHydrated === 'function'\) window\.dashboardHydrated\(\);\s*return;/,
+    );
+  });
+
   it('reconciles ambiguous one-shot-secret mutations before suggesting recovery', () => {
     expect(body).toContain("timeoutError.name = 'AbortError'");
     expect(body).toContain('refreshEndpointList(false)');
@@ -59,7 +83,9 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toContain('let endpointSnapshot = [];');
     expect(body).toMatch(/!endpointIdsBefore\.has\(endpoint\.id\)/);
     expect(body).toMatch(/String\(endpoint\.url \|\| ''\) === url/);
-    expect(body).toMatch(/createSubmit\.disabled = createOutcomeBlocked/);
+    expect(body).toMatch(
+      /createSubmit\.disabled = !endpointDataAvailable \|\| createOutcomeBlocked/,
+    );
     expect(body).toMatch(/if \(createOutcomeBlocked\)/);
     expect(body).toMatch(/currentGrace && currentGrace !== previousGrace/);
     expect(body).toMatch(/uncertainRotationIds\.add\(String\(id\)\)/);

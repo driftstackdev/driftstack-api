@@ -29,6 +29,7 @@ interface MockFetchCall {
 
 interface SetUpOpts {
   token?: string;
+  storageDenied?: boolean;
   confirmReturns?: boolean;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
@@ -36,7 +37,11 @@ interface SetUpOpts {
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -76,7 +81,21 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
-  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== undefined) {
+    window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
+  let hydrated = 0;
+  // @ts-expect-error — injected by DashboardLayout
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   const __cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
   window.driftstackConfirm = () => Promise.resolve(__cr);
@@ -96,7 +115,11 @@ function setUpDom(
   installDashboardDeadline(window);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function isHidden(window: JSDOM['window'], selector: string): boolean {
@@ -147,6 +170,82 @@ describe('webhooks page — local integration', () => {
     win = null;
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('keeps signed-out and storage-denied endpoint actions inert and releases hydration', async () => {
+    for (const options of [{}, { storageDenied: true }]) {
+      const result = setUpDom(loadBuiltPage(), {
+        ...options,
+        fetchPlan: [],
+      });
+      win = result.window;
+      await flush();
+
+      expect(result.fetchCalls).toHaveLength(0);
+      expect(
+        result.window.document.querySelector<HTMLButtonElement>('[data-refresh]')?.disabled,
+      ).toBe(true);
+      for (const button of result.window.document.querySelectorAll<HTMLButtonElement>(
+        '[data-show-create]',
+      )) {
+        expect(button.disabled).toBe(true);
+        expect(button.getAttribute('aria-disabled')).toBe('true');
+      }
+      expect(isHidden(result.window, '[data-empty]')).toBe(true);
+      expect(result.window.document.body.textContent).toContain(
+        'Sign in to see and manage your webhook endpoints',
+      );
+      expect(result.hydratedCount()).toBe(1);
+      result.window.close();
+      win = null;
+    }
+  });
+
+  it('failed list authority blocks create until a successful manual refresh', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ detail: 'down' }, 503), () => json({ data: [] })],
+    });
+    win = window;
+    await flush();
+
+    const refresh = window.document.querySelector<HTMLButtonElement>('[data-refresh]');
+    const create = window.document.querySelector<HTMLButtonElement>('[data-show-create]');
+    const form = window.document.querySelector<HTMLFormElement>('[data-create-form]');
+    expect(refresh?.disabled).toBe(false);
+    expect(create?.disabled).toBe(true);
+    form?.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+    expect(window.document.querySelector('[data-create-error]')?.textContent).toContain(
+      'Refresh the live endpoint list',
+    );
+
+    refresh?.click();
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
+    expect(create?.disabled).toBe(false);
+    expect(isHidden(window, '[data-empty]')).toBe(false);
+    expect(isHidden(window, '[data-banner]')).toBe(true);
+  });
+
+  it('a failed refresh revokes stale row mutations and create authority', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ data: [ENDPOINT] }), () => json({ detail: 'down' }, 503)],
+    });
+    win = window;
+    await flush();
+    expect(window.document.querySelector<HTMLButtonElement>('[data-delete]')?.disabled).toBe(false);
+
+    window.document.querySelector<HTMLButtonElement>('[data-refresh]')?.click();
+    await flush();
+
+    expect(window.document.querySelector<HTMLButtonElement>('[data-delete]')?.disabled).toBe(true);
+    expect(window.document.querySelector<HTMLButtonElement>('[data-show-create]')?.disabled).toBe(
+      true,
+    );
+    expect(window.document.body.textContent).toContain("Couldn't load your webhook endpoints");
+  });
 
   it('empty list: shows empty state, hides the list', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {

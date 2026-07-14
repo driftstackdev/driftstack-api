@@ -50,7 +50,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         >
           Docs
         </a>
-        <button type="button" data-show-create class="btn-primary">New endpoint</button>
+        <button
+          type="button"
+          data-refresh
+          disabled
+          aria-disabled="true"
+          title="Available after sign-in."
+          class="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        >Refresh</button>
+        <button
+          type="button"
+          data-show-create
+          disabled
+          aria-disabled="true"
+          title="Live endpoints must load before creating another."
+          class="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >New endpoint</button>
       </div>
     </header>
 
@@ -179,7 +194,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button
             type="submit"
             data-create-submit
-            class="btn-primary"
+            disabled
+            aria-disabled="true"
+            title="Live endpoints must load before creating another."
+            class="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             Create endpoint
           </button>
@@ -437,7 +455,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           dead anchor (no #new target, no handler): the primary CTA for
           every zero-endpoint customer did nothing. Now the same
           data-show-create trigger the header button uses. */}
-      <button type="button" data-show-create class="btn-primary mt-6 inline-flex"
+      <button
+        type="button"
+        data-show-create
+        disabled
+        aria-disabled="true"
+        title="Live endpoints must load before creating another."
+        class="btn-primary mt-6 inline-flex disabled:cursor-not-allowed disabled:opacity-50"
         >Create endpoint</button
       >
     </div>
@@ -471,9 +495,9 @@ const apiBaseUrl = resolveApiBaseUrl();
   <!--
  — progressive-enhancement script. Reads
     ds_web_session_token from localStorage, fetches /v1/webhooks,
-    replaces the endpoint list with live data. Falls back to
-    mock-rendered list when token absent or fetch fails. Mirrors
- /sessions pattern.
+    replaces the endpoint list with live data. Signed-out and failed
+    reads remain unavailable and non-actionable; no preview data is
+    rendered. Mirrors the /sessions authority pattern.
   -->
   <script is:inline define:vars={{ apiBaseUrl }}>
     (function () {
@@ -482,7 +506,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const ul = root.querySelector('[data-list]');
       const empty = root.querySelector('[data-empty]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const refreshBtn = root.querySelector('[data-refresh]');
+      let token = '';
+      try {
+        token = localStorage.getItem('ds_web_session_token') || '';
+      } catch {
+        token = '';
+      }
       const WEBHOOK_TIMEOUT_MS = 15_000;
       const actionButtonsInFlight = new WeakSet();
       const endpointMutationIdsInFlight = new Set();
@@ -497,6 +527,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       let createOutcomeBlocked = false;
       let createOutcomeReason = '';
       let editInFlight = false;
+      let endpointDataAvailable = false;
+      let endpointListLoading = false;
 
       function boundedFetch(url, init = {}) {
         return window.driftstackFetchWithDeadline(url, init, WEBHOOK_TIMEOUT_MS)
@@ -526,9 +558,49 @@ const apiBaseUrl = resolveApiBaseUrl();
       const revealSecret = root.querySelector('[data-reveal-secret]');
       const revealDismiss = root.querySelector('[data-reveal-dismiss]');
 
+      function syncEndpointAuthority(reason) {
+        const unavailableReason = reason || 'Live endpoints must load before creating another.';
+        showCreateBtns.forEach((button) => {
+          button.disabled = !endpointDataAvailable;
+          button.setAttribute('aria-disabled', endpointDataAvailable ? 'false' : 'true');
+          if (endpointDataAvailable) button.removeAttribute('title');
+          else button.title = unavailableReason;
+        });
+        if (createSubmit && !createInFlight) {
+          const blocked = !endpointDataAvailable || createOutcomeBlocked;
+          createSubmit.disabled = blocked;
+          createSubmit.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+          if (!endpointDataAvailable) createSubmit.title = unavailableReason;
+          else if (!createOutcomeBlocked) createSubmit.removeAttribute('title');
+        }
+        if (refreshBtn) {
+          const refreshDisabled = !token || endpointListLoading;
+          refreshBtn.disabled = refreshDisabled;
+          refreshBtn.setAttribute('aria-disabled', refreshDisabled ? 'true' : 'false');
+          if (!token) refreshBtn.title = 'Available after sign-in.';
+          else if (endpointListLoading) refreshBtn.title = 'Refreshing live endpoints.';
+          else refreshBtn.removeAttribute('title');
+        }
+        if (!endpointDataAvailable && ul) {
+          ul
+            .querySelectorAll(
+              'button[data-edit], button[data-delete], button[data-rotate], button[data-test], button[data-open-deliveries], button[data-toggle-deliveries], button[data-replay]',
+            )
+            .forEach((button) => {
+              button.disabled = true;
+              button.setAttribute('aria-disabled', 'true');
+              button.title = unavailableReason;
+            });
+        }
+      }
+
       function showCreate() {
-        if (!token) {
-          showBanner('Sign in to create webhook endpoints.');
+        if (!endpointDataAvailable) {
+          showBanner(
+            token
+              ? 'Refresh the live endpoint list before creating another endpoint.'
+              : 'Sign in to create webhook endpoints.',
+          );
           return;
         }
         if (createWrap) createWrap.classList.remove('hidden');
@@ -573,6 +645,10 @@ const apiBaseUrl = resolveApiBaseUrl();
                 ? 'This endpoint was likely created, but its one-shot signing secret was lost with the timed-out response. Delete the matching endpoint before creating another.'
                 : 'Endpoint creation is locked because the prior outcome could not be verified. Reload and review the endpoint list before retrying.',
             );
+            return;
+          }
+          if (!endpointDataAvailable) {
+            showCreateError('Refresh the live endpoint list before creating another endpoint.');
             return;
           }
           if (createError) {
@@ -628,7 +704,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               // form is stuck on 'Creating…' after the first create and a
               // second endpoint can never be submitted without a reload.
               if (createSubmit) {
-                createSubmit.disabled = false;
+                createSubmit.disabled = !endpointDataAvailable;
                 createSubmit.textContent = 'Create endpoint';
               }
               if (createReveal && revealSecret) {
@@ -678,14 +754,23 @@ const apiBaseUrl = resolveApiBaseUrl();
             .finally(() => {
               createInFlight = false;
               if (createSubmit) {
-                createSubmit.disabled = createOutcomeBlocked;
+                createSubmit.disabled = !endpointDataAvailable || createOutcomeBlocked;
+                createSubmit.setAttribute(
+                  'aria-disabled',
+                  !endpointDataAvailable || createOutcomeBlocked ? 'true' : 'false',
+                );
                 createSubmit.setAttribute('aria-busy', 'false');
                 createSubmit.textContent = createOutcomeBlocked
                   ? createOutcomeReason === 'created'
                     ? 'Already created'
                     : 'Verify before retrying'
                   : 'Create endpoint';
-                if (createOutcomeBlocked) {
+                if (!endpointDataAvailable) {
+                  createSubmit.setAttribute(
+                    'title',
+                    'Refresh the live endpoint list before creating another endpoint.',
+                  );
+                } else if (createOutcomeBlocked) {
                   createSubmit.setAttribute(
                     'title',
                     createOutcomeReason === 'created'
@@ -704,6 +789,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!banner) return;
         banner.textContent = text;
         banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.textContent = '';
+        banner.classList.add('hidden');
       }
 
       function escapeHtml(s) {
@@ -1742,12 +1832,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         // S32 2026-07-07 (fable-frontend-audit) — no preview data exists;
         // show the empty state, not a promise of data below.
         ul.classList.add('hidden');
-        empty.classList.remove('hidden');
+        empty.classList.add('hidden');
+        syncEndpointAuthority('Available after sign-in.');
         showBanner('Sign in to see and manage your webhook endpoints.');
+        if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
         return;
       }
 
       function refreshEndpointList(showLoadError = true) {
+        if (endpointListLoading) return Promise.resolve(false);
+        endpointListLoading = true;
+        endpointDataAvailable = false;
+        syncEndpointAuthority('Refreshing the live endpoint list.');
         return boundedFetch(apiBaseUrl + '/v1/webhooks', {
           // Every mutation (create/edit/delete/rotate/test) carries the act-as
           // team header; the LIST must too, or acting-as a team renders the
@@ -1778,6 +1874,9 @@ const apiBaseUrl = resolveApiBaseUrl();
               wireTestButtons();
               wireRotateButtons();
             }
+            endpointDataAvailable = true;
+            syncEndpointAuthority();
+            hideBanner();
             // S32 2026-07-07 (fable-frontend-audit) — the old success banner
             // claimed delivery counts are "not exposed via /v1/webhooks",
             // but V-185 added delivery_counts and the cards render them; the
@@ -1785,6 +1884,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             return true;
           })
           .catch((err) => {
+            endpointDataAvailable = false;
+            syncEndpointAuthority('Refresh the live endpoint list to restore actions.');
             // S32 2026-07-07 (fable-frontend-audit) — the old copy said
             // "Showing preview data below", but no preview data is ever
             // rendered (MOCK_WEBHOOKS was dead code) — the customer was left
@@ -1803,9 +1904,18 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
             }
             return false;
+          })
+          .finally(() => {
+            endpointListLoading = false;
+            syncEndpointAuthority(
+              endpointDataAvailable
+                ? undefined
+                : 'Refresh the live endpoint list to restore actions.',
+            );
           });
       }
 
+      if (refreshBtn) refreshBtn.addEventListener('click', () => void refreshEndpointList());
       refreshEndpointList()
         .finally(function () {
           // 2026-05-21 — signal the layout's opacity-gate that the
