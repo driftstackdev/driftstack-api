@@ -1668,8 +1668,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         const codes = Array.from(
           mfaRecoveryList.querySelectorAll('li'),
         ).map((li) => li.textContent || '');
-        navigator.clipboard
-          .writeText(codes.join('\n'))
+        window
+          .driftstackWriteClipboard(codes.join('\n'))
           .then(() => showBanner('Recovery codes copied to clipboard.'))
           .catch(() => showBanner("Copy failed. Select + copy manually."));
       }

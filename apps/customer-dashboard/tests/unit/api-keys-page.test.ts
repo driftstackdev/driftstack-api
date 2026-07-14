@@ -399,6 +399,16 @@ describe('api-keys page — local integration', () => {
     expect(textMutations).toBeGreaterThanOrEqual(2);
     expect(clipboardWrites).toEqual([secret, secret, secret]);
 
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    copy.click();
+    await flushMicrotasks();
+    expect(feedback.textContent).toMatch(/copy failed.*manually/i);
+    expect(feedback.classList.contains('hidden')).toBe(false);
+    expect(clipboardWrites).toEqual([secret, secret, secret]);
+
     (window.document.querySelector('[data-created-dismiss]') as HTMLButtonElement).click();
     expect(feedback.textContent).toBe('');
     expect(feedback.classList.contains('hidden')).toBe(true);

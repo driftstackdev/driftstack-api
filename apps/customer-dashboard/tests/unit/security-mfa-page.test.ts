@@ -525,6 +525,36 @@ describe('security page — MFA recovery-codes regenerate (enrolled)', () => {
         false,
       );
     }
+
+    const copy = window.document.querySelector(
+      '[data-button="mfa-recovery-copy"]',
+    ) as HTMLButtonElement;
+    copy.click();
+    await flush();
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /copy failed.*select.*copy manually/i,
+    );
+
+    const writes: string[] = [];
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText(value: string) {
+          writes.push(value);
+          return Promise.resolve();
+        },
+      },
+    });
+    copy.click();
+    await flush();
+    expect(writes).toEqual([
+      Array.from(codes)
+        .map((code) => code.textContent ?? '')
+        .join('\n'),
+    ]);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /recovery codes copied to clipboard/i,
+    );
   });
 
   it('regenerate cancelled at confirm: no POST fired, the panel stays hidden', async () => {

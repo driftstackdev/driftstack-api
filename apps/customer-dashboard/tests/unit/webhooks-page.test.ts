@@ -31,6 +31,7 @@ interface SetUpOpts {
   token?: string;
   storageDenied?: boolean;
   confirmReturns?: boolean;
+  clipboardPlan?: Array<(text: string) => Promise<void>>;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
 
@@ -40,6 +41,7 @@ function setUpDom(
 ): {
   window: JSDOM['window'];
   fetchCalls: MockFetchCall[];
+  clipboardWrites: string[];
   hydratedCount: () => number;
 } {
   const scriptBodies: string[] = [];
@@ -67,6 +69,8 @@ function setUpDom(
   const { window } = dom;
   const fetchCalls: MockFetchCall[] = [];
   const plan = [...(opts.fetchPlan ?? [])];
+  const clipboardWrites: string[] = [];
+  const clipboardPlan = [...(opts.clipboardPlan ?? [])];
   // @ts-expect-error — jsdom global is loose
   if (typeof window.Response !== 'function') window.Response = Response;
   // @ts-expect-error — jsdom global is loose
@@ -81,6 +85,15 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText(text: string) {
+        clipboardWrites.push(text);
+        return clipboardPlan.shift()?.(text) ?? Promise.resolve();
+      },
+    },
+  });
   if (opts.storageDenied === true) {
     Object.defineProperty(Object.getPrototypeOf(window.localStorage), 'getItem', {
       configurable: true,
@@ -118,6 +131,7 @@ function setUpDom(
   return {
     window: window as JSDOM['window'],
     fetchCalls,
+    clipboardWrites,
     hydratedCount: () => hydrated,
   };
 }
@@ -431,9 +445,10 @@ describe('webhooks page — local integration', () => {
   });
 
   it('rotate-secret: confirm-gated POST /:id/rotate-secret reveals the new secret', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+    const { window, fetchCalls, clipboardWrites } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       confirmReturns: true,
+      clipboardPlan: [() => Promise.reject(new Error('clipboard denied')), () => Promise.resolve()],
       fetchPlan: [
         () => json({ data: [ENDPOINT] }),
         () => json({ secret: 'whsec_ROTATED', grace_expires_at: '2026-05-21T10:00:00.000Z' }),
@@ -458,6 +473,32 @@ describe('webhooks page — local integration', () => {
     expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe(
       'whsec_ROTATED',
     );
+
+    const copy = window.document.querySelector('[data-rotate-copy]') as HTMLButtonElement;
+    copy.click();
+    await flush();
+    expect(copy.textContent).toMatch(/copy failed/i);
+    expect(copy.disabled).toBe(false);
+    expect(copy.getAttribute('aria-busy')).toBe('false');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /select the secret manually/i,
+    );
+
+    copy.click();
+    copy.click();
+    await flush();
+    expect(clipboardWrites).toEqual(['whsec_ROTATED', 'whsec_ROTATED']);
+    expect(copy.textContent).toBe('Copied ✓');
+    expect(copy.getAttribute('aria-label')).toBe('Signing secret copied');
+
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    copy.click();
+    await flush();
+    expect(copy.textContent).toMatch(/copy failed/i);
+    expect(clipboardWrites).toHaveLength(2);
   });
 
   it('serializes every row action while one endpoint mutation is pending', async () => {

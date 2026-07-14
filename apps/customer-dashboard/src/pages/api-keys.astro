@@ -1009,8 +1009,8 @@ npm i @driftstack/sdk</code></pre>
           if (!rotatePlaintext) return;
           const plaintext = rotatePlaintext.textContent || '';
           if (!plaintext) return;
-          navigator.clipboard
-            .writeText(plaintext)
+          window
+            .driftstackWriteClipboard(plaintext)
             .then(() => {
               showCopyFeedback(rotateCopyFb, 'Copied.', true);
             })
@@ -1270,8 +1270,8 @@ npm i @driftstack/sdk</code></pre>
       revealCopy.addEventListener('click', () => {
         const value = revealPre.textContent || '';
         if (!value) return;
-        navigator.clipboard
-          .writeText(value)
+        window
+          .driftstackWriteClipboard(value)
           .then(() => {
             showCopyFeedback(revealCopyFb, 'Copied.', true);
           })

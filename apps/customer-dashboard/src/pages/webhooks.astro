@@ -283,7 +283,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
       <p data-rotate-grace-expires class="mt-1 text-sm text-tk-ink"></p>
       <div class="mt-4 flex flex-wrap gap-2">
-        <button type="button" data-rotate-copy class="btn-primary text-sm">
+        <button
+          type="button"
+          data-rotate-copy
+          aria-label="Copy signing secret"
+          aria-live="polite"
+          aria-atomic="true"
+          class="btn-primary text-sm"
+        >
           Copy secret
         </button>
         <button type="button" data-rotate-dismiss class="btn-secondary text-sm">
@@ -1653,9 +1660,37 @@ const apiBaseUrl = resolveApiBaseUrl();
       const rotateGraceEl = root.querySelector('[data-rotate-grace-expires]');
       const rotateCopyBtn = root.querySelector('[data-rotate-copy]');
       const rotateDismissBtn = root.querySelector('[data-rotate-dismiss]');
+      let rotateCopyInFlight = false;
+      let rotateCopyGeneration = 0;
+      let rotateCopyResetTimer = null;
+
+      function resetRotateCopyFeedback() {
+        if (!rotateCopyBtn) return;
+        if (rotateCopyResetTimer !== null) window.clearTimeout(rotateCopyResetTimer);
+        rotateCopyResetTimer = null;
+        rotateCopyBtn.textContent = 'Copy secret';
+        rotateCopyBtn.setAttribute('aria-label', 'Copy signing secret');
+      }
+
+      function showRotateCopyResult(label, ariaLabel, generation) {
+        if (!rotateCopyBtn || generation !== rotateCopyGeneration) return;
+        resetRotateCopyFeedback();
+        rotateCopyBtn.textContent = label;
+        rotateCopyBtn.setAttribute('aria-label', ariaLabel);
+        rotateCopyResetTimer = window.setTimeout(() => {
+          if (generation === rotateCopyGeneration) resetRotateCopyFeedback();
+        }, 2200);
+      }
 
       function showRotateReveal(endpointId, secret, graceExpiresAt) {
         if (!rotateRevealEl || !rotateSecretEl) return;
+        rotateCopyGeneration += 1;
+        rotateCopyInFlight = false;
+        resetRotateCopyFeedback();
+        if (rotateCopyBtn) {
+          rotateCopyBtn.disabled = false;
+          rotateCopyBtn.setAttribute('aria-busy', 'false');
+        }
         if (rotateEndpointIdEl) rotateEndpointIdEl.textContent = endpointId;
         rotateSecretEl.textContent = secret;
         if (rotateGraceEl) {
@@ -1667,6 +1702,13 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function hideRotateReveal() {
         if (!rotateRevealEl || !rotateSecretEl) return;
+        rotateCopyGeneration += 1;
+        rotateCopyInFlight = false;
+        resetRotateCopyFeedback();
+        if (rotateCopyBtn) {
+          rotateCopyBtn.disabled = false;
+          rotateCopyBtn.setAttribute('aria-busy', 'false');
+        }
         rotateRevealEl.classList.add('hidden');
         // Clear secret from DOM so it isn't recoverable post-dismiss.
         rotateSecretEl.textContent = '';
@@ -1681,22 +1723,34 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
       if (rotateCopyBtn) {
-        rotateCopyBtn.addEventListener('click', () => {
+        rotateCopyBtn.addEventListener('click', async () => {
           if (!rotateSecretEl) return;
           const secret = rotateSecretEl.textContent || '';
-          if (!secret) return;
-          navigator.clipboard
-            .writeText(secret)
-            .then(() => {
-              const orig = rotateCopyBtn.textContent;
-              rotateCopyBtn.textContent = 'Copied ✓';
-              window.setTimeout(() => {
-                rotateCopyBtn.textContent = orig;
-              }, 1500);
-            })
-            .catch(() => {
-              showBanner('Copy failed. Select the secret manually.');
-            });
+          if (!secret || rotateCopyInFlight) return;
+          const generation = ++rotateCopyGeneration;
+          rotateCopyInFlight = true;
+          resetRotateCopyFeedback();
+          rotateCopyBtn.textContent = 'Copying…';
+          rotateCopyBtn.setAttribute('aria-label', 'Copying signing secret');
+          rotateCopyBtn.disabled = true;
+          rotateCopyBtn.setAttribute('aria-busy', 'true');
+          try {
+            await window.driftstackWriteClipboard(secret);
+            showRotateCopyResult('Copied ✓', 'Signing secret copied', generation);
+          } catch {
+            showRotateCopyResult(
+              'Copy failed',
+              'Could not copy signing secret; select it manually',
+              generation,
+            );
+            showBanner('Copy failed. Select the secret manually.');
+          } finally {
+            if (generation === rotateCopyGeneration) {
+              rotateCopyInFlight = false;
+              rotateCopyBtn.disabled = false;
+              rotateCopyBtn.setAttribute('aria-busy', 'false');
+            }
+          }
         });
       }
 
