@@ -107,8 +107,11 @@ describe('routes/account-notifications.ts content parity', () => {
     );
     expect(body).toMatch(/const activeByAccount = new Map<string, number>\(\);/);
     expect(body).toMatch(/if \(active >= maxStreamsPerAccount\) \{/);
-    expect(body).toMatch(/\.code\(429\)/);
-    expect(body).toMatch(/too_many_notification_streams/);
+    expect(body).toMatch(/throw new RateLimitedError\(/);
+    expect(body).toMatch(
+      /At most \$\{maxStreamsPerAccount\.toString\(\)\} concurrent notification streams/,
+    );
+    expect(body).not.toMatch(/\.send\(\{\s*\n?\s*error:/);
     expect(body).toMatch(/activeByAccount\.set\(accountId, active \+ 1\);/);
     expect(body).toMatch(/const remaining = \(activeByAccount\.get\(accountId\) \?\? 1\) - 1;/);
   });

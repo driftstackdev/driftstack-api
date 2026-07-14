@@ -43,4 +43,70 @@ describe('broad read floor on GET /v1/account/me/notifications', () => {
     expect(res.headers['content-type'] ?? '').not.toContain('text/event-stream');
     expect(res.json<{ detail: string }>().detail).toBe('This action requires the "read" scope.');
   });
+
+  it('returns a correlated problem at connection 11 and reuses capacity after disconnect', async () => {
+    fx = await buildTestApp();
+    const address = await fx.app.listen({ host: '127.0.0.1', port: 0 });
+    const controllers: AbortController[] = [];
+    const streamResponses: Response[] = [];
+    const authorization = `Bearer ${fx.plaintext}`;
+
+    try {
+      for (let i = 0; i < 10; i++) {
+        const controller = new AbortController();
+        controllers.push(controller);
+        const response = await fetch(`${address}/v1/account/me/notifications`, {
+          headers: { authorization },
+          signal: controller.signal,
+        });
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
+        streamResponses.push(response);
+      }
+
+      const denied = await fetch(`${address}/v1/account/me/notifications`, {
+        headers: { authorization, connection: 'close' },
+      });
+      expect(denied.status).toBe(429);
+      expect(denied.headers.get('retry-after')).toBe('30');
+      expect(denied.headers.get('content-type')).toContain('application/problem+json');
+      const problem = (await denied.json()) as Record<string, unknown>;
+      expect(problem).toMatchObject({
+        type: 'https://errors.driftstack.dev/rate-limited',
+        title: 'Too Many Requests',
+        status: 429,
+        detail: 'At most 10 concurrent notification streams are allowed per account.',
+        retry_after_seconds: 30,
+      });
+      expect(problem['instance']).toBe(denied.headers.get('x-request-id'));
+
+      controllers.shift()!.abort();
+
+      let replacementAccepted = false;
+      for (let attempt = 0; attempt < 20 && !replacementAccepted; attempt++) {
+        const controller = new AbortController();
+        const replacement = await fetch(`${address}/v1/account/me/notifications`, {
+          headers: { authorization, connection: 'close' },
+          signal: controller.signal,
+        });
+        if (replacement.status === 200) {
+          controllers.push(controller);
+          streamResponses.push(replacement);
+          replacementAccepted = true;
+        } else {
+          controller.abort();
+          await replacement.body?.cancel();
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      }
+      expect(replacementAccepted).toBe(true);
+    } finally {
+      for (const controller of controllers) controller.abort();
+      await Promise.allSettled(
+        streamResponses.map(async (response) => {
+          await response.body?.cancel();
+        }),
+      );
+    }
+  });
 });

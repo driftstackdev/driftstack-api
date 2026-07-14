@@ -23,6 +23,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { NotificationEventBus } from '../services/notification-event-bus.js';
 import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
+import { RateLimitedError } from '../lib/errors.js';
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -90,16 +91,10 @@ export function registerAccountNotificationsRoutes(
       // 429 (the client backs off + retries) rather than evicting a live one.
       const active = activeByAccount.get(accountId) ?? 0;
       if (active >= maxStreamsPerAccount) {
-        void reply
-          .code(429)
-          .header('retry-after', '30')
-          .send({
-            error: {
-              code: 'too_many_notification_streams',
-              message: `at most ${maxStreamsPerAccount} concurrent notification streams per account`,
-            },
-          });
-        return;
+        throw new RateLimitedError(
+          30,
+          `At most ${maxStreamsPerAccount.toString()} concurrent notification streams are allowed per account.`,
+        );
       }
       // NOTE: the concurrency slot is acquired LATER — just before reply.hijack(),
       // once the stream is fully wired + cleanup is registered — NOT here. Acquiring

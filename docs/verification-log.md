@@ -25426,3 +25426,29 @@ Verification:
   and structural coverage passes 21 files and 231 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-592 — notification-stream capacity uses the API problem contract
+
+**Date:** 2026-07-14
+
+Moved the authenticated account-notification stream's capacity denial onto the
+canonical error path. Connection eleven for one account previously returned an
+inline `{error:{code,message}}` object with ordinary JSON, no stable Driftstack
+problem type, and no request-id correlation despite being a `/v1` response.
+
+The ceiling remains ten concurrent streams per account and a rejected client
+still receives 429 with a 30-second `Retry-After`. The denial is now a typed
+RateLimited problem with `retry_after_seconds` and an `instance` matching the
+response request id. Successful EventSource/header authentication, broad-read
+scope floor, SSE framing, heartbeat reauthentication, backpressure closure,
+and idempotent capacity cleanup are unchanged.
+
+Verification:
+
+- a real HTTP test holds ten authenticated SSE responses open, validates every
+  status/header/problem/correlation field on connection eleven, aborts one live
+  response, and proves a replacement stream acquires the released slot;
+- focused route behavior, source-contract, and notification schema coverage
+  passes 3 files and 24 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.
