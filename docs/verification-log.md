@@ -25744,3 +25744,25 @@ Verification:
   minting;
 - auth service and documentation coverage passes 4 files and 155 tests;
 - Docs typecheck/build, targeted formatting, diff, and hooks pass.
+
+## V-601 — public auto-incidents never reflect probe URLs
+
+**Date:** 2026-07-14
+
+Removed the configured health-probe URL from automatically created public
+incident descriptions. The existing network-error sanitizer already collapsed
+raw transport failures, but the URL itself could still disclose an internal
+failover hostname, port, path, or query if a target were expanded or
+misconfigured. The public title and affected-component id identify the service;
+operators retain the exact target id and raw error in private probe history,
+while structured diagnostics retain the target id.
+
+Verification:
+
+- a hostile internal URL carrying a token-like query and a raw connection error
+  carrying IP/password-like text produces only the fixed generic public phrase;
+- the exact raw diagnostic remains present in the private probe row;
+- focused runtime and structural guards preserve failure thresholds, safe
+  `HTTP nnn` detail, auto-resolution, pruning, response disposal, and timeouts;
+- strict server source/test typechecking, targeted linting/formatting, diff, and
+  hooks pass.

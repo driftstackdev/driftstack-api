@@ -130,12 +130,22 @@ function makeIncidents(
 ): {
   service: IncidentsService;
   state: {
-    creates: Array<{ title: string; autoProbeTarget: string | null }>;
+    creates: Array<{
+      title: string;
+      description: string;
+      public: boolean;
+      autoProbeTarget: string | null;
+    }>;
     resolves: string[];
   };
 } {
   const state = {
-    creates: [] as Array<{ title: string; autoProbeTarget: string | null }>,
+    creates: [] as Array<{
+      title: string;
+      description: string;
+      public: boolean;
+      autoProbeTarget: string | null;
+    }>,
     resolves: [] as string[],
   };
   let openIncident = opts.open ?? null;
@@ -168,6 +178,8 @@ function makeIncidents(
     create: (input: CreateIncidentInput) => {
       state.creates.push({
         title: input.title,
+        description: input.description,
+        public: input.public,
         autoProbeTarget: input.autoProbeTarget ?? null,
       });
       openIncident = fakeIncident;
@@ -265,6 +277,39 @@ describe('V-553.B-31 HealthProbeService — threshold auto-create', () => {
     expect(state.creates).toHaveLength(1);
     expect(state.creates[0]?.title).toContain('API');
     expect(state.creates[0]?.autoProbeTarget).toBe('api');
+  });
+
+  it('never reflects the configured probe URL or raw network diagnostic in a public incident', async () => {
+    const hostileTarget: HealthProbeTarget = {
+      id: 'api',
+      label: 'API',
+      url: 'http://internal-api.local:8443/health?access_token=do-not-publish',
+    };
+    const rawError = 'connect ECONNREFUSED 10.0.0.7:8443 password=do-not-publish';
+    const { logger } = makeLogger();
+    const probes = new FakeProbesRepo();
+    const { service, state } = makeIncidents();
+    const prober = new FakeProber([fail(rawError), fail(rawError), fail(rawError)]);
+    const svc = new HealthProbeService(probes, service, prober, logger, {
+      targets: [hostileTarget],
+      failureThreshold: 3,
+    });
+
+    for (let i = 0; i < 3; i += 1) await svc.processTick(NOW);
+
+    expect(state.creates).toHaveLength(1);
+    expect(state.creates[0]).toMatchObject({
+      public: true,
+      description:
+        'Auto-detected: 3 consecutive health checks failed. Latest error: a connectivity error.',
+    });
+    expect(state.creates[0]?.description).not.toContain(hostileTarget.url);
+    expect(state.creates[0]?.description).not.toContain('internal-api.local');
+    expect(state.creates[0]?.description).not.toContain('access_token');
+    expect(state.creates[0]?.description).not.toContain('10.0.0.7');
+    expect(state.creates[0]?.description).not.toContain('password');
+    // Operators retain the exact private diagnostic in probe history.
+    expect(probes.rows[0]?.errorMessage).toBe(rawError);
   });
 
   it('does NOT auto-create when an open auto-incident already exists', async () => {

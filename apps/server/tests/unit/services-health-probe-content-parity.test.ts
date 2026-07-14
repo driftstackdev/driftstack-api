@@ -123,8 +123,9 @@ describe('W408.A apps/server/src/services/health-probe.ts content parity', () =>
       /if \(\s*\n?\s*!open &&\s*\n?\s*recent\.length >= this\.failureThreshold &&\s*\n?\s*recent\.slice\(0, this\.failureThreshold\)\.every\(\(p\) => !p\.ok\)\s*\n?\s*\) \{/,
     );
     expect(body).toMatch(
-      /const created = await this\.incidents\.create\(\{\s*\n?\s*title: `\$\{target\.label\} health check failing`,\s*\n?\s*description: `Auto-detected: \$\{this\.failureThreshold\} consecutive failed probes against \$\{target\.url\}\. Latest error: \$\{sanitizePublicProbeError\(lastErr\)\}\.`,\s*\n?\s*severity: 'major',\s*\n?\s*affectedComponents: \[target\.id\],\s*\n?\s*public: true,\s*\n?\s*startedAt: now,\s*\n?\s*createdByAdminId: null,\s*\n?\s*createdByAdminKeyId: null,\s*\n?\s*autoProbeTarget: target\.id,/,
+      /const created = await this\.incidents\.create\(\{\s*\n?\s*title: `\$\{target\.label\} health check failing`,\s*\n?\s*description: `Auto-detected: \$\{this\.failureThreshold\} consecutive health checks failed\. Latest error: \$\{sanitizePublicProbeError\(lastErr\)\}\.`,\s*\n?\s*severity: 'major',\s*\n?\s*affectedComponents: \[target\.id\],\s*\n?\s*public: true,\s*\n?\s*startedAt: now,\s*\n?\s*createdByAdminId: null,\s*\n?\s*createdByAdminKeyId: null,\s*\n?\s*autoProbeTarget: target\.id,/,
     );
+    expect(body).not.toMatch(/description:.*target\.url/);
     expect(body).toMatch(/'auto-created incident on health probe failure threshold',/);
   });
 

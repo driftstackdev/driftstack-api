@@ -250,9 +250,15 @@ export class HealthProbeService {
       recent.slice(0, this.failureThreshold).every((p) => !p.ok)
     ) {
       const lastErr = recent[0]?.errorMessage ?? null;
+      // This description is published verbatim on the unauthenticated status
+      // site. Never interpolate `target.url`: an operator may legitimately
+      // point a probe at an internal failover origin or a URL carrying
+      // deployment-specific path/query detail. The stable title/component id
+      // identifies the affected surface; the private probe row retains the
+      // exact target id and raw diagnostic for operators.
       const created = await this.incidents.create({
         title: `${target.label} health check failing`,
-        description: `Auto-detected: ${this.failureThreshold} consecutive failed probes against ${target.url}. Latest error: ${sanitizePublicProbeError(lastErr)}.`,
+        description: `Auto-detected: ${this.failureThreshold} consecutive health checks failed. Latest error: ${sanitizePublicProbeError(lastErr)}.`,
         severity: 'major',
         affectedComponents: [target.id],
         public: true,
