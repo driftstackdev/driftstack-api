@@ -125,6 +125,18 @@ const REST_VELOCITY_THRESHOLD_PX_PER_SEC = 5;
 /** Hard cap on duration to bound test runtime. ~5 seconds is generous. */
 const MAX_DURATION_MS = 5000;
 
+/** Slowest useful event cadence. A lower rate collapses visible motion into jumps. */
+const MAX_TICK_INTERVAL_MS = 100;
+
+/** Generous upper bound beyond observed human finger-flick velocity. */
+const MAX_INITIAL_VELOCITY_PX_PER_SEC = 12_000;
+
+/** Slowest supported friction; also keeps the analytic integral stable. */
+const MIN_DECAY_RATE = 0.1;
+
+/** Avoid an effectively instantaneous one-sample stop. Defaults peak at 6.8/s. */
+const MAX_DECAY_RATE = 20;
+
 /**
  * Hard floor on `tickIntervalMs`. The generation loop below is bounded by
  * WALL-CLOCK duration (`tMs <= MAX_DURATION_MS`), not by iteration count, so
@@ -203,7 +215,9 @@ function defaultSeed(opts: GenerateScrollVelocityProfileOpts): string {
  * starts at `initialVelocityPxPerSec` and decays as
  *   v(t) = v0 * exp(-decayRate * t)
  * sampled at `tickIntervalMs` intervals until velocity drops below the
- * rest threshold (5 px/s) or `MAX_DURATION_MS` is reached.
+ * rest threshold (5 px/s). Explicit overrides that cannot settle inside
+ * `MAX_DURATION_MS` are rejected instead of compressing unseen motion into a
+ * synthetic final tick.
  *
  * Direction sign convention:
  *   - 'down' / 'right' → positive `deltaPx`
@@ -232,16 +246,18 @@ export function generateScrollVelocityProfile(
         `iteration count (MAX_DURATION_MS / tickIntervalMs) unbounded`,
     );
   }
-  // Override inputs bypass the default-branch clamps (Math.max(1, v0) /
-  // Math.max(0.1, decayRate)), so validate them here. A non-positive
-  // initial velocity yields a dead/reverse scroll; a negative decay rate
-  // makes v(t) GROW — a physically-impossible accelerating flick that no
-  // real finger produces (a behavioural tell). A decayRate override of 0
-  // would yield a non-decaying constant-velocity scroll that never slows —
-  // equally impossible for a real finger flick (it always decays under
-  // friction) — so the override is FLOORED to 0.1 below, matching the
-  // default path's Math.max(0.1, …) clamp rather than throwing (so existing
-  // decayRate:0 callers keep working, just with a realistic floor).
+  if (tickIntervalMs > MAX_TICK_INTERVAL_MS) {
+    throw new Error(
+      `generateScrollVelocityProfile: tickIntervalMs must be <= ${MAX_TICK_INTERVAL_MS} ` +
+        `(got ${tickIntervalMs}); slower sampling collapses a gesture into visible jumps`,
+    );
+  }
+  // Override inputs bypass the bounded class defaults, so validate the whole
+  // physical envelope here. Non-positive velocity is a dead/reverse scroll;
+  // non-positive decay never slows (or accelerates); extreme velocity, decay
+  // or cadence collapses a gesture into detector-visible jumps. Reject those
+  // inputs rather than silently rewriting caller intent or emitting an
+  // unphysical profile.
   if (opts.initialVelocityPxPerSec !== undefined) {
     requireFinite(
       'generateScrollVelocityProfile: initialVelocityPxPerSec',
@@ -253,12 +269,19 @@ export function generateScrollVelocityProfile(
           `(got ${opts.initialVelocityPxPerSec})`,
       );
     }
+    if (opts.initialVelocityPxPerSec > MAX_INITIAL_VELOCITY_PX_PER_SEC) {
+      throw new Error(
+        `generateScrollVelocityProfile: initialVelocityPxPerSec must be <= ` +
+          `${MAX_INITIAL_VELOCITY_PX_PER_SEC} when set (got ${opts.initialVelocityPxPerSec})`,
+      );
+    }
   }
   if (opts.decayRate !== undefined) {
     requireFinite('generateScrollVelocityProfile: decayRate', opts.decayRate);
-    if (opts.decayRate < 0) {
+    if (opts.decayRate < MIN_DECAY_RATE || opts.decayRate > MAX_DECAY_RATE) {
       throw new Error(
-        `generateScrollVelocityProfile: decayRate must be >= 0 when set (got ${opts.decayRate})`,
+        `generateScrollVelocityProfile: decayRate must be >= ${MIN_DECAY_RATE} and <= ` +
+          `${MAX_DECAY_RATE} when set (got ${opts.decayRate})`,
       );
     }
   }
@@ -275,12 +298,26 @@ export function generateScrollVelocityProfile(
       defaults.meanInitialVelocityPxPerSec + uniformSigned() * defaults.initialVelocityJitter,
     );
   const decayRate =
-    opts.decayRate !== undefined
-      ? // Floor an explicit override to 0.1 — a real finger flick always decays,
-        // so decayRate 0 (non-decaying, constant-velocity ~5s scroll) is
-        // physically impossible. Same floor as the default-path clamp below.
-        Math.max(0.1, opts.decayRate)
-      : Math.max(0.1, defaults.meanDecayRate + uniformSigned() * defaults.decayRateJitter);
+    opts.decayRate ??
+    Math.max(0.1, defaults.meanDecayRate + uniformSigned() * defaults.decayRateJitter);
+
+  // Every generated profile must contain its own visible settling sample. The
+  // previous cap path integrated the unobserved exponential tail to infinity
+  // and placed the entire remainder in one zero-velocity tick. For
+  // v0=8000/decay=0.1 that produced a 48,484 px final jump after 313 ordinary
+  // samples. Reject a physically incompatible override instead. Use the last
+  // actual cadence-aligned sample at/before MAX_DURATION_MS, not the ideal 5 s
+  // point, so fractional tick intervals cannot slip through then stop above
+  // the threshold because their next sample lands after the cap.
+  const lastSampleMs = Math.floor(MAX_DURATION_MS / tickIntervalMs) * tickIntervalMs;
+  const velocityAtLastSample = v0 * Math.exp(-decayRate * (lastSampleMs / 1000));
+  if (velocityAtLastSample >= REST_VELOCITY_THRESHOLD_PX_PER_SEC) {
+    throw new Error(
+      `generateScrollVelocityProfile: velocity/decay overrides must settle below ` +
+        `${REST_VELOCITY_THRESHOLD_PX_PER_SEC} px/s within ${MAX_DURATION_MS} ms ` +
+        `(got ${velocityAtLastSample.toFixed(3)} px/s at the final sample)`,
+    );
+  }
 
   const sign = opts.direction === 'up' || opts.direction === 'left' ? -1 : 1;
   const tickSec = tickIntervalMs / 1000;
@@ -296,10 +333,7 @@ export function generateScrollVelocityProfile(
     // Pixels scrolled this tick: ∫ v(τ)dτ from t to t+tickSec
     //   = (v0 / decayRate) * (exp(-decay * t) - exp(-decay * (t+tickSec)))
     const deltaPxAbs =
-      decayRate === 0
-        ? v0 * tickSec
-        : (v0 / decayRate) *
-          (Math.exp(-decayRate * tSec) - Math.exp(-decayRate * (tSec + tickSec)));
+      (v0 / decayRate) * (Math.exp(-decayRate * tSec) - Math.exp(-decayRate * (tSec + tickSec)));
     const deltaPx = sign * deltaPxAbs;
     cumulativePx += deltaPx;
 
@@ -309,44 +343,6 @@ export function generateScrollVelocityProfile(
       break;
     }
     tMs += tickIntervalMs;
-  }
-
-  // Guarantee a settling phase: a real finger flick always coasts to a
-  // stop, so the profile MUST end at rest. The `tMs <= MAX_DURATION_MS`
-  // cap above can truncate the loop while velocity is still high (a high
-  // v0 with a low/floored decayRate decays slowly — e.g. v0=8000,
-  // decayRate=0.1 is still ~4800 px/s at 5 s), which would otherwise read
-  // as an unnatural abrupt mid-flight stop — a behavioural tell. When the
-  // last sampled tick is still above the rest threshold, append a final
-  // tick AT rest (velocity 0) carrying the remaining coast distance.
-  //
-  // ⚠️ Off-by-one integral: the in-loop tick emitted at time t_cut already
-  // covers the interval [t_cut, t_cut + tickSec] (its deltaPx is
-  // ∫ v(τ)dτ from t_cut to t_cut + tickSec — see the loop body above). So
-  // the settling tail must resume at t_cut + tickSec, NOT at t_cut, or the
-  // interval [t_cut, t_cut + tickSec] is double-counted and totalDistancePx /
-  // cumulativePx are inflated by exactly that last in-loop tick's distance.
-  // The correct, NON-overlapping tail is:
-  //   ∫ v(τ)dτ from t_cut + tickSec to ∞ = v(t_cut + tickSec) / decayRate
-  //     = v(t_cut) * exp(-decayRate * tickSec) / decayRate
-  // Combined with the in-loop sum (which covers [0, t_cut + tickSec]) this
-  // yields the exact analytic total ∫ v(τ)dτ from 0 to ∞ = v0 / decayRate,
-  // with no overlap — so the emitted distance is exact, not merely smaller.
-  const lastTick = ticks[ticks.length - 1];
-  if (lastTick !== undefined && lastTick.velocityPxPerSec >= REST_VELOCITY_THRESHOLD_PX_PER_SEC) {
-    // decayRate is floored to >= 0.1 above, so this division is always safe.
-    // Advance the tail's start bound by one tick (× exp(-decayRate * tickSec))
-    // so it begins exactly where the last in-loop tick's integral ended.
-    const velocityAfterLastTick = lastTick.velocityPxPerSec * Math.exp(-decayRate * tickSec);
-    const tailDistanceAbs = velocityAfterLastTick / decayRate;
-    const tailDelta = sign * tailDistanceAbs;
-    cumulativePx += tailDelta;
-    ticks.push({
-      tMs: lastTick.tMs + tickIntervalMs,
-      velocityPxPerSec: 0,
-      deltaPx: tailDelta,
-      cumulativePx,
-    });
   }
 
   return {

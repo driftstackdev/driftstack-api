@@ -19,16 +19,18 @@
 //     DEFAULTS 7-entry table (per-ElementClass) Object.freeze.
 //   • Constants: DEFAULT_TICK_INTERVAL_MS=16 ('60Hz, matching touch
 //     device rates'), REST_VELOCITY_THRESHOLD_PX_PER_SEC=5,
-//     MAX_DURATION_MS=5000.
+//     MAX_DURATION_MS=5000, MAX_TICK_INTERVAL_MS=100,
+//     MAX_INITIAL_VELOCITY_PX_PER_SEC=12000, MIN_DECAY_RATE=0.1,
+//     MAX_DECAY_RATE=20.
 //   • generateScrollVelocityProfile framing pinned:
 //     'v(t) = v0 * exp(-decayRate * t) sampled at tickIntervalMs
 //     intervals until velocity drops below the rest threshold (5
-//     px/s) or MAX_DURATION_MS is reached.'
+//     px/s); overrides unable to settle within MAX_DURATION_MS fail.'
 //   • Direction sign: 'down'/'right' → positive; 'up'/'left' →
 //     negative; totalDistancePx always positive (abs).
 //   • Per-tick integration: ∫ v(τ)dτ = (v0/decayRate) ×
-//     (exp(-decay*t) - exp(-decay*(t+tickSec))); decayRate===0
-//     degenerate-case fallback.
+//     (exp(-decay*t) - exp(-decay*(t+tickSec))); non-positive decay
+//     fails at the boundary.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -92,7 +94,7 @@ describe('W453.A packages/behavioural-simulation/src/scroll.ts content parity', 
     );
   });
 
-  it("Module constants: DEFAULT_TICK_INTERVAL_MS=16 ('60Hz, matching touch device rates' framing), REST_VELOCITY_THRESHOLD_PX_PER_SEC=5, MAX_DURATION_MS=5000 ('~5 seconds is generous' framing)", () => {
+  it("Module constants: DEFAULT_TICK_INTERVAL_MS=16 ('60Hz, matching touch device rates' framing), REST_VELOCITY_THRESHOLD_PX_PER_SEC=5, MAX_DURATION_MS=5000 plus bounded cadence/velocity/decay envelope", () => {
     expect(body).toMatch(
       /\/\*\* Default tick interval \(ms\)\. 16ms ≈ 60 Hz, matching touch device rates\. \*\/\s*\n?\s*const DEFAULT_TICK_INTERVAL_MS = 16;/,
     );
@@ -102,11 +104,15 @@ describe('W453.A packages/behavioural-simulation/src/scroll.ts content parity', 
     expect(body).toMatch(
       /\/\*\* Hard cap on duration to bound test runtime\. ~5 seconds is generous\. \*\/\s*\n?\s*const MAX_DURATION_MS = 5000;/,
     );
+    expect(body).toMatch(/^const MAX_TICK_INTERVAL_MS = 100;$/m);
+    expect(body).toMatch(/^const MAX_INITIAL_VELOCITY_PX_PER_SEC = 12_000;$/m);
+    expect(body).toMatch(/^const MIN_DECAY_RATE = 0\.1;$/m);
+    expect(body).toMatch(/^const MAX_DECAY_RATE = 20;$/m);
   });
 
-  it("generateScrollVelocityProfile framing pinned: 'v(t) = v0 * exp(-decayRate * t) sampled at tickIntervalMs intervals until velocity drops below the rest threshold (5 px/s) or MAX_DURATION_MS is reached.' + direction sign convention 'down/right → positive; up/left → negative' + totalDistancePx always-positive (abs)", () => {
+  it('generateScrollVelocityProfile framing pinned: decay sampled until rest; overrides unable to settle in MAX_DURATION_MS reject without a synthetic final tick; direction and total-distance conventions pinned', () => {
     expect(body).toMatch(
-      /\*\s*v\(t\) = v0 \* exp\(-decayRate \* t\)\s*\n?\s*\*\s*sampled at `tickIntervalMs` intervals until velocity drops below the\s*\n?\s*\*\s*rest threshold \(5 px\/s\) or `MAX_DURATION_MS` is reached\./,
+      /\*\s*v\(t\) = v0 \* exp\(-decayRate \* t\)\s*\n?\s*\*\s*sampled at `tickIntervalMs` intervals until velocity drops below the\s*\n?\s*\*\s*rest threshold \(5 px\/s\)\. Explicit overrides that cannot settle inside\s*\n?\s*\*\s*`MAX_DURATION_MS` are rejected instead of compressing unseen motion into a\s*\n?\s*\*\s*synthetic final tick\./,
     );
     expect(body).toMatch(
       /\* Direction sign convention:\s*\n?\s*\*\s*- 'down' \/ 'right' → positive `deltaPx`\s*\n?\s*\*\s*- 'up' \/ 'left'\s*→ negative `deltaPx`\s*\n?\s*\*\s*\n?\s*\* `totalDistancePx` is always positive \(absolute distance scrolled\)\./,
@@ -116,12 +122,15 @@ describe('W453.A packages/behavioural-simulation/src/scroll.ts content parity', 
     );
   });
 
-  it("Per-tick deltaPx integration framing pinned: '∫ v(τ)dτ from t to t+tickSec = (v0 / decayRate) * (exp(-decay * t) - exp(-decay * (t+tickSec)))' + decayRate===0 degenerate-case fallback (v0 * tickSec)", () => {
+  it("Per-tick deltaPx integration framing pinned: '∫ v(τ)dτ from t to t+tickSec = (v0 / decayRate) * (exp(-decay * t) - exp(-decay * (t+tickSec)))' with positive decay guaranteed at the boundary", () => {
     expect(body).toMatch(
       /\/\/ Pixels scrolled this tick: ∫ v\(τ\)dτ from t to t\+tickSec\s*\n?\s*\/\/\s*= \(v0 \/ decayRate\) \* \(exp\(-decay \* t\) - exp\(-decay \* \(t\+tickSec\)\)\)/,
     );
     expect(body).toMatch(
-      /const deltaPxAbs =\s*\n?\s*decayRate === 0\s*\n?\s*\? v0 \* tickSec\s*\n?\s*: \(v0 \/ decayRate\) \*\s*\n?\s*\(Math\.exp\(-decayRate \* tSec\) - Math\.exp\(-decayRate \* \(tSec \+ tickSec\)\)\);/,
+      /const deltaPxAbs =\s*\n?\s*\(v0 \/ decayRate\) \*\s*\n?\s*\(Math\.exp\(-decayRate \* tSec\) - Math\.exp\(-decayRate \* \(tSec \+ tickSec\)\)\);/,
+    );
+    expect(body).toMatch(
+      /if \(opts\.decayRate < MIN_DECAY_RATE \|\| opts\.decayRate > MAX_DECAY_RATE\) \{/,
     );
   });
 
@@ -132,6 +141,21 @@ describe('W453.A packages/behavioural-simulation/src/scroll.ts content parity', 
     expect(body).toMatch(
       /if \(velocityPxPerSec < REST_VELOCITY_THRESHOLD_PX_PER_SEC && tMs > 0\) \{\s*\n?\s*break;\s*\n?\s*\}/,
     );
+  });
+
+  it('physical envelope fails closed before generation: max cadence/velocity/decay plus cadence-aligned settle check; no synthetic tail append', () => {
+    expect(body).toMatch(/if \(tickIntervalMs > MAX_TICK_INTERVAL_MS\) \{/);
+    expect(body).toMatch(
+      /if \(opts\.initialVelocityPxPerSec > MAX_INITIAL_VELOCITY_PX_PER_SEC\) \{/,
+    );
+    expect(body).toMatch(
+      /if \(opts\.decayRate < MIN_DECAY_RATE \|\| opts\.decayRate > MAX_DECAY_RATE\) \{/,
+    );
+    expect(body).toMatch(
+      /const lastSampleMs = Math\.floor\(MAX_DURATION_MS \/ tickIntervalMs\) \* tickIntervalMs;/,
+    );
+    expect(body).toMatch(/if \(velocityAtLastSample >= REST_VELOCITY_THRESHOLD_PX_PER_SEC\) \{/);
+    expect(body).not.toMatch(/remainingDistanceAbs|settlingDeltaPx|velocityPxPerSec: 0/);
   });
 
   it('v0/decayRate jitter with bounded minimums: v0 = max(1, mean + uniformSigned*jitter); decayRate = max(0.1, mean + uniformSigned*jitter); defaultSeed = `scroll-v:${direction}:${elementClass}`', () => {

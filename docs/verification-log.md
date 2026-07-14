@@ -26861,3 +26861,31 @@ security classes. The two focused guards pass 2 files and 14/14 tests; the
 combined admin, mutation, complete-authority and OpenAPI inventory matrix passes
 4 files and 31/31 tests. Strict server test TypeScript, targeted lint/format,
 diff and whitespace checks are green.
+
+## V-635 — Scroll profiles remain inside a visible physical envelope
+
+**Date:** 2026-07-14
+
+The reference finger-flick generator allowed arbitrarily large finite velocity,
+arbitrarily slow decay and arbitrarily sparse cadence. When a profile had not
+reached rest after five seconds, it integrated every unobserved future pixel
+into one synthetic zero-velocity tick. An 8,000 px/s flick at 0.1/s decay thus
+ended with a 48,483.65 px delta—624.5 times the preceding tick. A maximum-finite
+velocity could also escape the finite-input check and produce infinite deltas.
+
+Explicit profiles now remain within a generous physical/numerical envelope:
+1–12,000 px/s velocity, 0.1–20/s decay and 1–100 ms cadence. The generator
+checks the final cadence-aligned sample before allocating and rejects any input
+that cannot visibly settle below 5 px/s inside five seconds. The synthetic tail
+is removed; accepted profiles end through ordinary finite samples with
+monotonically decaying deltas. All class defaults and their seeded byte-for-byte
+outputs remain unchanged.
+
+Focused tests pin both sides of every boundary, the exact slow-tail regression,
+maximum-finite velocity, subnormal decay, ordinary-sample settling, finite
+outputs and all seeded class defaults. Source-content guards independently pin
+the fail-closed envelope and absence of tail synthesis. Focused source/guard
+evidence passes 3 files and 47/47 tests; the full behavioural package passes 9
+files and 179/179 tests; the two exact server guards pass 17/17. Package build,
+strict server-test TypeScript, targeted lint/format, diff and whitespace checks
+are green.

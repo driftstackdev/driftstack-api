@@ -32,7 +32,7 @@ describe('W596.B packages/behavioural-simulation/src/scroll.ts content parity', 
     expect(body).toMatch(/\/\/ per-tick deltas\./);
   });
 
-  it('ScrollVelocityTick + ScrollVelocityProfile + ScrollVelocityClassDefaults types pinned + SCROLL_VELOCITY_DEFAULTS Object.freeze 7-class table + DEFAULT_TICK_INTERVAL_MS=16 (60Hz) + REST_VELOCITY_THRESHOLD=5 + MAX_DURATION_MS=5000', () => {
+  it('ScrollVelocityTick + ScrollVelocityProfile + ScrollVelocityClassDefaults types pinned + seven-class defaults + bounded cadence/velocity/decay constants', () => {
     expect(body).toMatch(/\/\*\* A single per-tick sample of a decaying scroll\. \*\//);
     expect(body).toMatch(/^export interface ScrollVelocityTick \{$/m);
     expect(body).toMatch(/velocityPxPerSec: number;/);
@@ -68,14 +68,24 @@ describe('W596.B packages/behavioural-simulation/src/scroll.ts content parity', 
     );
     expect(body).toMatch(/^const REST_VELOCITY_THRESHOLD_PX_PER_SEC = 5;$/m);
     expect(body).toMatch(/^const MAX_DURATION_MS = 5000;$/m);
+    expect(body).toMatch(/^const MAX_TICK_INTERVAL_MS = 100;$/m);
+    expect(body).toMatch(/^const MAX_INITIAL_VELOCITY_PX_PER_SEC = 12_000;$/m);
+    expect(body).toMatch(/^const MIN_DECAY_RATE = 0\.1;$/m);
+    expect(body).toMatch(/^const MAX_DECAY_RATE = 20;$/m);
   });
 
-  it('generateScrollVelocityProfile: tickIntervalMs<=0 throws + v0/decayRate explicit-override-or-class-default-jittered + sign convention (down/right=+, up/left=-) + analytic ∫v(τ)dτ delta per tick + rest-threshold break + MAX_DURATION_MS bound', () => {
+  it('generateScrollVelocityProfile: finite physical envelope + cadence-aligned settle guard + analytic delta + rest-threshold break', () => {
     expect(body).toMatch(/\* Generate a scroll velocity profile with exponential decay\./);
     expect(body).toMatch(/\* Pure \+ deterministic given \(direction, elementClass, seed\)\./);
     expect(body).toMatch(/\*\s+v\(t\) = v0 \* exp\(-decayRate \* t\)/);
     expect(body).toMatch(/\* sampled at `tickIntervalMs` intervals until velocity drops below the/);
-    expect(body).toMatch(/\* rest threshold \(5 px\/s\) or `MAX_DURATION_MS` is reached\./);
+    expect(body).toMatch(
+      /\* rest threshold \(5 px\/s\)\. Explicit overrides that cannot settle inside/,
+    );
+    expect(body).toMatch(
+      /\* `MAX_DURATION_MS` are rejected instead of compressing unseen motion into a/,
+    );
+    expect(body).toMatch(/\* synthetic final tick\./);
     expect(body).toMatch(/\* Direction sign convention:/);
     expect(body).toMatch(/\*\s+- 'down' \/ 'right' → positive `deltaPx`/);
     expect(body).toMatch(/\*\s+- 'up' \/ 'left'\s+→ negative `deltaPx`/);
@@ -96,6 +106,17 @@ describe('W596.B packages/behavioural-simulation/src/scroll.ts content parity', 
     );
     expect(body).toMatch(/if \(tickIntervalMs <= 0\) \{\s*\n\s*throw new Error\(/);
     expect(body).toMatch(/`generateScrollVelocityProfile: tickIntervalMs must be > 0/);
+    expect(body).toMatch(/if \(tickIntervalMs > MAX_TICK_INTERVAL_MS\) \{/);
+    expect(body).toMatch(
+      /if \(opts\.initialVelocityPxPerSec > MAX_INITIAL_VELOCITY_PX_PER_SEC\) \{/,
+    );
+    expect(body).toMatch(
+      /if \(opts\.decayRate < MIN_DECAY_RATE \|\| opts\.decayRate > MAX_DECAY_RATE\) \{/,
+    );
+    expect(body).toMatch(
+      /const lastSampleMs = Math\.floor\(MAX_DURATION_MS \/ tickIntervalMs\) \* tickIntervalMs;/,
+    );
+    expect(body).toMatch(/if \(velocityAtLastSample >= REST_VELOCITY_THRESHOLD_PX_PER_SEC\) \{/);
     expect(body).toMatch(
       /const sign = opts\.direction === 'up' \|\| opts\.direction === 'left' \? -1 : 1;/,
     );
@@ -107,6 +128,7 @@ describe('W596.B packages/behavioural-simulation/src/scroll.ts content parity', 
       /if \(velocityPxPerSec < REST_VELOCITY_THRESHOLD_PX_PER_SEC && tMs > 0\) \{\s*\n\s*break;\s*\n\s*\}/,
     );
     expect(body).toMatch(/totalDistancePx: Math\.abs\(cumulativePx\),/);
+    expect(body).not.toMatch(/remainingDistanceAbs|settlingDeltaPx|velocityPxPerSec: 0/);
   });
 
   it('file exists at canonical path', () => {

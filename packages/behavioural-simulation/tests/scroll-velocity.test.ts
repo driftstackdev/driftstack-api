@@ -355,28 +355,33 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     ).toThrow(/initialVelocityPxPerSec must be > 0/);
   });
 
-  it('rejects a negative decayRate override (would accelerate, not decay)', () => {
+  it('rejects decay rates outside the physical envelope and accepts both boundaries', () => {
+    for (const decayRate of [-1, 0, 0.099_999, Number.MIN_VALUE, 20.000_001]) {
+      expect(() =>
+        generateScrollVelocityProfile({
+          direction: 'down',
+          elementClass: 'scroll-container',
+          decayRate,
+        }),
+      ).toThrow(/decayRate must be >= 0.1 and <= 20/);
+    }
+
     expect(() =>
       generateScrollVelocityProfile({
         direction: 'down',
         elementClass: 'scroll-container',
-        decayRate: -1,
+        initialVelocityPxPerSec: 1,
+        decayRate: 0.1,
       }),
-    ).toThrow(/decayRate must be >= 0/);
-  });
-
-  it('floors a decayRate 0 override to 0.1 (a real finger flick always decays)', () => {
-    // decayRate 0 would be a non-decaying constant-velocity scroll — physically
-    // impossible. The override is floored to 0.1 rather than throwing so existing
-    // decayRate:0 callers keep working with a realistic decaying profile.
-    const profile = generateScrollVelocityProfile({
-      direction: 'down',
-      elementClass: 'scroll-container',
-      initialVelocityPxPerSec: 1000,
-      decayRate: 0,
-    });
-    expect(profile.decayRate).toBe(0.1);
-    expect(profile.ticks.length).toBeGreaterThan(0);
+    ).not.toThrow();
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        initialVelocityPxPerSec: 1000,
+        decayRate: 20,
+      }),
+    ).not.toThrow();
   });
 
   it('regression pin — deterministic shape for fixed inputs', () => {
@@ -401,100 +406,104 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     expect(profile.totalDistancePx).toBeLessThan(1000);
   });
 
-  it('settles to rest even when the MAX_DURATION cap truncates the decay (high v0, low decayRate)', () => {
-    // A high v0 with a low/floored decayRate decays slowly enough that the
-    // 5s MAX_DURATION cap would otherwise cut the profile while velocity is
-    // still high (e.g. v0=8000, decayRate=0.1 is ~4800 px/s at 5s) — an
-    // unnatural abrupt stop a detector can read. The settling phase MUST
-    // bring the final tick to rest regardless of v0/decayRate.
+  it('rejects a slow profile instead of hiding its remaining distance in one synthetic tick', () => {
+    // Exact finding: v0=8000, decay=0.1 produced a 48,483.65 px final delta,
+    // 624.5x the preceding cadence-sized delta. The input cannot visibly
+    // settle inside the 5s bound, so it must fail before emitting any profile.
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        initialVelocityPxPerSec: 8000,
+        decayRate: 0.1,
+        tickIntervalMs: 16,
+      }),
+    ).toThrow(/must settle below 5 px\/s within 5000 ms/);
+  });
+
+  it('rejects unphysical velocity and cadence, accepting each upper boundary', () => {
+    for (const initialVelocityPxPerSec of [12_000.000_001, Number.MAX_VALUE]) {
+      expect(() =>
+        generateScrollVelocityProfile({
+          direction: 'down',
+          elementClass: 'scroll-container',
+          initialVelocityPxPerSec,
+          decayRate: 2,
+        }),
+      ).toThrow(/initialVelocityPxPerSec must be <= 12000/);
+    }
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        initialVelocityPxPerSec: 12_000,
+        decayRate: 1.6,
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        initialVelocityPxPerSec: 1000,
+        decayRate: 2,
+        tickIntervalMs: 100.000_001,
+      }),
+    ).toThrow(/tickIntervalMs must be <= 100/);
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        initialVelocityPxPerSec: 1000,
+        decayRate: 2,
+        tickIntervalMs: 100,
+      }),
+    ).not.toThrow();
+  });
+
+  it('near-boundary profile settles through ordinary finite cadence samples', () => {
     const profile = generateScrollVelocityProfile({
       direction: 'down',
       elementClass: 'scroll-container',
-      initialVelocityPxPerSec: 8000,
-      decayRate: 0.1,
+      initialVelocityPxPerSec: 12_000,
+      decayRate: 1.6,
+      tickIntervalMs: 16,
+      seed: 'physical-boundary',
     });
     const last = profile.ticks[profile.ticks.length - 1];
-    // The final tick is at rest (velocity below the 5 px/s rest threshold).
+
+    expect(profile.durationMs).toBeLessThanOrEqual(5000);
+    expect(last.velocityPxPerSec).toBeGreaterThan(0);
     expect(last.velocityPxPerSec).toBeLessThan(5);
-    // Monotonic non-increasing velocity is preserved through the settling tick.
-    for (let i = 1; i < profile.ticks.length; i += 1) {
-      expect(profile.ticks[i].velocityPxPerSec).toBeLessThanOrEqual(
-        profile.ticks[i - 1].velocityPxPerSec,
-      );
-    }
-    // cumulativePx still equals the running sum of deltaPx (tail integral
-    // folded into the settling tick keeps distance physically consistent).
+    expect(profile.ticks.every((tick) => Number.isFinite(tick.velocityPxPerSec))).toBe(true);
+    expect(profile.ticks.every((tick) => Number.isFinite(tick.deltaPx))).toBe(true);
+    expect(profile.ticks.every((tick) => Number.isFinite(tick.cumulativePx))).toBe(true);
+
     let runningSum = 0;
-    for (const tick of profile.ticks) {
+    for (let i = 0; i < profile.ticks.length; i += 1) {
+      const tick = profile.ticks[i];
       runningSum += tick.deltaPx;
       expect(tick.cumulativePx).toBeCloseTo(runningSum, 9);
+      if (i > 0) {
+        expect(Math.abs(tick.deltaPx)).toBeLessThanOrEqual(Math.abs(profile.ticks[i - 1].deltaPx));
+      }
     }
     expect(profile.totalDistancePx).toBeCloseTo(Math.abs(last.cumulativePx), 9);
   });
 
-  it('settling tail is the EXACT analytic integral — no off-by-one tick overlap', () => {
-    // A flick whose decay is slow enough that the 5s MAX_DURATION cap truncates
-    // the loop BEFORE the rest threshold, so the settling tail runs. Explicit
-    // v0/decayRate + tickIntervalMs make the total analytically computable.
-    //
-    // The emitted total distance must equal the exact analytic integral of the
-    // whole decaying flick from t=0 to infinity:
-    //   ∫ v0·exp(-decay·τ) dτ, 0→∞ = v0 / decayRate
-    // The in-loop ticks integrate [0, t_cut + tickSec] and the settling tail
-    // must integrate [t_cut + tickSec, ∞) — with NO overlap. The prior bug
-    // started the tail at t_cut, double-counting the last in-loop tick's
-    // interval [t_cut, t_cut + tickSec] and inflating the total by exactly that
-    // tick's distance. Asserting EQUALITY with v0/decayRate (not just "< old
-    // value") proves the overlap is gone and the integral is exact.
-    const v0 = 8000;
-    const decayRate = 0.1;
-    const profile = generateScrollVelocityProfile({
-      direction: 'down',
-      elementClass: 'scroll-container',
-      initialVelocityPxPerSec: v0,
-      decayRate,
-      tickIntervalMs: 16,
-      seed: 'analytic-tail',
-    });
-    // Confirm the tail actually ran (loop truncated by MAX_DURATION, not rest):
-    // v(5s) = 8000·exp(-0.1·5) ≈ 4852 px/s, well above the 5 px/s rest threshold.
-    const last = profile.ticks[profile.ticks.length - 1];
-    expect(last.velocityPxPerSec).toBe(0); // appended settling tick is at rest
-    const secondToLast = profile.ticks[profile.ticks.length - 2];
-    expect(secondToLast.velocityPxPerSec).toBeGreaterThan(/* rest threshold */ 5);
-
-    // EXACT total: v0 / decayRate = 8000 / 0.1 = 80000 px. Telescoping the
-    // per-tick integrals + the corrected tail collapses to this closed form.
-    const expectedTotalPx = v0 / decayRate;
-    expect(profile.totalDistancePx).toBeCloseTo(expectedTotalPx, 6);
-    expect(profile.totalDistancePx).toBeCloseTo(Math.abs(last.cumulativePx), 9);
-
-    // Guard against the specific regression: the OLD (buggy) tail started at
-    // t_cut, so the total was inflated by exactly the last in-loop tick's
-    // distance (v0/decay · (exp(-decay·t_cut) − exp(-decay·(t_cut+tickSec)))).
-    // Recompute that overlap and assert the emitted total is NOT the old,
-    // inflated value — i.e. the correct total is strictly less by that amount.
-    const tickSec = 16 / 1000;
-    const tCutSec = secondToLast.tMs / 1000;
-    const lastInLoopTickDistance =
-      (v0 / decayRate) *
-      (Math.exp(-decayRate * tCutSec) - Math.exp(-decayRate * (tCutSec + tickSec)));
-    const oldBuggyTotal = expectedTotalPx + lastInLoopTickDistance;
-    expect(oldBuggyTotal - profile.totalDistancePx).toBeCloseTo(lastInLoopTickDistance, 6);
-    expect(profile.totalDistancePx).toBeLessThan(oldBuggyTotal);
-  });
-
-  it('a high-v0 profile across element classes always ends at rest', () => {
+  it('every seeded default ends below the rest threshold with finite cadence deltas', () => {
     for (const klass of ALL_CLASSES) {
-      const profile = generateScrollVelocityProfile({
-        direction: 'up',
-        elementClass: klass,
-        initialVelocityPxPerSec: 12000,
-        decayRate: 0.1,
-        seed: `settle-${klass}`,
-      });
-      const last = profile.ticks[profile.ticks.length - 1];
-      expect(last.velocityPxPerSec).toBeLessThan(5);
+      for (const seed of seeds(32, `settle-${klass}`)) {
+        const profile = generateScrollVelocityProfile({
+          direction: 'up',
+          elementClass: klass,
+          seed,
+        });
+        const last = profile.ticks[profile.ticks.length - 1];
+        expect(last.velocityPxPerSec).toBeGreaterThan(0);
+        expect(last.velocityPxPerSec).toBeLessThan(5);
+        expect(profile.ticks.every((tick) => Number.isFinite(tick.deltaPx))).toBe(true);
+      }
     }
   });
 });
