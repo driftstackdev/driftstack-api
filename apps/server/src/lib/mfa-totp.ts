@@ -5,8 +5,8 @@
 //     Authenticator, 1Password, Authy, Bitwarden, etc. all support).
 //   - ±1 window drift tolerance — total verification range = 90s.
 //   - At-rest encryption: AES-256-GCM with the env-supplied
-//     `MFA_ENCRYPTION_KEY` (32 random bytes, base64). Single key for v1;
-//     rotation deferred to a runbook + future migration.
+//     `MFA_ENCRYPTION_KEY` (32 random bytes, base64). The v2 envelope binds
+//     its purpose + account identity as GCM additional authenticated data.
 //
 // The TOTP secret itself is 20 bytes random, base32-encoded for the
 // otpauth:// URI, AES-GCM-encrypted at rest. Verification reads the
@@ -29,7 +29,11 @@ export const TOTP_DRIFT_WINDOWS = 1;
 const SECRET_RAW_BYTES = 20;
 const GCM_IV_BYTES = 12;
 const GCM_TAG_BYTES = 16;
+const MAX_ACCOUNT_ID_BYTES = 256;
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+export const MFA_TOTP_SECRET_V2_PREFIX = 'driftstack:mfa-totp:v2:';
+const MFA_TOTP_SECRET_AAD_PURPOSE = 'driftstack.mfa-totp-secret';
 
 /** V-353b — generate a fresh 20-byte TOTP secret + return its base32-
  *  encoded form (what auth apps consume). The plaintext is never
@@ -115,21 +119,24 @@ export function otpauthUri(args: { email: string; secretBase32: string }): strin
 
 /**
  * V-353b — AES-256-GCM encryption of the TOTP secret with the env-
- * supplied 32-byte key. Returns base64-encoded ciphertext + iv + tag
- * (text columns; bytea also viable but text is friendlier for
- * direct DB inspection during incidents).
+ * supplied 32-byte key. The ciphertext carries an explicit v2 prefix and
+ * authenticates the store purpose + owning account. IV + tag remain separate
+ * base64 text columns for the existing no-DDL storage shape.
  */
 export function encryptSecret(
   secretBytes: Buffer,
   keyBase64: string,
+  accountId: string,
 ): { ciphertext: string; iv: string; tag: string } {
+  assertTotpSecretLength(secretBytes);
   const key = decodeKey(keyBase64);
   const iv = randomBytes(GCM_IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(buildMfaTotpSecretAad(accountId));
   const ciphertext = Buffer.concat([cipher.update(secretBytes), cipher.final()]);
   const tag = cipher.getAuthTag();
   return {
-    ciphertext: ciphertext.toString('base64'),
+    ciphertext: `${MFA_TOTP_SECRET_V2_PREFIX}${ciphertext.toString('base64')}`,
     iv: iv.toString('base64'),
     tag: tag.toString('base64'),
   };
@@ -138,11 +145,46 @@ export function encryptSecret(
 export function decryptSecret(
   args: { ciphertext: string; iv: string; tag: string },
   keyBase64: string,
+  accountId: string,
+): Buffer {
+  if (!args.ciphertext.startsWith(MFA_TOTP_SECRET_V2_PREFIX)) {
+    throw new Error('MFA secret storage is not a v2 envelope.');
+  }
+  const plaintext = decryptSecretPayload(
+    {
+      ciphertext: args.ciphertext.slice(MFA_TOTP_SECRET_V2_PREFIX.length),
+      iv: args.iv,
+      tag: args.tag,
+    },
+    keyBase64,
+    buildMfaTotpSecretAad(accountId),
+  );
+  assertTotpSecretLength(plaintext);
+  return plaintext;
+}
+
+/** Bootstrap-only reader for the prefixless, context-free legacy tuple. */
+export function decryptLegacyMfaSecret(
+  args: { ciphertext: string; iv: string; tag: string },
+  keyBase64: string,
+): Buffer {
+  if (args.ciphertext.startsWith(MFA_TOTP_SECRET_V2_PREFIX)) {
+    throw new Error('MFA legacy secret reader refuses a v2 envelope.');
+  }
+  const plaintext = decryptSecretPayload(args, keyBase64);
+  assertTotpSecretLength(plaintext);
+  return plaintext;
+}
+
+function decryptSecretPayload(
+  args: { ciphertext: string; iv: string; tag: string },
+  keyBase64: string,
+  additionalAuthenticatedData?: Buffer,
 ): Buffer {
   const key = decodeKey(keyBase64);
-  const ciphertext = Buffer.from(args.ciphertext, 'base64');
-  const iv = Buffer.from(args.iv, 'base64');
-  const tag = Buffer.from(args.tag, 'base64');
+  const ciphertext = decodeCanonicalBase64(args.ciphertext, 'ciphertext');
+  const iv = decodeCanonicalBase64(args.iv, 'IV');
+  const tag = decodeCanonicalBase64(args.tag, 'tag');
   if (iv.length !== GCM_IV_BYTES) {
     throw new Error(`MFA secret IV is ${iv.length} bytes; expected ${GCM_IV_BYTES}`);
   }
@@ -150,8 +192,37 @@ export function decryptSecret(
     throw new Error(`MFA secret tag is ${tag.length} bytes; expected ${GCM_TAG_BYTES}`);
   }
   const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  if (additionalAuthenticatedData !== undefined) {
+    decipher.setAAD(additionalAuthenticatedData);
+  }
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+function buildMfaTotpSecretAad(accountId: string): Buffer {
+  const accountIdBytes = Buffer.byteLength(accountId, 'utf8');
+  if (accountIdBytes < 1 || accountIdBytes > MAX_ACCOUNT_ID_BYTES) {
+    throw new Error(
+      `MFA secret accountId must encode to 1..${MAX_ACCOUNT_ID_BYTES.toString()} bytes; got ${accountIdBytes.toString()}`,
+    );
+  }
+  return Buffer.from(JSON.stringify([MFA_TOTP_SECRET_AAD_PURPOSE, 2, accountId]), 'utf8');
+}
+
+function assertTotpSecretLength(secretBytes: Buffer): void {
+  if (secretBytes.length !== SECRET_RAW_BYTES) {
+    throw new Error(
+      `MFA TOTP secret is ${secretBytes.length.toString()} bytes; expected ${SECRET_RAW_BYTES.toString()}`,
+    );
+  }
+}
+
+function decodeCanonicalBase64(value: string, field: string): Buffer {
+  const decoded = Buffer.from(value, 'base64');
+  if (value.length === 0 || decoded.toString('base64') !== value) {
+    throw new Error(`MFA secret ${field} is not canonical base64.`);
+  }
+  return decoded;
 }
 
 function decodeKey(keyBase64: string): Buffer {

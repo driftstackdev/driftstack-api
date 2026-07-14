@@ -76,6 +76,7 @@ function read(p: string): string {
 }
 
 const TEST_KEY_BASE64 = randomBytes(32).toString('base64');
+const TEST_ACCOUNT_ID = 'acc_mfa_cross_source';
 
 describe('W964 V-353b mfa-totp lib cross-source invariant', () => {
   // ─── V-353b anchor + RFC 6238 framing ────────────────────────
@@ -87,15 +88,15 @@ describe('W964 V-353b mfa-totp lib cross-source invariant', () => {
 
   // ─── V-353a founder-verdict algorithm choices ────────────────
 
-  it("CRITICAL V-353a algorithm-choice framing — 'Algorithm choices (founder verdict V-353a): SHA-1 / 30s period / 6 digits — auth-app compat (Google Authenticator, 1Password, Authy, Bitwarden, etc. all support). ±1 window drift tolerance — total verification range = 90s. At-rest encryption: AES-256-GCM with the env-supplied MFA_ENCRYPTION_KEY (32 random bytes, base64). Single key for v1; rotation deferred to a runbook + future migration'. The V-353a anchor + 5-auth-app compat + ±1 drift + 90s window + AES-256-GCM is the founder-verdict provenance.", () => {
+  it('CRITICAL V-353a algorithm-choice framing pins auth-app-compatible TOTP and account-bound AES-GCM v2', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts'));
     expect(p).toMatch(/Algorithm choices \(founder verdict V-353a\):/);
     expect(p).toMatch(/- SHA-1 \/ 30s period \/ 6 digits — auth-app compat \(Google/);
     expect(p).toMatch(/Authenticator, 1Password, Authy, Bitwarden, etc\. all support\)\./);
     expect(p).toMatch(/- ±1 window drift tolerance — total verification range = 90s\./);
     expect(p).toMatch(/- At-rest encryption: AES-256-GCM with the env-supplied/);
-    expect(p).toMatch(/`MFA_ENCRYPTION_KEY` \(32 random bytes, base64\)\. Single key for v1;/);
-    expect(p).toMatch(/rotation deferred to a runbook \+ future migration\./);
+    expect(p).toMatch(/`MFA_ENCRYPTION_KEY` \(32 random bytes, base64\)\. The v2 envelope binds/);
+    expect(p).toMatch(/its purpose \+ account identity as GCM additional authenticated data\./);
   });
 
   // ─── TOTP_PERIOD_SECONDS / TOTP_DIGITS / TOTP_DRIFT_WINDOWS ──
@@ -207,12 +208,12 @@ describe('W964 V-353b mfa-totp lib cross-source invariant', () => {
 
   // ─── AES-256-GCM encryption framing ──────────────────────────
 
-  it("CRITICAL encryptSecret JSDoc — 'V-353b — AES-256-GCM encryption of the TOTP secret with the env-supplied 32-byte key. Returns base64-encoded ciphertext + iv + tag (text columns; bytea also viable but text is friendlier for direct DB inspection during incidents)'. The base64-text + bytea-rationale framing is the storage-format design.", () => {
+  it('CRITICAL encryptSecret JSDoc pins explicit v2 ciphertext and purpose/account authenticated context', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts'));
     expect(p).toMatch(/V-353b — AES-256-GCM encryption of the TOTP secret with the env-/);
-    expect(p).toMatch(/supplied 32-byte key\. Returns base64-encoded ciphertext \+ iv \+ tag/);
-    expect(p).toMatch(/\(text columns; bytea also viable but text is friendlier for/);
-    expect(p).toMatch(/direct DB inspection during incidents\)\./);
+    expect(p).toMatch(/supplied 32-byte key\. The ciphertext carries an explicit v2 prefix/);
+    expect(p).toMatch(/authenticates the store purpose \+ owning account/);
+    expect(p).toMatch(/base64 text columns for the existing no-DDL storage shape/);
   });
 
   it("CRITICAL decryptSecret validates IV + tag byte-lengths — 'MFA secret IV is X bytes; expected GCM_IV_BYTES' + 'MFA secret tag is X bytes; expected GCM_TAG_BYTES'. The 2-bound check prevents constructor mismatch + AES-GCM library quirks.", () => {
@@ -321,30 +322,32 @@ describe('W964 V-353b mfa-totp lib cross-source invariant', () => {
   // ─── Runtime parity: encryptSecret + decryptSecret ───────────
 
   it('CRITICAL encryptSecret + decryptSecret round-trip — encrypted bytes decrypt back to original. The AES-256-GCM symmetric primitive correctness.', () => {
-    const original = Buffer.from('test-secret-bytes-20', 'utf8');
-    const enc = encryptSecret(original, TEST_KEY_BASE64);
-    const dec = decryptSecret(enc, TEST_KEY_BASE64);
+    const original = Buffer.alloc(20, 7);
+    const enc = encryptSecret(original, TEST_KEY_BASE64, TEST_ACCOUNT_ID);
+    const dec = decryptSecret(enc, TEST_KEY_BASE64, TEST_ACCOUNT_ID);
     expect(dec.equals(original)).toBe(true);
   });
 
   it('CRITICAL encryptSecret returns 3-field { ciphertext, iv, tag } all base64-encoded. IV is 12 bytes (16 base64 chars); tag is 16 bytes (24 base64 chars).', () => {
-    const enc = encryptSecret(Buffer.from('test'), TEST_KEY_BASE64);
+    const enc = encryptSecret(Buffer.alloc(20, 8), TEST_KEY_BASE64, TEST_ACCOUNT_ID);
     expect(Buffer.from(enc.iv, 'base64').length).toBe(12);
     expect(Buffer.from(enc.tag, 'base64').length).toBe(16);
     expect(typeof enc.ciphertext).toBe('string');
   });
 
   it('CRITICAL decryptSecret throws on wrong-length IV (e.g. 11 or 13 bytes). The byte-count guard rejects misformed input early.', () => {
-    const enc = encryptSecret(Buffer.from('test'), TEST_KEY_BASE64);
+    const enc = encryptSecret(Buffer.alloc(20, 9), TEST_KEY_BASE64, TEST_ACCOUNT_ID);
     // Substitute a 4-byte IV.
     const badIv = Buffer.alloc(4).toString('base64');
-    expect(() => decryptSecret({ ...enc, iv: badIv }, TEST_KEY_BASE64)).toThrow(/MFA secret IV/);
+    expect(() => decryptSecret({ ...enc, iv: badIv }, TEST_KEY_BASE64, TEST_ACCOUNT_ID)).toThrow(
+      /MFA secret IV/,
+    );
   });
 
   it('CRITICAL decryptSecret throws on 32-byte-mismatch key. The decodeKey guard requires base64 → 32 bytes.', () => {
     const shortKey = randomBytes(16).toString('base64'); // 16 bytes, not 32
-    const enc = encryptSecret(Buffer.from('test'), TEST_KEY_BASE64);
-    expect(() => decryptSecret(enc, shortKey)).toThrow(
+    const enc = encryptSecret(Buffer.alloc(20, 10), TEST_KEY_BASE64, TEST_ACCOUNT_ID);
+    expect(() => decryptSecret(enc, shortKey, TEST_ACCOUNT_ID)).toThrow(
       /MFA_ENCRYPTION_KEY must decode to 32 bytes/,
     );
   });

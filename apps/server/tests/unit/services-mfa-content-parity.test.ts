@@ -132,7 +132,9 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     );
     expect(body).toMatch(/const started = await this\.repo\.startEnrollmentIfNotEnrolled\(\{/);
     expect(body).toMatch(/const \{ secretBase32, secretBytes \} = generateTotpSecret\(\);/);
-    expect(body).toMatch(/const enc = encryptSecret\(secretBytes, this\.config\.encryptionKey\);/);
+    expect(body).toMatch(
+      /const enc = encryptSecret\(secretBytes, this\.config\.encryptionKey, args\.accountId\);/,
+    );
     expect(body).toMatch(/if \(started === null\) \{\s*\n?\s*throw new ConflictError\(/);
     expect(body).toMatch(/otpauthUri: otpauthUri\(\{ email: args\.email, secretBase32 \}\),/);
   });

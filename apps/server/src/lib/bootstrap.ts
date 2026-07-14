@@ -853,9 +853,38 @@ export async function createProductionDeps(
   // can't enroll. Generate the key with:
   //   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
   // and set as MFA_ENCRYPTION_KEY in deploy env.
+  const mfaRepo = new DrizzleMfaRepo(dbHandle);
+  if (config.mfaEncryptionKey !== undefined) {
+    const MAX_MFA_SECRET_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await mfaRepo.migrateTotpSecretEnvelopes(config.mfaEncryptionKey, 500);
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `MFA TOTP secret migration made no progress with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_MFA_SECRET_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `MFA TOTP secret migration exceeded the ${MAX_MFA_SECRET_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
+      logger.info(
+        { component: 'mfa-totp-secret-encryption', scanned, converted, remaining },
+        'legacy MFA TOTP secrets migrated to account-bound v2 before serving',
+      );
+    }
+  }
   const mfaService = config.mfaEncryptionKey
     ? new MfaService(
-        new DrizzleMfaRepo(dbHandle),
+        mfaRepo,
         { encryptionKey: config.mfaEncryptionKey },
         accountAuditService,
         authCache,

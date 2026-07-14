@@ -142,7 +142,7 @@ export class MfaService {
     email: string;
   }): Promise<StartEnrollmentResult> {
     const { secretBase32, secretBytes } = generateTotpSecret();
-    const enc = encryptSecret(secretBytes, this.config.encryptionKey);
+    const enc = encryptSecret(secretBytes, this.config.encryptionKey, args.accountId);
     const started = await this.repo.startEnrollmentIfNotEnrolled({
       accountId: args.accountId,
       ciphertext: enc.ciphertext,
@@ -186,6 +186,7 @@ export class MfaService {
         tag: row.totpSecretTag,
       },
       this.config.encryptionKey,
+      args.accountId,
     );
     if (!verifyTotpCode(secretBytes, args.code)) {
       throw new BadRequestError('Invalid 6-digit code. Try again.');
@@ -288,6 +289,7 @@ export class MfaService {
           tag: row.totpSecretTag,
         },
         this.config.encryptionKey,
+        args.accountId,
       );
       // TOTP replay defence (migration 0090). verifyTotpCodeWithCounter returns
       // the matched timestep counter; the code is only accepted when that

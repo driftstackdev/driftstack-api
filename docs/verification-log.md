@@ -27150,3 +27150,37 @@ bound identity field, corrupts the ciphertext and uses a wrong key; each read
 fails closed, while restoration of the exact row replays the original terminal
 response and a different second completion remains rejected. The direct content
 guard pins the complete context on both encryption and decryption.
+
+## V-646 — MFA TOTP secrets are bound to their owning account
+
+**Date:** 2026-07-14
+
+The MFA enrollment table stored a TOTP seed in an AES-256-GCM ciphertext/IV/tag
+tuple, but the tuple authenticated only the seed bytes. Moving all three fields
+between otherwise valid account rows could therefore make the destination
+account accept codes generated from the source account's seed if the database
+trust boundary were already writable or corrupted.
+
+New secrets carry an explicit v2 ciphertext prefix and canonical JSON-array
+authenticated context containing a dedicated store purpose, version and owning
+account ID. Enrollment, enrollment completion and ordinary TOTP verification
+all require the exact account context; legacy tuples are rejected outside the
+bootstrap converter. Canonical base64, 12-byte IV, 16-byte tag, nonempty bounded
+account identity and exact 20-byte TOTP seed constraints now fail closed before
+a malformed value can enter or leave the credential path.
+
+Bootstrap authenticates an existing v2 probe, then decrypts and validates the
+entire bounded legacy page before its first write. Each conversion compares the
+account plus all three prior tuple fields and deliberately leaves `updated_at`
+unchanged so customer enrollment/recovery-code revision semantics do not move.
+Startup drains legacy rows to zero before serving, with no-progress and 10,000
+row bounds. The production cutover requires no DDL and covers the one aggregate-
+confirmed legacy MFA row on the next controlled deploy.
+
+The database-enabled MFA/bootstrap matrix passes 34 files and 502/502 tests. The focused
+real-PostgreSQL migration proof passes 3/3 cases: a wrong key leaves the legacy
+tuple and revision byte-identical, a malformed authenticated 19-byte seed keeps
+the whole page untouched, account relocation fails, successor wrong-key probing
+fails, and a deterministic blocked-update race proves an exact-tuple CAS loser
+cannot overwrite a newer v2 credential. Strict server source/test TypeScript,
+targeted lint/format, diff and whitespace checks are green.

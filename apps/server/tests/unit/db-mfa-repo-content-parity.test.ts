@@ -45,13 +45,27 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
   });
 
   it('imports the MFA tables plus account/web-session authority primitives', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, gt, isNull, or, sql \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import \{ and, asc, count, desc, eq, gt, isNull, or, sql \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(
       /import type \{ MfaEnrollmentRow, MfaRepo, RecoveryCodeRow \} from '\.\.\/services\/mfa\.js';/,
     );
     expect(body).toMatch(
       /import \{ accountMfa, accountMfaRecoveryCodes, accounts, webSessions \} from '\.\/schema\.js';/,
     );
+  });
+
+  it('boot migration prevalidates a bounded legacy page, binds account context, exact-CASes the tuple, and preserves updatedAt', () => {
+    expect(body).toMatch(/async migrateTotpSecretEnvelopes\(/);
+    expect(body).toMatch(/decryptSecret\(v2Probe, keyBase64, v2Probe\.accountId\);/);
+    expect(body).toMatch(/const plaintext = decryptLegacyMfaSecret\(row, keyBase64\);/);
+    expect(body).toMatch(/encryptSecret\(plaintext, keyBase64, row\.accountId\)/);
+    expect(body).toMatch(/eq\(accountMfa\.totpSecretCiphertext, row\.ciphertext\)/);
+    expect(body).toMatch(/eq\(accountMfa\.totpSecretIv, row\.iv\)/);
+    expect(body).toMatch(/eq\(accountMfa\.totpSecretTag, row\.tag\)/);
+    expect(body).toMatch(/Deliberately leave updatedAt unchanged/);
+    expect(body).toMatch(/remaining: remainingRow\?\.value \?\? 0/);
   });
 
   it('toEnrollmentRow: 9-field MfaEnrollmentRow (accountId + totpSecretCiphertext/Iv/Tag + enrolledAt + lastUsedAt + lastUsedTotpCounter + created/updated_at)', () => {

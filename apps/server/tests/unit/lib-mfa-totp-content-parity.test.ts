@@ -57,9 +57,8 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
     expect(body).toMatch(
       /At-rest encryption: AES-256-GCM with the env-supplied\s*\n?\s*\/\/\s*`MFA_ENCRYPTION_KEY` \(32 random bytes, base64\)/,
     );
-    expect(body).toMatch(
-      /Single key for v1;\s*\n?\s*\/\/\s*rotation deferred to a runbook \+ future migration/,
-    );
+    expect(body).toMatch(/The v2 envelope binds/);
+    expect(body).toMatch(/its purpose \+ account identity as GCM additional authenticated data/);
   });
 
   it('TOTP constants: TOTP_PERIOD_SECONDS=30, TOTP_DIGITS=6, TOTP_DRIFT_WINDOWS=1', () => {
@@ -121,23 +120,39 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
     expect(body).toMatch(/return `otpauth:\/\/totp\/\$\{label\}\?\$\{params\.toString\(\)\}`;/);
   });
 
-  it('encryptSecret returns base64 ciphertext + iv + tag (text columns for incident inspection)', () => {
-    expect(body).toMatch(/Returns base64-encoded ciphertext \+ iv \+ tag/);
+  it('encryptSecret writes an explicit v2 prefix and purpose/account AAD', () => {
+    expect(body).toMatch(/export const MFA_TOTP_SECRET_V2_PREFIX = 'driftstack:mfa-totp:v2:';/);
+    expect(body).toMatch(/const MFA_TOTP_SECRET_AAD_PURPOSE = 'driftstack\.mfa-totp-secret';/);
     expect(body).toMatch(/const cipher = createCipheriv\('aes-256-gcm', key, iv\);/);
+    expect(body).toMatch(/cipher\.setAAD\(buildMfaTotpSecretAad\(accountId\)\);/);
     expect(body).toMatch(/const tag = cipher\.getAuthTag\(\);/);
-    expect(body).toMatch(/ciphertext: ciphertext\.toString\('base64'\),/);
+    expect(body).toMatch(
+      /ciphertext: `\$\{MFA_TOTP_SECRET_V2_PREFIX\}\$\{ciphertext\.toString\('base64'\)\}`,/,
+    );
     expect(body).toMatch(/iv: iv\.toString\('base64'\),/);
     expect(body).toMatch(/tag: tag\.toString\('base64'\),/);
   });
 
-  it('decryptSecret enforces IV + tag length (12 + 16 bytes) before decipher', () => {
+  it('decryptSecret enforces v2, canonical encoding, IV/tag sizes, account AAD and 20-byte plaintext', () => {
+    expect(body).toMatch(/MFA secret storage is not a v2 envelope/);
+    expect(body).toMatch(/decodeCanonicalBase64/);
     expect(body).toMatch(
       /if \(iv\.length !== GCM_IV_BYTES\) \{[\s\S]+?MFA secret IV is \$\{iv\.length\} bytes; expected \$\{GCM_IV_BYTES\}/,
     );
     expect(body).toMatch(
       /if \(tag\.length !== GCM_TAG_BYTES\) \{[\s\S]+?MFA secret tag is \$\{tag\.length\} bytes; expected \$\{GCM_TAG_BYTES\}/,
     );
+    expect(body).toMatch(/decipher\.setAAD\(additionalAuthenticatedData\);/);
     expect(body).toMatch(/decipher\.setAuthTag\(tag\);/);
+    expect(body).toMatch(/MFA TOTP secret is \$\{secretBytes\.length\.toString\(\)\} bytes/);
+  });
+
+  it('legacy tuple decryption is explicitly bootstrap-only and refuses v2', () => {
+    expect(body).toMatch(
+      /\/\*\* Bootstrap-only reader for the prefixless, context-free legacy tuple\. \*\//,
+    );
+    expect(body).toMatch(/export function decryptLegacyMfaSecret/);
+    expect(body).toMatch(/MFA legacy secret reader refuses a v2 envelope/);
   });
 
   it('decodeKey: 32-byte hard requirement + generator command in error', () => {

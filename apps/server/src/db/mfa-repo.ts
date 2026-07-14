@@ -1,9 +1,21 @@
 // V-353b — Drizzle implementation of MfaRepo.
 
-import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
+import {
+  decryptLegacyMfaSecret,
+  decryptSecret,
+  encryptSecret,
+  MFA_TOTP_SECRET_V2_PREFIX,
+} from '../lib/mfa-totp.js';
 import type { MfaEnrollmentRow, MfaRepo, RecoveryCodeRow } from '../services/mfa.js';
 import type { Database } from './client.js';
 import { accountMfa, accountMfaRecoveryCodes, accounts, webSessions } from './schema.js';
+
+const MAX_MFA_SECRET_MIGRATION_BATCH = 500;
+
+function mfaSecretIsLegacy() {
+  return sql`${accountMfa.totpSecretCiphertext} NOT LIKE ${`${MFA_TOTP_SECRET_V2_PREFIX}%`}`;
+}
 
 function toEnrollmentRow(r: typeof accountMfa.$inferSelect): MfaEnrollmentRow {
   return {
@@ -35,6 +47,87 @@ function nextRevision(now: Date, previous: Date): Date {
 
 export class DrizzleMfaRepo implements MfaRepo {
   constructor(private readonly database: Database) {}
+
+  /**
+   * Bootstrap-only no-DDL cutover from the prefixless v1 tuple to the
+   * purpose/account-bound v2 tuple. The selected page is fully authenticated
+   * before its first write, and every rewrite compares all three old fields.
+   */
+  async migrateTotpSecretEnvelopes(
+    keyBase64: string,
+    limit = MAX_MFA_SECRET_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_MFA_SECRET_MIGRATION_BATCH) {
+      throw new Error(
+        `MFA secret migration limit must be an integer from 1 to ${MAX_MFA_SECRET_MIGRATION_BATCH.toString()}.`,
+      );
+    }
+
+    // Successor boots authenticate one already-bound tuple before considering
+    // legacy rows. This catches a wrong operator key without rewriting data.
+    const [v2Probe] = await this.database.db
+      .select({
+        accountId: accountMfa.accountId,
+        ciphertext: accountMfa.totpSecretCiphertext,
+        iv: accountMfa.totpSecretIv,
+        tag: accountMfa.totpSecretTag,
+      })
+      .from(accountMfa)
+      .where(sql`${accountMfa.totpSecretCiphertext} LIKE ${`${MFA_TOTP_SECRET_V2_PREFIX}%`}`)
+      .orderBy(asc(accountMfa.createdAt), asc(accountMfa.accountId))
+      .limit(1);
+    if (v2Probe !== undefined) {
+      decryptSecret(v2Probe, keyBase64, v2Probe.accountId);
+    }
+
+    const rows = await this.database.db
+      .select({
+        accountId: accountMfa.accountId,
+        ciphertext: accountMfa.totpSecretCiphertext,
+        iv: accountMfa.totpSecretIv,
+        tag: accountMfa.totpSecretTag,
+      })
+      .from(accountMfa)
+      .where(mfaSecretIsLegacy())
+      .orderBy(asc(accountMfa.createdAt), asc(accountMfa.accountId))
+      .limit(limit);
+
+    // Decode/authenticate every legacy row before the first UPDATE. A wrong
+    // key, malformed tuple, or non-20-byte seed leaves the whole page intact.
+    const prepared = rows.map((row) => {
+      const plaintext = decryptLegacyMfaSecret(row, keyBase64);
+      return { row, next: encryptSecret(plaintext, keyBase64, row.accountId) };
+    });
+
+    let converted = 0;
+    for (const { row, next } of prepared) {
+      const updated = await this.database.db
+        .update(accountMfa)
+        .set({
+          totpSecretCiphertext: next.ciphertext,
+          totpSecretIv: next.iv,
+          totpSecretTag: next.tag,
+          // Deliberately leave updatedAt unchanged: it is the customer-facing
+          // credential revision used by enrollment/recovery-code CAS paths.
+        })
+        .where(
+          and(
+            eq(accountMfa.accountId, row.accountId),
+            eq(accountMfa.totpSecretCiphertext, row.ciphertext),
+            eq(accountMfa.totpSecretIv, row.iv),
+            eq(accountMfa.totpSecretTag, row.tag),
+          ),
+        )
+        .returning({ accountId: accountMfa.accountId });
+      if (updated.length === 1) converted += 1;
+    }
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
+      .from(accountMfa)
+      .where(mfaSecretIsLegacy());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
+  }
 
   async findByAccount(accountId: string): Promise<MfaEnrollmentRow | null> {
     const [row] = await this.database.db
