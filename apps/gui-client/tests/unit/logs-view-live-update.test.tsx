@@ -86,14 +86,37 @@ describe('LogsView live updates (in-place buffer)', () => {
     expect(screen.getByText('a fresh error')).toBeTruthy();
   });
 
-  it('surfaces clipboard denial as a retryable Copy failure', async () => {
-    vi.stubGlobal('navigator', {
-      clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) },
-    });
+  it.each([
+    [
+      'the write promise rejects',
+      { clipboard: { writeText: vi.fn(() => Promise.reject(new Error('denied'))) } },
+    ],
+    ['the Clipboard API is absent', {}],
+    [
+      'the WebView throws synchronously',
+      {
+        clipboard: {
+          writeText: vi.fn(() => {
+            throw new Error('synchronous denial');
+          }),
+        },
+      },
+    ],
+  ])('surfaces a retryable Copy failure when %s', async (_label, navigatorStub) => {
+    vi.stubGlobal('navigator', navigatorStub);
     render(<LogsView />);
     pushLog('error', 'copy me');
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
-    expect(await screen.findByRole('button', { name: /Copy failed — retry/i })).toBeEnabled();
+    const retry = await screen.findByRole('button', { name: /Copy failed — retry/i });
+    expect(retry).toBeEnabled();
+    expect(retry).toHaveAttribute('aria-busy', 'false');
+
+    const recoveredWrite = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { clipboard: { writeText: recoveredWrite } });
+    fireEvent.click(retry);
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeEnabled();
+    expect(recoveredWrite).toHaveBeenCalledTimes(1);
+    expect(recoveredWrite).toHaveBeenCalledWith('copy me');
   });
 });

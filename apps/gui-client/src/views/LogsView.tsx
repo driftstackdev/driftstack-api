@@ -10,6 +10,7 @@
 
 import { memo, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
+import { writeClipboardText } from '../lib/clipboard';
 import {
   clearLogEntries,
   formatLogEntries,
@@ -141,12 +142,7 @@ export function LogsView(): JSX.Element {
   function handleCopy(): void {
     if (copyState === 'copying') return;
     setCopyState('copying');
-    const write = navigator.clipboard?.writeText(formatLogEntries());
-    if (write === undefined) {
-      setCopyState('failed');
-      return;
-    }
-    void write.then(
+    void writeClipboardText(formatLogEntries()).then(
       () => {
         setCopyState('copied');
         if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
