@@ -26,7 +26,8 @@ interface MockFetchCall {
 }
 
 interface SetUpOpts {
-  token?: string;
+  token?: string | null;
+  storageDenied?: boolean;
   confirmReturns?: boolean;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
 }
@@ -34,7 +35,11 @@ interface SetUpOpts {
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -62,7 +67,21 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
-  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== undefined && opts.token !== null) {
+    window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
+  let hydrated = 0;
+  // @ts-expect-error — injected by DashboardLayout
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   const __cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
   window.driftstackConfirm = () => Promise.resolve(__cr);
@@ -76,7 +95,11 @@ function setUpDom(
   if (!pageScript) throw new Error('api-keys inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function isHidden(window: JSDOM['window'], selector: string): boolean {
@@ -139,6 +162,24 @@ describe('api-keys page — local integration', () => {
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
+  it.each([
+    ['signed out', {}],
+    ['storage denied', { storageDenied: true }],
+  ])('%s: releases hydration without network and keeps create inert', async (_label, auth) => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), auth);
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(hydratedCount()).toBe(1);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toContain('Sign in');
+    for (const button of window.document.querySelectorAll<HTMLButtonElement>(
+      '[data-show-create], [data-create-submit]',
+    )) {
+      expect(button.disabled).toBe(true);
+    }
+  });
+
   it('empty list: shows empty state, hides the list', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
@@ -171,7 +212,7 @@ describe('api-keys page — local integration', () => {
     expect(text.toLowerCase()).toContain('revoked');
   });
 
-  it('supersedes an older list read so it cannot overwrite post-create credential state', async () => {
+  it('requires the initial authoritative list before allowing a create', async () => {
     let releaseInitial: (response: Response) => void = () => {};
     const initialRead = new Promise<Response>((resolve) => {
       releaseInitial = resolve;
@@ -191,15 +232,21 @@ describe('api-keys page — local integration', () => {
     const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
     (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Current key';
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    await flushMicrotasks(40);
+    await flushMicrotasks(10);
 
-    expect(initialSignal?.aborted).toBe(true);
-    expect(window.document.querySelector('[data-list]')?.textContent).toContain('Current key');
-    releaseInitial(json({ data: [{ ...REVOKED_KEY, name: 'Stale key' }] }));
-    await flushMicrotasks(30);
+    expect(initialSignal?.aborted).toBe(false);
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+    expect(isHidden(window, '[data-create-form-wrap]')).toBe(true);
+
+    releaseInitial(json({ data: [] }));
+    await flushMicrotasks(20);
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Current key';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushMicrotasks(40);
     const list = window.document.querySelector('[data-list]')?.textContent ?? '';
     expect(list).toContain('Current key');
-    expect(list).not.toContain('Stale key');
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
   });
 
   it('aborts and invalidates an orphaned list read on pagehide', () => {
@@ -388,7 +435,7 @@ describe('api-keys page — local integration', () => {
       fetchCalls.filter((c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url)),
     ).toHaveLength(1);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /creation is locked.*reload and review the key list/i,
+      /creation timed out.*key list could not be refreshed.*reload and verify/i,
     );
   });
 

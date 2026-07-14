@@ -112,6 +112,11 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     // Rename here without a coordinated migration would silently
     // sign every customer out of the page.
     expect(body).toContain("'ds_web_session_token'");
+    expect(body).toMatch(/try\s*\{\s*return localStorage\.getItem\('ds_web_session_token'\);/);
+    expect(body).toMatch(/catch\s*\{\s*return null;/);
+    expect(body).toMatch(
+      /if \(!token\)[\s\S]*?renderUnavailable\('Sign in to load your API keys\.'\)[\s\S]*?window\.dashboardHydrated\(\);[\s\S]*?return;/,
+    );
   });
 
   it('bounds hydration and serializes every API-key mutation', () => {
@@ -132,7 +137,7 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toContain('let keySnapshot = [];');
     expect(body).toMatch(/!keyIdsBefore\.has\(key\.id\)/);
     expect(body).toMatch(/String\(key\.name \|\| ''\) === String\(name\)/);
-    expect(body).toMatch(/createSubmit\.disabled = createOutcomeBlocked/);
+    expect(body).toMatch(/createSubmit\.disabled =\s*!keyDataAvailable \|\| createOutcomeBlocked/);
     expect(body).toMatch(/if \(createOutcomeBlocked\)/);
     expect(body).toMatch(/lockRotateAction\(sourceId, Boolean\(matchingKey\)\)/);
     expect(body).toMatch(/if \(ambiguousRotateIds\.has\(String\(id \|\| ''\)\)\)/);
