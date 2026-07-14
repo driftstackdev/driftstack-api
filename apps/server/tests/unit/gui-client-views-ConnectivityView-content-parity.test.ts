@@ -44,30 +44,40 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+// Keep this check at module load, before any content regex executes. A stale
+// assertion once combined these three fragments directly; because `\s` also
+// consumes newlines, V8 backtracked for minutes and Vitest could not service
+// its timeout. Constructing the marker avoids embedding the forbidden token in
+// this guard itself.
+const AMBIGUOUS_MULTILINE_SEPARATOR = String.raw`\s*` + String.raw`\n?` + String.raw`\s*`;
+if (read(fileURLToPath(import.meta.url)).includes(AMBIGUOUS_MULTILINE_SEPARATOR)) {
+  throw new Error('ConnectivityView content guard contains an ambiguous multiline separator');
+}
+
 describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity', () => {
   const body = read(LIB);
 
   it("Framing pinned: 'Connectivity test — verifies the configured API key + base URL by making a real call against the server. Useful when something stops working: is the key wrong? is the server down? is the network down?' + delegation framing 'Hits `client.sessions.list({ limit: 1 })` rather than a dedicated /healthz route — every authenticated endpoint exercises the same auth + rate-limit + DB chain, and `list` is the cheapest one.'", () => {
     expect(body).toMatch(
-      /\/\/ Connectivity test — verifies the configured API key \+ base URL by\s*\n?\s*\/\/ making a real call against the server\. Useful when something stops\s*\n?\s*\/\/ working: is the key wrong\? is the server down\? is the network down\?/,
+      /\/\/ Connectivity test — verifies the configured API key \+ base URL by[ \t]*(?:\r?\n[ \t]*)?\/\/ making a real call against the server\. Useful when something stops[ \t]*(?:\r?\n[ \t]*)?\/\/ working: is the key wrong\? is the server down\? is the network down\?/,
     );
     expect(body).toMatch(
-      /\/\/ Hits `client\.sessions\.list\(\{ limit: 1 \}\)` rather than a dedicated\s*\n?\s*\/\/ \/healthz route — every authenticated endpoint exercises the same\s*\n?\s*\/\/ auth \+ rate-limit \+ DB chain, and `list` is the cheapest one\./,
+      /\/\/ Hits `client\.sessions\.list\(\{ limit: 1 \}\)` rather than a dedicated[ \t]*(?:\r?\n[ \t]*)?\/\/ \/healthz route — every authenticated endpoint exercises the same[ \t]*(?:\r?\n[ \t]*)?\/\/ auth \+ rate-limit \+ DB chain, and `list` is the cheapest one\./,
     );
   });
 
   it("V-337 framing pinned: 'surface the server's driver mode + version when we can reach the public /version endpoint. Helps the founder spot \"you're talking to a mock server\" mismatches without running /version manually.'", () => {
     expect(body).toMatch(
-      /\/\/ V-337 — surface the server's driver mode \+ version when we can\s*\n?\s*\/\/ reach the public \/version endpoint\. Helps the founder spot\s*\n?\s*\/\/ "you're talking to a mock server" mismatches without running\s*\n?\s*\/\/ \/version manually\./,
+      /\/\/ V-337 — surface the server's driver mode \+ version when we can[ \t]*(?:\r?\n[ \t]*)?\/\/ reach the public \/version endpoint\. Helps the founder spot[ \t]*(?:\r?\n[ \t]*)?\/\/ "you're talking to a mock server" mismatches without running[ \t]*(?:\r?\n[ \t]*)?\/\/ \/version manually\./,
     );
   });
 
   it("CheckResult 4-field (ok: boolean + durationMs: number + detail: string + errorKind? optional) + ServerVersion 4-field with driver 3-value union ('mock' | 'webkit' | 'playwright') + playwright_browser? 3-value union ('webkit' | 'chromium' | 'firefox') — pinned so the V-337 driver/browser surface tracks the server-side enum", () => {
     expect(body).toMatch(
-      /interface CheckResult \{\s*\n?\s*ok: boolean;\s*\n?\s*durationMs: number;\s*\n?\s*detail: string;\s*\n?\s*errorKind\?: string;\s*\n?\s*\}/,
+      /interface CheckResult \{[ \t]*(?:\r?\n[ \t]*)?ok: boolean;[ \t]*(?:\r?\n[ \t]*)?durationMs: number;[ \t]*(?:\r?\n[ \t]*)?detail: string;[ \t]*(?:\r?\n[ \t]*)?errorKind\?: string;[ \t]*(?:\r?\n[ \t]*)?\}/,
     );
     expect(body).toMatch(
-      /interface ServerVersion \{\s*\n?\s*version: string;\s*\n?\s*git_sha: string;\s*\n?\s*driver: 'mock' \| 'webkit' \| 'playwright';\s*\n?\s*playwright_browser\?: 'webkit' \| 'chromium' \| 'firefox';\s*\n?\s*\}/,
+      /interface ServerVersion \{[ \t]*(?:\r?\n[ \t]*)?version: string;[ \t]*(?:\r?\n[ \t]*)?git_sha: string;[ \t]*(?:\r?\n[ \t]*)?driver: 'mock' \| 'webkit' \| 'playwright';[ \t]*(?:\r?\n[ \t]*)?playwright_browser\?: 'webkit' \| 'chromium' \| 'firefox';[ \t]*(?:\r?\n[ \t]*)?\}/,
     );
   });
 
@@ -86,13 +96,13 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
 
   it("runCheck: performance.now() ms timing (start → end → Math.round) + client.sessions.list({limit: 1}) delegation + 'API replied with N session(s) on the first page.' detail format + DriftstackError instanceof for errorKind extraction + 'unknown error' / 'unknown' kind fallbacks", () => {
     expect(body).toMatch(
-      /const start = performance\.now\(\);\s*\n?\s*try \{\s*\n?\s*const page = await client\.sessions\.list\(\{ limit: 1 \}\);\s*\n?\s*const durationMs = Math\.round\(performance\.now\(\) - start\);\s*\n?\s*setResult\(\{\s*\n?\s*ok: true,\s*\n?\s*durationMs,\s*\n?\s*detail: `API replied with \$\{page\.data\.length\} session\$\{page\.data\.length === 1 \? '' : 's'\} on the first page\.`,\s*\n?\s*\}\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*const durationMs = Math\.round\(performance\.now\(\) - start\);\s*\n?\s*const detail = err instanceof Error \? err\.message : 'unknown error';\s*\n?\s*const errorKind = err instanceof DriftstackError \? err\.kind : 'unknown';/,
+      /const start = performance\.now\(\);[ \t]*(?:\r?\n[ \t]*)?try \{[ \t]*(?:\r?\n[ \t]*)?const page = await client\.sessions\.list\(\{ limit: 1 \}\);[ \t]*(?:\r?\n[ \t]*)?const durationMs = Math\.round\(performance\.now\(\) - start\);[ \t]*(?:\r?\n[ \t]*)?setResult\(\{[ \t]*(?:\r?\n[ \t]*)?ok: true,[ \t]*(?:\r?\n[ \t]*)?durationMs,[ \t]*(?:\r?\n[ \t]*)?detail: `API replied with \$\{page\.data\.length\} session\$\{page\.data\.length === 1 \? '' : 's'\} on the first page\.`,[ \t]*(?:\r?\n[ \t]*)?\}\);[ \t]*(?:\r?\n[ \t]*)?\} catch \(err\) \{[ \t]*(?:\r?\n[ \t]*)?const durationMs = Math\.round\(performance\.now\(\) - start\);[ \t]*(?:\r?\n[ \t]*)?const detail = err instanceof Error \? err\.message : 'unknown error';[ \t]*(?:\r?\n[ \t]*)?const errorKind = err instanceof DriftstackError \? err\.kind : 'unknown';/,
     );
   });
 
   it("API-key masking + 'not set' fallback: settings.apiKey === null → 'not set — configure under Settings' in text-status-error else maskApiKey(settings.apiKey) — the shared, prefix-aware mask (consistency standardization, replacing the old non-standard inline slice(0,8)…slice(-4)); apiKey unmasked has 'configure under Settings' nudge so user knows where to set it", () => {
     expect(body).toMatch(
-      /\{settings\.apiKey === null \? \(\s*\n?\s*<span className="text-status-error">not set — configure under Settings<\/span>\s*\n?\s*\) : \([\s\S]*?maskApiKey\(settings\.apiKey\)\s*\n?\s*\)\}/,
+      /\{settings\.apiKey === null \? \([ \t]*(?:\r?\n[ \t]*)?<span className="text-status-error">not set — configure under Settings<\/span>[ \t]*(?:\r?\n[ \t]*)?\) : \([\s\S]*?maskApiKey\(settings\.apiKey\)[ \t]*(?:\r?\n[ \t]*)?\)\}/,
     );
   });
   it('imports the shared maskApiKey from ApiKeyMaskedSpan (prefix-aware mask used everywhere a key is shown)', () => {
@@ -101,25 +111,25 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
 
   it("V-337 server-info rows: driver row 'playwright (chromium)' format when driver===playwright && playwright_browser truthy + version row 'X.Y.Z · gitsha7' format when git_sha !== 'unknown' (.slice(0,7) short-sha); both rows only render when serverInfo !== null", () => {
     expect(body).toMatch(
-      /\{serverInfo !== null && \(\s*\n?\s*<>\s*\n?\s*<Row label="Server driver">/,
+      /\{serverInfo !== null && \([ \t]*(?:\r?\n[ \t]*)?<>[ \t]*(?:\r?\n[ \t]*)?<Row label="Server driver">/,
     );
     expect(body).toMatch(
-      /\{serverInfo\.driver\}\s*\n?\s*\{serverInfo\.driver === 'playwright' && serverInfo\.playwright_browser\s*\n?\s*\? ` \(\$\{serverInfo\.playwright_browser\}\)`\s*\n?\s*: ''\}/,
+      /\{serverInfo\.driver\}[ \t]*(?:\r?\n[ \t]*)?\{serverInfo\.driver === 'playwright' && serverInfo\.playwright_browser[ \t]*(?:\r?\n[ \t]*)?\? ` \(\$\{serverInfo\.playwright_browser\}\)`[ \t]*(?:\r?\n[ \t]*)?: ''\}/,
     );
     expect(body).toMatch(
-      /\{serverInfo\.version\}\s*\n?\s*\{serverInfo\.git_sha !== 'unknown' \? ` · \$\{serverInfo\.git_sha\.slice\(0, 7\)\}` : ''\}/,
+      /\{serverInfo\.version\}[ \t]*(?:\r?\n[ \t]*)?\{serverInfo\.git_sha !== 'unknown' \? ` · \$\{serverInfo\.git_sha\.slice\(0, 7\)\}` : ''\}/,
     );
   });
 
   it("ResultBlock: ok branch → status-ready tints + 'OK' section-label + durationMs ms display; fail branch → status-error tints + 'Failed' + errorKind '· {kind}' suffix conditional on errorKind !== undefined; both render Row helper Component with section-label + grid-cols-[10rem_1fr] layout", () => {
     expect(body).toMatch(
-      /function Row\(\{ label, children \}: \{ label: string; children: React\.ReactNode \}\): JSX\.Element \{\s*\n?\s*return \(\s*\n?\s*<div className="grid grid-cols-\[10rem_1fr\] items-center gap-3 text-sm">\s*\n?\s*<span className="section-label">\{label\}<\/span>/,
+      /function Row\(\{ label, children \}: \{ label: string; children: React\.ReactNode \}\): JSX\.Element \{[ \t]*(?:\r?\n[ \t]*)?return \([ \t]*(?:\r?\n[ \t]*)?<div className="grid grid-cols-\[10rem_1fr\] items-center gap-3 text-sm">[ \t]*(?:\r?\n[ \t]*)?<span className="section-label">\{label\}<\/span>/,
     );
     expect(body).toMatch(
-      /if \(result\.ok\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded-xl border border-status-ready\/30 bg-status-ready\/10 px-4 py-3">/,
+      /if \(result\.ok\) \{[ \t]*(?:\r?\n[ \t]*)?return \([ \t]*(?:\r?\n[ \t]*)?<div className="rounded-xl border border-status-ready\/30 bg-status-ready\/10 px-4 py-3">/,
     );
     expect(body).toMatch(
-      /\{result\.errorKind !== undefined && \(\s*\n?\s*<span className="mono text-2xs text-ink-muted">· \{result\.errorKind\}<\/span>\s*\n?\s*\)\}/,
+      /\{result\.errorKind !== undefined && \([ \t]*(?:\r?\n[ \t]*)?<span className="mono text-2xs text-ink-muted">· \{result\.errorKind\}<\/span>[ \t]*(?:\r?\n[ \t]*)?\)\}/,
     );
   });
 

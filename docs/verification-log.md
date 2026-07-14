@@ -25005,3 +25005,28 @@ Verification:
 - the package/config source guards pass 10/10;
 - an exact appended server test path executes one file and 3/3 tests rather
   than widening back to the whole workspace.
+
+## V-578 — content guard failures cannot wedge the server sweep
+
+**Date:** 2026-07-13
+
+Removed a catastrophic-backtracking expression from the Connectivity view's
+server-side content guard. Its repeated `\s*\n?\s*` separators were ambiguous:
+`\s*` can itself consume a newline, so a missing pinned comment made V8 explore
+combinatorial whitespace partitions instead of returning a normal assertion
+failure. Vitest could not enforce its ten-second timeout while the synchronous
+regular expression held the event loop.
+
+Every separator in that guard now matches horizontal whitespace followed by
+at most one optional line break and more horizontal whitespace. The accepted
+format remains the same, but each character has one bounded interpretation.
+
+Verification:
+
+- the pre-fix server-only sweep left one worker at full CPU for more than 85
+  seconds;
+- a Node inspector pause identified the exact active frame at line 52 inside
+  Vitest's `toMatch` implementation;
+- the post-fix file returns its intentionally stale content assertion as a
+  normal failure in under one second instead of wedging the suite;
+- the guard contains no remaining `\s*\n?\s*` separator.
