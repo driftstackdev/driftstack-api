@@ -25823,3 +25823,33 @@ Verification:
   Keychain, proxy, DNS, process-launch, and Dock command body;
 - focused GUI/server behavior, strict TypeScript, formatting, diff, and hooks
   pass.
+
+## V-604 — outbound webhook guard covers literals and non-global ranges
+
+**Date:** 2026-07-14
+
+Closed two connected SSRF gaps in customer-controlled webhook delivery. The
+shared host classifier now rejects additional IANA non-global/reserved IPv4 and
+IPv6 ranges, including benchmark/internal-lab, documentation, Teredo, discard,
+dummy, non-global SRv6, and the RFC 8215 local-use NAT64 prefix. The last is an
+IPv4-embedding route: `64:ff9b:1::a9fe:a9fe` can translate to cloud metadata
+`169.254.169.254` inside a NAT64-enabled domain.
+
+The guarded fetch now also validates its exact string, URL, or Request input
+before choosing undici's dispatcher. Node skips DNS lookup for literal IP URLs,
+so a lookup-hook-only design never sees such a target. Delivery-time preflight
+therefore protects legacy/corrupt/direct-database endpoint rows as well as
+ordinary route-created records. Valid public literals and hostnames continue to
+the existing connection-time DNS classification; both delivery workers retain
+redirect refusal.
+
+Verification:
+
+- direct webhook URLs and raw proxy hosts reject every added IPv4/IPv6 range,
+  including the local NAT64 metadata form, while public boundary controls pass;
+- string, URL, and Request inputs fail before network dispatch for unsafe
+  literals, invalid protocols, malformed URLs, and credential-bearing targets;
+- resolver tests retain all-address blocking, public-address allowance, and
+  exact DNS-error forwarding;
+- both webhook worker defaults/redirect fences, strict server source/test
+  TypeScript, targeted lint/format, diff, and hooks pass.

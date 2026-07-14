@@ -19,14 +19,39 @@
 
 import { Agent, fetch as undiciFetch } from 'undici';
 import { lookup as dnsLookup } from 'node:dns';
-import { classifyUnsafeHost } from './webhook-target-guard.js';
+import { classifyUnsafeHost, unsafeWebhookTargetReason } from './webhook-target-guard.js';
 
 /** Thrown by the lookup hook when a delivery target resolves to a blocked IP. */
 export class SsrfBlockedError extends Error {
-  constructor(address: string) {
-    super(`SSRF blocked: webhook target resolves to a private/reserved address (${address}).`);
+  constructor(address: string, reason = 'webhook target resolves to a private/reserved address') {
+    super(`SSRF blocked: ${reason} (${address}).`);
     this.name = 'SsrfBlockedError';
   }
+}
+
+function fetchTargetUrl(input: string | URL | Request): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+/**
+ * Validate the exact fetch input before undici selects a dispatcher. Node skips
+ * DNS lookup for literal IP URLs, so the connect-time lookup hook alone never
+ * sees them. This delivery-time preflight protects legacy/corrupt/direct-SQL
+ * endpoint rows as well as callers that use this guard outside the create route.
+ */
+export function assertSafeSsrfFetchTarget(input: string | URL | Request): void {
+  const url = fetchTargetUrl(input);
+  const reason = unsafeWebhookTargetReason(url);
+  if (reason === null) return;
+  let host = '<invalid target>';
+  try {
+    host = new URL(url).hostname || host;
+  } catch {
+    // Keep the fixed placeholder; never reflect an unparseable credential URL.
+  }
+  throw new SsrfBlockedError(host, reason);
 }
 
 // The net/tls lookup contract, loose enough to cover both the single-address
@@ -79,8 +104,10 @@ function ssrfAgent(): Agent {
  * SSRF-guarded dispatcher. Signature-compatible with the global `fetch` the
  * worker's config seam expects (tests inject their own fetch and bypass this).
  */
-export const ssrfGuardedFetch = ((input: string | URL | Request, init?: RequestInit) =>
-  undiciFetch(input as Parameters<typeof undiciFetch>[0], {
+export const ssrfGuardedFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  assertSafeSsrfFetchTarget(input);
+  return undiciFetch(input as Parameters<typeof undiciFetch>[0], {
     ...(init as Parameters<typeof undiciFetch>[1]),
     dispatcher: ssrfAgent(),
-  })) as unknown as typeof fetch;
+  });
+}) as unknown as typeof fetch;

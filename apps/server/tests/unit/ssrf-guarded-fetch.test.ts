@@ -4,7 +4,12 @@
 // itself is covered by webhook-target-guard tests.)
 
 import { describe, expect, it } from 'vitest';
-import { makeSsrfLookup, SsrfBlockedError } from '../../src/lib/ssrf-guarded-fetch.js';
+import {
+  assertSafeSsrfFetchTarget,
+  makeSsrfLookup,
+  ssrfGuardedFetch,
+  SsrfBlockedError,
+} from '../../src/lib/ssrf-guarded-fetch.js';
 
 type Addr = string | { address: string; family: number }[];
 function fakeResolver(result: { err?: NodeJS.ErrnoException; address?: Addr; family?: number }) {
@@ -49,7 +54,14 @@ describe('makeSsrfLookup — connection-time SSRF pin', () => {
   });
 
   it('blocks IPv6 loopback / ULA / link-local', () => {
-    for (const ip of ['::1', 'fc00::1', 'fe80::1']) {
+    for (const ip of [
+      '::1',
+      'fc00::1',
+      'fe80::1',
+      '64:ff9b:1::a9fe:a9fe',
+      '2001::1',
+      '2001:db8::1',
+    ]) {
       const lookup = makeSsrfLookup(fakeResolver({ address: ip, family: 6 }));
       expect(runLookup(lookup).err, ip).toBeInstanceOf(SsrfBlockedError);
     }
@@ -83,5 +95,51 @@ describe('makeSsrfLookup — connection-time SSRF pin', () => {
     const dnsErr = Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' });
     const lookup = makeSsrfLookup(fakeResolver({ err: dnsErr }));
     expect(runLookup(lookup).err).toBe(dnsErr);
+  });
+});
+
+describe('ssrfGuardedFetch — literal preflight before dispatcher selection', () => {
+  it('rejects direct string/URL/Request literals that bypass DNS lookup', async () => {
+    const blocked = [
+      'https://198.18.0.1/hook',
+      'https://[64:ff9b:1::a9fe:a9fe]/hook',
+      'https://[2001::1]/hook',
+    ];
+    for (const target of blocked) {
+      expect(() => assertSafeSsrfFetchTarget(target), target).toThrow(SsrfBlockedError);
+      expect(() => assertSafeSsrfFetchTarget(new URL(target)), target).toThrow(SsrfBlockedError);
+      expect(() => assertSafeSsrfFetchTarget(new Request(target)), target).toThrow(
+        SsrfBlockedError,
+      );
+      await expect(ssrfGuardedFetch(target), target).rejects.toBeInstanceOf(SsrfBlockedError);
+    }
+  });
+
+  it('allows public URL forms to continue to connection-time DNS pinning', () => {
+    for (const target of [
+      'https://hooks.example.com/delivery',
+      'https://8.8.8.8/delivery',
+      'https://[2606:4700:4700::1111]/delivery',
+    ]) {
+      expect(() => assertSafeSsrfFetchTarget(target), target).not.toThrow();
+      expect(() => assertSafeSsrfFetchTarget(new URL(target)), target).not.toThrow();
+      expect(() => assertSafeSsrfFetchTarget(new Request(target)), target).not.toThrow();
+    }
+  });
+
+  it('rejects malformed, non-HTTPS, and credential-bearing direct calls without reflecting secrets', () => {
+    for (const target of [
+      'not a URL',
+      'http://hooks.example.com/insecure',
+      'https://user:super-secret@hooks.example.com/delivery',
+    ]) {
+      try {
+        assertSafeSsrfFetchTarget(target);
+        throw new Error('expected target rejection');
+      } catch (error) {
+        expect(error).toBeInstanceOf(SsrfBlockedError);
+        expect((error as Error).message).not.toContain('super-secret');
+      }
+    }
   });
 });

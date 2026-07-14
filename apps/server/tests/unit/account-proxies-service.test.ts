@@ -24,7 +24,7 @@ async function seed(
   return repo.create(accountId, {
     label: 'p',
     scheme: 'socks5',
-    host: '203.0.113.10',
+    host: 'proxy.customer.example',
     port: 1080,
     username: 'user',
     wrappedPassword: wrapAccountSecret(MASTER, accountId, Buffer.from('hunter2', 'utf8')),
@@ -42,7 +42,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
       accountId: ACCT_A,
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg).not.toBeNull();
-    expect(cfg?.host).toBe('203.0.113.10');
+    expect(cfg?.host).toBe('proxy.customer.example');
     expect(cfg?.port).toBe(1080);
     expect(cfg?.username).toBe('user');
     expect(cfg?.password).toBe('hunter2');
@@ -146,7 +146,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
       accountId: ACCT_A,
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg?.password).toBeUndefined();
-    expect(cfg?.host).toBe('203.0.113.10');
+    expect(cfg?.host).toBe('proxy.customer.example');
   });
 
   it('a proxy with no stored password resolves without one', async () => {

@@ -44,6 +44,12 @@ describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () =
       'https://127.0.0.1/h',
       'https://169.254.169.254/h', // cloud metadata
       'https://100.64.0.1/h', // CGNAT
+      'https://192.0.0.1/h', // IETF protocol assignments
+      'https://192.0.2.1/h', // TEST-NET-1
+      'https://192.88.99.1/h', // deprecated 6to4 relay anycast
+      'https://198.18.0.1/h', // benchmark/internal lab range
+      'https://198.51.100.1/h', // TEST-NET-2
+      'https://203.0.113.1/h', // TEST-NET-3
       'https://0.0.0.0/h',
       'https://224.0.0.1/h', // multicast
       'https://240.0.0.1/h', // reserved
@@ -59,6 +65,14 @@ describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () =
       'https://[fd12::1]/h',
       'https://[fe80::1]/h',
       'https://[::]/h',
+      'https://[64:ff9b:1::a9fe:a9fe]/h', // local NAT64 → cloud metadata
+      'https://[100::1]/h', // discard-only
+      'https://[100:0:0:1::1]/h', // dummy prefix
+      'https://[2001::1]/h', // Teredo
+      'https://[2001:2::1]/h', // benchmark
+      'https://[2001:db8::1]/h', // documentation
+      'https://[3fff::1]/h', // documentation
+      'https://[5f00::1]/h', // non-global SRv6 SID
     ]) {
       expect(reason(h), h).toBeTruthy();
     }
@@ -156,7 +170,30 @@ describe('classifyUnsafeHost — raw-host SSRF (proxy/egress path, no URL normal
   it('blocks NAT64 + 6to4 IPv4-embedding forms', () => {
     expect(classifyUnsafeHost('64:ff9b::7f00:1'), 'NAT64→127.0.0.1').toBe('private');
     expect(classifyUnsafeHost('64:ff9b::a9fe:a9fe'), 'NAT64→169.254.169.254').toBe('private');
+    expect(classifyUnsafeHost('64:ff9b:1::a9fe:a9fe'), 'local-use NAT64→169.254.169.254').toBe(
+      'private',
+    );
     expect(classifyUnsafeHost('2002:7f00:1::'), '6to4→127.0.0.1').toBe('private');
+  });
+
+  it('blocks non-global benchmark, documentation, tunnel, and local-use ranges', () => {
+    for (const host of [
+      '192.0.0.1',
+      '192.0.2.1',
+      '192.88.99.1',
+      '198.18.0.1',
+      '198.51.100.1',
+      '203.0.113.1',
+      '100::1',
+      '100:0:0:1::1',
+      '2001::1',
+      '2001:2::1',
+      '2001:db8::1',
+      '3fff::1',
+      '5f00::1',
+    ]) {
+      expect(classifyUnsafeHost(host), host).toBe('private');
+    }
   });
 
   // Adversarial review w0p7zonl7: the IPv4-COMPATIBLE form (::a.b.c.d, RFC4291
@@ -175,6 +212,9 @@ describe('classifyUnsafeHost — raw-host SSRF (proxy/egress path, no URL normal
   it('does NOT false-positive on public IPv6 / IPv4 / hostnames', () => {
     expect(classifyUnsafeHost('2606:4700:4700::1111')).toBeNull(); // Cloudflare public IPv6
     expect(classifyUnsafeHost('8.8.8.8')).toBeNull(); // public IPv4 (no all-IPv4 quirk)
+    expect(classifyUnsafeHost('198.17.255.255')).toBeNull(); // before benchmark /15
+    expect(classifyUnsafeHost('198.20.0.0')).toBeNull(); // after benchmark /15
+    expect(classifyUnsafeHost('2001:4860:4860::8888')).toBeNull(); // Google public IPv6
     expect(classifyUnsafeHost('hooks.example.com')).toBeNull();
   });
 });

@@ -1621,12 +1621,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       : {}),
     profileMasterKey: proxyMasterKey,
     // ARC A slice 4b — deterministic probe so the proxy test endpoint doesn't
-    // open real sockets: TEST-NET hosts (203.0.113.x) resolve, anything else
-    // rejects (unreachable).
+    // open real sockets. Use a reserved example hostname instead of TEST-NET
+    // literals: the outbound SSRF guard correctly rejects non-global IP space.
     proxyTcpProbe:
       opts.proxyTcpProbe ??
       ((host: string) =>
-        host.startsWith('203.0.113.')
+        host === 'reachable-proxy.example.com'
           ? Promise.resolve()
           : Promise.reject(new Error('unreachable'))),
     // V-352b — fake R2 public bucket so /v1/account/me/avatar can be

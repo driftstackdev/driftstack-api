@@ -266,7 +266,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       method: 'POST',
       url: '/v1/account/me/proxies',
       headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
-      payload: { label: 'mine', host: '203.0.113.7', port: 1080, password: 'pw' },
+      payload: { label: 'mine', host: 'proxy.customer.example', port: 1080, password: 'pw' },
     });
     expect(proxy.statusCode).toBe(201);
     const proxyId = proxy.json<{ id: string }>().id;
@@ -285,7 +285,12 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       method: 'POST',
       url: '/v1/account/me/proxies',
       headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
-      payload: { label: 'http one', scheme: 'http', host: '203.0.113.9', port: 8080 },
+      payload: {
+        label: 'http one',
+        scheme: 'http',
+        host: 'proxy.customer.example',
+        port: 8080,
+      },
     });
     expect(proxy.statusCode).toBe(201);
     const proxyId = proxy.json<{ id: string }>().id;
@@ -318,7 +323,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       method: 'POST',
       url: '/v1/account/me/proxies',
       headers: { authorization: `Bearer ${fixture.plaintext}`, 'content-type': 'application/json' },
-      payload: { label: 'mine', host: '203.0.113.7', port: 1080, password: 'pw' },
+      payload: { label: 'mine', host: 'proxy.customer.example', port: 1080, password: 'pw' },
     });
     expect(proxy.statusCode).toBe(201);
     return proxy.json<{ id: string }>().id;

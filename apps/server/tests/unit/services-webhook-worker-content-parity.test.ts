@@ -227,6 +227,11 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/redirect: 'error',/);
   });
 
+  it('CRITICAL default sender uses the literal-preflight + connect-time-DNS-pinned guarded fetch', () => {
+    expect(body).toMatch(/import \{ ssrfGuardedFetch \} from '\.\.\/lib\/ssrf-guarded-fetch\.js';/);
+    expect(body).toMatch(/const fetchImpl = this\.config\.fetch \?\? ssrfGuardedFetch;/);
+  });
+
   it('defaultSleep: setTimeout-resolves-Promise helper', () => {
     expect(body).toMatch(
       /function defaultSleep\(ms: number\): Promise<void> \{\s*\n?\s*return new Promise\(\(resolve\) => setTimeout\(resolve, ms\)\);\s*\n?\s*\}/,

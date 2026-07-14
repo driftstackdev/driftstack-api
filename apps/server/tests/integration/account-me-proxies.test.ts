@@ -170,7 +170,7 @@ describe('SSRF host guard', () => {
         method: 'POST',
         url: '/v1/account/me/proxies',
         headers: { ...auth(fx), 'content-type': 'application/json' },
-        payload: { label: 'ok', host: '203.0.113.5', port: 1080 },
+        payload: { label: 'ok', host: 'proxy.customer.example', port: 1080 },
       })
     ).json<ProxyMeta>();
     const res = await fx.app.inject({
@@ -197,7 +197,7 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
 
   it('ok:true + latency_ms for a reachable proxy', async () => {
     fx = await buildTestApp();
-    const id = await makeProxy('203.0.113.9'); // harness stub resolves these
+    const id = await makeProxy('reachable-proxy.example.com');
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/account/me/proxies/${id}/test`,
@@ -211,7 +211,7 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
 
   it('ok:false + reason for an unreachable proxy (200, not an error)', async () => {
     fx = await buildTestApp();
-    const id = await makeProxy('198.51.100.9'); // harness stub rejects these
+    const id = await makeProxy('unreachable-proxy.example.com');
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/account/me/proxies/${id}/test`,
@@ -229,7 +229,7 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
     fx = await buildTestApp({
       proxyTcpProbe: () => Promise.reject(new Error(hostile)),
     });
-    const id = await makeProxy('198.51.100.9');
+    const id = await makeProxy('unreachable-proxy.example.com');
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/account/me/proxies/${id}/test`,

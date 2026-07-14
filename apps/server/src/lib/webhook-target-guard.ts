@@ -32,7 +32,13 @@ BLOCK.addSubnet('100.64.0.0', 10, 'ipv4'); // CGNAT (RFC6598)
 BLOCK.addSubnet('127.0.0.0', 8, 'ipv4'); // loopback
 BLOCK.addSubnet('169.254.0.0', 16, 'ipv4'); // link-local / cloud metadata
 BLOCK.addSubnet('172.16.0.0', 12, 'ipv4'); // RFC1918 private
+BLOCK.addSubnet('192.0.0.0', 24, 'ipv4'); // IETF protocol assignments
+BLOCK.addSubnet('192.0.2.0', 24, 'ipv4'); // TEST-NET-1 documentation
+BLOCK.addSubnet('192.88.99.0', 24, 'ipv4'); // deprecated 6to4 relay anycast
 BLOCK.addSubnet('192.168.0.0', 16, 'ipv4'); // RFC1918 private
+BLOCK.addSubnet('198.18.0.0', 15, 'ipv4'); // network benchmark / internal labs
+BLOCK.addSubnet('198.51.100.0', 24, 'ipv4'); // TEST-NET-2 documentation
+BLOCK.addSubnet('203.0.113.0', 24, 'ipv4'); // TEST-NET-3 documentation
 BLOCK.addSubnet('224.0.0.0', 4, 'ipv4'); // multicast
 BLOCK.addSubnet('240.0.0.0', 4, 'ipv4'); // reserved
 // IPv6 — loopback / unspecified / ULA / link-local / multicast.
@@ -46,7 +52,18 @@ BLOCK.addSubnet('ff00::', 8, 'ipv6'); // multicast
 // legit webhook/proxy target uses them (NAT64 is client-synthesized; 6to4 is
 // deprecated per RFC 7526). Distinct ranges — no all-IPv4 BlockList quirk.
 BLOCK.addSubnet('64:ff9b::', 96, 'ipv6'); // NAT64 well-known prefix (RFC6052)
+BLOCK.addSubnet('64:ff9b:1::', 48, 'ipv6'); // NAT64 local-use prefix (RFC8215)
 BLOCK.addSubnet('2002::', 16, 'ipv6'); // 6to4 (embeds IPv4 in 2nd/3rd hextets)
+// Other IANA non-global/reserved ranges. These are valid address syntax but not
+// public webhook destinations; several are deliberately usable only inside an
+// administrative domain, so accepting their literals recreates the SSRF class.
+BLOCK.addSubnet('100::', 64, 'ipv6'); // discard-only (RFC6666)
+BLOCK.addSubnet('100:0:0:1::', 64, 'ipv6'); // dummy prefix (RFC9780)
+BLOCK.addSubnet('2001::', 32, 'ipv6'); // Teredo tunnel (RFC4380)
+BLOCK.addSubnet('2001:2::', 48, 'ipv6'); // benchmarking (RFC5180)
+BLOCK.addSubnet('2001:db8::', 32, 'ipv6'); // documentation (RFC3849)
+BLOCK.addSubnet('3fff::', 20, 'ipv6'); // documentation (RFC9637)
+BLOCK.addSubnet('5f00::', 16, 'ipv6'); // SRv6 SIDs, non-global (RFC9602)
 
 const PRIVATE_TARGET = 'Webhook URL must not target a private, loopback, or reserved address.';
 const URL_CREDENTIALS =
