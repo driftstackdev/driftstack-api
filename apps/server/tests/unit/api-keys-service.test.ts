@@ -130,6 +130,45 @@ function makeRepo(initial: ApiKeyRow[] = []): {
       state.expiresSet.push({ id, at });
       return Promise.resolve();
     },
+    rotateApiKeyAtomic: (input) => {
+      const oldKey = state.rows.find(
+        (row) => row.id === input.oldKeyId && row.accountId === input.accountId,
+      );
+      if (!oldKey) return Promise.resolve({ kind: 'not_found' });
+      if (oldKey.revokedAt !== null) return Promise.resolve({ kind: 'revoked' });
+      if (oldKey.expiresAt !== null && oldKey.expiresAt <= input.now) {
+        return Promise.resolve({ kind: 'expired' });
+      }
+      const candidateGraceEnd = new Date(input.now.getTime() + input.gracePeriodMs);
+      const gracePeriodEndsAt =
+        oldKey.expiresAt !== null && oldKey.expiresAt < candidateGraceEnd
+          ? oldKey.expiresAt
+          : candidateGraceEnd;
+      const oldKeySnapshot: ApiKeyRow = { ...oldKey, scopes: [...oldKey.scopes] };
+      counter += 1;
+      const newRow: ApiKeyRow = {
+        id: `k_new_${counter.toString()}`,
+        accountId: oldKey.accountId,
+        name: input.name ?? oldKey.name,
+        keyPrefix: input.keyPrefix,
+        keyHash: input.keyHash,
+        scopes: oldKey.scopes,
+        lastUsedAt: null,
+        revokedAt: null,
+        expiresAt: oldKey.expiresAt,
+        provenance: null,
+        createdAt: new Date(),
+      };
+      state.rows.push(newRow);
+      oldKey.expiresAt = gracePeriodEndsAt;
+      state.expiresSet.push({ id: oldKey.id, at: gracePeriodEndsAt });
+      return Promise.resolve({
+        kind: 'rotated',
+        oldKey: oldKeySnapshot,
+        newRow,
+        gracePeriodEndsAt,
+      });
+    },
     listAllApiKeys: () => Promise.resolve({ items: state.rows, nextCursor: null }),
   };
   return { repo, state };
@@ -149,9 +188,9 @@ function prefixUniqueViolation(): Error {
 }
 
 /**
- * Build a repo whose insertApiKey throws a `key_prefix` 23505 on its
- * first `failTimes` calls, then succeeds. Records how many insert calls
- * were made so a test can assert the retry loop actually re-minted.
+ * Build a repo whose insert/atomic-rotate path throws a `key_prefix` 23505
+ * on its first `failTimes` calls, then succeeds. Records how many write calls
+ * were made so tests can assert the retry loop actually re-minted.
  */
 function makeRepoWithInsertFailures(
   failTimes: number,
@@ -170,6 +209,13 @@ function makeRepoWithInsertFailures(
         return Promise.reject(prefixUniqueViolation());
       }
       return base.insertApiKey(input);
+    },
+    rotateApiKeyAtomic: (input) => {
+      state.insertCalls += 1;
+      if (state.insertCalls <= failTimes) {
+        return Promise.reject(prefixUniqueViolation());
+      }
+      return base.rotateApiKeyAtomic(input);
     },
   };
   return { repo, state };
@@ -419,6 +465,24 @@ describe('V-553.B-20 ApiKeysService.rotate', () => {
     ]);
     const svc = new ApiKeysService(repo);
     await expect(svc.rotate(ctxWith(['account_owner']), 'k_old')).rejects.toThrow(/expired/);
+  });
+
+  it('does not mint a successor when revoke wins before the atomic authority check', async () => {
+    const { repo: base, state } = makeRepo([makeKey({ id: 'k_old', accountId: 'acc_1' })]);
+    const revokeWonAt = new Date('2026-07-13T12:00:00.000Z');
+    const repo: ApiKeysRepo = {
+      ...base,
+      rotateApiKeyAtomic: async (input) => {
+        await base.markRevoked(input.oldKeyId, revokeWonAt);
+        return base.rotateApiKeyAtomic(input);
+      },
+    };
+    const svc = new ApiKeysService(repo);
+
+    await expect(svc.rotate(ctxWith(['account_owner']), 'k_old')).rejects.toThrow(/revoked/);
+    expect(state.rows).toHaveLength(1);
+    expect(state.rows[0]?.id).toBe('k_old');
+    expect(state.rows[0]?.revokedAt).toEqual(revokeWonAt);
   });
 
   it('mints a new row, sets old key expiry, audits both ids', async () => {

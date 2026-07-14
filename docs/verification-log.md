@@ -25080,3 +25080,33 @@ Verification:
 - the focused team-invite schema, migration, and real-adapter proofs remain
   green;
 - strict server typechecking, linting, and formatting pass.
+
+## V-581 — API-key rotation serializes with revocation
+
+**Date:** 2026-07-13
+
+Closed a credential-persistence race in API-key rotation. The old service read
+an active key, inserted its successor, and shortened the old key in three
+separate repository operations. A concurrent revoke could commit after the
+read but before the insert, allowing rotation to mint a fresh active credential
+from authority that had already been revoked.
+
+Rotation is now one repository transaction. It locks the exact tenant-scoped
+old row with `FOR UPDATE`, re-checks revoked and expired state under that lock,
+inherits account, scopes, name, and existing expiry from the locked row, then
+inserts the successor and shortens the old key before commit. Prefix-collision
+retries rerun the whole transaction, so a failed insert cannot leave a partial
+expiry update. The standalone expiry setter remains only as a compatibility
+primitive and is no longer the rotation path.
+
+Verification:
+
+- a forced revoke-first service seam rejects rotation and retains exactly the
+  one revoked old row;
+- a real PostgreSQL transaction holds the revoke row lock while rotation starts,
+  then proves the waiting rotation observes `revoked` and mints no successor;
+- the inverse real PostgreSQL ordering proves rotate-first remains a valid
+  serial winner with one active successor;
+- the focused API-key service, route, repository, in-memory adapter, structural,
+  and real-database lane passes 12 files and 125 tests;
+- strict server typechecking plus focused ESLint and Prettier checks pass.

@@ -122,7 +122,7 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
 
   // ─── ApiKeysRepo 7+-method interface ─────────────────────────
 
-  it('CRITICAL ApiKeysRepo declares 6+ methods — insertApiKey + listApiKeys + findApiKey + findApiKeyUnscoped + markRevoked + setExpiresAt (V-296) + listAcrossAccounts (admin). The expanded method-set covers customer CRUD + V-296 rotate + admin cross-account list.', () => {
+  it('CRITICAL ApiKeysRepo declares CRUD, atomic rotate, and admin cross-account primitives.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
     expect(p).toMatch(/export interface ApiKeysRepo \{/);
     expect(p).toMatch(/insertApiKey\(input: NewApiKeyInput\): Promise<ApiKeyRow>;/);
@@ -131,6 +131,9 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
     expect(p).toMatch(/findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null>;/);
     expect(p).toMatch(/markRevoked\(id: string, at: Date\): Promise<void>;/);
     expect(p).toMatch(/setExpiresAt\(id: string, expiresAt: Date\): Promise<void>;/);
+    expect(p).toMatch(
+      /rotateApiKeyAtomic\(input: RotateApiKeyInput\): Promise<RotateApiKeyRepoResult>;/,
+    );
   });
 
   // ─── findApiKeyUnscoped admin-only framing ───────────────────
@@ -140,13 +143,12 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
     expect(p).toMatch(/Find an API key by id WITHOUT account scoping \(admin force-actions only\)/);
   });
 
-  // ─── V-296 setExpiresAt framing ──────────────────────────────
+  // ─── V-296 atomic rotation framing ───────────────────────────
 
-  it("CRITICAL V-296 setExpiresAt JSDoc — 'V-296 — set expires_at on an existing key. Used by rotate() to schedule the old key's automatic revocation at the end of the grace period. Idempotent — last write wins'. The V-296 + grace-period + idempotent-LWW framing is the rotate-path contract.", () => {
+  it('CRITICAL rotation JSDoc requires the atomic repository method while retaining a narrow compatibility setter.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
-    expect(p).toMatch(/V-296 — set expires_at on an existing key\. Used by rotate\(\) to/);
-    expect(p).toMatch(/schedule the old key's automatic revocation at the end of the/);
-    expect(p).toMatch(/grace period\. Idempotent — last write wins\./);
+    expect(p).toContain('Narrow expiration update retained for compatibility. Rotation must use');
+    expect(p).toContain('rotateApiKeyAtomic() so its authority check and both writes serialize.');
   });
 
   // ─── listAcrossAccounts admin-tool framing ───────────────────

@@ -11,6 +11,8 @@
 //     cross-account introspection.
 //   • markRevoked: update revokedAt where id.
 //   • setExpiresAt: update expiresAt where id.
+//   • rotateApiKeyAtomic: transaction + locked tenant-scoped old row;
+//     validates active authority before inserting successor + expiring old.
 //   • listAllApiKeys: tri-state revoked filter (true→isNotNull, false→
 //     isNull, undefined→no filter); cursor lt(createdAt); orderBy
 //     desc(createdAt); limit+1 hasMore + nextCursor.
@@ -35,14 +37,16 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed implementation of ApiKeysRepo\./);
   });
 
-  it('imports: and/desc/eq/isNotNull/isNull/lt from drizzle-orm; ApiKeyRow + ApiKeysRepo/NewApiKeyInput; Database; apiKeys schema', () => {
+  it('imports: Drizzle operators; ApiKeyRow + API-key repo input/result types; Database; apiKeys schema', () => {
     expect(body).toMatch(
       /import \{ type SQL, and, desc, eq, isNotNull, isNull, lt, or \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import type \{ ApiKeyRow \} from '\.\.\/services\/auth\.js';/);
-    expect(body).toMatch(
-      /import type \{ ApiKeysRepo, NewApiKeyInput \} from '\.\.\/services\/api-keys\.js';/,
-    );
+    expect(body).toContain('ApiKeysRepo,');
+    expect(body).toContain('NewApiKeyInput,');
+    expect(body).toContain('RotateApiKeyInput,');
+    expect(body).toContain('RotateApiKeyRepoResult,');
+    expect(body).toContain("} from '../services/api-keys.js';");
     expect(body).toMatch(/import \{ apiKeys \} from '\.\/schema\.js';/);
   });
 
@@ -74,6 +78,20 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     expect(body).toMatch(
       /async setExpiresAt\(id: string, expiresAt: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\.update\(apiKeys\)\.set\(\{ expiresAt \}\)\.where\(eq\(apiKeys\.id, id\)\);\s*\n?\s*\}/,
     );
+  });
+
+  it('rotateApiKeyAtomic: one transaction locks the tenant-scoped old row before active checks, successor insert, and old expiry update', () => {
+    expect(body).toContain(
+      'async rotateApiKeyAtomic(input: RotateApiKeyInput): Promise<RotateApiKeyRepoResult>',
+    );
+    expect(body).toContain('return this.database.db.transaction(async (tx) => {');
+    expect(body).toContain(
+      '.where(and(eq(apiKeys.id, input.oldKeyId), eq(apiKeys.accountId, input.accountId)))',
+    );
+    expect(body).toContain(".for('update');");
+    expect(body).toContain("if (locked.revokedAt !== null) return { kind: 'revoked' };");
+    expect(body).toContain('.insert(apiKeys)');
+    expect(body).toContain('.set({ expiresAt: gracePeriodEndsAt })');
   });
 
   it('listAllApiKeys tri-state revoked filter: revoked===true → isNotNull(revokedAt); revoked===false → isNull(revokedAt); undefined → no filter; cursor lt(createdAt, parsed-date); accountId optional', () => {

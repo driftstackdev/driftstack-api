@@ -2,7 +2,12 @@
 
 import { type SQL, and, desc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import type { ApiKeyRow } from '../services/auth.js';
-import type { ApiKeysRepo, NewApiKeyInput } from '../services/api-keys.js';
+import type {
+  ApiKeysRepo,
+  NewApiKeyInput,
+  RotateApiKeyInput,
+  RotateApiKeyRepoResult,
+} from '../services/api-keys.js';
 import type { Database } from './client.js';
 import { apiKeys } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
@@ -56,6 +61,52 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
 
   async setExpiresAt(id: string, expiresAt: Date): Promise<void> {
     await this.database.db.update(apiKeys).set({ expiresAt }).where(eq(apiKeys.id, id));
+  }
+
+  async rotateApiKeyAtomic(input: RotateApiKeyInput): Promise<RotateApiKeyRepoResult> {
+    return this.database.db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(apiKeys)
+        .where(and(eq(apiKeys.id, input.oldKeyId), eq(apiKeys.accountId, input.accountId)))
+        .limit(1)
+        .for('update');
+      if (!locked) return { kind: 'not_found' };
+      if (locked.revokedAt !== null) return { kind: 'revoked' };
+      if (locked.expiresAt !== null && locked.expiresAt.getTime() <= input.now.getTime()) {
+        return { kind: 'expired' };
+      }
+
+      const oldKey = toApiKeyRow(locked);
+      const candidateGraceEnd = new Date(input.now.getTime() + input.gracePeriodMs);
+      const gracePeriodEndsAt =
+        locked.expiresAt !== null && locked.expiresAt < candidateGraceEnd
+          ? locked.expiresAt
+          : candidateGraceEnd;
+      const [inserted] = await tx
+        .insert(apiKeys)
+        .values({
+          accountId: locked.accountId,
+          name: input.name ?? locked.name,
+          scopes: locked.scopes,
+          keyPrefix: input.keyPrefix,
+          keyHash: input.keyHash,
+          expiresAt: locked.expiresAt,
+          provenance: null,
+        })
+        .returning();
+      if (!inserted) throw new Error('rotateApiKeyAtomic insert returned no row');
+      await tx
+        .update(apiKeys)
+        .set({ expiresAt: gracePeriodEndsAt })
+        .where(eq(apiKeys.id, locked.id));
+      return {
+        kind: 'rotated',
+        oldKey,
+        newRow: toApiKeyRow(inserted),
+        gracePeriodEndsAt,
+      };
+    });
   }
 
   async listAllApiKeys(opts: {

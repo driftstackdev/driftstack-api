@@ -16,10 +16,9 @@
 //     'test' env, else 'live'.
 //   • V-216 audit: api_key.minted / api_key.revoked / api_key.rotated
 //     try/catch swallow.
-//   • V-296 rotate: NotFoundError + BadRequestError-on-revoked +
-//     BadRequestError-on-expired; mints fresh key (same scopes +
-//     accountId); old key's expires_at set to the EARLIER of (existing,
-//     now+grace) — never extends life; cache invalidateKey on old key.
+//   • V-296 rotate: repository transaction locks the old row, rejects
+//     missing/revoked/expired authority, and atomically mints a successor
+//     while shortening old expires_at — never extends life.
 //   • revoke: idempotent on already-revoked; cache.invalidateKey +
 //     webhooks api_key.revoked enqueue.
 
@@ -62,7 +61,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     );
   });
 
-  it('ApiKeysRepo: 6 methods (insertApiKey/listApiKeys/findApiKey/findApiKeyUnscoped/markRevoked/setExpiresAt) + listAllApiKeys with revoked filter', () => {
+  it('ApiKeysRepo: CRUD + atomic rotate + cross-account list with revoked filter', () => {
     expect(body).toMatch(/export interface ApiKeysRepo \{/);
     expect(body).toMatch(/insertApiKey\(input: NewApiKeyInput\): Promise<ApiKeyRow>;/);
     expect(body).toMatch(/listApiKeys\(accountId: string\): Promise<ApiKeyRow\[\]>;/);
@@ -73,10 +72,13 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /\/\*\* Find an API key by id WITHOUT account scoping \(admin force-actions only\)\. \*\/\s*\n?\s*findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null>;/,
     );
     expect(body).toMatch(/markRevoked\(id: string, at: Date\): Promise<void>;/);
-    expect(body).toMatch(
-      /V-296 — set expires_at on an existing key\. Used by rotate\(\) to\s*\n?\s*\*\s*schedule the old key's automatic revocation at the end of the\s*\n?\s*\*\s*grace period\. Idempotent — last write wins\./,
+    expect(body).toContain(
+      'Narrow expiration update retained for compatibility. Rotation must use',
     );
     expect(body).toMatch(/setExpiresAt\(id: string, expiresAt: Date\): Promise<void>;/);
+    expect(body).toMatch(
+      /rotateApiKeyAtomic\(input: RotateApiKeyInput\): Promise<RotateApiKeyRepoResult>;/,
+    );
     expect(body).toMatch(
       /listAllApiKeys\(opts: \{\s*\n?\s*limit: number;\s*\n?\s*cursor\?: string;\s*\n?\s*accountId\?: string;\s*\n?\s*revoked\?: boolean;\s*\n?\s*\}\): Promise<\{ items: ApiKeyRow\[\]; nextCursor: string \| null \}>;/,
     );
@@ -128,36 +130,24 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(/return this\.repo\.listAllApiKeys\(opts\);/);
   });
 
-  it('V-296 rotate: NotFoundError on missing + BadRequestError on revoked/expired + mint fresh + setExpiresAt to EARLIER of (existing, now+grace) — never extends life', () => {
-    expect(body).toMatch(
-      /if \(!oldKey\) throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/,
-    );
-    expect(body).toMatch(
-      /if \(oldKey\.revokedAt !== null\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Cannot rotate a revoked key\. Mint a fresh one via POST \/v1\/api-keys\.',\s*\n?\s*\);/,
-    );
-    // A born-dead key would result from rotating an already-expired one
-    // (the new key inherits expires_at), so rotate rejects it like revoked.
-    expect(body).toMatch(
-      /if \(oldKey\.expiresAt !== null && oldKey\.expiresAt\.getTime\(\) <= Date\.now\(\)\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Cannot rotate an expired key\. Mint a fresh one via POST \/v1\/api-keys\.',\s*\n?\s*\);/,
-    );
+  it('V-296 rotate: one repository call owns locked authority + both writes; terminal results map to public errors', () => {
     expect(body).toMatch(/const gracePeriodMs = opts\.gracePeriodMs \?\? 24 \* 60 \* 60 \* 1000;/);
-    expect(body).toMatch(/const candidate = new Date\(Date\.now\(\) \+ gracePeriodMs\);/);
-    expect(body).toMatch(
-      /const gracePeriodEndsAt =\s*\n?\s*oldKey\.expiresAt && oldKey\.expiresAt < candidate \? oldKey\.expiresAt : candidate;/,
-    );
-    expect(body).toMatch(/await this\.repo\.setExpiresAt\(oldKey\.id, gracePeriodEndsAt\);/);
-    // The inline comment must NOT describe this as the "later of" (the code
-    // computes the EARLIER/min so rotation never extends the old key's life);
-    // a "later of" comment contradicts the logic + could mislead a future
-    // dev into a security-regressing MAX refactor.
+    expect(body).toContain('const result = await this.repo.rotateApiKeyAtomic({');
+    expect(body).toContain('oldKeyId: keyId,');
+    expect(body).toContain('accountId,');
+    expect(body).toContain('now,');
+    expect(body).toContain('gracePeriodMs,');
+    expect(body).toContain("if (terminal?.kind === 'not_found') {");
+    expect(body).toContain("if (terminal?.kind === 'revoked') {");
+    expect(body).toContain("if (terminal?.kind === 'expired') {");
+    expect(body).not.toContain('await this.repo.setExpiresAt(oldKey.id, gracePeriodEndsAt);');
     expect(body).not.toMatch(/becomes the later of \(existing/);
   });
 
-  it('rotate: insertApiKey with same scopes + preserves original expiry (may be null); cache.invalidateKey on OLD; emits api_key.rotated audit with both ids', () => {
-    expect(body).toMatch(/name: opts\.name \?\? oldKey\.name,\s*\n?\s*scopes: oldKey\.scopes,/);
-    expect(body).toMatch(
-      /expiresAt: oldKey\.expiresAt, \/\/ preserve original expiry \(may be null\)/,
-    );
+  it('rotate: retries the whole atomic transaction on prefix collision; invalidates OLD cache; audits both ids', () => {
+    expect(body).toContain("!isUniqueViolation(err, 'api_keys_prefix_unique')");
+    expect(body).toContain('attempt === MAX_KEY_MINT_ATTEMPTS');
+    expect(body).toContain('const { oldKey, newRow, gracePeriodEndsAt } = rotated;');
     expect(body).toMatch(/await this\.authCache\.invalidateKey\(oldKey\.id\);/);
     expect(body).toMatch(
       /action: 'api_key\.rotated',\s*\n?\s*targetResourceId: `key_\$\{oldKey\.id\}`,\s*\n?\s*payload: \{\s*\n?\s*old_key_id: `key_\$\{oldKey\.id\}`,\s*\n?\s*new_key_id: `key_\$\{newRow\.id\}`,\s*\n?\s*grace_period_ends_at: gracePeriodEndsAt\.toISOString\(\),\s*\n?\s*\},/,

@@ -8,7 +8,12 @@
 
 import { randomUUID } from 'node:crypto';
 import type { ApiKeyRow } from '../../../src/services/auth.js';
-import type { ApiKeysRepo, NewApiKeyInput } from '../../../src/services/api-keys.js';
+import type {
+  ApiKeysRepo,
+  NewApiKeyInput,
+  RotateApiKeyInput,
+  RotateApiKeyRepoResult,
+} from '../../../src/services/api-keys.js';
 import type { InMemoryAuthRepo } from './in-memory-auth-repo.js';
 
 export class InMemoryApiKeysRepo implements ApiKeysRepo {
@@ -78,6 +83,48 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
       if (this.authRepoMirror) this.authRepoMirror.upsertApiKey(updated);
     }
     return Promise.resolve();
+  }
+
+  rotateApiKeyAtomic(input: RotateApiKeyInput): Promise<RotateApiKeyRepoResult> {
+    const current = this.byId.get(input.oldKeyId);
+    if (!current || current.accountId !== input.accountId) {
+      return Promise.resolve({ kind: 'not_found' });
+    }
+    if (current.revokedAt !== null) return Promise.resolve({ kind: 'revoked' });
+    if (current.expiresAt !== null && current.expiresAt <= input.now) {
+      return Promise.resolve({ kind: 'expired' });
+    }
+    const candidateGraceEnd = new Date(input.now.getTime() + input.gracePeriodMs);
+    const gracePeriodEndsAt =
+      current.expiresAt !== null && current.expiresAt < candidateGraceEnd
+        ? current.expiresAt
+        : candidateGraceEnd;
+    const newRow: ApiKeyRow = {
+      id: randomUUID(),
+      accountId: current.accountId,
+      name: input.name ?? current.name,
+      keyPrefix: input.keyPrefix,
+      keyHash: input.keyHash,
+      scopes: current.scopes,
+      lastUsedAt: null,
+      revokedAt: null,
+      expiresAt: current.expiresAt,
+      provenance: null,
+      createdAt: new Date(),
+    };
+    const updatedOld: ApiKeyRow = { ...current, expiresAt: gracePeriodEndsAt };
+    this.byId.set(current.id, updatedOld);
+    this.byId.set(newRow.id, newRow);
+    if (this.authRepoMirror) {
+      this.authRepoMirror.upsertApiKey(updatedOld);
+      this.authRepoMirror.upsertApiKey(newRow);
+    }
+    return Promise.resolve({
+      kind: 'rotated',
+      oldKey: current,
+      newRow,
+      gracePeriodEndsAt,
+    });
   }
 
   listAllApiKeys(opts: {

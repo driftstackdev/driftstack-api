@@ -64,6 +64,26 @@ export interface NewApiKeyInput {
   provenance?: string | null;
 }
 
+export interface RotateApiKeyInput {
+  oldKeyId: string;
+  accountId: string;
+  /** Omit to preserve the locked old row's name. */
+  name?: string;
+  keyPrefix: string;
+  keyHash: string;
+  now: Date;
+  gracePeriodMs: number;
+}
+
+export type RotateApiKeyRepoResult =
+  | {
+      kind: 'rotated';
+      oldKey: ApiKeyRow;
+      newRow: ApiKeyRow;
+      gracePeriodEndsAt: Date;
+    }
+  | { kind: 'not_found' | 'revoked' | 'expired' };
+
 export interface ApiKeysRepo {
   insertApiKey(input: NewApiKeyInput): Promise<ApiKeyRow>;
   listApiKeys(accountId: string): Promise<ApiKeyRow[]>;
@@ -71,10 +91,15 @@ export interface ApiKeysRepo {
   /** Find an API key by id WITHOUT account scoping (admin force-actions only). */
   findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null>;
   markRevoked(id: string, at: Date): Promise<void>;
-  /** V-296 — set expires_at on an existing key. Used by rotate() to
-   *  schedule the old key's automatic revocation at the end of the
-   *  grace period. Idempotent — last write wins. */
+  /** Narrow expiration update retained for compatibility. Rotation must use
+   *  rotateApiKeyAtomic() so its authority check and both writes serialize. */
   setExpiresAt(id: string, expiresAt: Date): Promise<void>;
+  /**
+   * Lock the current old-key row and, only while it remains active, insert its
+   * successor and shorten the old key to the grace boundary in one transaction.
+   * The locked row is the authority for account, scopes, and inherited expiry.
+   */
+  rotateApiKeyAtomic(input: RotateApiKeyInput): Promise<RotateApiKeyRepoResult>;
   /**
    * Cross-account list for admin tooling. Filters by accountId
    * optionally; supports cursor pagination by createdAt DESC. Optional
@@ -357,46 +382,63 @@ export class ApiKeysService {
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const tier = opts.effectiveTier ?? ctx.account.tier;
 
-    const oldKey = await this.repo.findApiKey(keyId, accountId);
-    if (!oldKey) throw new NotFoundError(`API key "${keyId}" not found.`);
-    if (oldKey.revokedAt !== null) {
+    const env = tier === 'free' ? 'test' : 'live';
+    const gracePeriodMs = opts.gracePeriodMs ?? 24 * 60 * 60 * 1000;
+    const now = new Date();
+    let rotated: Extract<RotateApiKeyRepoResult, { kind: 'rotated' }> | null = null;
+    let terminal: Exclude<RotateApiKeyRepoResult, { kind: 'rotated' }> | null = null;
+    let plaintext = '';
+
+    // The repository owns the locked-current authority check and both writes.
+    // Retry the whole transaction on the same rare prefix collision handled by
+    // create(); a failed attempt rolls back both the successor insert and old
+    // expiry update before a fresh plaintext is generated.
+    for (let attempt = 1; attempt <= MAX_KEY_MINT_ATTEMPTS; attempt++) {
+      const candidatePlaintext = generateApiKey(env);
+      try {
+        const result = await this.repo.rotateApiKeyAtomic({
+          oldKeyId: keyId,
+          accountId,
+          ...(opts.name !== undefined ? { name: opts.name } : {}),
+          keyPrefix: keyPrefixFromPlaintext(candidatePlaintext),
+          keyHash: await hashApiKey(candidatePlaintext),
+          now,
+          gracePeriodMs,
+        });
+        if (result.kind === 'rotated') {
+          rotated = result;
+          plaintext = candidatePlaintext;
+        } else {
+          terminal = result;
+        }
+        break;
+      } catch (err) {
+        if (
+          !isUniqueViolation(err, 'api_keys_prefix_unique') ||
+          attempt === MAX_KEY_MINT_ATTEMPTS
+        ) {
+          throw err;
+        }
+      }
+    }
+
+    if (terminal?.kind === 'not_found') {
+      throw new NotFoundError(`API key "${keyId}" not found.`);
+    }
+    if (terminal?.kind === 'revoked') {
       throw new BadRequestError(
         'Cannot rotate a revoked key. Mint a fresh one via POST /v1/api-keys.',
       );
     }
-    // The new key inherits the old key's expires_at (see below). Rotating
-    // an already-expired key would therefore mint a new key that is born
-    // dead — auth rejects it immediately. Reject the rotation instead, the
-    // same way a revoked key is handled, so the caller mints a fresh one.
-    if (oldKey.expiresAt !== null && oldKey.expiresAt.getTime() <= Date.now()) {
+    if (terminal?.kind === 'expired') {
       throw new BadRequestError(
         'Cannot rotate an expired key. Mint a fresh one via POST /v1/api-keys.',
       );
     }
-
-    // Mint the new key. Bounded regenerate-retry on a key_prefix collision
-    // (23505) so a rare prefix birthday-clash doesn't fail rotation with an
-    // opaque 500 — the key is simply re-minted.
-    const env = tier === 'free' ? 'test' : 'live';
-    const { row: newRow, plaintext } = await this.mintAndInsertWithRetry(env, {
-      accountId,
-      name: opts.name ?? oldKey.name,
-      scopes: oldKey.scopes,
-      expiresAt: oldKey.expiresAt, // preserve original expiry (may be null)
-    });
-
-    // Schedule the old key's automatic revocation. The old key's
-    // expires_at becomes the EARLIER of (existing, now + grace) — so
-    // rotation never EXTENDS the old key's life: a long-lived or
-    // no-expiry key is shortened to the grace window, and a sooner-
-    // expiring key keeps its earlier deadline. (The next line computes
-    // that minimum.) The auth path already rejects keys past expires_at;
-    // no separate cron needed.
-    const gracePeriodMs = opts.gracePeriodMs ?? 24 * 60 * 60 * 1000;
-    const candidate = new Date(Date.now() + gracePeriodMs);
-    const gracePeriodEndsAt =
-      oldKey.expiresAt && oldKey.expiresAt < candidate ? oldKey.expiresAt : candidate;
-    await this.repo.setExpiresAt(oldKey.id, gracePeriodEndsAt);
+    if (rotated === null) {
+      throw new Error('API key rotation returned no result');
+    }
+    const { oldKey, newRow, gracePeriodEndsAt } = rotated;
 
     // Cache invalidation for the OLD key — its expires_at changed, so
     // any cached AccountContext for that key is now stale. The cache

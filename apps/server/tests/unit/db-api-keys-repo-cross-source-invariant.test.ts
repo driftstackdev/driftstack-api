@@ -4,7 +4,7 @@
 //
 //   Header — 'Drizzle-backed implementation of ApiKeysRepo'.
 //
-//   DrizzleApiKeysRepo implements ApiKeysRepo with 6 methods:
+//   DrizzleApiKeysRepo implements ApiKeysRepo with atomic rotation:
 //     - insertApiKey(input): inserts + returns row.
 //     - listApiKeys(accountId): selects by accountId + orderBy
 //       desc(createdAt).
@@ -13,6 +13,8 @@
 //     - findApiKeyUnscoped(id): admin-only lookup without accountId.
 //     - markRevoked(id, at): sets revokedAt timestamp.
 //     - setExpiresAt(id, expiresAt): updates expiresAt.
+//     - rotateApiKeyAtomic(input): locks the tenant-scoped current row
+//       before validating authority and writing both rotation rows.
 //
 //   listAllApiKeys admin paged-cursor lookup with 4 filters:
 //     - cursor → lt(createdAt, cursorDate).
@@ -54,9 +56,9 @@ describe('W991 db/api-keys-repo cross-source invariant', () => {
     expect(p).toMatch(/constructor\(private readonly database: Database\) \{\}/);
   });
 
-  // ─── 6-method surface ────────────────────────────────────────
+  // ─── core method surface ─────────────────────────────────────
 
-  it('CRITICAL 6-method surface — insertApiKey + listApiKeys + findApiKey + findApiKeyUnscoped + markRevoked + setExpiresAt. The 6-method set is the ApiKeysRepo contract.', () => {
+  it('CRITICAL method surface includes atomic rotation alongside insert/list/find/revoke/expiry primitives.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/api-keys-repo.ts'));
     expect(p).toMatch(/async insertApiKey\(input: NewApiKeyInput\): Promise<ApiKeyRow> \{/);
     expect(p).toMatch(/async listApiKeys\(accountId: string\): Promise<ApiKeyRow\[\]> \{/);
@@ -66,6 +68,9 @@ describe('W991 db/api-keys-repo cross-source invariant', () => {
     expect(p).toMatch(/async findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null> \{/);
     expect(p).toMatch(/async markRevoked\(id: string, at: Date\): Promise<void> \{/);
     expect(p).toMatch(/async setExpiresAt\(id: string, expiresAt: Date\): Promise<void> \{/);
+    expect(p).toContain(
+      'async rotateApiKeyAtomic(input: RotateApiKeyInput): Promise<RotateApiKeyRepoResult>',
+    );
   });
 
   // ─── insertApiKey returning() ────────────────────────────────
@@ -112,6 +117,18 @@ describe('W991 db/api-keys-repo cross-source invariant', () => {
     expect(p).toMatch(
       /\.update\(apiKeys\)\.set\(\{ expiresAt \}\)\.where\(eq\(apiKeys\.id, id\)\);/,
     );
+  });
+
+  it('CRITICAL rotateApiKeyAtomic serializes the active-row check, successor insert, and old expiry update under a tenant-scoped FOR UPDATE lock.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/api-keys-repo.ts'));
+    expect(p).toContain('return this.database.db.transaction(async (tx) => {');
+    expect(p).toContain(
+      '.where(and(eq(apiKeys.id, input.oldKeyId), eq(apiKeys.accountId, input.accountId)))',
+    );
+    expect(p).toContain(".for('update');");
+    expect(p).toContain("if (locked.revokedAt !== null) return { kind: 'revoked' };");
+    expect(p).toContain('.insert(apiKeys)');
+    expect(p).toContain('.set({ expiresAt: gracePeriodEndsAt })');
   });
 
   // ─── listAllApiKeys 4-filter ─────────────────────────────────
