@@ -83,11 +83,21 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     );
   });
 
-  it("Success path (W528: shared completeSession for plain login + MFA challenge): session.token → localStorage.setItem('ds_web_session_token', ...) + window.location.href = next ? next : '/' — pinned so the post-login redirect honors next= but falls back to dashboard root", () => {
+  it("Success path (W528: shared completeSession for plain login + MFA challenge): the hardened persistence helper writes session.token, clears stale authority, then redirects to next ? next : '/'", () => {
     expect(body).toMatch(
-      /function completeSession\(body\) \{\s*\n?\s*const session = \(body && body\.session\) \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*\}/,
+      /function persistWebSession\(body\) \{[\s\S]*?const session = \(body && body\.session\) \|\| \{\};[\s\S]*?const staleKeys = \['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user'\];[\s\S]*?localStorage\.removeItem\(key\);[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.getItem\('ds_web_session_token'\) !== session\.token[\s\S]*?function completeSession/,
     );
-    expect(body).toMatch(/window\.location\.href = next \? next : '\/';/);
+    expect(body).toMatch(
+      /function completeSession\(body\) \{\s*persistWebSession\(body\);[\s\S]*?window\.location\.href = next \? next : '\/';\s*\}/,
+    );
+    expect(body.replace('persistWebSession(body);', '')).not.toMatch(
+      /function completeSession\(body\) \{\s*persistWebSession\(body\);/,
+    );
+    expect(
+      body.replace("localStorage.setItem('ds_web_session_token', session.token);", ''),
+    ).not.toMatch(
+      /function persistWebSession\(body\) \{[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?function completeSession/,
+    );
   });
 
   it('maps problem+json through fixed copy while preserving stable type/status for the email-verification recovery branch', () => {

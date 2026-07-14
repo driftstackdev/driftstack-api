@@ -75,7 +75,18 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
 
   it('persists the session only after the direct or MFA branch returns it', () => {
     expect(body).toMatch(
-      /function completeSession\(session\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*window\.location\.href = '\/';/,
+      /function persistWebSession\(session\) \{[\s\S]*?const staleKeys = \['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user'\];[\s\S]*?localStorage\.removeItem\(key\);[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.getItem\('ds_web_session_token'\) !== session\.token[\s\S]*?function completeSession/,
+    );
+    expect(body).toMatch(
+      /function completeSession\(session\) \{\s*persistWebSession\(session\);\s*window\.location\.href = '\/';\s*\}/,
+    );
+    expect(body.replace('persistWebSession(session);', '')).not.toMatch(
+      /function completeSession\(session\) \{\s*persistWebSession\(session\);/,
+    );
+    expect(
+      body.replace("localStorage.setItem('ds_web_session_token', session.token);", ''),
+    ).not.toMatch(
+      /function persistWebSession\(session\) \{[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?function completeSession/,
     );
     expect(body).toContain('if (body.mfa_required === true)');
     expect(body).toContain("'/v1/auth/mfa/challenge'");
@@ -83,7 +94,10 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
 
   it('maps password-reset problem+json through the shared fixed response boundary', () => {
     expect(body).toMatch(
-      /\.then\(\(b\) => Promise\.reject\(window\.driftstackResponseError\(r, b\)\)\),/,
+      /return r\s*\.json\(\)\s*\.catch\(\(\) => \(\{\}\)\)\s*\.then\(\(b\) =>\s*Promise\.reject\(window\.driftstackResponseError\(r, b\)\),?\s*\);/,
+    );
+    expect(body.replace('window.driftstackResponseError(r, b)', 'new Error(b.detail)')).not.toMatch(
+      /return r\s*\.json\(\)\s*\.catch\(\(\) => \(\{\}\)\)\s*\.then\(\(b\) =>\s*Promise\.reject\(window\.driftstackResponseError\(r, b\)\),?\s*\);/,
     );
     expect(body).not.toMatch(/new Error\(b\.detail/);
   });

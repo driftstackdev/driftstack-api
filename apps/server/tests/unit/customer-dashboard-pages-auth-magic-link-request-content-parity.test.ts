@@ -52,6 +52,7 @@ describe('customer-dashboard auth/magic-link-request content parity', () => {
   it('shows honest in-flight feedback, blocks duplicate requests, and keeps an ambiguous timed-out delivery latched', () => {
     expect(body).toMatch(/if \(requestInFlight\) return;/);
     expect(body).toMatch(/if \(requestOutcomeUnknown\) return;/);
+    expect(body).toMatch(/if \(requestResponseAccepted\) return;/);
     expect(body).toMatch(/setSubmitting\(true\);/);
     expect(body).toMatch(/submitBtn\.setAttribute\('aria-busy', on \? 'true' : 'false'\);/);
     expect(body).toMatch(/submitBtn\.textContent = on \? 'Sending…' : submitLabel;/);
@@ -61,7 +62,15 @@ describe('customer-dashboard auth/magic-link-request content parity', () => {
       /if \(controller\.signal\.aborted\) \{\s*\n?\s*showUnknownOutcome\(email\);\s*\n?\s*return;/,
     );
     expect(body).toMatch(
-      /requestInFlight = false;\s*\n?\s*if \(!requestOutcomeUnknown\) setSubmitting\(false\);/,
+      /requestInFlight = false;\s*if \(!requestOutcomeUnknown && !requestResponseAccepted\) setSubmitting\(false\);/,
+    );
+    expect(body).toMatch(
+      /if \(r\.ok\) \{\s*requestResponseAccepted = true;[\s\S]*?if \(requestResponseAccepted\) \{[\s\S]*?form\.classList\.add\('hidden'\);[\s\S]*?success\.classList\.remove\('hidden'\);\s*return;/,
+    );
+    expect(
+      body.replace('!requestOutcomeUnknown && !requestResponseAccepted', '!requestOutcomeUnknown'),
+    ).not.toMatch(
+      /requestInFlight = false;\s*if \(!requestOutcomeUnknown && !requestResponseAccepted\) setSubmitting\(false\);/,
     );
   });
 });

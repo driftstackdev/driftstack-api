@@ -74,7 +74,10 @@ describe('W491.C apps/customer-dashboard/src/pages/forgot-password.astro content
 
   it('maps problem+json through the shared fixed response boundary', () => {
     expect(body).toMatch(
-      /\.then\(\(b\) => Promise\.reject\(window\.driftstackResponseError\(r, b\)\)\),/,
+      /return r\s*\.json\(\)\s*\.catch\(\(\) => \(\{\}\)\)\s*\.then\(\(b\) =>\s*Promise\.reject\(window\.driftstackResponseError\(r, b\)\),?\s*\);/,
+    );
+    expect(body.replace('window.driftstackResponseError(r, b)', 'new Error(b.detail)')).not.toMatch(
+      /return r\s*\.json\(\)\s*\.catch\(\(\) => \(\{\}\)\)\s*\.then\(\(b\) =>\s*Promise\.reject\(window\.driftstackResponseError\(r, b\)\),?\s*\);/,
     );
     expect(body).not.toMatch(/new Error\(b\.detail/);
   });

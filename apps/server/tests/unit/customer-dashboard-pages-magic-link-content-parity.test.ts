@@ -54,7 +54,18 @@ describe('customer-dashboard/pages/auth/magic-link content parity', () => {
 
   it('completeSession persists the canonical session token and clears prior-user overrides', () => {
     expect(body).toMatch(
-      /function completeSession\(session\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);/,
+      /function persistWebSession\(session\) \{[\s\S]*?const staleKeys = \['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user'\];[\s\S]*?localStorage\.removeItem\(key\);[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.getItem\('ds_web_session_token'\) !== session\.token[\s\S]*?function completeSession/,
+    );
+    expect(body).toMatch(
+      /function completeSession\(session\) \{\s*persistWebSession\(session\);[\s\S]*?window\.location\.href = safeNextPath\(params\.get\('next'\), window\.location\.origin\);\s*\}/,
+    );
+    expect(body.replace('persistWebSession(session);', '')).not.toMatch(
+      /function completeSession\(session\) \{\s*persistWebSession\(session\);/,
+    );
+    expect(
+      body.replace("localStorage.setItem('ds_web_session_token', session.token);", ''),
+    ).not.toMatch(
+      /function persistWebSession\(session\) \{[\s\S]*?localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?function completeSession/,
     );
   });
 
