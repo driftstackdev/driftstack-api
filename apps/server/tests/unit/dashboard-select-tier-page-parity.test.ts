@@ -118,18 +118,25 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     expect(p).toMatch(/cancel_url: window\.location\.origin \+ '\/select-tier'/);
   });
 
-  it('CRITICAL on-checkout-response redirect to body.checkout_url, guarded against a missing checkout_url (Finding #20 — a 200 with no checkout_url must throw, not leave the button stuck on "Redirecting…" forever). The redirect IS the Stripe handoff; drift to dropping would leave customers stuck on /select-tier with no path forward.', () => {
+  it('CRITICAL checkout redirects only to a validated Stripe Checkout URL; missing, malformed, or off-origin responses throw so the busy button recovers', () => {
     const p = read(PAGE);
+    const trustedCheckoutRedirect =
+      /const checkoutUrl = window\.driftstackTrustedRedirectUrl\(body\.checkout_url, \[\s*'https:\/\/checkout\.stripe\.com',\s*\]\);\s*if \(!checkoutUrl\) throw new Error\('No valid checkout URL returned\.'\);\s*window\.location\.href = checkoutUrl;/;
 
-    // The paid-tier checkout-session flow redirects to body.checkout_url
-    // (the one-time trial-pack flow was retired; crypto uses a modal).
-    // A response missing checkout_url throws instead of silently
-    // no-oping, so withBusy's .catch resets the disabled button.
-    expect(p).toMatch(
-      /if \(!body\.checkout_url\) throw new Error\('No checkout URL returned\.'\);\s*\n\s+window\.location\.href = body\.checkout_url;/,
-    );
-    const redirects = (p.match(/window\.location\.href = body\.checkout_url/g) ?? []).length;
-    expect(redirects, 'body.checkout_url redirects').toBe(1);
+    expect(p).toMatch(trustedCheckoutRedirect);
+    expect(p).not.toMatch(/window\.location\.href = body\.checkout_url/);
+    expect(
+      p.replace(
+        /const checkoutUrl = window\.driftstackTrustedRedirectUrl\(body\.checkout_url, \[\s*'https:\/\/checkout\.stripe\.com',\s*\]\);/,
+        'const checkoutUrl = body.checkout_url;',
+      ),
+    ).not.toMatch(trustedCheckoutRedirect);
+    const redirects = (p.match(/window\.location\.href = checkoutUrl/g) ?? []).length;
+    expect(redirects, 'validated Stripe checkout redirects').toBe(1);
+    expect(
+      p.match(/driftstackTrustedRedirectUrl\(body\.checkout_url/g) ?? [],
+      'checkout response allow-list validations',
+    ).toHaveLength(1);
   });
 
   it("CRITICAL authedFetch helper bundles Bearer auth + content-type + credentials:'include'. Every billing-route call goes through this helper. Drift to inlining would let some calls miss the auth header.", () => {
@@ -167,13 +174,22 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     expect(p).toMatch(/\{String\(PROFILES_PER_TIER\[t\.id\]\)\}/);
   });
 
-  it('CRITICAL withBusy() error-handler restores original label + re-enables button on failure. Drift to dropping would leave the button permanently disabled on transient errors.', () => {
+  it("CRITICAL withBusy() serializes checkout across every tier and restores each button's authoritative prior state after settlement", () => {
     const p = read(PAGE);
 
+    expect(p).toMatch(/if \(checkoutInFlightButton !== null\) return Promise\.resolve\(\);/);
+    expect(p).toMatch(
+      /const buttonStates = Array\.from\(tierButtons\)\.map\(\(button\) => \(\{\s*button,\s*disabled: button\.disabled,\s*text: button\.textContent,\s*title: button\.getAttribute\('title'\),\s*\}\)\);/,
+    );
+    expect(p).toMatch(
+      /tierButtons\.forEach\(\(button\) => \{\s*button\.disabled = true;\s*button\.setAttribute\('aria-disabled', 'true'\);/,
+    );
     expect(p).toMatch(/\.finally\(\(\) => \{/);
     expect(p).toMatch(/busyCheckoutButtons\.delete\(btn\);/);
-    expect(p).toMatch(/btn\.disabled = false;/);
     expect(p).toMatch(/btn\.textContent = original;/);
+    expect(p).toMatch(
+      /buttonStates\.forEach\(\(\{ button, disabled, text, title \}\) => \{\s*button\.disabled = disabled;\s*button\.textContent = text;\s*button\.removeAttribute\('aria-disabled'\);/,
+    );
   });
 
   it('CRITICAL select-tier uses DashboardLayout + withSidebar={false}. The tier-picker is part of the onboarding flow — no sidebar (matches W735-W739 auth-page pattern).', () => {
