@@ -6,9 +6,11 @@
 //
 //   - decorateRequest('account') as the per-request auth-context
 //     anchor (typed via declare-module Fastify augmentation)
-//   - 4 decorators on the Fastify instance: requireAuth,
+//   - 5 decorators on the Fastify instance: requireAuth,
 //     requireAuthEventSource (SSE ds_token query fallback), requireScope,
-//     requireMfaFresh (V-353e step-up gate)
+//     requireMfaFresh (V-353e step-up gate), requireOwner
+//   - Both bearer-auth entrypoints pass the optional persistent OAuth
+//     store into the shared authenticate() authority pipeline
 //   - DEFAULT_MFA_FRESHNESS_SECONDS = 15 * 60 (15 minutes per
 //     V-353a Q4 verdict) — matches cross-SDK W682
 //   - V-353e step-up gate semantics:
@@ -47,7 +49,7 @@ describe('W712 server-side auth middleware parity', () => {
     expect(existsSync(AUTH_MIDDLEWARE), `missing ${AUTH_MIDDLEWARE}`).toBe(true);
   });
 
-  it('CRITICAL Fastify type augmentation pinned — declare module fastify adds `account` to FastifyRequest + 4 decorator methods to FastifyInstance. The augmentation is what gives TypeScript route handlers visibility into the account context without per-route generics.', () => {
+  it('CRITICAL Fastify type augmentation pinned — declare module fastify adds `account` to FastifyRequest + 5 decorator methods to FastifyInstance. The augmentation is what gives TypeScript route handlers visibility into the account context without per-route generics.', () => {
     const src = read(AUTH_MIDDLEWARE);
 
     expect(src).toMatch(/declare module 'fastify' \{/);
@@ -59,6 +61,7 @@ describe('W712 server-side auth middleware parity', () => {
     expect(src).toMatch(/requireAuthEventSource:/);
     expect(src).toMatch(/requireScope:/);
     expect(src).toMatch(/requireMfaFresh:/);
+    expect(src).toMatch(/requireOwner:/);
   });
 
   it('CRITICAL V-353e default step-up freshness pinned at 15 minutes (15 * 60 seconds). Matches cross-SDK W682 and api-types W709 documentation; drift to a different bound would let stale MFA proofs satisfy step-up checks.', () => {
@@ -72,12 +75,16 @@ describe('W712 server-side auth middleware parity', () => {
     expect(src).toMatch(/extractBearerToken\(request\.headers\.authorization\)/);
   });
 
-  it('CRITICAL authenticate() called with 7 args: (authRepo, token, authCache, new Date(), authCoalescer, staffEmails, negativeAuthCache). The canonical auth-pipeline shape — drift to dropping authCache or authCoalescer would let every request hit the DB (cache stampede + scale degradation); the 7th arg (negativeAuthCache) skips the prefix-lookup + scrypt verify on a repeated bogus token (DoS hardening).', () => {
+  it('CRITICAL both bearer entrypoints call authenticate() with 8 args: auth/cache/coalescer/staff/negative-cache plus the OAuth authority store. Dropping the OAuth store would make issued OAuth tokens unusable; dropping cache/coalescer controls would reintroduce stampedes and repeated bogus-token work.', () => {
     const src = read(AUTH_MIDDLEWARE);
 
-    expect(src).toMatch(
-      /await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*\)/,
-    );
+    const authenticateCalls = src.match(/await authenticate\([\s\S]*?\);/g) ?? [];
+    expect(authenticateCalls).toHaveLength(2);
+    for (const call of authenticateCalls) {
+      expect(call).toMatch(
+        /await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\)/,
+      );
+    }
   });
 
   it('CRITICAL requireAuth decorator + decorateRequest("account", null) initialization pinned. The null-init on every request is what prevents stale account contexts from leaking across requests (Fastify shares request prototypes by default).', () => {
@@ -144,22 +151,24 @@ describe('W712 server-side auth middleware parity', () => {
     expect(src).toMatch(/MfaStepUpRequiredError,?[\s\S]*?from '\.\.\/lib\/errors\.js'/);
   });
 
-  it('CRITICAL AuthPluginOptions 4-field shape pinned — authRepo + authCache + authCoalescer + mfaService (optional). The 4-field config is what lets test fixtures inject in-memory implementations + production wire-up Redis cache + DB repo. Drift to dropping a field would break either prod boot or test fixtures.', () => {
+  it('CRITICAL AuthPluginOptions authority dependencies pinned — authRepo + authCache + authCoalescer + optional oauthStore and mfaService. The fields let production wire persistent OAuth, Redis-backed controls and MFA while fixtures inject bounded alternatives.', () => {
     const src = read(AUTH_MIDDLEWARE);
     expect(src).toMatch(/export interface AuthPluginOptions \{/);
     expect(src).toMatch(/authRepo: AccountAuthRepo;/);
     expect(src).toMatch(/authCache: AuthCache \| null;/);
     expect(src).toMatch(/authCoalescer: AuthCoalescer \| null;/);
+    expect(src).toMatch(/oauthStore\?: OAuthStore \| null;/);
     expect(src).toMatch(/mfaService\?: MfaService \| null;/);
   });
 
-  it('Server auth-middleware invariant cluster — 4 decorators (requireAuth/requireAuthEventSource/requireScope/requireMfaFresh) + 15-min DEFAULT_MFA_FRESHNESS + Bearer extraction + 5-arg authenticate() + bypass-on-API-key. Drift on any would fragment the canonical auth gate.', () => {
+  it('Server auth-middleware invariant cluster — 5 decorators, OAuth-aware shared authentication, 15-min DEFAULT_MFA_FRESHNESS, Bearer extraction and bypass-on-API-key. Drift on any would fragment the canonical auth gate.', () => {
     const src = read(AUTH_MIDDLEWARE);
 
     expect(src).toMatch(/requireAuth/);
     expect(src).toMatch(/requireAuthEventSource/);
     expect(src).toMatch(/requireScope/);
     expect(src).toMatch(/requireMfaFresh/);
+    expect(src).toMatch(/requireOwner/);
     expect(src).toMatch(/15 \* 60/);
     expect(src).toMatch(/extractBearerToken/);
     expect(src).toMatch(/webSession === null/);
