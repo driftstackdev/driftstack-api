@@ -109,7 +109,7 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
       /const unsubPlaintext = await this\.subscribers\.rotateUnsubscribeToken\(sub\.id\);/,
     );
     expect(body).toMatch(
-      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\?token=\$\{encodeURIComponent\(\s*\n?\s*unsubPlaintext,\s*\n?\s*\)\}`;/,
+      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\/\?token=\$\{encodeURIComponent\(\s*\n?\s*unsubPlaintext,\s*\n?\s*\)\}`;/,
     );
     expect(body).toMatch(
       /await this\.email\.sendStatusIncidentNotification\(\{\s*\n?\s*to: sub\.email,\s*\n?\s*kind,\s*\n?\s*title: incident\.title,\s*\n?\s*severity: incident\.severity,\s*\n?\s*status: incident\.status,\s*\n?\s*message: update\.message,\s*\n?\s*incidentTime: time,\s*\n?\s*statusPageUrl: this\.baseUrl,\s*\n?\s*unsubscribeLink,\s*\n?\s*\}\);/,
