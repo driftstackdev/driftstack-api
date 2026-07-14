@@ -124,6 +124,34 @@ function missingOperations(spec: ReadonlySet<string>, routes: ReadonlySet<string
   return [...spec].filter((operation) => !routes.has(operation)).sort();
 }
 
+// Reverse coverage is intentionally stricter for the admin surface: every
+// staff/owner operation is part of the published internal contract. These are
+// the only literal Fastify registrations intentionally omitted from OpenAPI.
+// Keep this exact so a newly registered route cannot disappear from security
+// review and generated-client discovery without a deliberate test change.
+const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
+  'GET /healthz',
+  'GET /metrics',
+  'GET /openapi.json',
+  'GET /ready',
+  'GET /v1/agent-sessions/:p/gui-control-key',
+  'GET /v1/auth/oauth-client/callback',
+  'GET /v1/internal/atlas-priority/event/:p',
+  'GET /v1/internal/atlas-priority/queue',
+  'GET /v1/mac-nodes',
+  'GET /v1/status/stream',
+  'GET /v1/whoami',
+  'POST /v1/agent-sessions/:p/transport-report',
+  'POST /v1/internal/atlas-priority/event-status',
+  'POST /v1/internal/atlas-priority/probe-signature',
+  'POST /v1/mac-nodes',
+  'POST /v1/mac-nodes/:p/control',
+  'POST /v1/oauth/authorize/complete',
+  'POST /v1/sessions/:p/gui-input',
+  'POST /v1/webhooks/nowpayments',
+  'POST /v1/webhooks/stripe',
+]);
+
 describe('published OpenAPI operation ↔ Fastify registration coverage', () => {
   const spec = JSON.parse(readFileSync(PUBLISHED_SPEC, 'utf8')) as OpenApiSpec;
   const specOperations = publishedOperations(spec);
@@ -141,7 +169,7 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
   }
 
   it('inventories the complete current published and registered operation sets', () => {
-    expect(specOperations.size).toBe(212);
+    expect(specOperations.size).toBe(230);
     expect(routeOperations.size).toBe(250);
   });
 
@@ -180,6 +208,24 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
   it('backs every published method+path operation with a real registration', () => {
     const phantom = missingOperations(specOperations, routeOperations);
     expect(phantom, `Published phantom operation(s):\n${phantom.join('\n')}`).toEqual([]);
+  });
+
+  it('publishes every registered staff and owner admin operation', () => {
+    const undocumentedAdmin = missingOperations(routeOperations, specOperations).filter(
+      (operation) => operation.includes(' /v1/admin/'),
+    );
+    expect(
+      undocumentedAdmin,
+      `Undocumented admin operation(s):\n${undocumentedAdmin.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('pins the exact non-admin operations intentionally omitted from OpenAPI', () => {
+    const undocumented = missingOperations(routeOperations, specOperations);
+    expect(
+      undocumented,
+      `Unexpected unpublished or stale-exception operation(s):\n${undocumented.join('\n')}`,
+    ).toEqual([...INTENTIONALLY_UNPUBLISHED_OPERATIONS].sort());
   });
 
   it('does not let the wrong method or a matching comment satisfy coverage', () => {

@@ -2726,6 +2726,482 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── V-629 — complete staff/owner admin contract ────────────────────────
+  // These routes were live and consumed by the installed admin GUI but had
+  // regressed out of the published spec. Keep the wire shapes here even where
+  // the staff UI currently uses handwritten types: OpenAPI is also the
+  // authoritative inventory for security review and internal SDK consumers.
+  const AdminOpaqueObjectOpenApi = z.object({}).passthrough();
+  const AdminOAuthClientOpenApi = z.object({
+    client_id: z.string(),
+    label: z.string(),
+    redirect_uris: z.array(z.string().url()),
+    account_id: z.string().uuid().nullable(),
+    created_at: z.string(),
+    revoked_at: z.string().nullable(),
+  });
+  const AdminOAuthRegisterRequestOpenApi = z.object({
+    label: z.string().min(1).max(120),
+    redirect_uris: z.array(z.string().max(2048).url()).min(1).max(10),
+    account_id: z.string().uuid().nullable().optional(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/oauth/clients',
+    summary: 'Register an OAuth client and reveal its secret once (admin)',
+    tags: ['admin', 'oauth'],
+    security: auth,
+    request: {
+      body: {
+        required: true,
+        content: { 'application/json': { schema: AdminOAuthRegisterRequestOpenApi } },
+      },
+    },
+    responses: {
+      201: {
+        description: 'OAuth client registered; client_secret is returned once.',
+        content: {
+          'application/json': {
+            schema: z.object({ client_id: z.string(), client_secret: z.string() }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/oauth/clients',
+    summary: 'List OAuth clients without secret hashes (admin)',
+    tags: ['admin', 'oauth'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Registered OAuth clients, including revoked entries.',
+        content: {
+          'application/json': {
+            schema: z.object({ clients: z.array(AdminOAuthClientOpenApi) }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/oauth/clients/{id}',
+    summary: 'Get an OAuth client without its secret hash (admin)',
+    tags: ['admin', 'oauth'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'OAuth client metadata.',
+        content: { 'application/json': { schema: AdminOAuthClientOpenApi } },
+      },
+      ...errors4xx,
+      404: { description: 'OAuth client not found.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/admin/oauth/clients/{id}',
+    summary: 'Revoke an OAuth client (admin)',
+    tags: ['admin', 'oauth'],
+    security: auth,
+    responses: {
+      204: { description: 'OAuth client revoked.' },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/oauth/clients/{id}/rotate-secret',
+    summary: 'Rotate an OAuth client secret and reveal the successor once (admin)',
+    tags: ['admin', 'oauth'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'OAuth client secret rotated; client_secret is returned once.',
+        content: {
+          'application/json': { schema: z.object({ client_secret: z.string() }) },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+
+  const OwnerSecretNameOpenApi = z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$/);
+  const OwnerSecretMetadataOpenApi = z.object({
+    name: OwnerSecretNameOpenApi,
+    description: z.string().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/owner/secrets',
+    summary: 'List encrypted platform-secret metadata without values (owner only)',
+    tags: ['admin', 'owner'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Secret-store activation state and metadata-only entries.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              enabled: z.boolean(),
+              secrets: z.array(OwnerSecretMetadataOpenApi),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'put',
+    path: '/v1/admin/owner/secrets/{name}',
+    summary: 'Create or replace an encrypted platform secret (owner only; audited)',
+    tags: ['admin', 'owner'],
+    security: auth,
+    request: {
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({
+              value: z.string().min(1).max(8192),
+              description: z.string().max(256).nullable().optional(),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Existing secret replaced.',
+        content: {
+          'application/json': {
+            schema: z.object({ name: OwnerSecretNameOpenApi, status: z.literal('updated') }),
+          },
+        },
+      },
+      201: {
+        description: 'New secret created.',
+        content: {
+          'application/json': {
+            schema: z.object({ name: OwnerSecretNameOpenApi, status: z.literal('created') }),
+          },
+        },
+      },
+      ...errors4xx,
+      503: { description: 'Platform secret encryption is disabled.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/owner/secrets/{name}/reveal',
+    summary: 'Reveal one platform secret value (owner only; always audited)',
+    tags: ['admin', 'owner'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Plaintext secret value; this is the sole decrypting API path.',
+        content: {
+          'application/json': {
+            schema: z.object({ name: OwnerSecretNameOpenApi, value: z.string() }),
+          },
+        },
+      },
+      ...errors4xx,
+      404: { description: 'Secret not found.', content: problemContent },
+      503: { description: 'Platform secret encryption is disabled.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/admin/owner/secrets/{name}',
+    summary: 'Delete an encrypted platform secret (owner only; audited)',
+    tags: ['admin', 'owner'],
+    security: auth,
+    responses: {
+      204: { description: 'Secret deleted.' },
+      ...errors4xx,
+      404: { description: 'Secret not found.', content: problemContent },
+    },
+  });
+
+  const AdminBillingCycleOpenApi = z.string().regex(/^\d{4}-\d{2}$/);
+  const AdminCostSummaryOpenApi = z.object({
+    account_id: z.string(),
+    billing_cycle: AdminBillingCycleOpenApi,
+    breakdown: z.object({
+      computeCents: z.number(),
+      storageCents: z.number(),
+      egressCents: z.number(),
+      emailCents: z.number(),
+      llmCents: z.number(),
+      totalCents: z.number(),
+      thresholdState: z.enum(['under-soft', 'between-soft-and-hard', 'over-hard']),
+    }),
+    tier: z.string(),
+    thresholds: z.object({ softCents: z.number(), hardCents: z.number() }),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/cost/accounts/{id}',
+    summary: 'Get an account cost-to-serve summary for a billing cycle (admin)',
+    tags: ['admin', 'cost'],
+    security: auth,
+    request: {
+      query: z.object({ billing_cycle: AdminBillingCycleOpenApi.optional() }),
+    },
+    responses: {
+      200: {
+        description: 'Account cost-to-serve breakdown and alert thresholds.',
+        content: { 'application/json': { schema: AdminCostSummaryOpenApi } },
+      },
+      ...errors4xx,
+      404: { description: 'Account has no usage for this billing cycle.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/cost/config',
+    summary: 'Inspect the active cost rate card and per-tier thresholds (admin)',
+    tags: ['admin', 'cost'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Active cost-monitoring configuration.',
+        content: { 'application/json': { schema: AdminOpaqueObjectOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/cost/overview',
+    summary: 'Compare account cost-to-serve summaries for a billing cycle (admin)',
+    tags: ['admin', 'cost'],
+    security: auth,
+    request: {
+      query: z.object({
+        account_ids: z.string().min(1).max(4096),
+        billing_cycle: AdminBillingCycleOpenApi.optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Cost summaries ordered by total cost descending.',
+        content: {
+          'application/json': {
+            schema: z.object({ summaries: z.array(AdminCostSummaryOpenApi) }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/usage/accounts/{id}',
+    summary: 'Get current-period usage and quotas for an account (admin)',
+    tags: ['admin', 'usage'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Current billing-period usage summary.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              account_id: z.string(),
+              tier: z.string(),
+              period_start: z.string(),
+              period_end: z.string(),
+              totals: z.record(z.string(), z.number()),
+              quotas: z.record(z.string(), z.number().nullable()),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+      404: { description: 'Account not found.', content: problemContent },
+    },
+  });
+
+  const AtlasPriorityStatusOpenApi = z.enum([
+    'emitted',
+    'queued',
+    'bs_in_flight',
+    'bs_succeeded',
+    'bs_failed',
+    'atlas_appended',
+    'atlas_failed',
+  ]);
+  const AtlasPriorityQueueQueryOpenApi = z.object({
+    status: AtlasPriorityStatusOpenApi.optional(),
+    customer_id: z.string().min(1).optional(),
+    since: z.string().datetime().optional(),
+    limit: z.coerce.number().int().min(1).max(1000).optional(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/atlas-priority/queue',
+    summary: 'List recent atlas-priority learning events (admin)',
+    tags: ['admin', 'atlas-priority'],
+    security: auth,
+    request: { query: AtlasPriorityQueueQueryOpenApi },
+    responses: {
+      200: {
+        description: 'Recent events and aggregate queue statistics.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              events: z.array(AdminOpaqueObjectOpenApi),
+              total_count: z.number().int().nonnegative(),
+              stats: AdminOpaqueObjectOpenApi,
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/atlas-priority/event/{id}',
+    summary: 'Get an atlas-priority learning event and lifecycle timeline (admin)',
+    tags: ['admin', 'atlas-priority'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Event detail and computed lifecycle timeline.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              event: AdminOpaqueObjectOpenApi,
+              timeline: z.array(z.object({ event: z.string(), at: z.string() })),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+      404: { description: 'Atlas-priority event not found.', content: problemContent },
+    },
+  });
+
+  const AdminIncidentWireOpenApi = z.object({
+    id: z.string(),
+    title: z.string(),
+    description: z.string(),
+    severity: z.enum(['minor', 'major', 'outage']),
+    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']),
+    affected_components: z.array(z.string()),
+    public: z.boolean(),
+    started_at: z.string(),
+    resolved_at: z.string().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  });
+  const AdminIncidentTimelineUpdateOpenApi = z.object({
+    id: z.string(),
+    incident_id: z.string(),
+    message: z.string(),
+    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']),
+    posted_at: z.string(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/incidents/{id}/reopen',
+    summary: 'Reopen a resolved incident with a timeline message (admin; audited)',
+    tags: ['admin', 'incidents'],
+    security: auth,
+    request: {
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({ message: z.string().min(1).max(2000) }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Reopened incident and the appended timeline update.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              incident: AdminIncidentWireOpenApi,
+              update: AdminIncidentTimelineUpdateOpenApi,
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+      404: { description: 'Incident not found.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/status-subscribers/force-subscribe',
+    summary: 'Subscribe an address after staff verifies out-of-band consent (admin; audited)',
+    tags: ['admin', 'status'],
+    security: auth,
+    request: {
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({ email: z.string().email().max(254) }),
+          },
+        },
+      },
+    },
+    responses: {
+      201: {
+        description: 'Subscriber confirmed and a revocation link minted.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              id: z.string(),
+              email: z.string().email(),
+              confirmed_at: z.string(),
+              unsubscribe_link: z.string(),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/webhook-dlq/{id}/discard',
+    summary: 'Permanently discard a dead-letter webhook delivery (admin; audited)',
+    tags: ['admin', 'webhooks'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Dead-letter delivery permanently deleted.',
+        content: {
+          'application/json': { schema: z.object({ discarded_id: z.string() }) },
+        },
+      },
+      ...errors4xx,
+      404: { description: 'Dead-letter delivery not found.', content: problemContent },
+      409: {
+        description: 'Delivery is no longer in the dead-letter queue.',
+        content: problemContent,
+      },
+    },
+  });
+
   // ── V-353 MFA (TOTP) ───────────────────────────────────────────────────
   const MfaStatusResponseOpenApi = z.object({
     enrolled: z.boolean(),

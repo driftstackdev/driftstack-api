@@ -26705,3 +26705,33 @@ a matching comment plus wrong-method registration does not satisfy coverage,
 while differing route/spec parameter names normalize safely. Focused evidence
 passes 1 file and 5/5 tests; strict server test TypeScript, targeted
 lint/format, diff and whitespace checks are green.
+
+## V-629 — Every live admin operation is published in OpenAPI
+
+**Date:** 2026-07-14
+
+The new method-aware coverage guard proved only the forward direction: every
+published operation had a real Fastify registration. Reversing that comparison
+found 38 registered operations absent from the committed spec, including 18
+active `/v1/admin/*` endpoints used by staff and owner tooling. OAuth client
+management, encrypted platform secrets, cost/usage views, atlas-priority
+observability, incident reopening, consent-backed status subscription and
+destructive webhook-DLQ discard were therefore invisible to API inventory,
+security review and internal generated-client discovery.
+
+All 18 admin operations now have method-exact OpenAPI registrations with their
+real authentication posture, bounded inputs, success statuses and wire
+responses. Sensitive one-time plaintext responses are identified explicitly
+for OAuth secret registration/rotation and owner-only secret reveal. The
+committed Python SDK spec snapshot now publishes 230 operations. A reverse
+coverage invariant requires every current admin registration to remain
+published and pins the exact 20 non-admin registrations deliberately omitted:
+infrastructure probes/spec delivery, browser/session callbacks, provider
+webhooks and fleet/internal transport surfaces.
+
+Verification inventories 230 published operations against 250 unique live
+registrations, with zero phantom or undocumented admin operation and an exact
+20-operation intentional omission delta. Focused OpenAPI, snapshot, validity,
+source-parity and generated-spec evidence passes 7 files and 42/42 tests; all
+workspace builds, strict server test TypeScript, targeted lint/format, diff and
+whitespace checks are green.
