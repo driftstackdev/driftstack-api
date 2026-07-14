@@ -33,12 +33,12 @@ function read(p: string): string {
 describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-338 + V-338b framing pinned: 'incident form is now wired to POST /v1/admin/incidents. SSG renders MOCK_INCIDENTS as the initial fallback; the inline script below replaces with live data on mount + handles the form.' + 'also fetches /v1/admin/incidents on mount + replaces the SSG MOCK list contents with live data.' — pinned so the SSG-mock → live-replace pattern + V-338a/b evolution stays documented", () => {
+  it('V-338 + V-338b frame an inert incident shell that becomes authoritative only after a successful live read', () => {
     expect(body).toMatch(
-      /\/\/ V-338 — incident form is now wired to POST \/v1\/admin\/incidents\.\s*\n?\s*\/\/ SSG renders MOCK_INCIDENTS as the initial fallback; the inline\s*\n?\s*\/\/ script below replaces with live data on mount \+ handles the form\./,
+      /\/\/ V-338 — incident form is now wired to POST \/v1\/admin\/incidents\.\s*\/\/ SSG renders an inert unavailable list; the inline script replaces it\s*\/\/ only after a successful live read and also handles the create form\./,
     );
     expect(body).toMatch(
-      /\/\/ V-338 — wires the new-incident form to POST \/v1\/admin\/incidents\.\s*\n?\s*\/\/ V-338b — also fetches \/v1\/admin\/incidents on mount \+ replaces\s*\n?\s*\/\/ the SSG MOCK list contents with live data\./,
+      /\/\/ V-338 — wires the new-incident form to POST \/v1\/admin\/incidents\.\s*\/\/ V-338b — also fetches \/v1\/admin\/incidents on mount \+ replaces\s*\/\/ the unavailable list shell with live data\./,
     );
   });
 
@@ -80,15 +80,17 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
     );
   });
 
-  it("Open vs resolved split (SSG): const open = MOCK_INCIDENTS.filter((i) => i.status !== 'resolved') + const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved') — pinned so the open list excludes resolved incidents (drift to including would clutter the open list with already-handled items + push real urgencies below the fold)", () => {
+  it('Open vs resolved split happens only inside the live rebuild path', () => {
     expect(body).toMatch(
-      /const open = MOCK_INCIDENTS\.filter\(\(i\) => i\.status !== 'resolved'\);\s*\n?\s*const resolved = MOCK_INCIDENTS\.filter\(\(i\) => i\.status === 'resolved'\);/,
+      /const open = items\.filter\(function \(i\) \{\s*return i\.status !== 'resolved';\s*\}\);\s*const resolved = items\.filter\(function \(i\) \{\s*return i\.status === 'resolved';/,
     );
+    expect(body).not.toMatch(/MOCK_INCIDENTS/);
   });
 
-  it("Open empty-state framing: 'No open incidents. All systems operational.' — pinned so a zero-open-incidents state reads as positive ('all systems operational') rather than a neutral 'no entries' message (operators glancing at this page should see 'good' vs 'bad' at a glance)", () => {
+  it('Static and unavailable states are neutral; only a successful zero-row rebuild may claim all systems operational', () => {
+    expect(body).toMatch(/Live incident state unavailable until loaded\./);
     expect(body).toMatch(
-      /<div class="dashboard-card text-center text-sm text-tk-ink-3">\s*\n?\s*No open incidents\. All systems operational\.\s*\n?\s*<\/div>/,
+      /if \(open\.length === 0\) \{\s*html \+=\s*'<div class="dashboard-card text-center text-sm text-tk-ink-3">No open incidents\. All systems operational\.<\/div>';/,
     );
   });
 
@@ -98,22 +100,18 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
     );
   });
 
-  it("fetchAndRender: GET /v1/admin/incidents?scope=all&limit=100 + Bearer auth + rebuild on success / clears the SSG mock to the real empty state on EVERY failure path (no-token, 403, non-ok response, network error) — pinned so a transient failure never leaves the fabricated 'API server elevated 5xx' major incident on this incidents/status surface (a false ops signal); rebuild([]) ALWAYS fires before any banner logic, on every branch", () => {
+  it('fetchAndRender uses the shared deadline and keeps signed-out/failure states distinct from verified health', () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
+      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100',\s*\{ headers: \{ authorization: 'Bearer ' \+ token \} \},\s*controller,/,
     );
-    // No-token path clears the mock to the empty state (audit waefer6wu added a
-    // sign-in banner alongside — the safety-critical rebuild([]) is unchanged,
-    // still the first/unconditional action, just no longer the LAST line).
-    expect(body).toMatch(/if \(!token\) \{\s*\n?\s*rebuild\(\[\]\);\s*\n?\s*showBanner\(/);
-    // Success/non-ok/non-array response → rebuild with data or [].
-    expect(body).toMatch(/rebuild\(body && Array\.isArray\(body\.data\) \? body\.data : \[\]\);/);
-    // 2026-06-30 (audit waefer6wu) — every failure (403/non-ok/network) still
-    // rebuild([])s FIRST (clearing any stale/fabricated incident) before showing
-    // a distinct, retry-capable error banner instead of the old bare empty state.
-    expect(body).toMatch(/\.catch\(function \(err\) \{/);
     expect(body).toMatch(
-      /rebuild\(\[\]\);\s*\n?\s*var msg = err && err\.message \? err\.message : 'network error';/,
+      /if \(!token\) \{\s*renderUnavailable\('Sign in to load live incident state\.'\);\s*showBanner\('Sign in with a staff admin account to see live data\.'\);/,
+    );
+    expect(body).toMatch(
+      /latestIncidentItems = body && Array\.isArray\(body\.data\) \? body\.data : \[\];\s*rebuild\(latestIncidentItems\);\s*hideBanner\(\);/,
+    );
+    expect(body).toMatch(
+      /\.catch\(function \(err\) \{[\s\S]*?renderUnavailable\('Could not load live incident state\. Retry before judging health\.'\);\s*var msg = requestErrorMessage\(err, 'network error'\);/,
     );
     expect(body).toMatch(/Access denied — admin scope required\./);
   });
