@@ -307,13 +307,18 @@
         var input = document.getElementById('newtab-input');
         if (!form || !input) return;
         // Resolve a typed entry to a destination URL. A value that parses as a
-        // host (has a dot + no spaces) navigates directly — prefixing https://
-        // when no scheme is present; anything else becomes a Google search.
+        // HTTP(S) and host-like values navigate directly — prefixing https://
+        // when no scheme is present. Unsupported schemes become a Google
+        // search instead of executing in this page's Driftstack origin.
         function resolve(raw) {
           var v = (raw || '').trim();
           if (v === '') return null;
-          if (/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return v;
-          var looksLikeHost = /^[^\s]+\.[^\s]{2,}(\/[^\s]*)?$/.test(v) || v.indexOf('localhost') === 0;
+          if (/^https?:\/\//i.test(v)) return v;
+          if (/^[a-z][a-z0-9+.-]*:/i.test(v) && v.indexOf('localhost') !== 0) {
+            return 'https://www.google.com/search?q=' + encodeURIComponent(v);
+          }
+          var looksLikeHost =
+            /^[^\s]+\.[^\s]{2,}(\/[^\s]*)?$/.test(v) || v.indexOf('localhost') === 0;
           if (looksLikeHost) return 'https://' + v;
           return 'https://www.google.com/search?q=' + encodeURIComponent(v);
         }

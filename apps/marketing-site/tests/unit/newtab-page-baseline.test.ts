@@ -24,6 +24,15 @@ function read(p: string): string {
 
 describe('newtab page baseline', () => {
   const body = read(PAGE);
+  const resolveSource = body.match(
+    /function resolve\(raw\) \{([\s\S]*?)\n        \}\n        form\.addEventListener/,
+  )?.[1];
+  if (!resolveSource) throw new Error('newtab resolve function not found');
+  const resolveTypedEntry = new Function(`return function resolve(raw) {${resolveSource}\n}`)() as (
+    raw: unknown,
+  ) => string | null;
+  const searchFor = (value: string): string =>
+    `https://www.google.com/search?q=${encodeURIComponent(value)}`;
 
   it('renders the Driftstack wordmark (DRIFT + STACK)', () => {
     expect(body).toContain('DRIFT');
@@ -41,6 +50,27 @@ describe('newtab page baseline', () => {
 
   it('prefixes https:// when the typed value has no scheme', () => {
     expect(body).toContain("'https://' + v");
+    expect(resolveTypedEntry(' example.com/docs ')).toBe('https://example.com/docs');
+    expect(resolveTypedEntry('localhost:3000/path')).toBe('https://localhost:3000/path');
+  });
+
+  it('directly navigates only HTTP(S) and searches unsupported executable schemes', () => {
+    expect(resolveTypedEntry(' HTTPS://example.com/a?b=1 ')).toBe('HTTPS://example.com/a?b=1');
+    expect(resolveTypedEntry('http://example.com/')).toBe('http://example.com/');
+    expect(resolveTypedEntry('ordinary search')).toBe(searchFor('ordinary search'));
+    expect(resolveTypedEntry('')).toBeNull();
+
+    for (const unsafe of [
+      'javascript://comment%0Aalert(document.domain)',
+      'javascript:alert(document.domain)',
+      'data:text/html,<script>alert(1)</script>',
+      'file:///etc/passwd',
+      'ftp://example.com/private',
+      'custom-app://open/account',
+    ]) {
+      expect(resolveTypedEntry(unsafe)).toBe(searchFor(unsafe));
+    }
+    expect(body).not.toMatch(/\^\[a-z\]\[a-z0-9\+\.\-\]\*:\\\/\\\//i);
   });
 
   it('stays LIGHT for instant load — self-contained, no BaseLayout / webfont / image assets', () => {
