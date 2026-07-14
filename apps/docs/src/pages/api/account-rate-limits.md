@@ -141,8 +141,6 @@ its "Rate limits" card — per-bucket capacity, refill rate, and
 source (tier default vs staff override, with the override's
 auto-revert date). The endpoint remains available for SDK / `curl`
 reads.
-A dedicated rate-limits surface is queued for a future dashboard
-slice.
 
 ## Response headers
 

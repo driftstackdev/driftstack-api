@@ -110,17 +110,9 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
           listed in the table.
         </p>
         <p>
-          The preference exists so we can route accounts to the matching
-          region automatically once the multi-region rollout lands. When
-          that happens, customers who selected a non-EU region will be
-          notified 30 days before any of their data is migrated, with the
-          opportunity to keep their data in the EU or terminate the
-          affected portion of the service. The Article 28(2) sub-processor
-          amendment mechanics on this page apply unchanged.
-        </p>
-        <p>
-          Until the multi-region rollout ships, leaving the field as "no
-          preference" produces identical behaviour to selecting "eu".
+          The preference is informational and does not change routing or
+          residency. Leaving it unset, or selecting us / eu / apac, produces
+          the same current placement described above.
         </p>
       </div>
     </div>

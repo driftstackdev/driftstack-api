@@ -50,7 +50,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
       ['/trust/sub-processors/', 'Live list + regions →'],
       ['/trust/incidents/', 'Past events + post-mortems →'],
       ['/legal/dpa/', 'DPA · Privacy · Terms · AUP →'],
-      ['/trust/compliance/', 'Certifications + pen-test + disclosure →'],
+      ['/trust/compliance/', 'Compliance + disclosure →'],
       ['/trust/security-overview/', "Evaluator's checklist →"],
       ['/trust/cumulative-rig/', 'Signal-by-signal methodology →'],
     ] as const) {

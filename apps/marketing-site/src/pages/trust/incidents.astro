@@ -6,11 +6,9 @@ import Section from '../../components/Section.astro';
 import CtaBand from '../../components/CtaBand.astro';
 import StatusBadge from '../../components/StatusBadge.astro';
 
-// V-477 — public incident history. Pre-launch the list is empty;
-// the page documents the framework so customers know what to expect
-// when an incident does land. Each future incident gets an entry
-// here within the SLA window (24h impact summary, 7 days root-cause
-// + remediation).
+// V-477 — public incident history and disclosure policy.
+// Policy window: customer-impact summary within 24h; root-cause and
+// remediation within 7 days of the incident closing.
 
 interface Incident {
   date: string;
@@ -138,11 +136,8 @@ function severityClass(s: Incident['severity']): string {
             No customer-impacting incidents to date.
           </p>
           <p class="mt-2 max-w-prose text-sm text-tk-ink-2 mx-auto">
-            This list started before launch, so it can't quietly omit
-            anything — every
-            incident from the first paying customer onward will land here.
-            The live platform status above always reflects the current
-            moment.
+            No incidents are recorded in the public history. The live
+            platform status above reflects the current moment.
           </p>
         </div>
       ) : (
@@ -209,10 +204,10 @@ function severityClass(s: Incident['severity']): string {
   <CtaBand
     label="Subscribe"
     title="Get notified when status changes."
-    lead="Customers can opt into incident emails at the dashboard's settings page. Future updates: status.driftstack.dev with email + RSS subscription."
-    primaryHref="https://app.driftstack.dev/settings/"
-    primaryLabel="Manage notifications"
-    secondaryHref="/trust/"
-    secondaryLabel="Back to trust center"
+    lead="Subscribe by email from the status page, or manage account notification preferences from the dashboard."
+    primaryHref="https://status.driftstack.dev"
+    primaryLabel="Open status page"
+    secondaryHref="https://app.driftstack.dev/settings/"
+    secondaryLabel="Manage notifications"
   />
 </BaseLayout>

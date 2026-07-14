@@ -15,8 +15,8 @@ renamed, re-archetyped, or deleted.
 **What a snapshot does NOT capture at v1: browser state.**
 Cookies, `localStorage`, IndexedDB, and logins are not copied into
 the snapshot, and restoring one does not bring them back. The
-snapshot's state field is reserved for a future driver integration
-and is empty today. To keep evolving browser state, keep the live
+snapshot's state field is empty and must not be used as a browser-state
+backup. To keep evolving browser state, keep the live
 profile itself.
 
 The snapshot model is deliberately separate from the live profile
@@ -253,8 +253,7 @@ profile first or upgrade tier.
 
 Snapshots are plain metadata rows stored separately from live profiles —
 at v1 no browser-state payload is stored anywhere (the state
-field exists in the schema for a future driver integration and is
-always empty today). Each snapshot freezes the
+field is always empty). Each snapshot freezes the
 source profile's archetype + name (`parent_archetype` /
 `parent_name`) at capture time, so a snapshot stays meaningful even
 after the parent profile is renamed, re-archetyped, or deleted.

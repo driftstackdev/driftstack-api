@@ -50,9 +50,7 @@ Response (`200`):
 
 - `operational` — probe succeeded within timeout
 - `degraded` — probe failed (transient error or timeout)
-- `major_outage` — currently reserved for future use by the
-  incidents service when an incident's `severity` is `outage` and
-  it spans multiple components
+- `major_outage` — a service-wide outage affecting multiple components
 
 Aggregation: any `major_outage` → overall `major_outage`; otherwise
 any `degraded` → overall `degraded`; otherwise `operational`.
@@ -110,9 +108,7 @@ Response (`200`):
 
 ```json
 {
-  "incident": {
-    /* same shape as the list entry */
-  },
+  "incident": {/* same shape as the list entry */},
   "updates": [
     {
       "id": "incu_<uuid>",

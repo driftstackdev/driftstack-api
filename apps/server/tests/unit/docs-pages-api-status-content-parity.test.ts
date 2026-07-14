@@ -38,12 +38,10 @@ describe('docs/pages/api/status content parity', () => {
     );
   });
 
-  it("3-status-state machine pinned: operational (probe succeeded within timeout) + degraded (probe failed transient/timeout) + major_outage (reserved for future use by incidents service when severity=outage spans multiple components — 'outage' is the highest IncidentSeverity enum value, not 'critical'). + aggregation rules: 'any major_outage → overall major_outage; otherwise any degraded → overall degraded; otherwise operational.' — pinned so the 3-state machine + per-component aggregation contract all stay documented", () => {
+  it("3-status-state machine pinned: operational (probe succeeded within timeout) + degraded (probe failed transient/timeout) + major_outage (service-wide outage affecting multiple components). + aggregation rules: 'any major_outage → overall major_outage; otherwise any degraded → overall degraded; otherwise operational.' — pinned so the 3-state machine + per-component aggregation contract all stay documented", () => {
     expect(body).toMatch(/- `operational` — probe succeeded within timeout/);
     expect(body).toMatch(/- `degraded` — probe failed \(transient error or timeout\)/);
-    expect(body).toMatch(
-      /- `major_outage` — currently reserved for future use by the\s*\n?\s*incidents service when an incident's `severity` is `outage` and\s*\n?\s*it spans multiple components/,
-    );
+    expect(body).toMatch(/- `major_outage` — a service-wide outage affecting multiple components/);
     expect(body).toMatch(
       /Aggregation: any `major_outage` → overall `major_outage`; otherwise\s*\n?\s*any `degraded` → overall `degraded`; otherwise `operational`\./,
     );

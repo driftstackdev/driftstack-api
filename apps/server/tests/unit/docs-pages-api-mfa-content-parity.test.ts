@@ -44,11 +44,11 @@ describe('W767 docs /api/mfa content parity', () => {
     expect(p).toMatch(/plus single-use recovery codes\./);
   });
 
-  it("CRITICAL 15-minute step-up freshness window pinned. The 'most sensitive operations (disabling MFA; future: account deletion) require a fresh code within a 15-minute window' wording matches W764 /api/auth + W759 dashboard /settings step-up.", () => {
+  it('CRITICAL 15-minute step-up freshness window is pinned to current sensitive operations.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /the most\s*\n?sensitive operations \(disabling MFA; future: account deletion\) require\s*\n?a fresh code within a 15-minute window\./,
+      /the most\s*\n?sensitive operations such as disabling MFA require\s*\n?a fresh code within a 15-minute window\./,
     );
   });
 
@@ -213,11 +213,11 @@ describe('W767 docs /api/mfa content parity', () => {
     expect(p).toMatch(/Re-enabling requires the full enrollment dance from scratch\./);
   });
 
-  it("CRITICAL recovery-codes regenerate IS-step-up-gated framing pinned. The 'This endpoint is step-up gated, the same as MFA disable and account-delete … Without the gate a stolen web session could mint fresh recovery codes, then redeem one to satisfy step-up on disable — a full MFA bypass' wording is the load-bearing security policy.", () => {
+  it('CRITICAL recovery-codes regenerate IS-step-up-gated framing is pinned to the current MFA-disable comparison.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /This endpoint \*\*is\*\* step-up gated, the same as MFA disable and\s*\n?account-delete: a stale web session returns the `403` step-up\s*\n?envelope above \(`requires_mfa_step_up: true`\)\./,
+      /This endpoint \*\*is\*\* step-up gated, the same as MFA disable: a stale\s*\n?web session returns the `403` step-up\s*\n?envelope above \(`requires_mfa_step_up: true`\)\./,
     );
     expect(p).toMatch(
       /Without the gate a\s*\n?stolen web session could mint fresh recovery codes, then redeem one\s*\n?to satisfy step-up on disable — a full MFA bypass\./,

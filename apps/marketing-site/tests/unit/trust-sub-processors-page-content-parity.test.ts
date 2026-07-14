@@ -128,16 +128,15 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     );
   });
 
-  it('"Until multi-region rollout, leaving field as no-preference == EU" honesty pinned', () => {
+  it('region preference is informational and all choices retain the current placement', () => {
     expect(body).toMatch(
-      /Until the multi-region rollout ships, leaving the field as "no\s+preference" produces identical behaviour to selecting "eu"\./,
+      /The preference is informational and does not change routing or\s+residency\. Leaving it unset, or selecting us \/ eu \/ apac, produces\s+the same current placement described above\./,
     );
+    expect(body).not.toMatch(/multi-region rollout/i);
   });
 
-  it('multi-region rollout 30-day-notice + EU-stay-or-terminate framing pinned', () => {
-    expect(body).toMatch(
-      /customers who selected a non-EU region will be\s+notified 30 days before any of their data is migrated, with the\s+opportunity to keep their data in the EU or terminate the\s+affected portion of the service/,
-    );
+  it('does not promise an unshipped data migration', () => {
+    expect(body).not.toMatch(/selected a non-EU region|any of their data is migrated/i);
   });
 
   it('change-log entries iterate data-driven (entry.date / entry.kind / entry.summary / entry.effective_at)', () => {

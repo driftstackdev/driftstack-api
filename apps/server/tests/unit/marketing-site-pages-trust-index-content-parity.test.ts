@@ -122,14 +122,12 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     );
   });
 
-  it("Compliance card pinned: 'Certifications + pen-test + disclosure →' + 'Honest current state: certifications in place + in progress, pen-test access workflow, vulnerability-disclosure policy + safe-harbour' — pinned so the 'honest current state' framing + 4-state compliance scope survives (drift to claiming certs that aren't in place would invite buyer-pushback; drift to dropping 'safe-harbour' would weaken the vulnerability-disclosure protection)", () => {
-    expect(body).toMatch(/Certifications \+ pen-test \+ disclosure →/);
-    // S20c 2026-07-06 plain-language pass: same 5-part compliance
-    // scope (certs / pen-test access / disclosure + safe-harbour /
-    // change notice / retention), each said plainly.
+  it('Compliance card pins only current attestations, private disclosure, safe harbour, change notice, and retention.', () => {
+    expect(body).toMatch(/Compliance \+ disclosure →/);
     expect(body).toMatch(
-      /Honest current state: which certifications are in place or\s+in progress, how to get our penetration-test reports \(paid\s+ethical hackers attacking the platform\), how to report a\s+security hole — and our promise not to sue good-faith\s+researchers \("safe harbour"\) — how much warning you get\s+before we change vendors, and how long logs are kept\./,
+      /The attestations available today, how to report a security\s+issue privately, our safe-harbour commitment for good-faith\s+research, sub-processor change notice, and current log-retention\s+periods\./,
     );
+    expect(body).not.toMatch(/certifications are in progress|penetration-test reports/);
   });
 
   it("Quick-reference 6-question buyer FAQ: 'Where is data hosted?' + 'Do you see our destination URLs?' + 'Are API keys recoverable by staff?' + 'How do we get a DPA on file?' + 'What's the incident-response SLA?' + 'How do we get a security questionnaire answered?' — pinned so the 6-question buyer-evaluation FAQ stays complete (drift to dropping 'API keys recoverable' would obscure the scrypt-hashing posture; drift to dropping 'see destination URLs' would obscure the egress-via-customer-proxy posture)", () => {

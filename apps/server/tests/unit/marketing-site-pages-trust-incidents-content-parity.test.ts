@@ -1,21 +1,19 @@
 // W503.C — drift guard for apps/marketing-site/src/pages/trust/incidents.astro.
-// V-477 public incident history — pre-launch the list is empty; the
-// page documents the framework so customers know what to expect when
-// an incident does land. Drift here either softens the incident-SLA
+// V-477 public incident history and disclosure policy. Drift here
+// either softens the incident-SLA
 // commitment (24h impact summary / 7-day root-cause + remediation)
 // or breaks the 'every customer-impacting event gets a public entry'
 // posture that customers buy on.
 //
-//   • V-477 doc-comment framing + 24h/7d SLA.
+//   • V-477 current-policy doc-comment framing.
 //   • Incident interface 9-field shape + 3-state severity:
 //     major_outage / degraded / security.
-//   • INCIDENTS empty-list framing: 'No incidents to date' as honest
-//     pre-launch signal.
+//   • INCIDENTS empty-list framing: 'No incidents to date'.
 //   • severityLabel / severityClass 3-state maps.
 //   • 4-card 'What we publish' scope: Customer-impacting downtime +
 //     Security events + Sub-processor incidents + Maintenance windows.
 //   • Empty-list panel: 'No customer-impacting incidents to date.'
-//   • CTA: notification subscription + status.driftstack.dev future.
+//   • CTA: live status page + dashboard notification preferences.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,10 +31,9 @@ function read(p: string): string {
 describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-477 incident-history framing pinned: 'public incident history. Pre-launch the list is empty; the page documents the framework so customers know what to expect when an incident does land. Each future incident gets an entry here within the SLA window (24h impact summary, 7 days root-cause + remediation).' — pinned so the V-477 doc-comment + the 'pre-launch empty by design' + the 24h/7d SLA commitments all survive (drift to softening the 24h/7d window would let post-mortem timing slip without a code-tracked signal)", () => {
-    expect(body).toMatch(
-      /\/\/ V-477 — public incident history\. Pre-launch the list is empty;\s*\n?\s*\/\/ the page documents the framework so customers know what to expect\s*\n?\s*\/\/ when an incident does land\. Each future incident gets an entry\s*\n?\s*\/\/ here within the SLA window \(24h impact summary, 7 days root-cause\s*\n?\s*\/\/ \+ remediation\)\./,
-    );
+  it('V-477 incident-history framing pins the current disclosure policy without roadmap language', () => {
+    expect(body).toMatch(/\/\/ V-477 — public incident history and disclosure policy\./);
+    expect(body).not.toMatch(/pre-launch|each future incident/i);
   });
 
   it("Incident interface 9-field shape: date + title + severity + customer_impact + duration + components + status + summary + optional root_cause + optional remediation — pinned so the per-incident disclosure surface stays consistent (drift to dropping 'root_cause' or 'remediation' would let incident entries skip the post-mortem fields V-477 commits to; drift to dropping 'customer_impact' would lose the buyer-readable impact signal)", () => {
@@ -88,12 +85,12 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
     );
   });
 
-  it("Empty-list panel pinned: 'No customer-impacting incidents to date.' + 'We've kept this list honest by entering it pre-launch — every incident from the first paying customer onward will land here.' — pinned so the empty-state honest-framing (it's empty because nothing happened, not because we're hiding) survives (drift to dropping 'kept this list honest by entering it pre-launch' would let the empty state read as suspicious rather than intentional)", () => {
+  it("Empty-list panel pinned: 'No customer-impacting incidents to date.' + current-history and live-status framing", () => {
     expect(body).toMatch(/No customer-impacting incidents to date\./);
     expect(body).toMatch(
-      // S20c 2026-07-06: same empty-because-nothing-happened framing, plain words lead.
-      /This list started before launch, so it can't quietly omit\s+anything — every\s+incident from the first paying customer onward will land here\./,
+      /No incidents are recorded in the public history\. The live\s+platform status above reflects the current moment\./,
     );
+    expect(body).not.toMatch(/first paying customer|before launch/i);
   });
 
   it("StatusBadge import + render pinned — pinned so the live-platform-status visual signal stays in the hero (drift to dropping would lose the at-a-glance 'is platform up right now' signal that's distinct from the historical-incident-list below)", () => {
@@ -101,17 +98,18 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
     expect(body).toMatch(/<StatusBadge \/>/);
   });
 
-  it("Subscribe CTA pinned: 'Get notified when status changes.' + 'Future updates: status.driftstack.dev with email + RSS subscription.' + Manage notifications → app.driftstack.dev/settings + 'Back to trust center' → /trust — pinned so the email-subscription-now + future-status.driftstack.dev + RSS planning + dual-CTA navigation all survive (drift to dropping the future status.driftstack.dev mention would orphan the roadmap commitment; drift to dropping 'Back to trust center' would break the hub-and-spoke navigation). Fleet v2 (S10): the hand-rolled CTA section became a <CtaBand> — both anchors render from the primary/secondary props, so the pins match the prop forms", () => {
+  it('Subscribe CTA pins the live status page and dashboard notification preferences', () => {
     expect(body).toMatch(/title="Get notified when status changes\."/);
     expect(body).toMatch(
-      /Future updates: status\.driftstack\.dev with\s*\n?\s*email \+ RSS subscription\./,
+      /lead="Subscribe by email from the status page, or manage account notification preferences from the dashboard\."/,
     );
     expect(body).toMatch(
-      /primaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*primaryLabel="Manage notifications"/,
+      /primaryHref="https:\/\/status\.driftstack\.dev"\s*\n?\s*primaryLabel="Open status page"/,
     );
-    expect(body).toMatch(/secondaryHref="\/trust\/"\s*\n?\s*secondaryLabel="Back to trust center"/);
-    expect(body).not.toContain('primaryHref="https://app.driftstack.dev/settings"');
-    expect(body).not.toContain('secondaryHref="/trust"');
+    expect(body).toMatch(
+      /secondaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*secondaryLabel="Manage notifications"/,
+    );
+    expect(body).not.toMatch(/future updates|future-status/i);
   });
 
   it('file exists at canonical path', () => {

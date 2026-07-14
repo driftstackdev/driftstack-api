@@ -59,13 +59,10 @@ calendar-month boundary so the dashboard can render "resets on
 the rows where `record_type = 'agent_decomposer_bundled'` and
 `recorded_at >= start_of_calendar_month` (UTC).
 
-`refused_count_this_month` is **not live yet** — the route always
-returns `0` today, a stable schema placeholder. Refusal events
-(`402 BundledLlmBudgetExhausted`) aren't persisted to an audit row
-on this deployment, so the field never increments no matter how
-many times the cap is hit. Branch on `remaining_cents <= 0` instead
-to drive a "you've hit the cap" / "raise your cap" CTA — that field
-_is_ derived from real spend.
+`refused_count_this_month` is a compatibility field and returns `0`.
+Refusal events (`402 BundledLlmBudgetExhausted`) are not persisted as
+usage rows. Branch on `remaining_cents <= 0` to drive a "you've hit the
+cap" / "raise your cap" CTA; that field is derived from real spend.
 
 ## Get current settings
 

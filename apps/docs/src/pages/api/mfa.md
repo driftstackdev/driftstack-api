@@ -9,7 +9,7 @@ description: TOTP enrollment, verification, login challenge, step-up reauth, rec
 Driftstack supports time-based one-time passwords (TOTP) per RFC 6238
 plus single-use recovery codes. Once enrolled, sign-in to the dashboard
 requires a 6-digit code from your authenticator app, and the most
-sensitive operations (disabling MFA; future: account deletion) require
+sensitive operations such as disabling MFA require
 a fresh code within a 15-minute window.
 
 This doc covers the API surface. The dashboard at `/settings → Two-factor
@@ -202,9 +202,8 @@ factor; a new account cannot enroll MFA before it is active.
 
 ## Step-up reauth
 
-Some operations require a fresh MFA proof (currently: disabling MFA;
-the locked verdict adds account-deletion when self-service
-deletion ships). When a gated route is called without a fresh proof,
+Disabling MFA and regenerating recovery codes require a fresh MFA proof.
+When a gated route is called without a fresh proof,
 it returns:
 
 ```
@@ -296,8 +295,8 @@ Response (200):
 }
 ```
 
-This endpoint **is** step-up gated, the same as MFA disable and
-account-delete: a stale web session returns the `403` step-up
+This endpoint **is** step-up gated, the same as MFA disable: a stale
+web session returns the `403` step-up
 envelope above (`requires_mfa_step_up: true`). Without the gate a
 stolen web session could mint fresh recovery codes, then redeem one
 to satisfy step-up on disable — a full MFA bypass. The legitimate

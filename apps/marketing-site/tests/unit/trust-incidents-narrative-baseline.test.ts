@@ -34,8 +34,8 @@ describe('W316.B /trust/incidents narrative baseline', () => {
   });
 
   it('SLA-comment captures 24h impact summary + 7d post-mortem window', () => {
-    expect(body).toMatch(/24h\s+impact\s+summary/i);
-    expect(body).toMatch(/7\s+days\s+root-cause/i);
+    expect(body).toMatch(/customer-impact summary within 24h/i);
+    expect(body).toMatch(/root-cause and\s+\/\/ remediation within 7 days/i);
   });
 
   it('acknowledges short outages still get published (no silent fixes)', () => {

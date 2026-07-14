@@ -3,8 +3,7 @@
 // trust-incidents-policy-parity tests cover route shape. This
 // guard pins the load-bearing posture-publishing claims:
 //
-//   • V-477 pre-launch posture framing pinned: list starts empty
-//     + "first paying customer onward will land here" honesty.
+//   • V-477 current disclosure-policy framing pinned.
 //   • 3 incident severity values pinned in the Incident type:
 //     major_outage / degraded / security. A schema add silently
 //     renders undefined severityClass.
@@ -19,8 +18,8 @@
 //   • "24h impact summary, 7 days root-cause + remediation" SLA
 //     framing in page comment (matches /trust/security-overview).
 //   • <StatusBadge /> embed in hero (live platform health).
-//   • Empty-state UX present pre-launch.
-//   • Cross-link to /trust (back to trust center).
+//   • Empty-state UX reports the public history and live status.
+//   • Live status + dashboard-notification CTAs.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -38,11 +37,9 @@ function read(p: string): string {
 describe('W376.A marketing-site /trust/incidents page content parity', () => {
   const body = read(PAGE);
 
-  it('V-477 pre-launch posture framing pinned (empty list + first-customer onward)', () => {
-    expect(body).toMatch(/V-477 — public incident history/);
-    expect(body).toMatch(
-      /Pre-launch the list is empty;\s*\n?\s*\/\/\s*the page documents the framework so customers know what to expect/,
-    );
+  it('V-477 current disclosure-policy framing pinned', () => {
+    expect(body).toMatch(/V-477 — public incident history and disclosure policy/);
+    expect(body).not.toMatch(/pre-launch|first paying customer/i);
   });
 
   it('3 incident severity values pinned in type union (major_outage / degraded / security)', () => {
@@ -89,7 +86,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
 
   it('"24h impact summary, 7 days root-cause + remediation" SLA framing pinned', () => {
     expect(body).toMatch(
-      /Each future incident gets an entry\s*\n?\s*\/\/\s*here within the SLA window \(24h impact summary, 7 days root-cause\s*\n?\s*\/\/\s*\+ remediation\)/,
+      /Policy window: customer-impact summary within 24h; root-cause and\s*\n?\s*\/\/ remediation within 7 days of the incident closing/,
     );
     // Customer-facing version of the same commitment.
     expect(body).toMatch(
@@ -105,21 +102,20 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   it('empty-state UX pinned ("No customer-impacting incidents to date.")', () => {
     expect(body).toMatch(/No customer-impacting incidents to date\./);
     expect(body).toMatch(
-      /This list started before launch, so it can't quietly omit\s+anything — every\s+incident from the first paying customer onward will land here\./, // S20c 2026-07-06: same honesty framing, plain words
+      /No incidents are recorded in the public history\. The live\s+platform status above reflects the current moment\./,
     );
   });
 
-  it('cross-link to /trust (back to trust center) pinned (Fleet v2 S10: the CTA section became a <CtaBand> — the btn-secondary anchor renders from the secondaryHref/secondaryLabel props)', () => {
-    expect(body).toMatch(/secondaryHref="\/trust\/"\s*\n?\s*secondaryLabel="Back to trust center"/);
-    expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/trust/index.astro'))).toBe(
-      true,
+  it('live status CTA opens the public status page', () => {
+    expect(body).toMatch(
+      /primaryHref="https:\/\/status\.driftstack\.dev"\s*\n?\s*primaryLabel="Open status page"/,
     );
   });
 
-  it("'Get notified' CTA + Manage notifications link to dashboard /settings (Fleet v2 S10: btn-primary anchor renders from CtaBand primaryHref/primaryLabel props)", () => {
+  it("'Get notified' CTA + Manage notifications link to dashboard /settings", () => {
     expect(body).toMatch(/title="Get notified when status changes\."/);
     expect(body).toMatch(
-      /primaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*primaryLabel="Manage notifications"/,
+      /secondaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*secondaryLabel="Manage notifications"/,
     );
   });
 

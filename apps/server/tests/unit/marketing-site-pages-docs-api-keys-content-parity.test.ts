@@ -138,7 +138,7 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
     );
   });
 
-  it("FAQ 3-question framing pinned: 'Can I view a key's plaintext after creation?' (No, hash-only) + 'What happens if I use the same key from two regions simultaneously?' (Fine — keys aren't bound to a region. Rate limits are per-account, so the two regions share the bucket budget.) + 'Can I scope a key to a specific session id?' (Not today, per-resource is future-features) — pinned so the 3-FAQ + per-account-rate-limit + no-per-resource-scoping-today commitments survive", () => {
+  it("FAQ 3-question framing pinned: 'Can I view a key's plaintext after creation?' (No, hash-only) + 'What happens if I use the same key from two regions simultaneously?' (Fine — keys aren't bound to a region. Rate limits are per-account, so the two regions share the bucket budget.) + 'Can I scope a key to a specific session id?' (No, current scopes are verb:resource) — pinned so the 3-FAQ + per-account-rate-limit + current authorization boundary survive", () => {
     expect(body).toMatch(/<dt>Can I view a key's plaintext after creation\?<\/dt>/);
     expect(body).toMatch(
       /<dd>No\. We only store the hash; the plaintext is shown once on\s*\n?\s*creation\./,
@@ -151,8 +151,9 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
     );
     expect(body).toMatch(/<dt>Can I scope a key to a specific session id\?<\/dt>/);
     expect(body).toMatch(
-      /<dd>Not today\. Per-resource scoping is on the future-features\s*\n?\s*list; the current granularity is verb:resource \(e\.g\.\s*\n?\s*<code>read:sessions<\/code>\)\.<\/dd>/,
+      /<dd>No\. API-key authorization uses verb:resource scopes \(e\.g\.\s*\n?\s*<code>read:sessions<\/code>\)\.<\/dd>/,
     );
+    expect(body).not.toMatch(/future-features|not today/i);
   });
 
   it('file exists at canonical path', () => {

@@ -8,14 +8,12 @@ description: Read your account's per-dimension spend (compute, storage, egress, 
 
 Every account accrues cost across five dimensions:
 
-- **Compute** — session-minutes (the only metered dimension at
-  v1.0; the rest are placeholders).
-- **Storage** — recording bytes-month (active when R2 storage
-  ships).
-- **Egress** — bandwidth bytes (active when egress metering ships).
-- **Email** — Postmark sends attributable to the account.
-- **LLM** — Claude API calls (BYOK customers bill directly to
-  Anthropic; bundled-LLM tier accrues here).
+- **Compute** — session-minutes.
+- **Storage** — reserved in the response and currently reported as zero.
+- **Egress** — reserved in the response and currently reported as zero.
+- **Email** — reserved in the response and currently reported as zero.
+- **LLM** — reserved in the response and currently reported as zero;
+  BYOK usage is billed directly by the model provider.
 
 `GET /v1/account/cost` returns the current cycle's breakdown plus
 a threshold state so customers can see whether they're approaching
@@ -26,8 +24,7 @@ their tier's soft / hard cap.
 `GET /v1/account/cost?billing_cycle=YYYY-MM`
 
 ```ts
-// The typed SDK helper for this endpoint lands in V-541.E; until then
-// call it directly with the same base URL + API key as the SDK client:
+// Call the endpoint with the same base URL + API key as the SDK client:
 const res = await fetch(`${baseUrl}/v1/account/cost?billing_cycle=2026-05`, {
   headers: { authorization: `Bearer ${apiKey}` },
 });
@@ -113,13 +110,11 @@ existence check.
   `session.completed` webhook event corresponds to a
   `compute_cents` row in the usage ledger.
 - **Email** populates from outbound Postmark sends.
-- **Storage**, **egress**, **llm** dimensions currently return
-  zero placeholders. They activate once the underlying
-  per-account meters land (V-541.I/J/K follow-ups).
+- **Storage**, **egress**, **email**, and **LLM** currently return zero.
+  They remain in the response so clients can use one stable shape.
 
 `breakdown.totalCents` always sums the live dimensions; it's
-safe to use as your customer-facing "this cycle" amount even
-during the placeholder period.
+safe to use as your customer-facing "this cycle" amount.
 
 ## Rate limits
 
