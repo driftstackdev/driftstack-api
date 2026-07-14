@@ -1,9 +1,9 @@
 // Drift guard for apps/gui-client/src/lib/livekit-input-capture.ts.
 // Pins LK.6.d keyboard + mouse capture on the AgentSessionPanel
 // video element. Coordinate translation viewport-space via
-// naturalWidth/rect.width ratio + reliable=true on click/key/wheel +
-// reliable=false on mouseMove (lossy ok). Pointer-capture on mouseDown
-// keeps subsequent move/up landing even when cursor leaves bounds.
+// naturalWidth/rect.width ratio + reliable gesture boundaries/lifecycle
+// anchors with lossy intermediate moves. Pointer-capture on mouseDown keeps
+// subsequent move/up landing even when cursor leaves bounds.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -41,12 +41,15 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     expect(body).toMatch(/`naturalWidth \/\s*\n?\s*\/\/\s+displayedWidth` ratio\./);
   });
 
-  it("Reliability framing pinned: 'touchStart/touchEnd, key down/up, swipe: reliable=true (must arrive in order; a missed start/end breaks the gesture).' + 'touchMove: reliable=false (lossy ok — a dropped move jitters then recovers; reliable=true would congest the data channel on a fast drag).' — pinned so the reliability-split contract stays documented (drift to reliable=true on touchMove would congest the DataChannel on a fast drag; drift to reliable=false on touchStart/End would lose the gesture boundary on transient congestion)", () => {
+  it('Reliability framing pins reliable gesture boundaries plus first/final move anchors while keeping intermediate high-rate moves lossy', () => {
     expect(body).toMatch(
       /\/\/\s+- touchStart\/touchEnd, key down\/up, swipe: reliable=true \(must arrive\s*\n?\s*\/\/\s+in order; a missed start\/end breaks the gesture\)\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- touchMove: reliable=false \(lossy ok — a dropped move jitters then\s*\n?\s*\/\/\s+recovers; reliable=true would congest the data channel on a fast drag\)\./,
+      /\/\/\s+- the first committed touchMove and the final pre-end touchMove are\s*\n?\s*\/\/\s+reliable lifecycle anchors\./,
+    );
+    expect(body).toMatch(
+      /\/\/\s+- intermediate touchMoves remain reliable=false \(lossy ok — a dropped move\s*\n?\s*\/\/\s+jitters then recovers; making the high-rate stream reliable congests it\)\./,
     );
   });
 
@@ -93,11 +96,12 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
       /send\(\{ type: 'touchStart', x: g\.startX, y: devY\(g\.startY\), touchId: g\.touchId \}, true\);/,
     );
     expect(body).toMatch(
-      /send\(\{ type: 'touchMove', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, false\);/,
+      /let lifecycleAnchor = false;[\s\S]*?g\.committed = true;\s*lifecycleAnchor = true;[\s\S]*?send\(\{ type: 'touchMove', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, lifecycleAnchor\);/,
     );
     expect(body).toMatch(
-      /send\(\{ type: 'touchEnd', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, true\);/,
+      /const endCommittedTouch = \(x: number, y: number, touchId: number\): void => \{\s*send\(\{ type: 'touchMove', x, y, touchId \}, true\);\s*send\(\{ type: 'touchEnd', x, y, touchId \}, true\);\s*\};/,
     );
+    expect(body).toMatch(/endCommittedTouch\(p\.x, devY\(p\.y\), g\.touchId\);/);
     // Wheel/trackpad scroll drives a touchStream drag (touchStart→touchMove→touchEnd
     // via wheelDrag), NOT a `swipe` — the fork adds its own momentum to every swipe
     // (A3 W2736), so per-event swipes stacked into jumpy overshoot. The GUI no longer
