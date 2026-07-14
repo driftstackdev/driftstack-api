@@ -210,6 +210,16 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
     );
   });
 
+  it('fails closed when the staging-only decomposer fallback is enabled in production', () => {
+    expect(body).toMatch(
+      /env\.NODE_ENV === 'production' &&\s*env\.DRIFTSTACK_DEPLOY_ENV !== 'staging' &&\s*env\.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true'/,
+    );
+    expect(body).toMatch(
+      /Refusing to boot: DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK=true is staging-only and would bypass customer BYOK or bundled-LLM consent in production/,
+    );
+    expect(body).toMatch(/env\.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true'/);
+  });
+
   it('exported types: Config + R2Config + PostmarkConfig + SentryConfig (NonNullable shorthand)', () => {
     expect(body).toMatch(/export type Config = z\.infer<typeof ConfigSchema>;/);
     expect(body).toMatch(/export type R2Config = NonNullable<Config\['r2'\]>;/);

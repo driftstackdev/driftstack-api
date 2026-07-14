@@ -639,6 +639,15 @@ function resolveProfileMasterKey(env: NodeJS.ProcessEnv): string | undefined {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  if (
+    env.NODE_ENV === 'production' &&
+    env.DRIFTSTACK_DEPLOY_ENV !== 'staging' &&
+    env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true'
+  ) {
+    throw new Error(
+      'Refusing to boot: DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK=true is staging-only and would bypass customer BYOK or bundled-LLM consent in production.',
+    );
+  }
   return ConfigSchema.parse({
     nodeEnv: env.NODE_ENV,
     port: env.PORT,

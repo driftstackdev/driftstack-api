@@ -284,6 +284,47 @@ describe('loadConfig', () => {
     expect(cfg.authFlowUrls.exposeDebugToken).toBe(true);
   });
 
+  it.each([undefined, 'production'])(
+    'refuses the LLM fallback flag for %s deployment',
+    (deployEnv) => {
+      expect(() =>
+        loadConfig({
+          DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+          REDIS_URL: 'redis://localhost:6379',
+          NODE_ENV: 'production',
+          ...(deployEnv === undefined ? {} : { DRIFTSTACK_DEPLOY_ENV: deployEnv }),
+          DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+          DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK: 'true',
+        }),
+      ).toThrow(
+        /DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK=true is staging-only.*BYOK or bundled-LLM consent/,
+      );
+    },
+  );
+
+  it('retains the explicit fallback-key demo path for the staging deployment', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      NODE_ENV: 'production',
+      DRIFTSTACK_DEPLOY_ENV: 'staging',
+      DASHBOARD_ORIGIN: 'https://staging.driftstack-customer-dashboard.pages.dev',
+      DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK: 'true',
+    });
+    expect(cfg.agentDecomposer?.useFallbackForUnconfiguredCustomers).toBe(true);
+  });
+
+  it.each(['false', '0', 'no', 'off'])('keeps the LLM fallback disabled for %s', (raw) => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      NODE_ENV: 'production',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK: raw,
+    });
+    expect(cfg.agentDecomposer?.useFallbackForUnconfiguredCustomers).toBe(false);
+  });
+
   it('W190 strips trailing slash from DASHBOARD_ORIGIN so `${dashboardOrigin}/billing` is clean', () => {
     // Operator pastes the env var with a trailing slash. Without the
     // schema-level strip, every URL built via template literals would

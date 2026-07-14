@@ -26090,3 +26090,37 @@ Verification:
   refusal; the surrounding config/origin gate passes with 4 files and 90/90
   tests, plus strict server source/test TypeScript, lint, formatting, diff, and
   hooks.
+
+## V-613 — production cannot bypass customer LLM authority
+
+**Date:** 2026-07-14
+
+Added a fail-closed deployment boundary for
+`DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK`. The flag is an intentional staging
+demo escape hatch: when a customer has supplied neither a per-request nor stored
+BYOK key and has not activated the budgeted bundled-LLM rail, it permits the
+agent route to use the control plane's deployment Anthropic key. Accepting that
+flag on the production role would therefore bypass customer key/consent
+authority, send task content through an operator-funded credential, and create
+unattributed fallback spend.
+
+Configuration loading now refuses exact
+`DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK=true` whenever
+`NODE_ENV=production` and `DRIFTSTACK_DEPLOY_ENV` is not exact `staging`. The
+explicit staging deployment keeps its existing demo path; development and test
+remain available for local verification. Unset and non-`true` values keep the
+fallback disabled, preserving strict string parsing rather than coercing
+operator text.
+
+Verification:
+
+- executable configuration tests prove both an unset deployment role and the
+  explicit production role refuse the flag, while the exact staging role
+  retains it;
+- parameterized production tests prove `false`, `0`, `no`, and `off` all remain
+  disabled without preventing boot;
+- source guards pin all three conditions and the non-secret diagnostic, and the
+  canonical environment schema now documents the deployment-role authority and
+  staging-only fallback contract;
+- the focused config/decomposer gate passes with 3 files and 80/80 tests, plus
+  strict server source/test TypeScript, lint, formatting, diff, and hooks.
