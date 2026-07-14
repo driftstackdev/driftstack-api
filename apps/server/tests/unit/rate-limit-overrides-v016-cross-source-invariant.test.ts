@@ -22,7 +22,8 @@
 //     - MAX_REFILL = 100_000 (sanity cap; enterprise tier global is
 //       1000/s).
 //     - capacity must be positive integer + Number.isFinite.
-//     - expiresAt must be in the future.
+//     - refillPerSecond and expiresAt must be finite; expiresAt must
+//       also be in the future.
 //
 //   RateLimitOverrideRecord (10 fields):
 //     - id + accountId + bucketKey + capacity + refillPerSecond
@@ -123,19 +124,22 @@ describe('W931 rate-limit-overrides V-016 centi-quantum cross-source invariant',
     expect(p).toMatch(/throw new ConflictError\('capacity must be a positive integer\.'\);/);
   });
 
-  it('CRITICAL set() validates refillPerSecond ∈ [MIN_REFILL, MAX_REFILL] with ConflictError + interpolated bounds. The bounds-validation prevents subtle accidental rate-limit-bypasses via too-large values.', () => {
+  it('CRITICAL set() validates finite refillPerSecond ∈ [MIN_REFILL, MAX_REFILL] with ConflictError + interpolated bounds', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/rate-limit-overrides.ts'));
     expect(p).toMatch(
-      /if \(input\.refillPerSecond < MIN_REFILL \|\| input\.refillPerSecond > MAX_REFILL\) \{/,
+      /!Number\.isFinite\(input\.refillPerSecond\) \|\|\s*\n?\s*input\.refillPerSecond < MIN_REFILL \|\|\s*\n?\s*input\.refillPerSecond > MAX_REFILL/,
     );
     expect(p).toMatch(
       /`refill_per_second must be between \$\{MIN_REFILL\.toString\(\)\} and \$\{MAX_REFILL\.toString\(\)\}\.`,/,
     );
   });
 
-  it("CRITICAL set() validates expiresAt is in the future — 'expires_at must be in the future' ConflictError. The future-only requirement prevents accidentally-creating-already-expired overrides.", () => {
+  it("CRITICAL set() validates expiresAt is finite and in the future — 'expires_at must be in the future' ConflictError", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/rate-limit-overrides.ts'));
-    expect(p).toMatch(/if \(input\.expiresAt\.getTime\(\) <= Date\.now\(\)\) \{/);
+    expect(p).toMatch(/const expiresAtMs = input\.expiresAt\.getTime\(\);/);
+    expect(p).toMatch(
+      /if \(!Number\.isFinite\(expiresAtMs\) \|\| expiresAtMs <= Date\.now\(\)\) \{/,
+    );
     expect(p).toMatch(/throw new ConflictError\('expires_at must be in the future\.'\);/);
   });
 

@@ -86,12 +86,17 @@ export class RateLimitOverridesService {
     if (input.capacity < 1 || !Number.isFinite(input.capacity)) {
       throw new ConflictError('capacity must be a positive integer.');
     }
-    if (input.refillPerSecond < MIN_REFILL || input.refillPerSecond > MAX_REFILL) {
+    if (
+      !Number.isFinite(input.refillPerSecond) ||
+      input.refillPerSecond < MIN_REFILL ||
+      input.refillPerSecond > MAX_REFILL
+    ) {
       throw new ConflictError(
         `refill_per_second must be between ${MIN_REFILL.toString()} and ${MAX_REFILL.toString()}.`,
       );
     }
-    if (input.expiresAt.getTime() <= Date.now()) {
+    const expiresAtMs = input.expiresAt.getTime();
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
       throw new ConflictError('expires_at must be in the future.');
     }
 

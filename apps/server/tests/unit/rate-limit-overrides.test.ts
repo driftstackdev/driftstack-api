@@ -148,6 +148,21 @@ describe('V-553.B-8 RateLimitOverridesService.set — scope + validation', () =>
     ).rejects.toThrow(/refill_per_second/);
   });
 
+  it('rejects NaN refill before repository mutation', async () => {
+    const { repo, upsertSpy } = makeRepo();
+    const svc = new RateLimitOverridesService(repo);
+    await expect(
+      svc.set(ctxWithScopes(['driftstack_internal_admin']), {
+        accountId: 'acc_b',
+        bucketKey: 'global',
+        capacity: 10,
+        refillPerSecond: Number.NaN,
+        expiresAt: FUTURE_DATE,
+      }),
+    ).rejects.toThrow(/refill_per_second/);
+    expect(upsertSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects expiresAt in the past', async () => {
     const { repo } = makeRepo();
     const svc = new RateLimitOverridesService(repo);
@@ -160,6 +175,21 @@ describe('V-553.B-8 RateLimitOverridesService.set — scope + validation', () =>
         expiresAt: PAST_DATE,
       }),
     ).rejects.toThrow(/expires_at/);
+  });
+
+  it('rejects an invalid expiresAt before repository mutation', async () => {
+    const { repo, upsertSpy } = makeRepo();
+    const svc = new RateLimitOverridesService(repo);
+    await expect(
+      svc.set(ctxWithScopes(['driftstack_internal_admin']), {
+        accountId: 'acc_b',
+        bucketKey: 'global',
+        capacity: 10,
+        refillPerSecond: 1,
+        expiresAt: new Date(Number.NaN),
+      }),
+    ).rejects.toThrow(/expires_at/);
+    expect(upsertSpy).not.toHaveBeenCalled();
   });
 });
 

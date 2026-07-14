@@ -105,15 +105,15 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
     );
   });
 
-  it('set validation: refillPerSecond between MIN_REFILL and MAX_REFILL → ConflictError', () => {
+  it('set validation: refillPerSecond finite and between MIN_REFILL and MAX_REFILL → ConflictError', () => {
     expect(body).toMatch(
-      /if \(input\.refillPerSecond < MIN_REFILL \|\| input\.refillPerSecond > MAX_REFILL\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*`refill_per_second must be between \$\{MIN_REFILL\.toString\(\)\} and \$\{MAX_REFILL\.toString\(\)\}\.`,\s*\n?\s*\);\s*\n?\s*\}/,
+      /if \(\s*\n?\s*!Number\.isFinite\(input\.refillPerSecond\) \|\|\s*\n?\s*input\.refillPerSecond < MIN_REFILL \|\|\s*\n?\s*input\.refillPerSecond > MAX_REFILL\s*\n?\s*\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*`refill_per_second must be between \$\{MIN_REFILL\.toString\(\)\} and \$\{MAX_REFILL\.toString\(\)\}\.`,\s*\n?\s*\);\s*\n?\s*\}/,
     );
   });
 
-  it('set validation: expiresAt strictly in the future → ConflictError', () => {
+  it('set validation: expiresAt is finite and strictly in the future → ConflictError', () => {
     expect(body).toMatch(
-      /if \(input\.expiresAt\.getTime\(\) <= Date\.now\(\)\) \{\s*\n?\s*throw new ConflictError\('expires_at must be in the future\.'\);\s*\n?\s*\}/,
+      /const expiresAtMs = input\.expiresAt\.getTime\(\);\s*\n?\s*if \(!Number\.isFinite\(expiresAtMs\) \|\| expiresAtMs <= Date\.now\(\)\) \{\s*\n?\s*throw new ConflictError\('expires_at must be in the future\.'\);\s*\n?\s*\}/,
     );
   });
 
