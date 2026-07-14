@@ -18,8 +18,8 @@
 //   • isExpiringSoon triple-guard: status === 'pending' +
 //     typeof === 'string' && length > 0 + !Number.isNaN +
 //     diff > 0 && diff <= threshold.
-//   • Cancel-confirm modal a11y: Escape closes + keepBtnRef
-//     focus on open.
+//   • Cancel-confirm modal a11y: shared ref-backed focus trap +
+//     Escape close.
 //   • Auto-refresh effect: hasPending guard + paginatedBeyondFirst
 //     pause + setInterval cleanup.
 //   • Status filter conditional + date-range conditional
@@ -87,9 +87,11 @@ describe('W484.A apps/gui-client/src/views/CryptoOrdersHistoryView.tsx content p
     );
   });
 
-  it('Modal a11y (V-534.BK): Escape keydown listener closes modal + keepBtnRef.current?.focus() on open + cleanup removes listener — pinned so customer can dismiss without clicking; auto-refresh effect (V-534.BS/.BT): hasPending guard + paginatedBeyondFirst pause (orders > 50 && nextCursor !== null) + setInterval pendingRefreshMs + clearInterval cleanup', () => {
+  it('Modal a11y uses the shared ref-backed focus trap; auto-refresh pauses after pagination and cleans its interval', () => {
+    expect(body).toMatch(/import \{ useFocusTrap \} from '\.\.\/lib\/use-focus-trap';/);
+    expect(body).toMatch(/const cancelDialogRef = useRef<HTMLDivElement>\(null\);/);
     expect(body).toMatch(
-      /\/\/ V-534\.BK — escape closes the cancel-confirm modal\.\s*\n?\s*useEffect\(\(\) => \{\s*\n?\s*if \(cancelConfirmFor === null\) return;\s*\n?\s*const onKey = \(e: KeyboardEvent\): void => \{\s*\n?\s*if \(e\.key === 'Escape'\) setCancelConfirmFor\(null\);\s*\n?\s*\};\s*\n?\s*window\.addEventListener\('keydown', onKey\);\s*\n?\s*keepBtnRef\.current\?\.focus\(\);/,
+      /useFocusTrap\(cancelConfirmFor !== null, cancelDialogRef, \(\) => setCancelConfirmFor\(null\)\);/,
     );
     expect(body).toMatch(
       // The setInterval body carries a document.visibilityState hidden-skip gate (perf
@@ -109,14 +111,17 @@ describe('W484.A apps/gui-client/src/views/CryptoOrdersHistoryView.tsx content p
 
   it("Cancel-confirm modal: role='dialog' aria-modal='true' aria-label='Confirm order cancellation' + 'Cancel this order?' h3 + non-refundable disclaimer 'Crypto payments are non-refundable; cancelling only stops the pending pay window — if you've already sent crypto, contact support to reconcile.' + 'Keep order' button (default focus + safer action) + 'Confirm cancel' status-error button — pinned so the misclick-cancellation footgun stays guarded", () => {
     expect(body).toMatch(
-      /role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Confirm order cancellation"/,
+      /ref=\{cancelDialogRef\}\s*\n?\s*role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Confirm order cancellation"/,
     );
     expect(body).toMatch(/<h3 className="text-base font-semibold">Cancel this order\?<\/h3>/);
     expect(body).toMatch(
       /Order <span className="font-mono text-xs">\{cancelConfirmFor\}<\/span> will be marked\s*\n?\s*cancelled\. You can still mint a new order afterwards\. Crypto payments are\{' '\}\s*\n?\s*<strong>non-refundable<\/strong>; cancelling only stops the pending pay window — if\s*\n?\s*you've already sent crypto, contact support to reconcile\./,
     );
     expect(body).toMatch(
-      /<button\s*\n?\s*ref=\{keepBtnRef\}\s*\n?\s*type="button"\s*\n?\s*onClick=\{\(\) => setCancelConfirmFor\(null\)\}/,
+      /<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{\(\) => setCancelConfirmFor\(null\)\}/,
+    );
+    expect(body).toMatch(
+      /onClick=\{\(e\) => \{\s*\n?\s*if \(e\.target === e\.currentTarget\) setCancelConfirmFor\(null\);\s*\n?\s*\}\}/,
     );
   });
 
@@ -129,7 +134,10 @@ describe('W484.A apps/gui-client/src/views/CryptoOrdersHistoryView.tsx content p
     );
     expect(body).toMatch(/aria-label="Expires soon"/);
     expect(body).toMatch(
-      /onClick=\{\(e\) => \{\s*\n?\s*e\.stopPropagation\(\);\s*\n?\s*setCancelConfirmFor\(o\.order_id\);\s*\n?\s*\}\}/,
+      /onClick=\{\(e\) => \{\s*\n?\s*e\.stopPropagation\(\);\s*\n?\s*if \(cancellationInFlight\) return;\s*\n?\s*setCancelConfirmFor\(o\.order_id\);\s*\n?\s*\}\}\s*\n?\s*disabled=\{cancellationInFlight\}/,
+    );
+    expect(body).toMatch(
+      /cancellationInFlight && !isCancellingThis\s*\n?\s*\? 'Wait for the active order cancellation to finish\.'/,
     );
   });
 
