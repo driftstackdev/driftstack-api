@@ -60,13 +60,13 @@ describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parit
 
   it('GenerateMouseTrajectoryOpts: from/to {x,y} + optional seed (deterministic per-call default) + optional samples (default 32)', () => {
     expect(body).toMatch(
-      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*to: \{ x: number; y: number \};/,
+      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};/,
     );
     expect(body).toMatch(
       /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*\n?\s*seed\?: string;/,
     );
     expect(body).toMatch(
-      /\/\*\* Number of intermediate samples to emit \(default 32\)\. \*\/\s*\n?\s*samples\?: number;/,
+      /\/\*\* Integer sample count in the implementation's bounded range \(default 32\)\. \*\/\s*\n?\s*samples\?: number;/,
     );
   });
 
@@ -78,7 +78,7 @@ describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parit
 
   it('GenerateScrollPatternOpts: direction union (up|down|left|right) + totalDistancePx + profile + optional seed', () => {
     expect(body).toMatch(
-      /export interface GenerateScrollPatternOpts \{\s*\n?\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\n?\s*totalDistancePx: number;\s*\n?\s*profile: BehaviouralProfile;\s*\n?\s*seed\?: string;\s*\n?\s*\}/,
+      /export interface GenerateScrollPatternOpts \{\s*\n?\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\n?\s*\/\*\* Positive finite absolute distance\. \*\/\s*\n?\s*totalDistancePx: number;\s*\n?\s*profile: BehaviouralProfile;\s*\n?\s*seed\?: string;\s*\n?\s*\}/,
     );
   });
 
