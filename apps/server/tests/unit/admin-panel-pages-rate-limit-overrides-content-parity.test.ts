@@ -33,10 +33,19 @@ function read(p: string): string {
 describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-194 framing pinned: 'progressive-enhancement against /v1/admin/rate-limit-overrides (new in V-194). SSG renders a placeholder mock; an inline <script> fetches with bearer auth, replaces the list, and wires Clear-now (DELETE) action against /v1/admin/accounts/:id/quota-override?bucket_key=<bucket>. New override / Extend require a target account first — surfaced as deep-links into the per-account detail page rather than re-implementing the form here.' — pinned so the deferred-create framing (form lives on per-account page, not duplicated here) survives", () => {
+  it('V-194 framing pins an inert SSG shell and the per-account mutation contract', () => {
     expect(body).toMatch(
-      /\/\/ V-194 — progressive-enhancement against \/v1\/admin\/rate-limit-\s*\n?\s*\/\/ overrides \(new in V-194\)\. SSG renders a placeholder mock; an inline\s*\n?\s*\/\/ <script> fetches with bearer auth, replaces the list, and wires\s*\n?\s*\/\/ Clear-now \(DELETE\) action against \/v1\/admin\/accounts\/:id\/quota-\s*\n?\s*\/\/ override\?bucket_key=<bucket>\. New override \/ Extend require a target\s*\n?\s*\/\/ account first — surfaced as deep-links into the per-account detail\s*\n?\s*\/\/ page rather than re-implementing the form here\./,
+      /\/\/ V-194 — progressive-enhancement against \/v1\/admin\/rate-limit-\s*\n?\s*\/\/ overrides \(new in V-194\)\. SSG renders an inert shell; an inline\s*\n?\s*\/\/ <script> fetches with bearer auth, replaces the list, and wires/,
     );
+  });
+
+  it('ships no sample override, Clear control, or green live claim before authority', () => {
+    expect(body).not.toContain('MOCK_OVERRIDES');
+    expect(body).toContain('Live rate-limit overrides are unavailable until loaded.');
+    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toContain('<span data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).not.toMatch(/data-action="clear"\s*\n?\s*data-account-id=\{override\.accountId\}/);
   });
 
   it("Page-purpose framing pinned: 'Per-account bucket overrides that supersede the tier defaults. Used for time-boxed capacity bumps during migrations + production incidents. All overrides are auditable + auto-expire if a TTL is set. To set a new override, open the per-account page (Accounts → select account).' — pinned so the use-case framing (migration cutover + incident response) + per-account-page redirect stays explicit", () => {
@@ -60,13 +69,11 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
     );
   });
 
-  it("BUCKET_LABEL duplicated catalog (frontmatter Record + inline-script const) covering the full canonical enum: global → 'Global' + sessions:create → 'Sessions: create' + agent_sessions:message → 'Agent sessions: message' — pinned so the SSG-rendered badge text matches the live-script's rendered badge text (drift between the two would cause a flash-of-mismatched-labels on hydrate) AND every enum member has a friendly label (agent_sessions:message previously fell through to the raw key)", () => {
-    expect(body).toMatch(
-      /const BUCKET_LABEL: Record<string, string> = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*'agent_sessions:message': 'Agent sessions: message',\s*\n?\s*\};/,
-    );
+  it('BUCKET_LABEL live catalog covers every canonical override bucket', () => {
     expect(body).toMatch(
       /const BUCKET_LABEL = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*'agent_sessions:message': 'Agent sessions: message',\s*\n?\s*\};/,
     );
+    expect(body).not.toContain('const BUCKET_LABEL: Record<string, string>');
   });
 
   it("Clear-now DELETE endpoint contract: /v1/admin/accounts/{encodeURIComponent(id)}/quota-override?bucket_key={encodeURIComponent(bucketKey)} + method:'DELETE' + Bearer auth + credentials:'include' + window.confirm pre-prompt — pinned so the destructive action requires explicit confirmation + URL encoding handles the colon in bucket-keys like 'sessions:create' (raw colon would break path parsing)", () => {
@@ -78,10 +85,7 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
     );
   });
 
-  it("fmtIso null → 'permanent' fallback (distinct from other admin pages where null → '—') — pinned so a no-TTL (permanent) override renders as a meaningful label rather than the generic em-dash placeholder, making the 'flag in weekly audit review' state visible at a glance to operators reading the list", () => {
-    expect(body).toMatch(
-      /function fmtIso\(iso: string \| null\): string \{\s*\n?\s*if \(iso === null\) return 'permanent';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.replace\('T', ' '\)\.slice\(0, 16\) \+ ' UTC';\s*\n?\s*\}/,
-    );
+  it("live fmtIso renders a null expiry as 'permanent'", () => {
     expect(body).toMatch(
       /function fmtIso\(iso\) \{\s*\n?\s*if \(!iso\) return 'permanent';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.replace\('T', ' '\)\.slice\(0, 16\) \+ ' UTC';\s*\n?\s*\}/,
     );
@@ -94,20 +98,20 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
     expect(body).toMatch(
       /if \(includeExpiredEl && includeExpiredEl\.checked\)\s*\n?\s*params\.set\('include_expired', 'true'\);/,
     );
-    expect(body).toMatch(/setTimeout\(load, 200\)/);
+    expect(body).toMatch(/setTimeout\(loadWithLive, 200\)/);
   });
 
-  it("Override row data-attribute contract: data-action='clear' + data-account-id={override.accountId} + data-bucket-key={override.bucketKey} on Clear-now button — pinned so the event-delegation pattern (root.addEventListener) reads the right attrs from the closest matching button (drift to data-id alone would lose the bucket-key information needed for the DELETE call)", () => {
+  it('Live Clear controls retain account-id and bucket-key event-delegation attributes', () => {
     expect(body).toMatch(
-      /data-action="clear"\s*\n?\s*data-account-id=\{override\.accountId\}\s*\n?\s*data-bucket-key=\{override\.bucketKey\}/,
+      /'<button type="button" data-action="clear" data-account-id="' \+[\s\S]*?'" data-bucket-key="' \+/,
     );
     expect(body).toMatch(
       /const btn = target\.closest\('\[data-action="clear"\]'\);\s*\n?\s*if \(!btn\) return;\s*\n?\s*ev\.preventDefault\(\);\s*\n?\s*const accountId = btn\.getAttribute\('data-account-id'\);\s*\n?\s*const bucketKey = btn\.getAttribute\('data-bucket-key'\);\s*\n?\s*if \(accountId && bucketKey\) clear\(accountId, bucketKey, btn\);/,
     );
   });
 
-  it("Capacity number formatting: toLocaleString('en-US') — pinned so 4-digit+ capacity values render with thousands separators (drift to bare String() would render '10000' instead of '10,000', making at-a-glance comparisons of high-capacity overrides harder for operators)", () => {
-    expect(body).toMatch(/\{override\.capacity\.toLocaleString\('en-US'\)\}/);
+  it('Live capacity rendering escapes the authoritative numeric value', () => {
+    expect(body).toMatch(/escapeHtml\(String\(o\.capacity\)\)/);
   });
 
   it("Banner state taxonomy: no-token / 403 forbidden / fetch-error on load + 'Clearing override…' / 'Override cleared. Refreshing…' / 'Couldn't clear (mapped error).' on action — pinned so the 6-state banner vocabulary matches the rest of the admin pages + the 204-No-Content success path on DELETE is handled correctly", () => {
@@ -141,17 +145,26 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
     );
   });
 
-  it('Signed-out and failed loads replace SSG overrides with a non-actionable row and never present the empty-live state as authoritative', () => {
+  it('Signed-out and failed loads replace overrides with a non-actionable row and never present the empty-live state as authoritative', () => {
     expect(body).toMatch(
-      /function renderUnavailable\(message\) \{[\s\S]*?list\.classList\.remove\('hidden'\);[\s\S]*?list\.innerHTML =[\s\S]*?message \+[\s\S]*?'[^']*<\/li>';[\s\S]*?if \(emptyRegion\) emptyRegion\.classList\.add\('hidden'\);[\s\S]*?\}/,
+      /function renderUnavailable\(message\) \{[\s\S]*?list\.classList\.remove\('hidden'\);[\s\S]*?list\.innerHTML =[\s\S]*?escapeHtml\(message\) \+[\s\S]*?'[^']*<\/li>';[\s\S]*?if \(emptyRegion\) emptyRegion\.classList\.add\('hidden'\);[\s\S]*?\}/,
     );
     expect(body).toMatch(
       /\.catch\(\(err\) => \{[\s\S]*?renderUnavailable\(\s*'Could not load live overrides — nothing to act on\. Resolve the error above and retry\.',\s*\);/,
     );
     expect(body).toMatch(
-      /if \(!token\) \{\s*renderUnavailable\(\s*'Sign in with a staff admin account to see rate-limit overrides\.',\s*\);\s*showBanner\('Sign in with a staff admin account to see live data\.'\);\s*return;/,
+      /if \(!token\) \{\s*renderUnavailable\('Sign in with a staff admin account to see rate-limit overrides\.'\);[\s\S]*?showBanner\('Sign in with a staff admin account to see live data\.'\);/,
     );
-    expect(body).not.toMatch(/Showing preview below\./);
+    expect(body).toMatch(/if \(loaded\) \{[\s\S]*?setLiveState\('ready'\);/);
+    expect(body).toMatch(/if \(expectedReq !== inFlight\) return loaded;/);
+  });
+
+  it('defers token authority until DOMContentLoaded so the AdminLayout SSO bridge lands first', () => {
+    expect(body).toMatch(/let token = null;/);
+    expect(body).toMatch(
+      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+    );
+    expect(body).toMatch(/document\.addEventListener\('DOMContentLoaded', start\);/);
   });
 
   it('file exists at canonical path', () => {
