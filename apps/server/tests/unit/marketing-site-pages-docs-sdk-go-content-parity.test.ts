@@ -93,8 +93,9 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     expect(body).not.toMatch(/Kind:\s+"time"/);
     expect(body).not.toMatch(/DurationMs: 1000/);
     expect(body).toMatch(
-      /For batch workloads, prefer\s*\n?\s*<a href="\/docs\/webhooks">webhooks<\/a> over polling\./,
+      /For batch workloads, prefer\s*\n?\s*<a href="\/docs\/webhooks\/">webhooks<\/a> over polling\./,
     );
+    expect(body).not.toMatch(/href="\/docs\/webhooks"/);
   });
 
   it('Sessions.List pagination framing pinned: ListSessionsQuery{Limit: 50} + page.Data range + page.NextCursor nil-pointer + deref *page.NextCursor as query.Cursor — pinned so the List + NextCursor-nil + deref-refeed-pattern survives (drift to dropping NextCursor would create marketing↔server-cursor divergence). NextCursor is a *string (nil when there are no more pages), matching packages/sdk-go/agent_sessions.go:190 (NextCursor *string); the previous empty-string framing was wrong — the refeed dereferences *page.NextCursor.', () => {
@@ -136,13 +137,20 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
   });
 
   it('7-where-to-go-next cluster: /api-reference + /docs/sdk-go-crypto-orders + /docs/sdk-typescript + /docs/sdk-python + /docs/webhooks + /docs/cost-monitoring + /docs/error-codes — pinned so the 7-related-doc navigation surface stays complete (drift to dropping /docs/sdk-go-crypto-orders would orphan the V-666 crypto-checkout cross-reference)', () => {
-    expect(body).toMatch(/<a href="\/api-reference">Full API reference<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/sdk-go-crypto-orders">Crypto orders<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/sdk-typescript">TypeScript SDK<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/sdk-python">Python SDK<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/webhooks">Webhooks<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/cost-monitoring">Cost monitoring<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/error-codes">Error codes<\/a>/);
+    const relatedDocs = [
+      ['/api-reference', 'Full API reference'],
+      ['/docs/sdk-go-crypto-orders', 'Crypto orders'],
+      ['/docs/sdk-typescript', 'TypeScript SDK'],
+      ['/docs/sdk-python', 'Python SDK'],
+      ['/docs/webhooks', 'Webhooks'],
+      ['/docs/cost-monitoring', 'Cost monitoring'],
+      ['/docs/error-codes', 'Error codes'],
+    ] as const;
+
+    for (const [path, label] of relatedDocs) {
+      expect(body).toContain(`<a href="${path}/">${label}</a>`);
+      expect(body).not.toContain(`<a href="${path}">${label}</a>`);
+    }
   });
 
   it("developers@driftstack.dev + 'within one business day' SLA pinned — pinned so the developer-channel routing + 1-business-day response commitment stays consistent across SDK pages (drift to a different SLA would create cross-page divergence)", () => {
