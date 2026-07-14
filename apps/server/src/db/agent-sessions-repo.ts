@@ -34,7 +34,8 @@ import { and, count, desc, eq, isNull, lt, notInArray, or, sql, type SQL } from 
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
 import type { Database } from './client.js';
-import { agentSessions } from './schema.js';
+import { agentSessions, sessions } from './schema.js';
+import { profileSessionAdvisoryLockKey } from './profile-session-lock.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
 import {
   encryptAgentTranscript,
@@ -170,17 +171,16 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     // SessionsRepo.insertSessionIfUnderLimit (the proven pattern for the legacy
     // sessions table). Returns null when already at/over the cap.
     //
-    // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
-    // `args.profileId` is set, this ALSO takes a per-profile advisory lock + checks
-    // for an existing NON-TERMINAL (status != 'closed') session bound to that
-    // profile for this account, throwing ProfileInUseError(activeSessionId) when one
-    // exists. Two concurrent creates for the same profile serialise on the profile
-    // lock; the second sees the first's row → exactly one binds. This prevents a
-    // cross-node sealed-blob clobber (two sessions restore the same blob, diverge,
-    // both save back). A create WITHOUT a profile_id never takes the profile lock or
-    // runs the check (fail-safe: no guard). The cap lock is taken first, then the
-    // profile lock (a stable acquisition order — accountId before profileId — so two
-    // creates can never deadlock by locking in opposite orders).
+    // A3 finding #7 (W2979/W2980) — global single-active-session-per-profile
+    // guard. When `args.profileId` is set, this takes the canonical cross-surface
+    // advisory lock + checks BOTH agent_sessions and legacy sessions. The legacy
+    // create path takes the exact same lock and checks the same two tables, so a
+    // mixed /v1/sessions ↔ /v1/agent-sessions race has exactly one winner. Throw
+    // ProfileInUseError(activeSessionId) with the competing public session id. This
+    // prevents a cross-node sealed-blob clobber (two sessions restore the same blob,
+    // diverge, then both save back). A create WITHOUT a profile_id never takes the
+    // profile lock or runs the check. The account cap lock is taken first, then the
+    // profile lock (stable accountId-before-profileId acquisition order).
     const id = `agt_${randomUUID()}`;
     const now = this.clock();
     return this.database.db.transaction(async (tx) => {
@@ -189,9 +189,9 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       );
       if (args.profileId !== undefined) {
         await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtext(${`agent-session-profile:${args.profileId}`}))`,
+          sql`SELECT pg_advisory_xact_lock(hashtext(${profileSessionAdvisoryLockKey(args.profileId)}))`,
         );
-        const [live] = await tx
+        const [liveAgent] = await tx
           .select({ id: agentSessions.id })
           .from(agentSessions)
           .where(
@@ -204,8 +204,23 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
             ),
           )
           .limit(1);
-        if (live) {
-          throw new ProfileInUseError(live.id);
+        if (liveAgent) {
+          throw new ProfileInUseError(liveAgent.id);
+        }
+        const [liveLegacy] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(
+            and(
+              eq(sessions.accountId, args.accountId),
+              sql`${sessions.metadata}->>'profile_id' = ${args.profileId}`,
+              notInArray(sessions.status, ['destroyed', 'errored']),
+              isNull(sessions.destroyedAt),
+            ),
+          )
+          .limit(1);
+        if (liveLegacy) {
+          throw new ProfileInUseError(`ses_${liveLegacy.id}`);
         }
       }
       const [countRow] = await tx

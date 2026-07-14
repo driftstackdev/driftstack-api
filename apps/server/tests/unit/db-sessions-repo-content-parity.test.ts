@@ -45,7 +45,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('imports: asc/and/desc/eq/inArray/isNull/lt/notInArray/or/sql from drizzle-orm; SessionStatusSchema + AccountTier; ProfileInUseError; 5 service types; Database; accounts + sessionEvents + sessions schemas', () => {
+  it('imports: Drizzle primitives; SessionStatusSchema + AccountTier; ProfileInUseError; service/Database types; both session schemas; canonical profile lock helper', () => {
     // Reflow-robust: prettier wraps this multi-member import across lines, so
     // match the members with \s* separators rather than a single-line literal.
     expect(body).toMatch(
@@ -62,8 +62,14 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     expect(body).toMatch(
       /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
     );
-    // 6.g — accounts joined in for the duration-sweep tier resolution.
-    expect(body).toMatch(/import \{ accounts, sessionEvents, sessions \} from '\.\/schema\.js';/);
+    // 6.g — accounts joined in for the duration-sweep tier resolution. The agent
+    // table participates in the global single-profile launch guard.
+    expect(body).toMatch(
+      /import \{ accounts, agentSessions, sessionEvents, sessions \} from '\.\/schema\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ profileSessionAdvisoryLockKey \} from '\.\/profile-session-lock\.js';/,
+    );
   });
 
   it("insertSession: 7-field values (accountId + apiKeyId + driverSessionId + archetype + purpose + label + metadata); returning(); throws 'insertSession returned no row'", () => {
@@ -86,13 +92,18 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard inside insertSessionIfUnderLimit: per-profile advisory lock + metadata.profile_id non-terminal lookup → throws ProfileInUseError. Drift to dropping the lock or the check reopens the cross-node sealed-blob clobber.', () => {
+  it('A3 finding #7 (W2979/W2980) — global single-profile guard uses the canonical lock and checks both legacy + agent live tables before insert, returning the competing public id', () => {
     expect(body).toMatch(
-      /SELECT pg_advisory_xact_lock\(hashtext\(\$\{`session-create-profile:\$\{opts\.profileId\}`\}\)\)/,
+      /SELECT pg_advisory_xact_lock\(hashtext\(\$\{profileSessionAdvisoryLockKey\(opts\.profileId\)\}\)\)/,
     );
     expect(body).toMatch(/\$\{sessions\.metadata\}->>'profile_id' = \$\{opts\.profileId\}/);
     expect(body).toMatch(/notInArray\(sessions\.status, \['destroyed', 'errored'\]\)/);
-    expect(body).toMatch(/throw new ProfileInUseError\(`ses_\$\{live\.id\}`\)/);
+    expect(body).toMatch(/throw new ProfileInUseError\(`ses_\$\{liveLegacy\.id\}`\)/);
+    expect(body).toMatch(/\.from\(agentSessions\)/);
+    expect(body).toMatch(/eq\(agentSessions\.profileId, opts\.profileId\)/);
+    expect(body).toMatch(/notInArray\(agentSessions\.status, \['closed'\]\)/);
+    expect(body).toMatch(/throw new ProfileInUseError\(liveAgent\.id\)/);
+    expect(body).not.toMatch(/session-create-profile:/);
   });
 
   it('findSession: account-scoped via and(eq(id), eq(accountId)) + limit 1; findSessionUnscoped: id-only no account scope (admin force-actions path)', () => {

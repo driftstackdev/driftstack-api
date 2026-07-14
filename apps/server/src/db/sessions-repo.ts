@@ -25,8 +25,9 @@ import type {
   SessionRepo,
 } from '../services/sessions.js';
 import type { Database } from './client.js';
-import { accounts, sessionEvents, sessions } from './schema.js';
+import { accounts, agentSessions, sessionEvents, sessions } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
+import { profileSessionAdvisoryLockKey } from './profile-session-lock.js';
 
 // 6.g — non-terminal statuses eligible for the duration auto-destroy sweep.
 const ACTIVE_SESSION_STATUSES: SessionRecord['status'][] = ['creating', 'ready', 'busy'];
@@ -72,12 +73,14 @@ export class DrizzleSessionRepo implements SessionRepo {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${`session-create:${input.accountId}`}))`,
       );
-      // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard.
-      // When a profile_id rode the create, take a per-profile advisory lock + check
-      // for an existing NON-TERMINAL session bound to it (profile_id lives in the
-      // session `metadata` jsonb on the driver-sessions table — there is no
-      // dedicated column here, unlike agent_sessions). Throw ProfileInUseError when
-      // one exists so two sessions never restore + clobber the same sealed blob.
+      // A3 finding #7 (W2979/W2980) — global single-active-session-per-profile
+      // guard. When a profile_id rode the create, take the canonical cross-surface
+      // advisory lock + check BOTH legacy sessions (profile_id lives in metadata
+      // jsonb) and agent_sessions (dedicated profile_id column). The agent create
+      // path takes the exact same lock and checks the same two tables, so a mixed
+      // /v1/sessions ↔ /v1/agent-sessions race has exactly one winner. Throw
+      // ProfileInUseError with the competing public session id before inserting so
+      // two sessions never restore + clobber the same sealed blob.
       // Locked AFTER the account lock (stable accountId-then-profileId acquisition
       // order — no opposite-order deadlock between two concurrent creates). NULL/
       // absent profileId → no lock, no check (fail-safe). This atomic reserve runs
@@ -86,9 +89,9 @@ export class DrizzleSessionRepo implements SessionRepo {
       // nothing to tear down (the row was never inserted).
       if (opts.profileId !== undefined) {
         await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtext(${`session-create-profile:${opts.profileId}`}))`,
+          sql`SELECT pg_advisory_xact_lock(hashtext(${profileSessionAdvisoryLockKey(opts.profileId)}))`,
         );
-        const [live] = await tx
+        const [liveLegacy] = await tx
           .select({ id: sessions.id })
           .from(sessions)
           .where(
@@ -103,8 +106,22 @@ export class DrizzleSessionRepo implements SessionRepo {
             ),
           )
           .limit(1);
-        if (live) {
-          throw new ProfileInUseError(`ses_${live.id}`);
+        if (liveLegacy) {
+          throw new ProfileInUseError(`ses_${liveLegacy.id}`);
+        }
+        const [liveAgent] = await tx
+          .select({ id: agentSessions.id })
+          .from(agentSessions)
+          .where(
+            and(
+              eq(agentSessions.accountId, input.accountId),
+              eq(agentSessions.profileId, opts.profileId),
+              notInArray(agentSessions.status, ['closed']),
+            ),
+          )
+          .limit(1);
+        if (liveAgent) {
+          throw new ProfileInUseError(liveAgent.id);
         }
       }
       const [countRow] = await tx

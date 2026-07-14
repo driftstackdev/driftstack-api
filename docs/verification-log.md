@@ -27065,3 +27065,28 @@ positive invariants pin API-key row and audit ownership. The expanded crypto,
 service, route and integration matrix passes 12 files and 184/184 tests. Strict
 affected-source/test TypeScript, targeted lint/format, diff and whitespace
 checks are green.
+
+## V-643 — Profile launch exclusivity is global across both session surfaces
+
+**Date:** 2026-07-14
+
+The legacy and agent session repositories each enforced one live session per
+profile, but they used different advisory-lock namespaces and inspected only
+their own table. A concurrent `/v1/sessions` launch and `/v1/agent-sessions`
+launch could therefore both bind the same profile, restore the same sealed
+state, diverge and overwrite one another when each saved back at teardown.
+
+Both insert transactions now derive their advisory key from one shared helper
+and, while holding that lock, inspect both live-session tables before inserting.
+Each path preserves its existing same-surface status semantics and reports the
+competing public `ses_…` or `agt_…` identifier through `ProfileInUseError`. No
+migration, route, request/response shape or no-profile launch behavior changed.
+
+The real-PostgreSQL regression uses a multi-connection pool to race one legacy
+and one agent launch for the same account/profile, proves exactly one succeeds,
+checks the rejected path reports the winner's exact public identifier and counts
+one live row across both tables. Existing same-surface cap/profile concurrency
+and in-memory behavior remain green. The expanded focused matrix passes 7 files
+and 64/64 tests against the reachable migrated PostgreSQL schema. Strict server
+source/test TypeScript, targeted lint/format, diff and whitespace checks are
+green.

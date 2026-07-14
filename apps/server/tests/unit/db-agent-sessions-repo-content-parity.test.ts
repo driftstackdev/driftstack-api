@@ -75,6 +75,24 @@ describe('db/agent-sessions-repo content parity', () => {
     expect(body).not.toMatch(/each UPDATE is a single statement, so concurrent/);
   });
 
+  it('createIfUnderActiveCap uses the canonical cross-surface profile lock, checks both agent + legacy live tables, and returns the competing public session id', () => {
+    expect(body).toMatch(/import \{ agentSessions, sessions \} from '\.\/schema\.js';/);
+    expect(body).toMatch(
+      /import \{ profileSessionAdvisoryLockKey \} from '\.\/profile-session-lock\.js';/,
+    );
+    expect(body).toMatch(
+      /SELECT pg_advisory_xact_lock\(hashtext\(\$\{profileSessionAdvisoryLockKey\(args\.profileId\)\}\)\)/,
+    );
+    expect(body).toMatch(/eq\(agentSessions\.profileId, args\.profileId\)/);
+    expect(body).toMatch(/notInArray\(agentSessions\.status, \['closed'\]\)/);
+    expect(body).toMatch(/throw new ProfileInUseError\(liveAgent\.id\)/);
+    expect(body).toMatch(/\$\{sessions\.metadata\}->>'profile_id' = \$\{args\.profileId\}/);
+    expect(body).toMatch(/notInArray\(sessions\.status, \['destroyed', 'errored'\]\)/);
+    expect(body).toMatch(/isNull\(sessions\.destroyedAt\)/);
+    expect(body).toMatch(/throw new ProfileInUseError\(`ses_\$\{liveLegacy\.id\}`\)/);
+    expect(body).not.toMatch(/agent-session-profile:/);
+  });
+
   it("rowToRecord field-mapper framing pinned: 'v2-#9 + v2-#19 hardening columns — present on every row even when migration 0047 left them NULL on legacy rows.' + 'Arc 2 sub-slice 8.2 (v2-#8) — pair-mode + GUI-key columns from migration 0052. Existing rows pick up mode=\"ai\" from the CHECK default; null for pair_mode_state + gui_control_key_expires_at.' + mode: (row.mode as 'manual' | 'ai' | 'pair') ?? 'ai' fallback — pinned so the v2-#9/19 + Arc 2 sub-slice 8.2 + migration 0052 + 3-mode enum + 'ai' fallback contract all stay documented", () => {
     expect(body).toMatch(
       /\/\/ v2-#9 \+ v2-#19 hardening columns — present on every row even\s*\n?\s*\/\/ when migration 0047 left them NULL on legacy rows\./,

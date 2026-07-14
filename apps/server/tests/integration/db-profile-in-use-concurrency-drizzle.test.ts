@@ -1,6 +1,6 @@
 // Drizzle-backed integration test: the single-active-session-per-profile guard
 // (A3 finding #7, W2979/W2980) enforced ATOMICALLY under concurrency against a
-// REAL Postgres, on BOTH session-create paths:
+// REAL Postgres, across and within BOTH session-create paths:
 //   - DrizzleSessionRepo.insertSessionIfUnderLimit (driver /v1/sessions; the
 //     profile_id lives in metadata.profile_id jsonb)
 //   - DrizzleAgentSessionsRepo.createIfUnderActiveCap (agent-sessions; the
@@ -8,28 +8,32 @@
 //
 // The guard refuses a SECOND concurrent session bound to the same profile_id so
 // two sessions can't both restore the same sealed cookie/state blob, diverge, and
-// clobber each other at teardown. It is enforced under a per-profile
-// pg_advisory_xact_lock inside the same transaction as the cap check, so two
-// concurrent creates serialise on the lock → the second sees the first's row and
-// throws ProfileInUseError. The in-memory twins are synchronous (no await gap), so
-// only a real Postgres with a MULTI-connection pool (max:5 → distinct
-// connections) actually exercises the advisory lock under true concurrency.
+// clobber each other at teardown. Both repositories use one canonical per-profile
+// pg_advisory_xact_lock and inspect both live tables inside their insert
+// transaction, so even a mixed legacy↔agent race serialises → the second sees the
+// first's row and throws ProfileInUseError. The in-memory twins are synchronous
+// (no await gap), so only a real Postgres with a MULTI-connection pool (max:5 →
+// distinct connections) actually exercises the advisory lock under concurrency.
 //
-// Covers the five required cases:
-//   1. two concurrent creates on the same profile → exactly ONE binds, the other
-//      gets ProfileInUseError (the atomicity).
-//   2. reconnect to the same existing session is not a new bind (no create call →
-//      never gated).  [covered by case 3's same-profile-after-terminal symmetry +
+// Covers the six required cases:
+//   1. one concurrent legacy create + one concurrent agent create on the same
+//      profile → exactly ONE binds globally, with the competing public id reported.
+//   2. two same-surface concurrent creates on the same profile → exactly ONE binds,
+//      the other gets ProfileInUseError (the atomicity).
+//   3. reconnect to the same existing session is not a new bind (no create call →
+//      never gated).  [covered by case 4's same-profile-after-terminal symmetry +
 //      a no-second-create assertion]
-//   3. a profile whose only session is TERMINAL allows a new bind.
-//   4. cross-account same profile_id is isolated (account B is unaffected by
+//   4. a profile whose only session is TERMINAL allows a new bind.
+//   5. cross-account same profile_id is isolated (account B is unaffected by
 //      account A's live session on the same profile_id string).
-//   5. a create with NO profile_id is never gated.
+//   6. a create with NO profile_id is never gated.
 //
 // Run scope:
 //   - CI: the build-test job has postgres:17 at localhost:5432 with the
 //     `driftstack` schema migrated; this test always runs there.
-//   - Local dev: skips if the DATABASE_URL postgres is unreachable.
+//   - Local dev: opt in by setting DATABASE_URL. Once opted in (and always in CI),
+//     an unreachable database or missing schema fails the test instead of silently
+//     converting its race assertions into no-ops.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
@@ -56,8 +60,11 @@ beforeAll(async () => {
     await probe`SELECT 1`;
     dbReachable = true;
     await probe.end({ timeout: 1 });
-  } catch {
+  } catch (error) {
     await probe.end({ timeout: 1 }).catch(() => {});
+    if (process.env.CI || process.env.DATABASE_URL) {
+      throw new Error('Profile exclusivity test database is unreachable.', { cause: error });
+    }
     return;
   }
   // max: 5 so concurrent transactions get distinct connections — the advisory
@@ -67,10 +74,13 @@ beforeAll(async () => {
     await client`SELECT 1 FROM sessions LIMIT 0`;
     await client`SELECT 1 FROM agent_sessions LIMIT 0`;
     await client`SELECT 1 FROM profiles LIMIT 0`;
-  } catch {
+  } catch (error) {
     dbReachable = false;
     await client.end({ timeout: 1 }).catch(() => {});
     client = null;
+    if (process.env.CI || process.env.DATABASE_URL) {
+      throw new Error('Profile exclusivity test database schema is unavailable.', { cause: error });
+    }
   }
 });
 
@@ -125,9 +135,86 @@ function mkDriverInput(
 
 const HIGH_CAP = 100; // well above any per-test count, so the cap never confounds.
 
+function requireProfileInUseError(result: PromiseSettledResult<unknown>): ProfileInUseError {
+  if (result.status !== 'rejected') {
+    throw new Error('Expected the competing profile launch to be rejected.');
+  }
+  const reason: unknown = result.reason;
+  expect(reason).toBeInstanceOf(ProfileInUseError);
+  if (!(reason instanceof ProfileInUseError)) {
+    throw new Error('Expected a ProfileInUseError.');
+  }
+  return reason;
+}
+
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'single-active-session-per-profile guard is atomic (per-profile advisory lock, real Postgres)',
   () => {
+    it('cross-surface: concurrent legacy + agent creates on the SAME profile → EXACTLY 1 global bind with the competing public id', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const database = { client, db, close: async () => {} };
+      const legacyRepo = new DrizzleSessionRepo(database);
+      const agentRepo = new DrizzleAgentSessionsRepo(database, {
+        transcriptEncryptionKeyBase64: Buffer.alloc(32, 11).toString('base64'),
+      });
+      const { accountId, apiKeyId } = await seedAccountWithKey(client);
+      const profileId = await seedProfile(client, accountId);
+
+      const [legacyResult, agentResult] = await Promise.allSettled([
+        legacyRepo.insertSessionIfUnderLimit(
+          mkDriverInput(accountId, apiKeyId, 0, profileId),
+          HIGH_CAP,
+          { profileId },
+        ),
+        agentRepo.createIfUnderActiveCap(
+          { accountId, tokenBudgetTotal: 1000, profileId },
+          HIGH_CAP,
+        ),
+      ]);
+
+      const fulfilled = [legacyResult, agentResult].filter(
+        (result) => result.status === 'fulfilled' && result.value !== null,
+      );
+      const rejected = [legacyResult, agentResult].filter(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      if (legacyResult.status === 'fulfilled' && legacyResult.value !== null) {
+        expect(requireProfileInUseError(agentResult).extensions['active_session_id']).toBe(
+          `ses_${legacyResult.value.id}`,
+        );
+      } else {
+        if (agentResult.status !== 'fulfilled' || agentResult.value === null) {
+          throw new Error('Expected the agent launch to be the sole fulfilled result.');
+        }
+        expect(requireProfileInUseError(legacyResult).extensions['active_session_id']).toBe(
+          agentResult.value.id,
+        );
+      }
+
+      const rows = await client<{ live_count: number }[]>`
+        SELECT
+          (
+            SELECT count(*)::int
+            FROM sessions
+            WHERE account_id = ${accountId}
+              AND metadata->>'profile_id' = ${profileId}
+              AND status NOT IN ('destroyed', 'errored')
+              AND destroyed_at IS NULL
+          ) + (
+            SELECT count(*)::int
+            FROM agent_sessions
+            WHERE account_id = ${accountId}
+              AND profile_id = ${profileId}
+              AND status <> 'closed'
+          ) AS live_count
+      `;
+      expect(rows[0]?.live_count).toBe(1);
+    });
+
     // ── Driver-sessions path (insertSessionIfUnderLimit, metadata.profile_id) ──
 
     it('driver: two concurrent creates on the SAME profile → EXACTLY 1 binds, the other throws ProfileInUseError', async () => {
