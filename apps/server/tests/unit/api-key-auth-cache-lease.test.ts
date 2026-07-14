@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hashApiKey, keyPrefixFromPlaintext } from '../../src/lib/api-keys.js';
-import { RevokedKeyError } from '../../src/lib/errors.js';
+import { ForbiddenError, InvalidKeyError, RevokedKeyError } from '../../src/lib/errors.js';
 import {
   authenticate,
   type AccountAuthRepo,
@@ -103,14 +103,19 @@ describe('API-key positive-cache generation lease', () => {
     await expect(cache.get(SHA)).resolves.toBeNull();
   });
 
-  it('keeps a positive API-key cache hit free of repository lookups', async () => {
+  it('revalidates a positive API-key cache hit without repeating its slow path', async () => {
     const cache = new InMemoryAuthCache();
     const key = await activeKey();
     let lookupCount = 0;
+    let accountLookupCount = 0;
     const repo = repoWith({
       findApiKeyByPrefix: () => {
         lookupCount += 1;
         return Promise.resolve(key);
+      },
+      getAccount: () => {
+        accountLookupCount += 1;
+        return Promise.resolve(ACCOUNT);
       },
     });
 
@@ -118,10 +123,113 @@ describe('API-key positive-cache generation lease', () => {
       authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z')),
     ).resolves.toMatchObject({ apiKey: { id: key.id }, webSession: null });
     expect(lookupCount).toBe(2);
+    expect(accountLookupCount).toBe(1);
 
     await expect(
       authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
     ).resolves.toMatchObject({ apiKey: { id: key.id }, webSession: null });
-    expect(lookupCount).toBe(2);
+    expect(lookupCount).toBe(3);
+    expect(accountLookupCount).toBe(2);
+  });
+
+  it('rejects a cached key revoked after population when invalidation is lost', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let liveKey = key;
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(liveKey),
+    });
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z')),
+    ).resolves.toMatchObject({ apiKey: { id: key.id } });
+    await expect(cache.get(SHA)).resolves.not.toBeNull();
+
+    liveKey = { ...key, revokedAt: new Date('2026-07-14T00:00:01.000Z') };
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:02.000Z')),
+    ).rejects.toBeInstanceOf(RevokedKeyError);
+    await expect(cache.get(SHA)).resolves.not.toBeNull();
+  });
+
+  it('rejects a cached key whose live secret hash rotated without invalidation', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let liveKey = key;
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(liveKey),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    liveKey = {
+      ...key,
+      keyHash: await hashApiKey('ds_live_rotated_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+    };
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).rejects.toBeInstanceOf(InvalidKeyError);
+  });
+
+  it('rejects a cached credential when the live account is suspended without invalidation', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let liveAccount = ACCOUNT;
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(key),
+      getAccount: () => Promise.resolve(liveAccount),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    liveAccount = { ...ACCOUNT, status: 'suspended' };
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('refreshes live account tier and API-key scopes on a positive hit', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let liveKey = key;
+    let liveAccount = ACCOUNT;
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(liveKey),
+      getAccount: () => Promise.resolve(liveAccount),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    liveKey = { ...key, scopes: ['read'] };
+    liveAccount = { ...ACCOUNT, tier: 'enterprise' };
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).resolves.toMatchObject({
+      account: { tier: 'enterprise' },
+      apiKey: { scopes: ['read'] },
+    });
+  });
+
+  it('fails closed instead of trusting a positive entry when authority is unavailable', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let authorityAvailable = true;
+    const repo = repoWith({
+      findApiKeyByPrefix: () =>
+        authorityAvailable
+          ? Promise.resolve(key)
+          : Promise.reject(new Error('authority unavailable')),
+      getAccount: () =>
+        authorityAvailable
+          ? Promise.resolve(ACCOUNT)
+          : Promise.reject(new Error('authority unavailable')),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    authorityAvailable = false;
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).rejects.toThrow('authority unavailable');
   });
 });

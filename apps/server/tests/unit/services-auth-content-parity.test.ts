@@ -11,9 +11,9 @@
 //     verify); else → web session (sha256 lookup against
 //     web_sessions row).
 //   • Cache fast path: re-check expiresAt on every read; exact live
-//     PostgreSQL authority on every web-session hit; API-key hits
-//     retain their DB/scrypt bypass; cache.get/set wrapped in
-//     try/catch for graceful degradation.
+//     PostgreSQL account + credential authority on every hit; API-key
+//     hits retain their scrypt/ancillary-query bypass; cache.get/set
+//     wrapped in try/catch for graceful degradation.
 //   • Slow-path API key: 5 failure modes (no row → InvalidKey;
 //     hash mismatch → InvalidKey; revoked → RevokedKey; expired →
 //     ExpiredKey; account suspended → Forbidden; account deleted →
@@ -128,10 +128,10 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     );
   });
 
-  it('positive web-session cache hits revalidate exact live PostgreSQL authority and refresh MFA state', () => {
+  it('positive cache hits revalidate live account + exact credential authority while bypassing scrypt', () => {
     expect(body).toMatch(/if \(cached\.webSession !== null\) \{/);
     expect(body).toMatch(
-      /const liveSession = await repo\.findActiveWebSession\(\{ tokenHash: sha, now \}\);/,
+      /const \[liveSession, liveAccount\] = await Promise\.all\(\[\s*repo\.findActiveWebSession\(\{ tokenHash: sha, now \}\),\s*repo\.getAccount\(cached\.account\.id\),\s*\]\);/,
     );
     expect(body).toMatch(/liveSession\.id !== cached\.webSession\.id/);
     expect(body).toMatch(/liveSession\.accountId !== cached\.account\.id/);
@@ -139,8 +139,12 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(/cached\.apiKey\.id !== `wsk_\$\{liveSession\.id\}`/);
     expect(body).toMatch(/mfaSatisfiedAt: liveSession\.mfaSatisfiedAt/);
     expect(body).toMatch(
-      /API-key cache hits intentionally\s*\n?\s*\/\/ retain their existing DB\/scrypt bypass\./,
+      /const \[liveApiKey, liveAccount\] = await Promise\.all\(\[\s*repo\.findApiKeyByPrefix\(cached\.apiKey\.keyPrefix\),\s*repo\.getAccount\(cached\.account\.id\),\s*\]\);/,
     );
+    expect(body).toMatch(/liveApiKey\.keyHash !== cached\.apiKey\.keyHash/);
+    expect(body).toMatch(/if \(liveApiKey\.revokedAt !== null\) throw new RevokedKeyError\(\);/);
+    expect(body).toMatch(/return \{ \.\.\.cached, account: liveAccount, apiKey: liveApiKey \};/);
+    expect(body).toMatch(/API-key hits still avoid the\s*\n?\s*\/\/ expensive scrypt verification/);
   });
 
   it('V-168 isApiKeyShape: ds_-prefix dispatch (API key path) else web session path', () => {

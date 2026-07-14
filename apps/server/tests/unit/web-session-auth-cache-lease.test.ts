@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidKeyError } from '../../src/lib/errors.js';
+import { ForbiddenError, InvalidKeyError } from '../../src/lib/errors.js';
 import {
   authenticate,
   type AccountAuthRepo,
@@ -153,5 +153,48 @@ describe('web-session positive-cache generation lease', () => {
     await expect(cache.get(SHA)).resolves.toMatchObject({
       webSession: { id: SESSION.id, mfaSatisfiedAt: null },
     });
+  });
+
+  it('rejects a cached web session when the live account is suspended without invalidation', async () => {
+    const cache = new InMemoryAuthCache();
+    let liveAccount = ACCOUNT;
+    const repo = repoWith({
+      getAccount: () => Promise.resolve(liveAccount),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    liveAccount = { ...ACCOUNT, status: 'suspended' };
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('drops a cached staff scope when the live account email leaves the allowlist', async () => {
+    const cache = new InMemoryAuthCache();
+    let liveAccount = ACCOUNT;
+    const repo = repoWith({
+      getAccount: () => Promise.resolve(liveAccount),
+    });
+    const staffEmails = new Set([ACCOUNT.email]);
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'), null, staffEmails),
+    ).resolves.toMatchObject({
+      apiKey: {
+        scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+      },
+    });
+
+    liveAccount = { ...ACCOUNT, email: 'former-staff@example.test' };
+    const refreshed = await authenticate(
+      repo,
+      PLAINTEXT,
+      cache,
+      new Date('2026-07-14T00:00:01.000Z'),
+      null,
+      staffEmails,
+    );
+    expect(refreshed.apiKey.scopes).toEqual(['read', 'write', 'account_owner']);
   });
 });

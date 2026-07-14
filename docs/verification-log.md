@@ -25567,3 +25567,46 @@ Verification:
   including a positively cached predecessor rejected after epoch advancement;
 - strict server source/test
   typechecking, targeted linting, formatting, diff, and hooks pass.
+
+## V-596 — positive cache revalidates credential and account authority
+
+**Date:** 2026-07-14
+
+Extended the V-595 fail-closed cache boundary to machine API keys and live
+account state. API-key revocation/rotation and account suspension/deletion/tier
+changes commit in PostgreSQL before their best-effort Redis generation bump. If
+the process died or Redis refused that bump, a positive entry could previously
+continue authorizing the stale credential and account context for up to 30
+seconds.
+
+Every positive cache hit now reads the exact live credential and account in
+parallel. API-key hits require the same key id, account id, prefix-selected row,
+and secret hash, then apply live revocation and expiry before accepting. Web
+sessions retain V-595's exact token/session/epoch validation. Both paths reject
+missing, suspended, or deleted accounts and return the live account row. API-key
+scopes/provenance/timing and web-session MFA/timing are refreshed; web-session
+staff scope is recomputed from the live account email and the process allowlist.
+This makes Redis invalidation a performance optimization rather than an
+authorization dependency.
+
+The deliberate performance contract is two parallel indexed PostgreSQL reads
+on a positive hit. API keys still bypass scrypt plus the ancillary team and
+rate-override queries, retaining the expensive part of the cache benefit while
+failing closed when the database is unavailable.
+
+Verification:
+
+- unit proofs warm a physically current positive entry, mutate only live key or
+  account authority, and observe immediate denial for revoke, secret rotation,
+  and suspension;
+- privilege-freshness controls observe live API-key scopes and account tier,
+  and prove a cached web session loses internal-admin scope when its live email
+  leaves the staff allowlist;
+- an unavailable authority store rejects the cached request instead of falling
+  back to its positive snapshot;
+- a real HTTP/Redis/PostgreSQL spec warms Redis, updates SQL directly without a
+  generation bump, and receives typed 401/403 denials for key revocation,
+  account suspension, and account deletion (3/3);
+- the widened cache/auth/coalescer gate passes 19 files and 186 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

@@ -300,19 +300,19 @@ export async function authenticate(
         throw new ExpiredKeyError();
       }
 
-      // A Redis generation bump is deliberately an acceleration, not the
-      // authority boundary for human sessions. Password reset, MFA activation,
-      // and logout commit in PostgreSQL before best-effort cache invalidation;
-      // a crash or Redis failure between those operations
-      // must not let a positive entry authorize until its TTL expires.
-      //
-      // findActiveWebSession joins the session to the account's current auth
-      // epoch and filters revocation/expiry. Require the exact cached identity
-      // as defense against a malformed custom cache, then refresh the live MFA
-      // timestamp used by step-up middleware. API-key cache hits intentionally
-      // retain their existing DB/scrypt bypass.
+      // Redis generation bumps are cache accelerators, not authority. Every
+      // positive hit re-reads the live account plus exact credential in
+      // parallel, so a process crash or Redis failure after a PostgreSQL
+      // revoke/rotate/reset/MFA/status mutation cannot extend authorization to
+      // the cache TTL. These are indexed reads; API-key hits still avoid the
+      // expensive scrypt verification and all ancillary context queries.
       if (cached.webSession !== null) {
-        const liveSession = await repo.findActiveWebSession({ tokenHash: sha, now });
+        // findActiveWebSession joins the session to the account's current auth
+        // epoch and filters revocation/expiry.
+        const [liveSession, liveAccount] = await Promise.all([
+          repo.findActiveWebSession({ tokenHash: sha, now }),
+          repo.getAccount(cached.account.id),
+        ]);
         if (
           liveSession === null ||
           liveSession.id !== cached.webSession.id ||
@@ -326,11 +326,25 @@ export async function authenticate(
         // the production query has already applied both predicates.
         if (liveSession.revokedAt !== null) throw new RevokedKeyError();
         if (liveSession.expiresAt.getTime() <= now.getTime()) throw new ExpiredKeyError();
+        if (liveAccount === null || liveAccount.id !== liveSession.accountId) {
+          throw new InvalidKeyError();
+        }
+        if (liveAccount.status === 'suspended') {
+          throw new ForbiddenError('Account is suspended.');
+        }
+        if (liveAccount.status === 'deleted') throw new InvalidKeyError();
+
+        const baseScopes: ApiKeyRow['scopes'] = ['read', 'write', 'account_owner'];
+        const scopes: ApiKeyRow['scopes'] = staffEmails.has(liveAccount.email.toLowerCase())
+          ? [...baseScopes, 'driftstack_internal_admin']
+          : baseScopes;
 
         return {
           ...cached,
+          account: liveAccount,
           apiKey: {
             ...cached.apiKey,
+            scopes,
             lastUsedAt: liveSession.lastUsedAt,
             revokedAt: liveSession.revokedAt,
             expiresAt: liveSession.expiresAt,
@@ -341,9 +355,36 @@ export async function authenticate(
           },
         };
       }
-      // API-key last_used_at remains sampled at cache TTL granularity, which is
-      // the accepted trade for amortising scrypt across the burst window.
-      return cached;
+
+      const [liveApiKey, liveAccount] = await Promise.all([
+        repo.findApiKeyByPrefix(cached.apiKey.keyPrefix),
+        repo.getAccount(cached.account.id),
+      ]);
+      if (
+        liveApiKey === null ||
+        liveApiKey.id !== cached.apiKey.id ||
+        liveApiKey.accountId !== cached.account.id ||
+        liveApiKey.accountId !== cached.apiKey.accountId ||
+        liveApiKey.keyHash !== cached.apiKey.keyHash
+      ) {
+        throw new InvalidKeyError();
+      }
+      if (liveApiKey.revokedAt !== null) throw new RevokedKeyError();
+      if (liveApiKey.expiresAt !== null && liveApiKey.expiresAt.getTime() <= now.getTime()) {
+        throw new ExpiredKeyError();
+      }
+      if (liveAccount === null || liveAccount.id !== liveApiKey.accountId) {
+        throw new InvalidKeyError();
+      }
+      if (liveAccount.status === 'suspended') {
+        throw new ForbiddenError('Account is suspended.');
+      }
+      if (liveAccount.status === 'deleted') throw new InvalidKeyError();
+
+      // last_used_at remains sampled at cache TTL granularity. Live key scopes,
+      // provenance, expiry, and account tier/status/profile authority are
+      // refreshed even if distributed invalidation was lost.
+      return { ...cached, account: liveAccount, apiKey: liveApiKey };
     }
   }
 
