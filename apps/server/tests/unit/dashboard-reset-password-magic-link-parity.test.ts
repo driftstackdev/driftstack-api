@@ -70,8 +70,9 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     expect(r).toMatch(/data-missing/);
     expect(r).toMatch(/No reset token in URL\./);
     expect(r).toMatch(
-      /Open the page from the link in your reset email, or\s*\n\s+<a\s*\n\s+href="\/forgot-password"/,
+      /Open the page from the link in your reset email, or\s*\n\s+<a\s*\n\s+href="\/forgot-password\/"/,
     );
+    expect(r).not.toMatch(/href="\/forgot-password"/);
 
     // Implementation: hide form + show missing-block when no token.
     expect(r).toMatch(
