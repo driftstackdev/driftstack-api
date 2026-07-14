@@ -94,10 +94,23 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
     expect(body).toMatch(/if \(!cancelled && info\) setServerInfo\(info\)/);
   });
 
-  it("runCheck: performance.now() ms timing (start → end → Math.round) + client.sessions.list({limit: 1}) delegation + 'API replied with N session(s) on the first page.' detail format + DriftstackError instanceof for errorKind extraction + 'unknown error' / 'unknown' kind fallbacks", () => {
-    expect(body).toMatch(
-      /const start = performance\.now\(\);[ \t]*(?:\r?\n[ \t]*)?try \{[ \t]*(?:\r?\n[ \t]*)?const page = await client\.sessions\.list\(\{ limit: 1 \}\);[ \t]*(?:\r?\n[ \t]*)?const durationMs = Math\.round\(performance\.now\(\) - start\);[ \t]*(?:\r?\n[ \t]*)?setResult\(\{[ \t]*(?:\r?\n[ \t]*)?ok: true,[ \t]*(?:\r?\n[ \t]*)?durationMs,[ \t]*(?:\r?\n[ \t]*)?detail: `API replied with \$\{page\.data\.length\} session\$\{page\.data\.length === 1 \? '' : 's'\} on the first page\.`,[ \t]*(?:\r?\n[ \t]*)?\}\);[ \t]*(?:\r?\n[ \t]*)?\} catch \(err\) \{[ \t]*(?:\r?\n[ \t]*)?const durationMs = Math\.round\(performance\.now\(\) - start\);[ \t]*(?:\r?\n[ \t]*)?const detail = err instanceof Error \? err\.message : 'unknown error';[ \t]*(?:\r?\n[ \t]*)?const errorKind = err instanceof DriftstackError \? err\.kind : 'unknown';/,
+  it('runCheck keeps timing/list delegation, fixed success copy, shared safe error copy, stable kind classification, and the running latch', () => {
+    expect(body).toContain("import { humanizeError } from '../lib/humanize-error';");
+    expect(body).toContain('const start = performance.now();');
+    expect(body).toContain('const page = await client.sessions.list({ limit: 1 });');
+    expect(body).toContain('const durationMs = Math.round(performance.now() - start);');
+    expect(body).toContain(
+      "detail: `API replied with ${page.data.length} session${page.data.length === 1 ? '' : 's'} on the first page.`,",
     );
+    expect(body).toContain(
+      "'Connectivity check failed. Verify the API URL and key in Settings, then try again.',",
+    );
+    expect(body).toContain(
+      "const errorKind = err instanceof DriftstackError ? err.kind : 'unknown';",
+    );
+    expect(body).toContain('setResult({ ok: false, durationMs, detail, errorKind });');
+    expect(body).toContain('finally {\n      setRunning(false);');
+    expect(body).not.toContain("err instanceof Error ? err.message : 'unknown error'");
   });
 
   it("API-key masking + 'not set' fallback: settings.apiKey === null → 'not set — configure under Settings' in text-status-error else maskApiKey(settings.apiKey) — the shared, prefix-aware mask (consistency standardization, replacing the old non-standard inline slice(0,8)…slice(-4)); apiKey unmasked has 'configure under Settings' nudge so user knows where to set it", () => {
