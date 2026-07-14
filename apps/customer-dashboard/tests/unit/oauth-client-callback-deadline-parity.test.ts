@@ -28,6 +28,7 @@ describe('OAuth callback completion deadlines', () => {
     expectBoundedRequest(CALLBACK, 'CALLBACK_TIMEOUT_MS');
     expect(CALLBACK).toContain("credentials: 'include'");
     expect(CALLBACK).toContain("localStorage.setItem('ds_web_session_token', token)");
+    expect(CALLBACK).toContain("localStorage.getItem('ds_web_session_token') !== token");
     expect(CALLBACK).toContain('safeNextPath(body.redirect_to, window.location.origin)');
     expect(CALLBACK).toContain('OAuth sign-in outcome is unknown after the request timed out.');
     expect(CALLBACK).toContain('exchanged this one-time callback code');
@@ -39,6 +40,13 @@ describe('OAuth callback completion deadlines', () => {
     expect(CALLBACK).toContain("fetch(apiBaseUrl + '/v1/auth/mfa/challenge'");
     expect(CALLBACK).toContain('MFA sign-in outcome is unknown after the request timed out.');
     expect(CALLBACK).toContain('Do not submit this code again.');
+  });
+
+  it('preflights persistent session storage before the one-time callback exchange', () => {
+    expect(CALLBACK).toContain('function canPersistWebSession()');
+    expect(CALLBACK).toMatch(
+      /if \(!canPersistWebSession\(\)\) \{[\s\S]*callback code has not been exchanged[\s\S]*return;[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/callback'/,
+    );
   });
 
   it('bounds merge confirmation while preserving its one-shot token POST', () => {

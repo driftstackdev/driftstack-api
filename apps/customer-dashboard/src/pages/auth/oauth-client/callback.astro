@@ -159,19 +159,40 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      function canPersistWebSession() {
+        const probeKey = 'ds_web_session_storage_probe';
+        try {
+          localStorage.setItem(probeKey, '1');
+          const persisted = localStorage.getItem(probeKey) === '1';
+          localStorage.removeItem(probeKey);
+          return persisted;
+        } catch {
+          try {
+            localStorage.removeItem(probeKey);
+          } catch {
+            // Storage is unavailable; there is no probe value to retain.
+          }
+          return false;
+        }
+      }
+
       function completeSession(token, redirectTo) {
         try {
           localStorage.setItem('ds_web_session_token', token);
+          if (localStorage.getItem('ds_web_session_token') !== token) {
+            throw new Error('session storage read-back failed');
+          }
           // A fresh session must not inherit a previous user's per-session
           // acting-as or cached authorization flags on a shared browser.
           localStorage.removeItem('ds_act_as_account');
           localStorage.removeItem('ds_is_team_user');
           localStorage.removeItem('ds_is_staff_user');
+          window.location.href = redirectTo;
         } catch (_) {
-          // Storage-disabled browsers will be sent back through sign-in by
-          // the dashboard if the session cannot be persisted locally.
+          showBanner(
+            'Sign-in completed, but this browser could not persist the session. Do not reload this callback. Enable site storage, then start a fresh sign-in.',
+          );
         }
-        window.location.href = redirectTo;
       }
 
       function startMfaChallenge(body) {
@@ -224,6 +245,12 @@ const apiBaseUrl = resolveApiBaseUrl();
               mfaUsingRecovery
                 ? 'Enter one of your recovery codes.'
                 : 'Enter the 6-digit code from your authenticator app.',
+            );
+            return;
+          }
+          if (!canPersistWebSession()) {
+            showBanner(
+              'Enable browser site storage before completing this one-time MFA sign-in. The challenge has not been consumed, so you can retry after storage is available.',
             );
             return;
           }
@@ -304,6 +331,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       const qs = window.location.search;
       if (!qs || qs.length === 0) {
         showBanner('Missing callback parameters.');
+        return;
+      }
+      if (!canPersistWebSession()) {
+        showBanner(
+          'Enable browser site storage before completing this one-time provider sign-in. The callback code has not been exchanged, so you can retry after storage is available.',
+        );
         return;
       }
 
