@@ -143,7 +143,7 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     );
   });
 
-  it("V-530.H framing pinned: 'typo-aware typing sequence' + 3 type re-exports (GenerateTypingSequenceOpts + KeystrokeEvent + TypingSequence) + 3 value exports (DEFAULT_TYPO_PROBABILITY + generateTypingSequence + replayTypingSequence)", () => {
+  it("V-530.H framing pinned: 'typo-aware typing sequence' + 3 type re-exports and bounded replay value exports", () => {
     expect(body).toMatch(
       /\/\/ V-530\.H — typo-aware typing sequence \(file 05 §"Typing behavior"\)\./,
     );
@@ -151,7 +151,7 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
       /export type \{\s*\n\s*GenerateTypingSequenceOpts,\s*\n\s*KeystrokeEvent,\s*\n\s*TypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/,
     );
     expect(body).toMatch(
-      /export \{\s*\n\s*DEFAULT_TYPO_PROBABILITY,\s*\n\s*generateTypingSequence,\s*\n\s*replayTypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/,
+      /export \{\s*\n\s*DEFAULT_TYPO_PROBABILITY,\s*\n\s*generateTypingSequence,\s*\n\s*MAX_TYPING_REPLAY_EVENTS,\s*\n\s*MAX_TYPING_REPLAY_INSERTED_CODE_UNITS,\s*\n\s*replayTypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/,
     );
   });
 

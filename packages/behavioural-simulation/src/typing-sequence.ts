@@ -49,6 +49,12 @@ export interface TypingSequence {
 /** File 05: 1-3% per persona — middle of the range as the default. */
 export const DEFAULT_TYPO_PROBABILITY = 0.025;
 
+/** A generated source unit emits at most wrong-key + backspace + correction. */
+export const MAX_TYPING_REPLAY_EVENTS = MAX_TEXT_LENGTH * 3;
+
+/** At most wrong-key + correction insertions are emitted per source unit. */
+export const MAX_TYPING_REPLAY_INSERTED_CODE_UNITS = MAX_TEXT_LENGTH * 2;
+
 function mulberry32(seedNum: number): () => number {
   let state = seedNum >>> 0;
   return () => {
@@ -176,6 +182,23 @@ export function generateTypingSequence(opts: GenerateTypingSequenceOpts): Typing
 /** Replay a typing sequence to the final text it produces (apply chars,
  *  undo on backspace). Useful for verification / tests. */
 export function replayTypingSequence(events: readonly KeystrokeEvent[]): string {
+  if (events.length > MAX_TYPING_REPLAY_EVENTS) {
+    throw new Error(
+      `replayTypingSequence: events must contain <= ${MAX_TYPING_REPLAY_EVENTS.toString()} entries (got ${events.length.toString()})`,
+    );
+  }
+
+  let insertedCodeUnits = 0;
+  for (const event of events) {
+    if (event.kind !== 'char') continue;
+    insertedCodeUnits += event.char.length;
+    if (insertedCodeUnits > MAX_TYPING_REPLAY_INSERTED_CODE_UNITS) {
+      throw new Error(
+        `replayTypingSequence: inserted text must contain <= ${MAX_TYPING_REPLAY_INSERTED_CODE_UNITS.toString()} code units`,
+      );
+    }
+  }
+
   const out: string[] = [];
   for (const e of events) {
     if (e.kind === 'char') out.push(e.char);

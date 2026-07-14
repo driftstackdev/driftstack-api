@@ -87,6 +87,8 @@ export type {
 export {
   DEFAULT_TYPO_PROBABILITY,
   generateTypingSequence,
+  MAX_TYPING_REPLAY_EVENTS,
+  MAX_TYPING_REPLAY_INSERTED_CODE_UNITS,
   replayTypingSequence,
 } from './typing-sequence.js';
 

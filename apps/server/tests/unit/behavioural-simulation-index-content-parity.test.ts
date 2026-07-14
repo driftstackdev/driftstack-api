@@ -100,7 +100,7 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
       /^export type \{\s*\n\s*GenerateTypingSequenceOpts,\s*\n\s*KeystrokeEvent,\s*\n\s*TypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/m,
     );
     expect(body).toMatch(
-      /^export \{\s*\n\s*DEFAULT_TYPO_PROBABILITY,\s*\n\s*generateTypingSequence,\s*\n\s*replayTypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/m,
+      /^export \{\s*\n\s*DEFAULT_TYPO_PROBABILITY,\s*\n\s*generateTypingSequence,\s*\n\s*MAX_TYPING_REPLAY_EVENTS,\s*\n\s*MAX_TYPING_REPLAY_INSERTED_CODE_UNITS,\s*\n\s*replayTypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/m,
     );
   });
 

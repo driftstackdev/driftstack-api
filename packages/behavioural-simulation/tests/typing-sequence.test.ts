@@ -5,6 +5,8 @@ import {
   generateTypingSequence,
   getProfile,
   MAX_TEXT_LENGTH,
+  MAX_TYPING_REPLAY_EVENTS,
+  MAX_TYPING_REPLAY_INSERTED_CODE_UNITS,
   replayTypingSequence,
   type BehaviouralProfile,
 } from '../src/index.js';
@@ -205,5 +207,41 @@ describe('generateTypingSequence', () => {
     expect(seq.events).toEqual([]);
     expect(seq.durationMs).toBe(0);
     expect(seq.typoCount).toBe(0);
+  });
+
+  it('accepts the exact replay event limit and rejects one over before replay', () => {
+    const backspace = { kind: 'backspace' as const, delayMs: 0 };
+    expect(replayTypingSequence(Array(MAX_TYPING_REPLAY_EVENTS).fill(backspace))).toBe('');
+    expect(() => replayTypingSequence(Array(MAX_TYPING_REPLAY_EVENTS + 1).fill(backspace))).toThrow(
+      /^replayTypingSequence: events must contain <= 60000 entries/,
+    );
+  });
+
+  it('accepts the exact inserted-code-unit limit and rejects one over', () => {
+    const replay = (length: number): string =>
+      replayTypingSequence([{ kind: 'char', char: 'x'.repeat(length), delayMs: 0 }]);
+
+    expect(replay(MAX_TYPING_REPLAY_INSERTED_CODE_UNITS)).toHaveLength(
+      MAX_TYPING_REPLAY_INSERTED_CODE_UNITS,
+    );
+    expect(() => replay(MAX_TYPING_REPLAY_INSERTED_CODE_UNITS + 1)).toThrow(
+      /^replayTypingSequence: inserted text must contain <= 40000 code units/,
+    );
+  });
+
+  it('replays the generator worst case at both exact derived limits', () => {
+    const text = 'a'.repeat(MAX_TEXT_LENGTH);
+    const seq = generateTypingSequence({
+      text,
+      profile: PROFILE,
+      seed: 'maximum-replay-envelope',
+      typoProbability: 1,
+    });
+
+    expect(seq.events).toHaveLength(MAX_TYPING_REPLAY_EVENTS);
+    expect(
+      seq.events.reduce((sum, event) => sum + (event.kind === 'char' ? event.char.length : 0), 0),
+    ).toBe(MAX_TYPING_REPLAY_INSERTED_CODE_UNITS);
+    expect(replayTypingSequence(seq.events)).toBe(text);
   });
 });

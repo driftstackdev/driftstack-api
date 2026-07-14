@@ -26995,3 +26995,26 @@ expiry, ordinary exchanges and concurrent one-shot delivery. The focused crypto,
 service, route, integration and content-invariant matrix passes 10 files and
 161/161 tests. Strict affected-source/test TypeScript, targeted lint/format,
 diff and whitespace checks are green.
+
+## V-640 — Typing replay has the same resource envelope as generation
+
+**Date:** 2026-07-14
+
+The exported typing replay helper accepted arbitrary event collections and
+arbitrarily large inserted strings. Generated sequences were already bounded by
+the 20,000-code-unit text ceiling, but external callers could bypass that
+contract and make replay allocate, push and join an unbounded output stream.
+
+Replay now rejects above 60,000 events—the generator's worst case of wrong key,
+backspace and correction for every source unit—and above 40,000 inserted code
+units—the corresponding wrong-key plus correction maximum. Both limits are
+package-root exports so callers can validate ahead of time. Event count and
+inserted size are checked before the output array is allocated, while ordinary
+backspace semantics and every generated stream remain unchanged.
+
+Boundary tests cover both exact limits and one-over rejection, including a
+20,000-character, 100%-typo generated sequence that reaches both derived
+ceilings and replays exactly. The focused source/export matrix passes 3 files
+and 32/32 tests; the full behavioural package plus duplicate source/index guards
+passes 28 files and 356/356 tests. Package build, strict affected-source/test
+TypeScript, targeted lint/format, diff and whitespace checks are green.
