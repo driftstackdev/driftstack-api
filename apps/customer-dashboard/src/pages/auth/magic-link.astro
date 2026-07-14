@@ -152,11 +152,25 @@ const apiBaseUrl = resolveApiBaseUrl();
         return p;
       };
 
-      function completeSession(session) {
+      function persistWebSession(session) {
+        if (!session || typeof session.token !== 'string' || session.token.length === 0) {
+          throw new Error('Session token missing from accepted response.');
+        }
+        const staleKeys = ['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user'];
+        staleKeys.forEach((key) => {
+          localStorage.removeItem(key);
+          if (localStorage.getItem(key) !== null) {
+            throw new Error('Previous session authority could not be cleared.');
+          }
+        });
         localStorage.setItem('ds_web_session_token', session.token);
-        localStorage.removeItem('ds_act_as_account');
-        localStorage.removeItem('ds_is_team_user');
-        localStorage.removeItem('ds_is_staff_user');
+        if (localStorage.getItem('ds_web_session_token') !== session.token) {
+          throw new Error('Session token could not be persisted.');
+        }
+      }
+
+      function completeSession(session) {
+        persistWebSession(session);
         const params = new URLSearchParams(window.location.search);
         window.location.href = safeNextPath(params.get('next'), window.location.origin);
       }
@@ -165,9 +179,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         const probeKey = 'ds_web_session_storage_probe';
         try {
           localStorage.setItem(probeKey, '1');
-          const persisted = localStorage.getItem(probeKey) === '1';
+          if (localStorage.getItem(probeKey) !== '1') return false;
           localStorage.removeItem(probeKey);
-          return persisted;
+          return localStorage.getItem(probeKey) === null;
         } catch {
           try {
             localStorage.removeItem(probeKey);
@@ -215,9 +229,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function startMfaChallenge(body) {
-        if (!body.challenge_token) {
-          showBanner('Two-factor verification could not start. Request a fresh sign-in link.');
-          return;
+        if (
+          !body ||
+          typeof body.challenge_token !== 'string' ||
+          body.challenge_token.length === 0
+        ) {
+          throw new Error('MFA challenge missing from accepted response.');
         }
         mfaChallengeToken = body.challenge_token;
         mfaOutcomeUnknown = false;
@@ -233,6 +250,25 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (mfaForm) mfaForm.classList.remove('hidden');
         if (mfaCodeInput) mfaCodeInput.focus();
+      }
+
+      function showConsumeTerminal(message) {
+        consumeOutcomeUnknown = true;
+        if (form) form.classList.add('hidden');
+        if (mfaForm) mfaForm.classList.add('hidden');
+        if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+        if (intro) intro.textContent = 'Sign-in link already accepted';
+        showBanner(message);
+      }
+
+      function showMfaTerminal(message) {
+        mfaOutcomeUnknown = true;
+        mfaChallengeToken = null;
+        if (form) form.classList.add('hidden');
+        if (mfaForm) mfaForm.classList.add('hidden');
+        if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+        if (intro) intro.textContent = 'MFA sign-in already accepted';
+        showBanner(message);
       }
 
       if (mfaToggle) {
@@ -265,6 +301,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             return;
           }
+          if (!canPersistWebSession()) {
+            showBanner(
+              'Enable browser site storage before submitting this one-time MFA challenge. It has not been consumed, so you can retry after storage is available.',
+            );
+            return;
+          }
           const payload = mfaUsingRecovery
             ? { challenge_token: mfaChallengeToken, recovery_code: recoveryCode }
             : { challenge_token: mfaChallengeToken, code: code };
@@ -278,6 +320,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (mfaToggle) mfaToggle.disabled = true;
           const controller = new AbortController();
           const timeout = window.setTimeout(() => controller.abort(), MFA_TIMEOUT_MS);
+          let mfaAccepted = false;
           fetch(apiBaseUrl + '/v1/auth/mfa/challenge', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -285,16 +328,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             body: JSON.stringify(payload),
             signal: controller.signal,
           })
-            .then((response) =>
-              response.ok
-                ? response.json()
-                : response
-                    .json()
-                    .catch(() => ({}))
-                    .then((problem) =>
-                      Promise.reject(window.driftstackResponseError(response, problem)),
-                    ),
-            )
+            .then((response) => {
+              if (response.ok) {
+                mfaAccepted = true;
+                return response.json();
+              }
+              return response
+                .json()
+                .catch(() => ({}))
+                .then((problem) =>
+                  Promise.reject(window.driftstackResponseError(response, problem)),
+                );
+            })
             .then((body) => {
               const session = body && body.session;
               if (!session || !session.token)
@@ -306,13 +351,14 @@ const apiBaseUrl = resolveApiBaseUrl();
               completeSession(session);
             })
             .catch((err) => {
+              if (mfaAccepted) {
+                showMfaTerminal(
+                  'Two-factor verification was accepted, but this browser could not finish the session. Do not submit this code again; request a fresh sign-in link.',
+                );
+                return;
+              }
               if (err && err.name === 'AbortError') {
-                mfaOutcomeUnknown = true;
-                mfaChallengeToken = null;
-                mfaForm.classList.add('hidden');
-                if (unknownRecovery) unknownRecovery.classList.remove('hidden');
-                if (intro) intro.textContent = 'MFA sign-in outcome unknown';
-                showBanner(
+                showMfaTerminal(
                   'MFA sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time challenge and created a session whose credential did not reach this browser. Do not submit this code again; request a fresh sign-in link.',
                 );
                 return;
@@ -353,6 +399,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
         const controller = new AbortController();
         const timeout = window.setTimeout(() => controller.abort(), CONSUME_TIMEOUT_MS);
+        let consumeAccepted = false;
 
         return fetch(apiBaseUrl + '/v1/auth/magic-link/consume', {
           method: 'POST',
@@ -361,14 +408,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           credentials: 'include',
           signal: controller.signal,
         })
-          .then((r) =>
-            r.ok
-              ? r.json()
-              : r
-                  .json()
-                  .catch(() => ({}))
-                  .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-          )
+          .then((r) => {
+            if (r.ok) {
+              consumeAccepted = true;
+              return r.json();
+            }
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+          })
           .then((body) => {
             if (body.mfa_required === true) {
               startMfaChallenge(body);
@@ -383,12 +432,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             completeSession(session);
           })
           .catch((err) => {
+            if (consumeAccepted) {
+              showConsumeTerminal(
+                'This one-time sign-in link was accepted, but this browser could not finish the session. Do not use this link again; request a fresh sign-in link.',
+              );
+              return;
+            }
             if (err && err.name === 'AbortError') {
-              consumeOutcomeUnknown = true;
-              if (form) form.classList.add('hidden');
-              if (unknownRecovery) unknownRecovery.classList.remove('hidden');
-              if (intro) intro.textContent = 'Sign-in outcome unknown';
-              showBanner(
+              showConsumeTerminal(
                 'Magic-link sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time link and created a session whose credential did not reach this browser. Do not try this link again; request a fresh sign-in link.',
               );
               return;

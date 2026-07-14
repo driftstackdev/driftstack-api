@@ -82,7 +82,8 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
   it('proves session persistence before consuming the one-time link', () => {
     expect(body).toMatch(/function canPersistWebSession\(\)/);
     expect(body).toMatch(/localStorage\.setItem\(probeKey, '1'\)/);
-    expect(body).toMatch(/localStorage\.getItem\(probeKey\) === '1'/);
+    expect(body).toMatch(/localStorage\.getItem\(probeKey\) !== '1'/);
+    expect(body).toMatch(/localStorage\.getItem\(probeKey\) === null/);
     expect(body).toMatch(
       /function submitToken\(token\) \{[\s\S]*if \(!canPersistWebSession\(\)\)[\s\S]*has not been consumed[\s\S]*return Promise\.resolve\(false\);[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume'/,
     );
@@ -106,7 +107,10 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
   });
 
   it('success: localStorage ds_web_session_token + ?next= round-trip (falls back to /)', () => {
+    expect(body).toContain('function persistWebSession(session)');
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
+    expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) !== session\.token/);
+    expect(body).toContain("['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user']");
     // audit w2flmiw48 #5-7 — open-redirect-guarded: navigates via safeNextPath, not raw next.
     expect(body).toMatch(
       /window\.location\.href = safeNextPath\(params\.get\('next'\), window\.location\.origin\)/,
@@ -122,6 +126,20 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).not.toMatch(/localStorage\.setItem\([^,]+, mfaChallengeToken\)/);
     expect(body).toContain('MFA sign-in outcome is unknown after the request timed out.');
     expect(body).toContain('Do not submit this code again; request a fresh sign-in link.');
+  });
+
+  it('preflights the MFA exchange and locks both one-time credentials after accepted responses', () => {
+    expect(body.match(/if \(!canPersistWebSession\(\)\)/g)).toHaveLength(2);
+    expect(body).toMatch(/let consumeAccepted = false;/);
+    expect(body).toMatch(/if \(r\.ok\) \{\s*consumeAccepted = true;/);
+    expect(body).toMatch(/if \(consumeAccepted\) \{\s*showConsumeTerminal\(/);
+    expect(body).toMatch(/let mfaAccepted = false;/);
+    expect(body).toMatch(/if \(response\.ok\) \{\s*mfaAccepted = true;/);
+    expect(body).toMatch(/if \(mfaAccepted\) \{\s*showMfaTerminal\(/);
+    expect(body).toContain(
+      'It has not been consumed, so you can retry after storage is available.',
+    );
+    expect(body).toContain('Do not use this link again; request a fresh sign-in link.');
   });
 
   it('authoritative error path: fallback form revealed + banner shown (retry by paste)', () => {

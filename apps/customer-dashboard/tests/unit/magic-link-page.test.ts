@@ -14,10 +14,34 @@ interface MockFetchCall {
   init: RequestInit | undefined;
 }
 
+type StorageFault = 'none' | 'deny-all' | 'drop-session-write';
+
+function faultLocalStorage(window: JSDOM['window'], mode: StorageFault): void {
+  if (mode === 'none') return;
+  const storage = window.localStorage;
+  const proto = Object.getPrototypeOf(storage) as Storage;
+  const nativeGet = proto.getItem;
+  const nativeSet = proto.setItem;
+  const nativeRemove = proto.removeItem;
+  proto.getItem = function (key: string): string | null {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    return nativeGet.call(this, key);
+  };
+  proto.setItem = function (key: string, value: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    if (this === storage && mode === 'drop-session-write' && key === 'ds_web_session_token') return;
+    nativeSet.call(this, key, value);
+  };
+  proto.removeItem = function (key: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    nativeRemove.call(this, key);
+  };
+}
+
 function setUpDom(
   html: string,
   plan: Array<(call: MockFetchCall) => Response | Promise<Response>>,
-  storageDenied = false,
+  storageFault: StorageFault = 'none',
 ): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
@@ -50,17 +74,7 @@ function setUpDom(
     if (!handler) return Promise.resolve(new Response('{}', { status: 500 }));
     return Promise.resolve(handler(call));
   };
-  if (storageDenied) {
-    const storagePrototype = Object.getPrototypeOf(window.localStorage);
-    const setItem = storagePrototype.setItem;
-    Object.defineProperty(storagePrototype, 'setItem', {
-      configurable: true,
-      value(this: Storage, key: string, value: string) {
-        if (this === window.localStorage) throw new Error('storage denied');
-        return setItem.call(this, key, value);
-      },
-    });
-  }
+  faultLocalStorage(window as JSDOM['window'], storageFault);
 
   installDashboardDeadline(window);
   const pageScript = scriptBodies.find((body) => body.includes('data-page="magic-link"'));
@@ -93,7 +107,7 @@ describe('magic-link consume page', () => {
     const { window, fetchCalls } = setUpDom(
       loadBuiltPage(),
       [() => json({ session: { token: 'must_not_be_issued' } })],
-      true,
+      'deny-all',
     );
     win = window;
     await flush();
@@ -106,6 +120,43 @@ describe('magic-link consume page', () => {
     expect(form.classList.contains('hidden')).toBe(false);
     expect((form.querySelector('input[name="token"]') as HTMLInputElement).value).toBe(
       'magic_tok_123',
+    );
+  });
+
+  it('locks an accepted link when its session write is silently discarded', async () => {
+    const { window, fetchCalls } = setUpDom(
+      loadBuiltPage(),
+      [() => json({ session: { token: 'lost-after-magic-link' } })],
+      'drop-session-write',
+    );
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    expect(
+      window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),
+    ).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /one-time sign-in link was accepted.*could not finish the session.*do not use this link again.*fresh sign-in link/i,
+    );
+    const form = window.document.querySelector('[data-form="magic-link"]') as HTMLFormElement;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('locks an accepted link when its MFA challenge shape is missing', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), [() => json({ mfa_required: true })]);
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(
+      window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),
+    ).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /one-time sign-in link was accepted.*do not use this link again/i,
     );
   });
 
@@ -186,6 +237,66 @@ describe('magic-link consume page', () => {
       code: '123456',
     });
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('web_after_magic_mfa');
+  });
+
+  it('does not consume an MFA challenge when storage becomes unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), [
+      () =>
+        json({
+          mfa_required: true,
+          challenge_token: 'challenge-retryable',
+          challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+        }),
+    ]);
+    win = window;
+    await flush();
+    const mfaForm = window.document.querySelector(
+      '[data-form="magic-link-mfa"]',
+    ) as HTMLFormElement;
+    const code = mfaForm.querySelector('#magic-link-mfa-code') as HTMLInputElement;
+    code.value = '123456';
+    faultLocalStorage(window, 'deny-all');
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(mfaForm.classList.contains('hidden')).toBe(false);
+    expect(code.value).toBe('123456');
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /enable browser site storage.*one-time MFA challenge.*has not been consumed/i,
+    );
+  });
+
+  it('locks a successful MFA exchange whose session shape is missing', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), [
+      () =>
+        json({
+          mfa_required: true,
+          challenge_token: 'challenge-accepted',
+          challenge_expires_at: new Date(Date.now() + 300_000).toISOString(),
+        }),
+      () => json({ via: 'totp' }),
+    ]);
+    win = window;
+    await flush();
+    const mfaForm = window.document.querySelector(
+      '[data-form="magic-link-mfa"]',
+    ) as HTMLFormElement;
+    (mfaForm.querySelector('#magic-link-mfa-code') as HTMLInputElement).value = '123456';
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(mfaForm.classList.contains('hidden')).toBe(true);
+    expect(
+      window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),
+    ).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /two-factor verification was accepted.*do not submit this code again.*fresh sign-in link/i,
+    );
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
   });
 
   it('never replays an MFA challenge whose exchange timed out ambiguously', async () => {
