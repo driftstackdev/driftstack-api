@@ -37,9 +37,9 @@ function read(p: string): string {
 describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-193 framing pinned: 'progressive-enhancement against /v1/admin/api-keys (new in V-193). SSG renders a small mock; an inline <script> fetches with bearer auth. Filter bar wired (account_id text input + hide-revoked checkbox). Revoke action POSTs to existing /v1/admin/api-keys/:id/revoke with audited reason.'", () => {
+  it('V-193 framing pins an inert SSG shell replaced only after authenticated live loading', () => {
     expect(body).toMatch(
-      /\/\/ V-193 — progressive-enhancement against \/v1\/admin\/api-keys \(new in\s*\n?\s*\/\/ V-193\)\. SSG renders a small mock; an inline <script> fetches with\s*\n?\s*\/\/ bearer auth\. Filter bar wired \(account_id text input \+ hide-revoked\s*\n?\s*\/\/ checkbox\)\. Revoke action POSTs to existing\s*\n?\s*\/\/ \/v1\/admin\/api-keys\/:id\/revoke with audited reason\./,
+      /\/\/ V-193 — progressive-enhancement against \/v1\/admin\/api-keys \(new in\s*\n?\s*\/\/ V-193\)\. SSG renders an inert shell; an inline <script> fetches with\s*\n?\s*\/\/ bearer auth\./,
     );
   });
 
@@ -58,13 +58,20 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
     );
   });
 
-  it("SCOPE_LABEL 6-key catalogue duplicated frontmatter + inline-script: read → 'read' / write → 'write' / admin → 'admin' / account_owner → 'owner' / driftstack_internal_admin → 'staff' / gui_control → 'gui' — pinned so the enum→friendly-label mapping stays consistent across SSG + inline (drift would render raw enum strings like 'driftstack_internal_admin' as a 28-char chip that overflows the row)", () => {
-    expect(body).toMatch(
-      /const SCOPE_LABEL: Record<string, string> = \{\s*\n?\s*read: 'read',\s*\n?\s*write: 'write',\s*\n?\s*admin: 'admin',\s*\n?\s*account_owner: 'owner',\s*\n?\s*driftstack_internal_admin: 'staff',\s*\n?\s*gui_control: 'gui',\s*\n?\s*\};/,
-    );
+  it('SCOPE_LABEL 6-key catalogue remains in the authoritative live-row renderer', () => {
     expect(body).toMatch(
       /const SCOPE_LABEL = \{\s*\n?\s*read: 'read',\s*\n?\s*write: 'write',\s*\n?\s*admin: 'admin',\s*\n?\s*account_owner: 'owner',\s*\n?\s*driftstack_internal_admin: 'staff',\s*\n?\s*gui_control: 'gui',\s*\n?\s*\};/,
     );
+    expect(body).not.toContain('const SCOPE_LABEL: Record<string, string>');
+  });
+
+  it('ships no sample credential identity, revoke control, or green live claim before authority', () => {
+    expect(body).not.toContain('MOCK_KEYS');
+    expect(body).toContain('Live API keys are unavailable until loaded.');
+    expect(body).toMatch(/data-live-dot\s*\n?\s*class="[^"]*bg-amber-500"/);
+    expect(body).toContain('<span data-live-status>Waiting for live data</span>');
+    expect(body).toMatch(/data-live-refresh\s*\n?\s*disabled\s*\n?\s*aria-disabled="true"/);
+    expect(body).not.toMatch(/data-action="revoke"\s*\n?\s*data-id=\{key\.id\}/);
   });
 
   it("Reason REQUIRED on revoke: branded driftstackPrompt('Reason for revoking N (required):') → !reason || !reason.trim() → 'Revoke cancelled — reason is required.' banner + bail — pinned so the audit-row 'reason' field never lands empty (drift to optional reason would break the customer-facing 'revoked by Driftstack: <reason>' surface)", () => {
@@ -94,19 +101,13 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
     expect(body).toMatch(/const refreshed = await load\(\);/);
   });
 
-  it("Revoked-row visual treatment: SSG row class:list with opacity-60 when revokedAt !== null + inline rowHtml opacityClass = revoked ? 'opacity-60' : '' — pinned so revoked keys stay visible but visually de-emphasized (drift to hiding revoked keys would lose audit-history visibility) and drift between SSG + inline opacity-class would cause a hydrate flash", () => {
-    expect(body).toMatch(
-      /class:list=\{\['hover:bg-tk-bg', key\.revokedAt !== null && 'opacity-60'\]\}/,
-    );
+  it('Revoked live rows remain visible but visually de-emphasized with opacity-60', () => {
     expect(body).toMatch(
       /const revoked = k\.revoked_at !== null;\s*\n?\s*const opacityClass = revoked \? 'opacity-60' : '';/,
     );
   });
 
-  it('Status-badge 2-tone duplicated: revoked → slate-100/slate-600 + active → emerald-50/emerald-700 (SSG ternary + inline statusBadge const) — pinned so the active/revoked binary stays visually distinct + drift between the two render paths would cause a hydrate flash', () => {
-    expect(body).toMatch(
-      /\{key\.revokedAt !== null \? \(\s*\n?\s*<span class="inline-flex rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">\s*\n?\s*revoked\s*\n?\s*<\/span>\s*\n?\s*\) : \(\s*\n?\s*<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">\s*\n?\s*active\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
-    );
+  it('Live status badges keep revoked slate and active emerald treatments', () => {
     expect(body).toMatch(
       /const statusBadge = revoked\s*\n?\s*\? '<span class="inline-flex rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked<\/span>'\s*\n?\s*: '<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">active<\/span>';/,
     );
@@ -119,12 +120,31 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
     expect(body).toMatch(/Hide revoked/);
   });
 
-  it("Revoke button visibility: only shown when revokedAt === null (in both SSG ternary + inline actionCell) — pinned so already-revoked keys don't show a button that would 409/no-op (drift to always-show would create operator confusion when clicks return error)", () => {
-    expect(body).toMatch(
-      /\{key\.revokedAt === null && \(\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*data-action="revoke"\s*\n?\s*data-id=\{key\.id\}/,
-    );
+  it('Revoke is emitted only by live rowHtml and stays hidden for already-revoked keys', () => {
     expect(body).toMatch(
       /const actionCell = !revoked\s*\n?\s*\? '<button type="button" data-action="revoke" data-id="' \+/,
+    );
+  });
+
+  it('signed-out/failed reads reapply unavailable state and success alone turns freshness green', () => {
+    expect(body).toContain('function renderKeysUnavailable(message)');
+    expect(body).toContain(
+      "renderKeysUnavailable('Sign in with a staff admin account to see API keys.')",
+    );
+    expect(body).toContain(
+      "'Could not load API keys — nothing to act on. Resolve the error above and retry.'",
+    );
+    expect(body).toMatch(/if \(loaded\) \{[\s\S]*?setLiveState\('ready'\);/);
+    expect(body).toMatch(/if \(expectedReq !== inFlight\) return loaded;/);
+  });
+
+  it('defers token authority until DOMContentLoaded so the AdminLayout SSO bridge lands first', () => {
+    expect(body).toMatch(/let token = null;/);
+    expect(body).toMatch(
+      /function start\(\) \{\s*\n?\s*token = localStorage\.getItem\('ds_web_session_token'\);/,
+    );
+    expect(body).toMatch(
+      /document\.addEventListener\('DOMContentLoaded', start\);[\s\S]*?start\(\);/,
     );
   });
 

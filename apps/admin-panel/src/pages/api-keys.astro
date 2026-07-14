@@ -2,50 +2,10 @@
 import AdminLayout from '../layouts/AdminLayout.astro';
 
 // V-193 — progressive-enhancement against /v1/admin/api-keys (new in
-// V-193). SSG renders a small mock; an inline <script> fetches with
+// V-193). SSG renders an inert shell; an inline <script> fetches with
 // bearer auth. Filter bar wired (account_id text input + hide-revoked
 // checkbox). Revoke action POSTs to existing
 // /v1/admin/api-keys/:id/revoke with audited reason.
-
-interface MockAdminApiKey {
-  id: string;
-  name: string;
-  keyPrefix: string;
-  accountId: string;
-  accountEmail: string;
-  scopes: ReadonlyArray<string>;
-  lastUsedAt: string | null;
-  revokedAt: string | null;
-  createdAt: string;
-}
-
-const MOCK_KEYS: MockAdminApiKey[] = [
-  {
-    id: 'key_00000000-0000-4000-8000-0000000000b1',
-    name: 'production',
-    keyPrefix: 'ds_live_a1b2c3d4',
-    accountId: 'acc_00000000-0000-4000-8000-000000000001',
-    accountEmail: 'tester@driftstack.local',
-    scopes: ['read', 'write'],
-    lastUsedAt: '2026-05-04T10:00:00Z',
-    revokedAt: null,
-    createdAt: '2026-04-15T09:10:00Z',
-  },
-];
-
-const SCOPE_LABEL: Record<string, string> = {
-  read: 'read',
-  write: 'write',
-  admin: 'admin',
-  account_owner: 'owner',
-  driftstack_internal_admin: 'staff',
-  gui_control: 'gui',
-};
-
-function fmtIso(iso: string | null): string {
-  if (iso === null) return '—';
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-}
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -76,14 +36,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           <span
             aria-hidden="true"
             data-live-dot
-            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+            class="inline-block h-2 w-2 rounded-full bg-amber-500"
           ></span>
-          <span>Live · updated <span data-live-age>just now</span></span>
+          <span data-live-status>Waiting for live data</span>
+          <span data-live-age class="hidden"></span>
         </span>
         <button
           type="button"
           data-live-refresh
-          class="text-tk-accent hover:underline"
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in"
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           Refresh now
         </button>
@@ -130,56 +94,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="api-keys">
-          {
-            MOCK_KEYS.map((key) => (
-              <tr class:list={['hover:bg-tk-bg', key.revokedAt !== null && 'opacity-60']}>
-                <td class="px-4 py-3">
-                  <p class="font-medium text-tk-ink">{key.name}</p>
-                  <p class="mt-1 font-mono text-[11px] text-tk-ink-2">
-                    {key.keyPrefix}
-                    <span class="text-tk-ink-3">…</span>
-                  </p>
-                  <p class="mt-0.5 font-mono text-[10px] text-tk-ink-3">{key.id}</p>
-                </td>
-                <td class="px-4 py-3">
-                  <p class="font-mono text-[10px] text-tk-ink-3">{key.accountId}</p>
-                </td>
-                <td class="px-4 py-3">
-                  <div class="flex flex-wrap gap-1">
-                    {key.scopes.map((scope) => (
-                      <span class="rounded bg-tk-hover px-1.5 py-0.5 font-mono text-[11px] text-tk-ink-2">
-                        {SCOPE_LABEL[scope] ?? scope}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-xs text-tk-ink-2">{fmtIso(key.lastUsedAt)}</td>
-                <td class="px-4 py-3">
-                  {key.revokedAt !== null ? (
-                    <span class="inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">
-                      revoked
-                    </span>
-                  ) : (
-                    <span class="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-emerald-700">
-                      active
-                    </span>
-                  )}
-                </td>
-                <td class="px-4 py-3 text-right">
-                  {key.revokedAt === null && (
-                    <button
-                      type="button"
-                      data-action="revoke"
-                      data-id={key.id}
-                      class="text-sm font-medium text-red-700 hover:underline"
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))
-          }
+          <tr>
+            <td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">
+              Live API keys are unavailable until loaded.
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -200,7 +119,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       const footnote = root.querySelector('[data-field="footnote"]');
       const accountIdEl = root.querySelector('[data-field="account-id"]');
       const hideRevokedEl = root.querySelector('[data-field="hide-revoked"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const liveDot = root.querySelector('[data-live-dot]');
+      const liveStatus = root.querySelector('[data-live-status]');
+      const liveAge = root.querySelector('[data-live-age]');
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      let token = null;
       const API_KEY_TIMEOUT_MS = 15_000;
       let loadController = null;
 
@@ -246,6 +169,38 @@ const apiBaseUrl = resolveApiBaseUrl();
       function fmtIso(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function renderKeysUnavailable(message) {
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+            escapeHtml(message) +
+            '</td></tr>';
+        }
+        if (footnote) footnote.textContent = '';
+      }
+
+      function setLiveState(state, message) {
+        if (liveDot) {
+          const color =
+            state === 'ready'
+              ? 'bg-emerald-500'
+              : state === 'failed'
+                ? 'bg-red-500'
+                : 'bg-amber-500';
+          liveDot.className = 'inline-block h-2 w-2 rounded-full ' + color;
+        }
+        if (liveStatus) {
+          liveStatus.textContent = message
+            ? message
+            : state === 'ready'
+              ? 'Live · updated'
+              : state === 'failed'
+                ? 'Live refresh failed'
+                : 'Loading live data';
+        }
+        if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
       }
 
       const revokesInFlight = new Set();
@@ -399,19 +354,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return;
+            if (myReq !== inFlight) return false;
             const msg = requestErrorMessage(err, 'network error');
-            // W604 — clear the SSG mock table on ANY load failure. Leaving the
-            // mock row on screen is dangerous here: it renders a live Revoke
-            // button wired to a FAKE key id, so an admin could fire
-            // POST /admin/api-keys/<mock-id>/revoke on a key that doesn't
-            // exist. Replace with an honest empty/error state + clear the
-            // footnote so no fabricated active key is presented as actionable.
-            if (tbody) {
-              tbody.innerHTML =
-                '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load API keys — nothing to act on. Resolve the error above and retry.</td></tr>';
-            }
-            if (footnote) footnote.textContent = '';
+            renderKeysUnavailable(
+              'Could not load API keys — nothing to act on. Resolve the error above and retry.',
+            );
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -505,46 +452,46 @@ const apiBaseUrl = resolveApiBaseUrl();
       let debounce = 0;
       function scheduleLoad() {
         clearTimeout(debounce);
-        debounce = setTimeout(load, 200);
+        debounce = setTimeout(loadWithLive, 200);
       }
       if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
       if (hideRevokedEl) hideRevokedEl.addEventListener('change', scheduleLoad);
 
-      if (!token) {
-        // W604 — clear the SSG mock so the unauthenticated state never shows a
-        // fabricated active key with a live Revoke button wired to a FAKE id.
-        if (tbody) {
-          tbody.innerHTML =
-            '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in with a staff admin account to see API keys.</td></tr>';
-        }
-        if (footnote) footnote.textContent = '';
-        showBanner('Sign in with a staff admin account to see live data.');
-        return;
-      }
-
       // 2026-05-22 — live auto-poll. Same pattern as be9793f8.
       let lastFetch = Date.now();
       function loadWithLive() {
-        const liveDot = root.querySelector('[data-live-dot]');
-        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        setLiveState('loading');
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-disabled', 'true');
+        }
+        const expectedReq = inFlight + 1;
         const p = load();
         if (p && typeof p.then === 'function') {
-          p.then(
-            () => {
+          return p.then((loaded) => {
+            if (expectedReq !== inFlight) return loaded;
+            if (loaded) {
               lastFetch = Date.now();
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
-            },
-            () => {
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
-            },
-          );
+              if (liveAge) liveAge.textContent = 'just now';
+              setLiveState('ready');
+            } else {
+              setLiveState('failed');
+            }
+            if (refreshBtn) {
+              refreshBtn.disabled = false;
+              refreshBtn.removeAttribute('aria-disabled');
+            }
+            return loaded;
+          });
         } else {
-          lastFetch = Date.now();
+          setLiveState('failed');
+          if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.removeAttribute('aria-disabled');
+          }
+          return Promise.resolve(false);
         }
       }
-      const refreshBtn = root.querySelector('[data-live-refresh]');
-      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
-      setInterval(loadWithLive, 30_000);
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -552,12 +499,33 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
-      const ageEl = root.querySelector('[data-live-age]');
-      setInterval(() => {
-        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
-      }, 5_000);
+      function start() {
+        token = localStorage.getItem('ds_web_session_token');
+        if (!token) {
+          renderKeysUnavailable('Sign in with a staff admin account to see API keys.');
+          setLiveState('failed', 'Sign in for live data');
+          showBanner('Sign in with a staff admin account to see live data.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return;
+        }
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.removeAttribute('aria-disabled');
+          refreshBtn.removeAttribute('title');
+          refreshBtn.addEventListener('click', loadWithLive);
+        }
+        setInterval(loadWithLive, 30_000);
+        setInterval(() => {
+          if (liveAge) liveAge.textContent = fmtAge(lastFetch);
+        }, 5_000);
+        loadWithLive();
+      }
 
-      load();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>
