@@ -96,10 +96,11 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
     );
   });
 
-  it("Multi-region future-rollout 30-day-notice commitment pinned: 'customers who selected a non-EU region will be notified 30 days before any of their data is migrated, with the opportunity to keep their data in the EU or terminate the affected portion of the service.' — pinned so the future-multi-region + 30-day-migration-notice + EU-stay-option + terminate-option 4-state commitment survives (drift to dropping the 'keep in EU' option would close off the privacy-preserving fallback EU-driven customers need)", () => {
+  it('region preference remains informational and does not promise an unshipped migration', () => {
     expect(body).toMatch(
-      /customers who selected a non-EU region will be\s*\n?\s*notified 30 days before any of their data is migrated, with the\s*\n?\s*opportunity to keep their data in the EU or terminate the\s*\n?\s*affected portion of the service\./,
+      /The preference is informational and does not change routing or\s*\n?\s*residency\. Leaving it unset, or selecting us \/ eu \/ apac, produces\s*\n?\s*the same current placement described above\./,
     );
+    expect(body).not.toMatch(/multi-region|selected a non-EU region|data is migrated/i);
   });
 
   it("V-478 change-log section pinned: 'Change log.' header + 'Every material change to the register lands here as an immutable entry. Cosmetic edits (rewording, typo fixes) don't qualify and aren't logged.' — pinned so the change-log immutability + cosmetic-edits-excluded framing survives (drift to logging cosmetic edits would dilute the signal; drift to dropping 'immutable' would let customers question whether entries get rewritten)", () => {
