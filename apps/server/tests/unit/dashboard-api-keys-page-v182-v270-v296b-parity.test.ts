@@ -137,7 +137,7 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/rotate', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{\s*\n\s+authorization: 'Bearer ' \+ token,\s*\n\s+'content-type': 'application\/json',\s*\n\s+\},\s*\n\s+body: '\{\}',\s*\n\s+\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/api-keys\/' \+ encodeURIComponent\(id\) \+ '\/rotate', \{\s*method: 'POST',\s*headers: authedHeaders\(\{\s*'content-type': 'application\/json',\s*\}\),\s*body: '\{\}',\s*signal: controller\.signal,\s*\}\)/,
     );
   });
 
@@ -173,7 +173,7 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /revealDismiss\.addEventListener\('click', \(\) => \{\s*\n\s+revealPre\.textContent = '';\s*\n\s+reveal\.classList\.add\('hidden'\);\s*\n\s+\}\)/,
+      /revealDismiss\.addEventListener\('click', \(\) => \{\s*clearCopyFeedback\(revealCopyFb\);\s*revealPre\.textContent = '';\s*reveal\.classList\.add\('hidden'\);\s*\}\)/,
     );
   });
 
@@ -240,11 +240,12 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(escapeUsages).toBeGreaterThanOrEqual(10);
   });
 
-  it('CRITICAL no-token preview-fallback pinned — "Sign in to see live API keys. Showing preview data below." Drift to a 401 redirect would lose the preview-of-real-product affordance (matches W749 /sessions framing).', () => {
+  it('CRITICAL signed-out state is visibly unavailable and non-actionable rather than presenting preview keys as authoritative live data', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /showBanner\('Sign in to see live API keys\. Showing preview data below\.'\);\s*\n\s+return;/,
+      /if \(!token\) \{\s*renderUnavailable\('Sign in to load your API keys\.'\);\s*showBanner\('Sign in to see live API keys\.'\);[\s\S]*?return;\s*\}/,
     );
+    expect(p).not.toContain('Showing preview data below.');
   });
 
   it("CRITICAL key-row 'grace ends' inline annotation pinned. When a key has expires_at set (post-rotation), the row shows ' · <span class=\"text-tk-accent-text\">grace ends <iso>' as inline metadata (S23 2026-07-06 AA text tone). Drift would hide the grace-deadline from the customer.", () => {
