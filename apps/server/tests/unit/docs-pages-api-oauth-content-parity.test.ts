@@ -51,7 +51,7 @@ describe('docs/pages/api/oauth content parity', () => {
     );
   });
 
-  it("Admin-gated client-registration framing pinned: 'Client registration is currently admin-gated — talk to support@driftstack.dev' + 'The client_secret is shown once and never recoverable; the server stores only its SHA-256 hash. Lost secrets require rotation via support.' + 4-field intake (label + redirect URIs HTTPS-only-except-localhost + account-scoped-or-marketplace). Drift to dropping the SHA-256 hash-at-rest would weaken the client-secret security model", () => {
+  it("Admin-gated client-registration framing pinned: 'Client registration is currently admin-gated — talk to support@driftstack.dev' + 'The client_secret is shown once and never recoverable; the server stores only its SHA-256 hash. Lost secrets require rotation via support.' + account-scoped or multi-tenant intake. Drift to dropping the SHA-256 hash-at-rest would weaken the client-secret security model", () => {
     expect(body).toMatch(
       /Client registration is currently \*\*admin-gated\*\* — talk to\s*\n?\s*\[support@driftstack\.dev\]/,
     );
@@ -61,6 +61,13 @@ describe('docs/pages/api/oauth content parity', () => {
     expect(body).toMatch(
       /- the redirect URIs you'll use \(HTTPS-only, except `localhost` for\s*\n?\s*native-app development per RFC 8252\)/,
     );
+    expect(body).toMatch(
+      /- whether the client is account-scoped \(one specific customer\s*\n?\s*account\) or multi-tenant \(any customer can authorize\)/,
+    );
+    expect(body).toMatch(
+      /a multi-tenant client has\s*\n?\s*no account binding and may be approved by any customer\./,
+    );
+    expect(body).not.toMatch(/marketplace/i);
   });
 
   it('Errors-at-a-glance 6-row roster pinned: 400 invalid_request + 400 invalid_grant (code unknown/expired/already-used; PKCE mismatch) + 400 invalid_scope + 400 access_denied + 401 invalid_client + 401 unauthorized_client. All RFC 9457 problem+json + real https://errors.driftstack.dev/ type URIs — pinned so the 6-error-code roster + RFC 9457 + errors.driftstack.dev type-URI contract all stay documented', () => {

@@ -39,7 +39,7 @@ Client registration is currently **admin-gated** — talk to
 - the redirect URIs you'll use (HTTPS-only, except `localhost` for
   native-app development per RFC 8252)
 - whether the client is account-scoped (one specific customer
-  account) or marketplace-style (any customer can authorize)
+  account) or multi-tenant (any customer can authorize)
 
 Support returns:
 
@@ -131,7 +131,7 @@ interactive dashboard session.
 
 An account-scoped client can be approved only by its registered
 account. A different customer's consent attempt returns `access_denied`
-without consuming the pending authorization; a marketplace client has
+without consuming the pending authorization; a multi-tenant client has
 no account binding and may be approved by any customer.
 
 The granted scopes are reduced against the dashboard session's
