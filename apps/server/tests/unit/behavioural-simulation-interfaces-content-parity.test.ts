@@ -20,14 +20,20 @@ describe('W595.B packages/behavioural-simulation/src/interfaces.ts content parit
     expect(body).toMatch(/\/\/ V-127 stub interfaces\. The Phase 3 real implementation slots in/);
     expect(body).toMatch(/\/\/ here without changing call sites\./);
     expect(body).toMatch(/^import type \{ ScrollVelocityProfile \} from '\.\/scroll\.js';/m);
-    expect(body).toMatch(/^export interface GenerateMouseTrajectoryOpts \{$/m);
     expect(body).toMatch(
-      /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\//,
+      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};/,
     );
-    expect(body).toMatch(/\/\*\* Number of intermediate samples to emit \(default 32\)\. \*\//);
+    expect(body).toMatch(
+      /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*\n?\s*seed\?: string;/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Integer sample count in the implementation's bounded range \(default 32\)\. \*\/\s*\n?\s*samples\?: number;/,
+    );
     expect(body).toMatch(/^export interface GenerateKeyboardCadenceOpts \{$/m);
     expect(body).toMatch(/\/\*\* Profile whose meanKeyDelayMs \+ jitter shapes the cadence\. \*\//);
-    expect(body).toMatch(/^export interface GenerateScrollPatternOpts \{$/m);
+    expect(body).toMatch(
+      /export interface GenerateScrollPatternOpts \{\s*\n?\s*direction: 'up' \| 'down' \| 'left' \| 'right';\s*\n?\s*\/\*\* Positive finite absolute distance\. \*\/\s*\n?\s*totalDistancePx: number;/,
+    );
     expect(body).toMatch(/^export interface GenerateTouchEventOpts \{$/m);
     expect(body).toMatch(/\/\*\* DOM element class the touch targets\. \*\//);
     expect(body).toMatch(
