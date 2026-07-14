@@ -163,6 +163,115 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(pane.textContent).toContain('⏱ 1y');
   });
 
+  it('surfaces a synchronous cookie-copy failure and retries the exact value', async () => {
+    cookiesMock.mockResolvedValue({
+      status: 'ok',
+      cookies: [
+        {
+          domain: 'example.com',
+          name: 'sid',
+          value: 'secret-cookie-value',
+          secure: true,
+          expires: null,
+        },
+      ],
+    });
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const throwingWrite = vi.fn(() => {
+      throw new Error('clipboard denied');
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: throwingWrite },
+      configurable: true,
+    });
+    try {
+      const { container } = renderSim();
+      openCookies(container);
+      const copyButton = (await waitFor(() => {
+        const button = container.querySelector('[aria-label="Copy value of sid"]');
+        if (button === null) throw new Error('cookie row not ready');
+        return button;
+      })) as HTMLButtonElement;
+      fireEvent.click(copyButton);
+
+      await waitFor(() => {
+        expect(copyButton.getAttribute('aria-label')).toBe('Retry copy value of sid');
+      });
+      expect(copyButton.textContent).toBe("Couldn't copy — retry");
+      expect(throwingWrite).toHaveBeenCalledWith('secret-cookie-value');
+
+      const recoveredWrite = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: recoveredWrite },
+        configurable: true,
+      });
+      fireEvent.click(copyButton);
+
+      await waitFor(() => expect(recoveredWrite).toHaveBeenCalledWith('secret-cookie-value'));
+      expect(recoveredWrite).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(copyButton.getAttribute('aria-label')).toBe('Copied value of sid');
+      });
+      expect(copyButton.textContent).toBe('Copied ✓');
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else delete (navigator as Partial<Navigator>).clipboard;
+    }
+  });
+
+  it('ignores an older cookie-copy completion after a newer row succeeds', async () => {
+    cookiesMock.mockResolvedValue({
+      status: 'ok',
+      cookies: [
+        { domain: 'example.com', name: 'first', value: 'alpha', expires: null },
+        { domain: 'example.com', name: 'second', value: 'beta', expires: null },
+      ],
+    });
+    let resolveFirst: (() => void) | undefined;
+    const writeText = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(undefined);
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    try {
+      const { container } = renderSim();
+      openCookies(container);
+      const first = (await waitFor(() => {
+        const button = container.querySelector('[aria-label="Copy value of first"]');
+        if (button === null) throw new Error('first cookie row not ready');
+        return button;
+      })) as HTMLButtonElement;
+      const second = container.querySelector(
+        '[aria-label="Copy value of second"]',
+      ) as HTMLButtonElement;
+
+      fireEvent.click(first);
+      await waitFor(() => expect(first.getAttribute('aria-label')).toBe('Copying value of first'));
+      fireEvent.click(second);
+      await waitFor(() => expect(second.getAttribute('aria-label')).toBe('Copied value of second'));
+
+      await act(async () => {
+        resolveFirst?.();
+        await Promise.resolve();
+      });
+      expect(second.getAttribute('aria-label')).toBe('Copied value of second');
+      expect(first.textContent).toBe('alpha');
+      expect(writeText.mock.calls).toEqual([['alpha'], ['beta']]);
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else delete (navigator as Partial<Navigator>).clipboard;
+    }
+  });
+
   it('labels a long poll as refreshing while retaining the last good cookie jar', async () => {
     let resolveRefresh:
       | ((value: { status: 'ok'; cookies: Array<Record<string, unknown>> }) => void)

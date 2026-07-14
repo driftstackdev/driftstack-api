@@ -2125,16 +2125,44 @@ function CookiesPane({
   // Cookie values are truncated to fit — track which one was just copied so the
   // row can confirm it (the whole point of opening the panel is to read/copy a
   // value, which was previously impossible: truncated + unselectable).
+  const [copyingKey, setCopyingKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [copyFailedKey, setCopyFailedKey] = useState<string | null>(null);
+  const copyGenerationRef = useRef(0);
+  const copyTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      copyGenerationRef.current += 1;
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
   const copyCookieValue = (key: string, value: string): void => {
-    const write = navigator.clipboard?.writeText(value);
-    if (write === undefined) return;
-    void write.then(
+    const generation = copyGenerationRef.current + 1;
+    copyGenerationRef.current = generation;
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
+    setCopyingKey(key);
+    setCopiedKey(null);
+    setCopyFailedKey(null);
+    void writeClipboardText(value).then(
       () => {
+        if (copyGenerationRef.current !== generation) return;
+        setCopyingKey(null);
         setCopiedKey(key);
-        window.setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1200);
+        copyTimerRef.current = window.setTimeout(() => {
+          if (copyGenerationRef.current !== generation) return;
+          copyTimerRef.current = null;
+          setCopiedKey(null);
+        }, 1200);
       },
-      () => undefined,
+      () => {
+        if (copyGenerationRef.current !== generation) return;
+        setCopyingKey(null);
+        setCopyFailedKey(key);
+      },
     );
   };
 
@@ -2428,37 +2456,63 @@ function CookiesPane({
                   </button>
                   {expanded && (
                     <div className="space-y-1 px-2 pb-2">
-                      {g.cookies.map((c, ci) => (
-                        <div
-                          key={`${c.name}|${ci}`}
-                          className="rounded-md bg-white/[0.025] px-2 py-1.5 transition-colors hover:bg-white/5"
-                        >
-                          <div className="flex items-center gap-1.5 font-mono text-[10.5px]">
-                            <span className="shrink-0 font-semibold text-ink-secondary">
-                              {c.name}
-                            </span>
-                            <button
-                              type="button"
-                              title={c.value === '' ? '(empty)' : `${c.value}\n(click to copy)`}
-                              aria-label={`Copy value of ${c.name}`}
-                              onClick={() =>
-                                copyCookieValue(`${g.domain}|${c.name}|${ci}`, c.value)
-                              }
-                              className="min-w-0 flex-1 truncate text-left text-white/40 transition-colors hover:text-white/70"
-                            >
-                              {copiedKey === `${g.domain}|${c.name}|${ci}` ? 'Copied ✓' : c.value}
-                            </button>
+                      {g.cookies.map((c, ci) => {
+                        const key = `${g.domain}|${c.name}|${ci}`;
+                        const copying = copyingKey === key;
+                        const copied = copiedKey === key;
+                        const failed = copyFailedKey === key;
+                        return (
+                          <div
+                            key={`${c.name}|${ci}`}
+                            className="rounded-md bg-white/[0.025] px-2 py-1.5 transition-colors hover:bg-white/5"
+                          >
+                            <div className="flex items-center gap-1.5 font-mono text-[10.5px]">
+                              <span className="shrink-0 font-semibold text-ink-secondary">
+                                {c.name}
+                              </span>
+                              <button
+                                type="button"
+                                title={
+                                  failed
+                                    ? "Couldn't copy — click to retry"
+                                    : c.value === ''
+                                      ? '(empty)'
+                                      : `${c.value}\n(click to copy)`
+                                }
+                                aria-label={
+                                  copying
+                                    ? `Copying value of ${c.name}`
+                                    : failed
+                                      ? `Retry copy value of ${c.name}`
+                                      : copied
+                                        ? `Copied value of ${c.name}`
+                                        : `Copy value of ${c.name}`
+                                }
+                                aria-busy={copying}
+                                disabled={copying}
+                                onClick={() => copyCookieValue(key, c.value)}
+                                className="min-w-0 flex-1 truncate text-left text-white/40 transition-colors hover:text-white/70 disabled:cursor-wait disabled:opacity-70"
+                              >
+                                {copying
+                                  ? 'Copying…'
+                                  : failed
+                                    ? "Couldn't copy — retry"
+                                    : copied
+                                      ? 'Copied ✓'
+                                      : c.value}
+                              </button>
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {c.secure === true && <CookieFlag kind="secure" label="🔒 Secure" />}
+                              {c.httpOnly === true && <CookieFlag kind="http" label="HttpOnly" />}
+                              {c.sameSite !== undefined && c.sameSite !== null && (
+                                <CookieFlag kind="ss" label={`SameSite=${c.sameSite}`} />
+                              )}
+                              <CookieFlag kind="exp" label={`⏱ ${formatCookieExpiry(c.expires)}`} />
+                            </div>
                           </div>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {c.secure === true && <CookieFlag kind="secure" label="🔒 Secure" />}
-                            {c.httpOnly === true && <CookieFlag kind="http" label="HttpOnly" />}
-                            {c.sameSite !== undefined && c.sameSite !== null && (
-                              <CookieFlag kind="ss" label={`SameSite=${c.sameSite}`} />
-                            )}
-                            <CookieFlag kind="exp" label={`⏱ ${formatCookieExpiry(c.expires)}`} />
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
