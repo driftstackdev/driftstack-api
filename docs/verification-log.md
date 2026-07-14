@@ -26969,3 +26969,29 @@ behavioural package passes 9 files and 191/191 tests; package plus eight exact
 source/index guards passes 17 files and 265/265 tests. Package/server strict
 TypeScript, package build, targeted lint/format, diff and whitespace checks are
 green.
+
+## V-639 — CLI authorization credentials are bound to their pending record
+
+**Date:** 2026-07-14
+
+The short-lived CLI authorization record encrypted its minted API key at rest,
+but authenticated only the key plaintext. A valid encrypted blob could therefore
+be relocated between otherwise intact bound records without failing the GCM tag,
+allowing one account's key to be delivered under another record's account label
+if the Redis trust boundary were already writable or corrupted.
+
+New bound records use an explicit v2 envelope and additional authenticated data
+containing a dedicated purpose, request code, state, user-code verifier hash and
+account ID. Exchange reconstructs that context from the atomically claimed
+record, so changing the record or moving only its ciphertext fails closed through
+the existing uniform expired result. Already-bound pre-v2 records are consumed as
+expired instead of receiving an insecure dual-read; their lifetime was at most
+two minutes. Pending records remain bindable directly into v2, and no route,
+schema or response shape changed.
+
+Verification covers exact-context round trips, wrong and missing context,
+explicit empty-context refusal, cross-record blob relocation, legacy bound-record
+expiry, ordinary exchanges and concurrent one-shot delivery. The focused crypto,
+service, route, integration and content-invariant matrix passes 10 files and
+161/161 tests. Strict affected-source/test TypeScript, targeted lint/format,
+diff and whitespace checks are green.

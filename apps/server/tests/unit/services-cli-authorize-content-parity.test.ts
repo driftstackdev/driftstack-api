@@ -192,8 +192,25 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
     expect(body).toMatch(/const didBind = await this\.store\.compareAndSetEx\(/);
     expect(body).toMatch(/if \(!didBind\) \{/);
-    expect(body).toMatch(/const secretBlob = encryptPlatformSecret\(/);
+    expect(body).toContain('const secretBlob = `${CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX}');
     expect(body).toMatch(/encrypted: true,/);
+  });
+
+  it('bound credentials use an explicit v2 envelope and record-bound authenticated context', () => {
+    expect(body).toContain(
+      "const CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX = 'driftstack:cli-authorize-secret:v2:';",
+    );
+    expect(body).toContain(
+      "const CLI_AUTHORIZE_SECRET_PURPOSE = 'driftstack.cli-authorize.api-key.v2';",
+    );
+    expect(body).toContain('function cliAuthorizeSecretContext(input: {');
+    for (const field of ['input.code', 'input.state', 'input.userCodeHash', 'input.accountId']) {
+      expect(body).toContain(field);
+    }
+    expect(body).toContain(
+      'if (!claimed.secret_blob.startsWith(CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX))',
+    );
+    expect(body).toContain('cliAuthorizeSecretContext({');
   });
 
   it('exchange: raw=null → expired; pending short-circuit; bound uses atomic getDel claim + D1 decrypt (no leak, no double-deliver)', () => {

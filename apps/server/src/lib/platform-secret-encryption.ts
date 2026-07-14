@@ -35,15 +35,29 @@ function decodeKey(keyBase64: string): Buffer {
   return key;
 }
 
+function encodeAuthenticatedContext(context: string | undefined): Buffer | undefined {
+  if (context === undefined) return undefined;
+  if (context.length === 0) {
+    throw new Error('platform-secret authenticated context is empty; refusing to continue');
+  }
+  return Buffer.from(context, 'utf8');
+}
+
 /** Encrypt a platform secret for at-rest storage. Returns the single
  *  `[IV | tag | ciphertext]` blob for the bytea column. */
-export function encryptPlatformSecret(plaintext: string, keyBase64: string): Buffer {
+export function encryptPlatformSecret(
+  plaintext: string,
+  keyBase64: string,
+  authenticatedContext?: string,
+): Buffer {
   if (plaintext.length === 0) {
     throw new Error('platform-secret plaintext is empty; refusing to encrypt');
   }
   const key = decodeKey(keyBase64);
+  const context = encodeAuthenticatedContext(authenticatedContext);
   const iv = randomBytes(GCM_IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
+  if (context !== undefined) cipher.setAAD(context);
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, ciphertext]);
@@ -51,8 +65,13 @@ export function encryptPlatformSecret(plaintext: string, keyBase64: string): Buf
 
 /** Decrypt a stored platform-secret blob. Throws on tampered/garbled input
  *  (GCM auth failure) or a wrong key. */
-export function decryptPlatformSecret(blob: Buffer, keyBase64: string): PlatformSecretPlaintext {
+export function decryptPlatformSecret(
+  blob: Buffer,
+  keyBase64: string,
+  authenticatedContext?: string,
+): PlatformSecretPlaintext {
   const key = decodeKey(keyBase64);
+  const context = encodeAuthenticatedContext(authenticatedContext);
   if (blob.length < GCM_IV_BYTES + GCM_TAG_BYTES + 1) {
     throw new Error(
       'platform-secret blob too short to contain IV + auth tag + >=1 ciphertext byte',
@@ -62,6 +81,7 @@ export function decryptPlatformSecret(blob: Buffer, keyBase64: string): Platform
   const tag = blob.subarray(GCM_IV_BYTES, GCM_IV_BYTES + GCM_TAG_BYTES);
   const ciphertext = blob.subarray(GCM_IV_BYTES + GCM_TAG_BYTES);
   const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  if (context !== undefined) decipher.setAAD(context);
   decipher.setAuthTag(tag);
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return plaintext.toString('utf8') as PlatformSecretPlaintext;

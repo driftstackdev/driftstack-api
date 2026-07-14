@@ -33,6 +33,23 @@ const BIND_TTL_SECONDS = 2 * 60;
 // and type as `XXXX-XXXX` from the desktop into the dashboard.
 const USER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const USER_CODE_HASH_DOMAIN = 'driftstack:cli-authorize:user-code:v1\0';
+const CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX = 'driftstack:cli-authorize-secret:v2:';
+const CLI_AUTHORIZE_SECRET_PURPOSE = 'driftstack.cli-authorize.api-key.v2';
+
+function cliAuthorizeSecretContext(input: {
+  code: string;
+  state: string;
+  userCodeHash: string;
+  accountId: string;
+}): string {
+  return JSON.stringify([
+    CLI_AUTHORIZE_SECRET_PURPOSE,
+    input.code,
+    input.state,
+    input.userCodeHash,
+    input.accountId,
+  ]);
+}
 
 export function cliAuthorizeRedisKey(code: string): string {
   return `${REDIS_KEY_PREFIX}${createHash('sha256').update(code).digest('hex')}`;
@@ -178,9 +195,9 @@ interface StoredBoundCode extends StoredCodeBase {
   status: 'bound';
   /**
    * The minted API key held for the CLI / GUI's next exchange poll. This is
-   * base64 of the
-   * AES-256-GCM `[IV|tag|ciphertext]` blob (D1 — the plaintext key never
-   * sits in Redis at rest).
+   * Versioned prefix + base64 of the AES-256-GCM `[IV|tag|ciphertext]` blob.
+   * Its authenticated context binds purpose + code + state + user-code hash +
+   * account (D1 — the plaintext key never sits in Redis at rest).
    */
   secret_blob: string;
   /** D1 — true for every bound entry. */
@@ -403,10 +420,17 @@ export class CliAuthorizeService {
 
     // D1 — encrypt the minted key before it enters Redis. Construction
     // requires the envelope key, so there is no plaintext fallback.
-    const secretBlob = encryptPlatformSecret(
+    const secretContext = cliAuthorizeSecretContext({
+      code: input.code,
+      state: stored.state,
+      userCodeHash: stored.user_code_hash,
+      accountId: input.account_id,
+    });
+    const secretBlob = `${CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX}${encryptPlatformSecret(
       input.api_key_plaintext,
       this.secretEncryptionKey,
-    ).toString('base64');
+      secretContext,
+    ).toString('base64')}`;
     const updated: StoredCode = {
       ...stored,
       status: 'bound',
@@ -492,6 +516,14 @@ export class CliAuthorizeService {
       if (claimedRaw !== raw || claimed?.status !== 'bound') {
         throw new CliAuthorizeError('invalid_code', 'Authorization code state is invalid.');
       }
+      // Bound records live for at most two minutes. Pre-v2 blobs are consumed
+      // as expired rather than dual-read without identity binding; pending
+      // records from an older process can still bind directly into v2.
+      if (!claimed.secret_blob.startsWith(CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX)) {
+        return { status: 'expired' };
+      }
+      const encodedSecret = claimed.secret_blob.slice(CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX.length);
+      if (encodedSecret.length === 0) return { status: 'expired' };
       // D1 — recover the plaintext from the at-rest blob only at the
       // moment of delivery. A decrypt failure (e.g. the key rotated out
       // from under a bound code) surfaces as expired rather than a 500,
@@ -499,8 +531,14 @@ export class CliAuthorizeService {
       let apiKey: string;
       try {
         apiKey = decryptPlatformSecret(
-          Buffer.from(claimed.secret_blob, 'base64'),
+          Buffer.from(encodedSecret, 'base64'),
           this.secretEncryptionKey,
+          cliAuthorizeSecretContext({
+            code: input.code,
+            state: claimed.state,
+            userCodeHash: claimed.user_code_hash,
+            accountId: claimed.account_id,
+          }),
         );
       } catch {
         return { status: 'expired' };

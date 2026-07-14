@@ -19,6 +19,7 @@ import {
   InMemoryCliAuthorizeStore,
   cliAuthorizeRedisKey,
 } from '../../src/services/cli-authorize.js';
+import { encryptPlatformSecret } from '../../src/lib/platform-secret-encryption.js';
 
 const STATE = 'st_' + 'a'.repeat(20);
 const ENC_KEY = randomBytes(32).toString('base64');
@@ -338,6 +339,69 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
       status: 'expired',
     });
   });
+
+  it('refuses a valid encrypted key blob moved between two bound records', async () => {
+    const { svc, store } = makeSvc();
+    const first = await svc.initiate({ state: STATE });
+    const second = await svc.initiate({ state: STATE });
+    await svc.bind({
+      code: first.code,
+      state: STATE,
+      user_code: first.user_code,
+      account_id: 'acc_first',
+      api_key_plaintext: 'ds_test_first',
+      scopes: ['read'],
+    });
+    await svc.bind({
+      code: second.code,
+      state: STATE,
+      user_code: second.user_code,
+      account_id: 'acc_second',
+      api_key_plaintext: 'ds_test_second',
+      scopes: ['read'],
+    });
+
+    const firstKey = cliAuthorizeRedisKey(first.code);
+    const firstRaw = await store.get(firstKey);
+    const secondRaw = await store.get(cliAuthorizeRedisKey(second.code));
+    expect(firstRaw).not.toBeNull();
+    expect(secondRaw).not.toBeNull();
+    const firstRecord = JSON.parse(firstRaw ?? '{}') as Record<string, unknown>;
+    const secondRecord = JSON.parse(secondRaw ?? '{}') as Record<string, unknown>;
+    await store.setEx(
+      firstKey,
+      JSON.stringify({ ...firstRecord, secret_blob: secondRecord.secret_blob }),
+      120,
+    );
+
+    await expect(svc.exchange({ code: first.code, state: STATE })).resolves.toEqual({
+      status: 'expired',
+    });
+  });
+
+  it('refuses a bound record whose state is rewritten with matching caller input', async () => {
+    const { svc, store } = makeSvc();
+    const initiated = await svc.initiate({ state: STATE });
+    await svc.bind({
+      code: initiated.code,
+      state: STATE,
+      user_code: initiated.user_code,
+      account_id: 'acc_state_bound',
+      api_key_plaintext: 'ds_test_state_bound',
+      scopes: ['read'],
+    });
+
+    const key = cliAuthorizeRedisKey(initiated.code);
+    const raw = await store.get(key);
+    expect(raw).not.toBeNull();
+    const record = JSON.parse(raw ?? '{}') as Record<string, unknown>;
+    const rewrittenState = 'st_' + 'b'.repeat(20);
+    await store.setEx(key, JSON.stringify({ ...record, state: rewrittenState }), 120);
+
+    await expect(svc.exchange({ code: initiated.code, state: rewrittenState })).resolves.toEqual({
+      status: 'expired',
+    });
+  });
 });
 
 describe('V-266 D1 — encryption of the minted key at rest', () => {
@@ -393,6 +457,28 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
     await expect(svc.exchange({ code, state: STATE })).rejects.toMatchObject({
       code: 'invalid_code',
     });
+    await expect(svc.exchange({ code, state: STATE })).resolves.toEqual({ status: 'expired' });
+  });
+
+  it('consumes a pre-v2 encrypted bound entry as expired', async () => {
+    const { svc, store } = makeSvc();
+    const { code } = await svc.initiate({ state: STATE });
+    const key = cliAuthorizeRedisKey(code);
+    const raw = await store.get(key);
+    expect(raw).not.toBeNull();
+    const pending = JSON.parse(raw ?? '{}') as Record<string, unknown>;
+    await store.setEx(
+      key,
+      JSON.stringify({
+        ...pending,
+        status: 'bound',
+        secret_blob: encryptPlatformSecret('ds_test_pre_v2', ENC_KEY).toString('base64'),
+        encrypted: true,
+        account_id: 'acc_pre_v2',
+      }),
+      120,
+    );
+
     await expect(svc.exchange({ code, state: STATE })).resolves.toEqual({ status: 'expired' });
   });
 });

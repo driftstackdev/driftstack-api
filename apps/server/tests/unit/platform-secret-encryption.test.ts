@@ -77,6 +77,21 @@ describe('platform-secret encryption', () => {
     expect(() => decryptPlatformSecret(blob, keyB)).toThrow();
   });
 
+  it('authenticated context round-trips only under the exact same context', () => {
+    const key = makeKey();
+    const blob = encryptPlatformSecret('context-bound-value', key, 'purpose:record-a');
+    expect(decryptPlatformSecret(blob, key, 'purpose:record-a')).toBe('context-bound-value');
+    expect(() => decryptPlatformSecret(blob, key, 'purpose:record-b')).toThrow();
+    expect(() => decryptPlatformSecret(blob, key)).toThrow();
+  });
+
+  it('rejects an explicitly empty authenticated context', () => {
+    const key = makeKey();
+    expect(() => encryptPlatformSecret('value', key, '')).toThrow(/authenticated context is empty/);
+    const blob = encryptPlatformSecret('value', key);
+    expect(() => decryptPlatformSecret(blob, key, '')).toThrow(/authenticated context is empty/);
+  });
+
   it('encrypt/decrypt reject a key that does not decode to 32 bytes', () => {
     const tooShortKey = Buffer.alloc(16).toString('base64');
     expect(() => encryptPlatformSecret('v', tooShortKey)).toThrow(/32 bytes/);

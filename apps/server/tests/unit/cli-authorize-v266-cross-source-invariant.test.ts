@@ -166,6 +166,24 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     expect(p).toMatch(/!Number\.isFinite\(record\.created_at\)/);
   });
 
+  it('CRITICAL bound secret v2 authenticates purpose, code, state, verifier hash and account; legacy blobs expire', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
+    expect(p).toContain(
+      "const CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX = 'driftstack:cli-authorize-secret:v2:';",
+    );
+    expect(p).toContain(
+      "const CLI_AUTHORIZE_SECRET_PURPOSE = 'driftstack.cli-authorize.api-key.v2';",
+    );
+    expect(p).toContain('input.code,');
+    expect(p).toContain('input.state,');
+    expect(p).toContain('input.userCodeHash,');
+    expect(p).toContain('input.accountId,');
+    expect(p).toContain(
+      'if (!claimed.secret_blob.startsWith(CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX))',
+    );
+    expect(p).toContain("return { status: 'expired' };");
+  });
+
   // ─── CliAuthorizeStore interface ────────────────────────
 
   it('CRITICAL CliAuthorizeStore includes atomic bind CAS and one-shot exchange claim.', () => {
