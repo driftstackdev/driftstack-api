@@ -2,7 +2,8 @@
 //
 // Compare METHOD + normalized path. A path-only regex lets documented GET and
 // implemented POST satisfy one another, and counts comments/string constants as
-// routes. The AST inventory sees only literal Fastify registrations.
+// routes. Finite template domains are expanded; every other dynamic path is an
+// explicit inventory item so it cannot disappear from reverse coverage.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -29,7 +30,8 @@ function normalizePath(path: string): string {
 }
 
 function operationKey(method: string, path: string): string {
-  return `${method.toUpperCase()} ${normalizePath(path)}`;
+  const inventoryPath = path.startsWith('<unresolved:') ? path : normalizePath(path);
+  return `${method.toUpperCase()} ${inventoryPath}`;
 }
 
 function publishedOperations(spec: OpenApiSpec): Set<string> {
@@ -84,6 +86,66 @@ function isTypedFastifyParameter(
   return false;
 }
 
+function enclosingForOfValues(node: ts.Node, identifier: string): string[] | null {
+  let parent: ts.Node | undefined = node.parent;
+  while (parent !== undefined) {
+    if (ts.isForOfStatement(parent) && ts.isVariableDeclarationList(parent.initializer)) {
+      const declarations = parent.initializer.declarations;
+      const declaration = declarations.length === 1 ? declarations[0] : undefined;
+      if (
+        declaration !== undefined &&
+        ts.isIdentifier(declaration.name) &&
+        declaration.name.text === identifier
+      ) {
+        let expression = parent.expression;
+        while (ts.isAsExpression(expression) || ts.isParenthesizedExpression(expression)) {
+          expression = expression.expression;
+        }
+        if (!ts.isArrayLiteralExpression(expression)) return null;
+        const values: string[] = [];
+        for (const element of expression.elements) {
+          if (!ts.isStringLiteral(element) && !ts.isNoSubstitutionTemplateLiteral(element)) {
+            return null;
+          }
+          values.push(element.text);
+        }
+        return values;
+      }
+    }
+    parent = parent.parent;
+  }
+  return null;
+}
+
+function routePaths(
+  pathArg: ts.Expression,
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+): string[] {
+  if (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) {
+    return pathArg.text.startsWith('/')
+      ? [pathArg.text]
+      : [`<unresolved:${pathArg.getText(sourceFile)}>`];
+  }
+  if (ts.isTemplateExpression(pathArg)) {
+    let paths = [pathArg.head.text];
+    for (const span of pathArg.templateSpans) {
+      if (!ts.isIdentifier(span.expression)) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      const values = enclosingForOfValues(call, span.expression.text);
+      if (values === null || values.length === 0) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      paths = paths.flatMap((prefix) =>
+        values.map((value) => `${prefix}${value}${span.literal.text}`),
+      );
+    }
+    if (paths.every((path) => path.startsWith('/'))) return paths;
+  }
+  return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+}
+
 function scanFastifyOperations(file: string, source: string): Set<string> {
   const sourceFile = ts.createSourceFile(
     file,
@@ -106,11 +168,11 @@ function scanFastifyOperations(file: string, source: string): Set<string> {
       const pathArg = node.arguments[0];
       if (
         (factoryIdentifiers.has(receiver) || isTypedFastifyParameter(node, receiver, sourceFile)) &&
-        pathArg !== undefined &&
-        (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) &&
-        pathArg.text.startsWith('/')
+        pathArg !== undefined
       ) {
-        operations.add(operationKey(node.expression.name.text, pathArg.text));
+        for (const path of routePaths(pathArg, node, sourceFile)) {
+          operations.add(operationKey(node.expression.name.text, path));
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -136,6 +198,8 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   'GET /ready',
   'GET /v1/agent-sessions/:p/gui-control-key',
   'GET /v1/auth/oauth-client/callback',
+  'GET /v1/auth/oauth/github/callback',
+  'GET /v1/auth/oauth/google/callback',
   'GET /v1/internal/atlas-priority/event/:p',
   'GET /v1/internal/atlas-priority/queue',
   'GET /v1/mac-nodes',
@@ -170,7 +234,7 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
 
   it('inventories the complete current published and registered operation sets', () => {
     expect(specOperations.size).toBe(230);
-    expect(routeOperations.size).toBe(250);
+    expect(routeOperations.size).toBe(252);
   });
 
   it('documents the method-specific customer-core contract', () => {
@@ -253,5 +317,28 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     expect(missingOperations(new Set(['DELETE /v1/customer/:p']), syntheticRoutes)).toEqual([
       'DELETE /v1/customer/:p',
     ]);
+  });
+
+  it('expands finite literal template domains into concrete operations', () => {
+    const syntheticRoutes = scanFastifyOperations(
+      'synthetic.ts',
+      `function registerSyntheticRoutes(server: FastifyInstance): void {
+        for (const resource of ['profiles', 'sessions'] as const) {
+          server.get(\`/v1/\${resource}/public\`, async () => ({ ok: true }));
+        }
+      }`,
+    );
+    expect([...syntheticRoutes]).toEqual(['GET /v1/profiles/public', 'GET /v1/sessions/public']);
+  });
+
+  it('surfaces an unresolved dynamic path in reverse coverage', () => {
+    const syntheticRoutes = scanFastifyOperations(
+      'synthetic.ts',
+      `function registerSyntheticRoutes(server: FastifyInstance): void {
+        const path = chooseCustomerPath();
+        server.get(path, async () => ({ secret: true }));
+      }`,
+    );
+    expect(missingOperations(syntheticRoutes, new Set())).toEqual(['GET <unresolved:path>']);
   });
 });

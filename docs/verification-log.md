@@ -26812,3 +26812,29 @@ allocation boundary. The full behavioural package passes 9 files and 179/179
 tests; package plus source-parity evidence passes 21 files and 280/280 tests.
 All workspace typechecks and environment-complete builds, targeted lint/format,
 diff and whitespace checks are green.
+
+## V-633 — Computed Fastify paths cannot bypass route inventories
+
+**Date:** 2026-07-14
+
+The all-route caller-authority and OpenAPI reverse-coverage invariants inspected
+only string-literal and no-substitution-template path arguments. The live OAuth
+provider callback loop registers Google and GitHub routes through a finite
+template expression, so both anonymous operations were absent from the two
+supposedly complete inventories. A future computed customer-data route could
+therefore bypass both preventive controls without failing either suite.
+
+Both AST inventories now expand template identifiers bound by enclosing
+`for..of` loops over finite literal arrays. Every other dynamic Fastify path is
+represented as an unresolved inventory item and fails closed until deliberately
+made statically enumerable. The two fixed-origin OAuth bounce callbacks are
+classified as exact reviewed public operations and exact intentional OpenAPI
+omissions; no product route or published contract changed.
+
+The corrected authority inventory contains 284 registrations: the existing 214
+structurally authorized routes plus 70 exact reviewed exceptions, including 34
+public registrations. OpenAPI reverse coverage now sees 252 unique live
+operations, 230 published and 22 intentionally omitted. Synthetic tests prove
+finite expansion and unresolved-path rejection. Focused authority/OpenAPI
+evidence passes 4 files and 63/63 tests; strict server source/test TypeScript,
+targeted lint/format, diff and whitespace checks are green.

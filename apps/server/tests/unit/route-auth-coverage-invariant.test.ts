@@ -106,6 +106,17 @@ const PUBLIC_EXEMPTIONS: readonly RouteExemption[] = [
     PUBLIC_PROTOCOL,
   ),
   ...exactRoutes(
+    'auth-oauth-client.ts',
+    'registerOAuthClientRoutes',
+    [
+      ['get', '/v1/auth/oauth/google/callback'],
+      ['get', '/v1/auth/oauth/github/callback'],
+    ],
+    'inline',
+    'public',
+    'Public IDP callback bounces to the fixed dashboard origin; no token exchange occurs here.',
+  ),
+  ...exactRoutes(
     'auth.ts',
     'registerAuthRoutes',
     [
@@ -345,6 +356,66 @@ function hasStructuralAuthority(optionsArg: ts.Expression | undefined): boolean 
   return found;
 }
 
+function enclosingForOfValues(node: ts.Node, identifier: string): string[] | null {
+  let parent: ts.Node | undefined = node.parent;
+  while (parent !== undefined) {
+    if (ts.isForOfStatement(parent) && ts.isVariableDeclarationList(parent.initializer)) {
+      const declarations = parent.initializer.declarations;
+      const declaration = declarations.length === 1 ? declarations[0] : undefined;
+      if (
+        declaration !== undefined &&
+        ts.isIdentifier(declaration.name) &&
+        declaration.name.text === identifier
+      ) {
+        let expression = parent.expression;
+        while (ts.isAsExpression(expression) || ts.isParenthesizedExpression(expression)) {
+          expression = expression.expression;
+        }
+        if (!ts.isArrayLiteralExpression(expression)) return null;
+        const values: string[] = [];
+        for (const element of expression.elements) {
+          if (!ts.isStringLiteral(element) && !ts.isNoSubstitutionTemplateLiteral(element)) {
+            return null;
+          }
+          values.push(element.text);
+        }
+        return values;
+      }
+    }
+    parent = parent.parent;
+  }
+  return null;
+}
+
+function routePaths(
+  pathArg: ts.Expression,
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+): string[] {
+  if (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) {
+    return pathArg.text.startsWith('/')
+      ? [pathArg.text]
+      : [`<unresolved:${pathArg.getText(sourceFile)}>`];
+  }
+  if (ts.isTemplateExpression(pathArg)) {
+    let paths = [pathArg.head.text];
+    for (const span of pathArg.templateSpans) {
+      if (!ts.isIdentifier(span.expression)) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      const values = enclosingForOfValues(call, span.expression.text);
+      if (values === null || values.length === 0) {
+        return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+      }
+      paths = paths.flatMap((prefix) =>
+        values.map((value) => `${prefix}${value}${span.literal.text}`),
+      );
+    }
+    if (paths.every((path) => path.startsWith('/'))) return paths;
+  }
+  return [`<unresolved:${pathArg.getText(sourceFile)}>`];
+}
+
 function scanRoutes(file: string, source: string): RouteDecl[] {
   const sourceFile = ts.createSourceFile(
     file,
@@ -368,12 +439,7 @@ function scanRoutes(file: string, source: string): RouteDecl[] {
         sourceFile,
       );
       const pathArg = node.arguments[0];
-      if (
-        registrationFunction !== null &&
-        pathArg !== undefined &&
-        (ts.isStringLiteral(pathArg) || ts.isNoSubstitutionTemplateLiteral(pathArg)) &&
-        pathArg.text.startsWith('/')
-      ) {
+      if (registrationFunction !== null && pathArg !== undefined) {
         const secondArg = node.arguments[1];
         const hasSeparateHandler = node.arguments.length >= 3;
         const optionsArg =
@@ -381,20 +447,22 @@ function scanRoutes(file: string, source: string): RouteDecl[] {
             ? secondArg
             : undefined;
         const handlerArg = hasSeparateHandler ? node.arguments[2] : secondArg;
-        routes.push({
-          file,
-          registrationFunction: registrationFunction.name?.text ?? '<anonymous>',
-          method: node.expression.name.text,
-          path: pathArg.text,
-          handler:
-            handlerArg !== undefined && ts.isIdentifier(handlerArg)
-              ? handlerArg.text
-              : handlerArg !== undefined &&
-                  (ts.isArrowFunction(handlerArg) || ts.isFunctionExpression(handlerArg))
-                ? 'inline'
-                : '<unknown>',
-          structurallyAuthorized: hasStructuralAuthority(optionsArg),
-        });
+        for (const path of routePaths(pathArg, node, sourceFile)) {
+          routes.push({
+            file,
+            registrationFunction: registrationFunction.name?.text ?? '<anonymous>',
+            method: node.expression.name.text,
+            path,
+            handler:
+              handlerArg !== undefined && ts.isIdentifier(handlerArg)
+                ? handlerArg.text
+                : handlerArg !== undefined &&
+                    (ts.isArrowFunction(handlerArg) || ts.isFunctionExpression(handlerArg))
+                  ? 'inline'
+                  : '<unknown>',
+            structurallyAuthorized: hasStructuralAuthority(optionsArg),
+          });
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -435,7 +503,7 @@ describe('all-route caller-authority invariant', () => {
   );
 
   it('discovers the complete current Fastify registration surface', () => {
-    expect(routes).toHaveLength(282);
+    expect(routes).toHaveLength(284);
     expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(214);
   });
 
@@ -448,7 +516,7 @@ describe('all-route caller-authority invariant', () => {
   });
 
   it('the anonymous/manual/disabled surface is exact, unique, and non-stale', () => {
-    expect(PUBLIC_EXEMPTIONS).toHaveLength(32);
+    expect(PUBLIC_EXEMPTIONS).toHaveLength(34);
     expect(MANUAL_AUTH_EXEMPTIONS).toHaveLength(1);
     expect(DISABLED_EXEMPTIONS).toHaveLength(35);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
@@ -509,6 +577,34 @@ describe('all-route caller-authority invariant', () => {
     );
     expect(violations(synthetic)).toEqual([
       'GET /v1/status/private-leak (synthetic.ts#registerSyntheticRoutes)',
+    ]);
+  });
+
+  it('expands finite literal template domains into every concrete route', () => {
+    const synthetic = scanRoutes(
+      'synthetic.ts',
+      `function registerSyntheticRoutes(server: FastifyInstance): void {
+        for (const resource of ['profiles', 'sessions'] as const) {
+          server.get(\`/v1/\${resource}/public\`, async () => ({ ok: true }));
+        }
+      }`,
+    );
+    expect(synthetic.map((route) => route.path)).toEqual([
+      '/v1/profiles/public',
+      '/v1/sessions/public',
+    ]);
+  });
+
+  it('reports an unresolved dynamic path instead of silently skipping it', () => {
+    const synthetic = scanRoutes(
+      'synthetic.ts',
+      `function registerSyntheticRoutes(server: FastifyInstance): void {
+        const path = chooseCustomerPath();
+        server.get(path, async () => ({ secret: true }));
+      }`,
+    );
+    expect(violations(synthetic)).toEqual([
+      'GET <unresolved:path> (synthetic.ts#registerSyntheticRoutes)',
     ]);
   });
 });
