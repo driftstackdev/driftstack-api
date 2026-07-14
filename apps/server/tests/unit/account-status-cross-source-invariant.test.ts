@@ -11,11 +11,9 @@
 //   - packages/api-types/src/accounts.ts (Zod canonical source).
 //   - apps/server/src/db/schema.ts pgEnum (Postgres runtime).
 //   - packages/sdk-go/types.go (Go SDK closed-enum consts).
-//   - apps/admin-panel/src/data/mocks.ts (admin-panel mock-mode).
 //
 // Drift would silently break:
 //   * Server persist: pgEnum rejects unknown values.
-//   * Admin-panel mock-mode account filters.
 //   * Go SDK customer pattern-match on status.
 //   * Billing-quota gates (only 'active' grants new-session).
 
@@ -65,13 +63,6 @@ describe('W860 AccountStatus cross-source invariant', () => {
     expect(p).toMatch(/AccountActive\s+AccountStatus = "active"/);
     expect(p).toMatch(/AccountSuspended AccountStatus = "suspended"/);
     expect(p).toMatch(/AccountDeleted\s+AccountStatus = "deleted"/);
-  });
-
-  // ─── Admin-panel mock-mode mirror ────────────────────────────
-
-  it("CRITICAL apps/admin-panel/src/data/mocks.ts mock-account declares 'status: 'active' | 'suspended' | 'deleted'' — the EXACT 3-value union. Admin-panel filter must offer all 3 status filters; drift would silently let an admin filter on a status the production schema doesn't accept.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/admin-panel/src/data/mocks.ts'));
-    expect(p).toMatch(/status: 'active' \| 'suspended' \| 'deleted';/);
   });
 
   // ─── 3-value cardinality + 1-good + 2-restricted split ───────

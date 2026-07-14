@@ -1,7 +1,4 @@
-// W789 — admin-panel AdminLayout.astro + data/mocks.ts content
-// parity. One-hundred-fifteenth in the cross-SDK drift-guard
-// series. Pins the 2 admin-panel surfaces previously without a
-// parity guard (only admin-panel/src/lib/api-base-url.ts had one).
+// W789 — admin-panel AdminLayout.astro content parity.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -16,12 +13,10 @@ function read(p: string): string {
 }
 
 const LAYOUT = resolve(REPO_ROOT, 'apps/admin-panel/src/layouts/AdminLayout.astro');
-const MOCKS = resolve(REPO_ROOT, 'apps/admin-panel/src/data/mocks.ts');
 
-describe('W789 admin-panel AdminLayout + mocks content parity', () => {
-  it('both files exist', () => {
+describe('W789 admin-panel AdminLayout content parity', () => {
+  it('layout exists', () => {
     expect(existsSync(LAYOUT)).toBe(true);
-    expect(existsSync(MOCKS)).toBe(true);
   });
 
   // ─── AdminLayout.astro ────────────────────────────────────────
@@ -133,105 +128,6 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
     expect(p).toMatch(
       /class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block"/,
     );
-  });
-
-  // ─── data/mocks.ts ────────────────────────────────────────────
-
-  it('CRITICAL mocks scaffolding-comment pinned. The "Mock data for admin-panel scaffolding. Real reads against /v1/admin/* land when the panel moves past scaffolding" wording matches the V-134 V-NNN scaffolding convention.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(
-      /\/\/ Mock data for admin-panel scaffolding\. Real reads against\s*\n?\/\/ \/v1\/admin\/\* land when the panel moves past scaffolding\./,
-    );
-  });
-
-  it('CRITICAL AccountTier import from @driftstack/api-types pinned. Drift to inlining would let admin panel drift from server tier enforcement.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
-  });
-
-  it('CRITICAL 5 mock-types pinned — MockAdminAccount + MockAuditLogEntry + MockLead + MockIncidentSeverity/Status/Update + MockIncident. Drift to dropping any would break admin pages.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/export interface MockAdminAccount \{/);
-    expect(p).toMatch(/export interface MockAuditLogEntry \{/);
-    expect(p).toMatch(/export interface MockLead \{/);
-    expect(p).toMatch(/export type MockIncidentSeverity = 'minor' \| 'major' \| 'outage';/);
-    expect(p).toMatch(
-      /export type MockIncidentStatus = 'investigating' \| 'identified' \| 'monitoring' \| 'resolved';/,
-    );
-    expect(p).toMatch(/export interface MockIncidentUpdate \{/);
-    expect(p).toMatch(/export interface MockIncident \{/);
-  });
-
-  it('CRITICAL MockAdminAccount 3-status enum pinned — active/suspended/deleted. Matches W770 /api/account 3-status framing.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/status: 'active' \| 'suspended' \| 'deleted';/);
-  });
-
-  it('CRITICAL MOCK_ACCOUNTS 3 rows pinned — tester (api_builder + active) + agency (agency_manual + active) + suspended (api_starter + suspended). Drift would change the admin-panel scaffolding shape.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/email: 'tester@driftstack\.local',/);
-    expect(p).toMatch(/tier: 'api_builder',/);
-    expect(p).toMatch(/email: 'agency@driftstack\.local',/);
-    expect(p).toMatch(/tier: 'agency_manual',/);
-    expect(p).toMatch(/email: 'suspended@driftstack\.local',/);
-    expect(p).toMatch(/tier: 'api_starter',/);
-    expect(p).toMatch(/status: 'suspended',/);
-  });
-
-  it('CRITICAL MockAuditLogEntry 2-result enum pinned — success/error. Drift would break the admin audit-log row render.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/result: 'success' \| 'error';/);
-  });
-
-  it('CRITICAL 3-action mock-audit set pinned — account.tier_changed + session.destroyed_by_admin + webhook_delivery.requeued. Drift would lose canonical admin-only audit actions.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/action: 'account\.tier_changed',/);
-    expect(p).toMatch(/action: 'session\.destroyed_by_admin',/);
-    expect(p).toMatch(/action: 'webhook_delivery\.requeued',/);
-  });
-
-  it('CRITICAL MockLead 4-source enum pinned — docs_signup/pricing_cta/email_inbound/other. Drift to a different source taxonomy would mismatch marketing-page lead-capture.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/source: 'docs_signup' \| 'pricing_cta' \| 'email_inbound' \| 'other';/);
-  });
-
-  it("CRITICAL MOCK_INCIDENTS major-status-monitoring scaffolded incident pinned. The 'API server elevated 5xx — eu-west-1' + investigating→identified→monitoring 3-update progression demonstrates the incident-update lifecycle.", () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/title: 'API server elevated 5xx — eu-west-1',/);
-    expect(p).toMatch(/severity: 'major',/);
-    expect(p).toMatch(/status: 'monitoring',/);
-    expect(p).toMatch(/affectedComponents: \['api', 'sessions'\],/);
-    expect(p).toMatch(/status: 'investigating',/);
-    expect(p).toMatch(/status: 'identified',/);
-  });
-
-  it('CRITICAL MockIncident 4-status enum pinned — investigating/identified/monitoring/resolved. Matches incident lifecycle conventions used by the status site.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(
-      /export type MockIncidentStatus = 'investigating' \| 'identified' \| 'monitoring' \| 'resolved';/,
-    );
-  });
-
-  it('CRITICAL acc_/aud_/lead_/inc_/incu_/ses_/wdl_ id-prefix coverage. Drift to different prefixes would break server-side type discriminators.', () => {
-    const p = read(MOCKS);
-
-    expect(p).toMatch(/'acc_00000000-0000-4000-8000-000000000001'/);
-    expect(p).toMatch(/'aud_00000000-0000-4000-8000-0000000000a1'/);
-    expect(p).toMatch(/'lead_00000000-0000-4000-8000-0000000000e1'/);
-    expect(p).toMatch(/'inc_00000000-0000-4000-8000-0000000000a1'/);
-    expect(p).toMatch(/'incu_00000000-0000-4000-8000-0000000000b1'/);
-    expect(p).toMatch(/'ses_00000000-0000-4000-8000-0000000000c1'/);
-    expect(p).toMatch(/'wdl_00000000-0000-4000-8000-0000000000d1'/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

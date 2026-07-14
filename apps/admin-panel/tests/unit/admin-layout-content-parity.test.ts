@@ -79,7 +79,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/if \(!response\.body\) clearDeadline\(\)/);
   });
 
-  it('12 live navItems in canonical order; the backend-less Leads placeholder stays out', () => {
+  it('12 live navItems in canonical order; absent surfaces stay out', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
@@ -174,14 +174,14 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).not.toMatch(/var (?:confirm|prompt)Open/);
   });
 
-  it('all 10 navItem targets exist as files (no dangling sidebar links)', () => {
+  it('all navItem targets exist as files (no dangling sidebar links)', () => {
     const dir = resolve(REPO_ROOT, 'apps/admin-panel/src/pages');
     expect(existsSync(resolve(dir, 'index.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'accounts.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'audit-log.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'incidents/index.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'status-subscribers.astro'))).toBe(true);
-    expect(existsSync(resolve(dir, 'leads.astro'))).toBe(true);
+    expect(existsSync(resolve(dir, 'leads.astro'))).toBe(false);
     expect(existsSync(resolve(dir, 'sessions.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'api-keys.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'webhook-dlq.astro'))).toBe(true);

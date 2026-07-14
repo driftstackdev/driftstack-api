@@ -510,9 +510,8 @@ const navItems = [
       {
         /*
          * 2026-05-21 — page-hydrate reveal. Same pattern as
-         * DashboardLayout f33fa91e: <main> renders opacity:0 so the
-         * customer doesn't see the brief flash of MOCK_ACCOUNTS /
-         * MOCK_AUDIT_LOG / MOCK_OVERRIDES / etc on first paint. The
+         * DashboardLayout f33fa91e: <main> renders opacity:0 so staff
+         * don't see a brief flash of pre-hydration shells on first paint. The
          * reveal fires on either DOMContentLoaded+rAF OR a 600ms
          * safety fallback, whichever first.
          */

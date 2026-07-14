@@ -7,16 +7,13 @@
 // remain consistent across:
 //   - packages/api-types/src/incidents.ts (canonical source).
 //   - apps/server/src/services/incidents.ts (typed imports).
-//   - apps/admin-panel/src/data/mocks.ts (MockIncidentSeverity +
-//     MockIncidentStatus union types — mock-mode mirrors enum shape).
 //   - apps/status-site/src/pages/history.astro (SEVERITY_BADGE +
 //     status colour-map — public status page renders all enum keys).
 //   - apps/status-site/src/pages/index.astro (its own SEVERITY_BADGE +
 //     STATUS_BADGE maps — main status page renders all enum keys).
 //
 // Drift to adding/removing an enum value without coordinated
-// admin-panel + status-site updates would silently break:
-//   * Mock-mode incidents UI (admin) if mocks lag canonical schema.
+// status-site updates would silently break:
 //   * Status-page badge rendering (public) if a new status arrives
 //     that has no colour-map entry.
 
@@ -70,20 +67,6 @@ describe('W851 incident enum cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'));
     expect(p).toMatch(/import type \{[^}]*IncidentSeverity[^}]*\} from '@driftstack\/api-types';/s);
     expect(p).toMatch(/import type \{[^}]*IncidentStatus[^}]*\} from '@driftstack\/api-types';/s);
-  });
-
-  // ─── Admin-panel mock types mirror canonical shape ───────────
-
-  it("CRITICAL apps/admin-panel/src/data/mocks.ts declares MockIncidentSeverity = 'minor' | 'major' | 'outage' — the EXACT 3-value union matching api-types. Drift would let mock-mode admin UI show severities that production schema rejects.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/admin-panel/src/data/mocks.ts'));
-    expect(p).toMatch(/export type MockIncidentSeverity = 'minor' \| 'major' \| 'outage';/);
-  });
-
-  it("CRITICAL apps/admin-panel/src/data/mocks.ts declares MockIncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved' — the EXACT 4-value union matching api-types. Mock-mode admin UI must render all 4 statuses.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/admin-panel/src/data/mocks.ts'));
-    expect(p).toMatch(
-      /export type MockIncidentStatus = 'investigating' \| 'identified' \| 'monitoring' \| 'resolved';/,
-    );
   });
 
   // ─── Status-site renders ALL enum values ─────────────────────

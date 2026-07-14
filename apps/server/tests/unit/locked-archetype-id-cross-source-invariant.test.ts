@@ -74,15 +74,11 @@ describe('W847 LOCKED_ARCHETYPE_ID cross-source invariant', () => {
     expect(p).toMatch(new RegExp(`"archetype": "${LOCKED_ARCHETYPE_ID}"`));
   });
 
-  // ─── Customer-dashboard + admin-panel mocks use same ─────────
+  // ─── Customer-dashboard fixtures use the same id ─────────────
 
-  it("CRITICAL customer-dashboard mocks.ts uses the EXACT same archetype string. Drift would silently let mock-mode UI show a different archetype than production. admin-panel mocks.ts intentionally does NOT have sessions (admin-side doesn't render archetype) — only customer-dashboard renders sessions where the archetype shows.", () => {
+  it('CRITICAL customer-dashboard mocks.ts uses the EXACT same archetype string. Drift would silently let fixture-backed UI show a different archetype than production.', () => {
     const dashMocks = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/data/mocks.ts'));
     expect(dashMocks).toMatch(new RegExp(LOCKED_ARCHETYPE_ID));
-    // admin-panel mocks intentionally lacks session data — its archetype-string
-    // absence is correct.
-    const adminMocks = read(resolve(REPO_ROOT, 'apps/admin-panel/src/data/mocks.ts'));
-    expect(adminMocks).not.toMatch(new RegExp(LOCKED_ARCHETYPE_ID));
   });
 
   // ─── Marketing-site index references same ────────────────────

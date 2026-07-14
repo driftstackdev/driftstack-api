@@ -41,7 +41,6 @@
 // stays in lockstep across:
 //   - packages/api-types/src/admin.ts (Zod canonical source).
 //   - apps/server/src/db/schema.ts pgEnum (Postgres runtime).
-//   - apps/admin-panel/src/data/mocks.ts (mock-mode refs).
 //
 // The admin audit log is an append-only audit trail; pgEnum
 // rejection of an unknown action would silently drop the audit
@@ -217,14 +216,6 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
         `Action '${a}' must have non-empty resource + verb parts`,
       ).toBeTruthy();
     }
-  });
-
-  // ─── Admin-panel mocks reference subset ──────────────────────
-
-  it("CRITICAL apps/admin-panel/src/data/mocks.ts references at least 2 of the 16 actions in mock-mode audit rows ('account.tier_changed' + 'session.destroyed_by_admin'). The mock-mode audit-log UI must render canonical action strings — drift would render rows the production schema would reject.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/admin-panel/src/data/mocks.ts'));
-    expect(p).toMatch(/action: 'account\.tier_changed'/);
-    expect(p).toMatch(/action: 'session\.destroyed_by_admin'/);
   });
 
   // ─── ListAuditLogQuery exposes action filter ─────────────────
