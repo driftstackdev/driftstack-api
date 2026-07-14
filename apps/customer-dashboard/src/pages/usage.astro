@@ -267,11 +267,10 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </dl>
     </section>
 
-    {/* W576 — per-bucket rate-limit panel. Closes the gap the docs called
-        out ("the dashboard does not yet render this data visually"): the
-        /v1/account/rate-limits read endpoint surfaced per-bucket config +
-        overrides since W199, but customers had to curl it. SSG renders the
-        skeleton; the inline script populates rows on fetch. */}
+    {/* W576 — per-bucket rate-limit panel. The
+        /v1/account/rate-limits endpoint provides per-bucket config and
+        overrides; the SSG shell renders the skeleton and the inline script
+        populates rows from the live response. */}
     <section class="mt-10 dashboard-card" data-section="rate-limits">
       <div class="flex items-start gap-3">
         <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
@@ -328,8 +327,8 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
     from localStorage, fetches /v1/usage + /v1/usage/series with
     credentials, replaces tile values + sparkline paths.
 
-    Production wires the token via the (future) signup/login flow that
-    sets `localStorage.ds_web_session_token`. Local dev: paste the
+    Signup/login stores the production web-session token in
+    `localStorage.ds_web_session_token`. Local dev: paste the
     token in DevTools console:
       localStorage.setItem('ds_web_session_token', '<token>')
     then reload.
@@ -592,8 +591,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
             path.setAttribute('d', d);
           }
 
-          // Empty-data state — let the user know real data is loaded
-          // but everything is zero (writers not yet wired).
+          // Empty-data state — real data loaded, with no activity in this period.
           const allZero = Object.values(totals).every((v) => !v || v === 0);
           if (allZero) {
             showBanner(

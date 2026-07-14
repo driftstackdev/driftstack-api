@@ -26,8 +26,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 GET  https://api.driftstack.dev/v1/profiles
 POST https://api.driftstack.dev/v1/billing/crypto-checkout`}</code></pre>
     <p>
-      A future v2 would live at <code>/v2/</code> in parallel with
-      v1 — old clients keep working while you migrate.
+      Breaking changes use a new major prefix such as <code>/v2/</code>
+      in parallel with v1, so old clients keep working during the
+      announced migration window.
     </p>
 
     <h2>Definition of a breaking change</h2>
@@ -105,9 +106,8 @@ POST https://api.driftstack.dev/v1/billing/crypto-checkout`}</code></pre>
     <p>
       No customer-facing endpoints are in beta today — the surface
       under <code>/v1/</code> is stable per the breaking-change policy
-      above. If we introduce a beta path in the future we'll document
-      it explicitly on its own docs page and announce it in the
-      <a href="/changelog/">changelog</a> before it ships.
+      above. Any beta path is explicitly labeled on its docs page and
+      announced in the <a href="/changelog/">changelog</a> before use.
     </p>
 
     <h2>What "v1" guarantees about behaviour</h2>
@@ -131,10 +131,10 @@ POST https://api.driftstack.dev/v1/billing/crypto-checkout`}</code></pre>
       <a href="/docs/sdk-go/">Go</a>) follow semver independently of
       the API. SDK <code>0.x</code> is the current pre-1.0 line —
       surface is stable for the published methods but new resources
-      land in minor versions. When the SDK reaches <code>1.x</code>
-      it will continue to target API <code>/v1/</code>; an API
-      <code>/v2/</code> would mean an SDK <code>2.x</code> in
-      lockstep.
+      land in minor versions. SDK majors and API majors are independent:
+      a supported SDK <code>1.x</code> can still target API
+      <code>/v1/</code>, while an SDK targeting API <code>/v2/</code>
+      uses SDK <code>2.x</code>.
     </p>
 
     <h2>Support</h2>

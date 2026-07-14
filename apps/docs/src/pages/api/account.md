@@ -182,7 +182,6 @@ at [`/api/auth#mfa-challenge`](/api/auth/#mfa-challenge).
 The `X-Driftstack-Account` header routes most `/v1/*`
 requests to a team owner's account. `/v1/account/me` is the
 exception: editing a team owner's display name, slug, region, or
-avatar via a member's bearer token would be surprising. If
-team-scoped account editing is needed in the future, it lands as
-a separate `/v1/team/owners/:id/...` surface with explicit
-semantics — not an opt-in flag on `/me`.
+avatar via a member's bearer token would be surprising. Account
+editing therefore stays bound to the authenticated account; the
+team act-as header never expands `/me` mutation authority.

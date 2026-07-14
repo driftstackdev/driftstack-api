@@ -32,7 +32,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
       /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: SDK versioning policy\n/,
     );
     expect(p).toMatch(
-      /description: Driftstack SDK versioning \+ deprecation policy\. Independent of HTTP API versioning per the\./,
+      /description: Driftstack SDK versioning and deprecation policy, independent of HTTP API versioning\./,
     );
   });
 
@@ -84,14 +84,13 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(/The bar is the same as post-1\.0;/);
   });
 
-  it('CRITICAL 1.0 ships when-clause 3-criteria pinned — first paying customer + 30+ days production-stable + founder explicit approval. Drift to dropping any criterion would let 1.0 ship prematurely.', () => {
+  it('CRITICAL pre-1.0 customers are told to pin a compatible version and read the CHANGELOG.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/1\. Driftstack has its first paying customer\./);
     expect(p).toMatch(
-      /2\. The SDK has been in production use at that customer for ≥ 30 days\s*\n?\s+without breaking changes\./,
+      /Customers integrating a pre-1\.0 SDK should pin a compatible version\s*\n?\(e\.g\., `\^0\.1\.5`\) and read the CHANGELOG before bumping\./,
     );
-    expect(p).toMatch(/3\. Driftstack explicitly approves the 1\.0 cut\./);
+    expect(p).not.toMatch(/`1\.0\.0` ships when|first paying customer/);
   });
 
   it('CRITICAL 3-language @deprecated annotation framing pinned. JSDoc @deprecated + Python DeprecationWarning + Go doc-comment // Deprecated:. Each SDK runtime emits a one-time deprecation warning on first use except Go (doc-only, noise-avoidance).', () => {
@@ -155,7 +154,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(/OpenAPI schema\. Each SDK regenerates its types from the same/);
     expect(p).toMatch(/`openapi\.json` per release\./);
     expect(p).toMatch(
-      /When a feature lands in one SDK but not another, the missing SDKs\s*\n?get a CHANGELOG note \("planned for v0\.X\.Y"\) and a tracking issue\.\s*\n?The lag should be ≤ one MINOR release\./,
+      /When a feature lands in one SDK but not another, the missing SDKs\s*\n?get a CHANGELOG parity note and a tracking issue\. The lag must not\s*\n?exceed one MINOR release\./,
     );
   });
 
@@ -201,9 +200,8 @@ describe('W777 docs /sdk/versioning content parity', () => {
   it("F-5 (Issue 5) founder-approval framing — current-scale framing instead of launch-window. The 'Publish steps are gated on founder approval at the current scale. Once the customer base + release cadence justify it, MINOR + PATCH publishes will run autonomously while MAJOR publishes continue to require explicit founder approval.' wording is the canonical release-gating policy. (Refresh of the prior 'Pre-launch / Post-launch' framing stripped per Issue 5.)", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Publish steps are gated on Driftstack approval at the current scale\./);
-    expect(p).toMatch(/MAJOR publishes continue to\s*\n?require explicit Driftstack approval\./);
-    expect(p).not.toMatch(/Pre-launch \(no paying customers yet\)/);
+    expect(p).toMatch(/Publish steps require Driftstack release approval\./);
+    expect(p).not.toMatch(/customer base|publishes will run autonomously|Pre-launch/);
   });
 
   it('CRITICAL cross-reference set pinned — CHANGELOG.md + D-021 decision + packages/api-types Zod schemas. The 3-link footer threads the load-bearing source-of-truth pointers.', () => {
@@ -218,8 +216,10 @@ describe('W777 docs /sdk/versioning content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*LTS branches\*\*\. The SDKs don't carry long-term support/);
-    expect(p).toMatch(/\*\*Public deprecation timeline doc\*\*\./);
+    expect(p).toMatch(/\*\*Deprecation notices\*\*\. The SDK CHANGELOGs and source-level/);
     expect(p).toMatch(/\*\*Telemetry on deprecated-call usage\*\*\./);
+    expect(p).toMatch(/for deprecated SDK call sites is not collected\./);
+    expect(p).not.toMatch(/future surface|future workstream|something we'll introduce/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

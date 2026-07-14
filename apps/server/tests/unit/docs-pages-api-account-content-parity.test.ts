@@ -231,8 +231,9 @@ describe('W770 docs /api/account content parity', () => {
       /editing a team owner's display name, slug, region, or\s*\n?avatar via a member's bearer token would be surprising\./,
     );
     expect(p).toMatch(
-      /If\s*\n?team-scoped account editing is needed in the future, it lands as\s*\n?a separate `\/v1\/team\/owners\/:id\/\.\.\.` surface with explicit\s*\n?semantics — not an opt-in flag on `\/me`\./,
+      /Account\s*\n?editing therefore stays bound to the authenticated account; the\s*\n?team act-as header never expands `\/me` mutation authority\./,
     );
+    expect(p).not.toMatch(/needed in the future|\/v1\/team\/owners\/:id/);
   });
 
   it('CRITICAL 3-language SDK examples pinned — listWebSessions / list_web_sessions / ListWebSessions(ctx).', () => {

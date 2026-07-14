@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: SDK versioning policy
-description: Driftstack SDK versioning + deprecation policy. Independent of HTTP API versioning per the.
+description: Driftstack SDK versioning and deprecation policy, independent of HTTP API versioning.
 ---
 
 # SDK versioning + deprecation policy
@@ -36,8 +36,8 @@ All three SDKs follow [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html):
 The control plane (`apps/server`) is NOT versioned — its API is
 versioned via the `/v1/` URL prefix; breaking changes there bump to
 `/v2/`. SDKs follow whichever API version they target. Today every
-SDK targets `/v1/`; a future `/v2/` SDK release would be a major
-version bump.
+SDK targets `/v1/`; targeting a different API major requires an SDK
+major-version bump.
 
 ## Pre-1.0 stability
 
@@ -48,15 +48,8 @@ breaks bump the MINOR version AND get explicit deprecation notice
 (see Deprecation policy below). The bar is the same as post-1.0;
 the difference is only that we haven't promised long-term stability.
 
-`1.0.0` ships when:
-
-1. Driftstack has its first paying customer.
-2. The SDK has been in production use at that customer for ≥ 30 days
-   without breaking changes.
-3. Driftstack explicitly approves the 1.0 cut.
-
-Until then, customers integrating an SDK should pin a specific
-version (e.g., `^0.1.5`) and read CHANGELOG before bumping.
+Customers integrating a pre-1.0 SDK should pin a compatible version
+(e.g., `^0.1.5`) and read the CHANGELOG before bumping.
 
 ## Deprecation policy
 
@@ -65,7 +58,7 @@ A method, type, or behavior is deprecated by:
 1. Adding `@deprecated` JSDoc / Python `DeprecationWarning` / Go
    doc-comment `// Deprecated:` to the symbol in the SDK source.
 2. CHANGELOG.md entry under the next MINOR-or-greater release noting
-   the deprecation, the replacement (if any), and the planned
+   the deprecation, the replacement (if any), and the declared
    removal version.
 3. SDK runtime emits a one-time deprecation warning on first use
    (TS via `console.warn`; Python via `warnings.warn(category=
@@ -119,8 +112,8 @@ The three SDKs MUST stay in lockstep on:
   `openapi.json` per release.
 
 When a feature lands in one SDK but not another, the missing SDKs
-get a CHANGELOG note ("planned for v0.X.Y") and a tracking issue.
-The lag should be ≤ one MINOR release.
+get a CHANGELOG parity note and a tracking issue. The lag must not
+exceed one MINOR release.
 
 ## Version-pinning recommendations
 
@@ -157,30 +150,22 @@ Each SDK's release process:
 5. GitHub release post with the CHANGELOG-entry copy + migration
    guide if breaking.
 
-Publish steps are gated on Driftstack approval at the current scale.
-Once the customer base + release cadence justify it, MINOR + PATCH
-publishes will run autonomously while MAJOR publishes continue to
-require explicit Driftstack approval.
+Publish steps require Driftstack release approval.
 
 ## Cross-references
 
 - Each SDK's `CHANGELOG.md` for the running history.
 - `docs/decisions.md` D-021 for the original SDK package decision
-  (TypeScript-first, expanded to Python + Go in +.
+  (TypeScript-first, expanded to Python and Go).
 - `packages/api-types/` for the Zod schemas that drive
   `openapi.json` generation; any schema change here propagates to
   all three SDKs at re-generation time.
 
-## Out of scope (today)
+## Current support boundaries
 
 - **LTS branches**. The SDKs don't carry long-term support
-  branches; only the latest MINOR receives patches. LTS for major
-  versions in active customer use is something we'll introduce when
-  customer breadth makes it worth the maintenance overhead.
-- **Public deprecation timeline doc**. Customer-facing
-  deprecation-window doc (e.g., `docs.driftstack.dev/sdk/deprecations`)
-  is a future surface; today the SDK CHANGELOGs are the source of
-  truth.
+  branches; only the latest MINOR receives patches.
+- **Deprecation notices**. The SDK CHANGELOGs and source-level
+  deprecation markers are the source of truth.
 - **Telemetry on deprecated-call usage**. Customer-side telemetry
-  that flags deprecated SDK call sites (so we know who's still on
-  the old code) is a future workstream.
+  for deprecated SDK call sites is not collected.

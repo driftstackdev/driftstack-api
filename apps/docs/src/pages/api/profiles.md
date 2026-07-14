@@ -295,9 +295,8 @@ state is not in the envelope.
 
 `source_profile_id` and `source_account_id` are informational only —
 they record where the file came from. Importing always mints a fresh
-id, into whatever account holds the calling key. The envelope is
-versioned so a future v2 (extending to driver state) stays
-back-compat.
+id, into whatever account holds the calling key. Consumers must honor
+the envelope version and reject versions they do not understand.
 
 ## Import
 

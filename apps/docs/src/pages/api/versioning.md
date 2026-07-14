@@ -6,8 +6,8 @@ description: Driftstack API versioning policy — additive vs breaking changes, 
 
 # API versioning strategy
 
-Versioning policy for the HTTP API surface (`/v1/*`, eventually
-`/v2/*`). Distinct from the SDK versioning policy at
+Versioning policy for the HTTP API surface (`/v1/*` and any later
+major prefix). Distinct from the SDK versioning policy at
 [`docs.driftstack.dev/sdk/versioning`](/sdk/versioning/): SDKs version
 independently of the API; this doc covers the API endpoint contract.
 
@@ -57,7 +57,7 @@ When a breaking change is necessary, the sequence is:
 
 1. **Announce the deprecation** in a `Deprecation` HTTP response
    header on every affected endpoint, with a `Sunset` header
-   pointing at the planned removal date (RFC 8594).
+   pointing at the declared removal date (RFC 8594).
 2. **Document the migration path** in the OpenAPI spec via
    `deprecated: true` on the affected operation / field, plus a
    `description` pointing at the replacement.
@@ -79,8 +79,8 @@ When a breaking change is necessary, the sequence is:
   redesign that needs different state-machine semantics).
 - Multiple breaking changes batch sensibly (don't spread breakage
   across many minor announcements when one batched cut is cleaner).
-- An entirely new architectural shape lands (e.g. switch from REST
-  semantics to RPC, or vice versa — extreme; we have no plans).
+- An entirely new architectural shape requires a distinct contract
+  (for example, REST semantics changing to RPC).
 
 It does NOT ship when:
 
@@ -89,9 +89,9 @@ It does NOT ship when:
 - A single field rename is desired. Announce, deprecate, support
   both for a sunset window, drop the old name.
 
-## Operating two majors simultaneously
+## Operating multiple majors simultaneously
 
-When `/v2/*` does ship, expect:
+When more than one major is active:
 
 - `/v1/*` continues to work for the announced sunset window
   (typically 12+ months).
@@ -104,15 +104,14 @@ When `/v2/*` does ship, expect:
 
 ## Per-resource versioning notes
 
-- **`/v1/sessions/*`** — session lifecycle is the most-likely
-  candidate for a future `/v2/*` cut. Customers already opt into
-  schema evolution via `purpose` + `archetype` fields ;
+- **`/v1/sessions/*`** — session-lifecycle shape changes require a
+  new major version. Customers already opt into
+  schema evolution via `purpose` + `archetype` fields;
   shape changes within the lifecycle (e.g. new states, new
   required fields) are breaking and trigger the deprecation cycle.
-- **`/v1/api-keys/*`** — scope enum is the breaking-change risk
-  (was the most recent expansion; future scopes may need
-  the deprecation cycle if the meaning of `account_owner`
-  narrows or splits further).
+- **`/v1/api-keys/*`** — scope enum is the breaking-change risk.
+  Scope changes use the deprecation cycle if the meaning of `account_owner`
+  narrows or splits further.
 - **`/v1/webhooks/*`** — `WebhookEventType` enum is closed. Adding
   a new event type IS technically breaking for strictly-typed
   consumers. We mitigate via the SDK passthrough pattern +
@@ -153,14 +152,10 @@ When `/v2/*` does ship, expect:
   to debug in logs, and matches industry convention (Stripe-style
   `/v1/`).
 - **Date-based versioning per-account** (Stripe's "API version
-  pinning") — useful at very high scale; overkill at our current
-  scale + customer count. Revisit post-launch if a deprecation
-  cycle proves painful.
+  pinning") — not offered. Driftstack uses explicit URL prefixes.
 - **Continuous breaking changes** — pre-1.0 SDKs ship them
-  (broke AccountTier; documented + intended). The HTTP API
-  itself is post-1.0 from the customer's perspective even though
-  Driftstack is pre-launch — customers pinning to `/v1/*` should
-  see additive-only changes.
+  under their published SemVer policy. Customers pinned to the
+  HTTP `/v1/*` contract receive additive-only changes.
 
 ## Related
 

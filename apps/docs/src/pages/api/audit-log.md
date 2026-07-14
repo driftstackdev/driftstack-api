@@ -92,9 +92,9 @@ reading — whenever the row is **cross-account-caused**: its
 `actor_account_id` records an account DIFFERENT from `account_id`.
 This covers a Driftstack staff member's `admin.support_note` /
 `admin.refund_recorded` note (landed on the _customer's_ log with
-the _staff_ member's IP), and any future action a team member
-performs on an owner's account via `X-Driftstack-Account` once
-that write path records `actor_account_id`. The redaction is
+the _staff_ member's IP), and team actions performed on an owner's
+account via `X-Driftstack-Account` when the write path records
+`actor_account_id`. The redaction is
 per-row and independent of the reader: an owner self-reading their
 OWN log still gets `null` on a cross-account-caused row, exactly
 as a team member reading the owner's log does.
@@ -273,9 +273,7 @@ JSON envelope:
   "account_id": "acc_abc",
   "row_count": 142,
   "truncated": false,
-  "data": [
-    /* up to 10,000 audit-log entries — same shape as the read endpoint */
-  ]
+  "data": [/* up to 10,000 audit-log entries — same shape as the read endpoint */]
 }
 ```
 

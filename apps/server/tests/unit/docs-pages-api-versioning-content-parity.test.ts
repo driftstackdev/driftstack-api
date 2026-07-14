@@ -40,7 +40,7 @@ describe('W772 docs /api/versioning content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Versioning policy for the HTTP API surface \(`\/v1\/\*`, eventually\s*\n?`\/v2\/\*`\)\. Distinct from the SDK versioning policy at/,
+      /Versioning policy for the HTTP API surface \(`\/v1\/\*` and any later\s*\n?major prefix\)\. Distinct from the SDK versioning policy at/,
     );
     expect(p).toMatch(
       /SDKs version\s*\n?independently of the API; this doc covers the API endpoint contract\./,
@@ -98,7 +98,7 @@ describe('W772 docs /api/versioning content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/1\. \*\*Announce the deprecation\*\* in a `Deprecation` HTTP response/);
-    expect(p).toMatch(/`Sunset` header\s*\n?\s+pointing at the planned removal date \(RFC 8594\)/);
+    expect(p).toMatch(/`Sunset` header\s*\n?\s+pointing at the declared removal date \(RFC 8594\)/);
     expect(p).toMatch(/2\. \*\*Document the migration path\*\* in the OpenAPI spec via/);
     expect(p).toMatch(/`deprecated: true`/);
     expect(p).toMatch(/3\. \*\*Email customers\*\* using the deprecated surface\./);
@@ -111,7 +111,7 @@ describe('W772 docs /api/versioning content parity', () => {
 
     expect(p).toMatch(/A breaking change can't be avoided/);
     expect(p).toMatch(/Multiple breaking changes batch sensibly/);
-    expect(p).toMatch(/An entirely new architectural shape lands/);
+    expect(p).toMatch(/An entirely new architectural shape requires a distinct contract/);
   });
 
   it("CRITICAL '/v2/* does NOT ship when' framing pinned — pre-1.0-restlessness + single-field-rename. The 2-counter set explains common false-justifications.", () => {
@@ -185,8 +185,9 @@ describe('W772 docs /api/versioning content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The HTTP API\s*\n?\s+itself is post-1\.0 from the customer's perspective even though\s*\n?\s+Driftstack is pre-launch — customers pinning to `\/v1\/\*` should\s*\n?\s+see additive-only changes\./,
+      /pre-1\.0 SDKs ship them\s*\n?\s+under their published SemVer policy\. Customers pinned to the\s*\n?\s+HTTP `\/v1\/\*` contract receive additive-only changes\./,
     );
+    expect(p).not.toMatch(/pre-launch|post-launch/);
   });
 
   it("CRITICAL URL-prefix vs header-versioning decision framing pinned. The 'URL-prefix is more discoverable, easier to debug in logs, and matches industry convention (Stripe-style /v1/)' wording is the canonical justification.", () => {

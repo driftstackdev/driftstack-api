@@ -36,12 +36,12 @@ describe('W510.B apps/marketing-site/src/pages/docs/api-versioning.astro content
     );
   });
 
-  it("Version-in-URL-not-header framing pinned: 'Every endpoint is prefixed with /v1/. The version lives in the URL, not in a header, so callers always know which contract they're hitting.' + 'A future v2 would live at /v2/ in parallel with v1 — old clients keep working while you migrate.' — pinned so the in-URL-not-header + parallel-v1/v2 commitments survive (drift to a header-based scheme would create marketing↔server divergence; drift to dropping the 'parallel' promise would force destructive migrations)", () => {
+  it("Version-in-URL-not-header framing pinned: 'Every endpoint is prefixed with /v1/. The version lives in the URL, not in a header, so callers always know which contract they're hitting.' + major prefixes run in parallel — pinned so the in-URL-not-header + parallel-major commitments survive (drift to a header-based scheme would create marketing↔server divergence; drift to dropping the 'parallel' promise would force destructive migrations)", () => {
     expect(body).toMatch(
       /Every endpoint is prefixed with <code>\/v1\/<\/code>\. The version\s*\n?\s*lives in the URL, not in a header, so callers always know\s*\n?\s*which contract they're hitting\./,
     );
     expect(body).toMatch(
-      /A future v2 would live at <code>\/v2\/<\/code> in parallel with\s*\n?\s*v1 — old clients keep working while you migrate\./,
+      /Breaking changes use a new major prefix such as <code>\/v2\/<\/code>\s*\n?\s*in parallel with v1, so old clients keep working during the\s*\n?\s*announced migration window\./,
     );
   });
 
@@ -93,9 +93,12 @@ describe('W510.B apps/marketing-site/src/pages/docs/api-versioning.astro content
     );
   });
 
-  it("Beta-endpoints framing pinned: 'No customer-facing endpoints are in beta today — the surface under /v1/ is stable per the breaking-change policy above. If we introduce a beta path in the future we'll document it explicitly on its own docs page and announce it in the changelog before it ships.' — pinned so the no-beta-today commitment + the future-beta announcement-path framing survive (drift to ambiguously claiming 'some endpoints are beta' would weaken the v1 stability guarantee)", () => {
+  it("Beta-endpoints framing pinned: 'No customer-facing endpoints are in beta today — the surface under /v1/ is stable per the breaking-change policy above.' + beta paths are labeled and announced before use — pinned so the no-beta-today commitment + beta announcement-path framing survive (drift to ambiguously claiming 'some endpoints are beta' would weaken the v1 stability guarantee)", () => {
     expect(body).toMatch(
       /No customer-facing endpoints are in beta today — the surface\s*\n?\s*under <code>\/v1\/<\/code> is stable per the breaking-change policy\s*\n?\s*above\./,
+    );
+    expect(body).toMatch(
+      /Any beta path is explicitly labeled on its docs page and\s*\n?\s*announced in the <a href="\/changelog\/">changelog<\/a> before use\./,
     );
   });
 
@@ -109,13 +112,13 @@ describe('W510.B apps/marketing-site/src/pages/docs/api-versioning.astro content
     );
   });
 
-  it('SDK semver independent of API + 0.x current pre-1.0 line + 1.x→v1 lockstep + 2.x→v2 lockstep pinned — pinned so the SDK-independent-semver + 0.x-current + future-1.x-still-v1 + 2.x-for-v2 commitments survive (drift to claiming SDK majors track API majors 1:1 today would create marketing↔SDK-versioning divergence)', () => {
+  it('SDK semver independent of API + 0.x current pre-1.0 line + supported 1.x→v1 + 2.x→v2 mapping pinned — pinned so the SDK-independent-semver + current compatibility rules survive (drift to claiming SDK majors track API majors 1:1 today would create marketing↔SDK-versioning divergence)', () => {
     expect(body).toMatch(
       /The official SDKs \(<a href="\/docs\/sdk-typescript\/">TypeScript<\/a>,\s*\n?\s*<a href="\/docs\/sdk-python\/">Python<\/a>,\s*\n?\s*<a href="\/docs\/sdk-go\/">Go<\/a>\) follow semver independently of\s*\n?\s*the API\./,
     );
     expect(body).toMatch(/SDK <code>0\.x<\/code> is the current pre-1\.0 line/);
     expect(body).toMatch(
-      /When the SDK reaches <code>1\.x<\/code>\s*\n?\s*it will continue to target API <code>\/v1\/<\/code>; an API\s*\n?\s*<code>\/v2\/<\/code> would mean an SDK <code>2\.x<\/code> in\s*\n?\s*lockstep\./,
+      /SDK majors and API majors are independent:\s*\n?\s*a supported SDK <code>1\.x<\/code> can still target API\s*\n?\s*<code>\/v1\/<\/code>, while an SDK targeting API <code>\/v2\/<\/code>\s*\n?\s*uses SDK <code>2\.x<\/code>\./,
     );
     for (const path of ['/changelog', '/docs/sdk-typescript', '/docs/sdk-python', '/docs/sdk-go']) {
       expect(body).not.toContain(`href="${path}"`);

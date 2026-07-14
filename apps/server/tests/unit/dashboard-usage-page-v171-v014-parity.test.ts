@@ -158,11 +158,12 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     );
   });
 
-  it("CRITICAL all-zero state framing pinned. The 'Empty-data state — let the user know real data is loaded but everything is zero (writers not yet wired)' inline comment + 'Live usage loaded. No activity in the current period yet — counts will populate as you run sessions.' banner is what differentiates 'fetch worked but empty' from 'fetch failed'.", () => {
+  it('CRITICAL all-zero state framing distinguishes a successful empty response from fetch failure.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\/\/ Empty-data state — let the user know real data is loaded/);
-    expect(p).toMatch(/\/\/ but everything is zero \(writers not yet wired\)\./);
+    expect(p).toMatch(
+      /\/\/ Empty-data state — real data loaded, with no activity in this period\./,
+    );
     expect(p).toMatch(
       /'Live usage loaded\. No activity in the current period yet — counts will populate as you run sessions\.'/,
     );

@@ -229,16 +229,15 @@ on the marketing site.
 **Why:** infrastructure operation and abuse detection.
 
 **Legal basis:** Article 6(1)(f) — legitimate interest in operating
-the site. Where consent is required (e.g. for non-essential
-analytics introduced in a future revision), Driftstack will collect
-consent before processing and update this Section.
+the site. Driftstack does not deploy non-essential analytics without
+first collecting the required consent and updating this Section.
 
 **Cookies:** Driftstack uses strictly-necessary cookies on the
 marketing site (session-id for signup flow, CSRF token). Strictly-
 necessary cookies do not require consent under Article 5(3) of
-Directive 2002/58/EC (the ePrivacy Directive). If Driftstack adds
-analytics or marketing cookies in a future revision, this Privacy
-Policy will be updated and a cookie-consent mechanism deployed.
+Directive 2002/58/EC (the ePrivacy Directive). Non-essential analytics
+or marketing cookies require an updated Privacy Policy and an active
+cookie-consent mechanism before deployment.
 
 ## 4. Special Category Data
 

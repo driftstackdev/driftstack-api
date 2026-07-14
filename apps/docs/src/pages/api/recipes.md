@@ -40,9 +40,8 @@ flattened intent_log. The list endpoint omits the intent array for
 payload weight; fetch a single recipe with `GET /v1/recipes/{id}`
 to get its public `intent_log`. Sensitive `type` steps retain their
 selector, order, and `sensitive: true` marker but omit `value`. The
-exact value remains inside the server's encrypted recipe payload for
-future server-side execution; it is never exposed to an ordinary
-`read`-scope caller.
+exact value remains inside the server's encrypted recipe payload and
+is never exposed to an ordinary `read`-scope caller.
 
 ## Create
 
