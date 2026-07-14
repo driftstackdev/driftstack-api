@@ -100,13 +100,16 @@ describe('W511.C apps/marketing-site/src/pages/docs/sdk-python.astro content par
     );
   });
 
-  it('6-related-doc cluster: /api-reference + /docs/sdk-python-crypto-orders + /docs/sdk-typescript + /docs/webhooks + /docs/cost-monitoring + /docs/error-codes — pinned so the 6-related-doc navigation surface stays complete (drift to dropping /docs/error-codes would orphan the RFC-7807-type cross-reference from the SDK exception subclass mapping)', () => {
-    expect(body).toMatch(/<a href="\/api-reference">Full API reference<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/sdk-python-crypto-orders">Crypto orders<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/sdk-typescript">TypeScript SDK<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/webhooks">Webhooks<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/cost-monitoring">Cost monitoring<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/error-codes">Error codes<\/a>/);
+  it('6-related-doc cluster pins canonical API, crypto, TypeScript, webhook, cost and error-code destinations so every next-step remains discoverable', () => {
+    expect(body).toMatch(/<a href="\/api-reference\/">Full API reference<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sdk-python-crypto-orders\/">Crypto orders<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sdk-typescript\/">TypeScript SDK<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/webhooks\/">Webhooks<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/cost-monitoring\/">Cost monitoring<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/error-codes\/">Error codes<\/a>/);
+    expect(body).not.toMatch(
+      /href="\/(?:api-reference|docs\/sdk-python-crypto-orders|docs\/sdk-typescript|docs\/webhooks|docs\/cost-monitoring|docs\/error-codes)"/,
+    );
   });
 
   it("developers@driftstack.dev + 'within one business day' SLA pinned — pinned so the developer-channel routing + 1-business-day response commitment stays consistent across SDK pages (drift to a different SLA would create cross-page divergence)", () => {
