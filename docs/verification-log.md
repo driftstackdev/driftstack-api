@@ -25904,3 +25904,32 @@ Verification:
   source-parity suites pass with 229/229 tests;
 - strict server source/test TypeScript, targeted lint/format, diff, and hooks
   pass.
+
+## V-607 — OAuth PKCE cookies support parallel browser flows
+
+**Date:** 2026-07-14
+
+Replaced the single shared Google/GitHub PKCE cookie name with a fixed-length,
+token-safe name derived from each signed state nonce. Starting OAuth in a second
+tab or window therefore no longer overwrites the first flow's verifier. After
+state verification, the callback selects only that nonce's cookie, validates
+the existing HMAC-protected verifier/nonce value, and clears only the consumed
+flow; other live flows retain their independent five-minute cookies.
+
+The security attributes and trust order are unchanged: the callback verifies
+the signed, expiring state before deriving the cookie selector; the verifier
+value remains HttpOnly, Secure, SameSite=Lax, path-restricted, and HMAC-bound to
+the nonce. Hashing the nonce for the cookie-name suffix also keeps the selector
+safe and bounded if another server-side state producer is added later.
+
+Verification:
+
+- a two-start/two-callback integration test combines Google and GitHub cookies
+  in one browser jar and proves both flows pass binding independently;
+- each callback expires only its own cookie name and leaves the sibling flow
+  untouched;
+- wrong scoped-cookie names, a different flow's valid signed value forged under
+  the expected name, and ordinary missing/tampered inputs fail closed;
+- the complete OAuth-client route/state/provider/service/content gate passes
+  with 15 files and 164/164 tests, plus strict server source/test TypeScript,
+  targeted lint/format, diff, and hooks.

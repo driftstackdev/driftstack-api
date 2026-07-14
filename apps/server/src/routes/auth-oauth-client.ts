@@ -26,7 +26,7 @@
 // to the SPA which then fetches /v1/auth/oauth-client/callback where
 // the cookie IS in scope.
 
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { buildAuthorizeUrl, type OAuthClientProvider } from '../lib/oauth-client-providers.js';
@@ -41,7 +41,7 @@ import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { Logger } from '../lib/logger.js';
 
-const COOKIE_NAME = 'ds_oauth_pkce';
+const COOKIE_NAME_PREFIX = 'ds_oauth_pkce_';
 const COOKIE_TTL_SECONDS = 300; // 5 min — matches state TTL
 
 const StartBodySchema = z.object({
@@ -203,7 +203,7 @@ export function registerOAuthClientRoutes(
       const { provider, redirectTo, nonce: stateNonce } = stateRes.payload;
 
       // Read + verify the PKCE verifier cookie.
-      const cookie = readPkceCookie(req, deps.signingSecret);
+      const cookie = readPkceCookie(req, deps.signingSecret, stateNonce);
       if (cookie === null) {
         throw new BadRequestError('PKCE verifier cookie missing or invalid.');
       }
@@ -215,7 +215,7 @@ export function registerOAuthClientRoutes(
         throw new BadRequestError('State/cookie binding mismatch.');
       }
       const verifier = cookie.verifier;
-      clearPkceCookie(reply);
+      clearPkceCookie(reply, stateNonce);
 
       const creds = deps.providers[provider];
       if (!creds) {
@@ -385,28 +385,31 @@ function setPkceCookie(reply: FastifyReply, verifier: string, nonce: string, sec
   // different nonce.
   const sig = createHmac('sha256', secret).update(`${verifier}.${nonce}`).digest('base64url');
   const value = `${verifier}.${nonce}.${sig}`;
+  const cookieName = pkceCookieName(nonce);
   reply.header(
     'set-cookie',
-    `${COOKIE_NAME}=${value}; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=${COOKIE_TTL_SECONDS.toString()}`,
+    `${cookieName}=${value}; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=${COOKIE_TTL_SECONDS.toString()}`,
   );
 }
 
-function clearPkceCookie(reply: FastifyReply): void {
+function clearPkceCookie(reply: FastifyReply, nonce: string): void {
   reply.header(
     'set-cookie',
-    `${COOKIE_NAME}=; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+    `${pkceCookieName(nonce)}=; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
   );
 }
 
 function readPkceCookie(
   req: FastifyRequest,
   secret: string,
+  expectedNonce: string,
 ): { verifier: string; nonce: string } | null {
   const cookieHeader = req.headers.cookie;
   if (typeof cookieHeader !== 'string') return null;
+  const expectedName = pkceCookieName(expectedNonce);
   for (const part of cookieHeader.split(';')) {
     const [k, ...rest] = part.trim().split('=');
-    if (k === COOKIE_NAME) {
+    if (k === expectedName) {
       const value = rest.join('=');
       // base64url verifier/sig and hex nonce contain no '.', so a 3-way split
       // is unambiguous.
@@ -425,4 +428,14 @@ function readPkceCookie(
     }
   }
   return null;
+}
+
+/**
+ * Give each in-flight browser flow an independent cookie. Hashing the signed
+ * nonce keeps the cookie name fixed-length and token-safe even if another
+ * server-side state producer is added later. The nonce remains inside the
+ * HMAC-protected value and is compared with the verified state on callback.
+ */
+function pkceCookieName(nonce: string): string {
+  return `${COOKIE_NAME_PREFIX}${createHash('sha256').update(nonce).digest('base64url')}`;
 }

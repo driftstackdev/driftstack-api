@@ -1,27 +1,25 @@
 // V-667.C — integration tests for the OAuth-client routes.
 //
 //   POST /v1/auth/oauth-client/start          — issue authorize URL
-//   GET  /v1/auth/oauth-client/callback       — IDP redirect target
-//                                                (not exercised here —
-//                                                the IDP-side token-
-//                                                exchange would need a
-//                                                live IDP or a stub,
-//                                                covered separately by
-//                                                lib-oauth-client-
-//                                                exchange unit tests)
+//   GET  /v1/auth/oauth-client/callback       — state/cookie boundary
+//                                                exercised with a stubbed
+//                                                token exchange; provider
+//                                                protocol behavior is covered
+//                                                by the exchange unit tests
 //   POST /v1/auth/oauth-client/confirm-merge  — Verdict-1 completion
 //
 // The fixture registers the routes only when `opts.oauthClient` is
 // passed; this test exercises the registered-route surface. Tests that
 // pass nothing should continue to see 404 (route absent), matching
 // prod-pre-env-wire posture.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 
 afterEach(async () => {
   if (fx) await fx.cleanup();
+  vi.unstubAllGlobals();
 });
 
 const headers = { 'content-type': 'application/json' };
@@ -76,8 +74,9 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
     expect(res.statusCode).toBe(200);
     const setCookie = res.headers['set-cookie'];
     const cookies = Array.isArray(setCookie) ? setCookie : [setCookie ?? ''];
-    const pkce = cookies.find((c) => typeof c === 'string' && c.startsWith('ds_oauth_pkce='));
+    const pkce = cookies.find((c) => typeof c === 'string' && c.startsWith('ds_oauth_pkce_'));
     expect(pkce).toBeDefined();
+    expect(String(pkce).split('=')[0]).toMatch(/^ds_oauth_pkce_[A-Za-z0-9_-]{43}$/);
     expect(pkce).toMatch(/HttpOnly/i);
     expect(pkce).toMatch(/Path=\/v1\/auth\/oauth-client/);
     // D2 — cookie body is "<verifier>.<nonce>.<base64url(hmac)>"; all three non-empty.
@@ -292,40 +291,94 @@ describe('GET /v1/auth/oauth-client/callback — Path B SPA exchange', () => {
 });
 
 describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
-  async function startFlow(f: TestAppFixture): Promise<{ state: string; cookie: string }> {
+  async function startFlow(
+    f: TestAppFixture,
+    provider: 'google' | 'github' = 'github',
+  ): Promise<{ state: string; cookie: string; cookieName: string; cookieValue: string }> {
     const res = await f.app.inject({
       method: 'POST',
       url: '/v1/auth/oauth-client/start',
       headers,
-      payload: { provider: 'github', redirect_to: 'https://app.driftstack.test/dashboard' },
+      payload: { provider, redirect_to: 'https://app.driftstack.test/dashboard' },
     });
     const state = new URL(res.json<{ authorize_url: string }>().authorize_url).searchParams.get(
       'state',
     );
     const setCookie = res.headers['set-cookie'];
     const raw = (Array.isArray(setCookie) ? setCookie : [setCookie ?? '']).find((c) =>
-      String(c).startsWith('ds_oauth_pkce='),
+      String(c).startsWith('ds_oauth_pkce_'),
     );
-    return { state: state ?? '', cookie: String(raw).split(';')[0] ?? '' };
+    const cookie = String(raw).split(';')[0] ?? '';
+    const separator = cookie.indexOf('=');
+    return {
+      state: state ?? '',
+      cookie,
+      cookieName: cookie.slice(0, separator),
+      cookieValue: cookie.slice(separator + 1),
+    };
   }
 
-  it("rejects a valid state paired with a DIFFERENT flow's cookie → 400 binding mismatch (before any IDP exchange)", async () => {
+  function rejectTokenExchange(): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'invalid_grant' }), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+  }
+
+  it("rejects a valid state when only a DIFFERENT flow's scoped cookie is present", async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
     const a = await startFlow(fx);
     const b = await startFlow(fx);
-    // Attacker feeds flow B's (valid, signed) state with flow A's cookie.
+    // Flow B selects only B's nonce-scoped cookie; A's valid cookie is unrelated.
     const res = await fx.app.inject({
       method: 'GET',
       url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(b.state)}`,
       headers: { cookie: a.cookie },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail?: string }>().detail).toContain(
+      'PKCE verifier cookie missing or invalid',
+    );
+  });
+
+  it("rejects another flow's valid signed value forged under the expected cookie name", async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const a = await startFlow(fx);
+    const b = await startFlow(fx);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(b.state)}`,
+      headers: { cookie: `${b.cookieName}=${a.cookieValue}` },
+    });
+    expect(res.statusCode).toBe(400);
     expect(res.json<{ detail?: string }>().detail).toContain('State/cookie binding mismatch');
+  });
+
+  it('rejects a tampered value under the correct nonce-scoped cookie name', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const flow = await startFlow(fx);
+    const last = flow.cookieValue.at(-1);
+    const tampered = `${flow.cookieValue.slice(0, -1)}${last === 'A' ? 'B' : 'A'}`;
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
+      headers: { cookie: `${flow.cookieName}=${tampered}` },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail?: string }>().detail).toContain(
+      'PKCE verifier cookie missing or invalid',
+    );
   });
 
   it('a state+cookie from the SAME flow passes the binding check (fails later, not on the binding)', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
     const a = await startFlow(fx);
+    rejectTokenExchange();
     const res = await fx.app.inject({
       method: 'GET',
       url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(a.state)}`,
@@ -334,5 +387,30 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
     // The nonce binding matches, so we get PAST it (the flow then fails at the
     // IDP token exchange, which is not exercised here) — never the mismatch 400.
     expect(res.json<{ detail?: string }>().detail ?? '').not.toContain('State/cookie binding');
+  });
+
+  it('keeps two browser-tab flows independent and clears only the callback flow', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const google = await startFlow(fx, 'google');
+    const github = await startFlow(fx, 'github');
+    expect(google.cookieName).not.toBe(github.cookieName);
+    rejectTokenExchange();
+    const cookieJar = `${google.cookie}; ${github.cookie}`;
+
+    for (const flow of [google, github]) {
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
+        headers: { cookie: cookieJar },
+      });
+      expect(res.statusCode).toBe(400);
+      const detail = res.json<{ detail?: string }>().detail ?? '';
+      expect(detail).not.toContain('PKCE verifier cookie');
+      expect(detail).not.toContain('State/cookie binding');
+      const cleared = String(res.headers['set-cookie'] ?? '');
+      expect(cleared).toContain(`${flow.cookieName}=;`);
+      const other = flow === google ? github : google;
+      expect(cleared).not.toContain(`${other.cookieName}=;`);
+    }
   });
 });

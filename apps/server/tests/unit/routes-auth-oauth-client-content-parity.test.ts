@@ -41,11 +41,11 @@ describe('routes/auth-oauth-client content parity', () => {
     );
   });
 
-  it("PKCE cookie security framing pinned: 'HTTP-only secure cookie keyed on the state nonce. The cookie is HMAC-signed via the same OAUTH_CLIENT_STATE_SIGNING_SECRET used to sign the state JWT; tampering is detected. Cookie path is restricted to /v1/auth/oauth-client and 5-min Max-Age matches the state TTL. The IDP-direct redirect path (/v1/auth/oauth/:provider/callback) doesn't need the cookie — it just 302s to the SPA which then fetches /v1/auth/oauth-client/callback where the cookie IS in scope.' + COOKIE_NAME = 'ds_oauth_pkce' + COOKIE_TTL_SECONDS = 300 — pinned so the HMAC-signed-cookie + 5-min-TTL + restricted-Path + cookie-scope-match contract all stay documented", () => {
+  it('PKCE cookie security framing pinned: HTTP-only secure cookie keyed on the state nonce, HMAC-signed, restricted to /v1/auth/oauth-client, and five-minute lifetime', () => {
     expect(body).toMatch(
       /\/\/ PKCE verifier storage: HTTP-only secure cookie keyed on the state\s*\n?\s*\/\/ nonce\. The cookie is HMAC-signed via the same OAUTH_CLIENT_STATE_\s*\n?\s*\/\/ SIGNING_SECRET used to sign the state JWT; tampering is detected\./,
     );
-    expect(body).toMatch(/const COOKIE_NAME = 'ds_oauth_pkce';/);
+    expect(body).toMatch(/const COOKIE_NAME_PREFIX = 'ds_oauth_pkce_';/);
     expect(body).toMatch(/const COOKIE_TTL_SECONDS = 300;/);
   });
 
@@ -107,12 +107,23 @@ describe('routes/auth-oauth-client content parity', () => {
     );
   });
 
-  it('setPkceCookie 5-attribute framing pinned: Path=/v1/auth/oauth-client + HttpOnly + Secure + SameSite=Lax + Max-Age=300. Drift to dropping HttpOnly would expose the verifier to JS XSS; dropping Secure would let plaintext-HTTP leak the verifier; dropping SameSite=Lax would invite CSRF carries', () => {
+  it('nonce-scoped cookies preserve independent browser flows and the five security attributes', () => {
     expect(body).toMatch(
-      /`\$\{COOKIE_NAME\}=\$\{value\}; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=\$\{COOKIE_TTL_SECONDS\.toString\(\)\}`/,
+      /function pkceCookieName\(nonce: string\): string \{\s*\n?\s*return `\$\{COOKIE_NAME_PREFIX\}\$\{createHash\('sha256'\)\.update\(nonce\)\.digest\('base64url'\)\}`;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/const cookieName = pkceCookieName\(nonce\);/);
+    expect(body).toMatch(
+      /`\$\{cookieName\}=\$\{value\}; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=\$\{COOKIE_TTL_SECONDS\.toString\(\)\}`/,
     );
     expect(body).toMatch(
-      /`\$\{COOKIE_NAME\}=; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=0`/,
+      /`\$\{pkceCookieName\(nonce\)\}=; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=0`/,
+    );
+    expect(body).toMatch(/const cookie = readPkceCookie\(req, deps\.signingSecret, stateNonce\);/);
+    expect(body).toMatch(
+      /const expectedName = pkceCookieName\(expectedNonce\);[\s\S]*?if \(k === expectedName\)/,
+    );
+    expect(body).toMatch(
+      /const verifier = cookie\.verifier;\s*\n?\s*clearPkceCookie\(reply, stateNonce\);/,
     );
   });
 
