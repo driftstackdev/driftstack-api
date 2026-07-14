@@ -422,6 +422,12 @@ export class AgentSessionsResource {
    * here so the re-planned action dispatches instead of halting again. The SDK
    * maps each entry to the wire's snake_case `{category, matched_text}`.
    *
+   * `idempotencyKey` (strongly recommended) identifies this logical turn.
+   * Reuse it when retrying after a lost/ambiguous stream so the server replays
+   * the durable terminal result instead of executing browser actions twice.
+   * Use a new key whenever the message, session, approvals, or explicit BYOK
+   * key changes.
+   *
    * A closed session returns a 409 ConflictError; the chat UI
    * should prompt the customer to start a new agent session.
    */
@@ -430,6 +436,7 @@ export class AgentSessionsResource {
     userMessage: string,
     opts?: {
       byokApiKey?: string;
+      idempotencyKey?: string;
       /** Absolute transport backstop for the heartbeat-backed turn stream.
        * Defaults to 50 minutes; this is not an idle timeout. */
       timeoutMs?: number;
@@ -466,6 +473,7 @@ export class AgentSessionsResource {
       // `opts != nil && opts.ByokAPIKey != ""` shape.
       headers: {
         accept: 'text/event-stream',
+        ...(opts?.idempotencyKey !== undefined ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
         ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
           ? { 'x-byok-anthropic-api-key': opts.byokApiKey }
           : {}),

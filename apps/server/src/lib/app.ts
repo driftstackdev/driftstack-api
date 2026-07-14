@@ -55,6 +55,7 @@ import type { BillingService } from '../services/billing.js';
 import type { SessionEgressService } from '../services/session-egress.js';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
+import type { AgentTurnReceiptsRepo } from '../services/agent-turn-receipts.js';
 import type { RecipesRepo } from '../services/recipes.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
@@ -398,6 +399,8 @@ export interface AppDeps {
    * create/close paths. When agentRuntime is wired this MUST also be set.
    */
   agentSessionsRepo?: AgentSessionsRepo;
+  /** Durable account-scoped receipts for at-most-once agent message turns. */
+  agentTurnReceiptsRepo?: AgentTurnReceiptsRepo;
   /**
    * Q.1.c — in-memory per-session plaintext BYOK key cache.
    * Wired alongside `agentRuntime`. Route layer stashes decrypted
@@ -1416,6 +1419,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAgentSessionsRoutes(app, {
       runtime: deps.agentRuntime,
       sessions: deps.agentSessionsRepo,
+      ...(deps.agentTurnReceiptsRepo !== undefined
+        ? { agentTurnReceipts: deps.agentTurnReceiptsRepo }
+        : {}),
       // W650/A3-W1254 — agent-session pageState read (GUI loading-bar/overlay).
       // Present only when the fleet control plane wired the store.
       ...(deps.sessionPageStateStore !== undefined

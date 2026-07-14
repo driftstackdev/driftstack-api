@@ -161,6 +161,7 @@ class AgentSessionsResource:
         user_message: str,
         *,
         byok_api_key: str | None = None,
+        idempotency_key: str | None = None,
         approve_consequential_actions: builtins.list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Run one decompose→execute turn against the agent session.
@@ -172,13 +173,22 @@ class AgentSessionsResource:
         forwarded as the ``x-byok-anthropic-api-key`` request header so
         callers don't have to construct it by hand. NEVER logged by
         the SDK; arrives over TLS to the control plane.
+
+        ``idempotency_key`` (strongly recommended) identifies this logical
+        turn. Reuse it after a lost/ambiguous stream so the server replays the
+        durable terminal response instead of executing browser actions twice.
+        Use a new key when the session, message, approvals, or BYOK key changes.
         """
         # Skip the header when byok_api_key is None OR empty. Empty
         # would send `x-byok-anthropic-api-key:` on the wire — the
         # server normalises that to absent (slice 105 fix), but skipping
         # client-side saves the round-trip header and matches the Go
         # SDK's `opts.ByokAPIKey != ""` shape.
-        extra_headers = {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
+        extra_headers: dict[str, str] = {}
+        if byok_api_key:
+            extra_headers["x-byok-anthropic-api-key"] = byok_api_key
+        if idempotency_key is not None:
+            extra_headers["Idempotency-Key"] = idempotency_key
         body: dict[str, Any] = {"user_message": user_message}
         # W443/W445 — re-send approved consequential actions (each
         # {"category", "matched_text"}) so the executor skips the confirmation
@@ -193,7 +203,7 @@ class AgentSessionsResource:
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body(body),
-            extra_headers=extra_headers,
+            extra_headers=extra_headers or None,
         )
 
     def close(self, agent_session_id: str) -> None:
@@ -414,6 +424,7 @@ class AsyncAgentSessionsResource:
         user_message: str,
         *,
         byok_api_key: str | None = None,
+        idempotency_key: str | None = None,
         approve_consequential_actions: builtins.list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Async counterpart to AgentSessionsResource.message.
@@ -425,13 +436,20 @@ class AsyncAgentSessionsResource:
         forwarded as the ``x-byok-anthropic-api-key`` request header so
         callers don't have to construct it by hand. NEVER logged by
         the SDK; arrives over TLS to the control plane.
+
+        ``idempotency_key`` has the same durable logical-turn retry semantics
+        as the synchronous resource.
         """
         # Skip the header when byok_api_key is None OR empty. Empty
         # would send `x-byok-anthropic-api-key:` on the wire — the
         # server normalises that to absent (slice 105 fix), but skipping
         # client-side saves the round-trip header and matches the Go
         # SDK's `opts.ByokAPIKey != ""` shape.
-        extra_headers = {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
+        extra_headers: dict[str, str] = {}
+        if byok_api_key:
+            extra_headers["x-byok-anthropic-api-key"] = byok_api_key
+        if idempotency_key is not None:
+            extra_headers["Idempotency-Key"] = idempotency_key
         body: dict[str, Any] = {"user_message": user_message}
         # W443/W445 — re-send approved consequential actions (each
         # {"category", "matched_text"}) so the executor skips the confirmation
@@ -445,7 +463,7 @@ class AsyncAgentSessionsResource:
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body(body),
-            extra_headers=extra_headers,
+            extra_headers=extra_headers or None,
         )
 
     async def close(self, agent_session_id: str) -> None:

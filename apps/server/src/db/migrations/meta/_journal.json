@@ -722,6 +722,13 @@
       "when": 1780371600000,
       "tag": "0102_accounts_canonical_email_provider_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1783988649000,
+      "tag": "0103_agent_turn_idempotency_receipts",
+      "breakpoints": true
     }
   ]
 }

@@ -129,6 +129,12 @@ Retryable errors by default: `TransportError` (network / timeout / parse) + `Rat
 
 > **Idempotency on retried writes.** A `TransportError` can mean a request the server already processed but whose response was lost, so an automatically-retried create or charge can execute twice. Pass an `idempotency_key` on non-idempotent calls — e.g. `client.agent_sessions.create(body, idempotency_key="…")` — and the server dedupes the retry onto the first request (Stripe-pattern `(account_id, idempotency_key)` uniqueness).
 
+For a streamed browser turn, pass
+`client.agent_sessions.message(id, text, idempotency_key="…")` and reuse the
+key only for an ambiguous retry of the exact same
+session/message/approvals/BYOK request. A completed turn replays without
+executing its browser actions again; changed or still-running turns fail closed.
+
 ## Webhook signature verification
 
 Stripe-style HMAC-SHA256 over `<unix_seconds>.<raw_body>`. Constant-time comparison via `hmac.compare_digest`. 5-minute default tolerance.

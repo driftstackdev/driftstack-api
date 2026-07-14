@@ -25,6 +25,7 @@ import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomp
 import type { DecomposeUsage } from '../../../src/services/agent-decomposer.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
+import { InMemoryAgentTurnReceiptsRepo } from '../../../src/services/agent-turn-receipts.js';
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
 import { BundledTurnConcurrencyLimiter } from '../../../src/services/bundled-turn-concurrency.js';
 import {
@@ -321,6 +322,8 @@ export interface TestAppOptions {
    * (matches prod posture until founder flips the LLM key path on).
    */
   enableAgentRuntime?: boolean;
+  /** Test the fail-closed deployment posture when turn-receipt storage is absent. */
+  disableAgentTurnReceipts?: boolean;
   /**
    * Founder directive #63 — inject a CP-side live proxy connectivity probe so the
    * pre-launch gate runs in tests. Omitted → no probe wired → the gate is a no-op
@@ -460,6 +463,8 @@ export interface TestAppFixture {
    *  otherwise). Lets a test set/expire a session's gui_control_key
    *  directly via `setGuiControlKey(...)`. */
   agentSessionsRepo?: InMemoryAgentSessionsRepo;
+  /** Durable message-turn receipt double wired with the agent runtime. */
+  agentTurnReceiptsRepo?: InMemoryAgentTurnReceiptsRepo;
   /** V-295a — exposed so tests can assert incident state. */
   incidentsRepo: InMemoryIncidentsRepo;
   /** V-295c3 — exposed so tests can assert subscriber state. */
@@ -951,6 +956,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // expired-key path 401s) without time-flaky waits. Stays undefined
   // when the runtime isn't wired.
   let agentSessionsRepoForTests: InMemoryAgentSessionsRepo | undefined;
+  let agentTurnReceiptsRepoForTests: InMemoryAgentTurnReceiptsRepo | undefined;
   // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock for tests.
   const pairModeLock = new InMemoryPairModeTakeoverLock();
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker for tests.
@@ -1476,6 +1482,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();
           agentSessionsRepoForTests = agentSessionsRepo;
+          const agentTurnReceiptsRepo =
+            opts.disableAgentTurnReceipts === true
+              ? undefined
+              : new InMemoryAgentTurnReceiptsRepo();
+          agentTurnReceiptsRepoForTests = agentTurnReceiptsRepo;
           // v2-#18 — optional capturing usage recorder. When the test
           // passes `captureAgentDecomposerUsage: true`, AgentRuntime
           // wires a recorder that appends each .record() call into the
@@ -1504,7 +1515,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
                 }
               : {}),
           });
-          return { agentRuntime, agentSessionsRepo, agentSessionEventBus };
+          return {
+            agentRuntime,
+            agentSessionsRepo,
+            ...(agentTurnReceiptsRepo !== undefined ? { agentTurnReceiptsRepo } : {}),
+            agentSessionEventBus,
+          };
         })()
       : {}),
     // Founder safeguard (2026-06-24) — per-account in-flight upload cap override
@@ -1632,6 +1648,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     pairModeHeartbeatTracker,
     ...(agentSessionsRepoForTests !== undefined
       ? { agentSessionsRepo: agentSessionsRepoForTests }
+      : {}),
+    ...(agentTurnReceiptsRepoForTests !== undefined
+      ? { agentTurnReceiptsRepo: agentTurnReceiptsRepoForTests }
       : {}),
     incidentsRepo,
     statusSubscribersRepo,

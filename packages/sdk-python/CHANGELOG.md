@@ -8,6 +8,10 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Durable agent-turn idempotency** — sync and async
+  `client.agent_sessions.message(..., idempotency_key="…")` forward one
+  caller-reusable `Idempotency-Key` beside SSE/BYOK headers so an ambiguous
+  retry cannot execute browser actions twice.
 - **`client.team.list_owners()`** plus the async mirror — typed access
   to `GET /v1/team/owners` for owner workspaces the calling account has
   joined. Returns `TeamOwnersList` / `TeamOwner` and requires broad

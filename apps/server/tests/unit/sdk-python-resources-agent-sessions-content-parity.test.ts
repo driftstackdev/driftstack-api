@@ -68,7 +68,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
       /def iterate\(self, \*, limit: int \| None = None\) -> Iterator\[dict\[str, Any\]\]:/,
     );
     expect(body).toMatch(
-      /def message\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*user_message: str,\s*\n?\s*\*,\s*\n?\s*byok_api_key: str \| None = None,\s*\n?\s*approve_consequential_actions: builtins\.list\[dict\[str, str\]\] \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
+      /def message\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*user_message: str,\s*\n?\s*\*,\s*\n?\s*byok_api_key: str \| None = None,\s*\n?\s*idempotency_key: str \| None = None,\s*\n?\s*approve_consequential_actions: builtins\.list\[dict\[str, str\]\] \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/def close\(self, agent_session_id: str\) -> None:/);
     expect(body).toMatch(
@@ -127,8 +127,15 @@ describe('sdk-python resources/agent_sessions content parity', () => {
       /# Skip the header when byok_api_key is None OR empty\. Empty\s*\n?\s*# would send `x-byok-anthropic-api-key:` on the wire — the\s*\n?\s*# server normalises that to absent \(slice 105 fix\), but skipping\s*\n?\s*# client-side saves the round-trip header and matches the Go\s*\n?\s*# SDK's `opts\.ByokAPIKey != ""` shape\./,
     );
     expect(body).toMatch(
-      /extra_headers = (?:\(\s*\n?\s*)?\{"x-byok-anthropic-api-key": byok_api_key\} if byok_api_key else None(?:\s*\n?\s*\))?/,
+      /if byok_api_key:\s*\n?\s*extra_headers\["x-byok-anthropic-api-key"\] = byok_api_key/,
     );
+  });
+
+  it('sync + async message expose one durable idempotency_key and merge it with BYOK headers', () => {
+    expect(body.match(/idempotency_key: str \| None = None,/g)).toHaveLength(4);
+    expect(body).toMatch(/Reuse it after a lost\/ambiguous stream/);
+    expect(body.match(/extra_headers\["Idempotency-Key"\] = idempotency_key/g)).toHaveLength(2);
+    expect(body.match(/extra_headers=extra_headers or None,/g)).toHaveLength(2);
   });
 
   it("takeover/handback pair-mode state-machine framing pinned: 'ai-driving → takeover-pending (or takeover-queued if mid-decompose)' + 'human-driving → handback-pending (or handback-queued if mid-decompose)' + PairModeStateInvalidTransitionError (409) catalog + ConflictError (409) for non-pair mode. Drift would diverge from the cross-SDK state-machine contract", () => {

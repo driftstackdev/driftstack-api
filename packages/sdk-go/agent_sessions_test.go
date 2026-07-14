@@ -154,6 +154,35 @@ func TestAgentSessions_Message_Plan(t *testing.T) {
 	}
 }
 
+func TestAgentSessions_Message_IdempotencyKeyBesideBYOK(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Idempotency-Key"); got != "logical-turn-go-1" {
+			t.Errorf("Idempotency-Key=%q want logical-turn-go-1", got)
+		}
+		if got := r.Header.Get("x-byok-anthropic-api-key"); got != "sk-ant-test-byok" {
+			t.Errorf("x-byok-anthropic-api-key=%q want sk-ant-test-byok", got)
+		}
+		writeAgentMessageSSE(t, w, http.StatusOK, map[string]any{
+			"kind":                "clarify",
+			"session":             agentSessionEnvelope,
+			"clarifying_question": "?",
+		})
+	})
+	_, err := client.AgentSessions.Message(
+		context.Background(),
+		"agt_1",
+		"submit once",
+		&MessageOptions{
+			ByokAPIKey:     "sk-ant-test-byok",
+			IdempotencyKey: "logical-turn-go-1",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAgentSessions_Message_StreamProblemAndMalformedTerminal(t *testing.T) {
 	t.Run("typed problem", func(t *testing.T) {
 		_, client := newServer(t, func(w http.ResponseWriter, _ *http.Request) {

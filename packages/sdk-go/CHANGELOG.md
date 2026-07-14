@@ -8,6 +8,9 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Durable agent-turn idempotency** — `MessageOptions.IdempotencyKey`
+  forwards one caller-reusable `Idempotency-Key` beside SSE/BYOK headers so an
+  ambiguous retry cannot execute browser actions twice.
 - **`client.Team.ListOwners(ctx)`** — typed access to
   `GET /v1/team/owners` for owner workspaces the calling account has
   joined. Returns `TeamOwnersList` / `TeamOwner` and requires broad

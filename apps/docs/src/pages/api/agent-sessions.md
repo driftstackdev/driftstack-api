@@ -186,6 +186,13 @@ Request body:
 
 Headers:
 
+- `Idempotency-Key: <UUID>` (strongly recommended) — identifies this
+  logical turn. If the heartbeat stream or final response is lost, retry the
+  exact same session/message/approval request with the same key; the server
+  replays the durable terminal status and body without running the browser task
+  again. Changing the message, session, approvals, or explicit BYOK key requires
+  a new key. Reuse while the original outcome is still unknown returns `409`
+  and does not dispatch another turn.
 - `x-byok-anthropic-api-key: sk-ant-...` (optional) — supply a
   per-request BYOK key that overrides any account-stored key for
   this turn. Useful for users who don't want to persist a key but

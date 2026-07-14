@@ -310,7 +310,11 @@ type ConsequentialActionApproval struct {
 // the request body when empty). Without it, Go callers were permanently
 // stuck on any confirmation-required turn.
 type MessageOptions struct {
-	ByokAPIKey                  string
+	ByokAPIKey string
+	// IdempotencyKey identifies one logical turn. Reuse it after a lost or
+	// ambiguous stream so the server replays the durable terminal result instead
+	// of executing browser actions twice. Change it when the request changes.
+	IdempotencyKey              string
 	ApproveConsequentialActions []ConsequentialActionApproval
 	// Timeout is the absolute heartbeat-stream backstop. Zero uses
 	// AgentMessageStreamTimeout (50 minutes). An earlier caller context wins.
@@ -342,8 +346,17 @@ func (r *AgentSessionsResource) Message(ctx context.Context, agentSessionID, use
 	if opts != nil && opts.Timeout > 0 {
 		req.streamTimeout = opts.Timeout
 	}
-	if opts != nil && opts.ByokAPIKey != "" {
-		req.headers = map[string]string{"x-byok-anthropic-api-key": opts.ByokAPIKey}
+	if opts != nil {
+		headers := map[string]string{}
+		if opts.ByokAPIKey != "" {
+			headers["x-byok-anthropic-api-key"] = opts.ByokAPIKey
+		}
+		if opts.IdempotencyKey != "" {
+			headers["Idempotency-Key"] = opts.IdempotencyKey
+		}
+		if len(headers) > 0 {
+			req.headers = headers
+		}
 	}
 	if err := r.client.doEventStream(ctx, req); err != nil {
 		return nil, err

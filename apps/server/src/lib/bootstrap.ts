@@ -100,6 +100,7 @@ import { MetricsRegistry, METRIC_NAMES } from '../services/metrics-registry.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
+import { DrizzleAgentTurnReceiptsRepo } from '../db/agent-turn-receipts-repo.js';
 import { DrizzleAgentDecomposerUsageRecorder } from '../db/agent-decomposer-usage-recorder.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
 import { loadRefusalPatterns, type RefusalPattern } from '../services/task-refusal.js';
@@ -947,6 +948,10 @@ export async function createProductionDeps(
       ? { transcriptEncryptionKeyBase64: config.mfaEncryptionKey }
       : {}),
   });
+  const agentTurnReceiptsRepo =
+    config.mfaEncryptionKey === undefined
+      ? undefined
+      : new DrizzleAgentTurnReceiptsRepo(dbHandle, config.mfaEncryptionKey);
   // W2808 — forward holder for the fleet control registry, constructed later in
   // the fleet-control-plane deps block. Declared HERE (moved up from that block)
   // so the #139 go-live routing dispatcher can read it lazily. `current` is unset
@@ -1973,6 +1978,7 @@ export async function createProductionDeps(
     // activate from process start.
     agentRuntime,
     agentSessionsRepo,
+    agentTurnReceiptsRepo,
     byokKeyCache,
     exitIdentityCache,
     agentDecomposerKind,

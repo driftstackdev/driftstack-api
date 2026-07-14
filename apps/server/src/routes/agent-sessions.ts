@@ -39,6 +39,10 @@ import {
   publicTranscriptEntry,
 } from '../services/agent-public-redaction.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
+import {
+  hashAgentTurnRequest,
+  type AgentTurnReceiptsRepo,
+} from '../services/agent-turn-receipts.js';
 import type { ProfilesService } from '../services/profiles.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { AccountProxiesService } from '../services/account-proxies.js';
@@ -448,6 +452,10 @@ function publicAgentSession(
 export interface AgentSessionsRoutesDeps {
   runtime: AgentRuntime;
   sessions: AgentSessionsRepo;
+  /** Durable at-most-once receipts for POST /:id/message. Headerless calls
+   *  retain compatibility; a supplied Idempotency-Key fails closed when this
+   *  dependency is unavailable instead of promising a dedupe that cannot hold. */
+  agentTurnReceipts?: AgentTurnReceiptsRepo;
   /** Q.1.c — optional. When wired, the route decrypts the
    *  customer's stored BYOK key on session-create and caches the
    *  plaintext for the session lifetime. Absent when MFA_ENCRYPTION_KEY
@@ -1465,6 +1473,7 @@ export function registerAgentSessionsRoutes(
   const {
     runtime,
     sessions,
+    agentTurnReceipts,
     byokService,
     byokKeyCache,
     exitIdentityCache,
@@ -3825,7 +3834,7 @@ export function registerAgentSessionsRoutes(
     );
   }
 
-  const handleAgentMessage = async (req: FastifyRequest<{ Params: { id: string } }>) => {
+  const executeAgentMessage = async (req: FastifyRequest<{ Params: { id: string } }>) => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
     // Cross-account guard before runtime.runTurn — the runtime
@@ -4169,6 +4178,129 @@ export function registerAgentSessionsRoutes(
     }
   };
 
+  interface AgentMessageTerminal {
+    status: number;
+    body: unknown;
+    error?: unknown;
+  }
+
+  const handleAgentMessage = async (
+    req: FastifyRequest<{ Params: { id: string } }>,
+  ): Promise<AgentMessageTerminal> => {
+    // Authenticate ownership and validate the exact canonical body before
+    // reserving a key. Invalid/foreign requests must not poison the account's
+    // durable idempotency namespace.
+    const parsed = RunTurnRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+    const pre = await sessions.get(req.params.id);
+    if (pre === null) throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+    if (req.guiControlKeyAuthorized !== true) {
+      const ctx = requireCtx(req);
+      if (!callerCanAccessAgentSession(ctx, pre.accountId)) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+    }
+
+    const idempotency = readIdempotencyKey(req);
+    if (idempotency.kind === 'invalid') {
+      throw new ValidationError({
+        formErrors: ['Idempotency-Key must be ≤255 ASCII characters, no whitespace.'],
+        fieldErrors: {},
+      });
+    }
+    if (idempotency.kind === 'absent') {
+      return { status: 200, body: await executeAgentMessage(req) };
+    }
+    if (agentTurnReceipts === undefined) {
+      throw new FeatureUnavailableError(
+        'Agent-turn idempotency storage is unavailable. Do not retry this browser task without the same key; contact support.',
+      );
+    }
+
+    const rawHeaderByokKey = req.headers['x-byok-anthropic-api-key'];
+    const explicitByokApiKey =
+      typeof rawHeaderByokKey === 'string' && rawHeaderByokKey.length > 0
+        ? rawHeaderByokKey
+        : undefined;
+    const requestHash = hashAgentTurnRequest({
+      agentSessionId: req.params.id,
+      userMessage: parsed.data.user_message,
+      ...(parsed.data.approve_consequential_actions !== undefined
+        ? { approveConsequentialActions: parsed.data.approve_consequential_actions }
+        : {}),
+      ...(explicitByokApiKey !== undefined ? { explicitByokApiKey } : {}),
+    });
+    const receiptArgs = {
+      accountId: pre.accountId,
+      agentSessionId: req.params.id,
+      idempotencyKey: idempotency.key,
+      requestHash,
+    };
+    const reservation = await agentTurnReceipts.reserve(receiptArgs);
+    if (reservation.kind === 'mismatch') {
+      throw new ConflictError(
+        'This Idempotency-Key was already used for a different agent turn or session.',
+        { idempotency_status: 'mismatch' },
+      );
+    }
+    if (reservation.kind === 'in-progress') {
+      throw new ConflictError(
+        'The original agent turn is still running or its terminal outcome is unknown. Do not submit the browser task again; inspect the durable transcript before choosing a new Idempotency-Key.',
+        { idempotency_status: 'in_progress' },
+      );
+    }
+    if (reservation.kind === 'replay') {
+      return reservation.terminal;
+    }
+
+    try {
+      const body = await executeAgentMessage(req);
+      const terminal = { status: 200, body };
+      await agentTurnReceipts.complete({ ...receiptArgs, terminal });
+      return terminal;
+    } catch (error) {
+      // Persist typed failures too. If browser work finished and a later
+      // database/debit step failed, retrying must replay the same terminal
+      // problem rather than guessing that the action is safe to repeat.
+      const apiError =
+        error instanceof ApiError
+          ? error
+          : new InternalError('An unexpected error occurred.', error);
+      const terminal = { status: apiError.status, body: apiError.toProblem(req.id) };
+      await agentTurnReceipts.complete({ ...receiptArgs, terminal });
+      return { ...terminal, error };
+    }
+  };
+
+  const reportAgentMessageError = (
+    req: FastifyRequest,
+    error: unknown,
+    status: number,
+    body: unknown,
+  ): void => {
+    if (status >= 500)
+      req.log.error({ err: error, problem: body }, 'agent message request failed: 5xx');
+    else req.log.warn({ err: error, problem: body }, 'agent message request rejected: 4xx');
+    sentry?.captureException(error, {
+      request_id: req.id,
+      method: req.method,
+      route: '/v1/agent-sessions/:id/message',
+    });
+  };
+
+  const applyAgentMessageRetryAfter = (
+    reply: FastifyReply,
+    status: number,
+    body: unknown,
+  ): void => {
+    if (status !== 429 && status !== 503) return;
+    if (typeof body !== 'object' || body === null) return;
+    const retryAfter = (body as Record<string, unknown>)['retry_after_seconds'];
+    if (typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter >= 0) {
+      reply.header('retry-after', Math.ceil(retryAfter).toString());
+    }
+  };
+
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/message',
     // v2-#13 — dedicated bucket for AI chat turns (separate from
@@ -4192,7 +4324,18 @@ export function registerAgentSessionsRoutes(
           .split(',')
           .some((value) => value.trim().split(';', 1)[0]?.trim() === 'text/event-stream')
       ) {
-        return handleAgentMessage(req);
+        const terminal = await handleAgentMessage(req);
+        if (terminal.error !== undefined) {
+          reportAgentMessageError(req, terminal.error, terminal.status, terminal.body);
+        }
+        if (terminal.status >= 400) {
+          applyAgentMessageRetryAfter(reply, terminal.status, terminal.body);
+          return reply
+            .code(terminal.status)
+            .header('content-type', 'application/problem+json; charset=utf-8')
+            .send(terminal.body);
+        }
+        return reply.code(terminal.status).send(terminal.body);
       }
 
       // Long AI turns legitimately outlive both the SDK's generic 30-second
@@ -4240,7 +4383,12 @@ export function registerAgentSessionsRoutes(
       let status = 200;
       let body: unknown;
       try {
-        body = await handleAgentMessage(req);
+        const terminal = await handleAgentMessage(req);
+        status = terminal.status;
+        body = terminal.body;
+        if (terminal.error !== undefined) {
+          reportAgentMessageError(req, terminal.error, status, body);
+        }
       } catch (err) {
         const apiError =
           err instanceof ApiError ? err : new InternalError('An unexpected error occurred.', err);
@@ -4248,13 +4396,7 @@ export function registerAgentSessionsRoutes(
         body = apiError.toProblem(req.id);
         // Hijacked replies bypass Fastify's normal error handler/onError hook,
         // so preserve its observability without exposing internals on the wire.
-        if (status >= 500) req.log.error({ err, problem: body }, 'streamed request failed: 5xx');
-        else req.log.warn({ err, problem: body }, 'streamed request rejected: 4xx');
-        sentry?.captureException(err, {
-          request_id: req.id,
-          method: req.method,
-          route: '/v1/agent-sessions/:id/message',
-        });
+        reportAgentMessageError(req, err, status, body);
       } finally {
         clearInterval(heartbeat);
         reply.raw.off('close', stopWriting);

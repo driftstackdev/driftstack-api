@@ -214,6 +214,12 @@ It does **not** retry 4xx responses other than 429. Backoff is exponential with 
 
 > **Idempotency on retried writes.** Because the SDK retries network failures **and** 5xx, and a request can reach the server, be processed, and then have its response lost (or a 500 fire after the write commits), an automatically-retried create or charge can execute twice. Pass an `idempotencyKey` on non-idempotent calls — e.g. `client.agentSessions.create(body, { idempotencyKey })` or `client.cryptoOrders.createCheckout(body, { idempotencyKey })` — and the server collapses the retry onto the first request.
 
+Agent browser turns need the same protection even though they stream: pass
+`client.agentSessions.message(id, text, { idempotencyKey })` and reuse that key
+only for an ambiguous retry of the exact same session/message/approvals/BYOK
+request. A completed turn is replayed without executing its browser actions
+again; changed or still-running turns fail closed.
+
 ## Webhook signature verification
 
 When you wire up Driftstack webhooks, verify each delivery before processing:

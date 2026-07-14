@@ -169,6 +169,20 @@ describe('AgentSessionsResource', () => {
     });
   });
 
+  it('message forwards a caller-reusable Idempotency-Key beside BYOK so ambiguous stream retries cannot repeat browser actions', async () => {
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'submit once', {
+      idempotencyKey: 'logical-turn-ts-1',
+      byokApiKey: 'sk-ant-test-byok',
+    });
+    expect(calls[0]?.headers).toEqual({
+      accept: 'text/event-stream',
+      'Idempotency-Key': 'logical-turn-ts-1',
+      'x-byok-anthropic-api-key': 'sk-ant-test-byok',
+    });
+  });
+
   it('message without opts sends only the SSE accept header (never an empty BYOK header)', async () => {
     const { http, calls } = makeFakeHttp({});
     const res = new AgentSessionsResource(http);

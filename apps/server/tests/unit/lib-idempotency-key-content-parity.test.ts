@@ -1,5 +1,5 @@
 // Drift guard for apps/server/src/lib/idempotency-key.ts. Pins the
-// V-666.AO + v2-#19 shared Idempotency-Key parser — 3-consumer
+// V-666.AO + v2-#19 shared Idempotency-Key parser — 4-consumer
 // consolidation + 4-rule validation contract + discriminated union
 // return shape.
 
@@ -27,9 +27,9 @@ describe('lib/idempotency-key content parity', () => {
     expect(body).toMatch(/\/\/ V-666\.AO \+ v2-#19 — shared Idempotency-Key parser\./);
   });
 
-  it('3-consumer catalog pins subscription Checkout, crypto checkout, and agent-session retry identities', () => {
+  it('4-consumer catalog pins subscription checkout, crypto checkout, agent-session create, and durable agent-turn retry identities', () => {
     expect(body).toMatch(
-      /\/\/ Three routes consume the customer-facing `Idempotency-Key` request\s*\n?\s*\/\/ header today:/,
+      /\/\/ Four routes consume the customer-facing `Idempotency-Key` request\s*\n?\s*\/\/ header today:/,
     );
     expect(body).toMatch(
       /\/\/ {3}- POST \/v1\/billing\/checkout-session \(Stripe Checkout safe retry\)/,
@@ -38,11 +38,14 @@ describe('lib/idempotency-key content parity', () => {
       /\/\/ {3}- POST \/v1\/billing\/crypto-checkout \(V-666\.AO; documented at\s*\n?\s*\/\/ {5}\/docs\/idempotency-keys on the marketing site\)/,
     );
     expect(body).toMatch(/\/\/ {3}- POST \/v1\/agent-sessions \(v2-#19; Stripe-pattern dedup\)/);
+    expect(body).toMatch(
+      /\/\/ {3}- POST \/v1\/agent-sessions\/:id\/message \(durable at-most-once turn receipt\)/,
+    );
   });
 
   it('4-rule validation contract framing pinned: empty/whitespace → absent + >255 ASCII → invalid (400) + whitespace or non-printable-ASCII → invalid (400) + duplicate header → first wins. + cross-ref to /docs/idempotency-keys.astro single-source-of-truth. — pinned so the 4-rule + docs-as-source-of-truth contract all stay documented', () => {
     expect(body).toMatch(
-      /\/\/ All three follow the same validation contract documented at\s*\n?\s*\/\/ apps\/marketing-site\/src\/pages\/docs\/idempotency-keys\.astro:\s*\n?\s*\/\/ {3}- empty \/ whitespace-only → treat as absent\s*\n?\s*\/\/ {3}- >255 ASCII chars → invalid \(return 400\)\s*\n?\s*\/\/ {3}- contains whitespace OR non-printable-ASCII → invalid \(400\)\s*\n?\s*\/\/ {3}- duplicate header → first value wins/,
+      /\/\/ All four follow the same validation contract documented at\s*\n?\s*\/\/ apps\/marketing-site\/src\/pages\/docs\/idempotency-keys\.astro:\s*\n?\s*\/\/ {3}- empty \/ whitespace-only → treat as absent\s*\n?\s*\/\/ {3}- >255 ASCII chars → invalid \(return 400\)\s*\n?\s*\/\/ {3}- contains whitespace OR non-printable-ASCII → invalid \(400\)\s*\n?\s*\/\/ {3}- duplicate header → first value wins/,
     );
   });
 
@@ -54,7 +57,7 @@ describe('lib/idempotency-key content parity', () => {
 
   it("IdempotencyHeader 3-variant discriminated union pinned: absent + valid (with key) + invalid. Drift to dropping a variant would force callers to handle 'all the rest' as a fall-through; drift to merging absent + invalid would let downstream code conflate the contract (absent = no opinion; invalid = customer broke the contract → 400)", () => {
     expect(body).toMatch(
-      /export type IdempotencyHeader =\s*\{ kind: 'absent' \}\s*\| \{ kind: 'valid'; key: string \}\s*\| \{ kind: 'invalid' \};/,
+      /export type IdempotencyHeader =\s*\| \{ kind: 'absent' \}\s*\| \{ kind: 'valid'; key: string \}\s*\| \{ kind: 'invalid' \};/,
     );
   });
 

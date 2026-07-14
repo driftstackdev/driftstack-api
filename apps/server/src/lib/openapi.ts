@@ -3352,6 +3352,15 @@ function buildRegistry(): OpenAPIRegistry {
         // Official clients negotiate the heartbeat-backed representation so
         // legal multi-minute turns do not sit headerless behind the API edge.
         accept: z.literal('text/event-stream').optional(),
+        'idempotency-key': z
+          .string()
+          .min(1)
+          .max(255)
+          .openapi({
+            description:
+              'Strongly recommended durable identity for this logical turn. Reuse the same key only when retrying the exact same session, message, approvals, and explicit BYOK key after an ambiguous/lost response. A completed turn replays its exact terminal status and body without re-executing browser actions; a different request or still-in-progress outcome returns 409.',
+          })
+          .optional(),
         // BYOK Anthropic key (Tier-3 LOCKED 2026-05-16). Optional;
         // when set, forwards to the decomposer's Anthropic API call.
         // Customer-stored keys (per-account) override the deployment
@@ -3420,7 +3429,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       409: {
         description:
-          'Agent session is closed/paused, its transcript capacity is exhausted, or another turn is already running for this session.',
+          'Agent session is closed/paused, its transcript capacity is exhausted, another turn is already running, or the Idempotency-Key is pending/reused with a different logical turn.',
         content: problemContent,
       },
       503: {

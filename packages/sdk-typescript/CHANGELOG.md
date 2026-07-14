@@ -30,6 +30,11 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Durable agent-turn idempotency** —
+  `client.agentSessions.message(id, text, { idempotencyKey })` forwards the
+  caller-reusable `Idempotency-Key` beside SSE/BYOK headers. Reusing one key for
+  an ambiguous retry replays the terminal result without executing browser
+  actions twice.
 - **`client.team.listOwners()`** — typed access to `GET /v1/team/owners`
   for owner workspaces the calling account has joined. Returns
   `TeamOwnersList` / `TeamOwner` and requires broad `read` (or

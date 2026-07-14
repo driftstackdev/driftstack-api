@@ -6,12 +6,12 @@ description: Stripe-pattern Idempotency-Key header — safely retry POST request
 
 # Idempotency keys
 
-The create-style POST requests that wire idempotency (agent sessions
-and crypto-invoice orders) accept an optional `Idempotency-Key` header.
-When set, the server stores the first response keyed by `(account_id,
-idempotency_key)` and **replays the same response** on subsequent
-requests with the same key — even if the operation is otherwise
-non-idempotent. This is the standard
+The non-idempotent POST requests that wire idempotency accept an optional
+`Idempotency-Key` header. When set, the server or payment provider binds the
+first operation to the account-scoped key and prevents a retry from performing
+that operation twice. Depending on the endpoint, a completed request replays
+the same response and a changed or still-running request fails closed. This is
+the standard
 [Stripe-pattern](https://stripe.com/docs/api/idempotent_requests)
 that exists to make network retries safe.
 
@@ -21,24 +21,23 @@ Network requests fail. Sometimes a `502` from the edge means the
 request never reached the server; sometimes it means the server
 processed the request but the response was lost. Without an idempotency
 key, retrying the request after the latter case would mint a duplicate
-resource (a second session, a second checkout). With one, the retry
-returns the original response and no duplicate is created.
+resource or repeat browser work (a second session, a second checkout, a second
+form submission). With one, the retry returns the original terminal outcome or
+an explicit non-dispatching conflict and no duplicate is created.
 
 ## Which endpoints honour it
 
-The header is honoured (stored-and-replayed) on the **create-style**
-endpoints that wire it explicitly:
+The header is honoured on these explicitly wired endpoints:
 
 - `POST /v1/agent-sessions` — agent (chat-style) session creation
+- `POST /v1/agent-sessions/{id}/message` — one decompose→execute browser turn
+- `POST /v1/billing/checkout-session` — Stripe subscription checkout
 - `POST /v1/billing/crypto-checkout` — crypto checkout (NOWPayments invoice)
 
-Every other endpoint — including `POST /v1/sessions`, the Stripe
-checkout-session create, the PATCH/DELETE surface, the GET surface,
-and idempotent-by-design POSTs like `/v1/auth/login` — accepts the
-header but does not store or replay on it. Sending an `Idempotency-Key`
-to one of those endpoints is harmless but has no effect; retries are
-not collapsed, so guard those calls with your own dedupe if you need
-exactly-once semantics.
+Every other endpoint — including `POST /v1/sessions`, the PATCH/DELETE
+surface, the GET surface, and idempotent-by-design POSTs like
+`/v1/auth/login` — ignores the header. Sending it is harmless but has no
+dedupe effect; guard those calls separately if they need at-most-once behavior.
 
 ## Format
 
@@ -55,8 +54,9 @@ Idempotency-Key: <UUID-v4 or other globally-unique identifier>
 Stripe-pattern best practice: generate a new key per logical
 operation (not per retry of the same operation). A client retrying
 the same `POST /v1/agent-sessions` after a timeout should send the same
-key on the retry; the next time the customer creates an agent session, a
-fresh key.
+key on the retry; the next create gets a fresh key. For an agent message,
+the key must stay attached to the exact same session, message, ordered
+approval list, and explicit BYOK key.
 
 Constraints:
 
@@ -68,48 +68,43 @@ Constraints:
 
 ## Semantics
 
-When the server sees a POST with an `Idempotency-Key`:
+For create-style requests, the server/provider records the operation and a
+duplicate key replays the original response. Agent message turns use a stronger
+durable receipt because browser work deliberately continues after an SSE viewer
+disconnects:
 
-1. Look up `(account_id, idempotency_key)` in the cache.
-2. **Hit** → replay the original response status + body, byte-for-byte.
-3. **Miss** → execute the operation as usual, then record the
-   response keyed by `(account_id, idempotency_key)` before
-   returning.
+1. Validate session ownership and the request, then atomically reserve
+   `(account_id, idempotency_key)` before decomposition or dispatch.
+2. **Completed exact match** → replay the stored terminal status and JSON body.
+3. **Different session/body/BYOK fingerprint** → return `409` without dispatch.
+4. **Still running or terminal outcome unknown** → return `409` with
+   `idempotency_status: "in_progress"`; inspect the durable transcript rather
+   than minting a new key and repeating the task.
+5. **New key** → run once and application-encrypt the terminal response before
+   marking the receipt completed.
 
-A replay returns the same status code (typically `201 Created`) and
-the same body as the original — including any server-generated IDs.
+A completed replay returns the same status code and body as the original —
+including generated IDs or a terminal RFC 7807 problem.
 The client can treat the replay as if the original response had been
 received successfully.
 
 ### What happens if I send the same key with a different body?
 
-The server **ignores the new body** and replays the cached response.
-This matches Stripe's behaviour: the idempotency key is the
-contract; if the customer wants a different result they need a
-different key.
-
-(This deliberately favours "duplicate-prevention is more important
-than parameter-correctness." If you're worried about silently
-returning an old response when your body changed, generate a new
-key.)
+Do not do this. Agent-message and crypto-checkout receipts reject a changed
+request with `409`; Stripe also validates parameters on a reused checkout key.
+The legacy agent-session create path replays the existing session. In every
+case, mint a new key for a new logical operation.
 
 ### What happens during a concurrent retry?
 
-Two requests with the same `(account_id, idempotency_key)` race the
-underlying `INSERT` on the resource row. The unique constraint on
-`idempotency_key` ensures exactly one wins; the loser sees the
-constraint violation and replays the winner's cached response.
-
-The window between "cache hit check" and "row insert" is the only
-unsafe interval; the constraint check closes it. The customer never
-sees a `409 Conflict` from this race — the loser falls through to a
-clean replay.
+Database uniqueness/provider idempotency chooses one create operation. For an
+agent turn, the first request owns the durable reservation; an overlapping
+retry receives `409 in_progress` and never enters the browser runtime. Retry the
+same key after the original completes to retrieve its terminal result.
 
 ## Lifetime
 
-Idempotency-key records live as long as the resource row they
-protect — **there is no 24-hour expiry** on either endpoint that
-wires idempotency today:
+Lifetime is endpoint-specific:
 
 - **Crypto checkout** keys are enforced by a permanent unique
   index on the orders table (`INSERT … ON CONFLICT DO NOTHING`,
@@ -119,11 +114,17 @@ wires idempotency today:
   database is the cross-instance source of truth.
 - **Agent-session** keys live in a partial unique index on the
   session row and replay for as long as the row exists.
+- **Agent-message** receipts live in their own durable table and are deleted
+  only if the owning account/session row is deleted.
+- **Stripe checkout-session** keys are forwarded to Stripe and follow Stripe's
+  provider-side retention rather than Driftstack's resource-row lifetime.
 
 Practical upshot: never reuse an idempotency key for a NEW logical
-request — mint a fresh UUID per logical operation. A reused key
-returns the original cached response instead of creating a new
-resource.
+request — mint a fresh UUID per logical operation. An exact retry with a reused
+key returns the original cached response instead of creating a new
+resource. For agent turns, keep the key until a terminal response is received;
+after an `in_progress` conflict, inspect the transcript before deciding whether
+a different task and fresh key are appropriate.
 
 ## Examples
 
@@ -192,26 +193,24 @@ curl -X POST https://api.driftstack.dev/v1/agent-sessions \
   logic assumes "I just charged the customer," a replay does NOT
   re-charge them (it returns the original charge response).
 
-- **Not retrying on idempotency-key 5xx.** A 5xx response on an
-  idempotent POST is safe to retry — that's the whole point of the
-  header. Don't skip retrying because "the server might have processed
-  it"; if it did, the retry replays; if it didn't, the retry creates.
+- **Minting a new key after an agent-message timeout.** The server may still be
+  finishing the original browser work. Reuse the original key. A completed
+  receipt replays; an `in_progress` receipt refuses to dispatch again.
 
 ## Implementation notes
 
-- **Storage.** Idempotency-key records live alongside the resource
-  they protected (e.g. `agent_sessions.idempotency_key` is a
-  partial-unique-indexed column on the table itself). There's no
-  separate idempotency-key table — the resource row IS the cache.
+- **Storage.** Create receipts generally live alongside the protected resource.
+  Agent-message terminal bodies instead use a dedicated receipt table and are
+  application-encrypted because they can contain customer/model transcript data.
 - **TTL enforcement.** There is no scheduled key-expiry job and no
   effective TTL. Crypto-order keys are backed by a permanent unique
   index on the order row — the 24-hour in-memory cache is only a
   same-process fast-path, and after a restart (or on another
   instance) the database still replays the key. Resource-backed
   keys (e.g. `agent_sessions.idempotency_key`) live in the
-  partial-unique index for the lifetime of the row. Both kinds
-  replay for as long as the protected resource exists.
-- **Replay observability.** Audit-log entries are written for the
-  first request but NOT the replays. This intentionally mirrors
-  Stripe — the original is the operationally-significant action; the
-  replays are transport noise.
+  partial-unique index for the lifetime of the row. Agent-message receipts
+  follow their owning session row. Stripe checkout is provider-managed.
+- **Replay observability.** Where an operation writes an audit-log entry, it is
+  written for the first request but NOT the replays. This intentionally mirrors
+  Stripe — the original is the operationally-significant action; the replays
+  are transport noise.

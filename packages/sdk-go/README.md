@@ -125,6 +125,12 @@ client := driftstack.New("…", driftstack.WithRetry(driftstack.RetryConfig{Disa
 
 `context.Cancel` aborts the retry loop between attempts; the in-flight request is cancelled by the inner `http.NewRequestWithContext` chain.
 
+For a streamed browser turn, set
+`&driftstack.MessageOptions{IdempotencyKey: "…"}` and reuse the key only for
+an ambiguous retry of the exact same session/message/approvals/BYOK request. A
+completed turn replays without executing its browser actions again; changed or
+still-running turns fail closed.
+
 ## Webhook signature verification
 
 Stripe-style HMAC-SHA256 over `<unix_seconds>.<raw_body>`. Constant-time comparison via `hmac.Equal`. 5-minute default tolerance.

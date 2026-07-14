@@ -234,6 +234,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // persisted to chat history by the view's turns-change effect. Set when a user
   // bubble is appended, cleared when the turn completes/rolls back.
   const inFlightUserTurnIdRef = useRef<number | null>(null);
+  // One durable server receipt key per exact logical turn. The SSE connection can
+  // disappear while the server deliberately finishes browser work, so a retry of
+  // the same session/message/approval body MUST reuse this key. A changed body or
+  // session gets a fresh key; a confirmed terminal success clears it. Stop keeps
+  // it because Stop is only a local soft-cancel and the server may still finish.
+  const pendingTurnReceiptRef = useRef<{ signature: string; key: string } | null>(null);
   // Consequential-action approvals ACCUMULATED across successive halts of the SAME
   // logical task. The server re-decomposes on every message and builds its approved
   // set purely from THAT message's approve_consequential_actions (stateless — it does
@@ -382,11 +388,29 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
           setRestoredHistoryCount(0);
           sid = created.id;
         }
+        const turnSignature = JSON.stringify({
+          session_id: sid,
+          user_message: userMessage,
+          approve_consequential_actions:
+            approvals !== undefined && approvals.length > 0 ? approvals : null,
+        });
+        const priorReceipt = pendingTurnReceiptRef.current;
+        const turnReceipt =
+          priorReceipt !== null && priorReceipt.signature === turnSignature
+            ? priorReceipt
+            : { signature: turnSignature, key: crypto.randomUUID() };
+        pendingTurnReceiptRef.current = turnReceipt;
         const response = await client.agentSessions.message(sid, userMessage, {
+          idempotencyKey: turnReceipt.key,
           ...(approvals !== undefined && approvals.length > 0
             ? { approveConsequentialActions: approvals }
             : {}),
         });
+        // A terminal success (fresh or replayed) removes the ambiguity. Only clear
+        // this exact receipt: a different send may have started after a soft Stop.
+        if (pendingTurnReceiptRef.current?.key === turnReceipt.key) {
+          pendingTurnReceiptRef.current = null;
+        }
         if (cancelGenRef.current !== gen) {
           rollbackUserTurn(); // user hit Stop — discard the reply + the orphan bubble
           return false;
@@ -514,6 +538,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     setResolvedTurnId(null);
     setDeniedTurnIds(new Set());
     approvedActionsRef.current = [];
+    pendingTurnReceiptRef.current = null;
     setLastUserMessage(null);
     setRestoredHistoryCount(0);
   }, [closeServerSession, clearProfileBinding]);
@@ -536,6 +561,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       setSession(null);
       setError(null);
       setResolvedTurnId(null);
+      pendingTurnReceiptRef.current = null;
       // Clear denied ids too (mirroring reset()) — restore() rebases idRef into the
       // low id space, so a stale denied id from the chat we're leaving (e.g. 3) would
       // otherwise false-mark the restored chat's own turn id 3 as "denied — skipped".

@@ -15,6 +15,7 @@ import type {
   ProxyConnectivityProbe,
   ProxyProbeResult,
 } from '../../src/services/proxy-connectivity-probe.js';
+import { hashAgentTurnRequest } from '../../src/services/agent-turn-receipts.js';
 
 describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)', () => {
   let fx: TestAppFixture;
@@ -915,6 +916,188 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       payload: { user_message: 'anything' },
     });
     expect(post.statusCode).toBe(409);
+  });
+
+  it('message Idempotency-Key replays one exact JSON/SSE terminal and never executes the browser turn twice', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'logical-turn-1',
+    };
+    const payload = { user_message: 'open https://example.com and capture' };
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers,
+      payload,
+    });
+    expect(first.statusCode).toBe(200);
+    const firstBody = first.json();
+
+    const replay = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers,
+      payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(firstBody);
+
+    const streamReplay = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { ...headers, accept: 'text/event-stream' },
+      payload,
+    });
+    const dataLine = streamReplay.body.split('\n').find((line) => line.startsWith('data: {'));
+    expect(JSON.parse(dataLine!.slice('data: '.length))).toEqual({
+      status: 200,
+      body: firstBody,
+    });
+
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.json<{ transcript_length: number }>().transcript_length).toBe(2);
+  });
+
+  it('message Idempotency-Key rejects body/session reuse and an unresolved in-progress receipt without dispatch', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const createSession = async (): Promise<string> => {
+      const response = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: { token_budget: 50_000 },
+      });
+      return response.json<{ id: string }>().id;
+    };
+    const id = await createSession();
+    const otherId = await createSession();
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'logical-turn-reuse',
+    };
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers,
+      payload: { user_message: 'first task' },
+    });
+    expect(first.statusCode).toBe(200);
+
+    for (const [sessionId, userMessage] of [
+      [id, 'different task'],
+      [otherId, 'first task'],
+    ] as const) {
+      const mismatch = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${sessionId}/message`,
+        headers,
+        payload: { user_message: userMessage },
+      });
+      expect(mismatch.statusCode).toBe(409);
+      expect(mismatch.json()).toMatchObject({ idempotency_status: 'mismatch' });
+    }
+
+    const pendingKey = 'logical-turn-pending';
+    await fx.agentTurnReceiptsRepo!.reserve({
+      accountId: fx.accountId,
+      agentSessionId: otherId,
+      idempotencyKey: pendingKey,
+      requestHash: hashAgentTurnRequest({
+        agentSessionId: otherId,
+        userMessage: 'must not dispatch',
+      }),
+    });
+    const pending = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${otherId}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': pendingKey,
+      },
+      payload: { user_message: 'must not dispatch' },
+    });
+    expect(pending.statusCode).toBe(409);
+    expect(pending.json()).toMatchObject({ idempotency_status: 'in_progress' });
+    expect((await fx.agentSessionsRepo!.get(otherId))?.transcript).toHaveLength(0);
+  });
+
+  it('message Idempotency-Key persists and replays a typed terminal problem', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const request = {
+      method: 'POST' as const,
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'closed-turn-problem',
+      },
+      payload: { user_message: 'will fail once' },
+    };
+    const first = await fx.app.inject(request);
+    const replay = await fx.app.inject(request);
+    expect(first.statusCode).toBe(409);
+    expect(replay.statusCode).toBe(409);
+    expect(replay.json()).toEqual(first.json());
+  });
+
+  it('message rejects malformed keys before dispatch and fails closed when durable receipt storage is unavailable', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, disableAgentTurnReceipts: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    const malformed = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'contains whitespace',
+      },
+      payload: { user_message: 'must not dispatch' },
+    });
+    expect(malformed.statusCode).toBe(400);
+
+    const unavailable = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'valid-but-no-receipt-store',
+      },
+      payload: { user_message: 'must not dispatch' },
+    });
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json()).toMatchObject({
+      type: 'https://errors.driftstack.dev/feature-unavailable',
+    });
+    expect((await fx.agentSessionsRepo!.get(id))?.transcript).toHaveLength(0);
   });
 
   it('message SSE representation opens immediately, emits bounded heartbeats, then one terminal success envelope', async () => {

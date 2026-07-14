@@ -33,6 +33,14 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
         routeFile: 'apps/server/src/routes/agent-sessions.ts',
       },
       {
+        path: '/v1/agent-sessions/{id}/message',
+        routeFile: 'apps/server/src/routes/agent-sessions.ts',
+      },
+      {
+        path: '/v1/billing/checkout-session',
+        routeFile: 'apps/server/src/routes/billing.ts',
+      },
+      {
         // The idempotent crypto endpoint is the checkout create (billing-crypto.ts
         // reads the Idempotency-Key); /v1/billing/crypto-orders is a GET list and
         // does NOT honour it.
@@ -59,21 +67,33 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     expect(body).toMatch(/per-account/i);
   });
 
-  it("documents the real key lifetime — no 24-hour expiry; keys replay for the lifetime of the resource row. S36 2026-07-07 (fable-truth-audit): the old '24-hour retention' headline was FALSE for BOTH wired endpoints — crypto-checkout keys hit a permanent partial unique index (db/crypto-orders-repo.ts insertWithIdempotencyKey; the 24h in-memory cache is only a same-process fast-path) and agent-session keys live in the row's partial-unique index forever.", () => {
-    expect(body).toMatch(/\*\*there is no 24-hour expiry\*\*/);
+  it('documents endpoint-specific lifetime: permanent resource-backed creates, durable session-owned turn receipts, and provider-managed Stripe checkout', () => {
     expect(body).toMatch(/permanent unique\s*\n?\s*index on the orders table/);
-    expect(body).toMatch(/replay for as long as the protected resource exists\./);
-    // Negative pins — the fictional 24h retention window must not come back.
-    expect(body).not.toMatch(/retained \*\*24 hours\*\*/);
-    expect(body).not.toMatch(/stops replaying/);
+    expect(body).toMatch(/session row and replay for as long as the row exists\./);
+    expect(body).toMatch(/Agent-message.*durable table/i);
+    expect(body).toMatch(
+      /Stripe checkout-session.*follow Stripe's\s*\n?\s*provider-side retention/i,
+    );
   });
 
   it('documents the empty-string-treated-as-absent rule', () => {
     expect(body).toMatch(/Empty string is treated as.+absent/i);
   });
 
-  it('documents the same-key-different-body behaviour (replay wins)', () => {
+  it('documents the endpoint-specific same-key-different-body rejection/legacy replay behavior', () => {
     expect(body).toMatch(/different body/i);
+    expect(body).toMatch(
+      /Agent-message and crypto-checkout receipts reject a changed\s*\n?\s*request with `409`/,
+    );
+    expect(body).toMatch(/legacy agent-session create path replays the existing session/);
+  });
+
+  it('documents the fail-closed durable agent-turn receipt and disconnect ambiguity', () => {
+    expect(body).toMatch(
+      /browser work deliberately continues after an SSE viewer\s*\n?\s*disconnects/,
+    );
+    expect(body).toMatch(/idempotency_status: "in_progress"/);
+    expect(body).toMatch(/application-encrypt the terminal response/);
   });
 
   it('documents the audit-log behaviour (originals logged, replays not)', () => {

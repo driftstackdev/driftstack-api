@@ -151,6 +151,25 @@ def test_sync_message_byok_api_key_sets_header() -> None:
         assert sent_headers["x-byok-anthropic-api-key"] == "sk-ant-test-byok"
 
 
+def test_sync_message_idempotency_key_sets_header_beside_byok() -> None:
+    """A caller can reuse one logical-turn key after an ambiguous stream."""
+    reply = {"kind": "clarify", "session": SESSION_ENVELOPE, "clarifying_question": "?"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.message(
+                "agt_1",
+                "submit once",
+                byok_api_key="sk-ant-test-byok",
+                idempotency_key="logical-turn-py-1",
+            )
+        sent_headers = route.calls.last.request.headers
+        assert sent_headers["x-byok-anthropic-api-key"] == "sk-ant-test-byok"
+        assert sent_headers["Idempotency-Key"] == "logical-turn-py-1"
+
+
 def test_sync_message_no_byok_omits_header() -> None:
     """Omitting ``byok_api_key`` sends NO byok header (distinguishes
     "no key" from "empty key" at the server boundary)."""
@@ -357,6 +376,26 @@ async def test_async_message_byok_api_key_sets_header() -> None:
         assert route.called
         sent_headers = route.calls.last.request.headers
         assert sent_headers["x-byok-anthropic-api-key"] == "sk-ant-test-byok"
+
+
+@pytest.mark.asyncio
+async def test_async_message_idempotency_key_sets_header_beside_byok() -> None:
+    """Async message mirrors the sync durable logical-turn header."""
+    reply = {"kind": "clarify", "session": SESSION_ENVELOPE, "clarifying_question": "?"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            await client.agent_sessions.message(
+                "agt_1",
+                "submit once",
+                byok_api_key="sk-ant-test-byok",
+                idempotency_key="logical-turn-py-1",
+            )
+        sent_headers = route.calls.last.request.headers
+        assert sent_headers["x-byok-anthropic-api-key"] == "sk-ant-test-byok"
+        assert sent_headers["Idempotency-Key"] == "logical-turn-py-1"
 
 
 @pytest.mark.asyncio

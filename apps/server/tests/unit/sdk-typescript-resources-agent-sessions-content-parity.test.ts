@@ -172,6 +172,14 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
+  it('message() exposes and forwards a caller-reusable durable logical-turn Idempotency-Key beside SSE/BYOK', () => {
+    expect(body).toMatch(/idempotencyKey\?: string;/);
+    expect(body).toMatch(/Reuse it when retrying after a lost\/ambiguous stream/);
+    expect(body).toMatch(
+      /\.{3}\(opts\?\.idempotencyKey !== undefined\s*\n?\s*\? \{ 'Idempotency-Key': opts\.idempotencyKey \}\s*\n?\s*: \{\}\),/,
+    );
+  });
+
   it("takeover() + handback() pair-mode state-machine framing pinned: 'transitions ai-driving → takeover-pending (or takeover-queued if the runtime is mid-decompose)' + 'transitions human-driving → handback-pending (or handback-queued if the runtime is mid-decompose)' + Throws PairModeStateInvalidTransitionError (409) — pinned so the queued-vs-pending discriminant + the 409 error type stay documented (drift would break the pair-mode UI's state-transition handling)", () => {
     expect(body).toMatch(
       /transitions\s*\n?\s*\*\s+`ai-driving → takeover-pending` \(or `takeover-queued` if the\s*\n?\s*\*\s+runtime is mid-decompose\)/,

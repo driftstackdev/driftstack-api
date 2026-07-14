@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  check,
   customType,
   index,
   integer,
@@ -2130,6 +2131,57 @@ export const agentSessions = pgTable(
 
 export type AgentSessionRow = typeof agentSessions.$inferSelect;
 export type NewAgentSessionRow = typeof agentSessions.$inferInsert;
+
+// Durable at-most-once receipts for agent message turns (migration 0103).
+// The raw idempotency key is account-scoped and bounded by the shared header
+// parser. The terminal public response is application-encrypted before bytea
+// storage because it can contain customer-authored/model-authored session data.
+export const agentTurnReceipts = pgTable(
+  'agent_turn_receipts',
+  {
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    agentSessionId: text('agent_session_id')
+      .notNull()
+      .references(() => agentSessions.id, { onDelete: 'cascade' }),
+    requestHash: text('request_hash').notNull(),
+    state: text('state').notNull(),
+    responseStatus: integer('response_status'),
+    responseCiphertext: customType<{ data: Buffer; driverData: Buffer }>({
+      dataType: () => 'bytea',
+    })('response_ciphertext'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.accountId, t.idempotencyKey] }),
+    index('agent_turn_receipts_session_created_idx').on(t.agentSessionId, t.createdAt),
+    check('agent_turn_receipts_key_length', sql`length(${t.idempotencyKey}) BETWEEN 1 AND 255`),
+    check('agent_turn_receipts_request_hash', sql`${t.requestHash} ~ '^[0-9a-f]{64}$'`),
+    check('agent_turn_receipts_state', sql`${t.state} IN ('in_progress', 'completed')`),
+    check(
+      'agent_turn_receipts_terminal_shape',
+      sql`(
+        ${t.state} = 'in_progress'
+        AND ${t.responseStatus} IS NULL
+        AND ${t.responseCiphertext} IS NULL
+        AND ${t.completedAt} IS NULL
+      ) OR (
+        ${t.state} = 'completed'
+        AND ${t.responseStatus} BETWEEN 100 AND 599
+        AND ${t.responseCiphertext} IS NOT NULL
+        AND ${t.completedAt} IS NOT NULL
+      )`,
+    ),
+  ],
+);
+
+export type AgentTurnReceiptRow = typeof agentTurnReceipts.$inferSelect;
+export type NewAgentTurnReceiptRow = typeof agentTurnReceipts.$inferInsert;
 
 // V-820 fleet_nodes — design APPROVED AS WRITTEN 2026-05-17
 // (orchestrator handoff post-AUTO #1; migration 0043).

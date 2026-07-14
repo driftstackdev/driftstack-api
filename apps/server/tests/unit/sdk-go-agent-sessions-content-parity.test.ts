@@ -99,6 +99,13 @@ describe('sdk-go agent_sessions content parity', () => {
     );
   });
 
+  it('MessageOptions carries a durable IdempotencyKey and merges it beside BYOK without emitting empty headers', () => {
+    expect(body).toMatch(/IdempotencyKey\s+string/);
+    expect(body).toMatch(/Reuse it after a lost or\s*\n?\s*\/\/ ambiguous stream/);
+    expect(body).toMatch(/headers\["Idempotency-Key"\] = opts\.IdempotencyKey/);
+    expect(body).toMatch(/if len\(headers\) > 0 \{\s*\n?\s*req\.headers = headers/);
+  });
+
   it('AgentSessionsResource 11-method surface: Create + Get + List + Message + Close + SetMode + SendInputEvent + Takeover + Handback + LivekitToken + Resume. Drift to dropping a method would break cross-SDK uniformity (TS + Python have the same set); drift to changing signature would break Go consumers using the context.Context-first idiom', () => {
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Create\(ctx context\.Context, body \*CreateAgentSessionRequest, opts \*CreateOptions\) \(\*AgentSession, error\)/,

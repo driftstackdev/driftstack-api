@@ -104,6 +104,7 @@ describe('useAgentChat approve()', () => {
     // The approval echo was forwarded on the 2nd message call.
     expect(message).toHaveBeenCalledTimes(2);
     expect(message.mock.calls[1]?.[2]).toEqual({
+      idempotencyKey: expect.any(String) as string,
       approveConsequentialActions: [{ category: 'purchase', matchedText: 'place order' }],
     });
 
@@ -151,9 +152,11 @@ describe('useAgentChat approve()', () => {
     // The 3rd message carries BOTH approvals (accumulated), not just the latest.
     expect(message).toHaveBeenCalledTimes(3);
     expect(message.mock.calls[1]?.[2]).toEqual({
+      idempotencyKey: expect.any(String) as string,
       approveConsequentialActions: [{ category: 'purchase', matchedText: 'place order' }],
     });
     expect(message.mock.calls[2]?.[2]).toEqual({
+      idempotencyKey: expect.any(String) as string,
       approveConsequentialActions: [
         { category: 'purchase', matchedText: 'place order' },
         { category: 'payment', matchedText: 'confirm payment' },
@@ -175,7 +178,9 @@ describe('useAgentChat approve()', () => {
     await act(async () => {
       await result.current.send('just take a screenshot');
     });
-    expect(message.mock.calls[2]?.[2]).toEqual({});
+    expect(message.mock.calls[2]?.[2]).toEqual({
+      idempotencyKey: expect.any(String) as string,
+    });
   });
 
   it('send() still appends a user bubble (default unchanged)', async () => {
@@ -187,7 +192,48 @@ describe('useAgentChat approve()', () => {
     expect(result.current.turns.filter((t) => t.role === 'user')).toHaveLength(1);
     expect(result.current.turns.filter((t) => t.role === 'agent')).toHaveLength(1);
     // No approvals on a plain send.
-    expect(message.mock.calls[0]?.[2]).toEqual({});
+    expect(message.mock.calls[0]?.[2]).toEqual({
+      idempotencyKey: expect.any(String) as string,
+    });
+  });
+
+  it('reuses one receipt key after an ambiguous transport failure, then rotates after success', async () => {
+    message
+      .mockRejectedValueOnce(new Error('network timeout'))
+      .mockResolvedValueOnce(DONE)
+      .mockResolvedValueOnce(DONE);
+    const { result } = renderHook(() => useAgentChat());
+
+    await act(async () => {
+      await result.current.send('submit once');
+    });
+    const firstKey = (message.mock.calls[0]?.[2] as { idempotencyKey: string }).idempotencyKey;
+
+    await act(async () => {
+      await result.current.send('submit once');
+    });
+    const retryKey = (message.mock.calls[1]?.[2] as { idempotencyKey: string }).idempotencyKey;
+    expect(retryKey).toBe(firstKey);
+
+    await act(async () => {
+      await result.current.send('submit once');
+    });
+    const laterKey = (message.mock.calls[2]?.[2] as { idempotencyKey: string }).idempotencyKey;
+    expect(laterKey).not.toBe(firstKey);
+  });
+
+  it('rotates the receipt immediately when the logical request body changes', async () => {
+    message.mockRejectedValueOnce(new Error('network timeout')).mockResolvedValueOnce(DONE);
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.send('first task');
+    });
+    await act(async () => {
+      await result.current.send('different task');
+    });
+    expect((message.mock.calls[0]?.[2] as { idempotencyKey: string }).idempotencyKey).not.toBe(
+      (message.mock.calls[1]?.[2] as { idempotencyKey: string }).idempotencyKey,
+    );
   });
 
   it('does not expose an unknown agent-request exception', async () => {
