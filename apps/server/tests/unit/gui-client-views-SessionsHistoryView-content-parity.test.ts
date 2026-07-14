@@ -22,7 +22,7 @@
 //     'errored'.
 //   • Newest-first sort by destroyed_at via getTime() with
 //     null-coalesce to 0.
-//   • DriftstackError | Error | fallback message hierarchy.
+//   • Shared humanizeError with fixed actionable fallback.
 //   • !client early return → 'Configure API access' empty
 //     state.
 //   • errored status pill in status-error/20 tint else
@@ -75,10 +75,13 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it("Error message hierarchy: DriftstackError instanceof (server-friendly message) → Error instanceof (raw .message) → 'Failed to load history.' fallback — pinned so client-thrown DriftstackErrors surface clean messages instead of raw exception text", () => {
+  it('history failures use the shared safe humanizer with fixed actionable copy', () => {
+    expect(body).toMatch(/import \{ humanizeError \} from '\.\.\/lib\/humanize-error';/);
     expect(body).toMatch(
-      /const message =\s*\n?\s*err instanceof DriftstackError\s*\n?\s*\? err\.message\s*\n?\s*: err instanceof Error\s*\n?\s*\? err\.message\s*\n?\s*: 'Failed to load history\.';/,
+      /const message = humanizeError\(err, "Couldn't load session history\. Try again\."\);/,
     );
+    const bypassMutation = body.replace('humanizeError(err,', 'String(err) || (');
+    expect(bypassMutation).not.toMatch(/humanizeError\(err,/);
   });
 
   it("!client early-return: 'Configure API access' section-label + 'Set up your API key in Settings to view session history.' subline — pinned so the unauthenticated user sees a useful direction instead of an empty list", () => {
