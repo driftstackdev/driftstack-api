@@ -9,7 +9,7 @@
 //   • Buckets allowlist: `as const` 3-tuple ['global', 'sessions:create',
 //     'agent_sessions:message'] — v2-#8 sub-slice 8.20 isolated bucket.
 //   • BucketKey type: typeof BUCKET_KEYS[number].
-//   • Auth posture: requireAuth + global rate-limit gate.
+//   • Auth posture: requireAuth + exact read scope + global rate-limit gate.
 //   • TIER_RATE_LIMIT_DEFAULTS sourced from @driftstack/api-types
 //     (SDK mirror — single source of truth).
 //   • Active-override detection: expiresAt.getTime() > now (current
@@ -50,8 +50,10 @@ describe('W413.A apps/server/src/routes/account-rate-limits.ts content parity', 
     expect(body).toMatch(/type BucketKey = \(typeof BUCKET_KEYS\)\[number\];/);
   });
 
-  it('Auth posture: requireAuth + rateLimit("global") preHandler', () => {
-    expect(body).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/);
+  it('Auth posture: requireAuth + exact read scope + rateLimit("global") preHandler', () => {
+    expect(body).toMatch(
+      /\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \},/,
+    );
   });
 
   it('TIER_RATE_LIMIT_DEFAULTS imported from @driftstack/api-types (SDK mirror)', () => {
