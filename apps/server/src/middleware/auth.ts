@@ -9,6 +9,7 @@ import { authenticate, extractBearerToken, requireScope } from '../services/auth
 import type { AuthCache } from '../services/auth-cache.js';
 import type { AuthCoalescer } from '../services/auth-coalescer.js';
 import type { NegativeAuthCache } from '../services/negative-auth-cache.js';
+import type { OAuthStore } from '../services/oauth.js';
 import type { MfaService } from '../services/mfa.js';
 import {
   ExpiredKeyError,
@@ -75,6 +76,8 @@ export interface AuthPluginOptions {
    * negatives).
    */
   negativeAuthCache?: NegativeAuthCache | null;
+  /** Third-party OAuth bearer authority; absent fixtures reject `oat_` tokens. */
+  oauthStore?: OAuthStore | null;
   /** V-353e — when set, step-up gate consults this for enrollment
    *  state. When omitted the gate becomes a no-op (MFA off in this
    *  deploy / test fixture without it). */
@@ -133,6 +136,7 @@ function authPlugin(
         opts.authCoalescer,
         opts.staffEmails ?? new Set(),
         opts.negativeAuthCache ?? null,
+        opts.oauthStore ?? null,
       );
       request.account = ctx;
       try {
@@ -182,6 +186,7 @@ function authPlugin(
         opts.authCoalescer,
         opts.staffEmails ?? new Set(),
         opts.negativeAuthCache ?? null,
+        opts.oauthStore ?? null,
       );
       request.account = ctx;
       try {

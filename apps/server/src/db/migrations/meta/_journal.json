@@ -743,6 +743,13 @@
       "when": 1784003764771,
       "tag": "0105_web_session_auth_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1784018906000,
+      "tag": "0106_oauth_provider_persistence",
+      "breakpoints": true
     }
   ]
 }

@@ -825,6 +825,108 @@ export const oauthPendingLinks = pgTable(
   ],
 );
 
+// Third-party OAuth 2.0 provider persistence. These tables are deliberately
+// separate from account_oauth_links above: links authenticate a Driftstack
+// user through Google/GitHub, while these rows let an external application
+// obtain a bounded Driftstack API bearer token after customer consent.
+// Plaintext client secrets, pending-authorization handles, authorization codes
+// and access tokens are never stored. The OAuth store hashes each one-time or
+// bearer value before every database write/lookup; only SHA-256 digests land.
+export const oauthClients = pgTable(
+  'oauth_clients',
+  {
+    clientId: text('client_id').primaryKey(),
+    clientSecretHash: text('client_secret_hash').notNull(),
+    redirectUris: text('redirect_uris').array().notNull(),
+    label: text('label').notNull(),
+    // null means marketplace/global. Deleting a bound account must delete the
+    // client; SET NULL would silently widen it into a marketplace client.
+    accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('oauth_clients_secret_hash_check', sql`${t.clientSecretHash} ~ '^[0-9a-f]{64}$'`),
+    index('oauth_clients_account_idx').on(t.accountId),
+  ],
+);
+
+export const oauthAuthorizations = pgTable(
+  'oauth_authorizations',
+  {
+    authorizationHash: text('authorization_hash').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.clientId, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    state: text('state').notNull(),
+    scopes: apiKeyScope('scopes').array().notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    check('oauth_authorizations_hash_check', sql`${t.authorizationHash} ~ '^[0-9a-f]{64}$'`),
+    index('oauth_authorizations_client_idx').on(t.clientId),
+    index('oauth_authorizations_created_idx').on(t.createdAt),
+  ],
+);
+
+export const oauthAuthorizationCodes = pgTable(
+  'oauth_authorization_codes',
+  {
+    codeHash: text('code_hash').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.clientId, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    state: text('state').notNull(),
+    scopes: apiKeyScope('scopes').array().notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('oauth_authorization_codes_hash_check', sql`${t.codeHash} ~ '^[0-9a-f]{64}$'`),
+    index('oauth_authorization_codes_client_idx').on(t.clientId),
+    index('oauth_authorization_codes_account_idx').on(t.accountId),
+    index('oauth_authorization_codes_created_idx').on(t.createdAt),
+  ],
+);
+
+export const oauthAccessTokens = pgTable(
+  'oauth_access_tokens',
+  {
+    // The same UUID is a backing api_keys authority row. Reusing that
+    // identity preserves every existing actor/session foreign-key invariant
+    // when an OAuth bearer performs a write, while the oauth_access_tokens
+    // row remains the only place its token digest/client binding lives.
+    id: uuid('id')
+      .primaryKey()
+      .references(() => apiKeys.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.clientId, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    scopes: apiKeyScope('scopes').array().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('oauth_access_tokens_hash_check', sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+    uniqueIndex('oauth_access_tokens_hash_unique').on(t.tokenHash),
+    index('oauth_access_tokens_client_idx').on(t.clientId),
+    index('oauth_access_tokens_account_idx').on(t.accountId),
+    index('oauth_access_tokens_expires_idx').on(t.expiresAt),
+  ],
+);
+
 export const profileSnapshots = pgTable(
   'profile_snapshots',
   {

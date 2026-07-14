@@ -100,7 +100,7 @@ Query parameters (RFC 7636 PKCE — `S256` only):
 | `state`                 | yes      | opaque value 8–256 chars; you'll receive it back unchanged in step 3 |
 | `code_challenge`        | yes      | 43–128 chars; `base64url(SHA-256(code_verifier))`                    |
 | `code_challenge_method` | yes      | literal `S256` (the plain method is rejected)                        |
-| `scope`                 | optional | space-separated list from the standard API-key scope set             |
+| `scope`                 | optional | space-separated list from the curated third-party scope set          |
 
 Response (`200`):
 
@@ -130,11 +130,21 @@ cross-account takeover). General API keys cannot call this endpoint,
 even if they have broad scopes: consent must be a human action from an
 interactive dashboard session.
 
+An account-scoped client can be approved only by its registered
+account. A different customer's consent attempt returns `access_denied`
+without consuming the pending authorization; a marketplace client has
+no account binding and may be approved by any customer.
+
 The granted scopes are reduced against the dashboard session's
 effective authority. Broad `read` and `write` authority can approve
 their matching granular scopes (for example, `read:sessions`), while a
 granular scope cannot approve a broad or sibling scope. Privileged
 internal and account-owner scopes are never minted into OAuth tokens.
+The OAuth request itself may contain only the 13 granular scopes in the
+[integrator scope table](https://driftstack.dev/docs/oauth-apps/);
+deprecated broad aliases, `gui_control`, and newly added API-key scopes
+fail closed with `invalid_scope` rather than becoming available by
+default.
 
 Response:
 
@@ -185,7 +195,7 @@ Response (`200`):
   "access_token": "<opaque>",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "scope": ["read", "write"]
+  "scope": ["read:sessions", "write:sessions"]
 }
 ```
 
@@ -237,7 +247,7 @@ Response when the token is active:
   "active": true,
   "client_id": "oac_…",
   "account_id": "<customer-uuid>",
-  "scope": ["read", "write"],
+  "scope": ["read:sessions", "write:sessions"],
   "exp": 1747852800
 }
 ```
@@ -281,9 +291,11 @@ is revoked. This preserves RFC 7009 anti-enumeration behavior without
 allowing cross-client revocation. Invalid or revoked client credentials
 return `401` before mutation.
 
-Customers can ALSO revoke your integration from the customer
-dashboard at any time, which invalidates all access tokens issued
-to your `client_id` for that account.
+Client revocation is currently handled through Driftstack support;
+self-service customer-dashboard revocation is not yet available. A
+client revoke invalidates every access token issued by that client on
+the next API request. Rotating only the client secret does not revoke
+existing bearer tokens.
 
 ## Errors at a glance
 
@@ -308,13 +320,19 @@ OAuth code from the table above (`invalid_grant`, `invalid_client`,
 - **PKCE is mandatory**, including for confidential clients. The
   `plain` challenge method is rejected — `S256` only.
 - **Codes are single-use** and expire 5 minutes after issue. Race a
-  second `/token` exchange with the same code → both fail with
-  `invalid_grant` (the code is atomically consumed).
+  second `/token` exchange with the same code → exactly one exchange
+  succeeds and every loser receives `invalid_grant` (the code is
+  atomically consumed).
 - **Access tokens are opaque** — don't try to parse them. They're
   not JWTs; introspect via `/v1/oauth/introspect` if you need the
   encoded fields. Introspection and revocation require the same
   confidential-client credentials used at `/v1/oauth/token` and are
   bound to that client's own tokens.
+- **Provider state is persistent.** Client secrets, pending consent
+  handles, authorization codes and access tokens are stored only as
+  SHA-256 digests. Pending consent survives API restarts/replicas, and
+  an issued `oat_` bearer enters the same account/scope/rate-limit/audit
+  pipeline as an API key.
 - **Refresh tokens are NOT issued.** When a token expires, the
   customer must re-authorize. This is intentional; refresh tokens
   are an attack surface and 1-hour TTL access tokens are a workable

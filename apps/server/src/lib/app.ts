@@ -348,10 +348,11 @@ export interface AppDeps {
    */
   nowpaymentsIpnCallbackUrl?: string;
   /**
-   * V-667.B — OAuth store. When provided, /v1/oauth/* + /v1/admin/oauth/*
-   * routes register. When omitted, OAuth is not exposed (pre-launch
-   * posture). Tests pass `new InMemoryOAuthStore()`; production wires
-   * a Drizzle-backed implementation in V-667.C.
+   * OAuth provider authority. Production and real e2e pass the persistent
+   * Drizzle store, registering /v1/oauth/* + /v1/admin/oauth/* and resolving
+   * `oat_` bearers through the same instance. Omission remains a fail-closed
+   * seam for isolated fixtures: provider routes are absent and central auth
+   * rejects OAuth-shaped tokens.
    */
   oauthStore?: OAuthStore;
   /**
@@ -938,6 +939,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // DoS hardening — negative auth cache: a repeated bogus token skips
     // the prefix-lookup + scrypt verify after the first rejection.
     negativeAuthCache: deps.negativeAuthCache ?? null,
+    ...(deps.oauthStore !== undefined ? { oauthStore: deps.oauthStore } : {}),
     // V-353e — step-up gate consults MFA enrollment state; null when
     // MFA is disabled in this deploy (gate becomes a no-op).
     mfaService: deps.mfaService ?? null,

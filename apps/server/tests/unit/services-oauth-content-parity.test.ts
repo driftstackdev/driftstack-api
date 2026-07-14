@@ -26,12 +26,14 @@
 //   • authorize: code_challenge_method=S256 enforced (downgrade
 //     reject); exact-match redirect_uri check; pendingAuthorizations
 //     in-memory staging.
-//   • approveAuthorization: pending pop + 5-min TTL recheck +
-//     canonical hierarchical scope reduction + fresh code mint.
+//   • authorize/approveAuthorization retain the exact curated third-party
+//     scope allowlist; broad/deprecated/new API-key scopes fail closed.
+//   • Approval: pending read + transactional replace with one code +
+//     5-min TTL recheck + hierarchical scope reduction.
 //   • authenticateClient: shared client_secret_hash timing-safe equality;
 //     consumed_at !== null → invalid_grant; client_id-mismatch
 //     guard; redirect_uri-mismatch guard; verifyS256Challenge call;
-//     atomic consumeCodeIfUnconsumed claim (single-use gate); token mint with oat_ prefix.
+//     atomic code-consume + authority/token insert; token mint with oat_ prefix.
 //   • V-667.E rotateClientSecret: invalid_client on unknown or
 //     revoked; same client_id retained.
 //   • RFC 7662/7009 lifecycle calls authenticate and bind the live
@@ -111,7 +113,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(/this\.name = 'OAuthError';/);
   });
 
-  it('OAuthStore: 4 client methods + 3 code methods + 3 token methods + V-667.E rotateClientSecretHash atomic-swap framing', () => {
+  it('OAuthStore: client + persistent-consent + code + token authority methods are explicit', () => {
     expect(body).toMatch(/export interface OAuthStore \{/);
     expect(body).toMatch(/insertClient\(client: OAuthClient\): Promise<void>;/);
     expect(body).toMatch(/getClient\(client_id: string\): Promise<OAuthClient \| null>;/);
@@ -122,14 +124,25 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(
       /rotateClientSecretHash\(client_id: string, new_hash: string\): Promise<boolean>;/,
     );
-    expect(body).toMatch(/insertCode\(code: AuthorizationCode\): Promise<void>;/);
+    expect(body).toMatch(
+      /insertAuthorization\(authorization: PendingAuthorization\): Promise<void>;/,
+    );
+    expect(body).toMatch(
+      /getAuthorization\(authorization_id: string\): Promise<PendingAuthorization \| null>;/,
+    );
+    expect(body).toMatch(/consumeAuthorizationForCode\(args: \{/);
+    expect(body).toMatch(
+      /'inserted' \| 'expired' \| 'unavailable' \| 'client_unavailable' \| 'account_mismatch'/,
+    );
     expect(body).toMatch(/getCode\(code: string\): Promise<AuthorizationCode \| null>;/);
-    expect(body).toMatch(/consumeCodeIfUnconsumed\(code: string, at: number\): Promise<boolean>;/);
-    expect(body).toMatch(/insertTokenIfClientAuthorityMatches\(args: \{/);
+    expect(body).toMatch(/consumeCodeForToken\(args: \{/);
     expect(body).toMatch(/expectedClientSecretHash: string;/);
-    expect(body).toMatch(/INSERT … SELECT from the/);
+    expect(body).toMatch(/performs all four changes in one transaction/);
     expect(body).toMatch(/getToken\(token: string\): Promise<AccessToken \| null>;/);
     expect(body).toMatch(/revokeToken\(token: string\): Promise<void>;/);
+    expect(body).toMatch(
+      /findTokenForAuthentication\(token: string, now: number\): Promise<AccessToken \| null>;/,
+    );
   });
 
   it('InMemoryOAuthStore: getCode self-evict on TTL expiry; getToken self-evict on expires_at', () => {
@@ -172,21 +185,33 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(
       /const authorization_id = `oaa_\$\{randomBytes\(16\)\.toString\('base64url'\)\}`;/,
     );
+    expect(body).toMatch(/const OAUTH_ALLOWED_SCOPES: ReadonlySet<ApiKeyScope> = new Set\(\[/);
+    expect(body).toMatch(
+      /if \(args\.scope\.some\(\(scope\) => !OAUTH_ALLOWED_SCOPES\.has\(scope\)\)\) \{\s*\n?\s*throw new OAuthError\('invalid_scope', 'scope is not available to OAuth clients'\);/,
+    );
   });
 
-  it('approveAuthorization: pending pop + 5-min TTL recheck + canonical hierarchical scope reduction + fresh code mint', () => {
+  it('approveAuthorization: atomic persistent authorization-to-code commit + TTL recheck + hierarchical scope reduction', () => {
     expect(body).toMatch(
-      /if \(pending === undefined\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'unknown or expired authorization_id'\);/,
+      /const pending = await this\.store\.getAuthorization\(args\.authorization_id\);/,
     );
-    expect(body).toMatch(/this\.pendingAuthorizations\.delete\(args\.authorization_id\);/);
+    expect(body).toMatch(
+      /if \(pending === null\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'unknown or expired authorization_id'\);/,
+    );
     expect(body).toMatch(
       /if \(this\.nowFn\(\) - pending\.created_at > CODE_TTL_SECONDS \* 1000\) \{\s*\n?\s*throw new OAuthError\('invalid_request', 'authorization expired before approval'\);/,
     );
     expect(body).toMatch(/import \{ scopesSatisfy \} from '\.\.\/lib\/errors-helpers\.js';/);
     expect(body).toMatch(
-      /!OAUTH_DENY_SCOPES\.has\(s\) &&\s*\n?\s*\(approverScopes === undefined \|\| scopesSatisfy\(approverScopes, s\)\)/,
+      /OAUTH_ALLOWED_SCOPES\.has\(s\) &&\s*\n?\s*\(approverScopes === undefined \|\| scopesSatisfy\(approverScopes, s\)\)/,
     );
     expect(body).toMatch(/const code = `oac_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
+    expect(body).toMatch(/this\.store\.consumeAuthorizationForCode\(\{/);
+    expect(body).toMatch(/if \(committed === 'unavailable'\) \{/);
+    expect(body).toMatch(/if \(committed === 'client_unavailable'\) \{/);
+    expect(body).toMatch(
+      /if \(committed === 'account_mismatch'\) \{\s*\n?\s*throw new OAuthError\('access_denied', 'client is not registered for this account'\);/,
+    );
   });
 
   it('exchangeCode delegates shared constant-time client authentication and preserves grant invariants', () => {
@@ -208,14 +233,11 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(
       /if \(!verifyS256Challenge\(\{ verifier: args\.code_verifier, challenge: code\.code_challenge \}\)\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'PKCE verification failed'\);/,
     );
-    // Atomic single-use gate: claim-or-reject (no blind unconditional consume).
-    expect(body).toMatch(
-      /if \(!\(await this\.store\.consumeCodeIfUnconsumed\(args\.code, this\.nowFn\(\)\)\)\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'code already exchanged'\);/,
-    );
-    expect(body).toMatch(/this\.store\.insertTokenIfClientAuthorityMatches\(\{/);
+    expect(body).toMatch(/this\.store\.consumeCodeForToken\(\{/);
+    expect(body).toMatch(/consumed_at: now,/);
     expect(body).toMatch(/expectedClientSecretHash: presentedSecretHash,/);
     expect(body).toMatch(
-      /if \(!inserted\) throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
+      /if \(committed === 'client_authority_changed'\) \{\s*\n?\s*throw new OAuthError\('invalid_client', 'unknown or revoked client_id'\);/,
     );
     expect(body).toMatch(/const token = `oat_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
   });

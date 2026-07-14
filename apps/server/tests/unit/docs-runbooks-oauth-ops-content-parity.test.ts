@@ -2,17 +2,16 @@
 // V-682 internal OAuth ops ref. Drift here either weakens the
 // 1h-token-TTL-no-refresh posture (would re-permit perpetual
 // access), drops the secret-shown-ONCE rotation discipline, or
-// weakens the existing-tokens-stay-valid-after-revoke caveat
-// (would surprise ops thinking revocation is instant for tokens).
+// weakens the full-kill revocation guarantee (would surprise ops
+// if a revoked client retained bearer authority).
 //
 //   • V-682. Customer-facing dev docs live at /docs/oauth-apps.
 //   • Token TTL: 1 hour. NO refresh tokens (intentional —
 //     forces consent re-confirmation on regular cadence).
 //   • V-667.B register/revoke + V-667.E rotate-secret admin routes.
 //   • Secret shown ONCE — copy to password-manager + email reply.
-//   • Existing access tokens stay valid after revoke (1h TTL),
-//     full kill requires SQL revoke of oauth_access_tokens.
-//   • V-667.G follow-up: "revoke all tokens for client" admin route.
+//   • Rotation preserves access tokens; client revoke atomically
+//     invalidates every backing token authority.
 //   • Introspect /v1/oauth/introspect for 401 triage.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -59,7 +58,7 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     expect(body).toMatch(/founder's password manager \+ the email reply to the developer\./);
   });
 
-  it('Rotation/revocation pins surviving-token caveat and requires administrative-store deletion after client revoke', () => {
+  it('Rotation preserves tokens while client revocation is an atomic full kill', () => {
     expect(body).toMatch(/## Rotating a client_secret \(V-667\.E\)/);
     expect(body).toMatch(/"\$BASE_URL\/v1\/admin\/oauth\/clients\/<client_id>\/rotate-secret"/);
     expect(body).toMatch(/The response carries the NEW plaintext `client_secret`\./);
@@ -75,13 +74,13 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     expect(body).toMatch(/`revoked_at` is set on the client row\. Effects:/);
     expect(body).toMatch(/- New `\/authorize` requests for the client fail\./);
     expect(body).toMatch(/- New `\/token` exchanges fail \(the service blocks revoked clients\)\./);
-    expect(body).toMatch(/- \*\*Existing access tokens stay valid until their 1-hour TTL\.\*\*/);
-    expect(body).toMatch(/If you need to invalidate \*\*all\*\* existing tokens too:/);
-    expect(body).toMatch(/3\. Delete each token through the administrative store operation\./);
-    expect(body).toMatch(/public `POST \/v1\/oauth\/revoke` route cannot be used after client/);
-    expect(body).toMatch(/correctly rejects revoked client credentials\./);
-    expect(body).toMatch(/A V-667\.G follow-up will expose a "revoke all tokens for client"/);
-    expect(body).toMatch(/admin route/);
+    expect(body).toMatch(/- \*\*Every existing access token issued by the client is revoked in/);
+    expect(body).toMatch(/the same database transaction\.\*\*/);
+    expect(body).toMatch(/there is no positive OAuth-auth cache or/);
+    expect(body).toMatch(/one-hour residual-access window\./);
+    expect(body).toMatch(
+      /Rotation replaces\s*\n?\s*only the client authenticator and keeps current bearer tokens alive/,
+    );
   });
 
   it('Triage keeps token+secret with the developer, uses client-authenticated introspection, and shares only sanitized output', () => {
@@ -104,15 +103,13 @@ describe('W556.B /docs/runbooks/oauth-ops.md content parity', () => {
     expect(body).toMatch(/state \+ V-481 scope predicate edge cases\./);
   });
 
-  it("Security-incident + 5-failure-modes framing pinned: '## Security incident posture' + '**Revoke the client immediately** (above). Don't wait for developer confirmation.' + '**Force-revoke any active tokens** via the SQL path described above.' + 'Open an incident in the `incidents` runbook with severity `major` or `critical` depending on impact.' + 'Notify the affected customer (the one whose data the client could access) within 24h via the standard incident-comms path.' + '`/authorize` returns 400 \"invalid_request\"' + '`/token` returns 401 \"invalid_client\"' + '`/token` returns 400 \"invalid_grant\"' + '`/introspect` returns active:false unexpectedly' + 'Customer sees an unexpected OAuth consent' + 'Phishing — someone got their session and tried to authorize a malicious client.' — pinned so the immediate-revoke-no-confirm + force-revoke-SQL + 24h-customer-notify + 5-failure-mode-row + phishing-malicious-client-detection commitment survives", () => {
+  it('Security incident response pins atomic revoke, notification, and failure-mode triage', () => {
     expect(body).toMatch(/## Security incident posture/);
     expect(body).toMatch(/1\. \*\*Revoke the client immediately\*\* \(above\)\. Don't wait for/);
-    expect(body).toMatch(/developer confirmation\./);
-    expect(body).toMatch(/2\. \*\*Force-revoke any active tokens\*\* via the SQL path described/);
-    expect(body).toMatch(/above\./);
-    expect(body).toMatch(/3\. Open an incident in the `incidents` runbook with severity/);
+    expect(body).toMatch(/developer confirmation\. This atomically revokes its active tokens\./);
+    expect(body).toMatch(/2\. Open an incident in the `incidents` runbook with severity/);
     expect(body).toMatch(/`major` or `critical` depending on impact\./);
-    expect(body).toMatch(/4\. Notify the affected customer \(the one whose data the client/);
+    expect(body).toMatch(/3\. Notify the affected customer \(the one whose data the client/);
     expect(body).toMatch(/could access\) within 24h via the standard incident-comms path\./);
     expect(body).toMatch(/`\/authorize` returns 400 "invalid_request"/);
     expect(body).toMatch(/`\/token` returns 401 "invalid_client"/);

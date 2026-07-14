@@ -79,6 +79,7 @@ import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.j
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
 import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
 import { DrizzleOAuthLinksRepo, DrizzleOAuthPendingLinksRepo } from '../db/oauth-links-repo.js';
+import { DrizzleOAuthStore } from '../db/oauth-store.js';
 import { OAuthClientServiceImpl } from '../services/oauth-client-service.js';
 import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
 import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
@@ -334,6 +335,7 @@ export async function createProductionDeps(
 
   // Repos — Drizzle-backed.
   const authRepo = new DrizzleAccountAuthRepo(dbHandle);
+  const oauthStore = new DrizzleOAuthStore(dbHandle);
   const sessionsRepo = new DrizzleSessionRepo(dbHandle);
   const apiKeysRepo = new DrizzleApiKeysRepo(dbHandle);
   const usageRepo = new DrizzleUsageRepo(dbHandle);
@@ -1845,6 +1847,7 @@ export async function createProductionDeps(
     authCache,
     authCoalescer,
     negativeAuthCache,
+    oauthStore,
     ...(effectiveStaffEmails.size > 0 ? { staffEmails: effectiveStaffEmails } : {}),
     ...(ownerEmail !== null ? { ownerEmail } : {}),
     rateLimitStore,

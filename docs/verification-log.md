@@ -26287,3 +26287,82 @@ Verification:
   is generator-identical; strict server source/test TypeScript, Docs and
   marketing Astro checks (0 errors/0 warnings/0 hints), targeted ESLint,
   Prettier, diff, and whitespace checks are green.
+
+## V-618 — Third-party OAuth is persistent and authenticates real API requests
+
+**Date:** 2026-07-14
+
+Closed a release-blocking capability gap between the published OAuth contract
+and production bootstrap. The provider routes were registered only when an
+`OAuthStore` dependency existed, but bootstrap never supplied one; the only
+store was test-only memory, PostgreSQL had no provider tables, and central
+bearer authentication had no `oat_` branch. A token returned by the isolated
+OAuth service therefore could not authenticate any documented API request,
+and all client/consent/code/token state would have disappeared on a restart or
+replica transition.
+
+Production now constructs one PostgreSQL-backed provider store and shares it
+with the OAuth routes and central authentication middleware. Four migrated
+tables persist clients, pending authorizations, codes and access tokens. The
+database stores only SHA-256 digests of client secrets and externally
+presented authorization/code/token handles—never their plaintext. Every OAuth
+token also owns one backing `api_keys` authority UUID with the same one-way
+token digest. That preserves established session and audit foreign-key
+contracts when an OAuth principal performs a write without creating a second
+usable credential.
+
+The two lifecycle handoffs are transactionally crash-safe. Approval deletes
+one pending authorization and inserts exactly one code in the same
+transaction. Token exchange locks the code and client, rejects consumed or
+expired code/client-authority changes, then consumes the code and inserts both
+authority rows in one transaction. Parallel approval or exchange therefore
+has exactly one winner, while an exception cannot strand accepted consent or
+burn a valid code without a returned token. Client revocation is a full kill:
+it revokes the client, every OAuth token and every backing API-key authority
+under one client lock/transaction. Secret rotation intentionally preserves
+already issued bearers.
+
+Central `oat_` authentication performs an authoritative joined PostgreSQL
+lookup on every request rather than using the positive Redis credential cache.
+It requires an unexpired/unrevoked token, live client and live backing
+authority, then reloads live account status, teams and rate-limit overrides
+and exposes only the exact approved OAuth scopes. Revocation is therefore
+effective on the next API request, while suspended/deleted accounts and
+missing provider wiring remain fail-closed. Existing API-key and web-session
+dispatch remains unchanged.
+
+Activation also closed a scope-boundary mismatch found during final
+documentation reconciliation. The integrator contract publishes 13 granular
+OAuth scopes, but the dormant service used only a three-entry denylist; broad
+legacy `read`/`write` aliases held by normal dashboard sessions could therefore
+have been staged and minted after production wiring. Authorize and approval now
+both retain the exact published allowlist. Deprecated broad aliases,
+`gui_control`, account/staff scopes, and any future API-key scope fail closed
+with `invalid_scope` until explicitly added to the third-party contract.
+
+The same review closed an account-binding gap. `oauth_clients.account_id`
+already distinguished single-customer clients from null-bound marketplace
+clients, but approval had not enforced it. The authorization-to-code
+transaction now locks the live client and rejects a different approving
+account without consuming consent; token issuance rechecks the binding. The
+foreign key uses delete-cascade because `SET NULL` would have converted a
+deleted customer's bound client into a global marketplace client.
+
+Verification:
+
+- the complete OAuth-related unit/integration matrix passes 40 files and
+  449/449 tests; the final focused transaction/authentication/scope/docs
+  matrix passes 6 files and 69/69 tests;
+- the migrated PostgreSQL/Redis Playwright flow passes 6/6, including an
+  actual signup/verification web session approving consent, a fresh service
+  instance consuming persisted consent, simultaneous approval with one code,
+  foreign-account consent refusal without consuming the authorization,
+  simultaneous code exchange with one token, broad-alias refusal, exact-scope
+  denial, and an OAuth bearer creating a real session through the backing actor
+  foreign key;
+- the same real flow inspects digest-only rows, proves token revoke returns
+  401 on the next API request, and proves client revoke leaves zero live OAuth
+  tokens and zero live backing authorities;
+- strict server source/test TypeScript, targeted ESLint, diff and whitespace
+  checks are green; Docs Astro reports 0 errors/0 warnings/0 hints and builds
+  all 61 pages with its search index.

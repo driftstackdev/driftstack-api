@@ -29,12 +29,24 @@ import { scopesSatisfy } from '../lib/errors-helpers.js';
 
 const CODE_TTL_SECONDS = 5 * 60;
 
-// Privileged scopes a third-party OAuth token must NEVER carry (full account / admin
-// control). Granted scope = requested ∩ approver scopes, minus these.
-const OAUTH_DENY_SCOPES: ReadonlySet<ApiKeyScope> = new Set([
-  'account_owner',
-  'driftstack_internal_admin',
-  'admin',
+// Exact third-party scope surface published to integrators. This is an
+// allowlist rather than a privileged-scope denylist: newly added API-key
+// scopes and deprecated broad aliases must never become OAuth-authorizable by
+// accident. Granted scope = requested ∩ this set ∩ approver authority.
+const OAUTH_ALLOWED_SCOPES: ReadonlySet<ApiKeyScope> = new Set([
+  'read:sessions',
+  'write:sessions',
+  'read:profiles',
+  'write:profiles',
+  'admin:profiles',
+  'read:webhooks',
+  'write:webhooks',
+  'admin:webhooks',
+  'read:api-keys',
+  'admin:api-keys',
+  'read:billing',
+  'admin:billing',
+  'read:audit',
 ] as ApiKeyScope[]);
 const TOKEN_TTL_SECONDS = 60 * 60; // 1 hour — short by design; no refresh tokens.
 
@@ -67,7 +79,19 @@ export interface AuthorizationCode {
   consumed_at: number | null;
 }
 
+export interface PendingAuthorization {
+  authorization_id: string;
+  client_id: string;
+  redirect_uri: string;
+  state: string;
+  scope: readonly ApiKeyScope[];
+  code_challenge: string;
+  created_at: number;
+}
+
 export interface AccessToken {
+  /** UUID of the backing api_keys authority row (persistent stores). */
+  api_key_id?: string;
   token: string;
   client_id: string;
   account_id: string;
@@ -92,50 +116,62 @@ export interface OAuthStore {
    * later introspection and revocation as well as token exchange.
    */
   rotateClientSecretHash(client_id: string, new_hash: string): Promise<boolean>;
+  // Pending browser consent. Approval reads the immutable pending row, then
+  // atomically replaces it with exactly one authorization code. The database
+  // transaction means a crash can neither lose accepted consent nor mint two
+  // codes from parallel submits.
+  insertAuthorization(authorization: PendingAuthorization): Promise<void>;
+  getAuthorization(authorization_id: string): Promise<PendingAuthorization | null>;
+  consumeAuthorizationForCode(args: {
+    authorization_id: string;
+    code: string;
+    account_id: string;
+    scope: readonly ApiKeyScope[];
+    created_at: number;
+    not_before: number;
+  }): Promise<'inserted' | 'expired' | 'unavailable' | 'client_unavailable' | 'account_mismatch'>;
   // Authorization codes
-  insertCode(code: AuthorizationCode): Promise<void>;
   getCode(code: string): Promise<AuthorizationCode | null>;
   /**
-   * Atomically claim an unconsumed code: set consumed_at and return true IFF
-   * this call transitioned it unconsumed → consumed. Returns false when the code
-   * is unknown or was already consumed (incl. by a concurrent exchange). The
-   * persistent impl MUST do this as a single conditional statement (UPDATE …
-   * SET consumed_at = $at WHERE code = $code AND consumed_at IS NULL RETURNING …,
-   * claimed = rowCount === 1) so two concurrent /v1/oauth/token exchanges of the
-   * same code can never both succeed (authorization-code reuse / token replay).
+   * Atomically consume one code, revalidate the exact live client authority,
+   * and insert both the backing API-key authority and OAuth token. A persistent
+   * implementation performs all four changes in one transaction. Therefore a
+   * crash cannot burn a valid code without returning a token, parallel exchanges
+   * cannot both win, and concurrent revoke/rotation cannot mint stale authority.
    */
-  consumeCodeIfUnconsumed(code: string, at: number): Promise<boolean>;
-  // Access tokens
-  /**
-   * Insert a token only while its client is unrevoked and still carries the
-   * exact secret hash authenticated by this exchange. Return true iff the
-   * token was inserted. A persistent implementation must bind both client
-   * predicates to the insert atomically (for example, INSERT … SELECT from the
-   * matching live client) so concurrent revoke or secret rotation cannot mint
-   * authority from a stale client read.
-   */
-  insertTokenIfClientAuthorityMatches(args: {
+  consumeCodeForToken(args: {
+    code: string;
+    consumed_at: number;
     token: AccessToken;
     expectedClientSecretHash: string;
-  }): Promise<boolean>;
+  }): Promise<'inserted' | 'code_unavailable' | 'client_authority_changed'>;
+  // Access tokens
   getToken(token: string): Promise<AccessToken | null>;
   revokeToken(token: string): Promise<void>;
+  /**
+   * Resolve one bearer token against both token and client authority. The
+   * persistent implementation performs one joined query over an unrevoked,
+   * unexpired token and an unrevoked client; raw token material is hashed
+   * before lookup. Central API authentication intentionally does not cache
+   * this result, so revocation is authoritative on the next request.
+   */
+  findTokenForAuthentication(token: string, now: number): Promise<AccessToken | null>;
 }
 
 export class InMemoryOAuthStore implements OAuthStore {
   private readonly clients = new Map<string, OAuthClient>();
+  private readonly authorizations = new Map<string, PendingAuthorization>();
   private readonly codes = new Map<string, AuthorizationCode>();
   private readonly tokens = new Map<string, AccessToken>();
 
   /**
-   * 2026-05-21 — test-only state flush. The e2e helper's resetState()
-   * calls this so per-test assertions don't see clients / codes /
-   * tokens left over from earlier tests in the same spec file.
-   * Never call from production code paths — there are no production
-   * code paths that should be wiping the catalog mid-run.
+   * Test-only state flush for isolated in-memory suites. Real e2e and
+   * production use DrizzleOAuthStore and reset through database lifecycle;
+   * no production path can wipe provider authority mid-run.
    */
   resetForTest(): void {
     this.clients.clear();
+    this.authorizations.clear();
     this.codes.clear();
     this.tokens.clear();
   }
@@ -162,11 +198,19 @@ export class InMemoryOAuthStore implements OAuthStore {
   // eslint-disable-next-line @typescript-eslint/require-await
   async revokeClient(id: string, at: number): Promise<void> {
     const c = this.clients.get(id);
-    if (c) this.clients.set(id, { ...c, revoked_at: at });
+    if (c === undefined) return;
+    this.clients.set(id, { ...c, revoked_at: at });
+    for (const [token, authority] of this.tokens) {
+      if (authority.client_id === id) this.tokens.delete(token);
+    }
   }
   // eslint-disable-next-line @typescript-eslint/require-await
-  async insertCode(c: AuthorizationCode): Promise<void> {
-    this.codes.set(c.code, c);
+  async insertAuthorization(authorization: PendingAuthorization): Promise<void> {
+    this.authorizations.set(authorization.authorization_id, authorization);
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getAuthorization(authorization_id: string): Promise<PendingAuthorization | null> {
+    return this.authorizations.get(authorization_id) ?? null;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async getCode(code: string): Promise<AuthorizationCode | null> {
@@ -179,30 +223,69 @@ export class InMemoryOAuthStore implements OAuthStore {
     return c;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
-  async consumeCodeIfUnconsumed(code: string, at: number): Promise<boolean> {
-    // Single-thread check-and-set: no await between the read and the write, so
-    // two interleaved exchanges can't both observe consumed_at === null and both
-    // claim the code.
-    const c = this.codes.get(code);
-    if (c === undefined || c.consumed_at !== null) return false;
-    this.codes.set(code, { ...c, consumed_at: at });
-    return true;
+  async consumeAuthorizationForCode(args: {
+    authorization_id: string;
+    code: string;
+    account_id: string;
+    scope: readonly ApiKeyScope[];
+    created_at: number;
+    not_before: number;
+  }): Promise<'inserted' | 'expired' | 'unavailable' | 'client_unavailable' | 'account_mismatch'> {
+    const authorization = this.authorizations.get(args.authorization_id);
+    if (authorization === undefined) return 'unavailable';
+    const client = this.clients.get(authorization.client_id);
+    if (client === undefined || client.revoked_at !== null) return 'client_unavailable';
+    if (client.account_id !== null && client.account_id !== args.account_id) {
+      return 'account_mismatch';
+    }
+    this.authorizations.delete(args.authorization_id);
+    if (authorization.created_at < args.not_before) return 'expired';
+    this.codes.set(args.code, {
+      code: args.code,
+      client_id: authorization.client_id,
+      redirect_uri: authorization.redirect_uri,
+      state: authorization.state,
+      scope: args.scope,
+      code_challenge: authorization.code_challenge,
+      account_id: args.account_id,
+      created_at: args.created_at,
+      consumed_at: null,
+    });
+    return 'inserted';
   }
   // eslint-disable-next-line @typescript-eslint/require-await
-  async insertTokenIfClientAuthorityMatches(args: {
+  async consumeCodeForToken(args: {
+    code: string;
+    consumed_at: number;
     token: AccessToken;
     expectedClientSecretHash: string;
-  }): Promise<boolean> {
+  }): Promise<'inserted' | 'code_unavailable' | 'client_authority_changed'> {
+    // No await occurs between any read and write in this test-only store, so
+    // this models the production transaction's indivisible commit.
+    const code = this.codes.get(args.code);
+    if (
+      code === undefined ||
+      code.consumed_at !== null ||
+      code.client_id !== args.token.client_id ||
+      code.account_id !== args.token.account_id
+    ) {
+      return 'code_unavailable';
+    }
     const client = this.clients.get(args.token.client_id);
     if (
       client === undefined ||
       client.revoked_at !== null ||
+      (client.account_id !== null && client.account_id !== args.token.account_id) ||
       !constantTimeStringEqual(client.client_secret_hash, args.expectedClientSecretHash)
     ) {
-      return false;
+      return 'client_authority_changed';
     }
-    this.tokens.set(args.token.token, args.token);
-    return true;
+    this.codes.set(args.code, { ...code, consumed_at: args.consumed_at });
+    this.tokens.set(args.token.token, {
+      ...args.token,
+      api_key_id: args.token.api_key_id ?? oauthCredentialId(args.token.token),
+    });
+    return 'inserted';
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async getToken(token: string): Promise<AccessToken | null> {
@@ -217,6 +300,14 @@ export class InMemoryOAuthStore implements OAuthStore {
   // eslint-disable-next-line @typescript-eslint/require-await
   async revokeToken(token: string): Promise<void> {
     this.tokens.delete(token);
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async findTokenForAuthentication(token: string, now: number): Promise<AccessToken | null> {
+    const accessToken = this.tokens.get(token);
+    if (accessToken === undefined || accessToken.expires_at <= now) return null;
+    const client = this.clients.get(accessToken.client_id);
+    if (client === undefined || client.revoked_at !== null) return null;
+    return accessToken;
   }
 }
 
@@ -270,10 +361,9 @@ export interface ApproveAuthorizationArgs {
   authorization_id: string;
   account_id: string;
   // The approving caller's own scopes (the route always passes these). The granted
-  // code/token scope is restricted to the intersection of the requested scope and these,
-  // minus privileged scopes — so a third-party OAuth token can never exceed the approver's
-  // authority or carry account_owner / admin / driftstack_internal_admin. When omitted, the
-  // privileged deny-set still applies (the intersection is just skipped).
+  // code/token scope is restricted to the exact third-party allowlist intersected with
+  // the approver's authority. When omitted, the allowlist still applies (only the
+  // approver-authority intersection is skipped for isolated service fixtures).
   approverScopes?: readonly ApiKeyScope[];
 }
 
@@ -308,8 +398,6 @@ export interface ClientTokenArgs extends OAuthClientCredentials {
 }
 
 export class OAuthService {
-  private readonly pendingAuthorizations = new Map<string, AuthorizationCode & { pending: true }>();
-
   constructor(
     private readonly store: OAuthStore,
     private readonly nowFn: () => number = () => Date.now(),
@@ -385,6 +473,9 @@ export class OAuthService {
     if (args.code_challenge_method !== 'S256') {
       throw new OAuthError('invalid_request', 'only S256 PKCE is supported');
     }
+    if (args.scope.some((scope) => !OAUTH_ALLOWED_SCOPES.has(scope))) {
+      throw new OAuthError('invalid_scope', 'scope is not available to OAuth clients');
+    }
     const client = await this.store.getClient(args.client_id);
     if (client === null || client.revoked_at !== null) {
       throw new OAuthError('invalid_client', 'unknown or revoked client_id');
@@ -392,20 +483,18 @@ export class OAuthService {
     if (!client.redirect_uris.includes(args.redirect_uri)) {
       throw new OAuthError('invalid_request', 'redirect_uri not registered');
     }
-    // Stage the pending authorization in-memory; dashboard exchanges
-    // authorization_id → approval result via approveAuthorization.
+    // Persist the pending authorization; the dashboard exchanges its
+    // one-time authorization_id through approveAuthorization. Persistent
+    // storage keeps this flow valid across restarts and API replicas.
     const authorization_id = `oaa_${randomBytes(16).toString('base64url')}`;
-    this.pendingAuthorizations.set(authorization_id, {
-      code: '', // assigned on approval
+    await this.store.insertAuthorization({
+      authorization_id,
       client_id: args.client_id,
       redirect_uri: args.redirect_uri,
       state: args.state,
       scope: [...args.scope],
       code_challenge: args.code_challenge,
-      account_id: '', // set on approval
       created_at: this.nowFn(),
-      consumed_at: null,
-      pending: true,
     });
     return {
       authorization_id,
@@ -417,35 +506,44 @@ export class OAuthService {
   }
 
   async approveAuthorization(args: ApproveAuthorizationArgs): Promise<ApproveAuthorizationResult> {
-    const pending = this.pendingAuthorizations.get(args.authorization_id);
-    if (pending === undefined) {
+    const pending = await this.store.getAuthorization(args.authorization_id);
+    if (pending === null) {
       throw new OAuthError('invalid_request', 'unknown or expired authorization_id');
     }
-    this.pendingAuthorizations.delete(args.authorization_id);
     if (this.nowFn() - pending.created_at > CODE_TTL_SECONDS * 1000) {
       throw new OAuthError('invalid_request', 'authorization expired before approval');
     }
-    // SECURITY: restrict the granted scope — always drop the privileged deny-set, then
-    // reduce through the canonical hierarchy so broad authority can grant matching granular
-    // scopes without ever letting granular authority broaden or cross into a sibling scope.
+    // SECURITY: retain the exact OAuth allowlist at approval as defense in depth,
+    // then reduce through the canonical hierarchy so broad approver authority can
+    // grant a matching granular scope without letting granular authority broaden.
     const approverScopes = args.approverScopes;
     const grantedScope = pending.scope.filter(
       (s) =>
-        !OAUTH_DENY_SCOPES.has(s) &&
+        OAUTH_ALLOWED_SCOPES.has(s) &&
         (approverScopes === undefined || scopesSatisfy(approverScopes, s)),
     );
     const code = `oac_${randomBytes(32).toString('base64url')}`;
-    await this.store.insertCode({
+    const createdAt = this.nowFn();
+    const committed = await this.store.consumeAuthorizationForCode({
+      authorization_id: args.authorization_id,
       code,
-      client_id: pending.client_id,
-      redirect_uri: pending.redirect_uri,
-      state: pending.state,
-      scope: grantedScope,
-      code_challenge: pending.code_challenge,
       account_id: args.account_id,
-      created_at: this.nowFn(),
-      consumed_at: null,
+      scope: grantedScope,
+      created_at: createdAt,
+      not_before: createdAt - CODE_TTL_SECONDS * 1000,
     });
+    if (committed === 'expired') {
+      throw new OAuthError('invalid_request', 'authorization expired before approval');
+    }
+    if (committed === 'unavailable') {
+      throw new OAuthError('invalid_request', 'unknown or expired authorization_id');
+    }
+    if (committed === 'client_unavailable') {
+      throw new OAuthError('invalid_client', 'unknown or revoked client_id');
+    }
+    if (committed === 'account_mismatch') {
+      throw new OAuthError('access_denied', 'client is not registered for this account');
+    }
     return { code, redirect_uri: pending.redirect_uri, state: pending.state };
   }
 
@@ -465,19 +563,11 @@ export class OAuthService {
     if (!verifyS256Challenge({ verifier: args.code_verifier, challenge: code.code_challenge })) {
       throw new OAuthError('invalid_grant', 'PKCE verification failed');
     }
-    // Atomic single-use gate: claim the code or lose to a concurrent exchange.
-    // The consumed_at read above is a fast-fail pre-check; THIS is the
-    // authoritative serialization point (validation already passed, so a
-    // failed validation never burns the code — only a real winning exchange
-    // consumes it). Two concurrent exchanges of the same code → exactly one
-    // claims → exactly one token issued (no authorization-code reuse).
-    if (!(await this.store.consumeCodeIfUnconsumed(args.code, this.nowFn()))) {
-      throw new OAuthError('invalid_grant', 'code already exchanged');
-    }
-
     const token = `oat_${randomBytes(32).toString('base64url')}`;
     const now = this.nowFn();
-    const inserted = await this.store.insertTokenIfClientAuthorityMatches({
+    const committed = await this.store.consumeCodeForToken({
+      code: args.code,
+      consumed_at: now,
       token: {
         token,
         client_id: client.client_id,
@@ -488,7 +578,12 @@ export class OAuthService {
       },
       expectedClientSecretHash: presentedSecretHash,
     });
-    if (!inserted) throw new OAuthError('invalid_client', 'unknown or revoked client_id');
+    if (committed === 'code_unavailable') {
+      throw new OAuthError('invalid_grant', 'code already exchanged');
+    }
+    if (committed === 'client_authority_changed') {
+      throw new OAuthError('invalid_client', 'unknown or revoked client_id');
+    }
     return {
       access_token: token,
       token_type: 'Bearer',
@@ -555,6 +650,11 @@ export class OAuthService {
     }
     return { client, presentedSecretHash };
   }
+}
+
+function oauthCredentialId(token: string): string {
+  const digest = sha256Hex(token);
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
 }
 
 function isAllowedRedirectUri(uri: string): boolean {

@@ -29,10 +29,12 @@ class ClientAuthorityChangeBeforeTokenStore extends InMemoryOAuthStore {
     super();
   }
 
-  override async insertTokenIfClientAuthorityMatches(args: {
+  override async consumeCodeForToken(args: {
+    code: string;
+    consumed_at: number;
     token: AccessToken;
     expectedClientSecretHash: string;
-  }): Promise<boolean> {
+  }): Promise<'inserted' | 'code_unavailable' | 'client_authority_changed'> {
     this.attemptedToken = args.token.token;
     if (this.change === 'revoke') {
       await this.revokeClient(args.token.client_id, Date.now());
@@ -42,7 +44,7 @@ class ClientAuthorityChangeBeforeTokenStore extends InMemoryOAuthStore {
         createHash('sha256').update('replacement-secret').digest('hex'),
       );
     }
-    return super.insertTokenIfClientAuthorityMatches(args);
+    return super.consumeCodeForToken(args);
   }
 }
 
@@ -162,6 +164,31 @@ describe('V-667 OAuthService — authorize', () => {
       }),
     ).rejects.toMatchObject({ code: 'invalid_request' });
   });
+
+  it.each([
+    'read',
+    'write',
+    'admin',
+    'account_owner',
+    'driftstack_internal_admin',
+    'gui_control',
+  ] as const)('rejects non-curated API-key scope %s before staging consent', async (scope) => {
+    const { svc } = makeService();
+    const { client_id } = await svc.registerClient({
+      label: 'Scoped App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+    await expect(
+      svc.authorize({
+        client_id,
+        redirect_uri: 'https://app.example/cb',
+        state: 'state',
+        code_challenge: computeS256Challenge(makeVerifier()),
+        code_challenge_method: 'S256',
+        scope: [scope],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_scope' });
+  });
 });
 
 describe('V-667 OAuthService — approveAuthorization + exchangeCode (full happy path)', () => {
@@ -254,21 +281,62 @@ describe('V-667 OAuthService — granted scope restriction (the cross-account/es
     expect(scope).toEqual(['read:sessions', 'write:sessions', 'read:billing']);
   });
 
-  it('does not let a granular approver grant a broad or sibling scope', async () => {
-    const scope = await grantedScopeFor(
-      ['read', 'read:sessions', 'read:billing'],
-      ['read:sessions'],
-    );
-    expect(scope).toEqual(['read:sessions']);
+  it('retains the curated allowlist during approval even if staging is bypassed', async () => {
+    const store = new InMemoryOAuthStore();
+    const svc = new OAuthService(store);
+    const client = await svc.registerClient({
+      label: 'Injected App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+    await store.insertAuthorization({
+      authorization_id: 'oaa_injected',
+      client_id: client.client_id,
+      redirect_uri: 'https://app.example/cb',
+      state: 'state',
+      scope: ['read:sessions', 'read', 'account_owner'],
+      code_challenge: computeS256Challenge(makeVerifier()),
+      created_at: Date.now(),
+    });
+    const approval = await svc.approveAuthorization({
+      authorization_id: 'oaa_injected',
+      account_id: 'acc_test',
+      approverScopes: ['read', 'account_owner'],
+    });
+
+    expect((await store.getCode(approval.code))?.scope).toEqual(['read:sessions']);
   });
 
-  it('strips deny-set scopes (account_owner) even when requested AND the approver holds them', async () => {
-    // The escalation guard: account_owner can never be minted via the OAuth flow.
-    const scope = await grantedScopeFor(
-      ['read:sessions', 'account_owner'],
-      ['read:sessions', 'account_owner'],
-    );
-    expect(scope).toEqual(['read:sessions']);
+  it('account-scoped consent rejects another account without consuming the authorization', async () => {
+    const { svc } = makeService();
+    const client = await svc.registerClient({
+      label: 'Bound App',
+      redirect_uris: ['https://app.example/cb'],
+      account_id: 'acc_owner',
+    });
+    const authorization = await svc.authorize({
+      client_id: client.client_id,
+      redirect_uri: 'https://app.example/cb',
+      state: 'state',
+      code_challenge: computeS256Challenge(makeVerifier()),
+      code_challenge_method: 'S256',
+      scope: ['read:sessions'],
+    });
+
+    await expect(
+      svc.approveAuthorization({
+        authorization_id: authorization.authorization_id,
+        account_id: 'acc_attacker',
+        approverScopes: ['read'],
+      }),
+    ).rejects.toMatchObject({ code: 'access_denied' });
+
+    await expect(
+      svc.approveAuthorization({
+        authorization_id: authorization.authorization_id,
+        account_id: 'acc_owner',
+        approverScopes: ['read'],
+      }),
+    ).resolves.toMatchObject({ code: expect.stringMatching(/^oac_/) });
   });
 });
 
@@ -359,7 +427,7 @@ describe('V-667 OAuthService — exchangeCode rejection paths', () => {
       });
     // Fire both before either resolves — with a blind (non-atomic) consume both
     // would observe consumed_at===null and both mint a token. The atomic
-    // consumeCodeIfUnconsumed claim serialises them: exactly one wins.
+    // The transactional code-to-token commit serialises them: exactly one wins.
     const settled = await Promise.allSettled([exchange(), exchange()]);
     const fulfilled = settled.filter((s) => s.status === 'fulfilled');
     const rejected = settled.filter((s) => s.status === 'rejected');
@@ -389,7 +457,7 @@ describe('V-667 OAuthService — exchangeCode rejection paths', () => {
 
       expect(store.attemptedToken).toMatch(/^oat_/);
       expect(await store.getToken(store.attemptedToken!)).toBeNull();
-      expect((await store.getCode(code))?.consumed_at).not.toBeNull();
+      expect((await store.getCode(code))?.consumed_at).toBeNull();
     },
   );
 
@@ -433,5 +501,38 @@ describe('V-667 OAuthService — listClients / revokeClient', () => {
         scope: [],
       }),
     ).rejects.toMatchObject({ code: 'invalid_client' });
+  });
+
+  it('client revocation immediately invalidates every issued bearer', async () => {
+    const { svc } = makeService();
+    const reg = await svc.registerClient({
+      label: 'Bearer App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+    const verifier = makeVerifier();
+    const authorization = await svc.authorize({
+      client_id: reg.client_id,
+      redirect_uri: 'https://app.example/cb',
+      state: 'state',
+      code_challenge: computeS256Challenge(verifier),
+      code_challenge_method: 'S256',
+      scope: ['read:sessions'],
+    });
+    const { code } = await svc.approveAuthorization({
+      authorization_id: authorization.authorization_id,
+      account_id: 'acc_test',
+    });
+    const token = await svc.exchangeCode({
+      code,
+      code_verifier: verifier,
+      client_id: reg.client_id,
+      client_secret: reg.client_secret,
+      redirect_uri: 'https://app.example/cb',
+    });
+    expect(await svc.introspect(token.access_token)).not.toBeNull();
+
+    await svc.revokeClient(reg.client_id);
+
+    expect(await svc.introspect(token.access_token)).toBeNull();
   });
 });

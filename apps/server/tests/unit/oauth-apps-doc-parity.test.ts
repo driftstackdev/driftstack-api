@@ -31,6 +31,14 @@ function docScopes(): string[] {
   return Array.from(doc.matchAll(/\{ name: '([^']+)',/g)).map((m) => m[1]!);
 }
 
+function serviceOAuthScopes(): string[] {
+  const service = read(OAUTH_SVC_PATH);
+  const block = service
+    .split('const OAUTH_ALLOWED_SCOPES: ReadonlySet<ApiKeyScope> = new Set([')[1]!
+    .split('] as ApiKeyScope[])')[0]!;
+  return Array.from(block.matchAll(/'([^']+)'/g)).map((match) => match[1]!);
+}
+
 describe('W214.B oauth-apps doc parity', () => {
   it('every scope listed in /docs/oauth-apps exists in the api_key_scope enum', () => {
     const allowed = new Set(enumScopes());
@@ -38,6 +46,10 @@ describe('W214.B oauth-apps doc parity', () => {
     expect(listed.length, 'doc must list at least one scope').toBeGreaterThan(0);
     const offenders = listed.filter((s) => !allowed.has(s));
     expect(offenders).toEqual([]);
+  });
+
+  it('the service allowlist exactly matches the curated integrator scope table', () => {
+    expect(serviceOAuthScopes()).toEqual(docScopes());
   });
 
   it('doc does not list the fictional read:recordings scope', () => {

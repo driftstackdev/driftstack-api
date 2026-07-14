@@ -16,6 +16,7 @@ import type { AuthCache, AuthCacheVersions } from './auth-cache.js';
 import { sha256Hex } from './auth-cache.js';
 import type { AuthCoalescer } from './auth-coalescer.js';
 import type { NegativeAuthCache } from './negative-auth-cache.js';
+import type { OAuthStore } from './oauth.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountTier } from '@driftstack/api-types';
 import type { AccountOrganization } from '@driftstack/api-types';
@@ -270,8 +271,24 @@ export async function authenticate(
    * revoked/expired/suspended/forbidden (state that can flip back).
    */
   negativeCache: NegativeAuthCache | null = null,
+  /**
+   * Persistent third-party OAuth bearer authority. Optional keeps isolated
+   * service tests and pre-provider app fixtures source-compatible; an `oat_`
+   * credential fails closed when the store is absent.
+   */
+  oauthStore: OAuthStore | null = null,
 ): Promise<AccountContext> {
   if (plaintext.length < 24) throw new InvalidKeyError();
+
+  // OAuth access tokens deliberately bypass the API-key/web-session Redis
+  // cache. Their joined store lookup rechecks token expiry/revocation, client
+  // revocation, and the backing api_keys authority row on every request, so a
+  // lifecycle mutation is effective immediately without a second invalidation
+  // protocol.
+  if (plaintext.startsWith('oat_')) {
+    if (oauthStore === null) throw new InvalidKeyError();
+    return slowPathOAuthToken(repo, oauthStore, plaintext, now);
+  }
 
   // Cache fast path: if Redis has a fresh entry for sha256(plaintext), skip
   // the prefix lookup + scrypt verification entirely. The cache may also
@@ -442,6 +459,47 @@ export async function authenticate(
 
   if (coalescer) return coalescer.coalesce(sha, slowPath);
   return slowPath();
+}
+
+async function slowPathOAuthToken(
+  repo: AccountAuthRepo,
+  store: OAuthStore,
+  plaintext: string,
+  now: Date,
+): Promise<AccountContext> {
+  const token = await store.findTokenForAuthentication(plaintext, now.getTime());
+  if (token === null || token.api_key_id === undefined) throw new InvalidKeyError();
+
+  const account = await repo.getAccount(token.account_id);
+  if (account === null) throw new InvalidKeyError();
+  if (account.status === 'suspended') throw new ForbiddenError('Account is suspended.');
+  if (account.status === 'deleted') throw new InvalidKeyError();
+
+  await repo.touchApiKeyLastUsed(token.api_key_id, now);
+  const [overrideRows, teams] = await Promise.all([
+    repo.findActiveRateLimitOverrides(account.id, now),
+    repo.findTeamMemberships(account.id),
+  ]);
+  const apiKey: ApiKeyRow = {
+    id: token.api_key_id,
+    accountId: token.account_id,
+    name: `OAuth: ${token.client_id}`,
+    keyPrefix: 'oauth_access',
+    keyHash: sha256Hex(plaintext),
+    scopes: [...token.scope],
+    lastUsedAt: now,
+    revokedAt: null,
+    expiresAt: new Date(token.expires_at),
+    provenance: 'oauth',
+    createdAt: new Date(token.created_at),
+  };
+  return {
+    account,
+    apiKey,
+    rateLimitOverrides: indexRateLimitOverrides(overrideRows),
+    teams,
+    webSession: null,
+  };
 }
 
 /**

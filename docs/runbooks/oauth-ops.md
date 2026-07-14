@@ -119,23 +119,14 @@ be cut, developer asks for full deletion.
 
 - New `/authorize` requests for the client fail.
 - New `/token` exchanges fail (the service blocks revoked clients).
-- **Existing access tokens stay valid until their 1-hour TTL.**
-  This is intentional — same posture as the V-667.E rotation: the
-  tokens remain bearer-authenticated even though client lifecycle
-  endpoints re-authenticate the client.
+- **Every existing access token issued by the client is revoked in
+  the same database transaction.** Central API authentication rejects
+  them on the next request; there is no positive OAuth-auth cache or
+  one-hour residual-access window.
 
-If you need to invalidate **all** existing tokens too:
-
-1. Revoke the client (above).
-2. Fetch active tokens via the admin store (no UI yet — query
-   `oauth_access_tokens` directly with `WHERE client_id = '…' AND
-expires_at > now()`).
-3. Delete each token through the administrative store operation. The
-   public `POST /v1/oauth/revoke` route cannot be used after client
-   revocation because it correctly rejects revoked client credentials.
-
-A V-667.G follow-up will expose a "revoke all tokens for client"
-admin route — until then it's a SQL operation.
+This intentionally differs from secret rotation. Rotation replaces
+only the client authenticator and keeps current bearer tokens alive;
+client revocation is the full-kill incident/customer-removal action.
 
 ## Triage workflow — "this token is failing"
 
@@ -181,14 +172,12 @@ copy. Interpret the sanitized response:
 If an OAuth client is implicated in a security incident:
 
 1. **Revoke the client immediately** (above). Don't wait for
-   developer confirmation.
-2. **Force-revoke any active tokens** via the SQL path described
-   above.
-3. Open an incident in the `incidents` runbook with severity
+   developer confirmation. This atomically revokes its active tokens.
+2. Open an incident in the `incidents` runbook with severity
    `major` or `critical` depending on impact.
-4. Notify the affected customer (the one whose data the client
+3. Notify the affected customer (the one whose data the client
    could access) within 24h via the standard incident-comms path.
-5. Post-mortem includes a check of `oauth_clients.created_at` vs.
+4. Post-mortem includes a check of `oauth_clients.created_at` vs.
    `oauth_access_tokens.created_at` — was this a long-resident
    compromised client or one created during the attack?
 
