@@ -56,7 +56,7 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
       /Read or modify another customer's <strong>sessions<\/strong>,\s*\n?\s*<strong>recordings<\/strong>, <strong>profiles<\/strong>, or\s*\n?\s*<strong>API keys<\/strong>\. Those endpoints scope by\s*\n?\s*<code>account_id<\/code> on the calling key — there is no\s*\n?\s*admin-impersonation path\./,
     );
     expect(body).toMatch(
-      /Issue a crypto refund\. Crypto payments are non-refundable\s*\n?\s*by policy; there is no admin endpoint that initiates a\s*\n?\s*crypto-side reversal\. See\s*\n?\s*<a href="\/legal\/refunds">\/legal\/refunds<\/a> for the binding\s*\n?\s*rules\. Stripe refund handling is unchanged and runs through\s*\n?\s*the Stripe dashboard with audit-only records on our side\./,
+      /Issue a crypto refund\. Crypto payments are non-refundable\s*\n?\s*by policy; there is no admin endpoint that initiates a\s*\n?\s*crypto-side reversal\. See\s*\n?\s*<a href="\/legal\/refunds\/">\/legal\/refunds<\/a> for the binding\s*\n?\s*rules\. Stripe refund handling is unchanged and runs through\s*\n?\s*the Stripe dashboard with audit-only records on our side\./,
     );
     expect(body).toMatch(
       /Charge a customer\. Stripe \+ NowPayments are the only\s*\n?\s*money-moving paths and neither is reachable from the admin\s*\n?\s*scope\./,
@@ -108,7 +108,7 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
     );
     expect(body).toMatch(/Audit rows are archived to R2 after 90 days \(per\s*\n?\s*ADR-006\)\./);
     expect(body).toMatch(
-      /The customer-facing\s*\n?\s*<a href="\/docs\/audit-log">audit log<\/a> page documents the\s*\n?\s*schema\./,
+      /The customer-facing\s*\n?\s*<a href="\/docs\/audit-log\/">audit log<\/a> page documents the\s*\n?\s*schema\./,
     );
   });
 
@@ -122,13 +122,16 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
   });
 
   it('3-related-doc cluster: /docs/audit-log + /docs/billing-crypto-overview + /docs/api-quickstart — pinned so the 3-related navigation surface stays complete (drift to dropping /docs/audit-log would orphan the schema cross-ref from the admin-action source)', () => {
-    expect(body).toMatch(/<a href="\/docs\/audit-log">Audit log schema<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/audit-log\/">Audit log schema<\/a>/);
     expect(body).toMatch(
-      /<a href="\/docs\/billing-crypto-overview">Crypto payments — how it works<\/a>/,
+      /<a href="\/docs\/billing-crypto-overview\/">Crypto payments — how it works<\/a>/,
     );
     // S47 2026-07-07 (founder-approved: mirror deprecation): the api-quickstart mirror is deleted; href re-pinned to the docs successor.
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/">Customer-facing API quickstart<\/a>/,
+    );
+    expect(body).not.toMatch(
+      /href="\/(?:legal\/refunds|docs\/(?:audit-log|billing-crypto-overview))"/,
     );
   });
 
