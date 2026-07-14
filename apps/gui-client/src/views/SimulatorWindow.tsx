@@ -70,6 +70,7 @@ import {
   type TouchCursorOverlayHandle,
 } from '../components/TouchCursorOverlay';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
+import { writeClipboardText } from '../lib/clipboard';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
@@ -1411,12 +1412,7 @@ function BrowserBar({
   const copyUrl = (): void => {
     const text = (liveUrl || draft).trim();
     if (text === '') return;
-    const write = navigator.clipboard?.writeText(text);
-    if (write === undefined) {
-      flagCopyFailed();
-      return;
-    }
-    void write.then(() => {
+    void writeClipboardText(text).then(() => {
       setCopyFailed(false);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);

@@ -10,7 +10,7 @@
 
 import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, fireEvent } from '@testing-library/react';
+import { act, render, fireEvent, waitFor } from '@testing-library/react';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
 let terminalSession = false;
@@ -364,6 +364,55 @@ describe('SimulatorWindow — address bar navigate', () => {
       expect(writeText).toHaveBeenCalledWith('https://live.example.com/');
     } finally {
       if (orig) Object.defineProperty(navigator, 'clipboard', orig);
+      else delete (navigator as Partial<Navigator>).clipboard;
+    }
+  });
+
+  it.each([
+    ['the clipboard API is unavailable', false],
+    ['the clipboard API throws synchronously', true],
+  ])('Copy URL reports failure and remains retryable when %s', async (_scenario, throws) => {
+    const orig = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const unavailableOrThrowing = throws
+      ? {
+          writeText: vi.fn(() => {
+            throw new Error('clipboard denied');
+          }),
+        }
+      : undefined;
+    Object.defineProperty(navigator, 'clipboard', {
+      value: unavailableOrThrowing,
+      configurable: true,
+    });
+    try {
+      const { container } = renderSim();
+      const addressInput = container.querySelector(
+        '[aria-label="Address bar"]',
+      ) as HTMLInputElement;
+      fireEvent.change(addressInput, { target: { value: 'retry.example.com' } });
+      fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+      fireEvent.click(container.querySelector('[aria-label="Copy URL"]') as Element);
+
+      await waitFor(() => {
+        expect(container.querySelector('[aria-label="Couldn\'t copy"]')).not.toBeNull();
+      });
+
+      const recoveredWrite = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: recoveredWrite },
+        configurable: true,
+      });
+      fireEvent.click(container.querySelector('[aria-label="Couldn\'t copy"]') as Element);
+
+      await waitFor(() =>
+        expect(recoveredWrite).toHaveBeenCalledWith('https://retry.example.com/'),
+      );
+      await waitFor(() => {
+        expect(container.querySelector('[aria-label="Copied"]')).not.toBeNull();
+      });
+    } finally {
+      if (orig) Object.defineProperty(navigator, 'clipboard', orig);
+      else delete (navigator as Partial<Navigator>).clipboard;
     }
   });
 });
