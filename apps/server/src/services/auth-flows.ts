@@ -15,6 +15,7 @@
 //     RFC 7807 problem responses.
 
 import type { Logger } from '../lib/logger.js';
+import { canonicalOneTimeTokenUrl } from '../lib/canonical-one-time-token-url.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { maskEmail } from '../lib/redact-url.js';
 import type { EmailService } from './email.js';
@@ -293,7 +294,7 @@ export function canonicalizeEmailForDedup(email: string): string {
 // ───────────────────────────────────────────────────────────────────────────
 
 export interface AuthFlowsServiceConfig {
-  /** Base URL the verify-email link points at (no trailing slash). */
+  /** Base URL the verify-email link points at. */
   verifyEmailUrl: string;
   /** Base URL the magic-link points at. */
   magicLinkUrl: string;
@@ -729,7 +730,7 @@ export class AuthFlowsService {
       requestedFromIp: args.requestedFromIp,
     });
 
-    const link = `${this.config.verifyEmailUrl}?token=${plaintext}`;
+    const link = canonicalOneTimeTokenUrl(this.config.verifyEmailUrl, plaintext);
     void this.email.sendSignupVerification({ to: email, link, expiresAt });
 
     return {
@@ -771,7 +772,7 @@ export class AuthFlowsService {
       requestedFromIp: args.requestedFromIp,
     });
 
-    const link = `${this.config.verifyEmailUrl}?token=${plaintext}`;
+    const link = canonicalOneTimeTokenUrl(this.config.verifyEmailUrl, plaintext);
     // Account-bound credentials always go to the address persisted on the
     // account, never an anonymous request's alternate spelling. Canonical
     // lookup is only an identity-resolution aid for known Gmail aliases.
@@ -1049,7 +1050,7 @@ export class AuthFlowsService {
       requestedFromIp: args.requestedFromIp,
     });
 
-    const link = `${this.config.magicLinkUrl}?token=${plaintext}`;
+    const link = canonicalOneTimeTokenUrl(this.config.magicLinkUrl, plaintext);
     void this.email.sendSignupVerification({ to: account.email, link, expiresAt });
 
     return {
@@ -1128,7 +1129,7 @@ export class AuthFlowsService {
       expiresAt,
       requestedFromIp: args.requestedFromIp,
     });
-    const link = `${this.config.passwordResetUrl}?token=${plaintext}`;
+    const link = canonicalOneTimeTokenUrl(this.config.passwordResetUrl, plaintext);
     void this.email.sendPasswordReset({ to: account.email, link, expiresAt });
 
     return {

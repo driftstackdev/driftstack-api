@@ -24,6 +24,7 @@
 //     returns the existing membership without error.
 
 import { generateAuthToken, tokenHash } from '../lib/auth-tokens.js';
+import { canonicalOneTimeTokenUrl } from '../lib/canonical-one-time-token-url.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
 import type { AuthCache } from './auth-cache.js';
@@ -202,7 +203,7 @@ export class TeamMembersService {
       invitedByAccountId: input.invitedByAccountId,
     });
 
-    const acceptLink = `${this.dashboardBaseUrl}/team/accept?token=${encodeURIComponent(plaintext)}`;
+    const acceptLink = canonicalOneTimeTokenUrl(`${this.dashboardBaseUrl}/team/accept`, plaintext);
     await this.email.sendTeamInvite({
       to: normalized,
       acceptLink,

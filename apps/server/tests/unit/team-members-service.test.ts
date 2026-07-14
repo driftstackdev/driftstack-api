@@ -246,7 +246,7 @@ describe('V-553.B-13 TeamMembersService.invite', () => {
     expect(captures).toHaveLength(1);
     expect(captures[0]?.to).toBe('new@example.com');
     expect(captures[0]?.acceptLink).toMatch(
-      /^https:\/\/app\.driftstack\.dev\/team\/accept\?token=/,
+      /^https:\/\/app\.driftstack\.dev\/team\/accept\/\?token=/,
     );
     expect(captures[0]?.role).toBe('admin');
   });

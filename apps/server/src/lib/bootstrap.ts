@@ -44,6 +44,7 @@ import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.
 import { reconcileNodeBootChange } from '../services/node-boot-reconcile.js';
 import { serializeSessionEnd } from '../services/harness-control-codec.js';
 import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
+import { canonicalOneTimeTokenUrl } from '../lib/canonical-one-time-token-url.js';
 import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
 import { InternalFleetAuth } from './internal-fleet-auth.js';
 import { DrizzleSessionRepo } from '../db/sessions-repo.js';
@@ -2118,10 +2119,13 @@ export async function createProductionDeps(
                 // the recipient lands on the dashboard's confirm-merge
                 // page (which POSTs back to /v1/auth/oauth-client
                 // /confirm-merge). DASHBOARD_ORIGIN strips its trailing
-                // slash at schema-level, so template-literal `/...`
-                // concatenation is safe.
+                // slash at schema-level; the shared helper restores the
+                // page's canonical slash and URL-encodes the token.
                 sendVerifyMergeEmail: async (args) => {
-                  const confirmLink = `${config.dashboardOrigin}/auth/oauth-client/confirm-merge?token=${encodeURIComponent(args.plaintextToken)}`;
+                  const confirmLink = canonicalOneTimeTokenUrl(
+                    `${config.dashboardOrigin}/auth/oauth-client/confirm-merge`,
+                    args.plaintextToken,
+                  );
                   await email.sendOauthPendingLinkVerification({
                     to: args.to,
                     provider: args.provider,

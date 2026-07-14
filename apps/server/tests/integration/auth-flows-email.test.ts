@@ -82,7 +82,7 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.to).toBe('newuser@driftstack.local');
     expect(calls[0]?.subject).toBe('Verify your Driftstack account');
-    expect(calls[0]?.text).toContain('https://app.driftstack.local/verify-email?token=');
+    expect(calls[0]?.text).toContain('https://app.driftstack.local/verify-email/?token=');
     expect(calls[0]?.text).toContain(result.debugToken!);
   });
 
@@ -110,7 +110,7 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     // time (V-079 reuses sendSignupVerification for both flows). When the
     // template diverges, this assertion gets updated.
     expect(calls[0]?.to).toBe('returning@driftstack.local');
-    expect(calls[0]?.text).toContain('https://app.driftstack.local/auth/magic-link?token=');
+    expect(calls[0]?.text).toContain('https://app.driftstack.local/auth/magic-link/?token=');
   });
 
   it('routes every Gmail-alias credential to the stored account address, never the requester spelling', async () => {
@@ -253,7 +253,7 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     expect(result.sent).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.subject).toBe('Reset your Driftstack password');
-    expect(calls[0]?.text).toContain('https://app.driftstack.local/reset-password?token=');
+    expect(calls[0]?.text).toContain('https://app.driftstack.local/reset-password/?token=');
   });
 
   it('password-reset silently no-ops when email is unknown', async () => {

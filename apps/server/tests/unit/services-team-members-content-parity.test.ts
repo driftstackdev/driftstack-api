@@ -123,9 +123,9 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     expect(body).toMatch(
       /const inviteExpiresAt = new Date\(Date\.now\(\) \+ TEAM_INVITE_TTL_MS\);/,
     );
-    expect(body).toMatch(
-      /const acceptLink = `\$\{this\.dashboardBaseUrl\}\/team\/accept\?token=\$\{encodeURIComponent\(plaintext\)\}`;/,
-    );
+    expect(body).toMatch(/const acceptLink = canonicalOneTimeTokenUrl\(/);
+    expect(body).toMatch(/`\$\{this\.dashboardBaseUrl\}\/team\/accept`/);
+    expect(body).not.toMatch(/\/team\/accept\?token=/);
     expect(body).toMatch(
       /action: 'team\.member_invited',\s*\n?\s*targetResourceId: null,\s*\n?\s*payload: \{ invitee_email: normalized, role \},/,
     );

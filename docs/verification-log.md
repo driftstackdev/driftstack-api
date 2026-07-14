@@ -26124,3 +26124,39 @@ Verification:
   staging-only fallback contract;
 - the focused config/decomposer gate passes with 3 files and 80/80 tests, plus
   strict server source/test TypeScript, lint, formatting, diff, and hooks.
+
+## V-614 — Dashboard bearer links begin at canonical pages
+
+**Date:** 2026-07-14
+
+Canonicalized every server-generated one-time Dashboard link before email
+delivery. Live read-only probes showed that verify-email, magic-link,
+password-reset, team-invite, and OAuth merge-confirmation links at their former
+slashless paths all received a `308` from Cloudflare Pages, with the complete
+query copied into `Location`. The Dashboard's `no-referrer` policy prevents the
+redirected page from forwarding that query as a referrer, but the extra edge
+request/response still duplicated a bearer URL and delayed the in-page history
+scrubber.
+
+One shared URL builder now normalizes the static page path to exactly one
+trailing slash and attaches or replaces exactly one URL-encoded `token`
+parameter. It retains other query parameters and fragments on an explicit
+operator URL. Signup and resend verification, magic-link, password-reset, team
+invite, and merge-confirmation producers all use the same builder; token
+generation, hashes, expiry, email templates, fire-and-forget/await behavior,
+and consume outcomes are unchanged.
+
+Verification:
+
+- helper tests cover slashless, canonical, and multiply-slashed inputs;
+  reserved token characters; existing query/fragment state; and replacement of
+  an operator-supplied stale token without duplication;
+- executable auth-email and team-service tests prove their delivered links use
+  canonical paths and still contain usable generated tokens;
+- source guards require all six call sites to use the helper and reject the
+  former raw query templates, including the production-bootstrap merge-mail
+  closure;
+- the focused helper/auth/team/bootstrap gate passes with 6 files and 104/104
+  tests, and the surrounding auth/team/bootstrap matrix passes with 11 files
+  and 242/242 tests, plus strict server source/test TypeScript, lint,
+  formatting, diff, and hooks.

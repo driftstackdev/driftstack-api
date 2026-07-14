@@ -51,6 +51,12 @@ function read(p: string): string {
 describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
   const body = read(LIB);
 
+  it('builds the OAuth merge bearer link at the canonical static-page path', () => {
+    expect(body).toMatch(/const confirmLink = canonicalOneTimeTokenUrl\(/);
+    expect(body).toMatch(/`\$\{config\.dashboardOrigin\}\/auth\/oauth-client\/confirm-merge`/);
+    expect(body).not.toMatch(/\/auth\/oauth-client\/confirm-merge\?token=/);
+  });
+
   it('CLI authorization is activation-gated on MFA_ENCRYPTION_KEY so Redis never receives plaintext API keys', () => {
     expect(body).toMatch(
       /const cliAuthorizeService = config\.mfaEncryptionKey\s*\n?\s*\? new CliAuthorizeService\(\{/,

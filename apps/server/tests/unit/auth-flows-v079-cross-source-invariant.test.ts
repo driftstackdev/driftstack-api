@@ -168,7 +168,7 @@ describe('W941 V-079 auth-flows cross-source invariant', () => {
   it("CRITICAL AuthFlowsServiceConfig has 5 fields — verifyEmailUrl + magicLinkUrl + passwordResetUrl + exposeDebugToken + initialTier? (default 'free'). The 3 URL fields + dev-test exposeDebugToken seam + initialTier default is the boot-time wiring.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-flows.ts'));
     expect(p).toMatch(/export interface AuthFlowsServiceConfig \{/);
-    expect(p).toMatch(/Base URL the verify-email link points at \(no trailing slash\)/);
+    expect(p).toMatch(/Base URL the verify-email link points at\./);
     expect(p).toMatch(/verifyEmailUrl: string;/);
     expect(p).toMatch(/Base URL the magic-link points at/);
     expect(p).toMatch(/magicLinkUrl: string;/);

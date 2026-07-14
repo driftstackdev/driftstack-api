@@ -78,9 +78,16 @@ describe('W745 server AuthFlowsService canonical surface parity', () => {
     );
   });
 
-  it('CRITICAL signup() verify-link construction — `${verifyEmailUrl}?token=${plaintext}`. The URL+token string is what email customers click — drift to a different shape would break the verify-email page query-param parser.', () => {
+  it('CRITICAL all four auth email producers use the canonical one-time-token URL helper', () => {
     const f = read(FLOWS);
-    expect(f).toMatch(/const link = `\$\{this\.config\.verifyEmailUrl\}\?token=\$\{plaintext\}`/);
+    expect(
+      f.match(/canonicalOneTimeTokenUrl\(this\.config\.verifyEmailUrl, plaintext\)/g),
+    ).toHaveLength(2);
+    expect(f).toMatch(/canonicalOneTimeTokenUrl\(this\.config\.magicLinkUrl, plaintext\)/);
+    expect(f).toMatch(/canonicalOneTimeTokenUrl\(this\.config\.passwordResetUrl, plaintext\)/);
+    expect(f).not.toMatch(
+      /`\$\{this\.config\.(?:verifyEmailUrl|magicLinkUrl|passwordResetUrl)\}\?token=/,
+    );
   });
 
   it('CRITICAL signup() returns SignupResult shape — { account, verifyExpiresAt, debugToken }. debugToken is plaintext when exposeDebugToken=true, null otherwise. Drift to dropping the field would force test fixtures to scrape email.', () => {
