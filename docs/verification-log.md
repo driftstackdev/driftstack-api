@@ -24980,3 +24980,28 @@ Verification:
 - the same sentinel invoked through the server workspace executes 3/3;
 - the source invariant pins config-relative URL resolution for both project
   targets so plain cwd-relative strings cannot return.
+
+## V-577 — server workspace tests stay inside the server workspace
+
+**Date:** 2026-07-13
+
+Separated the server package's focused test lane from the intentional root
+monorepo orchestrator. Once project resolution was repaired, the server's bare
+`vitest run` discovered 2,602 test files across every app and package,
+including 157 GUI jsdom files. That made a server security sweep slow, noisy,
+and vulnerable to unrelated cross-app guard failures.
+
+The server package now selects a local Vitest config rooted at
+`apps/server`. It includes only `tests/**/*.test.ts`, uses the node environment,
+retains the standard e2e/build exclusions and bounded timeouts, and still
+accepts appended single-file filters. Root `npm test` continues to own the
+whole-monorepo node plus GUI gate.
+
+Verification:
+
+- pre-fix workspace discovery contained 157 GUI plus 2,445 node files;
+- server-local discovery now contains 1,829 server node files and no GUI or
+  sibling-app project;
+- the package/config source guards pass 10/10;
+- an exact appended server test path executes one file and 3/3 tests rather
+  than widening back to the whole workspace.

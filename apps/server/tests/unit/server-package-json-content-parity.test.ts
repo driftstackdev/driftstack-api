@@ -8,7 +8,7 @@
 //   • main: dist/index.js (compiled entry).
 //   • private: true + type: module.
 //   • 7 scripts: build (tsc --build) + dev (tsx watch) + start
-//     (node dist) + test (vitest run) + test:e2e (playwright) +
+//     (node dist) + test (server-local Vitest config) + test:e2e (playwright) +
 //     typecheck (tsc --build && tsc --noEmit on tsconfig.test.json) +
 //     db:migrate + db:seed.
 //   • Critical runtime deps: fastify + fastify-plugin + 4 @fastify/*
@@ -51,11 +51,11 @@ describe('W530.A apps/server/package.json content parity', () => {
     expect(pkg.main).toBe('dist/index.js');
   });
 
-  it("7-script build pipeline framing pinned: 'build: tsc --build' (project-references aware) + 'dev: tsx watch src/index.ts' (hot-reload via tsx) + 'start: node dist/index.js' (prod startup from pre-compiled dist) + 'test: vitest run' + 'test:e2e: playwright test --config=playwright.config.ts' + 'typecheck: tsc --build && tsc --noEmit -p tsconfig.test.json' (typecheck src first via project-references then tests separately) + 'db:migrate: tsx src/db/migrate.ts' + 'db:seed: tsx src/db/seed.ts' — pinned so the 7-script pipeline commitment survives (drift to single-tsc typecheck without tsconfig.test.json would skip type-checking the test suite)", () => {
+  it("7-script build pipeline framing pinned: 'build: tsc --build' (project-references aware) + 'dev: tsx watch src/index.ts' (hot-reload via tsx) + 'start: node dist/index.js' (prod startup from pre-compiled dist) + 'test: vitest run --config vitest.config.ts' (server-only, file-filter-compatible) + 'test:e2e: playwright test --config=playwright.config.ts' + 'typecheck: tsc --build && tsc --noEmit -p tsconfig.test.json' (typecheck src first via project-references then tests separately) + 'db:migrate: tsx src/db/migrate.ts' + 'db:seed: tsx src/db/seed.ts' — pinned so the 7-script pipeline commitment survives (drift to bare vitest would run the whole monorepo; drift to single-tsc typecheck would skip the test suite)", () => {
     expect(pkg.scripts.build).toBe('tsc --build');
     expect(pkg.scripts.dev).toBe('tsx watch src/index.ts');
     expect(pkg.scripts.start).toBe('node dist/index.js');
-    expect(pkg.scripts.test).toBe('vitest run');
+    expect(pkg.scripts.test).toBe('vitest run --config vitest.config.ts');
     expect(pkg.scripts['test:e2e']).toBe('playwright test --config=playwright.config.ts');
     expect(pkg.scripts.typecheck).toBe('tsc --build && tsc --noEmit -p tsconfig.test.json');
     expect(pkg.scripts['db:migrate']).toBe('tsx src/db/migrate.ts');
