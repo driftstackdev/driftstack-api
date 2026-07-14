@@ -26519,3 +26519,29 @@ Verification:
   exactly one future successor and replay inserts none;
 - strict server source/test TypeScript, targeted lint/format, diff and
   whitespace checks are green.
+
+## V-622 — Admin authorization drift guard inventories routes before checking gates
+
+**Date:** 2026-07-14
+
+The repository's claimed all-admin-route authorization invariant had a
+structural blind spot: its discovery regular expression required the route text
+to already contain `preHandler`. A newly added `/v1/admin/*` registration with
+no options or authorization at all was therefore absent from the inventory, so
+the “every admin route is gated” assertion still passed. Its loose historical
+count protected only against a near-empty scan, not one invisible route.
+
+The invariant now parses every route source file with the TypeScript AST,
+discovers literal Fastify admin registrations independently of their options,
+and inspects only the registration's options argument for exact
+`driftstack_internal_admin` scope or the stricter owner gate. Handler-body text
+cannot satisfy the check. Any activation-off stub requires an exact
+file/method/path/handler exemption with a documented reason rather than gaining
+an automatic two-argument exemption; the current exemption set is empty.
+
+Verification proves all 67 current admin registrations are discovered and
+authorized. Synthetic regression cases prove a completely ungated route is
+reported even when its handler contains a misleading scope string, while a
+gate in the route options is accepted. Focused evidence passes 1 file and 5/5
+tests; strict server test TypeScript, targeted lint/format, diff and whitespace
+checks are green.
