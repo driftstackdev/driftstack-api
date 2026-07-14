@@ -63,9 +63,9 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
       /generateKeyboardCadence\(opts: GenerateKeyboardCadenceOpts\): KeyboardCadence \{/,
     );
     expect(body).toMatch(/\/\/ Deterministic constant delay — real path samples around mean/);
-    expect(body).toMatch(/\/\/ with profile-tuned jitter\./);
+    expect(body).toMatch(/\/\/ with profile-tuned jitter\. Keep one delay per Unicode grapheme/);
     expect(body).toMatch(
-      /const delaysMs = Array\.from\(\{ length: opts\.text\.length \}, \(\) => opts\.profile\.meanKeyDelayMs\);/,
+      /const delaysMs = splitGraphemes\(opts\.text\)\.map\(\(\) => opts\.profile\.meanKeyDelayMs\);/,
     );
     expect(body).toMatch(
       /generateScrollPattern\(opts: GenerateScrollPatternOpts\): ScrollPattern \{/,

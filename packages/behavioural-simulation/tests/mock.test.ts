@@ -106,6 +106,13 @@ describe('MockBehaviouralSimulator — determinism', () => {
     expect(cad.durationMs).toBe(500);
   });
 
+  it('generateKeyboardCadence mirrors real Unicode grapheme boundaries', () => {
+    const sim = new MockBehaviouralSimulator();
+    const cad = sim.generateKeyboardCadence({ text: 'A👩‍💻é🇺🇸', profile: PROFILE });
+    expect(cad.delaysMs).toEqual([100, 100, 100, 100]);
+    expect(cad.durationMs).toBe(400);
+  });
+
   it('generateScrollPattern produces ticks of profile.meanScrollPxPerTick magnitude', () => {
     const sim = new MockBehaviouralSimulator();
     const sc = sim.generateScrollPattern({

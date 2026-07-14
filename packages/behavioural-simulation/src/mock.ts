@@ -15,6 +15,7 @@ import type {
 } from './interfaces.js';
 import { generateScrollVelocityProfile, type ScrollVelocityProfile } from './scroll.js';
 import { generateTouchEvent } from './touch.js';
+import { splitGraphemes } from './graphemes.js';
 import type {
   BehaviouralProfile,
   KeyboardCadence,
@@ -100,8 +101,9 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
   generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): KeyboardCadence {
     const seed = opts.seed ?? defaultSeed('kb', { text: opts.text, profileId: opts.profile.id });
     // Deterministic constant delay — real path samples around mean
-    // with profile-tuned jitter.
-    const delaysMs = Array.from({ length: opts.text.length }, () => opts.profile.meanKeyDelayMs);
+    // with profile-tuned jitter. Keep one delay per Unicode grapheme so the
+    // mock cannot hide lone-surrogate events that the real path rejects.
+    const delaysMs = splitGraphemes(opts.text).map(() => opts.profile.meanKeyDelayMs);
     const durationMs = delaysMs.reduce((acc, d) => acc + d, 0);
     return { text: opts.text, delaysMs, durationMs, seed };
   }

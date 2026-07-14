@@ -101,6 +101,23 @@ describe('generateTypingSequence', () => {
     expect(replayTypingSequence(seq.events)).toBe('12 34 56');
   });
 
+  it('emits emoji, combining sequences, and flags as intact grapheme keystrokes', () => {
+    const text = 'A👩‍💻é🇺🇸';
+    const seq = generateTypingSequence({
+      text,
+      profile: PROFILE,
+      seed: 'graphemes',
+      typoProbability: 0,
+    });
+    expect(seq.events).toEqual([
+      expect.objectContaining({ kind: 'char', char: 'A' }),
+      expect.objectContaining({ kind: 'char', char: '👩‍💻' }),
+      expect.objectContaining({ kind: 'char', char: 'é' }),
+      expect.objectContaining({ kind: 'char', char: '🇺🇸' }),
+    ]);
+    expect(replayTypingSequence(seq.events)).toBe(text);
+  });
+
   it('BSIM-4: rejects text over MAX_TEXT_LENGTH with its OWN check (not just via the delegated generateKeyboardCadence call)', () => {
     // Regression-proofing: generateTypingSequence delegates to
     // generateKeyboardCadence internally, which has its own identical check —

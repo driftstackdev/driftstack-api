@@ -62,9 +62,12 @@ describe('W452.A packages/behavioural-simulation/src/types.ts content parity', (
     );
   });
 
-  it("KeyboardCadence: 4-field (text + delaysMs length=text.length + durationMs + seed); ScrollPattern: 5-field (direction 4-union + totalDistancePx + ticks + durationMs + seed) + 'Distinct from mouse — wheel/touch deltas' framing", () => {
+  it('KeyboardCadence: delays align to Unicode graphemes; ScrollPattern keeps its wheel/touch shape', () => {
     expect(body).toMatch(
       /export interface KeyboardCadence \{[\s\S]*?text: string;[\s\S]*?\/\*\* Per-keystroke delay in ms; `delaysMs\[i\]` is the delay BEFORE keystroke[\s\S]*?delaysMs: number\[\];[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
+    );
+    expect(body).toMatch(
+      /Length is\s*\n?\s*\*\s*the Unicode grapheme count, not the UTF-16 code-unit count\./,
     );
     expect(body).toMatch(
       /\/\*\* Scroll-by-scroll velocity profile\. Distinct from mouse — wheel\/touch deltas\. \*\/\s*\n?\s*export interface ScrollPattern \{[\s\S]*?direction: 'up' \| 'down' \| 'left' \| 'right';[\s\S]*?totalDistancePx: number;[\s\S]*?ticks: Array<\{ deltaPx: number; tMs: number \}>;/,

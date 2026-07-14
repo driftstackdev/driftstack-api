@@ -146,6 +146,14 @@ describe('generateKeyboardCadence', () => {
     expect(upperCyrillic).toBeGreaterThan(lowerCyrillic);
   });
 
+  it('emits one cadence slot per Unicode grapheme, never per surrogate or joiner', () => {
+    const text = 'A👩‍💻é🇺🇸';
+    expect(text.length).toBe(12); // UTF-16 units — the old broken slot count.
+    const cadence = generateKeyboardCadence({ text, profile: PROFILE, seed: 'graphemes' });
+    expect(cadence.delaysMs).toHaveLength(4); // A, ZWJ emoji, combining é, flag.
+    expect(cadence.durationMs).toBe(cadence.delaysMs.reduce((a, b) => a + b, 0));
+  });
+
   it('scales with the profile mean delay', () => {
     const slow = generateKeyboardCadence({
       text: 'hello world this is a test',

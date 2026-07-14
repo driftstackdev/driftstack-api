@@ -62,7 +62,7 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(/\/\/ Phase 3 ships a non-mock generator behind the same interface\./);
   });
 
-  it('imports: 5 interface types from ./interfaces.js (Simulator + 4 GenerateXxxOpts incl. ScrollVelocityProfile + TouchEvent); generateScrollVelocityProfile + ScrollVelocityProfile type from ./scroll.js; generateTouchEvent from ./touch.js; 5 type-only from ./types.js (Profile + KeyboardCadence + MouseTrajectory + ScrollPattern + TouchEvent)', () => {
+  it('imports: interface/types, real touch/scroll delegates, and the shared grapheme splitter', () => {
     expect(body).toMatch(
       /import type \{\s*\n?\s*BehaviouralSimulator,\s*\n?\s*GenerateKeyboardCadenceOpts,\s*\n?\s*GenerateMouseTrajectoryOpts,\s*\n?\s*GenerateScrollPatternOpts,\s*\n?\s*GenerateScrollVelocityProfileOpts,\s*\n?\s*GenerateTouchEventOpts,\s*\n?\s*\} from '\.\/interfaces\.js';/,
     );
@@ -70,6 +70,7 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
       /import \{ generateScrollVelocityProfile, type ScrollVelocityProfile \} from '\.\/scroll\.js';/,
     );
     expect(body).toMatch(/import \{ generateTouchEvent \} from '\.\/touch\.js';/);
+    expect(body).toMatch(/import \{ splitGraphemes \} from '\.\/graphemes\.js';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*BehaviouralProfile,\s*\n?\s*KeyboardCadence,\s*\n?\s*MouseTrajectory,\s*\n?\s*ScrollPattern,\s*\n?\s*TouchEvent,\s*\n?\s*\} from '\.\/types\.js';/,
     );
@@ -104,15 +105,15 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(/return \{ from: opts\.from, to: opts\.to, points, durationMs, seed \};/);
   });
 
-  it("generateKeyboardCadence framing pinned: 'Deterministic constant delay — real path samples around mean with profile-tuned jitter.' + delaysMs = Array.from text.length × meanKeyDelayMs + seed = defaultSeed('kb', {text, profileId})", () => {
+  it("generateKeyboardCadence uses deterministic constant delay over shared Unicode graphemes + seed = defaultSeed('kb', {text, profileId})", () => {
     expect(body).toMatch(
       /const seed = opts\.seed \?\? defaultSeed\('kb', \{ text: opts\.text, profileId: opts\.profile\.id \}\);/,
     );
     expect(body).toMatch(
-      /\/\/ Deterministic constant delay — real path samples around mean\s*\n?\s*\/\/ with profile-tuned jitter\./,
+      /\/\/ Deterministic constant delay — real path samples around mean\s*\n?\s*\/\/ with profile-tuned jitter\. Keep one delay per Unicode grapheme so the\s*\n?\s*\/\/ mock cannot hide lone-surrogate events that the real path rejects\./,
     );
     expect(body).toMatch(
-      /const delaysMs = Array\.from\(\{ length: opts\.text\.length \}, \(\) => opts\.profile\.meanKeyDelayMs\);/,
+      /const delaysMs = splitGraphemes\(opts\.text\)\.map\(\(\) => opts\.profile\.meanKeyDelayMs\);/,
     );
   });
 

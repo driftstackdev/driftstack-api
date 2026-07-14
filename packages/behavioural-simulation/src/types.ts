@@ -27,8 +27,8 @@ export interface KeyboardCadence {
   /** The string typed. */
   text: string;
   /** Per-keystroke delay in ms; `delaysMs[i]` is the delay BEFORE keystroke
-   *  `i` (so `delaysMs[0]` is the latency to the first keypress). Length =
-   *  `text.length`. */
+   *  `i` (so `delaysMs[0]` is the latency to the first keypress). Length is
+   *  the Unicode grapheme count, not the UTF-16 code-unit count. */
   delaysMs: number[];
   /** Total wall-clock duration in ms. */
   durationMs: number;

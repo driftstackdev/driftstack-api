@@ -28,6 +28,7 @@
 
 import type { GenerateKeyboardCadenceOpts } from './interfaces.js';
 import type { KeyboardCadence } from './types.js';
+import { splitGraphemes } from './graphemes.js';
 
 export interface KeyboardCadenceDefaults {
   /** σ as a fraction of the mean delay (gaussian jitter width). */
@@ -51,7 +52,7 @@ export interface KeyboardCadenceDefaults {
 }
 
 /**
- * Maximum allowed `text` length (characters), shared with
+ * Maximum allowed `text` length (UTF-16 code units), shared with
  * `generateTypingSequence` (typing-sequence.ts imports this constant rather
  * than redefining its own value, keeping the two in lockstep). Unlike
  * BSIM-1/2's unbounded-loop shapes, iterating `text.length` here scales only
@@ -125,8 +126,9 @@ const SYMBOLIC = /[0-9\p{P}\p{S}]/u;
 /**
  * Produce per-keystroke timings for `text` typed under `profile`.
  *
- * `delaysMs[i]` is the delay BEFORE keystroke `i` (so `delaysMs[0]` is
- * the latency to the first keypress). `durationMs` is their sum.
+ * `delaysMs[i]` is the delay BEFORE Unicode grapheme keystroke `i` (so
+ * `delaysMs[0]` is the latency to the first keypress). `durationMs` is their
+ * sum. Emoji, combining sequences, and flags each occupy one cadence slot.
  */
 export function generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): KeyboardCadence {
   const { text, profile } = opts;
@@ -145,12 +147,13 @@ export function generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): Keyb
   const rng = mulberry32(hashSeed(seed));
   const d = KEYBOARD_CADENCE_DEFAULTS;
   const mean = profile.meanKeyDelayMs;
+  const graphemes = splitGraphemes(text);
 
   const delaysMs: number[] = [];
   let prevChar = '';
 
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i] as string;
+  for (let i = 0; i < graphemes.length; i += 1) {
+    const char = graphemes[i] as string;
 
     // Base delay with gaussian jitter; clamp the factor so a single
     // unlucky draw can't collapse the delay to near-zero.

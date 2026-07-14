@@ -26653,3 +26653,29 @@ scroll and three-finger swipe, plus exact replay endpoints and non-negative,
 monotonic timelines for all valid gesture families. The focused multi-touch
 suite passes 1 file and 25/25 tests; strict package TypeScript, targeted
 lint/format, diff and whitespace checks are green.
+
+## V-627 — Keyboard simulation emits Unicode graphemes, not code units
+
+**Date:** 2026-07-14
+
+The keyboard cadence and typo-aware typing generators described their
+classification as Unicode-aware but iterated JavaScript string indices. That
+splits every non-BMP symbol into lone high/low surrogates and splits joined or
+combining characters into independent events. The four user-perceived keys in
+`A👩‍💻é🇺🇸` therefore produced 12 cadence slots and 12 driver events, including
+isolated surrogates, a ZWJ and a combining accent. Concatenating the events
+reconstructed the text, masking the invalid physical-key stream.
+
+A shared `Intl.Segmenter` extended-grapheme helper now drives real cadence,
+typo sequencing and the deterministic mock. Emoji ZWJ sequences, combining
+characters and flags each receive one timing slot and one intact character
+event. ASCII adjacent-key typo injection, case preservation, seeded cadence,
+duration accounting and the existing 20,000 UTF-16-code-unit safety ceiling
+remain unchanged. The public `KeyboardCadence` contract now states that delay
+count follows Unicode grapheme count.
+
+Focused real/mock/content evidence passes 6 files and 67/67 tests, including
+the exact four-grapheme/12-code-unit repro and final replay equality. The full
+behavioural-simulation suite passes 9 files and 166/166 tests; strict package
+and server-test TypeScript, targeted lint/format, diff and whitespace checks
+are green.

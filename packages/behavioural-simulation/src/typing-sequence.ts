@@ -21,6 +21,7 @@
 
 import { generateKeyboardCadence, MAX_TEXT_LENGTH } from './keyboard.js';
 import type { GenerateKeyboardCadenceOpts } from './interfaces.js';
+import { splitGraphemes } from './graphemes.js';
 
 export interface GenerateTypingSequenceOpts extends GenerateKeyboardCadenceOpts {
   /** Per-character typo probability (0..1). Default 0.025 (file 05: 1-3%). */
@@ -126,6 +127,7 @@ export function generateTypingSequence(opts: GenerateTypingSequenceOpts): Typing
 
   // Reuse the realistic per-keystroke timing model for the clean text.
   const cadence = generateKeyboardCadence({ text, profile, seed });
+  const graphemes = splitGraphemes(text);
   const rng = mulberry32(hashSeed(`${seed}:typo`));
   const minDelayMs = 30;
   const mean = profile.meanKeyDelayMs;
@@ -133,8 +135,8 @@ export function generateTypingSequence(opts: GenerateTypingSequenceOpts): Typing
   const events: KeystrokeEvent[] = [];
   let typoCount = 0;
 
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i] as string;
+  for (let i = 0; i < graphemes.length; i += 1) {
+    const char = graphemes[i] as string;
     const baseDelay = cadence.delaysMs[i] as number;
     const neighbours = QWERTY_NEIGHBOURS[char.toLowerCase()];
 
