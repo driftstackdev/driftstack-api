@@ -18,8 +18,8 @@
 //   • Form: name 1-120 required + description 500-max optional +
 //     archetype select disabled when KNOWN_ARCHETYPES.length < 2.
 //   • EmptyConnect 'Set an API key in Settings' framing.
-//   • friendlyError: DriftstackError → title+kind+detail else Error
-//     → message else String(err).
+//   • friendlyError: preserve the network diagnostic, then delegate safe,
+//     actionable fallback formatting to the shared humanizeError helper.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -147,10 +147,12 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it("2026-05-20 — friendlyError signature widened to (err, baseUrl?: string) for the Tauri-WebKit 'Load failed' diagnosticFetchError preflight; baseUrl-undefined branch keeps the prior DriftstackError → Error → String fallback chain so non-network callers still get the structured shape (rendered as '[object Object]' was the prior bug)", () => {
+  it('friendlyError preserves the Tauri-WebKit diagnosticFetchError preflight, strips its raw native suffix, and delegates every non-network error to the shared humanizeError helper with an actionable fallback', () => {
+    expect(body).toContain("import { humanizeError } from '../lib/humanize-error';");
     expect(body).toMatch(
-      /function friendlyError\(err: unknown, baseUrl\?: string\): string \{\s*\n?\s*\/\/ 2026-05-20 — network-failure preflight \(catches Tauri WebKit\s*\n?\s*\/\/ "Load failed" before falling through to per-view formatting\)\.\s*\n?\s*if \(baseUrl !== undefined\) \{\s*\n?\s*const diag = diagnosticFetchError\(err, baseUrl\);\s*\n?\s*if \(diag !== null\) return diag;\s*\n?\s*\}\s*\n?\s*if \(err instanceof DriftstackError\) \{\s*\n?\s*return `\$\{err\.title\} \(\$\{err\.kind\}\): \$\{err\.detail \?\? err\.message\}`;\s*\n?\s*\}\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*return String\(err\);\s*\n?\s*\}/,
+      /function friendlyError\(\s*\n?\s*err: unknown,\s*\n?\s*baseUrl\?: string,\s*\n?\s*fallback = "Couldn't complete this profile action\. Try again\.",\s*\n?\s*\): string \{[\s\S]*?if \(baseUrl !== undefined\) \{\s*\n?\s*const diag = diagnosticFetchError\(err, baseUrl\);\s*\n?\s*if \(diag !== null\) \{\s*\n?\s*return `Couldn't reach \$\{baseUrl\}\. Check the URL, connection, firewall, or VPN, then try again\.`;\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*return humanizeError\(err, fallback\);\s*\n?\s*\}/,
     );
+    expect(body).not.toMatch(/return `\$\{err\.title\} \(\$\{err\.kind\}\):/);
   });
 
   it('Launch gates on `busy` ONLY, not atProfileCap (free-tier fix 0ccff415): the profile cap limits CREATING profiles, not launching an existing one (launch consumes a session slot). A regression to `disabled={busy || atProfileCap}` re-greys Launch on a free-tier account (profile_cap 1) so the one allowed profile can never launch — the exact bug a self-hosted user hit. GRID + LIST(table) both route Launch through handleLaunch with launchDisabled gated on activeWorkspace only. (Duplicate removed per founder 2026-06-15.)', () => {
