@@ -102,4 +102,26 @@ describe('API-key positive-cache generation lease', () => {
     expect(cache.size()).toBe(1);
     await expect(cache.get(SHA)).resolves.toBeNull();
   });
+
+  it('keeps a positive API-key cache hit free of repository lookups', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let lookupCount = 0;
+    const repo = repoWith({
+      findApiKeyByPrefix: () => {
+        lookupCount += 1;
+        return Promise.resolve(key);
+      },
+    });
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z')),
+    ).resolves.toMatchObject({ apiKey: { id: key.id }, webSession: null });
+    expect(lookupCount).toBe(2);
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).resolves.toMatchObject({ apiKey: { id: key.id }, webSession: null });
+    expect(lookupCount).toBe(2);
+  });
 });

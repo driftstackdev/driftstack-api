@@ -92,4 +92,66 @@ describe('web-session positive-cache generation lease', () => {
     expect(cache.size()).toBe(1);
     await expect(cache.get(SHA)).resolves.toBeNull();
   });
+
+  it('rejects a cached predecessor when PostgreSQL authority changes without cache invalidation', async () => {
+    const cache = new InMemoryAuthCache();
+    let activeSession: WebSessionAuthRow | null = SESSION;
+    let lookupCount = 0;
+    const repo = repoWith({
+      findActiveWebSession: () => {
+        lookupCount += 1;
+        return Promise.resolve(activeSession);
+      },
+    });
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z')),
+    ).resolves.toMatchObject({ webSession: { id: SESSION.id } });
+    expect(lookupCount).toBe(2);
+    await expect(cache.get(SHA)).resolves.not.toBeNull();
+
+    // Model an auth-epoch advance or revoke that commits in
+    // PostgreSQL while Redis generation invalidation is lost. The physical
+    // positive cache entry remains current, but it must no longer authorize.
+    activeSession = null;
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).rejects.toBeInstanceOf(InvalidKeyError);
+    expect(lookupCount).toBe(3);
+    await expect(cache.get(SHA)).resolves.not.toBeNull();
+  });
+
+  it('refreshes MFA satisfaction from live session authority on every cache hit', async () => {
+    const cache = new InMemoryAuthCache();
+    let mfaSatisfiedAt: Date | null = null;
+    let lookupCount = 0;
+    const repo = repoWith({
+      findActiveWebSession: () => {
+        lookupCount += 1;
+        return Promise.resolve({ ...SESSION, mfaSatisfiedAt });
+      },
+    });
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z')),
+    ).resolves.toMatchObject({ webSession: { id: SESSION.id, mfaSatisfiedAt: null } });
+    expect(lookupCount).toBe(2);
+
+    mfaSatisfiedAt = new Date('2026-07-14T00:00:30.000Z');
+    const refreshed = await authenticate(
+      repo,
+      PLAINTEXT,
+      cache,
+      new Date('2026-07-14T00:00:31.000Z'),
+    );
+    expect(refreshed.webSession?.mfaSatisfiedAt).toEqual(mfaSatisfiedAt);
+    expect(refreshed.apiKey.expiresAt).toEqual(SESSION.expiresAt);
+    expect(lookupCount).toBe(3);
+
+    // The serialized cache still contains its original snapshot. Returning the
+    // fresh timestamp therefore proves authenticate() used the live row.
+    await expect(cache.get(SHA)).resolves.toMatchObject({
+      webSession: { id: SESSION.id, mfaSatisfiedAt: null },
+    });
+  });
 });

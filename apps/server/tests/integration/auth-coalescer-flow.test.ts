@@ -114,9 +114,11 @@ describe('coalescer integrated with authenticate()', () => {
     // same Promise, which resolves with one shared value.
     for (const r of results) expect(r.account.id).toBe(results[0]?.account.id);
 
-    // The slow path (prefix lookup + scrypt + account fetch) ran exactly
-    // once. Without coalescing this would be 16.
-    expect(repo.prefixLookups).toBe(1);
+    // The slow path ran exactly once: one initial key read, one V-591
+    // post-generation authority recheck, one scrypt verify, and one account
+    // fetch/touch. Without coalescing each of the 16 callers does that pair of
+    // cheap reads independently.
+    expect(repo.prefixLookups).toBe(2);
     expect(repo.accountLookups).toBe(1);
     expect(repo.touches).toBe(1);
 
@@ -140,9 +142,10 @@ describe('coalescer integrated with authenticate()', () => {
     );
     await Promise.all(calls);
 
-    // No coalescer — every concurrent call takes the slow path. This is the
+    // No coalescer — every concurrent call takes the slow path and performs
+    // both the initial key read and the V-591 authority recheck. This is the
     // V-012 cold-start fan-out shape.
-    expect(repo.prefixLookups).toBe(16);
+    expect(repo.prefixLookups).toBe(32);
   });
 
   it('coalescing across different plaintexts is independent', async () => {
@@ -199,11 +202,11 @@ describe('coalescer integrated with authenticate()', () => {
     await Promise.all(calls);
 
     // 4 distinct slow paths (one per plaintext); 12 coalesce hits (3 per
-    // plaintext).
+    // plaintext), with two key reads per winning slow path.
     const stats = coalescer.stats();
     expect(stats.starts).toBe(4);
     expect(stats.hits).toBe(12);
-    expect(repo.prefixLookups).toBe(4);
+    expect(repo.prefixLookups).toBe(8);
   });
 
   it('rejected slow path (invalid plaintext) clears the slot for retry', async () => {

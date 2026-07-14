@@ -25529,3 +25529,41 @@ Verification:
   session activates MFA;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-595 — cached web sessions revalidate live authority
+
+**Date:** 2026-07-14
+
+Made Redis generation invalidation an acceleration rather than the security
+boundary for human web sessions. Password reset, MFA activation, and logout
+commit their authoritative PostgreSQL change before a best-effort
+cache-generation bump. A process crash or Redis failure between those
+operations could previously leave an already-positive session context
+usable for the remainder of its 30-second cache TTL.
+
+Every positive web-session cache hit now performs the indexed token-hash lookup
+through `findActiveWebSession`. The production adapter joins the session's
+credential epoch to the account's current epoch and filters revoked or expired
+rows. Authentication additionally requires the returned session id,
+account id, and synthetic `wsk_` key identity to match the cached context. A
+missing or mismatched row is rejected even if Redis invalidation was lost. The
+returned context refreshes `mfa_satisfied_at` and session timing fields from
+the live row so step-up decisions do not use a stale cache snapshot.
+
+API-key cache hits keep their existing no-database/no-scrypt fast path; their
+generation-fenced slow-path insertion and expiry checks are unchanged.
+
+Verification:
+
+- an adversarial cache remains physically current after PostgreSQL retires the
+  session, yet the next cached authentication rechecks authority and rejects;
+- a second proof changes only live `mfa_satisfied_at` after cache population
+  and observes the fresh timestamp in the returned context while the serialized
+  cache still contains the old value;
+- an API-key control proves a positive cache hit performs zero additional
+  repository lookups;
+- the widened cache/auth/coalescer gate passes 19 files and 179 tests;
+- the real HTTP MFA lifecycle with Redis and PostgreSQL passes all 9 cases,
+  including a positively cached predecessor rejected after epoch advancement;
+- strict server source/test
+  typechecking, targeted linting, formatting, diff, and hooks pass.

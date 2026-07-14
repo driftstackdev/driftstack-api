@@ -294,15 +294,55 @@ export async function authenticate(
       cached = null;
     }
     if (cached) {
-      // expiresAt is the only clock-bound condition that can change inside
-      // the TTL window — re-check on every cache read so an expiry doesn't
-      // leak past its deadline.
+      // Expiry is clock-bound, so re-check it on every cache read even when
+      // the backing authority has not changed.
       if (cached.apiKey.expiresAt !== null && cached.apiKey.expiresAt.getTime() <= now.getTime()) {
         throw new ExpiredKeyError();
       }
-      // Skip the last_used_at touch on cache hits — sampled at TTL granularity
-      // (once per 30s in the worst case), which is the acceptable trade for
-      // amortising scrypt across the burst window.
+
+      // A Redis generation bump is deliberately an acceleration, not the
+      // authority boundary for human sessions. Password reset, MFA activation,
+      // and logout commit in PostgreSQL before best-effort cache invalidation;
+      // a crash or Redis failure between those operations
+      // must not let a positive entry authorize until its TTL expires.
+      //
+      // findActiveWebSession joins the session to the account's current auth
+      // epoch and filters revocation/expiry. Require the exact cached identity
+      // as defense against a malformed custom cache, then refresh the live MFA
+      // timestamp used by step-up middleware. API-key cache hits intentionally
+      // retain their existing DB/scrypt bypass.
+      if (cached.webSession !== null) {
+        const liveSession = await repo.findActiveWebSession({ tokenHash: sha, now });
+        if (
+          liveSession === null ||
+          liveSession.id !== cached.webSession.id ||
+          liveSession.accountId !== cached.account.id ||
+          liveSession.accountId !== cached.apiKey.accountId ||
+          cached.apiKey.id !== `wsk_${liveSession.id}`
+        ) {
+          throw new InvalidKeyError();
+        }
+        // Defensive checks keep custom repo implementations honest even though
+        // the production query has already applied both predicates.
+        if (liveSession.revokedAt !== null) throw new RevokedKeyError();
+        if (liveSession.expiresAt.getTime() <= now.getTime()) throw new ExpiredKeyError();
+
+        return {
+          ...cached,
+          apiKey: {
+            ...cached.apiKey,
+            lastUsedAt: liveSession.lastUsedAt,
+            revokedAt: liveSession.revokedAt,
+            expiresAt: liveSession.expiresAt,
+          },
+          webSession: {
+            id: liveSession.id,
+            mfaSatisfiedAt: liveSession.mfaSatisfiedAt,
+          },
+        };
+      }
+      // API-key last_used_at remains sampled at cache TTL granularity, which is
+      // the accepted trade for amortising scrypt across the burst window.
       return cached;
     }
   }

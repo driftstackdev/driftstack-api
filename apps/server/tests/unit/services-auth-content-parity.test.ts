@@ -10,9 +10,10 @@
 //   • V-168 dual-path: ds_-prefix → API key (prefix lookup + scrypt
 //     verify); else → web session (sha256 lookup against
 //     web_sessions row).
-//   • Cache fast path: re-check expiresAt on every read (clock-bound
-//     leak protection); cache.get/set wrapped in try/catch for
-//     graceful degradation.
+//   • Cache fast path: re-check expiresAt on every read; exact live
+//     PostgreSQL authority on every web-session hit; API-key hits
+//     retain their DB/scrypt bypass; cache.get/set wrapped in
+//     try/catch for graceful degradation.
 //   • Slow-path API key: 5 failure modes (no row → InvalidKey;
 //     hash mismatch → InvalidKey; revoked → RevokedKey; expired →
 //     ExpiredKey; account suspended → Forbidden; account deleted →
@@ -120,10 +121,25 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
   it('authenticate: plaintext.length < 24 → InvalidKey; cache fast path with expiresAt re-check on read', () => {
     expect(body).toMatch(/if \(plaintext\.length < 24\) throw new InvalidKeyError\(\);/);
     expect(body).toMatch(
-      /\/\/ expiresAt is the only clock-bound condition that can change inside\s*\n?\s*\/\/ the TTL window — re-check on every cache read so an expiry doesn't\s*\n?\s*\/\/ leak past its deadline\./,
+      /\/\/ Expiry is clock-bound, so re-check it on every cache read even when\s*\n?\s*\/\/ the backing authority has not changed\./,
     );
     expect(body).toMatch(
       /if \(cached\.apiKey\.expiresAt !== null && cached\.apiKey\.expiresAt\.getTime\(\) <= now\.getTime\(\)\) \{\s*\n?\s*throw new ExpiredKeyError\(\);/,
+    );
+  });
+
+  it('positive web-session cache hits revalidate exact live PostgreSQL authority and refresh MFA state', () => {
+    expect(body).toMatch(/if \(cached\.webSession !== null\) \{/);
+    expect(body).toMatch(
+      /const liveSession = await repo\.findActiveWebSession\(\{ tokenHash: sha, now \}\);/,
+    );
+    expect(body).toMatch(/liveSession\.id !== cached\.webSession\.id/);
+    expect(body).toMatch(/liveSession\.accountId !== cached\.account\.id/);
+    expect(body).toMatch(/liveSession\.accountId !== cached\.apiKey\.accountId/);
+    expect(body).toMatch(/cached\.apiKey\.id !== `wsk_\$\{liveSession\.id\}`/);
+    expect(body).toMatch(/mfaSatisfiedAt: liveSession\.mfaSatisfiedAt/);
+    expect(body).toMatch(
+      /API-key cache hits intentionally\s*\n?\s*\/\/ retain their existing DB\/scrypt bypass\./,
     );
   });
 
