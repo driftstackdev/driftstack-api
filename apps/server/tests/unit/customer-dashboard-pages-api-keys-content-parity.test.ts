@@ -157,7 +157,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     );
     expect(body).toMatch(/function showCreate\(\) \{\s*if \(!token \|\| !keyDataAvailable\) \{/);
     expect(body).toMatch(
-      /if \(!token\) \{\s*renderUnavailable\('Sign in to load your API keys\.'\);\s*showBanner\('Sign in to see live API keys\.'\);\s*return;/,
+      /if \(!token\) \{\s*renderUnavailable\('Sign in to load your API keys\.'\);\s*showBanner\('Sign in to see live API keys\.'\);[\s\S]*?window\.dashboardHydrated\(\);[\s\S]*?return;/,
     );
     expect(body).not.toMatch(/Showing preview data below/);
   });

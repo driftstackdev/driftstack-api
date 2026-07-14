@@ -101,8 +101,17 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     expect(body).toMatch(/btn\.textContent = 'Redirecting…';/);
     expect(body).toMatch(/\.finally\(\(\) => \{/);
     expect(body).toMatch(/busyCheckoutButtons\.delete\(btn\);/);
-    expect(body).toMatch(/btn\.disabled = false;/);
+    expect(body).toMatch(/checkoutInFlightButton = null;/);
     expect(body).toMatch(/btn\.textContent = original;/);
+    expect(body).toMatch(
+      /buttonStates\.forEach\(\(\{ button, disabled, text, title \}\) => \{\s*button\.disabled = disabled;\s*button\.textContent = text;/,
+    );
+    expect(
+      body.replace(
+        /busyCheckoutButtons\.delete\(btn\);\s*checkoutInFlightButton = null;/,
+        'busyCheckoutButtons.delete(btn);',
+      ),
+    ).not.toMatch(/busyCheckoutButtons\.delete\(btn\);\s*checkoutInFlightButton = null;/);
   });
 
   it("POST /v1/billing/checkout-session contract: tier + billing_period:'monthly' + success_url with ?subscribed={tier} + cancel_url → /select-tier — pinned so the post-checkout landing URL signals which tier was purchased (for the dashboard home to read; 2026-07-02 the landing moved from /first-session to / with the account-portal IA) and billing_period stays 'monthly' (drift to dropping would silently default server-side, which may or may not match customer intent)", () => {

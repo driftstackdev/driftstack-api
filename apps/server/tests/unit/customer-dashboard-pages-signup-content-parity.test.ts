@@ -61,7 +61,11 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
 
   it("sessionStorage handoff: ds_signup_email (so verify-email page can show 'Code sent to X') + ds_debug_verify_token (only set when server returns debug_token, i.e. AUTH_EXPOSE_DEBUG_TOKEN=true) — pinned so the post-signup → verify-email handoff carries both the email context AND the dev-mode paste-in token", () => {
     expect(body).toMatch(
-      /sessionStorage\.setItem\('ds_signup_email', payload\.email\);\s*\n?\s*if \(body\.debug_token\) \{\s*\n?\s*sessionStorage\.setItem\('ds_debug_verify_token', body\.debug_token\);\s*\n?\s*\}/,
+      /function persistSignupState\(email, debugToken\) \{\s*if \(!writeSignupState\('ds_signup_email', email\)\) return false;\s*if \(typeof debugToken === 'string' && debugToken\.length > 0\) \{\s*return writeSignupState\('ds_debug_verify_token', debugToken\);\s*\}\s*return removeSignupState\('ds_debug_verify_token'\);/,
+    );
+    expect(body).toMatch(/if \(!persistSignupState\(payload\.email, body\.debug_token\)\) \{/);
+    expect(body.replace('persistSignupState(payload.email, body.debug_token)', 'true')).not.toMatch(
+      /persistSignupState\(payload\.email, body\.debug_token\)/,
     );
   });
 

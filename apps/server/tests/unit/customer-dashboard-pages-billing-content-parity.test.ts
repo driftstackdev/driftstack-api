@@ -90,9 +90,12 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
       /const response = await authedFetch\('\/v1\/billing\/portal-session', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: '\{\}',\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(!body \|\| !body\.portal_url\) throw new Error\('portal URL missing'\);/,
+      /const portalUrl = window\.driftstackTrustedRedirectUrl\(body && body\.portal_url, \[\s*'https:\/\/billing\.stripe\.com',\s*\]\);\s*if \(!portalUrl\) throw new Error\('portal URL invalid'\);/,
     );
-    expect(body).toMatch(/window\.location\.href = body\.portal_url;/);
+    expect(body).toMatch(/window\.location\.href = portalUrl;/);
+    expect(body.replace('window.location.href = portalUrl;', '')).not.toMatch(
+      /window\.location\.href = portalUrl;/,
+    );
     expect(body).toMatch(/if \(portalLoading\) return;/);
   });
 
@@ -126,7 +129,7 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
       /Invoice history and permanent receipt URLs are available in the\s*Stripe Customer Portal\./,
     );
     expect(body).toMatch(
-      /if \(!token\) \{\s*renderBillingUnavailable\(\s*'Billing state unavailable',\s*'Sign in to load your subscription and renewal details\.',\s*'unavailable',\s*\);[\s\S]*?showBanner\('Sign in to see live billing state\.'\);\s*return;/,
+      /if \(!token\) \{\s*renderBillingUnavailable\(\s*'Billing state unavailable',\s*'Sign in to load your subscription and renewal details\.',\s*'unavailable',\s*\);[\s\S]*?showBanner\('Sign in to see live billing state\.'\);[\s\S]*?window\.dashboardHydrated\(\);[\s\S]*?return;/,
     );
     expect(body).not.toMatch(/Showing preview data below/);
   });

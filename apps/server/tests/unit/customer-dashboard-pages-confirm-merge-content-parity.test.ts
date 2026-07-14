@@ -62,7 +62,7 @@ describe('customer-dashboard/pages/auth/oauth-client/confirm-merge content parit
   it('On success navigates home; on failure uses fixed shared response/request copy', () => {
     expect(body).toMatch(/\.then\(\(\) => \{\s*\n?\s*window\.location\.href = '\/';\s*\n?\s*\}\)/);
     expect(body).toMatch(
-      /\.then\(\(b\) => Promise\.reject\(window\.driftstackResponseError\(r, b\)\)\),/,
+      /return r\s*\.json\(\)\s*\.catch\(\(\) => \(\{\}\)\)\s*\.then\(\(b\) =>\s*Promise\.reject\(window\.driftstackResponseError\(r, b\)\),?\s*\);/,
     );
     expect(body).toMatch(
       /window\.driftstackRequestErrorMessage\(\s*\n?\s*err,\s*\n?\s*'Account linking could not be confirmed\. Request a new link and try again\.',/,

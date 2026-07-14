@@ -49,7 +49,10 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
 
   it('Pre-fill priority: linkToken ?? debugToken — URL ?token= wins over sessionStorage ds_debug_verify_token (kept for dev-mode back-compat)', () => {
     expect(body).toMatch(
-      /const debugToken = sessionStorage\.getItem\('ds_debug_verify_token'\);\s*\n?\s*const prefill = linkToken \?\? debugToken;/,
+      /const debugToken = readSignupState\('ds_debug_verify_token'\);\s*const prefill = linkToken \?\? debugToken;/,
+    );
+    expect(body).toMatch(
+      /function readSignupState\(key\) \{\s*try \{\s*return sessionStorage\.getItem\(key\);\s*\} catch \{\s*return null;/,
     );
   });
 
@@ -82,7 +85,10 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
 
   it("Post-verify cleanup: sessionStorage.removeItem ds_signup_email + ds_debug_verify_token — pinned so the signup-stage state doesn't bleed into subsequent flows (drift to leaving them would surface stale 'Code sent to old@email' on a returning user who later does a separate signup attempt in the same browser)", () => {
     expect(body).toMatch(
-      /\/\/ Cleanup signup-stage state\.\s*\n?\s*sessionStorage\.removeItem\('ds_signup_email'\);\s*\n?\s*sessionStorage\.removeItem\('ds_debug_verify_token'\);/,
+      /\/\/ Cleanup signup-stage state\.\s*removeSignupState\('ds_signup_email'\);\s*removeSignupState\('ds_debug_verify_token'\);/,
+    );
+    expect(body).toMatch(
+      /function removeSignupState\(key\) \{\s*try \{\s*sessionStorage\.removeItem\(key\);\s*\} catch \{/,
     );
   });
 
@@ -117,7 +123,7 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
   });
 
   it("Resend missing-email prompt fallback: !resendEmail → branded window.driftstackPrompt('Email address used at signup:') + trim + bail if empty — pinned so the resend works even when sessionStorage was cleared (drift to silently bailing would leave customers with no path to resend if they cleared cookies or moved devices)", () => {
-    expect(body).toMatch(/let resendEmail = sessionStorage\.getItem\('ds_signup_email'\);/);
+    expect(body).toMatch(/let resendEmail = readSignupState\('ds_signup_email'\);/);
     expect(body).toMatch(/\(await window\.driftstackPrompt\('Email address used at signup:', \{/);
     expect(body).toMatch(
       /resendEmail = resendEmail\.trim\(\);\s*\n?\s*if \(!resendEmail\) \{\s*\n?\s*resendInFlight = false;\s*\n?\s*resendBtn\.disabled = false;\s*\n?\s*resendBtn\.setAttribute\('aria-busy', 'false'\);\s*\n?\s*return;\s*\n?\s*\}/,

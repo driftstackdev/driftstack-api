@@ -82,7 +82,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("Defensive redirect: localStorage.getItem('ds_web_session_token') === null → window.location.replace('/signup')", () => {
     expect(body).toMatch(
-      /\/\/ Defensive redirect: if user lands here without a token, send to\s*\n?\s*\/\/ \/signup\. \(Direct nav to \/welcome shouldn't normally happen\.\)\s*\n?\s*\(function \(\) \{\s*\n?\s*const token = localStorage\.getItem\('ds_web_session_token'\);\s*\n?\s*if \(!token\) window\.location\.replace\('\/signup'\);\s*\n?\s*\}\)\(\);/,
+      /\/\/ Defensive redirect: if user lands here without a token, send to\s*\/\/ \/signup\. \(Direct nav to \/welcome shouldn't normally happen\.\)\s*\(function \(\) \{\s*let token = null;\s*try \{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch \{\s*token = null;\s*\}\s*if \(!token\) window\.location\.replace\('\/signup'\);\s*\}\)\(\);/,
     );
   });
 
