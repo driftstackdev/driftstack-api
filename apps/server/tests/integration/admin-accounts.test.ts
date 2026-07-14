@@ -275,16 +275,16 @@ describe('V-174 — scope architecture split', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("'admin' scope (compat alias) still works on /v1/admin/* during migration", async () => {
-    // Default fixture seeds 'admin' scope. Existing behavior unchanged.
-    fx = await buildTestApp();
+  it("legacy 'admin' scope CANNOT call /v1/admin/*", async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write', 'admin'] });
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/tier`,
       headers: auth(fx),
       payload: { tier: 'api_scale' },
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail?: string }>().detail).toContain('driftstack_internal_admin');
   });
 
   it("'account_owner' scope alone CAN mint API keys (customer-account control)", async () => {

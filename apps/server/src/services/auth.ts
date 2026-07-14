@@ -712,8 +712,9 @@ function indexRateLimitOverrides(
  * this clone exists because route-side imports want zero indirection.
  *
  *   1. Exact match.
- *   2. V-174 admin alias — `'admin'` satisfies `'account_owner'` +
- *      `'driftstack_internal_admin'` during the migration window.
+ *   2. V-174 legacy customer alias — `'admin'` satisfies
+ *      `'account_owner'`, but never the staff-only
+ *      `'driftstack_internal_admin'` boundary.
  *   3. V-481 broad-satisfies-granular — required `read:X` accepted
  *      from `read` / `account_owner`; `write:X` from `write` /
  *      `account_owner`; `admin:X` from `admin` / `account_owner`.
@@ -723,11 +724,8 @@ export function requireScope(ctx: AccountContext, required: ApiKeyScope): void {
   const scopes = ctx.apiKey.scopes;
   if (scopes.includes(required)) return;
 
-  // V-174 admin alias.
-  if (
-    (required === 'account_owner' || required === 'driftstack_internal_admin') &&
-    scopes.includes('admin')
-  ) {
+  // V-174 legacy customer alias. Never satisfies the staff-only scope.
+  if (required === 'account_owner' && scopes.includes('admin')) {
     return;
   }
 

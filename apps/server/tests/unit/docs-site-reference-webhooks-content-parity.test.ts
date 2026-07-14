@@ -84,9 +84,9 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/2\. \*\*Account-control scopes\*\* — `account_owner`,/);
     expect(body).toMatch(/`driftstack_internal_admin`\./);
     expect(body).toMatch(/3\. \*\*Granular scopes \*\* — `verb:resource` syntax/);
-    expect(body).toMatch(/\| `admin`\s+\| broad \(legacy\)\s+\| Pre-alias\./);
+    expect(body).toMatch(/\| `admin`\s+\| broad \(legacy\)\s+\| Deprecated customer alias\./);
     expect(body).toMatch(
-      /Treated as satisfying both `account_owner` \+ `driftstack_internal_admin`\./,
+      /Satisfies `account_owner` and customer `admin:\*` scopes, but never the staff-only `driftstack_internal_admin` scope\./,
     );
     expect(body).toMatch(/\| `gui_control`\s+\| special\s+\| Manual-control plane/);
     expect(body).toMatch(/Self-hosted GUI workflow only \(locked-decision L-001\)\./);

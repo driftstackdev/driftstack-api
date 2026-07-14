@@ -58,6 +58,11 @@ Alternative considered but rejected: Option A (re-verify `revokedAt` from DB on 
 
 ### V-246-P1-003 — `account_owner` scope reachability into `/v1/admin/*`
 
+**Status (V616, 2026-07-13): resolved in application code.** Both authorization
+predicates now require exact `driftstack_internal_admin` authority for
+`/v1/admin/*`; neither `account_owner` nor the stored legacy `admin` customer
+alias satisfies that scope. Cloudflare Access remains defense in depth.
+
 **File:** `apps/server/src/services/auth.ts` lines 255–267 (pre-existing `KNOWN GAP` comment).
 
 **Pattern:** the V-174 scope split intentionally allowed `account_owner` (customer dashboard) to reach `/v1/admin/*` routes alongside `driftstack_internal_admin` (Driftstack staff). Operationally mitigated by Cloudflare Access on `admin.driftstack.dev` (V-135 separate origin).

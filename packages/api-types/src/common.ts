@@ -1348,18 +1348,15 @@ export function archetypeDisplayLabel(id: string): string {
  *   operations (`/v1/admin/*`: list all accounts, suspend account,
  *   change tier, force-actions, audit-log read, webhook DLQ
  *   management). Only the founder + Driftstack-internal accounts
- *   carry this scope. admin.driftstack.dev origin (V-135) gates
- *   reachability via Cloudflare Access SSO; the scope check is the
- *   defense-in-depth layer.
+ *   carry this scope. The exact scope check is the application authority
+ *   boundary; Cloudflare Access SSO on admin.driftstack.dev (V-135) is a
+ *   separate defense-in-depth identity perimeter.
  *
- * - `admin` — pre-V-174 compat alias. Treated as satisfying BOTH new
- *   scopes during the migration window (via
- *   `lib/errors-helpers.ts::requireScope`). Existing API keys with
- *   `'admin'` scope continue to work unchanged. Founder-driven
- *   migration script (separate V-NNN) promotes Driftstack-internal
- *   admin keys to explicit `'driftstack_internal_admin'`; remaining
- *   customer-side `'admin'` keys get re-scoped to `'account_owner'`.
- *   After migration, `'admin'` is deprecated + removed.
+ * - `admin` — pre-V-174 customer compatibility alias. It satisfies
+ *   `account_owner` and customer `admin:X` scopes, but never
+ *   `driftstack_internal_admin`; cross-account staff authority requires that
+ *   exact scope. The enum value remains so stored legacy customer keys parse
+ *   and retain their own-account access until they are rotated or revoked.
  */
 export const ApiKeyScopeSchema = z.enum([
   'read',
@@ -1369,7 +1366,7 @@ export const ApiKeyScopeSchema = z.enum([
   'driftstack_internal_admin',
   'gui_control',
   // V-481 — granular per-resource scopes. Verb:resource order.
-  // Backwards-compat: broad scopes (`read` / `write` / `admin` /
+  // Backwards-compat: customer broad scopes (`read` / `write` / `admin` /
   // `account_owner`) satisfy granular checks via requireScope's
   // verb-prefix logic in `apps/server/src/lib/errors-helpers.ts`
   // and `apps/server/src/services/auth.ts`. Granular scopes do

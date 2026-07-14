@@ -8,8 +8,8 @@
 //
 //   3 scope-check rules (V-174 + V-481):
 //     1. Exact match — key carries required scope verbatim.
-//     2. V-174 admin alias — admin-scoped keys satisfy
-//        account_owner + driftstack_internal_admin during migration.
+//     2. V-174 legacy customer alias — admin-scoped keys satisfy
+//        account_owner but never driftstack_internal_admin.
 //     3. V-481 broad-satisfies-granular — when required is granular
 //        (read:X, write:X, admin:X), broad key scopes on the same
 //        verb satisfy:
@@ -70,16 +70,17 @@ describe('W967 errors-helpers V-174 + V-481 + V-485 cross-source invariant', () 
     expect(p).toMatch(/services can import without pulling the auth service\./);
   });
 
-  // ─── V-174 admin alias framing ───────────────────────────────
+  // ─── V-174 legacy customer alias framing ────────────────────
 
-  it("CRITICAL V-174 + V-481 scope-check framing — 'V-174 + V-481 — scope check with backwards-compat aliases. 1. Exact match — the key carries the required scope verbatim. 2. V-174 admin alias — admin-scoped keys satisfy account_owner + driftstack_internal_admin during the migration window. After all admin keys are migrated, this clause stays a no-op (no live keys carry admin). 3. V-481 broad-satisfies-granular...'. The V-174 + V-481 chain is the scope-check policy provenance.", () => {
+  it('CRITICAL V-174 + V-481 scope-check framing keeps legacy admin customer-only and requires exact staff scope', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors-helpers.ts'));
     expect(p).toMatch(/V-174 \+ V-481 — scope check with backwards-compat aliases\./);
     expect(p).toMatch(/1\. Exact match — the key carries the required scope verbatim\./);
-    expect(p).toMatch(/2\. V-174 admin alias — `'admin'`-scoped keys satisfy/);
-    expect(p).toMatch(/`'account_owner'` \+ `'driftstack_internal_admin'` during the/);
-    expect(p).toMatch(/migration window\. After all `'admin'` keys are migrated,/);
-    expect(p).toMatch(/this clause stays a no-op \(no live keys carry `'admin'`\)\./);
+    expect(p).toMatch(/2\. V-174 legacy customer alias — `'admin'`-scoped keys satisfy/);
+    expect(p).toMatch(/`'account_owner'` so pre-split customer automation keeps its own-account/);
+    expect(p).toMatch(/The expired migration bridge to/);
+    expect(p).toMatch(/`'driftstack_internal_admin'` is deliberately closed: only the exact/);
+    expect(p).toMatch(/staff scope can authorize cross-account operations\./);
   });
 
   // ─── V-481 broad-satisfies-granular framing ──────────────────
@@ -122,11 +123,11 @@ describe('W967 errors-helpers V-174 + V-481 + V-485 cross-source invariant', () 
     );
   });
 
-  it("CRITICAL hasScope JSDoc — 'V-481 — pure predicate version of requireScope. Returns true iff the key satisfies the required scope (exact, V-174 admin alias, or V-481 broad-satisfies-granular)'. The pure-predicate framing is the V-481 boolean variant.", () => {
+  it('CRITICAL hasScope JSDoc pins the legacy alias as customer-only', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors-helpers.ts'));
     expect(p).toMatch(/V-481 — pure predicate version of \{@link requireScope\}\. Returns/);
-    expect(p).toMatch(/true iff the key satisfies the required scope \(exact, V-174 admin/);
-    expect(p).toMatch(/alias, or V-481 broad-satisfies-granular\)\./);
+    expect(p).toMatch(/true iff the key satisfies the required scope \(exact, V-174 legacy/);
+    expect(p).toMatch(/customer alias, or V-481 broad-satisfies-granular\)\./);
   });
 
   // ─── 3-verb exhaustive switch ────────────────────────────────
@@ -204,15 +205,15 @@ describe('W967 errors-helpers V-174 + V-481 + V-485 cross-source invariant', () 
     expect(hasScope(ctx, 'read:sessions')).toBe(true);
   });
 
-  // ─── Runtime parity: rule 2 (V-174 admin alias) ──────────────
+  // ─── Runtime parity: rule 2 (legacy customer alias) ──────────
 
-  it("CRITICAL hasScope rule 2 — V-174 admin alias. A key with 'admin' scope satisfies requireScope('account_owner') AND requireScope('driftstack_internal_admin'). Migration-window compat.", () => {
+  it('CRITICAL hasScope rule 2 — legacy admin preserves account_owner but cannot cross the staff boundary', () => {
     const ctx = ctxWithScopes(['admin']);
     expect(hasScope(ctx, 'account_owner')).toBe(true);
-    expect(hasScope(ctx, 'driftstack_internal_admin')).toBe(true);
+    expect(hasScope(ctx, 'driftstack_internal_admin')).toBe(false);
   });
 
-  it("CRITICAL hasScope rule 2 — admin alias ONLY for account_owner + driftstack_internal_admin, not generic. An 'admin' key does NOT satisfy 'read:sessions' (granular check still applies).", () => {
+  it('CRITICAL hasScope rule 2 — admin aliases account_owner and its own admin:X verb only, not staff or unrelated granular reads', () => {
     const ctx = ctxWithScopes(['admin']);
     // The 'admin' broad scope satisfies admin:X granular (rule 3), but not unrelated like 'read:sessions' (read:X granular).
     // 'admin' DOES satisfy 'admin:profiles' via rule 3 (admin broad → admin:X granular).

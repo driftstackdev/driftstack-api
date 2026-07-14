@@ -56,10 +56,13 @@ describe('W909 requireScope + EffectiveAccount cross-source invariant', () => {
 
   // ─── V-174 admin-alias path ──────────────────────────────────
 
-  it("CRITICAL V-174 admin-alias — required 'account_owner' OR 'driftstack_internal_admin' accepted from legacy 'admin' scope. The alias path keeps pre-V-174 keys working during the migration window.", () => {
+  it("CRITICAL V-174 customer alias — legacy 'admin' satisfies account_owner but never driftstack_internal_admin", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth.ts'));
     expect(p).toMatch(
-      /\/\/ V-174 admin alias\.\s*\n\s*if \(\s*\n\s*\(required === 'account_owner' \|\| required === 'driftstack_internal_admin'\) &&\s*\n\s*scopes\.includes\('admin'\)\s*\n\s*\)/,
+      /\/\/ V-174 legacy customer alias\. Never satisfies the staff-only scope\.\s*\n\s*if \(required === 'account_owner' && scopes\.includes\('admin'\)\)/,
+    );
+    expect(p).not.toMatch(
+      /required === 'account_owner' \|\| required === 'driftstack_internal_admin'/,
     );
   });
 

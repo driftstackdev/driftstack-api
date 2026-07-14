@@ -60,9 +60,9 @@ describe('hasScope (V-481 predicate)', () => {
     expect(hasScope(ctx, 'account_owner')).toBe(true);
   });
 
-  it('V-174 admin alias: admin satisfies driftstack_internal_admin', () => {
+  it('V-174 legacy admin never satisfies driftstack_internal_admin', () => {
     const ctx = ctxWithScopes(['admin']);
-    expect(hasScope(ctx, 'driftstack_internal_admin')).toBe(true);
+    expect(hasScope(ctx, 'driftstack_internal_admin')).toBe(false);
   });
 
   describe('V-481 broad satisfies granular (read verb)', () => {
@@ -180,7 +180,7 @@ describe('requireScope — both call sites evaluate the same predicate', () => {
     { keyScopes: ['read:sessions'], required: 'read', pass: false },
     { keyScopes: ['read:sessions'], required: 'read:profiles', pass: false },
     { keyScopes: ['read:sessions'], required: 'read:sessions', pass: true },
-    { keyScopes: ['admin'], required: 'driftstack_internal_admin', pass: true },
+    { keyScopes: ['admin'], required: 'driftstack_internal_admin', pass: false },
     // account_owner superscope → bare read/write pass; staff gates fail.
     { keyScopes: ['account_owner'], required: 'write', pass: true },
     { keyScopes: ['account_owner'], required: 'read', pass: true },

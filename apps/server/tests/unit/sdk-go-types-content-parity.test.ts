@@ -66,7 +66,10 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
       /\/\/ `account_owner` \(customer self-serve\) and `driftstack_internal_admin`/,
     );
     expect(body).toMatch(
-      /\/\/ \(staff cross-account\)\. The legacy `admin` token remains accepted as/,
+      /\/\/ \(staff cross-account\)\. The legacy `admin` token remains a customer-side/,
+    );
+    expect(body).toMatch(
+      /\/\/ alias for `account_owner` and `admin:\*`; it never grants staff authority\./,
     );
     expect(body).toMatch(/ScopeRead\s+APIKeyScope = "read"/);
     expect(body).toMatch(/ScopeAdmin\s+APIKeyScope = "admin" \/\/ compat alias \(V-174\)/);

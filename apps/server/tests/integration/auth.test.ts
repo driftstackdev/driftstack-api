@@ -27,7 +27,7 @@ describe('auth pipeline (GET /v1/whoami)', () => {
 
     const body = res.json<Record<string, unknown>>();
     expect(body.tier).toBe('api_builder');
-    expect(body.scopes).toEqual(['read', 'write', 'admin']);
+    expect(body.scopes).toEqual(['read', 'write', 'account_owner', 'driftstack_internal_admin']);
   });
 
   it('401 with no Authorization header', async () => {

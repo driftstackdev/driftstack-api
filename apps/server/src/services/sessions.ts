@@ -1014,8 +1014,8 @@ export class SessionsService {
 
   /**
    * Cross-account list for the admin panel + ops tooling. Requires
-   * driftstack_internal_admin scope (compat alias 'admin' also accepted
-   * for legacy keys per V-174 migration).
+   * the exact driftstack_internal_admin scope. The legacy customer
+   * 'admin' alias is deliberately insufficient for cross-account reads.
    */
   async listAll(
     ctx: AccountContext,
@@ -1034,8 +1034,8 @@ export class SessionsService {
    * Cross-account session stats for the admin ops dashboard: count by
    * status (every status present, zero-filled), plus `active` (the
    * currently-running statuses creating + ready + busy) and `total`.
-   * Requires driftstack_internal_admin scope (compat alias 'admin' per
-   * the V-174 migration, same as listAll).
+   * Requires the exact driftstack_internal_admin scope, same as listAll;
+   * the legacy customer 'admin' alias is deliberately insufficient.
    */
   async statsForAdmin(ctx: AccountContext): Promise<{
     by_status: Record<SessionRecord['status'], number>;

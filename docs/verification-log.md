@@ -26197,3 +26197,44 @@ Verification:
   69/69 tests, and the surrounding task-refusal/agent-runtime matrix passes with
   6 files and 148/148 tests, plus strict server source/test TypeScript, lint,
   formatting, diff, and hooks.
+
+## V-616 — legacy customer admin keys cannot cross the staff boundary
+
+**Date:** 2026-07-14
+
+Closed the expired V-174 compatibility bridge that let a stored legacy `admin`
+API key satisfy `driftstack_internal_admin`. The alias was intended to keep
+pre-split keys operational during migration, but no database migration ever
+re-scoped those rows and the enum remains accepted. Any surviving legacy key
+could therefore call every `/v1/admin/*` route and mint or rotate successor
+keys carrying the same cross-account authority.
+
+Both authorization predicate copies now keep `admin` customer-only: it still
+satisfies `account_owner` and customer `admin:*` checks, but never
+`driftstack_internal_admin`. Cross-account staff operations require that exact
+scope. The database enum remains intentionally unchanged so stored legacy
+customer keys continue parsing and retain own-account access until rotated or
+revoked; no data migration or live-key mutation was required.
+
+The shared integration fixture now grants explicit `account_owner` and
+`driftstack_internal_admin` scopes instead of depending on the deprecated
+alias. Public scope docs, the Go SDK contract, source comments, the historical
+security audit, and the Cloudflare operations runbook now describe the exact
+application boundary. Cloudflare Access remains a required separate identity
+perimeter, but is no longer documented as the load-bearing API authorization
+control.
+
+Verification:
+
+- direct predicate tests prove legacy `admin` retains `account_owner`, retains
+  customer `admin:X`, and fails `driftstack_internal_admin` identically in both
+  scope implementations;
+- a real `POST /v1/admin/accounts/:id/tier` integration proves
+  `account_owner` and legacy `admin` each receive `403`, while exact
+  `driftstack_internal_admin` receives `200`;
+- focused source/route/documentation guards pass with 13 files and 224/224
+  tests; the complete admin integration and authorization-invariant matrix
+  passes with 31 files and 284/284 tests;
+- strict server source/test, API-types, and Docs TypeScript checks pass; Astro
+  reports 0 errors/0 warnings/0 hints, and targeted ESLint, Prettier, gofmt,
+  diff, and whitespace checks are green.

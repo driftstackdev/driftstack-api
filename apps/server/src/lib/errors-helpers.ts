@@ -15,10 +15,11 @@ import { ForbiddenError, NotFoundError } from './errors.js';
  * V-174 + V-481 — scope check with backwards-compat aliases.
  *
  *   1. Exact match — the key carries the required scope verbatim.
- *   2. V-174 admin alias — `'admin'`-scoped keys satisfy
- *      `'account_owner'` + `'driftstack_internal_admin'` during the
- *      migration window. After all `'admin'` keys are migrated,
- *      this clause stays a no-op (no live keys carry `'admin'`).
+ *   2. V-174 legacy customer alias — `'admin'`-scoped keys satisfy
+ *      `'account_owner'` so pre-split customer automation keeps its own-account
+ *      authority. The expired migration bridge to
+ *      `'driftstack_internal_admin'` is deliberately closed: only the exact
+ *      staff scope can authorize cross-account operations.
  *   3. V-481 broad-satisfies-granular — when the required scope is
  *      granular (`read:sessions`, `admin:profiles`, etc.), the key's
  *      broad scopes can satisfy it on the same verb:
@@ -40,8 +41,8 @@ export function requireScope(ctx: AccountContext, required: ApiKeyScope): void {
 
 /**
  * V-481 — pure predicate version of {@link requireScope}. Returns
- * true iff the key satisfies the required scope (exact, V-174 admin
- * alias, or V-481 broad-satisfies-granular).
+ * true iff the key satisfies the required scope (exact, V-174 legacy
+ * customer alias, or V-481 broad-satisfies-granular).
  */
 export function hasScope(ctx: AccountContext, required: ApiKeyScope): boolean {
   return scopesSatisfy(ctx.apiKey.scopes, required);
@@ -50,17 +51,14 @@ export function hasScope(ctx: AccountContext, required: ApiKeyScope): boolean {
 /**
  * Pure scope-set predicate for authorization flows that do not carry a full
  * AccountContext (for example OAuth consent scope reduction). This is the
- * canonical hierarchy: exact match, legacy admin alias, account_owner broad
+ * canonical hierarchy: exact match, legacy customer alias, account_owner broad
  * verbs, then broad-satisfies-granular on the same verb.
  */
 export function scopesSatisfy(scopes: readonly ApiKeyScope[], required: ApiKeyScope): boolean {
   if (scopes.includes(required)) return true;
 
-  // V-174 admin alias.
-  if (
-    (required === 'account_owner' || required === 'driftstack_internal_admin') &&
-    scopes.includes('admin')
-  ) {
+  // V-174 legacy customer alias. Never satisfies the staff-only scope.
+  if (required === 'account_owner' && scopes.includes('admin')) {
     return true;
   }
 

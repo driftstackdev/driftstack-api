@@ -35,9 +35,9 @@ describe('docs reference/scopes content parity', () => {
     expect(body).toMatch(/\*\*Granular scopes\s*\*\* — `verb:resource` syntax/);
   });
 
-  it("legacy 'admin' scope treated as alias for both account_owner + driftstack_internal_admin (the compat-during-migration framing from packages/api-types/src/common.ts) — drift to removing this row would surprise customer keys minted before V-174", () => {
+  it("legacy 'admin' scope remains customer-compatible but never grants staff authority", () => {
     expect(body).toMatch(
-      /`admin`\s+\|\s+broad \(legacy\)\s+\|\s+Pre-alias\. Treated as satisfying both `account_owner` \+ `driftstack_internal_admin`/,
+      /`admin`\s+\|\s+broad \(legacy\)\s+\|\s+Deprecated customer alias\. Satisfies `account_owner` and customer `admin:\*` scopes, but never the staff-only `driftstack_internal_admin` scope/,
     );
   });
 

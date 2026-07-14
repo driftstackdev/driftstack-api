@@ -235,11 +235,14 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     );
   });
 
-  it('requireScope: V-174 admin alias + V-481 broad-satisfies-granular (read:X / write:X / admin:X)', () => {
+  it('requireScope: V-174 customer-only admin alias + V-481 broad-satisfies-granular', () => {
     expect(body).toMatch(/V-174 \+ V-481 — scope check with backwards-compat aliases\./);
     expect(body).toMatch(/if \(scopes\.includes\(required\)\) return;/);
     expect(body).toMatch(
-      /\/\/ V-174 admin alias\.\s*\n?\s*if \(\s*\n?\s*\(required === 'account_owner' \|\| required === 'driftstack_internal_admin'\) &&\s*\n?\s*scopes\.includes\('admin'\)\s*\n?\s*\) \{\s*\n?\s*return;/,
+      /\/\/ V-174 legacy customer alias\. Never satisfies the staff-only scope\.\s*\n?\s*if \(required === 'account_owner' && scopes\.includes\('admin'\)\) \{\s*\n?\s*return;/,
+    );
+    expect(body).not.toMatch(
+      /required === 'account_owner' \|\| required === 'driftstack_internal_admin'/,
     );
     expect(body).toMatch(
       /\(verb === 'read' && \(scopes\.includes\('read'\) \|\| scopes\.includes\('account_owner'\)\)\) \|\|\s*\n?\s*\(verb === 'write' && \(scopes\.includes\('write'\) \|\| scopes\.includes\('account_owner'\)\)\) \|\|\s*\n?\s*\(verb === 'admin' && \(scopes\.includes\('admin'\) \|\| scopes\.includes\('account_owner'\)\)\)/,

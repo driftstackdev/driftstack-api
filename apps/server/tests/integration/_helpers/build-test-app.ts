@@ -683,7 +683,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     name: 'test-key',
     keyPrefix,
     keyHash,
-    scopes: opts.scopes ?? ['read', 'write', 'admin'],
+    scopes: opts.scopes ?? ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
     lastUsedAt: null,
     revokedAt: opts.keyRevoked === true ? new Date('2026-01-15T00:00:00Z') : null,
     expiresAt: opts.keyExpired === true ? new Date('2026-01-15T00:00:00Z') : null,
@@ -706,7 +706,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     name: 'test-key',
     keyPrefix,
     keyHash,
-    scopes: opts.scopes ?? ['read', 'write', 'admin'],
+    scopes: opts.scopes ?? ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
     lastUsedAt: null,
     revokedAt: opts.keyRevoked === true ? new Date('2026-01-15T00:00:00Z') : null,
     expiresAt: opts.keyExpired === true ? new Date('2026-01-15T00:00:00Z') : null,
@@ -1767,7 +1767,9 @@ export async function seedAdditionalAccount(
     name: 'second-account-key',
     keyPrefix,
     keyHash,
-    scopes: opts.scopes ?? (['read', 'write', 'admin'] as ApiKeyScope[]),
+    scopes:
+      opts.scopes ??
+      (['read', 'write', 'account_owner', 'driftstack_internal_admin'] as ApiKeyScope[]),
     lastUsedAt: null,
     revokedAt: null,
     expiresAt: null,

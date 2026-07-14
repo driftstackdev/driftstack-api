@@ -239,14 +239,14 @@ export class ApiKeysService {
     // V-174 privilege de-escalation. The account_owner gate above lets a
     // customer dashboard session mint keys, but a caller must not be able
     // to grant an ELEVATED scope it does not itself hold — otherwise an
-    // account_owner key could mint a `driftstack_internal_admin` (or
-    // legacy `admin`, which aliases to it) key that satisfies the
-    // `/v1/admin/*` route guards and acts cross-account. Customer-level
+    // account_owner key could mint a `driftstack_internal_admin` key that
+    // satisfies the `/v1/admin/*` route guards and acts cross-account, or
+    // perpetuate the deprecated `admin` customer alias. Customer-level
     // scopes (read / write / account_owner / granular verb:resource /
     // gui_control) stay grantable under account_owner; only the
-    // staff/legacy-admin scopes require the caller to already hold them.
-    // A staff session (which carries driftstack_internal_admin) and any
-    // legacy `admin` key still mint freely.
+    // staff/deprecated scopes require the caller to already hold that exact
+    // scope. A legacy `admin` key can preserve customer compatibility but
+    // cannot grant or derive the staff-only scope.
     const ELEVATED_SCOPES: ApiKeyScope[] = ['admin', 'driftstack_internal_admin'];
     for (const scope of input.scopes) {
       if (ELEVATED_SCOPES.includes(scope) && !hasScope(ctx, scope)) {

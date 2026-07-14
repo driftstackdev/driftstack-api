@@ -317,7 +317,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(/canvasFamily: 'B',/);
   });
 
-  it('V-174 scope split framing pinned: account_owner (customer-account control via ctx.account.id) + driftstack_internal_admin (staff-only gates /v1/admin/* with admin.driftstack.dev Cloudflare Access SSO V-135 + defense-in-depth) + admin compat alias (satisfies BOTH during migration; founder-driven migration script promotes internal admin keys + re-scopes customer admin → account_owner; admin deprecated + removed after)', () => {
+  it('V-174 scope split framing pins legacy admin as customer-only and exact staff authority for /v1/admin/*', () => {
     expect(body).toMatch(
       /\*\s*V-174 — scope architecture split\. Two new scopes carve up what\s*\n?\s*\*\s*'admin' did pre-V-174:/,
     );
@@ -325,11 +325,12 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /\*\s*- `account_owner` — gates customer-account control \(mint API keys,\s*\n?\s*\*\s*revoke API keys, manage subscription, \/v1\/account\/\*\)\. A customer\s*\n?\s*\*\s*logged into their own dashboard has this scope; their personal\s*\n?\s*\*\s*keys can have it; cross-account access is impossible because the\s*\n?\s*\*\s*route handlers always operate against `ctx\.account\.id`\./,
     );
     expect(body).toMatch(
-      /\*\s*- `driftstack_internal_admin` — gates Driftstack-staff-only\s*\n?\s*\*\s*operations \(`\/v1\/admin\/\*`: list all accounts, suspend account,\s*\n?\s*\*\s*change tier, force-actions, audit-log read, webhook DLQ\s*\n?\s*\*\s*management\)\. Only the founder \+ Driftstack-internal accounts\s*\n?\s*\*\s*carry this scope\. admin\.driftstack\.dev origin \(V-135\) gates\s*\n?\s*\*\s*reachability via Cloudflare Access SSO; the scope check is the\s*\n?\s*\*\s*defense-in-depth layer\./,
+      /\*\s*- `driftstack_internal_admin` — gates Driftstack-staff-only\s*\n?\s*\*\s*operations \(`\/v1\/admin\/\*`: list all accounts, suspend account,\s*\n?\s*\*\s*change tier, force-actions, audit-log read, webhook DLQ\s*\n?\s*\*\s*management\)\. Only the founder \+ Driftstack-internal accounts\s*\n?\s*\*\s*carry this scope\. The exact scope check is the application authority\s*\n?\s*\*\s*boundary; Cloudflare Access SSO on admin\.driftstack\.dev \(V-135\) is a\s*\n?\s*\*\s*separate defense-in-depth identity perimeter\./,
     );
     expect(body).toMatch(
-      /\*\s*- `admin` — pre-V-174 compat alias\. Treated as satisfying BOTH new\s*\n?\s*\*\s*scopes during the migration window \(via\s*\n?\s*\*\s*`lib\/errors-helpers\.ts::requireScope`\)\./,
+      /\*\s*- `admin` — pre-V-174 customer compatibility alias\. It satisfies\s*\n?\s*\*\s*`account_owner` and customer `admin:X` scopes, but never\s*\n?\s*\*\s*`driftstack_internal_admin`/,
     );
+    expect(body).toMatch(/cross-account staff authority requires that\s*\n?\s*\*\s*exact scope\./);
   });
 
   it('gui_control scope L-001 framing pinned: gates manual-control plane (tap_at, type_focused, etc.) bypassing behavioral simulation layer; only granted to self-hosted GUI workflow keys; default creation does not include; enterprise gets it explicitly', () => {
@@ -340,7 +341,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
 
   it('V-481 ApiKeyScope enum: broad (read|write|admin|account_owner|driftstack_internal_admin|gui_control) + granular verb:resource set with backward-compat framing pinned (broad satisfies granular via verb-prefix in requireScope/auth; granular does NOT satisfy broad — narrow keys stay narrow)', () => {
     expect(body).toMatch(
-      /\/\/ V-481 — granular per-resource scopes\. Verb:resource order\.\s*\n?\s*\/\/ Backwards-compat: broad scopes \(`read` \/ `write` \/ `admin` \/\s*\n?\s*\/\/ `account_owner`\) satisfy granular checks via requireScope's\s*\n?\s*\/\/ verb-prefix logic in `apps\/server\/src\/lib\/errors-helpers\.ts`\s*\n?\s*\/\/ and `apps\/server\/src\/services\/auth\.ts`\. Granular scopes do\s*\n?\s*\/\/ NOT satisfy broad checks — narrow keys stay narrow\./,
+      /\/\/ V-481 — granular per-resource scopes\. Verb:resource order\.\s*\n?\s*\/\/ Backwards-compat: customer broad scopes \(`read` \/ `write` \/ `admin` \/\s*\n?\s*\/\/ `account_owner`\) satisfy granular checks via requireScope's\s*\n?\s*\/\/ verb-prefix logic in `apps\/server\/src\/lib\/errors-helpers\.ts`\s*\n?\s*\/\/ and `apps\/server\/src\/services\/auth\.ts`\. Granular scopes do\s*\n?\s*\/\/ NOT satisfy broad checks — narrow keys stay narrow\./,
     );
     expect(body).toMatch(
       /export const ApiKeyScopeSchema = z\.enum\(\[\s*\n?\s*'read',\s*\n?\s*'write',\s*\n?\s*'admin',\s*\n?\s*'account_owner',\s*\n?\s*'driftstack_internal_admin',\s*\n?\s*'gui_control',/,

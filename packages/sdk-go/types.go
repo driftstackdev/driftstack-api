@@ -45,8 +45,8 @@ const (
 
 // APIKeyScope. V-174 split the legacy single `admin` scope into
 // `account_owner` (customer self-serve) and `driftstack_internal_admin`
-// (staff cross-account). The legacy `admin` token remains accepted as
-// a compat alias for both during migration.
+// (staff cross-account). The legacy `admin` token remains a customer-side
+// alias for `account_owner` and `admin:*`; it never grants staff authority.
 type APIKeyScope string
 
 const (
