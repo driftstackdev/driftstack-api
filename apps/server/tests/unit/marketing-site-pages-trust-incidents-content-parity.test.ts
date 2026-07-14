@@ -107,9 +107,11 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
       /Future updates: status\.driftstack\.dev with\s*\n?\s*email \+ RSS subscription\./,
     );
     expect(body).toMatch(
-      /primaryHref="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*primaryLabel="Manage notifications"/,
+      /primaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*primaryLabel="Manage notifications"/,
     );
-    expect(body).toMatch(/secondaryHref="\/trust"\s*\n?\s*secondaryLabel="Back to trust center"/);
+    expect(body).toMatch(/secondaryHref="\/trust\/"\s*\n?\s*secondaryLabel="Back to trust center"/);
+    expect(body).not.toContain('primaryHref="https://app.driftstack.dev/settings"');
+    expect(body).not.toContain('secondaryHref="/trust"');
   });
 
   it('file exists at canonical path', () => {
