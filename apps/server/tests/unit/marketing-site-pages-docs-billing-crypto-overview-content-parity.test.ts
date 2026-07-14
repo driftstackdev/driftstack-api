@@ -150,23 +150,24 @@ describe('W520.A apps/marketing-site/src/pages/docs/billing-crypto-overview.astr
     );
   });
 
-  it('6-related-doc cluster: /docs/billing-crypto-integration-guide + /pricing + /docs/billing-faq + /docs/webhooks-crypto-events + /docs/crypto-orders-polling-vs-webhooks + /docs/idempotency-keys + /docs/api-quickstart — pinned so the 6-related-doc + 1-pricing navigation surface stays complete (drift to dropping any cross-ref would orphan from the per-topic detail page)', () => {
+  it('6-related-doc cluster: canonical integration guide + /pricing/ + /docs/billing-faq/ + canonical webhook guidance twice + /docs/idempotency-keys/ + canonical API quickstart — pinned so the 6-related-doc + 1-pricing navigation surface stays complete', () => {
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Crypto\s*\n?\s*payments — integration guide<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/pricing">Pricing<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/billing-faq">Billing FAQ<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing\/">Pricing<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/billing-faq\/">Billing FAQ<\/a>/);
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Crypto webhook\s*\n?\s*events<\/a>/,
     );
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Polling\s*\n?\s*vs webhooks<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/docs\/idempotency-keys">Idempotency keys<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/idempotency-keys\/">Idempotency keys<\/a>/);
     // S47 2026-07-07 (founder-approved: mirror deprecation): deleted-mirror hrefs re-pinned to the docs successors.
     expect(body).toMatch(
       /<a href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/">API quickstart<\/a>/,
     );
+    expect(body).not.toMatch(/href="\/(?:pricing|docs\/billing-faq|docs\/idempotency-keys)"/);
   });
 
   it('file exists at canonical path', () => {
