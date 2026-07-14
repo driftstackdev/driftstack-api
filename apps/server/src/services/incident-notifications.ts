@@ -98,7 +98,7 @@ export class IncidentNotificationsService {
       }
       try {
         const unsubPlaintext = await this.subscribers.rotateUnsubscribeToken(sub.id);
-        const unsubscribeLink = `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(
+        const unsubscribeLink = `${this.baseUrl}/subscribe/unsubscribe/?token=${encodeURIComponent(
           unsubPlaintext,
         )}`;
         await this.email.sendStatusIncidentNotification({

@@ -3,9 +3,9 @@ import StatusLayout from '../../layouts/StatusLayout.astro';
 
 // V-657 followup — status-subscription UNSUBSCRIBE landing page. Every
 // status email carries a one-click unsubscribe link to the status-site
-// path `/subscribe/unsubscribe?token=` (see
+// path `/subscribe/unsubscribe/?token=` (see
 // StatusSubscribersService.unsubscribeLink:
-// `${baseUrl}/subscribe/unsubscribe?token=...`). On load we read
+// `${baseUrl}/subscribe/unsubscribe/?token=...`). On load we read
 // `?token=` and call GET /v1/status/subscribe/unsubscribe?token=, then
 // render the result.
 //
@@ -106,6 +106,14 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const errorMessage = document.getElementById('unsub-error-message');
   let unsubscribeInFlight = false;
   let unsubscribeOutcomeUnknown = false;
+  const token = new URLSearchParams(window.location.search).get('token');
+  if (token) {
+    window.history.replaceState(
+      window.history.state,
+      '',
+      window.location.pathname + window.location.hash,
+    );
+  }
 
   function showError(message) {
     if (pending) pending.classList.add('hidden');
@@ -131,7 +139,6 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
   async function unsubscribe() {
     if (unsubscribeInFlight || unsubscribeOutcomeUnknown) return;
-    const token = new URLSearchParams(window.location.search).get('token');
     if (!token) {
       showError('This unsubscribe link is missing its token. Use the link directly from your email.');
       return;

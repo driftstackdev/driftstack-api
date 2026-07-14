@@ -106,7 +106,7 @@ export class StatusSubscribersService {
       confirmTokenHash: hash,
       confirmExpiresAt: expiresAt,
     });
-    const confirmLink = `${this.baseUrl}/subscribe/confirm?token=${encodeURIComponent(plaintext)}`;
+    const confirmLink = `${this.baseUrl}/subscribe/confirm/?token=${encodeURIComponent(plaintext)}`;
     await this.email.sendStatusSubscriptionConfirmation({
       to: normalized,
       confirmLink,
@@ -147,7 +147,7 @@ export class StatusSubscribersService {
       // may send a welcome email or publish its unsubscribe token.
       throw new NotFoundError('Confirmation link is invalid or has been used.');
     }
-    const unsubscribeLink = `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(unsubPlaintext)}`;
+    const unsubscribeLink = `${this.baseUrl}/subscribe/unsubscribe/?token=${encodeURIComponent(unsubPlaintext)}`;
     await this.email.sendStatusSubscriptionWelcome({
       to: email,
       statusPageUrl: this.baseUrl,
@@ -247,7 +247,7 @@ export class StatusSubscribersService {
       id: confirmed.id,
       email: confirmed.email ?? normalized,
       confirmedAt: confirmed.confirmedAt ?? now,
-      unsubscribeLink: `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(unsubPlaintext)}`,
+      unsubscribeLink: `${this.baseUrl}/subscribe/unsubscribe/?token=${encodeURIComponent(unsubPlaintext)}`,
     };
   }
 

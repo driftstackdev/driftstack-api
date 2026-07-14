@@ -220,7 +220,9 @@ describe('status-site subscription timeout recovery', () => {
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.url).toContain('token=confirm_token_1234567890');
     expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(window.location.search).toBe('');
     expect(window.document.querySelector('#confirm-pending')?.classList.contains('hidden')).toBe(
       true,
     );
@@ -246,7 +248,9 @@ describe('status-site subscription timeout recovery', () => {
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]?.url).toContain('token=unsub_token_1234567890');
     expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
+    expect(window.location.search).toBe('');
     expect(window.document.querySelector('#unsub-pending')?.classList.contains('hidden')).toBe(
       true,
     );
@@ -275,6 +279,24 @@ describe('status-site subscription timeout recovery', () => {
     expect(window.document.querySelector('#unsub-error')?.classList.contains('hidden')).toBe(false);
     expect(window.document.querySelector('#unsub-error-message')?.textContent).toMatch(
       /couldn't reach the status api/i,
+    );
+  });
+
+  it('does not rewrite a status link when no credential is present', async () => {
+    const setup = setUpPage(
+      'subscribe/confirm/index.html',
+      'https://status.driftstack.dev/subscribe/confirm/?campaign=status',
+      () => new Response(null, { status: 200 }),
+      false,
+    );
+    const { window, fetchCalls } = setup;
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(window.location.search).toBe('?campaign=status');
+    expect(window.document.querySelector('#confirm-error-message')?.textContent).toMatch(
+      /missing its token/i,
     );
   });
 });

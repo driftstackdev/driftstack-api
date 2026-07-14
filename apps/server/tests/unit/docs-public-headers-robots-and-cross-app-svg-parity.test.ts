@@ -226,11 +226,13 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     }
   });
 
-  it('CRITICAL status-site/public/_headers ships the 4-header security set on /* (X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy) plus immutable /_astro/* caching — matches the other Pages apps so the public status surface is no longer header-less. Drift to dropping any weakens the framing/MIME/referrer defenses on status.driftstack.dev.', () => {
+  it('CRITICAL status-site/public/_headers ships the 4-header security set on /*, including no-referrer for status bearer URLs, plus immutable /_astro/* caching.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/status-site/public/_headers'));
     expect(p).toMatch(/X-Frame-Options: DENY/);
     expect(p).toMatch(/X-Content-Type-Options: nosniff/);
-    expect(p).toMatch(/Referrer-Policy: strict-origin-when-cross-origin/);
+    expect(p).toMatch(/Referrer-Policy: no-referrer/);
+    expect(p).not.toMatch(/Referrer-Policy: strict-origin-when-cross-origin/);
+    expect(p).toMatch(/confirmation and long-lived one-click/);
     expect(p).toMatch(/Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\),/);
     expect(p).toMatch(/\/_astro\/\*\s*\n\s+Cache-Control: public, max-age=31536000, immutable/);
   });

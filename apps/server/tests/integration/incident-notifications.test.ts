@@ -135,6 +135,9 @@ describe('IncidentNotificationsService — fan-out via lifecycle hooks', () => {
       payload: { title: 'x', description: 'd', severity: 'minor' },
     });
     const created = fx.emailSends.find((s) => s.template === 'status-incident-created');
+    expect(new URL(created!.vars.unsubscribeLink as string).pathname).toBe(
+      '/subscribe/unsubscribe/',
+    );
     const createdToken = new URL(created!.vars.unsubscribeLink as string).searchParams.get('token');
 
     expect(createdToken).not.toBe(welcomeToken);

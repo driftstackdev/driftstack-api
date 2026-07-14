@@ -117,10 +117,10 @@ describe('W933 V-295c3-followup incident-notifications cross-source invariant', 
     );
   });
 
-  it('CRITICAL unsubscribeLink uses encodeURIComponent + base URL + /subscribe/unsubscribe?token= path. The URL shape matches the V-295c3 status-subscribers confirm/unsubscribe URL contract.', () => {
+  it('CRITICAL unsubscribeLink uses encodeURIComponent and the canonical status-page path.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incident-notifications.ts'));
     expect(p).toMatch(
-      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\?token=\$\{encodeURIComponent\(/,
+      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\/\?token=\$\{encodeURIComponent\(/,
     );
     expect(p).toMatch(/unsubPlaintext,/);
   });

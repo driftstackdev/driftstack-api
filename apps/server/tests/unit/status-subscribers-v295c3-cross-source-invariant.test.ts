@@ -192,13 +192,13 @@ describe('W930 V-295c3 status-subscribers cross-source invariant', () => {
 
   // ─── confirm/unsubscribe URL paths ───────────────────────────
 
-  it('CRITICAL confirm URL path = `${baseUrl}/subscribe/confirm?token=` + unsubscribe URL path = `${baseUrl}/subscribe/unsubscribe?token=`. The 2 URL paths are what the status-site routes; drift would break the email-CTA flow.', () => {
+  it('CRITICAL confirm and unsubscribe links use canonical trailing-slash status-page paths.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/status-subscribers.ts'));
     expect(p).toMatch(
-      /const confirmLink = `\$\{this\.baseUrl\}\/subscribe\/confirm\?token=\$\{encodeURIComponent\(plaintext\)\}`;/,
+      /const confirmLink = `\$\{this\.baseUrl\}\/subscribe\/confirm\/\?token=\$\{encodeURIComponent\(plaintext\)\}`;/,
     );
     expect(p).toMatch(
-      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\?token=\$\{encodeURIComponent\(unsubPlaintext\)\}`;/,
+      /const unsubscribeLink = `\$\{this\.baseUrl\}\/subscribe\/unsubscribe\/\?token=\$\{encodeURIComponent\(unsubPlaintext\)\}`;/,
     );
   });
 

@@ -159,7 +159,7 @@ describe('V-553.B-10 StatusSubscribersService.subscribe', () => {
     expect(sent?.template).toBe('confirmation');
     expect(sent?.to).toBe('user@example.com');
     const link = String(sent?.payload.confirmLink);
-    expect(link).toMatch(/^https:\/\/status\.driftstack\.dev\/subscribe\/confirm\?token=/);
+    expect(link).toMatch(/^https:\/\/status\.driftstack\.dev\/subscribe\/confirm\/\?token=/);
     // Confirm URL strips any trailing slash from the configured base url.
     expect(link).not.toContain('driftstack.dev//');
   });
@@ -225,7 +225,7 @@ describe('V-553.B-10 StatusSubscribersService.confirm', () => {
     // Welcome email is the 2nd send.
     expect(sends).toHaveLength(2);
     expect(sends[1]?.template).toBe('welcome');
-    expect(sends[1]?.payload.unsubscribeLink).toMatch(/\/subscribe\/unsubscribe\?token=/);
+    expect(sends[1]?.payload.unsubscribeLink).toMatch(/\/subscribe\/unsubscribe\/\?token=/);
   });
 
   it('atomically claims a confirmation token so only one concurrent caller sends welcome', async () => {
@@ -356,10 +356,10 @@ describe('V-553.B-10 StatusSubscribersService — admin + housekeeping', () => {
     expect(out.email).toBe('admin@example.com');
     expect(out.confirmedAt).toEqual(NOW);
     // CRITICAL — the unsubscribe link must use the SAME path the status-site
-    // routes (`/subscribe/unsubscribe`), not a bare `/unsubscribe` (404). This
+    // routes (`/subscribe/unsubscribe/`), not a bare `/unsubscribe` (404). This
     // is the link the docstring says staff copy/share with the subscriber.
     const url = new URL(out.unsubscribeLink);
-    expect(url.pathname).toBe('/subscribe/unsubscribe');
+    expect(url.pathname).toBe('/subscribe/unsubscribe/');
     // The link is functional end-to-end: its token hashes to the stored hash.
     const token = url.searchParams.get('token');
     expect(token).toBeTruthy();
@@ -385,7 +385,7 @@ describe('V-553.B-10 StatusSubscribersService — admin + housekeeping', () => {
     expect(rows[0]?.confirmTokenHash).toBeNull();
     expect(rows[0]?.confirmExpiresAt).toBeNull();
     const url = new URL(out.unsubscribeLink);
-    expect(url.pathname).toBe('/subscribe/unsubscribe');
+    expect(url.pathname).toBe('/subscribe/unsubscribe/');
     const token = url.searchParams.get('token');
     expect(token).toBeTruthy();
     // The link carries the freshly-minted token (old one invalidated).

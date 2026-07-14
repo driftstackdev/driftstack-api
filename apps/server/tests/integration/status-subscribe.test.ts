@@ -133,7 +133,7 @@ describe('GET /v1/status/subscribe/confirm', () => {
 
     const welcome = fx.emailSends[fx.emailSends.length - 1]!;
     expect(welcome.template).toBe('status-subscription-welcome');
-    expect(welcome.vars.unsubscribeLink).toMatch(/\/subscribe\/unsubscribe\?token=/);
+    expect(welcome.vars.unsubscribeLink).toMatch(/\/subscribe\/unsubscribe\/\?token=/);
   });
 
   it('404 + no duplicate welcome when re-using an already-consumed confirm token', async () => {

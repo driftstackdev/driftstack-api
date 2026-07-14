@@ -1,7 +1,7 @@
 // V-657-followup — drift guard for the status.driftstack.dev double-opt-in
 // landing pages: /subscribe/confirm and /subscribe/unsubscribe. The
-// confirmation email links to /subscribe/confirm?token=, and every status
-// email links to /subscribe/unsubscribe?token= (see
+// confirmation email links to /subscribe/confirm/?token=, and every status
+// email links to /subscribe/unsubscribe/?token= (see
 // StatusSubscribersService confirmLink/unsubscribeLink). Pins:
 //
 //   • Both pages call the GET ?token= API contract (NOT a POST body) —
@@ -24,6 +24,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const CONFIRM_PAGE = resolve(REPO_ROOT, 'apps/status-site/src/pages/subscribe/confirm.astro');
 const UNSUB_PAGE = resolve(REPO_ROOT, 'apps/status-site/src/pages/subscribe/unsubscribe.astro');
+const SUBSCRIBERS_SERVICE = resolve(REPO_ROOT, 'apps/server/src/services/status-subscribers.ts');
+const INCIDENT_NOTIFICATIONS = resolve(
+  REPO_ROOT,
+  'apps/server/src/services/incident-notifications.ts',
+);
 const SERVER_SRC = resolve(REPO_ROOT, 'apps/server/src');
 
 function read(p: string): string {
@@ -44,6 +49,17 @@ function serverMatches(re: RegExp): boolean {
     return false;
   }
   return walk(SERVER_SRC);
+}
+
+function hasSameEntryTokenScrub(source: string): boolean {
+  return /const token = new URLSearchParams\(window\.location\.search\)\.get\('token'\);\s*if \(token\) \{\s*window\.history\.replaceState\([\s\S]*?window\.location\.pathname \+ window\.location\.hash/.test(
+    source,
+  );
+}
+
+function usesOnlyCanonicalTokenLinks(source: string): boolean {
+  const matches = source.match(/\/subscribe\/(?:confirm|unsubscribe)\/?\?token=/g) ?? [];
+  return matches.length > 0 && matches.every((value) => value.includes('/?token='));
 }
 
 describe('status-site /subscribe/confirm + /subscribe/unsubscribe parity', () => {
@@ -80,6 +96,27 @@ describe('status-site /subscribe/confirm + /subscribe/unsubscribe parity', () =>
   it('both pages read ?token= from the URL', () => {
     expect(confirm).toMatch(/URLSearchParams\(window\.location\.search\)\.get\(['"]token['"]\)/);
     expect(unsub).toMatch(/URLSearchParams\(window\.location\.search\)\.get\(['"]token['"]\)/);
+  });
+
+  it('both pages capture the token before replacing the same history entry', () => {
+    for (const page of [confirm, unsub]) {
+      expect(hasSameEntryTokenScrub(page)).toBe(true);
+      expect(page.indexOf(".get('token');")).toBeLessThan(
+        page.indexOf('window.history.replaceState('),
+      );
+      expect(page).not.toContain('window.history.pushState(');
+      expect(page).not.toContain('window.location.reload(');
+    }
+  });
+
+  it('rejects deletion of same-entry scrubbing and slash removal from generated bearer links', () => {
+    expect(hasSameEntryTokenScrub(confirm.replace('window.history.replaceState(', ''))).toBe(false);
+    expect(hasSameEntryTokenScrub(unsub.replace('window.history.replaceState(', ''))).toBe(false);
+
+    for (const source of [read(SUBSCRIBERS_SERVICE), read(INCIDENT_NOTIFICATIONS)]) {
+      expect(usesOnlyCanonicalTokenLinks(source)).toBe(true);
+      expect(usesOnlyCanonicalTokenLinks(source.replaceAll('/?token=', '?token='))).toBe(false);
+    }
   });
 
   it('confirm page handles 200 success + 400 / 404 / 429 errors', () => {

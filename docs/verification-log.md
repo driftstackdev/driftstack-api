@@ -25993,3 +25993,39 @@ Verification:
 - the focused and surrounding auth-page gate passes with 27 files and 216/216
   tests, including a negative mutation that removes token deletion; Dashboard
   Astro check is 0 errors/0 warnings/15 hints and strict test TypeScript passes.
+
+## V-610 — status subscription bearer URLs are private and canonical
+
+**Date:** 2026-07-14
+
+Hardened the public status site's double-opt-in confirmation and one-click
+unsubscribe links. These URLs carry bearer tokens; the unsubscribe credential
+is rotated with each status message but otherwise remains valid until used or
+replaced. The status Pages origin previously used
+`strict-origin-when-cross-origin`, which still sends a full same-origin
+referrer, and both landing pages retained their token in the current browser
+history entry.
+
+The status site now sends `Referrer-Policy: no-referrer`. Each landing page
+captures its token once, synchronously replaces the current path without the
+query, and retains the captured in-memory value for the existing retry,
+deadline, and terminal-outcome behavior. Missing-token requests do not rewrite
+their URL. All confirmation, welcome, admin-created, and incident-notification
+email links now use canonical trailing-slash page paths, avoiding a static-host
+redirect before the privacy policy and page scrubber take effect.
+
+Verification:
+
+- executable built-page tests prove the exact original token reaches each API
+  request after `window.location.search` becomes empty, authoritative network
+  retries retain the in-memory token, and ambiguous outcomes remain terminal;
+- missing-token behavior performs no fetch and leaves an unrelated query
+  unchanged; source guards forbid `pushState`/reload and pin capture before
+  same-entry replacement;
+- service/integration tests require canonical confirmation and unsubscribe
+  paths for initial, welcome, administrative, and incident fan-out links;
+- negative mutations removing `replaceState` or the canonical slash fail, the
+  surrounding status/header gate passes with 23 files and 242/242 tests, the
+  seven-page status build is green, copied `dist/_headers` is byte-identical,
+  Status Astro check is 0 errors/0 warnings/6 hints, and strict server
+  source/test TypeScript passes.

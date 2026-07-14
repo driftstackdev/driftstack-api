@@ -3,8 +3,8 @@ import StatusLayout from '../../layouts/StatusLayout.astro';
 
 // V-657 followup — status-subscription CONFIRM landing page. The
 // double-opt-in confirmation email links here, at the status-site path
-// `/subscribe/confirm?token=` (see StatusSubscribersService.confirmLink:
-// `${baseUrl}/subscribe/confirm?token=...`). On load we read `?token=`
+// `/subscribe/confirm/?token=` (see StatusSubscribersService.confirmLink:
+// `${baseUrl}/subscribe/confirm/?token=...`). On load we read `?token=`
 // and call GET /v1/status/subscribe/confirm?token=, then render the
 // result.
 //
@@ -110,6 +110,14 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const unknownPane = document.getElementById('confirm-unknown');
   let confirmInFlight = false;
   let confirmOutcomeUnknown = false;
+  const token = new URLSearchParams(window.location.search).get('token');
+  if (token) {
+    window.history.replaceState(
+      window.history.state,
+      '',
+      window.location.pathname + window.location.hash,
+    );
+  }
 
   function showError(message) {
     if (pending) pending.classList.add('hidden');
@@ -133,7 +141,6 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
   async function confirmSubscription() {
     if (confirmInFlight || confirmOutcomeUnknown) return;
-    const token = new URLSearchParams(window.location.search).get('token');
     if (!token) {
       showError('This confirmation link is missing its token. Open the link directly from your email.');
       return;
