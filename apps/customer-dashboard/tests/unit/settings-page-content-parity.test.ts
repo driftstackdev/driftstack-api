@@ -188,6 +188,16 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(testHandler).not.toMatch(/request\.body/);
   });
 
+  it('renders the BYOK test reason contract with a bounded fixed fallback', () => {
+    expect(body).toContain('const BYOK_TEST_REASON_MAX_CHARS = 300;');
+    expect(body).toMatch(/typeof body\.reason === 'string' \? body\.reason\.trim\(\) : ''/);
+    expect(body).toMatch(/reason\.length > 0 && reason\.length <= BYOK_TEST_REASON_MAX_CHARS/);
+    expect(body).toContain(
+      'The stored key could not be validated. Check or rotate it and try again.',
+    );
+    expect(body).not.toContain("body.detail || 'Test call failed.'");
+  });
+
   it('reconciles an ambiguous BYOK clear against authoritative metadata', () => {
     expect(body).toMatch(/if \(refreshed\?\.hasKey === false\)/);
     expect(body).toMatch(/clear likely completed before the response timed out/);

@@ -90,13 +90,13 @@ async function flush(times = 6): Promise<void> {
 // metadata-only API contract; PUT sets it; DELETE clears it; /test → ok.
 function makeRouter(
   byok: ByokState,
-  opts: { testOk?: boolean } = {},
+  opts: { testResult?: unknown } = {},
 ): (c: MockFetchCall) => Response | Promise<Response> {
   return (call: MockFetchCall): Response => {
     const method = (call.init?.method || 'GET').toUpperCase();
     const u = call.url.replace(/^https?:\/\/[^/]+/, '');
     if (/\/v1\/account\/me\/byok-anthropic-key\/test$/.test(u) && method === 'POST') {
-      return json({ ok: opts.testOk ?? true });
+      return json(opts.testResult ?? { ok: true });
     }
     if (/\/v1\/account\/me\/byok-anthropic-key$/.test(u)) {
       if (method === 'PUT') {
@@ -550,6 +550,53 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(testCall?.init?.body).toBeUndefined();
     expect(new Headers(testCall?.init?.headers).has('content-type')).toBe(false);
     expect(JSON.stringify(testCall)).not.toContain('UNSAVED-PLAINTEXT');
+  });
+
+  it('shows the fixed BYOK test reason and rejects missing, non-string, or oversized guidance', async () => {
+    let testAttempts = 0;
+    const byok = newByok({ set: true });
+    const base = makeRouter(byok);
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/me\/byok-anthropic-key\/test$/.test(call.url) && method === 'POST') {
+          testAttempts += 1;
+          if (testAttempts === 1) {
+            return json({
+              ok: false,
+              reason: 'Anthropic rate-limited the connection test. Wait a moment and try again.',
+            });
+          }
+          if (testAttempts === 2) return json({ ok: false, reason: 'x'.repeat(301) });
+          return json({ ok: false, reason: 42 });
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    const testButton = window.document.querySelector('[data-byok-test]') as HTMLButtonElement;
+    const error = window.document.querySelector('[data-byok-error]') as HTMLElement;
+
+    testButton.click();
+    await flush();
+    expect(error.textContent).toBe(
+      'Anthropic rate-limited the connection test. Wait a moment and try again.',
+    );
+
+    testButton.click();
+    await flush();
+    expect(error.textContent).toBe(
+      'The stored key could not be validated. Check or rotate it and try again.',
+    );
+    expect(error.textContent).not.toContain('x'.repeat(100));
+
+    testButton.click();
+    await flush();
+    expect(error.textContent).toBe(
+      'The stored key could not be validated. Check or rotate it and try again.',
+    );
+    expect(testAttempts).toBe(3);
   });
 
   it('uses one shared lease so save, test, and clear cannot race', async () => {

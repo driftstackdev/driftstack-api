@@ -411,6 +411,7 @@ const EMAIL_EVENTS = [
         }
       })();
       const SETTINGS_TIMEOUT_MS = 15_000;
+      const BYOK_TEST_REASON_MAX_CHARS = 300;
       let bannerGeneration = 0;
 
       function boundedFetch(url, init = {}) {
@@ -1392,7 +1393,14 @@ const EMAIL_EVENTS = [
             )
             .then((body) => {
               showByokTestFeedback(body.ok === true ? 'Test ✓' : 'Test ⚠');
-              if (body.ok !== true) byokShowError(body.detail || 'Test call failed.');
+              if (body.ok !== true) {
+                const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+                byokShowError(
+                  reason.length > 0 && reason.length <= BYOK_TEST_REASON_MAX_CHARS
+                    ? reason
+                    : 'The stored key could not be validated. Check or rotate it and try again.',
+                );
+              }
             })
             .catch((err) => {
               showByokTestFeedback('Test ⚠');
