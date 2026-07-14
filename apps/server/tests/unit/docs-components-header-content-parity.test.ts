@@ -15,6 +15,17 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+function hasAccessibleThemeAndActiveNav(source: string): boolean {
+  return (
+    /class:list=\{\['nav-link font-medium', isActive\(item\.href\) && 'text-tk-accent-text'\]\}/.test(
+      source,
+    ) &&
+    (source.match(/^\s+data-theme-toggle$/gm)?.length ?? 0) === 2 &&
+    (source.match(/aria-label="Switch to light theme"/g)?.length ?? 0) === 2 &&
+    (source.match(/aria-pressed="false"/g)?.length ?? 0) === 2
+  );
+}
+
 describe('docs components/Header content parity', () => {
   const body = read(PAGE);
 
@@ -35,11 +46,17 @@ describe('docs components/Header content parity', () => {
 
   it('S22.1 (2026-07-06) — tk chrome + theme toggle pinned: tk-border/tk-surface header shell, active nav = tk-accent-text (AA-safe; NEVER the raw accent as text on dark), [data-theme-toggle] buttons in desktop nav + mobile cluster with mode-keyed sun/moon icons (hidden dark:block)', () => {
     expect(body).toMatch(/<header class="border-b border-tk-border bg-tk-surface">/);
-    expect(body).toMatch(/isActive\(item\.href\) && 'text-tk-accent-text font-medium'/);
-    expect(body).toMatch(/data-theme-toggle/);
-    expect(body).toMatch(/aria-label="Toggle light and dark theme"/);
-    expect(body).toMatch(/class="hidden dark:block"/);
-    expect(body).toMatch(/class="block dark:hidden"/);
+    expect(hasAccessibleThemeAndActiveNav(body)).toBe(true);
+    expect(body.match(/class="hidden dark:block"/g)?.length).toBe(2);
+    expect(body.match(/class="block dark:hidden"/g)?.length).toBe(2);
+
+    const unsafeActiveTone = body.replace(
+      "isActive(item.href) && 'text-tk-accent-text'",
+      "isActive(item.href) && 'text-tk-accent'",
+    );
+    const unnamedToggle = body.replace('aria-label="Switch to light theme"', '');
+    expect(hasAccessibleThemeAndActiveNav(unsafeActiveTone)).toBe(false);
+    expect(hasAccessibleThemeAndActiveNav(unnamedToggle)).toBe(false);
   });
 
   it('5-item nav pinned: Overview / API / SDKs / Guides / Marketing site (external). Drift to dropping any would break the docs-site IA + the marketing-site cross-link', () => {
@@ -64,7 +81,7 @@ describe('docs components/Header content parity', () => {
   });
 
   it('Mobile-nav details/summary disclosure pattern pinned: drift to dropping the mobile nav would break navigation on small screens — visitors arriving via mobile search would have no way to navigate the docs', () => {
-    expect(body).toMatch(/<details class="relative">/);
+    expect(body).toMatch(/<details class="relative" data-mobile-nav>/);
     expect(body).toMatch(/aria-label="Open navigation menu"/);
   });
 
