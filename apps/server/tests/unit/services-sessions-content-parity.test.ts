@@ -300,9 +300,9 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/throw err;/);
   });
 
-  it("listAll: driftstack_internal_admin scope (V-174 compat alias 'admin' accepted via requireScope)", () => {
+  it('listAll: exact driftstack_internal_admin scope; legacy customer admin is insufficient', () => {
     expect(body).toMatch(
-      /Cross-account list for the admin panel \+ ops tooling\. Requires\s*\n?\s*\*\s*driftstack_internal_admin scope \(compat alias 'admin' also accepted\s*\n?\s*\*\s*for legacy keys per V-174 migration\)\./,
+      /Cross-account list for the admin panel \+ ops tooling\. Requires\s*\n?\s*\*\s*the exact driftstack_internal_admin scope\. The legacy customer\s*\n?\s*\*\s*'admin' alias is deliberately insufficient for cross-account reads\./,
     );
     expect(body).toMatch(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/);
     expect(body).toMatch(/return this\.deps\.repo\.listAllSessions\(opts\);/);

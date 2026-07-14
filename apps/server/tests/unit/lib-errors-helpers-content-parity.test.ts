@@ -4,8 +4,8 @@
 // the predicate at both call sites in sync is the whole point of this
 // module. Drift here re-classifies authorization decisions silently.
 //
-//   • V-174 admin-alias clause: 'admin' satisfies 'account_owner' +
-//     'driftstack_internal_admin' during migration window.
+//   • V-174 legacy customer alias: 'admin' satisfies 'account_owner'
+//     but never the exact 'driftstack_internal_admin' staff boundary.
 //   • V-481 broad-satisfies-granular: required `read:X` satisfied by
 //     `read` or `account_owner`; granular does NOT satisfy broad.
 //   • requireScope: throws ForbiddenError; mirrored in
@@ -40,11 +40,11 @@ describe('W392.C apps/server/src/lib/errors-helpers.ts content parity', () => {
     );
   });
 
-  it('V-174 + V-481 scope-check framing pinned (3-clause: exact / admin-alias / broad-satisfies-granular)', () => {
+  it('V-174 + V-481 scope-check framing pinned (exact / customer-only alias / broad-satisfies-granular)', () => {
     expect(body).toMatch(/V-174 \+ V-481 — scope check with backwards-compat aliases\./);
     expect(body).toMatch(/1\. Exact match — the key carries the required scope verbatim\./);
     expect(body).toMatch(
-      /2\. V-174 admin alias — `'admin'`-scoped keys satisfy\s*\n?\s*\*\s*`'account_owner'` \+ `'driftstack_internal_admin'` during the\s*\n?\s*\*\s*migration window\. After all `'admin'` keys are migrated,\s*\n?\s*\*\s*this clause stays a no-op \(no live keys carry `'admin'`\)/,
+      /2\. V-174 legacy customer alias — `'admin'`-scoped keys satisfy\s*\n?\s*\*\s*`'account_owner'` so pre-split customer automation keeps its own-account\s*\n?\s*\*\s*authority\. The expired migration bridge to\s*\n?\s*\*\s*`'driftstack_internal_admin'` is deliberately closed: only the exact\s*\n?\s*\*\s*staff scope can authorize cross-account operations/,
     );
     expect(body).toMatch(
       /3\. V-481 broad-satisfies-granular — when the required scope is\s*\n?\s*\*\s*granular \(`read:sessions`, `admin:profiles`, etc\.\), the key's\s*\n?\s*\*\s*broad scopes can satisfy it on the same verb:/,
@@ -77,14 +77,16 @@ describe('W392.C apps/server/src/lib/errors-helpers.ts content parity', () => {
     );
   });
 
-  it('hasScope: pure predicate, 3 clauses (exact → V-174 admin alias → V-481 verb-table)', () => {
+  it('hasScope: pure predicate keeps the V-174 alias customer-only before the V-481 verb-table', () => {
     expect(body).toMatch(
       /V-481 — pure predicate version of \{@link requireScope\}\. Returns\s*\n?\s*\*\s*true iff the key satisfies the required scope/,
     );
     expect(body).toMatch(/if \(scopes\.includes\(required\)\) return true;/);
-    expect(body).toMatch(/\/\/ V-174 admin alias\./);
     expect(body).toMatch(
-      /if \(\s*\n?\s*\(required === 'account_owner' \|\| required === 'driftstack_internal_admin'\) &&\s*\n?\s*scopes\.includes\('admin'\)\s*\n?\s*\) \{\s*\n?\s*return true;\s*\n?\s*\}/,
+      /\/\/ V-174 legacy customer alias\. Never satisfies the staff-only scope\./,
+    );
+    expect(body).toMatch(
+      /if \(required === 'account_owner' && scopes\.includes\('admin'\)\) \{\s*\n?\s*return true;\s*\n?\s*\}/,
     );
     expect(body).toMatch(/\/\/ V-481 broad satisfies granular on the same verb\./);
   });
