@@ -444,8 +444,6 @@ const apiBaseUrl = resolveApiBaseUrl();
         clearTimeout(debounce);
         debounce = setTimeout(loadWithLive, 200);
       }
-      if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
-      if (includeExpiredEl) includeExpiredEl.addEventListener('change', scheduleLoad);
 
       // 2026-05-22 — live auto-poll. Same pattern as 154ff9cf.
       let lastFetch = Date.now();
@@ -490,7 +488,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         return Math.floor(s / 3600).toString() + 'h ago';
       }
       function start() {
-        token = localStorage.getItem('ds_web_session_token');
+        try {
+          token = localStorage.getItem('ds_web_session_token');
+        } catch {
+          token = null;
+        }
         if (!token) {
           renderUnavailable('Sign in with a staff admin account to see rate-limit overrides.');
           setLiveState('failed', 'Sign in for live data');
@@ -504,6 +506,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           refreshBtn.removeAttribute('title');
           refreshBtn.addEventListener('click', loadWithLive);
         }
+        if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
+        if (includeExpiredEl) includeExpiredEl.addEventListener('change', scheduleLoad);
         setInterval(loadWithLive, 30_000);
         setInterval(() => {
           if (liveAge) liveAge.textContent = fmtAge(lastFetch);

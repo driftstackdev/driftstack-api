@@ -1,11 +1,10 @@
 // W342.C — drift guard for the admin /rate-limit-overrides page
 // bucket_key taxonomy. The canonical server-side enum is
 // ['global', 'sessions:create', 'agent_sessions:message']. Both
-// BUCKET_LABEL maps (frontmatter + inline script) must cover the
-// full enum so every bucket renders a friendly label
-// (agent_sessions:message previously fell through to the raw key);
-// the MockOverride.bucketKey type union is a subset (the mock only
-// ever carries 'global' / 'sessions:create').
+// live BUCKET_LABEL map must cover the full enum so every bucket
+// renders a friendly label (agent_sessions:message previously fell
+// through to the raw key). The page intentionally has no fabricated
+// SSR override rows or duplicate frontmatter map.
 //
 // Prior drift caught + fixed by this wave: the page used the
 // (fictional) 'session_create' + 'capture' bucket keys. Both
@@ -56,8 +55,9 @@ describe('W342.C admin /rate-limit-overrides bucket_key parity', () => {
     }
   });
 
-  it("MockOverride.bucketKey type union matches ['global', 'sessions:create']", () => {
-    expect(page).toMatch(/bucketKey:\s*'global'\s*\|\s*'sessions:create';/);
+  it('does not restore a fabricated preview-only override type', () => {
+    expect(page).not.toContain('MockOverride');
+    expect(page).not.toMatch(/const\s+MOCK_OVERRIDES\b/);
   });
 
   it('no doc-drift bucket-key names (session_create / capture) remain', () => {
@@ -66,27 +66,14 @@ describe('W342.C admin /rate-limit-overrides bucket_key parity', () => {
     expect(page).not.toMatch(/'capture':/);
   });
 
-  it("frontmatter BUCKET_LABEL keys cover the full canonical enum {'global', 'sessions:create', 'agent_sessions:message'}", () => {
-    // Every canonical bucket key needs a friendly label —
-    // agent_sessions:message previously fell through to the raw key.
-    const block = page.match(/BUCKET_LABEL:[^={]*=?\s*\{([\s\S]*?)\};/);
-    expect(block).not.toBeNull();
-    const keys = [...block![1]!.matchAll(/^\s*(?:'([^']+)'|([a-z_]+)):\s*'[^']+',/gm)]
-      .map((m) => m[1] ?? m[2]!)
-      .sort();
-    expect(keys).toEqual(['agent_sessions:message', 'global', 'sessions:create']);
-  });
-
-  it("inline-script BUCKET_LABEL keys cover the full canonical enum {'global', 'sessions:create', 'agent_sessions:message'}", () => {
-    // Frontmatter declares `const BUCKET_LABEL: Record<…> = { … }`
-    // (typed); the inline-script copy is plain JS `const
-    // BUCKET_LABEL = { … }`. Grab the second form specifically.
+  it("live BUCKET_LABEL keys cover the full canonical enum {'global', 'sessions:create', 'agent_sessions:message'}", () => {
     const inline = page.match(/const BUCKET_LABEL\s*=\s*\{([\s\S]*?)\};/);
     expect(inline).not.toBeNull();
     const keys = [...inline![1]!.matchAll(/^\s*(?:'([^']+)'|([a-z_]+)):\s*'[^']+',/gm)]
       .map((m) => m[1] ?? m[2]!)
       .sort();
     expect(keys).toEqual(['agent_sessions:message', 'global', 'sessions:create']);
+    expect(page).toMatch(/BUCKET_LABEL\[o\.bucket_key\]\s*\|\|\s*o\.bucket_key/);
   });
 
   it('DELETE call still posts bucket_key as the query param name', () => {

@@ -8,8 +8,8 @@
 //   • Bucket-key footnote lists the canonical enum 'global' +
 //     'sessions:create' + 'agent_sessions:message' (the old
 //     session_create / capture values were rejected by the server).
-//   • BUCKET_LABEL identical between frontmatter + inline
-//     <script>; covers all canonical enum keys.
+//   • The live BUCKET_LABEL covers all canonical enum keys and the
+//     runtime row renderer indexes it with the server bucket_key.
 //   • 14-day default TTL claim pinned (operational expectation
 //     for time-boxed bumps).
 //   • "Permanent overrides allowed but flagged in weekly audit-
@@ -35,11 +35,8 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-function extractBucketLabel(src: string, anchorBefore: string): string {
-  const anchor = src.indexOf(anchorBefore);
-  if (anchor === -1) throw new Error(`anchor not found: ${anchorBefore}`);
-  const after = src.slice(anchor);
-  const m = /const\s+BUCKET_LABEL[^=]*=\s*\{([\s\S]*?)\};/.exec(after);
+function extractBucketLabel(src: string): string {
+  const m = /const\s+BUCKET_LABEL\s*=\s*\{([\s\S]*?)\};/.exec(src);
   if (!m || !m[1]) throw new Error('BUCKET_LABEL not found');
   return m[1].replace(/\s+/g, ' ').trim();
 }
@@ -96,13 +93,12 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
     expect(body).not.toMatch(/<code class="font-mono">capture<\/code>/);
   });
 
-  it('BUCKET_LABEL identical between frontmatter + inline <script>', () => {
-    const frontmatterMap = extractBucketLabel(body, 'const BUCKET_LABEL: Record');
-    const inlineMap = extractBucketLabel(body, '(function ()');
-    expect(frontmatterMap).toBe(inlineMap);
-    // Both forms cover the same two keys the rendering relies on.
-    expect(frontmatterMap).toMatch(/global:\s*'Global'/);
-    expect(frontmatterMap).toMatch(/'sessions:create':\s*'Sessions: create'/);
+  it('live BUCKET_LABEL covers every canonical override key', () => {
+    const liveMap = extractBucketLabel(body);
+    expect(liveMap).toMatch(/global:\s*'Global'/);
+    expect(liveMap).toMatch(/'sessions:create':\s*'Sessions: create'/);
+    expect(liveMap).toMatch(/'agent_sessions:message':\s*'Agent sessions: message'/);
+    expect(body).toMatch(/BUCKET_LABEL\[o\.bucket_key\]\s*\|\|\s*o\.bucket_key/);
   });
 
   it('14-day default TTL claim pinned (operational expectation)', () => {
@@ -133,6 +129,9 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
 
   it('localStorage key ds_web_session_token (admin-panel convention)', () => {
     expect(body).toContain("'ds_web_session_token'");
+    expect(body).toMatch(
+      /try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
+    );
   });
 
   it('filter wiring: account_id + include_expired query params', () => {
@@ -142,11 +141,9 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
     );
   });
 
-  it('MockOverride.bucketKey union type matches the BUCKET_LABEL keys', () => {
-    // Static guarantee: the TS literal union in the frontmatter
-    // must match the BUCKET_LABEL keys at the top of the file
-    // (otherwise the mock object can carry a key the label map
-    // doesn't render).
-    expect(body).toMatch(/bucketKey:\s*'global'\s*\|\s*'sessions:create'/);
+  it('does not restore fabricated SSR override rows', () => {
+    expect(body).not.toContain('MockOverride');
+    expect(body).not.toMatch(/const\s+MOCK_OVERRIDES\b/);
+    expect(body).toContain('Live rate-limit overrides are unavailable until loaded.');
   });
 });
