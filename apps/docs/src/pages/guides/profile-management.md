@@ -25,7 +25,7 @@ Each tier has a profile cap, enforced at `POST /v1/profiles` creation time. Exce
 | API Scale   | 500         |
 | Enterprise  | Custom      |
 
-Pricing source of truth: [driftstack.dev/pricing](https://driftstack.dev/pricing).
+Pricing source of truth: [driftstack.dev/pricing](https://driftstack.dev/pricing/).
 
 Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps + archetype counts at the fleet level instead.
 

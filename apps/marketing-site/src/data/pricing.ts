@@ -82,7 +82,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Evaluation (1 session, 20-min cap)',
     aiAgent: false,
     llmBilling: null,
-    cta: { label: 'Get started — free', href: 'https://app.driftstack.dev/signup' },
+    cta: { label: 'Get started — free', href: 'https://app.driftstack.dev/signup/' },
     oneTime: false,
   },
 
@@ -103,7 +103,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Solo power users, individual operators',
     aiAgent: false,
     llmBilling: null,
-    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup' },
+    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup/' },
   },
   {
     id: 'team_manual',
@@ -121,7 +121,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Teams of account managers',
     aiAgent: true,
     llmBilling: 'byok_only',
-    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup' },
+    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup/' },
     highlight: true,
   },
   {
@@ -140,7 +140,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Agencies juggling many client profiles',
     aiAgent: true,
     llmBilling: 'byok_only',
-    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup' },
+    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup/' },
   },
 
   // API ladder — programmatic SDK access.
@@ -160,7 +160,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Solo developers, evaluation-stage automation',
     aiAgent: true,
     llmBilling: 'byok_only',
-    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup' },
+    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup/' },
   },
   {
     id: 'api_builder',
@@ -178,7 +178,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Production automation at scale',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
-    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup' },
+    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup/' },
     highlight: true,
   },
   {
@@ -197,7 +197,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'High-volume automation running many sessions at once',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
-    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup' },
+    cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup/' },
   },
   {
     id: 'enterprise',

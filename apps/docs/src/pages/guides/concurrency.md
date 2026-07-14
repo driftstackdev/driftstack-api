@@ -177,7 +177,7 @@ checks the concurrency cap.
 ## Raising the cap
 
 Upgrading your tier raises the cap — see
-[driftstack.dev/pricing](https://driftstack.dev/pricing). Above the
+[driftstack.dev/pricing](https://driftstack.dev/pricing/). Above the
 Enterprise floor, per-account overrides are possible: email
 [support@driftstack.dev](mailto:support@driftstack.dev) with the
 workload shape.

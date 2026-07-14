@@ -51,7 +51,7 @@ The teammate receives an email with a 7-day accept link.
 
 ## Step 2 — Accept the invite (teammate)
 
-The teammate signs up at <https://app.driftstack.dev/signup> using
+The teammate signs up at <https://app.driftstack.dev/signup/> using
 the invitee email address (must match exactly), then clicks the
 accept link from the invite email.
 

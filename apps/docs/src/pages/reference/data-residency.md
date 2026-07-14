@@ -29,8 +29,8 @@ and the EU-US Data Privacy Framework (DPF).
   MacStadium hardware in the US, under SCCs + the EU-US DPF.
 - The complete sub-processor list, with each provider's region and
   contractual transfer basis, is published at
-  [driftstack.dev/trust/sub-processors](https://driftstack.dev/trust/sub-processors)
-  and in the [DPA](https://driftstack.dev/legal/dpa).
+  [driftstack.dev/trust/sub-processors](https://driftstack.dev/trust/sub-processors/)
+  and in the [DPA](https://driftstack.dev/legal/dpa/).
 
 ## What lives where
 
@@ -103,7 +103,7 @@ service.
 Deleting your account revokes access immediately — web sessions,
 API keys, and webhook endpoints stop working at deletion time —
 and stored data is purged within the retention windows disclosed in
-the [DPA](https://driftstack.dev/legal/dpa) (the retention table
+the [DPA](https://driftstack.dev/legal/dpa/) (the retention table
 discloses a 30-day outer bound for post-termination deletion).
 References held by payment processors are governed by their own
 retention policies.
@@ -113,7 +113,7 @@ Data subject access requests (GDPR):
 
 ## Related
 
-- [Sub-processor register](https://driftstack.dev/trust/sub-processors) — every provider, region, purpose, and transfer basis, with a change log
-- [DPA](https://driftstack.dev/legal/dpa) — the binding data-processing terms
-- [Privacy policy](https://driftstack.dev/legal/privacy)
-- [Trust & security overview](https://driftstack.dev/trust/security-overview)
+- [Sub-processor register](https://driftstack.dev/trust/sub-processors/) — every provider, region, purpose, and transfer basis, with a change log
+- [DPA](https://driftstack.dev/legal/dpa/) — the binding data-processing terms
+- [Privacy policy](https://driftstack.dev/legal/privacy/)
+- [Trust & security overview](https://driftstack.dev/trust/security-overview/)

@@ -210,7 +210,7 @@ selected at signup. Driftstack offers a perpetual Free tier, a
 Manual ladder (Personal, Team, Agency), and an API ladder (API
 Starter, API Builder, API Scale), with a custom-priced Enterprise
 tier. The current tiers and prices are published at
-<https://driftstack.dev/pricing>. Fees are exclusive of VAT unless
+<https://driftstack.dev/pricing/>. Fees are exclusive of VAT unless
 explicitly stated; VAT is added at the rate applicable to Customer's
 location at invoice issuance.
 

@@ -186,7 +186,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
 
   it('R13 footer privacy-policy cross-link to driftstack.dev/legal/privacy — dark-theme hover:text-ink-primary after status-site migration', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-ink-primary">\s*\n?\s*Privacy\s*\n?\s*<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-ink-primary">\s*\n?\s*Privacy\s*\n?\s*<\/a>/,
     );
   });
 

@@ -69,7 +69,7 @@ describe('V-293 — signup/login link parity (marketing-site + docs)', () => {
 
   it('docs/quickstart.md has clickable signup + signin links (not bare text)', () => {
     const src = readFileSync(resolve(DOCS_SRC, 'pages/quickstart.md'), 'utf8');
-    expect(src).toMatch(/\[sign up\]\(https:\/\/app\.driftstack\.dev\/signup\)/);
-    expect(src).toMatch(/\[sign in\]\(https:\/\/app\.driftstack\.dev\/login\)/);
+    expect(src).toMatch(/\[sign up\]\(https:\/\/app\.driftstack\.dev\/signup\/\)/);
+    expect(src).toMatch(/\[sign in\]\(https:\/\/app\.driftstack\.dev\/login\/\)/);
   });
 });

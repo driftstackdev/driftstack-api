@@ -97,7 +97,7 @@ Concurrency is the sizing axis (see the
 [full cap table](/guides/concurrency/)): `api_starter` runs 2
 sessions at once, `api_builder` 8, `api_scale` 24, and Enterprise
 starts at 32 with per-account overrides above that. Prices:
-[driftstack.dev/pricing](https://driftstack.dev/pricing).
+[driftstack.dev/pricing](https://driftstack.dev/pricing/).
 
 ## What Driftstack deliberately doesn't do
 
@@ -113,7 +113,7 @@ starts at 32 with per-account overrides above that. Prices:
 
 Self-hosting, on the other hand, does exist — as its own offering
 rather than a toggle on the cloud plans. See
-[driftstack.dev/self-hosted](https://driftstack.dev/self-hosted).
+[driftstack.dev/self-hosted](https://driftstack.dev/self-hosted/).
 
 ## Migration checklist
 

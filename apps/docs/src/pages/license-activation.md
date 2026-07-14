@@ -11,7 +11,7 @@ You don't need to find or buy a license key — the API key you already have is 
 ## What you need
 
 - The desktop app installed. Signed download builds will be published at `driftstack.dev/download` once the first ones ship (the page is not live yet during rollout).
-- An API key from [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys). Same shape as the API key your SDK calls use.
+- An API key from [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/). Same shape as the API key your SDK calls use.
 - Your tier supports GUI client access. Cloud customers on any Manual or API tier (or the Free tier) can activate; self-hosted Solo/Pro/Enterprise customers point at their own server URL.
 
 ## First-run flow
@@ -67,7 +67,7 @@ Tauri Updater + GitHub Releases ship updates automatically. The app polls the ma
 
 ## Troubleshooting
 
-- **"Authentication failed"** — in cloud mode, verify the key in [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys); revoking and reissuing the key is the safest reset. In self-hosted mode, make sure the key was created on the server the GUI points at — keys are bound to the deployment that minted them, so a cloud key never works against your own server (and vice-versa). Settings also re-validates the key on every save and shows the same guidance inline.
+- **"Authentication failed"** — in cloud mode, verify the key in [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/); revoking and reissuing the key is the safest reset. In self-hosted mode, make sure the key was created on the server the GUI points at — keys are bound to the deployment that minted them, so a cloud key never works against your own server (and vice-versa). Settings also re-validates the key on every save and shows the same guidance inline.
 - **"Couldn't reach control plane"** — for cloud, check [status.driftstack.dev](https://status.driftstack.dev). For self-hosted, check your control plane's `/v1/status` endpoint directly.
 - **Wizard re-fires on every launch** — the keychain backend may be unavailable. On Linux, install `gnome-keyring` or `kwallet`. On macOS, check that the app has Keychain entitlements (re-install if recently quarantined).
 - **Tier-suspended on activation** — the account is in a suspended state in billing. Email [support@driftstack.dev](mailto:support@driftstack.dev) with the account email and we'll resolve.

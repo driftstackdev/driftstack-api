@@ -55,7 +55,7 @@ Each tier has a hard cap on simultaneously-active sessions. Exceeding the cap re
 
 Concurrent caps are the only metering on paid tiers — there are no hour caps and no overage charges. Run sessions for as long as your workflow needs within your concurrent cap.
 
-Pricing source of truth: [driftstack.dev/pricing](https://driftstack.dev/pricing).
+Pricing source of truth: [driftstack.dev/pricing](https://driftstack.dev/pricing/).
 
 ## Create
 

@@ -13,7 +13,7 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 
 - Python 3.10+ (the SDK uses modern type hints + structural matches).
 - A Driftstack API key. Mint one at
-  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys).
+  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
 
 ## 1. Install
 

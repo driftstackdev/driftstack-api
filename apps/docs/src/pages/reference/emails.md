@@ -138,4 +138,4 @@ timezone — that's what we match against the delivery log.
 
 - [Email preferences API](/api/email-preferences/) — the toggle endpoints in full
 - [Account notifications (SSE)](/api/account-notifications/) — the in-dashboard notification stream
-- [Privacy policy](https://driftstack.dev/legal/privacy) — how long we keep what
+- [Privacy policy](https://driftstack.dev/legal/privacy/) — how long we keep what

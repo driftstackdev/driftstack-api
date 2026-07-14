@@ -13,12 +13,12 @@ wire. If you'd rather start in TypeScript, Python, or Go, use the
 [SDK quickstart](/quickstart/) instead.
 
 You will need a Driftstack account
-([sign up](https://app.driftstack.dev/signup) or
-[sign in](https://app.driftstack.dev/login)) and `curl`.
+([sign up](https://app.driftstack.dev/signup/) or
+[sign in](https://app.driftstack.dev/login/)) and `curl`.
 
 ## 1. Get an API key
 
-1. Open [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys).
+1. Open [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
 2. Click **Create key**, give it a name, and copy the value. The full
    key is shown once — Driftstack stores only a hash, so if you lose
    it you revoke it and mint a new one.

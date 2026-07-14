@@ -12,7 +12,7 @@ of a card. Payments run through
 your coins. You get a single-use payment address, send the exact
 amount shown, and Driftstack activates the tier once the payment
 settles on-chain. **Crypto payments are final and non-refundable**
-([refund policy](https://driftstack.dev/legal/refunds)), so this page
+([refund policy](https://driftstack.dev/legal/refunds/)), so this page
 also covers what each order state means and how to retry safely.
 
 This is the walkthrough. The endpoint-by-endpoint reference lives at
@@ -248,7 +248,7 @@ activity exists, the cancel returns `409` and reconciliation goes
 through support. Cancelling a **subscription** stops future billing
 periods, but the current period is not refunded — crypto payments
 are non-refundable end to end
-([policy](https://driftstack.dev/legal/refunds)). If you expect to
+([policy](https://driftstack.dev/legal/refunds/)). If you expect to
 need cash refunds, the card path (Stripe) is the right channel.
 
 ## Related

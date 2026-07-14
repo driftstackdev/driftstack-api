@@ -67,7 +67,7 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     expect(body).toMatch(/Manual ladder \(Personal, Team, Agency\)/);
     expect(body).toMatch(/API ladder \(API\s+Starter, API Builder, API Scale\)/);
     expect(body).toMatch(/custom-priced Enterprise/);
-    expect(body).toMatch(/published at\s+<https:\/\/driftstack\.dev\/pricing>/);
+    expect(body).toMatch(/published at\s+<https:\/\/driftstack\.dev\/pricing\/>/);
     // Fictional figures must never reappear in §8.1.
     expect(body).not.toMatch(/\$39\/mo|\$99\/mo|\$299\/mo|\$999\/mo|\$3,000\/mo/);
   });

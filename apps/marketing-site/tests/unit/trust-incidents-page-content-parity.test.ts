@@ -77,7 +77,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   it('72-hour-advance maintenance window notice claim pinned', () => {
     expect(body).toMatch(/Notice at least 72 hours in advance/);
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*class="text-tk-accent-text underline">\/settings → email preferences<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*class="text-tk-accent-text underline">\/settings → email preferences<\/a>/,
     );
   });
 
@@ -119,7 +119,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   it("'Get notified' CTA + Manage notifications link to dashboard /settings (Fleet v2 S10: btn-primary anchor renders from CtaBand primaryHref/primaryLabel props)", () => {
     expect(body).toMatch(/title="Get notified when status changes\."/);
     expect(body).toMatch(
-      /primaryHref="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*primaryLabel="Manage notifications"/,
+      /primaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*\n?\s*primaryLabel="Manage notifications"/,
     );
   });
 

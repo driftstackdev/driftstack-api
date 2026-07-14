@@ -13,7 +13,7 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 
 - Go 1.22+ (the SDK uses generic constraints + `slices` package).
 - A Driftstack API key. Mint one at
-  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys).
+  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
 
 ## 1. Install
 

@@ -15,7 +15,7 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
   `engines.node: ">=18"` and is built / tested against the same
   toolchain Driftstack runs in production).
 - A Driftstack API key. Mint one at
-  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys);
+  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/);
   the plaintext is shown once on creation.
 
 ## 1. Install

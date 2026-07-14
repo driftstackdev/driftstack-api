@@ -119,7 +119,7 @@ Full read-endpoint docs at
 [/api/account-rate-limits](/api/account-rate-limits/).
 
 The dashboard renders this data on
-[app.driftstack.dev/usage](https://app.driftstack.dev/usage) — the
+[app.driftstack.dev/usage](https://app.driftstack.dev/usage/) — the
 "Rate limits" card lists each bucket's capacity, refill rate, and
 source (tier default vs staff override, with the override's
 auto-revert date). The endpoint remains available for SDK / `curl`
