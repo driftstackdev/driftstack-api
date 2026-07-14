@@ -12,9 +12,9 @@
 //     roster (footer Product column carries it).
 //   • Mobile-extra items: /self-hosted + /glossary (no top-level desktop
 //     slot). Never /roadmap (F-3 / Issue 5 — no aspirational pages in nav).
-//   • Active-link styling on pathname match.
-//   • Sign in → https://app.driftstack.dev/login.
-//   • CTA → /pricing#free.
+//   • Active-link styling on normalized exact-or-nested pathname match.
+//   • Sign in → https://app.driftstack.dev/login/.
+//   • CTA → /pricing/#free.
 //   • External docs link opens with noopener noreferrer.
 //   • Mobile hamburger uses <details> with custom-summary + 3-line SVG icon.
 
@@ -64,15 +64,22 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).not.toMatch(/\{ href: '\/roadmap',/);
   });
 
-  it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-tk-accent-text' (S24 2026-07-06: the active tone is TEXT, so it reads the AA-safe accent-text pair — the raw accent is ~3.0:1 on the dark bg, a fill tone) + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location; drift back to the raw accent would fail WCAG AA)", () => {
+  it('Active-link styling pins normalized exact-or-nested local-route authority and external exclusion with the AA-safe accent-text tone.', () => {
     expect(body).toMatch(/const pathname = Astro\.url\.pathname;/);
-    expect(body).toMatch(
-      /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*(?:\/\/[^\n]*\n\s*)*pathname === item\.href && 'text-tk-accent-text',?\s*\]\}/,
+    expect(body).toContain(
+      "const normalizedPathname = pathname === '/' ? '/' : pathname.replace(/\\/+$/, '');",
     );
-    // the mobile popup active item carries the same AA-safe tone.
+    expect(body).toMatch(/if \(item\.external === true\) return false;/);
     expect(body).toMatch(
-      /'rounded px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',\s*(?:\/\/[^\n]*\n\s*)*pathname === item\.href && 'text-tk-accent-text',?\s*\]\}/,
+      /return normalizedPathname === item\.href \|\| normalizedPathname\.startsWith\(`\$\{item\.href\}\/`\);/,
     );
+    expect(body).toMatch(
+      /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*(?:\/\/[^\n]*\n\s*)*isActiveItem\(item\) && 'text-tk-accent-text',?\s*\]\}/,
+    );
+    expect(body).toMatch(
+      /'rounded px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',\s*(?:\/\/[^\n]*\n\s*)*isActiveItem\(item\) && 'text-tk-accent-text',?\s*\]\}/,
+    );
+    expect(body).toMatch(/href=\{item\.external \? item\.href : `\$\{item\.href\}\/`\}/);
   });
 
   it("R15 logo + brand framing pinned: a href / wrapping the new /driftstack-mark.svg <img> (iPhone-D brand SVG) + the W2 DRIFT/STACK two-tone wordmark + font-mono font-semibold + h-8-w-8 mark size. Replaces the prior bg-gradient-accent text-white 'D' chip with the real SVG brand asset. Drift to a different brand-mark source or font-family would create cross-page styling divergence.", () => {
@@ -91,11 +98,12 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it("Desktop nav 2-CTA framing pinned: 'Sign in' → https://app.driftstack.dev/login + 'Start free' btn-primary → /pricing#free — pinned so the 2-CTA target (dashboard login URL + #free pricing anchor) commitment survives (drift to a different login URL would create marketing↔dashboard divergence)", () => {
+  it("Desktop nav 2-CTA framing pinned: canonical sign-in + '/pricing/#free' Start free", () => {
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary">Start free<\/a>/);
+    expect(body).not.toMatch(/href="(?:https:\/\/app\.driftstack\.dev\/login|\/pricing#free)"/);
   });
 
   it('External-docs noopener-noreferrer framing pinned: \'target={item.external ? "_blank" : undefined}\' + \'rel={item.external ? "noopener noreferrer" : undefined}\' — pinned so the external-link safety pattern (noopener + noreferrer + target=_blank) survives', () => {
@@ -103,12 +111,12 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).toMatch(/rel=\{item\.external \? 'noopener noreferrer' : undefined\}/);
   });
 
-  it('Mobile CTA visible-at-all-widths + Start-button framing pinned: \'<a href="/pricing#free" class="btn-primary text-sm">Start free</a>\' — pinned so the mobile CTA always-visible + \'Start free\' short-label + same /pricing#free anchor commitment survives (drift to hiding CTA on mobile would lose the conversion path)', () => {
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary text-sm">Start free<\/a>/);
+  it('Mobile CTA visible-at-all-widths + canonical Start-button framing pinned.', () => {
+    expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary text-sm">Start free<\/a>/);
   });
 
   it("Mobile hamburger <details>+<summary> framing pinned: 'flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 text-slate-700 [&::-webkit-details-marker]:hidden' + aria-label 'Open navigation menu' + 3-line SVG icon (3 <line> elements at y=6/12/18) — pinned so the <details> hamburger + 3-line-icon + aria-label commitment survives (drift to a JS-based menu would break the no-JS-bundle pure-static commitment)", () => {
-    expect(body).toMatch(/<details class="relative">/);
+    expect(body).toMatch(/<details class="relative" data-mobile-nav>/);
     expect(body).toMatch(/aria-label="Open navigation menu"/);
     expect(body).toMatch(/\[&::-webkit-details-marker\]:hidden/);
     expect(body).toMatch(/<line x1="3" y1="6" x2="21" y2="6"><\/line>/);
@@ -127,9 +135,11 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it('S13 mode toggle (2026-07-03): a [data-theme-toggle] button in the desktop nav cluster with the accessible label + sun/moon icons keyed off the dark: variant — the wiring lives in BaseLayout (delegated listener)', () => {
+  it('S13 mode toggle: desktop button exposes its current action and pressed state with sun/moon icons; BaseLayout owns delegated wiring.', () => {
     expect(body).toMatch(/data-theme-toggle/);
-    expect(body).toMatch(/aria-label="Toggle light and dark theme"/);
+    expect(body).toMatch(/aria-label="Switch to light theme"/);
+    expect(body).toMatch(/aria-pressed="false"/);
+    expect(body).toMatch(/title="Switch to light theme"/);
     expect(body).toMatch(/class="hidden dark:block"/);
     expect(body).toMatch(/class="block dark:hidden"/);
   });
