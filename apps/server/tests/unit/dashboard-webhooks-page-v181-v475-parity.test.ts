@@ -90,11 +90,25 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     );
   });
 
-  it('CRITICAL rotate POST /v1/webhooks/<id>/rotate-secret pinned. Matches W750 api-key rotate URL pattern (per-resource /rotate-secret endpoint).', () => {
+  it('CRITICAL rotate POST /v1/webhooks/<id>/rotate-secret uses the shared deadline and reconciles an unknown outcome.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n\s+method: 'POST',/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n\s+method: 'POST',/,
+    );
+    expect(p).toMatch(
+      /function boundedFetch\(url, init = \{\}\) \{\s*return window\.driftstackFetchWithDeadline\(url, init, WEBHOOK_TIMEOUT_MS\)/,
+    );
+    expect(p).toMatch(
+      /if \(err && err\.name === 'AbortError'\) \{[\s\S]*?refreshEndpointList\(false\)[\s\S]*?uncertainRotationIds\.add\(String\(id\)\)/,
+    );
+
+    const rawFetchMutation = p.replace(
+      "boundedFetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/rotate-secret'",
+      "fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/rotate-secret'",
+    );
+    expect(rawFetchMutation).not.toMatch(
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret'/,
     );
   });
 
@@ -142,7 +156,7 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
 
     expect(p).toMatch(/V-347 — wire the create form\./);
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{\s*\n\s+'content-type': 'application\/json',\s*\n\s+authorization: 'Bearer ' \+ token,/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{\s*\n\s+'content-type': 'application\/json',\s*\n\s+authorization: 'Bearer ' \+ token,/,
     );
   });
 
@@ -199,7 +213,7 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay'/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay'/,
     );
   });
 
@@ -207,7 +221,7 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test'/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test'/,
     );
   });
 
@@ -215,14 +229,16 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpoint\.id\)/,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpointId\)/,
     );
   });
 
   it('CRITICAL DELETE /v1/webhooks/<id> pinned for the row revoke action.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{/);
+    expect(p).toMatch(
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{/,
+    );
   });
 
   it('CRITICAL escapeHtml() XSS guard with 5-char map pinned. Every dynamically-rendered endpoint field flows through it. Drift would let a malicious URL/description inject HTML.', () => {
