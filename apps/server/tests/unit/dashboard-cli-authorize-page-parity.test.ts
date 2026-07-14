@@ -86,8 +86,9 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     expect(p).toMatch(
       /const next = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\)/,
     );
-    expect(p).toMatch(/signinLink\.setAttribute\('href', '\/login\?next=' \+ next\)/);
-    expect(p).toMatch(/signupLink\.setAttribute\('href', '\/signup\?next=' \+ next\)/);
+    expect(p).toMatch(/signinLink\.setAttribute\('href', '\/login\/\?next=' \+ next\)/);
+    expect(p).toMatch(/signupLink\.setAttribute\('href', '\/signup\/\?next=' \+ next\)/);
+    expect(p).not.toMatch(/setAttribute\('href', '\/(?:login|signup)\?next='/);
   });
 
   it('CRITICAL bind contract requires Bearer auth plus code, state, and device-displayed user_code', () => {
@@ -155,8 +156,9 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     const p = read(PAGE);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /It remains active until you revoke it from <a href="\/api-keys" class="text-tk-accent-text underline">API keys<\/a>/,
+      /It remains active until you revoke it from <a href="\/api-keys\/" class="text-tk-accent-text underline">API keys<\/a>/,
     );
+    expect(p).not.toMatch(/href="\/api-keys"/);
   });
 
   it('CRITICAL authorize-button loading state pinned — "Authorizing…" while in-flight + disabled. Drift to dropping would let users double-click + mint 2 keys.', () => {
