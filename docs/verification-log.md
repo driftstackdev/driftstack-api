@@ -26596,3 +26596,34 @@ and a hidden local function alias, accepts safe aliased multiline composition,
 and detects direct raw-header access. Focused evidence passes 1 file and 7/7
 tests; strict server test TypeScript, targeted lint/format, diff and whitespace
 checks are green.
+
+## V-625 — Every literal API route has a caller-authority classification
+
+**Date:** 2026-07-14
+
+The server had targeted authorization tests for individual route families and
+the admin namespace, but no control that first discovered the complete Fastify
+registration surface. A newly added anonymous customer-data route could
+therefore remain outside every cross-route authority test. Path naming could
+not safely fill that gap because the server intentionally exposes public auth,
+OAuth, status, provider-ingress and API-contract endpoints alongside manually
+authenticated infrastructure and activation-off stubs.
+
+A new TypeScript-AST invariant discovers route calls through any parameter
+typed as `FastifyInstance`, rather than depending on the variable name `app`.
+It inspects only each registration's options for API-key, EventSource, scope,
+owner, internal, session-control or fleet-upgrade authority. Every remaining
+registration must match an exact file/function/method/path/handler exemption
+classified as public, manually authenticated or disabled; exemptions are
+unique, resolve to live registrations and must remain necessary.
+
+Verification inventories all 282 literal registrations: 214 carry structural
+caller authority and 68 match the reviewed exception surface (32 public, one
+constant-time metrics bearer route and 35 fail-closed activation stubs). The
+corrected scan found no latent live anonymous data route; the only initially
+unrecognized account route uses the dedicated EventSource authenticator and is
+now structurally classified. Synthetic cases prove an ungated customer route
+is detected despite misleading handler text, a public-looking status path gets
+no implicit exemption, and a real options gate passes. Focused evidence passes
+1 file and 6/6 tests; strict server test TypeScript, targeted lint/format, diff
+and whitespace checks are green.
