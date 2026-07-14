@@ -54,7 +54,7 @@ function setUpDom(
     return Promise.resolve().then(() => opts.route(call));
   };
   if (opts.storageDenied === true) {
-    Object.defineProperty(window.localStorage, 'getItem', {
+    Object.defineProperty(Object.getPrototypeOf(window.localStorage), 'getItem', {
       configurable: true,
       value: () => {
         throw new Error('storage denied');

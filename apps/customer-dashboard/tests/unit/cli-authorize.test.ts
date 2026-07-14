@@ -149,7 +149,7 @@ describe('cli-authorize page — local integration', () => {
   it('shows needs-signin when session storage access is denied', async () => {
     const html = loadBuiltPage();
     dom = setUpDom(html, (window) => {
-      Object.defineProperty(window.localStorage, 'getItem', {
+      Object.defineProperty(Object.getPrototypeOf(window.localStorage), 'getItem', {
         configurable: true,
         value: () => {
           throw new Error('storage denied');

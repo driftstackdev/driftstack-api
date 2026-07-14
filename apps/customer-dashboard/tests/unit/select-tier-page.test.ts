@@ -30,6 +30,7 @@ interface MockFetchCall {
 interface SetUpOpts {
   token?: string | null;
   storageDenied?: boolean;
+  cryptoStorageDenied?: boolean;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
@@ -65,7 +66,7 @@ function setUpDom(
     return Promise.resolve(opts.route(call));
   };
   if (opts.storageDenied === true) {
-    Object.defineProperty(window.localStorage, 'getItem', {
+    Object.defineProperty(Object.getPrototypeOf(window.localStorage), 'getItem', {
       configurable: true,
       value: () => {
         throw new Error('storage denied');
@@ -73,6 +74,27 @@ function setUpDom(
     });
   } else if (opts.token !== undefined && opts.token !== null) {
     window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
+  if (opts.cryptoStorageDenied === true) {
+    const storagePrototype = Object.getPrototypeOf(window.localStorage);
+    const getItem = storagePrototype.getItem;
+    const setItem = storagePrototype.setItem;
+    Object.defineProperties(storagePrototype, {
+      getItem: {
+        configurable: true,
+        value(this: Storage, key: string) {
+          if (key.startsWith('ds_crypto_idem_')) throw new Error('crypto storage denied');
+          return getItem.call(this, key);
+        },
+      },
+      setItem: {
+        configurable: true,
+        value(this: Storage, key: string, value: string) {
+          if (key.startsWith('ds_crypto_idem_')) throw new Error('crypto storage denied');
+          setItem.call(this, key, value);
+        },
+      },
+    });
   }
   let hydrated = 0;
   // @ts-expect-error — injected by DashboardLayout
@@ -516,6 +538,27 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
       '0xABCDEF0000000000000000000000000000001234',
     );
     expect(text(window, '[data-field="crypto-order-id"]')).toBe('ord_crypto_test1');
+  });
+
+  it('crypto checkout fails closed before POST when its idempotency key cannot persist', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      cryptoStorageDenied: true,
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url)
+          ? json({ subscription: null })
+          : json({ order_id: 'must_not_exist' }),
+    });
+    win = window;
+    await flush();
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await flush();
+
+    expect(fetchCalls.filter((call) => /\/crypto-checkout$/.test(call.url))).toHaveLength(0);
+    expect(isHidden(window, '[data-crypto-modal-error]')).toBe(false);
+    expect(text(window, '[data-crypto-modal-error]')).toMatch(
+      /needs browser site storage to prevent duplicate payment orders/i,
+    );
   });
 
   it('crypto checkout stub provider: shows the manual-wire fallback with the order id', async () => {

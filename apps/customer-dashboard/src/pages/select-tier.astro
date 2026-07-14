@@ -619,6 +619,23 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       // singleton, so only one mint can be meaningfully in progress).
       const cryptoOrderCache = new Map();
       let cryptoRequestInFlight = false;
+
+      function persistentCryptoIdempotencyKey(tier) {
+        const storageKey = 'ds_crypto_idem_' + tier;
+        try {
+          let key = localStorage.getItem(storageKey);
+          if (!key) {
+            key =
+              typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? 'crypto-tier-' + crypto.randomUUID()
+                : 'crypto-tier-' + Date.now().toString();
+            localStorage.setItem(storageKey, key);
+          }
+          return localStorage.getItem(storageKey) === key ? key : null;
+        } catch {
+          return null;
+        }
+      }
       const CRYPTO_TIMEOUT_MS = 15_000;
 
       function setCryptoText(key, value) {
@@ -698,23 +715,12 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
             // Crypto is non-refundable, so a reload-created duplicate order is a
             // real double-payment risk. Kept random per browser (not a fixed
             // 'crypto-tier-<tier>') so it can't collide across accounts.
-            const idemStorageKey = 'ds_crypto_idem_' + tier;
-            let idempotencyKey = null;
-            try {
-              idempotencyKey = localStorage.getItem(idemStorageKey);
-            } catch {
-              /* storage unavailable — fall through to a fresh key */
-            }
+            const idempotencyKey = persistentCryptoIdempotencyKey(tier);
             if (!idempotencyKey) {
-              idempotencyKey =
-                typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-                  ? 'crypto-tier-' + crypto.randomUUID()
-                  : 'crypto-tier-' + Date.now().toString();
-              try {
-                localStorage.setItem(idemStorageKey, idempotencyKey);
-              } catch {
-                /* storage unavailable — the key still works for this page load */
-              }
+              showCryptoError(
+                'Secure crypto checkout needs browser site storage to prevent duplicate payment orders. Enable site storage and try again.',
+              );
+              return;
             }
             const res = await authedFetch('/v1/billing/crypto-checkout', {
               method: 'POST',

@@ -137,6 +137,12 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     );
   });
 
+  it('fails closed unless the crypto idempotency key survives a storage read-back', () => {
+    expect(body).toMatch(/function persistentCryptoIdempotencyKey\(tier\)/);
+    expect(body).toMatch(/return localStorage\.getItem\(storageKey\) === key \? key : null/);
+    expect(body).toMatch(/if \(!idempotencyKey\) \{[\s\S]*prevent duplicate payment orders/);
+  });
+
   it('"All tiers run the same engine — only caps + profile counts change" framing pinned', () => {
     expect(body).toMatch(
       /All tiers run the same engine\. Only concurrent caps and profile\s+counts change between them — there's no fingerprint or feature\s+gating/,

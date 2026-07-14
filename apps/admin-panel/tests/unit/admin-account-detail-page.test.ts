@@ -85,7 +85,7 @@ describe('admin account detail mutation reconciliation', () => {
       throw new Error('must not fetch without a bearer');
     };
     if (storageDenied) {
-      Object.defineProperty(dom.window.localStorage, 'getItem', {
+      Object.defineProperty(Object.getPrototypeOf(dom.window.localStorage), 'getItem', {
         configurable: true,
         value: () => {
           throw new Error('storage denied');
