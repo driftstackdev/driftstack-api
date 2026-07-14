@@ -104,6 +104,17 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
     expect(body).toMatch(/if \(!row\) throw new Error\('team_members upsert produced no row'\);/);
   });
 
+  it('acceptInviteAtomic: consumes exact id+token hash while pending, then sources membership authority from the consumed row', () => {
+    expect(body).toMatch(
+      /eq\(teamInvites\.id, input\.inviteId\),\s*\n?\s*eq\(teamInvites\.inviteTokenHash, input\.inviteTokenHash\),\s*\n?\s*isNull\(teamInvites\.acceptedAt\),/,
+    );
+    expect(body).toMatch(/if \(!consumed\) return null;/);
+    expect(body).toMatch(/ownerAccountId: consumed\.ownerAccountId,/);
+    expect(body).toMatch(/role: consumed\.role,/);
+    expect(body).toMatch(/invitedAt: consumed\.createdAt,/);
+    expect(body).toMatch(/invitedByAccountId: consumed\.invitedByAccountId,/);
+  });
+
   it('markInviteAccepted: 1-field set acceptedAt where id=inviteId', () => {
     expect(body).toMatch(
       /async markInviteAccepted\(inviteId: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(teamInvites\)\s*\n?\s*\.set\(\{ acceptedAt: at \}\)\s*\n?\s*\.where\(eq\(teamInvites\.id, inviteId\)\);\s*\n?\s*\}/,

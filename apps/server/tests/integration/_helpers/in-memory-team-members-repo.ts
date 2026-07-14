@@ -114,42 +114,40 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
   // eslint-disable-next-line @typescript-eslint/require-await
   async acceptInviteAtomic(input: {
     inviteId: string;
-    ownerAccountId: string;
+    inviteTokenHash: string;
     memberAccountId: string;
     memberEmail: string;
-    role: TeamRole;
-    invitedAt: Date;
-    invitedByAccountId: string | null;
     acceptedAt: Date;
   }): Promise<TeamMemberRow | null> {
-    // TOCTOU fix mirror — CAS-consume the invite (only while still un-accepted)
-    // then upsert the membership. No real concurrency here, but the SAME
-    // conditional semantics as the Drizzle transaction: if the invite is gone
-    // or already accepted, return null and DON'T recreate a membership.
+    // Exact-credential CAS mirror. A replaced token, removed invite, or already
+    // accepted invite returns null without creating a membership. Authority
+    // fields come from the consumed row, matching the Drizzle transaction.
     const invite = this.invites.find((inv) => inv.id === input.inviteId);
-    if (!invite || invite.acceptedAt !== null) return null;
+    if (!invite || invite.inviteTokenHash !== input.inviteTokenHash || invite.acceptedAt !== null) {
+      return null;
+    }
     invite.acceptedAt = input.acceptedAt;
     const existing = this.members.find(
       (m) =>
-        m.ownerAccountId === input.ownerAccountId && m.memberAccountId === input.memberAccountId,
+        m.ownerAccountId === invite.ownerAccountId && m.memberAccountId === input.memberAccountId,
     );
     if (existing) {
       // Mirror upsertMembership's onConflictDoUpdate: role/invitedAt/inviter
       // refresh, acceptedAt untouched ("member since" preserved).
-      existing.role = input.role;
-      existing.invitedAt = input.invitedAt;
-      existing.invitedByAccountId = input.invitedByAccountId;
+      existing.role = invite.role;
+      existing.invitedAt = invite.createdAt;
+      existing.invitedByAccountId = invite.invitedByAccountId;
       return existing;
     }
     const row: TeamMemberRow = {
       id: randomUUID(),
-      ownerAccountId: input.ownerAccountId,
+      ownerAccountId: invite.ownerAccountId,
       memberAccountId: input.memberAccountId,
       memberEmail: input.memberEmail,
-      role: input.role,
-      invitedAt: input.invitedAt,
+      role: invite.role,
+      invitedAt: invite.createdAt,
       acceptedAt: input.acceptedAt,
-      invitedByAccountId: input.invitedByAccountId,
+      invitedByAccountId: invite.invitedByAccountId,
       createdAt: new Date(),
     };
     this.members.push(row);

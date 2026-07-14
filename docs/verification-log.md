@@ -24927,3 +24927,31 @@ Verification:
   invite creates one new pending row;
 - schema and repository source guards pin the partial index, conflict target,
   partial predicate, and four-field authority refresh.
+
+## V-575 — team acceptance consumes the exact presented invite token
+
+**Date:** 2026-07-13
+
+Closed a stale-credential privilege race between invite lookup and atomic
+acceptance. The accept transaction previously compared only invite id and
+pending state. Because re-inviting refreshes the same pending row, an old link
+that had already been resolved could still consume the row after its hash and
+role were replaced, creating membership with the stale role snapshot.
+
+Acceptance now carries the presented token hash into the repository and
+compare-and-swaps id, exact hash, and pending state together. Membership owner,
+role, invitation time, and inviter are sourced from the row returned by that
+CAS instead of caller-supplied snapshot fields. A replacement winner therefore
+invalidates the old link cleanly, while an accept winner remains serialized
+against both replacement and member removal.
+
+Verification:
+
+- the real-PostgreSQL adapter test was red before repair and created an `admin`
+  membership after the row had been replaced with a `member` invite;
+- the same interleaving now rejects the stale link without a membership, then
+  accepts the fresh replacement with the `member` role;
+- a service-level mutation seam replaces the token during account-email lookup
+  and proves the public accept flow returns its normal used/not-found result;
+- repository and service source guards pin exact-hash CAS and consumed-row
+  authority.

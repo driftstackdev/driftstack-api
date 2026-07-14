@@ -101,32 +101,32 @@ function makeRepo(): {
       return Promise.resolve(row);
     },
     acceptInviteAtomic: (input) => {
-      // TOCTOU-fix mirror — CAS-consume the invite (only while un-accepted) then
-      // upsert the membership. Returns null (no membership created) when the
-      // invite is missing or already accepted.
+      // Exact-credential CAS mirror. Authority comes from the consumed invite.
       const inv = state.invites.find((i) => i.id === input.inviteId);
-      if (!inv || inv.acceptedAt !== null) return Promise.resolve(null);
+      if (!inv || inv.inviteTokenHash !== input.inviteTokenHash || inv.acceptedAt !== null) {
+        return Promise.resolve(null);
+      }
       inv.acceptedAt = input.acceptedAt;
       const existing = state.members.find(
         (m) =>
-          m.ownerAccountId === input.ownerAccountId && m.memberAccountId === input.memberAccountId,
+          m.ownerAccountId === inv.ownerAccountId && m.memberAccountId === input.memberAccountId,
       );
       if (existing) {
-        existing.role = input.role;
-        existing.invitedAt = input.invitedAt;
-        existing.invitedByAccountId = input.invitedByAccountId;
+        existing.role = inv.role;
+        existing.invitedAt = inv.createdAt;
+        existing.invitedByAccountId = inv.invitedByAccountId;
         return Promise.resolve(existing);
       }
       memberCounter += 1;
       const row: TeamMemberRow = {
         id: `mem_${memberCounter.toString()}`,
-        ownerAccountId: input.ownerAccountId,
+        ownerAccountId: inv.ownerAccountId,
         memberAccountId: input.memberAccountId,
         memberEmail: input.memberEmail,
-        role: input.role,
-        invitedAt: input.invitedAt,
+        role: inv.role,
+        invitedAt: inv.createdAt,
         acceptedAt: input.acceptedAt,
-        invitedByAccountId: input.invitedByAccountId,
+        invitedByAccountId: inv.invitedByAccountId,
         createdAt: new Date(),
       };
       state.members.push(row);
@@ -404,6 +404,41 @@ describe('V-553.B-13 TeamMembersService.accept — happy path', () => {
     await expect(
       svc.accept({ plaintextToken: 'plain-tok', acceptingAccountId: 'acc_b' }),
     ).rejects.toThrow(/not found or already used/i);
+  });
+
+  it('rejects a token replaced after lookup instead of accepting its stale role', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    state.invites.push({
+      id: 'inv_1',
+      ownerAccountId: 'acc_owner',
+      inviteeEmail: 'b@e.test',
+      role: 'admin',
+      inviteTokenHash: tokenHash('old-tok'),
+      inviteExpiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      invitedByAccountId: 'acc_owner',
+      acceptedAt: null,
+      createdAt: new Date(),
+    });
+    state.emailByAccount.set('acc_b', 'b@e.test');
+    const findAccountEmail = repo.findAccountEmail.bind(repo);
+    repo.findAccountEmail = async (accountId) => {
+      const emailAddress = await findAccountEmail(accountId);
+      const invite = state.invites[0];
+      if (invite) {
+        invite.inviteTokenHash = tokenHash('replacement-tok');
+        invite.role = 'member';
+      }
+      return emailAddress;
+    };
+
+    const svc = new TeamMembersService(repo, email, CONFIG);
+    await expect(
+      svc.accept({ plaintextToken: 'old-tok', acceptingAccountId: 'acc_b' }),
+    ).rejects.toThrow(/not found or already used/i);
+    expect(state.members).toHaveLength(0);
+    expect(state.invites[0]?.acceptedAt).toBeNull();
+    expect(state.invites[0]?.role).toBe('member');
   });
 });
 

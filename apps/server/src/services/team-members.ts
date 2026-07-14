@@ -81,22 +81,18 @@ export interface TeamMembersRepo {
     invitedByAccountId: string | null;
   }): Promise<TeamMemberRow>;
   /**
-   * ATOMIC accept — TOCTOU fix (2026-07-10). Compare-and-swap the invite
-   * (consume it only while still un-accepted) then upsert the membership in
-   * ONE transaction, so an accept-in-flight can't resurrect a membership that
-   * a concurrent removeMember is deleting. Returns null when the invite was no
-   * longer consumable (deleted or already accepted by a racing statement) — in
-   * which case NO membership is (re)created. Serialization point: accept and
-   * remove both mutate the invite row, so they can't interleave.
+   * ATOMIC accept. Compare-and-swap the exact invite id + presented token hash
+   * while it is still unaccepted, then source membership authority from that
+   * consumed row and upsert in ONE transaction. A concurrent re-invite makes
+   * an old token miss instead of applying its stale role; a concurrent removal
+   * makes the same CAS miss instead of allowing membership resurrection.
+   * Returns null on every loser path with no membership side effect.
    */
   acceptInviteAtomic(input: {
     inviteId: string;
-    ownerAccountId: string;
+    inviteTokenHash: string;
     memberAccountId: string;
     memberEmail: string;
-    role: TeamRole;
-    invitedAt: Date;
-    invitedByAccountId: string | null;
     acceptedAt: Date;
   }): Promise<TeamMemberRow | null>;
   /** Mark invite as accepted (idempotent). */
@@ -258,19 +254,17 @@ export class TeamMembersService {
       );
     }
     const now = new Date();
-    // TOCTOU fix (2026-07-10) — atomically consume the invite (CAS on the
-    // still-un-accepted row) AND upsert the membership in one transaction. If a
-    // concurrent removeMember already deleted this invite, the CAS matches no
-    // row and no membership is (re)created, so a just-removed member can't
-    // resurrect their seat via an accept that read the invite before removal.
+    // Atomically consume the exact presented token (CAS on id + hash + still
+    // unaccepted) AND upsert the membership in one transaction. Binding the
+    // hash prevents an invalidated old link from winning with its stale role
+    // after a concurrent re-invite; the repository sources authority fields
+    // from the row returned by the CAS, not this earlier snapshot. The same
+    // row mutation still serializes against concurrent member removal.
     const membership = await this.repo.acceptInviteAtomic({
       inviteId: invite.id,
-      ownerAccountId: invite.ownerAccountId,
+      inviteTokenHash: hash,
       memberAccountId: input.acceptingAccountId,
       memberEmail: acceptingEmail,
-      role: invite.role,
-      invitedAt: invite.createdAt,
-      invitedByAccountId: invite.invitedByAccountId,
       acceptedAt: now,
     });
     if (membership === null) {

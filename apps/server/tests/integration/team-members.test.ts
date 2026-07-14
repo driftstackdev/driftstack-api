@@ -420,12 +420,9 @@ describe('TeamMembersService.listMembers + listPendingInvites + removeMember', (
     // First atomic accept consumes the invite + creates the membership.
     const first = await repo.acceptInviteAtomic({
       inviteId: invite.id,
-      ownerAccountId: OWNER,
+      inviteTokenHash: invite.inviteTokenHash,
       memberAccountId: INVITEE_ACCOUNT,
       memberEmail: INVITEE_EMAIL,
-      role: 'member',
-      invitedAt: invite.createdAt,
-      invitedByAccountId: INVITER,
       acceptedAt: new Date(),
     });
     expect(first).not.toBeNull();
@@ -435,12 +432,9 @@ describe('TeamMembersService.listMembers + listPendingInvites + removeMember', (
     // returns null without touching the membership set.
     const secondAlreadyAccepted = await repo.acceptInviteAtomic({
       inviteId: invite.id,
-      ownerAccountId: OWNER,
+      inviteTokenHash: invite.inviteTokenHash,
       memberAccountId: INVITEE_ACCOUNT,
       memberEmail: INVITEE_EMAIL,
-      role: 'admin',
-      invitedAt: invite.createdAt,
-      invitedByAccountId: INVITER,
       acceptedAt: new Date(),
     });
     expect(secondAlreadyAccepted).toBeNull();
@@ -448,12 +442,9 @@ describe('TeamMembersService.listMembers + listPendingInvites + removeMember', (
     // An entirely unknown invite id also returns null.
     const unknown = await repo.acceptInviteAtomic({
       inviteId: '00000000-0000-4000-8000-0000000000ff',
-      ownerAccountId: OWNER,
+      inviteTokenHash: invite.inviteTokenHash,
       memberAccountId: INVITEE_ACCOUNT,
       memberEmail: INVITEE_EMAIL,
-      role: 'member',
-      invitedAt: new Date(),
-      invitedByAccountId: INVITER,
       acceptedAt: new Date(),
     });
     expect(unknown).toBeNull();

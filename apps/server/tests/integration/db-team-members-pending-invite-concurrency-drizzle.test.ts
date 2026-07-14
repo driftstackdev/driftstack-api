@@ -47,7 +47,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'pending team-invite authority (Drizzle path, real Postgres)',
   () => {
     it('atomically collapses mixed-role refreshes while retaining accepted history', async () => {
-      if (!dbReachable || !client) return;
+      if (!dbReachable || !client) {
+        throw new Error('real PostgreSQL setup failed');
+      }
       const indexes = await client`
         SELECT indexdef
           FROM pg_indexes
@@ -114,6 +116,68 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       `;
       expect(history).toHaveLength(2);
       expect(history.filter((row) => row.accepted_at === null)).toHaveLength(1);
+    });
+
+    it('rejects an old invite snapshot after a concurrent token and role replacement', async () => {
+      if (!dbReachable || !client) {
+        throw new Error('real PostgreSQL setup failed');
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleTeamMembersRepo({ client, db, close: async () => {} });
+      const ownerAccountId = randomUUID();
+      const acceptingAccountId = randomUUID();
+      const inviteeEmail = `invite-replace-${randomUUID()}@test.local`;
+      const oldTokenHash = `old-${randomUUID()}`;
+      seededAccountIds.push(ownerAccountId, acceptingAccountId);
+      await client`
+        INSERT INTO accounts (id, email)
+        VALUES
+          (${ownerAccountId}, ${`owner-${ownerAccountId}@test.local`}),
+          (${acceptingAccountId}, ${inviteeEmail})
+      `;
+
+      const oldInvite = await repo.upsertInvite({
+        ownerAccountId,
+        inviteeEmail,
+        role: 'admin',
+        inviteTokenHash: oldTokenHash,
+        inviteExpiresAt: new Date(Date.now() + 60_000),
+        invitedByAccountId: ownerAccountId,
+      });
+      const replacementTokenHash = `replacement-${randomUUID()}`;
+      const replacementInvite = await repo.upsertInvite({
+        ownerAccountId,
+        inviteeEmail,
+        role: 'member',
+        inviteTokenHash: replacementTokenHash,
+        inviteExpiresAt: new Date(Date.now() + 60_000),
+        invitedByAccountId: ownerAccountId,
+      });
+
+      const staleAccept = await repo.acceptInviteAtomic({
+        inviteId: oldInvite.id,
+        inviteTokenHash: oldTokenHash,
+        memberAccountId: acceptingAccountId,
+        memberEmail: inviteeEmail,
+        acceptedAt: new Date(),
+      });
+      expect(staleAccept).toBeNull();
+      const memberships = await client`
+        SELECT role
+          FROM team_members
+         WHERE owner_account_id = ${ownerAccountId}
+           AND member_account_id = ${acceptingAccountId}
+      `;
+      expect(memberships).toHaveLength(0);
+
+      const freshAccept = await repo.acceptInviteAtomic({
+        inviteId: replacementInvite.id,
+        inviteTokenHash: replacementTokenHash,
+        memberAccountId: acceptingAccountId,
+        memberEmail: inviteeEmail,
+        acceptedAt: new Date(),
+      });
+      expect(freshAccept?.role).toBe('member');
     });
   },
 );

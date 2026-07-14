@@ -19,6 +19,9 @@
 //   upsertInvite refresh sets 4 fields — inviteTokenHash +
 //   inviteExpiresAt + role + invitedByAccountId.
 //
+//   acceptInviteAtomic exact-token CAS — id + inviteTokenHash +
+//   acceptedAt IS NULL; authority sourced from the consumed row.
+//
 //   upsertMembership framing — 'Use ON CONFLICT (owner, member) DO
 //   NOTHING via INSERT ... .returning() — falls through to a SELECT
 //   on conflict so we always return a TeamMemberRow'.
@@ -115,6 +118,15 @@ describe('W1000 db/team-members-repo V-298c cross-source invariant', () => {
     expect(p).toMatch(/role: input\.role,/);
     expect(p).toMatch(/invitedByAccountId: input\.invitedByAccountId,/);
     expect(p).toMatch(/if \(!row\) throw new Error\('team_invites upsert returned no row'\);/);
+  });
+
+  it('CRITICAL acceptInviteAtomic exact-token CAS and consumed-row authority prevent a replaced old role from being accepted.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/eq\(teamInvites\.id, input\.inviteId\),/);
+    expect(p).toMatch(/eq\(teamInvites\.inviteTokenHash, input\.inviteTokenHash\),/);
+    expect(p).toMatch(/isNull\(teamInvites\.acceptedAt\),/);
+    expect(p).toMatch(/ownerAccountId: consumed\.ownerAccountId,/);
+    expect(p).toMatch(/role: consumed\.role,/);
   });
 
   // ─── upsertMembership onConflictDoUpdate (security fix 2026-06-30) ──

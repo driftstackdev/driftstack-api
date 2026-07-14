@@ -24,8 +24,8 @@
 //   • invite: normalize email lowercase + @-check; BadRequestError
 //     on invalid; default role = 'member'.
 //   • accept: token-hash lookup; expired → BadRequestError; email
-//     mismatch → ConflictError (URL-share defence); idempotent
-//     row + markInviteAccepted.
+//     mismatch → ConflictError (URL-share defence); exact-hash
+//     atomic consume prevents stale-token role acceptance.
 //   • listPendingInvites: filters acceptedAt===null AND
 //     inviteExpiresAt >= now.
 //   • V-298f account-audit: 3-action union (team.member_invited /
@@ -131,7 +131,7 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     );
   });
 
-  it('accept: token-hash lookup → NotFoundError if missing; expired → BadRequestError; email mismatch → ConflictError (URL-share defence); idempotent upsertMembership + markInviteAccepted + invalidateAuthCache', () => {
+  it('accept: lookup/error guards + exact presented-hash atomic consume + invalidateAuthCache', () => {
     expect(body).toMatch(
       /The accepting account's email MUST match\s*\n?\s*\*\s*the invite's invitee email — prevents accidentally accepting an\s*\n?\s*\*\s*invite addressed to someone else even if they shared the URL\./,
     );
@@ -143,6 +143,12 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     );
     expect(body).toMatch(
       /if \(acceptingEmail\.trim\(\)\.toLowerCase\(\) !== invite\.inviteeEmail\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'The signed-in account does not match the invitee email\. Sign in with the address the invite was sent to, or ask for a fresh invite\.',/,
+    );
+    expect(body).toMatch(
+      /const membership = await this\.repo\.acceptInviteAtomic\(\{\s*\n?\s*inviteId: invite\.id,\s*\n?\s*inviteTokenHash: hash,\s*\n?\s*memberAccountId: input\.acceptingAccountId,\s*\n?\s*memberEmail: acceptingEmail,\s*\n?\s*acceptedAt: now,\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /if \(membership === null\) \{\s*\n?\s*throw new NotFoundError\('Invite not found or already used\.'\);/,
     );
     expect(body).toMatch(/await this\.invalidateAuthCache\(input\.acceptingAccountId\);/);
     expect(body).toMatch(
@@ -182,6 +188,9 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     expect(body).toMatch(/findInviteByTokenHash\(hash: string\): Promise<TeamInviteRow \| null>;/);
     expect(body).toMatch(/findAccountEmail\(accountId: string\): Promise<string \| null>;/);
     expect(body).toMatch(/upsertMembership\(input: \{/);
+    expect(body).toMatch(
+      /acceptInviteAtomic\(input: \{\s*\n?\s*inviteId: string;\s*\n?\s*inviteTokenHash: string;\s*\n?\s*memberAccountId: string;\s*\n?\s*memberEmail: string;\s*\n?\s*acceptedAt: Date;\s*\n?\s*\}\): Promise<TeamMemberRow \| null>;/,
+    );
     expect(body).toMatch(/markInviteAccepted\(inviteId: string, at: Date\): Promise<void>;/);
     expect(body).toMatch(/listMembers\(ownerAccountId: string\): Promise<TeamMemberRow\[\]>;/);
     expect(body).toMatch(

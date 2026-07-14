@@ -141,46 +141,45 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
 
   async acceptInviteAtomic(input: {
     inviteId: string;
-    ownerAccountId: string;
+    inviteTokenHash: string;
     memberAccountId: string;
     memberEmail: string;
-    role: TeamRole;
-    invitedAt: Date;
-    invitedByAccountId: string | null;
     acceptedAt: Date;
   }): Promise<TeamMemberRow | null> {
-    // TOCTOU fix (2026-07-10 audit) — compare-and-swap consume the invite THEN
-    // upsert the membership in one transaction, so a just-removed member cannot
-    // resurrect their seat via a concurrent accept. The CAS
-    // (set acceptedAt WHERE id = inviteId AND acceptedAt IS NULL) is the
-    // serialization point: if a concurrent removeMemberWithInvites deleted this
-    // invite first, the CAS matches 0 rows and we return null WITHOUT creating a
-    // membership. The upsert body mirrors upsertMembership exactly (same
-    // onConflictDoUpdate, acceptedAt excluded from SET to preserve "member
-    // since"), just bound to the transaction handle.
+    // Compare-and-swap the exact presented credential, then source owner, role,
+    // invite time, and inviter from the consumed database row. A concurrent
+    // re-invite that replaces the hash makes the stale accept miss; a concurrent
+    // remove that deletes the row also makes it miss. The row mutation remains
+    // the shared serialization point for both races.
     return this.database.db.transaction(async (tx) => {
-      const consumed = await tx
+      const [consumed] = await tx
         .update(teamInvites)
         .set({ acceptedAt: input.acceptedAt })
-        .where(and(eq(teamInvites.id, input.inviteId), isNull(teamInvites.acceptedAt)))
+        .where(
+          and(
+            eq(teamInvites.id, input.inviteId),
+            eq(teamInvites.inviteTokenHash, input.inviteTokenHash),
+            isNull(teamInvites.acceptedAt),
+          ),
+        )
         .returning();
-      if (consumed.length === 0) return null;
+      if (!consumed) return null;
       const [row] = await tx
         .insert(teamMembers)
         .values({
-          ownerAccountId: input.ownerAccountId,
+          ownerAccountId: consumed.ownerAccountId,
           memberAccountId: input.memberAccountId,
-          role: input.role,
-          invitedAt: input.invitedAt,
+          role: consumed.role,
+          invitedAt: consumed.createdAt,
           acceptedAt: input.acceptedAt,
-          invitedByAccountId: input.invitedByAccountId,
+          invitedByAccountId: consumed.invitedByAccountId,
         })
         .onConflictDoUpdate({
           target: [teamMembers.ownerAccountId, teamMembers.memberAccountId],
           set: {
-            role: input.role,
-            invitedAt: input.invitedAt,
-            invitedByAccountId: input.invitedByAccountId,
+            role: consumed.role,
+            invitedAt: consumed.createdAt,
+            invitedByAccountId: consumed.invitedByAccountId,
           },
         })
         .returning();
