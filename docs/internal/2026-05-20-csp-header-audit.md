@@ -200,3 +200,15 @@ Every policy now enforces `default-src 'self'`, `base-uri 'self'`, `object-src '
 connect sources, `manifest-src 'self'`, and `upgrade-insecure-requests`. The errors site has no
 JavaScript and uses the stricter `script-src 'none'; connect-src 'none'`. A cross-app regression
 test pins the exact per-surface contracts and rejects remote script allowances.
+
+## 2026-07-14 follow-up — dashboard one-time URLs send no referrer
+
+The authenticated dashboard now uses `Referrer-Policy: no-referrer` instead of
+the family default `strict-origin-when-cross-origin`. OAuth callback, magic-link,
+password-reset, and email-verification URLs carry one-time code/state/token query
+parameters. The W3C Referrer Policy algorithm sends a full stripped URL for
+same-origin requests under `strict-origin-when-cross-origin`, so ordinary
+same-origin asset or navigation traffic could copy those credentials into the
+static origin's `Referer` logs. `no-referrer` suppresses the header for every
+dashboard request. Admin, marketing, docs, and status retain their audited
+policies because they do not share this query-credential route family.

@@ -25933,3 +25933,30 @@ Verification:
 - the complete OAuth-client route/state/provider/service/content gate passes
   with 15 files and 164/164 tests, plus strict server source/test TypeScript,
   targeted lint/format, diff, and hooks.
+
+## V-608 — dashboard one-time URLs do not leak through referrers
+
+**Date:** 2026-07-14
+
+Changed the customer dashboard's Cloudflare Pages policy from
+`strict-origin-when-cross-origin` to `no-referrer`. OAuth callback, magic-link,
+password-reset, and email-verification pages carry one-time code, state, or token
+query parameters. The former policy protected cross-origin traffic but still
+sent the full stripped URL on same-origin requests, allowing ordinary asset or
+navigation requests to copy those credentials into static-origin `Referer`
+logs.
+
+The stricter policy is intentionally dashboard-only. Admin, marketing, docs,
+status, and the JSON API retain their existing audited values. CSP, HSTS,
+clickjacking, MIME-sniffing, indexing, permissions, cache, and network-origin
+directives are unchanged.
+
+Verification:
+
+- the authenticated-frontend header guard requires exactly one dashboard
+  `Referrer-Policy: no-referrer`, rejects the previous value there, and keeps
+  the admin policy exact;
+- the customer Dashboard production build copies the hardened source header
+  byte-for-byte into `dist/_headers`;
+- focused cross-app header/CSP guards, strict server test TypeScript, formatting,
+  diff, and commit hooks pass.

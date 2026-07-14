@@ -28,11 +28,13 @@ const SURFACES = [
     name: 'customer-dashboard',
     path: 'apps/customer-dashboard/public/_headers',
     title: '# Cloudflare Pages security headers for the customer dashboard.',
+    referrerPolicy: 'no-referrer',
   },
   {
     name: 'admin-panel',
     path: 'apps/admin-panel/public/_headers',
     title: '# Cloudflare Pages security headers for the admin panel.',
+    referrerPolicy: 'strict-origin-when-cross-origin',
   },
 ] as const;
 
@@ -68,9 +70,11 @@ describe('authenticated-frontend _headers security parity (customer-dashboard + 
         );
       });
 
-      it('CRITICAL: X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin', () => {
+      it(`CRITICAL: X-Content-Type-Options: nosniff + exact Referrer-Policy: ${surface.referrerPolicy}`, () => {
         expect(body).toMatch(/^ {2}X-Content-Type-Options: nosniff$/m);
-        expect(body).toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
+        expect(body.match(/^ {2}Referrer-Policy: .+$/gm)).toEqual([
+          `  Referrer-Policy: ${surface.referrerPolicy}`,
+        ]);
       });
 
       it('Permissions-Policy locks the sensitive sensor/payment surface (camera + microphone + geolocation + payment disabled)', () => {
@@ -85,4 +89,15 @@ describe('authenticated-frontend _headers security parity (customer-dashboard + 
       });
     });
   }
+
+  it('customer dashboard never sends one-time query credentials through Referer', () => {
+    const body = readFileSync(
+      resolve(REPO_ROOT, 'apps/customer-dashboard/public/_headers'),
+      'utf8',
+    );
+    expect(body).toMatch(/^ {2}Referrer-Policy: no-referrer$/m);
+    expect(body).not.toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
+    expect(body).toMatch(/OAuth callback, magic-link,/);
+    expect(body).toMatch(/full URL on same-origin asset\/navigation requests/);
+  });
 });

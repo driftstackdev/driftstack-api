@@ -44,10 +44,12 @@
 # X-Content-Type-Options nosniff: blocks browsers from MIME-sniffing
 #   the response body (especially relevant for the avatar presigned
 #   URLs which could otherwise be re-interpreted as HTML).
-# Referrer-Policy strict-origin-when-cross-origin: outbound clicks
-#   from the dashboard (Stripe portal, docs, etc.) see only our
-#   origin in the Referer header, not the full dashboard path the
-#   customer was on.
+# Referrer-Policy no-referrer: the OAuth callback, magic-link,
+#   password-reset, and email-verification routes carry one-time
+#   credentials in their query strings. strict-origin-when-cross-origin
+#   still sends that full URL on same-origin asset/navigation requests,
+#   which can place credentials in static-origin logs. The authenticated
+#   dashboard therefore sends no Referer, even to itself.
 # Permissions-Policy: deny camera/microphone/geolocation/USB/payment
 #   etc. — the dashboard never needs any of these; explicit denial
 #   eliminates an attack surface category entirely.
@@ -65,5 +67,5 @@
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   X-Robots-Tag: noindex, nofollow
-  Referrer-Policy: strict-origin-when-cross-origin
+  Referrer-Policy: no-referrer
   Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
