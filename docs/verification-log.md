@@ -25648,3 +25648,41 @@ Verification:
 - widened auth, repository, and Team RBAC coverage passes 18 files and 198 tests;
 - strict server source/test typechecking, targeted linting, formatting, diff,
   and hooks pass.
+
+## V-598 — cached rate-limit policy revalidates live authority
+
+**Date:** 2026-07-14
+
+Removed the final invalidation-only resource-policy snapshot from positive
+authentication contexts. Clearing or tightening a per-account rate-limit
+override commits its PostgreSQL change before a best-effort auth-cache
+generation bump. If that bump was lost, a cached permissive capacity/refill
+could previously remain in force for up to 30 seconds. Lazy expiry protected
+only an elapsed `expires_at`; it could not observe deletion or replacement.
+
+Every positive API-key and web-session cache hit now loads active override rows
+as the fourth parallel authority read and reconstructs the context's keyed
+override map before route middleware or customer quota responses use it. This
+keeps deletion, replacement, and database-filtered expiry authoritative while
+retaining generation invalidation as a performance accelerator. The token
+bucket's existing atomic capacity clamp applies a lower live capacity to any
+larger stored token balance on that same request.
+
+API-key hits still bypass scrypt, and all four indexed authority reads run in
+parallel. If PostgreSQL authority is unavailable, the request fails closed
+instead of trusting the cached permissive policy.
+
+Verification:
+
+- API-key unit proofs warm a permissive override, then clear or tighten only
+  the live repository rows and observe the rebuilt context on the next cache
+  hit; a web-session control proves the same refresh path;
+- the real HTTP/Redis/PostgreSQL spec warms a physical positive cache under a
+  global capacity of 9,999, mutates SQL directly without a generation bump,
+  and observes either the tier default after deletion or limit `7` with
+  remaining `6` after tightening, proving the live config and atomic clamp;
+- combined real cache-authority coverage passes all 8 Playwright cases;
+- widened auth, Team RBAC, override, and rate-limit coverage passes 22 files
+  and 251 tests;
+- strict server source/test typechecking, targeted linting, formatting, diff,
+  and hooks pass.

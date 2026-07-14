@@ -11,7 +11,8 @@
 //     verify); else → web session (sha256 lookup against
 //     web_sessions row).
 //   • Cache fast path: re-check expiresAt on every read; exact live
-//     PostgreSQL account + credential + team authority on every hit;
+//     PostgreSQL account + credential + team + rate-override authority
+//     on every hit;
 //     API-key hits retain their scrypt bypass; cache.get/set
 //     wrapped in try/catch for graceful degradation.
 //   • Slow-path API key: 5 failure modes (no row → InvalidKey;
@@ -128,10 +129,10 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     );
   });
 
-  it('positive cache hits revalidate live account + exact credential + team authority while bypassing scrypt', () => {
+  it('positive cache hits revalidate account + credential + team + rate-override authority while bypassing scrypt', () => {
     expect(body).toMatch(/if \(cached\.webSession !== null\) \{/);
     expect(body).toMatch(
-      /const \[liveSession, liveAccount, liveTeams\] = await Promise\.all\(\[\s*repo\.findActiveWebSession\(\{ tokenHash: sha, now \}\),\s*repo\.getAccount\(cached\.account\.id\),\s*repo\.findTeamMemberships\(cached\.account\.id\),\s*\]\);/,
+      /const \[liveSession, liveAccount, liveTeams, liveOverrideRows\] = await Promise\.all\(\[\s*repo\.findActiveWebSession\(\{ tokenHash: sha, now \}\),\s*repo\.getAccount\(cached\.account\.id\),\s*repo\.findTeamMemberships\(cached\.account\.id\),\s*repo\.findActiveRateLimitOverrides\(cached\.account\.id, now\),\s*\]\);/,
     );
     expect(body).toMatch(/liveSession\.id !== cached\.webSession\.id/);
     expect(body).toMatch(/liveSession\.accountId !== cached\.account\.id/);
@@ -139,15 +140,17 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     expect(body).toMatch(/cached\.apiKey\.id !== `wsk_\$\{liveSession\.id\}`/);
     expect(body).toMatch(/mfaSatisfiedAt: liveSession\.mfaSatisfiedAt/);
     expect(body).toMatch(/teams: liveTeams,/);
+    expect(body).toMatch(/rateLimitOverrides: indexRateLimitOverrides\(liveOverrideRows\),/);
     expect(body).toMatch(
-      /const \[liveApiKey, liveAccount, liveTeams\] = await Promise\.all\(\[\s*repo\.findApiKeyByPrefix\(cached\.apiKey\.keyPrefix\),\s*repo\.getAccount\(cached\.account\.id\),\s*repo\.findTeamMemberships\(cached\.account\.id\),\s*\]\);/,
+      /const \[liveApiKey, liveAccount, liveTeams, liveOverrideRows\] = await Promise\.all\(\[\s*repo\.findApiKeyByPrefix\(cached\.apiKey\.keyPrefix\),\s*repo\.getAccount\(cached\.account\.id\),\s*repo\.findTeamMemberships\(cached\.account\.id\),\s*repo\.findActiveRateLimitOverrides\(cached\.account\.id, now\),\s*\]\);/,
     );
     expect(body).toMatch(/liveApiKey\.keyHash !== cached\.apiKey\.keyHash/);
     expect(body).toMatch(/if \(liveApiKey\.revokedAt !== null\) throw new RevokedKeyError\(\);/);
+    expect(body).toMatch(/rateLimitOverrides: indexRateLimitOverrides\(liveOverrideRows\),/);
+    expect(body).toMatch(/API-key hits still avoid scrypt/);
     expect(body).toMatch(
-      /return \{ \.\.\.cached, account: liveAccount, apiKey: liveApiKey, teams: liveTeams \};/,
+      /function indexRateLimitOverrides\(\s*rows: readonly RateLimitOverride\[\],\s*\): Record<string, RateLimitOverride> \{/,
     );
-    expect(body).toMatch(/API-key hits still avoid the expensive scrypt verification/);
   });
 
   it('V-168 isApiKeyShape: ds_-prefix dispatch (API key path) else web session path', () => {

@@ -101,8 +101,8 @@ export interface AccountAuthRepo {
   touchApiKeyLastUsed(id: string, at: Date): Promise<void>;
   /**
    * Load the active (unexpired) rate-limit overrides for an account.
-   * Called once per auth-cache miss; the overrides are then cached
-   * inside the AccountContext until the next invalidation.
+   * Called on auth-cache misses and positive hits so a cleared or
+   * tightened override is authoritative even if invalidation is lost.
    */
   findActiveRateLimitOverrides(accountId: string, now: Date): Promise<RateLimitOverride[]>;
   /**
@@ -204,9 +204,9 @@ export interface AccountContext {
   apiKey: ApiKeyRow;
   /**
    * Active (unexpired) rate-limit overrides for this account, keyed by
-   * bucketKey. Loaded once on auth-cache miss; subsequent reads come
-   * from the cache. When an override expires, `rateLimitConsume` falls
-   * through to the tier default (lazy expiry — no background sweep).
+   * bucketKey. Refreshed on every positive cache hit. When an override
+   * expires, `rateLimitConsume` also falls through to the tier default
+   * lazily, without a background sweep.
    */
   rateLimitOverrides: Record<string, RateLimitOverride>;
   /**
@@ -302,18 +302,19 @@ export async function authenticate(
       }
 
       // Redis generation bumps are cache accelerators, not authority. Every
-      // positive hit re-reads the live account, exact credential, and team
-      // grants in parallel, so a process crash or Redis failure after a
-      // PostgreSQL revoke/rotate/reset/MFA/status/membership mutation cannot
-      // extend authorization to the cache TTL. These are indexed reads;
-      // API-key hits still avoid the expensive scrypt verification.
+      // positive hit re-reads the live account, exact credential, team grants,
+      // and active rate-limit overrides in parallel, so a process crash or
+      // Redis failure after a PostgreSQL revoke/rotate/reset/MFA/status/
+      // membership/override mutation cannot extend stale authority to the
+      // cache TTL. These are indexed reads; API-key hits still avoid scrypt.
       if (cached.webSession !== null) {
         // findActiveWebSession joins the session to the account's current auth
         // epoch and filters revocation/expiry.
-        const [liveSession, liveAccount, liveTeams] = await Promise.all([
+        const [liveSession, liveAccount, liveTeams, liveOverrideRows] = await Promise.all([
           repo.findActiveWebSession({ tokenHash: sha, now }),
           repo.getAccount(cached.account.id),
           repo.findTeamMemberships(cached.account.id),
+          repo.findActiveRateLimitOverrides(cached.account.id, now),
         ]);
         if (
           liveSession === null ||
@@ -345,6 +346,7 @@ export async function authenticate(
           ...cached,
           account: liveAccount,
           teams: liveTeams,
+          rateLimitOverrides: indexRateLimitOverrides(liveOverrideRows),
           apiKey: {
             ...cached.apiKey,
             scopes,
@@ -359,10 +361,11 @@ export async function authenticate(
         };
       }
 
-      const [liveApiKey, liveAccount, liveTeams] = await Promise.all([
+      const [liveApiKey, liveAccount, liveTeams, liveOverrideRows] = await Promise.all([
         repo.findApiKeyByPrefix(cached.apiKey.keyPrefix),
         repo.getAccount(cached.account.id),
         repo.findTeamMemberships(cached.account.id),
+        repo.findActiveRateLimitOverrides(cached.account.id, now),
       ]);
       if (
         liveApiKey === null ||
@@ -386,9 +389,15 @@ export async function authenticate(
       if (liveAccount.status === 'deleted') throw new InvalidKeyError();
 
       // last_used_at remains sampled at cache TTL granularity. Live key scopes,
-      // provenance, expiry, account tier/status/profile authority, and team
-      // roles are refreshed even if distributed invalidation was lost.
-      return { ...cached, account: liveAccount, apiKey: liveApiKey, teams: liveTeams };
+      // provenance, expiry, account tier/status/profile authority, team roles,
+      // and resource-limit policy are refreshed if invalidation was lost.
+      return {
+        ...cached,
+        account: liveAccount,
+        apiKey: liveApiKey,
+        teams: liveTeams,
+        rateLimitOverrides: indexRateLimitOverrides(liveOverrideRows),
+      };
     }
   }
 
@@ -513,10 +522,7 @@ async function slowPathApiKey(
     repo.findActiveRateLimitOverrides(account.id, now),
     repo.findTeamMemberships(account.id),
   ]);
-  const rateLimitOverrides: Record<string, RateLimitOverride> = {};
-  for (const o of overrideRows) {
-    rateLimitOverrides[o.bucketKey] = o;
-  }
+  const rateLimitOverrides = indexRateLimitOverrides(overrideRows);
   const ctx: AccountContext = {
     account,
     apiKey,
@@ -620,10 +626,7 @@ async function slowPathWebSession(
     repo.findActiveRateLimitOverrides(account.id, now),
     repo.findTeamMemberships(account.id),
   ]);
-  const rateLimitOverrides: Record<string, RateLimitOverride> = {};
-  for (const o of overrideRows) {
-    rateLimitOverrides[o.bucketKey] = o;
-  }
+  const rateLimitOverrides = indexRateLimitOverrides(overrideRows);
 
   // Synthetic ApiKeyRow shape so downstream consumers don't need to
   // branch on auth mode. `id = wsk_<webSessionId>` makes the auth
@@ -689,6 +692,14 @@ async function slowPathWebSession(
   }
 
   return ctx;
+}
+
+function indexRateLimitOverrides(
+  rows: readonly RateLimitOverride[],
+): Record<string, RateLimitOverride> {
+  const indexed: Record<string, RateLimitOverride> = {};
+  for (const row of rows) indexed[row.bucketKey] = row;
+  return indexed;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

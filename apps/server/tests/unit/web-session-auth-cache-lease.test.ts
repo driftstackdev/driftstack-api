@@ -4,6 +4,7 @@ import {
   authenticate,
   type AccountAuthRepo,
   type AccountRow,
+  type RateLimitOverride,
   type WebSessionAuthRow,
 } from '../../src/services/auth.js';
 import { InMemoryAuthCache, sha256Hex } from '../../src/services/auth-cache.js';
@@ -196,5 +197,29 @@ describe('web-session positive-cache generation lease', () => {
       staffEmails,
     );
     expect(refreshed.apiKey.scopes).toEqual(['read', 'write', 'account_owner']);
+  });
+
+  it('refreshes active rate-limit overrides on a positive web-session hit', async () => {
+    const cache = new InMemoryAuthCache();
+    let liveOverrides: RateLimitOverride[] = [
+      {
+        bucketKey: 'global',
+        capacity: 9_999,
+        refillPerSecond: 99,
+        expiresAt: new Date('2026-07-15T00:00:00.000Z'),
+      },
+    ];
+    const repo = repoWith({
+      findActiveRateLimitOverrides: () => Promise.resolve(liveOverrides),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    liveOverrides = [{ ...liveOverrides[0]!, capacity: 7, refillPerSecond: 0.5 }];
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).resolves.toMatchObject({
+      rateLimitOverrides: { global: { capacity: 7, refillPerSecond: 0.5 } },
+    });
   });
 });

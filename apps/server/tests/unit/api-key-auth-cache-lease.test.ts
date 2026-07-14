@@ -7,6 +7,7 @@ import {
   type AccountAuthRepo,
   type AccountRow,
   type ApiKeyRow,
+  type RateLimitOverride,
   type TeamMembership,
 } from '../../src/services/auth.js';
 import { InMemoryAuthCache, sha256Hex } from '../../src/services/auth-cache.js';
@@ -298,6 +299,62 @@ describe('API-key positive-cache generation lease', () => {
     expect(resolveEffectiveAccount(refreshed, 'acc_owner_role_authority')).toMatchObject({
       kind: 'team',
       role: 'member',
+    });
+  });
+
+  it('drops a cleared rate-limit override from a positive cache hit without invalidation', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let liveOverrides: RateLimitOverride[] = [
+      {
+        bucketKey: 'global',
+        capacity: 9_999,
+        refillPerSecond: 99,
+        expiresAt: new Date('2026-07-15T00:00:00.000Z'),
+      },
+    ];
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(key),
+      findActiveRateLimitOverrides: () => Promise.resolve(liveOverrides),
+    });
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z')),
+    ).resolves.toMatchObject({ rateLimitOverrides: { global: { capacity: 9_999 } } });
+    liveOverrides = [];
+
+    const refreshed = await authenticate(
+      repo,
+      PLAINTEXT,
+      cache,
+      new Date('2026-07-14T00:00:01.000Z'),
+    );
+    expect(refreshed.rateLimitOverrides).toEqual({});
+  });
+
+  it('replaces a cached permissive rate-limit override with its live tightened value', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    let liveOverrides: RateLimitOverride[] = [
+      {
+        bucketKey: 'global',
+        capacity: 9_999,
+        refillPerSecond: 99,
+        expiresAt: new Date('2026-07-15T00:00:00.000Z'),
+      },
+    ];
+    const repo = repoWith({
+      findApiKeyByPrefix: () => Promise.resolve(key),
+      findActiveRateLimitOverrides: () => Promise.resolve(liveOverrides),
+    });
+
+    await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z'));
+    liveOverrides = [{ ...liveOverrides[0]!, capacity: 7, refillPerSecond: 0.5 }];
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z')),
+    ).resolves.toMatchObject({
+      rateLimitOverrides: { global: { capacity: 7, refillPerSecond: 0.5 } },
     });
   });
 });
