@@ -29,13 +29,19 @@ interface MockFetchCall {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
+  token?: string | null;
+  storageDenied?: boolean;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
   html: string,
   opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+): {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  hydratedCount: () => number;
+} {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
@@ -56,7 +62,21 @@ function setUpDom(
     fetchCalls.push(call);
     return Promise.resolve().then(() => opts.route(call));
   };
-  window.localStorage.setItem('ds_web_session_token', 'tok');
+  if (opts.storageDenied === true) {
+    Object.defineProperty(window.localStorage, 'getItem', {
+      configurable: true,
+      value: () => {
+        throw new Error('storage denied');
+      },
+    });
+  } else if (opts.token !== null) {
+    window.localStorage.setItem('ds_web_session_token', opts.token ?? 'tok');
+  }
+  let hydrated = 0;
+  // @ts-expect-error — injected by DashboardLayout
+  window.dashboardHydrated = () => {
+    hydrated += 1;
+  };
   const cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout
   window.driftstackConfirm = () => Promise.resolve(cr);
@@ -67,7 +87,11 @@ function setUpDom(
   installDashboardDeadline(window);
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return {
+    window: window as JSDOM['window'],
+    fetchCalls,
+    hydratedCount: () => hydrated,
+  };
 }
 
 function json(obj: unknown, status = 200): Response {
@@ -109,6 +133,103 @@ describe('settings page — email notification preferences', () => {
       return json({}, 404);
     };
   }
+
+  it.each([
+    ['signed out', { token: null }],
+    ['storage denied', { storageDenied: true }],
+  ])(
+    '%s: releases hydration with zero network and keeps profile/BYOK mutations inert',
+    async (_label, auth) => {
+      const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
+        ...auth,
+        route: () => {
+          throw new Error('must not fetch without a bearer');
+        },
+      });
+      win = window;
+      await flush();
+
+      expect(fetchCalls).toHaveLength(0);
+      expect(hydratedCount()).toBe(1);
+      expect(window.document.querySelector('[data-banner]')?.textContent).toContain('Sign in');
+      for (const control of window.document.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+      >(
+        '[data-field="profile-name"], [data-field="profile-timezone"], [data-field="profile-slug"], [data-field="profile-region"], [data-button="profile-save"], #byok-key, [data-byok-form] button[type="submit"]',
+      )) {
+        expect(control.disabled).toBe(true);
+        expect(control.title).toMatch(/Sign in/i);
+      }
+    },
+  );
+
+  it('requires a successful current profile read before enabling edits or accepting submit', async () => {
+    let resolveProfile: ((response: Response) => void) | undefined;
+    const base = routerWithEmailPref(204);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/me$/.test(call.url) && method === 'GET') {
+          return new Promise<Response>((resolve) => {
+            resolveProfile = resolve;
+          });
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush(2);
+
+    const form = window.document.querySelector('[data-form="profile"]') as HTMLFormElement;
+    const name = window.document.querySelector('[data-field="profile-name"]') as HTMLInputElement;
+    const save = window.document.querySelector('[data-button="profile-save"]') as HTMLButtonElement;
+    expect(name.disabled).toBe(true);
+    expect(save.disabled).toBe(true);
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(2);
+    expect(fetchCalls.some((call) => call.init?.method === 'PATCH')).toBe(false);
+
+    resolveProfile?.(
+      json({
+        id: 'acct_1234567890123456',
+        email: 'me@example.com',
+        name: 'Authoritative name',
+        timezone: 'America/New_York',
+        slug: 'authoritative',
+        region: 'us',
+      }),
+    );
+    await flush();
+    expect(name.value).toBe('Authoritative name');
+    expect(name.disabled).toBe(false);
+    expect(save.disabled).toBe(false);
+  });
+
+  it('keeps profile mutation authority revoked when the current profile read fails', async () => {
+    const base = routerWithEmailPref(204);
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        if (/\/v1\/account\/me$/.test(call.url) && method === 'GET') {
+          return json({ detail: 'profile unavailable' }, 503);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+
+    const form = window.document.querySelector('[data-form="profile"]') as HTMLFormElement;
+    const save = window.document.querySelector('[data-button="profile-save"]') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(save.title).toMatch(/Reload/i);
+    expect(window.document.querySelector('[data-field="profile-error"]')?.textContent).toMatch(
+      /temporarily unavailable|Could not load your current profile/i,
+    );
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(2);
+    expect(fetchCalls.some((call) => call.init?.method === 'PATCH')).toBe(false);
+  });
 
   it('toggle off a preference that SAVES OK: stays unchecked + shows "saved"', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), { route: routerWithEmailPref(204) });

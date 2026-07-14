@@ -159,6 +159,8 @@ const EMAIL_EVENTS = [
             id="profile-name"
             data-field="profile-name"
             type="text"
+            disabled
+            title="Sign in and wait for your current profile to load"
             placeholder="Optional — leave blank to use your email"
             class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
@@ -171,6 +173,8 @@ const EMAIL_EVENTS = [
             id="profile-timezone"
             data-field="profile-timezone"
             type="text"
+            disabled
+            title="Sign in and wait for your current profile to load"
             placeholder="Europe/Amsterdam"
             class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
@@ -187,6 +191,8 @@ const EMAIL_EVENTS = [
             id="profile-slug"
             data-field="profile-slug"
             type="text"
+            disabled
+            title="Sign in and wait for your current profile to load"
             inputmode="text"
             autocomplete="off"
             placeholder="acme-corp"
@@ -205,6 +211,8 @@ const EMAIL_EVENTS = [
           <select
             id="profile-region"
             data-field="profile-region"
+            disabled
+            title="Sign in and wait for your current profile to load"
             class="mt-1 w-full rounded-md border border-tk-border bg-tk-surface px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           >
             <option value="">— no preference —</option>
@@ -228,6 +236,8 @@ const EMAIL_EVENTS = [
             type="submit"
             data-button="profile-save"
             class="btn-primary"
+            disabled
+            title="Sign in and wait for your current profile to load"
           >
             Save
           </button>
@@ -308,12 +318,19 @@ const EMAIL_EVENTS = [
           id="byok-key"
           type="password"
           name="byok-key"
+          disabled
+          title="Sign in to save an Anthropic API key"
           placeholder="sk-ant-..."
           autocomplete="off"
           spellcheck="false"
           class="flex-1 min-w-[260px] rounded-md border border-tk-border bg-tk-bg px-3 py-2 font-mono text-sm text-tk-ink placeholder-ink-muted focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
         />
-        <button type="submit" class="btn-primary">Save key</button>
+        <button
+          type="submit"
+          class="btn-primary"
+          disabled
+          title="Sign in to save an Anthropic API key"
+        >Save key</button>
         <button
           type="button"
           data-byok-test
@@ -386,7 +403,13 @@ const EMAIL_EVENTS = [
       const root = document.querySelector('[data-page="settings"]');
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
-      const token = localStorage.getItem('ds_web_session_token');
+      const token = (() => {
+        try {
+          return localStorage.getItem('ds_web_session_token');
+        } catch {
+          return null;
+        }
+      })();
       const SETTINGS_TIMEOUT_MS = 15_000;
       let bannerGeneration = 0;
 
@@ -436,6 +459,32 @@ const EMAIL_EVENTS = [
       let profileHydrated = false;
       let profileEditedBeforeHydration = false;
       let profileStatusGeneration = 0;
+      let profileUnavailableReason = token
+        ? 'Wait for your current profile to load'
+        : 'Sign in to edit your profile';
+
+      function syncProfileControls() {
+        const controls = [
+          profileNameInput,
+          profileTzInput,
+          profileSlugInput,
+          profileRegionInput,
+        ];
+        const controlsDisabled = profileSaveInFlight || !profileHydrated;
+        const reason = profileSaveInFlight ? 'Wait for the current profile save to finish' : profileUnavailableReason;
+        for (const control of controls) {
+          if (!control) continue;
+          control.disabled = controlsDisabled;
+          control.title = controlsDisabled ? reason : '';
+        }
+        if (profileSaveBtn) {
+          profileSaveBtn.disabled = controlsDisabled;
+          profileSaveBtn.title = controlsDisabled ? reason : '';
+          profileSaveBtn.toggleAttribute('aria-busy', profileSaveInFlight);
+        }
+      }
+
+      syncProfileControls();
 
       function showProfileError(msg) {
         if (!profileError) return;
@@ -622,6 +671,8 @@ const EMAIL_EVENTS = [
               if (profileRegionInput) profileRegionInput.value = me.region || '';
             }
             profileHydrated = true;
+            profileUnavailableReason = '';
+            syncProfileControls();
             // audit w2flmiw48 #3 — the header account-id used to be seeded
             // from the mock account and never overwritten by live data (so
             // every customer saw the mock id). Populate it from /account/me.
@@ -634,8 +685,16 @@ const EMAIL_EVENTS = [
             avatarSnapshotKnown = true;
             setAvatarPreview(me.avatar_url || null, normalizedAvatarSource(me));
           })
-          .catch(() => {
-            /* leave inputs blank */
+          .catch((err) => {
+            profileHydrated = false;
+            profileUnavailableReason = 'Reload to try loading your current profile again';
+            syncProfileControls();
+            showProfileError(
+              requestErrorMessage(
+                err,
+                'Could not load your current profile. Editing is unavailable; reload to try again.',
+              ),
+            );
           });
       }
 
@@ -823,13 +882,18 @@ const EMAIL_EVENTS = [
             showProfileError('Sign in to update your profile.');
             return;
           }
+          if (!profileHydrated) {
+            showProfileError(
+              'Wait for your current profile to load before saving. Reload if loading failed.',
+            );
+            return;
+          }
           const name = profileNameInput.value.trim();
           const tz = profileTzInput.value.trim();
           const slug = profileSlugInput ? profileSlugInput.value.trim() : '';
           profileSaveInFlight = true;
+          syncProfileControls();
           if (profileSaveBtn) {
-            profileSaveBtn.disabled = true;
-            profileSaveBtn.setAttribute('aria-busy', 'true');
             profileSaveBtn.textContent = 'Saving…';
           }
           const body = {
@@ -891,9 +955,8 @@ const EMAIL_EVENTS = [
             })
             .finally(() => {
               profileSaveInFlight = false;
+              syncProfileControls();
               if (profileSaveBtn) {
-                profileSaveBtn.disabled = false;
-                profileSaveBtn.removeAttribute('aria-busy');
                 profileSaveBtn.textContent = 'Save';
               }
             });
@@ -1062,11 +1125,24 @@ const EMAIL_EVENTS = [
 
       function syncByokActionControls() {
         const busy = byokActionInFlight !== null;
+        const authenticated = Boolean(token);
         const hasStoredKey = byokMetadataKnown && byokMetadata.hasKey;
+        if (byokInput) {
+          byokInput.disabled = busy || !authenticated;
+          byokInput.title = busy
+            ? 'Wait for the current key action to finish'
+            : authenticated
+              ? ''
+              : 'Sign in to save an Anthropic API key';
+        }
         if (byokSaveBtn) {
-          byokSaveBtn.disabled = busy;
+          byokSaveBtn.disabled = busy || !authenticated;
           byokSaveBtn.toggleAttribute('aria-busy', byokActionInFlight === 'save');
-          byokSaveBtn.title = busy ? 'Wait for the current key action to finish' : '';
+          byokSaveBtn.title = busy
+            ? 'Wait for the current key action to finish'
+            : authenticated
+              ? ''
+              : 'Sign in to save an Anthropic API key';
         }
         if (byokTestBtn) {
           byokTestBtn.disabled = busy || !hasStoredKey;
@@ -1091,6 +1167,8 @@ const EMAIL_EVENTS = [
                 : 'Wait for stored-key status to load';
         }
       }
+
+      syncByokActionControls();
 
       function beginByokAction(action) {
         if (byokActionInFlight !== null) return false;
@@ -1204,7 +1282,11 @@ const EMAIL_EVENTS = [
       if (byokForm) {
         byokForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
-          if (!byokInput || !token) return;
+          if (!byokInput) return;
+          if (!token) {
+            byokShowError('Sign in to save an Anthropic API key.');
+            return;
+          }
           const key = byokInput.value.trim();
           if (key.length === 0) {
             byokShowError('Paste an Anthropic API key first.');
@@ -1364,6 +1446,9 @@ const EMAIL_EVENTS = [
 
       if (!token) {
         showBanner('Sign in to see live preferences + recent activity.');
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
         return;
       }
 

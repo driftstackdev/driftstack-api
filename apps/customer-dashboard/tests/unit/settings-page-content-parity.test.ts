@@ -73,6 +73,29 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
+  it('fails closed before auth/current-profile authority and releases signed-out hydration', () => {
+    for (const selector of [
+      'data-field="profile-name"',
+      'data-field="profile-timezone"',
+      'data-field="profile-slug"',
+      'data-field="profile-region"',
+      'data-button="profile-save"',
+      'id="byok-key"',
+    ]) {
+      const start = body.indexOf(selector);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(body.slice(start, body.indexOf('>', start))).toMatch(/disabled/);
+    }
+    expect(body).toMatch(/try \{\s*return localStorage\.getItem\('ds_web_session_token'\)/);
+    expect(body).toMatch(/if \(!profileHydrated\) \{[\s\S]*?before saving/);
+    expect(body).toMatch(
+      /profileHydrated = true;\s*profileUnavailableReason = '';\s*syncProfileControls\(\)/,
+    );
+    expect(body).toMatch(
+      /showBanner\('Sign in to see live preferences \+ recent activity\.'\);\s*if \(typeof window\.dashboardHydrated === 'function'\) \{\s*window\.dashboardHydrated\(\);\s*\}\s*return;/,
+    );
+  });
+
   it('avatar controls distinguish removable uploads from linked-account fallbacks', () => {
     expect(body).toMatch(/avatar_source/);
     expect(body).toMatch(/avatarRemoveBtn\.hidden = source !== 'user'/);
