@@ -116,7 +116,12 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
     // Defensive redirect: if user lands here without a token, send to
     // /signup. (Direct nav to /welcome shouldn't normally happen.)
     (function () {
-      const token = localStorage.getItem('ds_web_session_token');
+      let token = null;
+      try {
+        token = localStorage.getItem('ds_web_session_token');
+      } catch {
+        token = null;
+      }
       if (!token) window.location.replace('/signup');
     })();
   </script>

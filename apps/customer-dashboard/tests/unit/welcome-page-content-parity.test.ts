@@ -75,7 +75,7 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
 
   it('defensive redirect: no ds_web_session_token → /signup (no orphan landings)', () => {
     expect(body).toMatch(
-      /const token = localStorage\.getItem\('ds_web_session_token'\);\s*\n?\s*if \(!token\) window\.location\.replace\('\/signup'\);/,
+      /let token = null;\s*try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;\s*\}\s*if \(!token\) window\.location\.replace\('\/signup'\);/,
     );
   });
 
