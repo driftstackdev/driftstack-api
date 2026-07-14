@@ -65,6 +65,7 @@ describe('StripeApiClient.createCustomer', () => {
     expect(calls[0]!.url).toBe('https://api.stripe.com/v1/customers');
     const init = calls[0]!.init;
     expect(init.method).toBe('POST');
+    expect(init.redirect).toBe('error');
     const headers = init.headers as Record<string, string>;
     expect(headers['Content-Type']).toBe('application/x-www-form-urlencoded');
     expect(headers.Authorization).toBe(`Basic ${Buffer.from('sk_test_dummy:').toString('base64')}`);

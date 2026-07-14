@@ -18,6 +18,7 @@ describe('makeAnthropicKeyTester', () => {
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe('https://api.anthropic.com/v1/models?limit=1');
     expect(init?.method).toBe('GET');
+    expect(init?.redirect).toBe('error');
     expect(init?.body).toBeUndefined();
     const headers = new Headers(init?.headers);
     expect(headers.get('anthropic-version')).toBe('2023-06-01');

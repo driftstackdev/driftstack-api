@@ -5,9 +5,11 @@ import { exchangeCodeForTokens, fetchUserInfo } from '../../src/lib/oauth-client
 
 function mockFetch(
   responses: Array<{ status: number; body: unknown; headers?: Record<string, string> }>,
+  calls?: RequestInit[],
 ): typeof fetch {
   let i = 0;
-  return ((_url: string, _init?: RequestInit) => {
+  return ((_url: string, init?: RequestInit) => {
+    calls?.push(init ?? {});
     const r = responses[i] ?? responses[responses.length - 1];
     i += 1;
     if (!r) throw new Error('mockFetch: no responses left');
@@ -28,6 +30,33 @@ const EXCHANGE_OPTS_BASE = {
   code: 'idp-code-12345',
   codeVerifier: 'verifier-43-chars-min-aaaaaaaaaaaaaaaaaaaaa',
 };
+
+describe('IDP redirect policy', () => {
+  it('refuses redirects for token, userinfo, and GitHub private-email requests', async () => {
+    const calls: RequestInit[] = [];
+    const fetchImpl = mockFetch(
+      [
+        { status: 200, body: { access_token: 'token' } },
+        { status: 200, body: { id: 7, login: 'user', email: null } },
+        {
+          status: 200,
+          body: [{ email: 'verified@example.test', primary: true, verified: true }],
+        },
+      ],
+      calls,
+    );
+
+    await expect(
+      exchangeCodeForTokens({ ...EXCHANGE_OPTS_BASE, provider: 'google', fetch: fetchImpl }),
+    ).resolves.toMatchObject({ kind: 'ok' });
+    await expect(
+      fetchUserInfo({ provider: 'github', accessToken: 'token', fetch: fetchImpl }),
+    ).resolves.toMatchObject({ kind: 'ok' });
+
+    expect(calls).toHaveLength(3);
+    expect(calls.map((init) => init.redirect)).toEqual(['error', 'error', 'error']);
+  });
+});
 
 describe('exchangeCodeForTokens — Google', () => {
   it('200 with access_token + id_token + scope → kind: ok', async () => {

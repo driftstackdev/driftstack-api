@@ -54,6 +54,7 @@ export function makeAnthropicKeyTester(
           'anthropic-version': ANTHROPIC_VERSION,
           'x-api-key': apiKey,
         },
+        redirect: 'error',
         signal: controller.signal,
       });
       // Do not read or reflect an upstream body. Cancelling promptly also keeps

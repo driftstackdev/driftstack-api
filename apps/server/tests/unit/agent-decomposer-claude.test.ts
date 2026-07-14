@@ -921,6 +921,7 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       const { url, init } = calls[0]!;
       expect(url).toBe(__TEST_ONLY__.ANTHROPIC_API_URL);
       expect(init.method).toBe('POST');
+      expect(init.redirect).toBe('error');
       const headers = init.headers as Record<string, string>;
       expect(headers['x-api-key']).toBe('sk-ant-zzz');
       expect(headers['anthropic-version']).toBe(__TEST_ONLY__.ANTHROPIC_VERSION_HEADER);

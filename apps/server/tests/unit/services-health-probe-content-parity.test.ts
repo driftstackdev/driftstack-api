@@ -153,7 +153,7 @@ describe('W408.A apps/server/src/services/health-probe.ts content parity', () =>
     expect(body).toMatch(/export class FetchProber implements Prober \{/);
     expect(body).toMatch(/const timeoutMs = target\.timeoutMs \?\? 5_000;/);
     expect(body).toMatch(
-      /const res = await fetch\(target\.url, \{\s*\n?\s*method: 'GET',\s*\n?\s*signal: controller\.signal,\s*\n?\s*\/\/ No Authorization header — \/health is public by design\.\s*\n?\s*headers: \{ accept: 'application\/json' \},\s*\n?\s*\}\);/,
+      /const res = await fetch\(target\.url, \{\s*\n?\s*method: 'GET',\s*\n?\s*redirect: 'error',\s*\n?\s*signal: controller\.signal,\s*\n?\s*\/\/ No Authorization header — \/health is public by design\.\s*\n?\s*headers: \{ accept: 'application\/json' \},\s*\n?\s*\}\);/,
     );
   });
 

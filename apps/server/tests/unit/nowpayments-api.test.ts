@@ -85,6 +85,7 @@ describe('NowPaymentsApiClient.createPayment', () => {
     expect(calls[0]!.url).toBe('https://api.nowpayments.io/v1/payment');
     const init = calls[0]!.init;
     expect(init.method).toBe('POST');
+    expect(init.redirect).toBe('error');
     const headers = init.headers as Record<string, string>;
     expect(headers['x-api-key']).toBe('np_test_dummy');
     expect(headers['content-type']).toBe('application/json');
@@ -182,6 +183,7 @@ describe('NowPaymentsApiClient.getPayment', () => {
     });
     expect(calls[0]!.url).toBe('https://api.nowpayments.io/v1/payment/5077125051');
     expect(calls[0]!.init.method).toBe('GET');
+    expect(calls[0]!.init.redirect).toBe('error');
   });
 
   it('maps the address/quote fields to null when the payment response omits them', async () => {

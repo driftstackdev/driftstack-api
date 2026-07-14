@@ -324,6 +324,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
             'anthropic-version': ANTHROPIC_VERSION_HEADER,
           },
           body,
+          redirect: 'error',
           signal: ac.signal,
         });
         bodyText = await readBoundedBody(res);

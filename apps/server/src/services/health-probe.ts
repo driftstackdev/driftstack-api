@@ -325,6 +325,7 @@ export class FetchProber implements Prober {
     try {
       const res = await fetch(target.url, {
         method: 'GET',
+        redirect: 'error',
         signal: controller.signal,
         // No Authorization header — /health is public by design.
         headers: { accept: 'application/json' },

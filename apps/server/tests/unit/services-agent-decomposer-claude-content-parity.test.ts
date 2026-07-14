@@ -209,7 +209,7 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/'x-api-key': apiKey,/);
     expect(body).toMatch(/'anthropic-version': ANTHROPIC_VERSION_HEADER,/);
     // Body forwarded + the per-request-timeout AbortSignal wired (one short group).
-    expect(body).toMatch(/body,\s*\n?\s*signal: ac\.signal,/);
+    expect(body).toMatch(/body,\s*\n?\s*redirect: 'error',\s*\n?\s*signal: ac\.signal,/);
     // The timeout machinery itself — AbortController + abort + teardown.
     expect(body).toMatch(/const ac = new AbortController\(\);/);
     expect(body).toMatch(/setTimeout\(\(\) => ac\.abort\(\), this\.requestTimeoutMs\)/);

@@ -211,6 +211,7 @@ export class NowPaymentsApiClient {
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
+        redirect: 'error',
         signal: ac.signal,
       });
       let text: string;

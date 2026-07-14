@@ -123,7 +123,10 @@ async function fetchWithTimeout(
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(url, { ...init, signal: ac.signal });
+    // OAuth requests carry bearer tokens, authorization codes, PKCE verifiers,
+    // and sometimes a client secret. Never replay them to a Location target;
+    // keep this after `init` so no caller can weaken the boundary.
+    const res = await fetchImpl(url, { ...init, redirect: 'error', signal: ac.signal });
     // Read the body inside the timer scope so a stalled body aborts at timeoutMs.
     // Stream with a raw-byte ceiling so a fast, oversized IDP response cannot
     // exhaust memory before the caller's bounded error-body slice runs.

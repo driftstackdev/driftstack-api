@@ -154,6 +154,7 @@ export class IncidentBroadcastService {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
+        redirect: 'error',
         signal: controller.signal,
       });
       // Broadcast responses are status-only. Dispose the body while the

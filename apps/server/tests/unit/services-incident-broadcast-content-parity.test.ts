@@ -141,7 +141,7 @@ describe('W401.B apps/server/src/services/incident-broadcast.ts content parity',
       /const timer = setTimeout\(\(\) => controller\.abort\(\), this\.timeoutMs\);/,
     );
     expect(body).toMatch(
-      /const res = await this\.fetcher\(url, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\);/,
+      /const res = await this\.fetcher\(url, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*redirect: 'error',\s*\n?\s*signal: controller\.signal,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(!res\.ok\) \{\s*\n?\s*this\.logger\.warn\(\s*\n?\s*\{ component: 'incident-broadcast', channel, status: res\.status \},\s*\n?\s*'broadcast webhook returned non-2xx',/,

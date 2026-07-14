@@ -238,6 +238,7 @@ export class StripeApiClient {
           ...(idempotencyKey !== undefined ? { 'Idempotency-Key': idempotencyKey } : {}),
         },
         body: formBody,
+        redirect: 'error',
         signal: ac.signal,
       });
 

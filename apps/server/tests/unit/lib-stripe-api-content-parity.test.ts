@@ -162,6 +162,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     expect(body).toMatch(/const timer = setTimeout\(\(\) => ac\.abort\(\), timeoutMs\);/);
     expect(body).toMatch(/'Stripe-Version': this\.config\.apiVersion \?\? DEFAULT_API_VERSION,/);
     expect(body).toMatch(/'Content-Type': 'application\/x-www-form-urlencoded',/);
+    expect(body).toMatch(/body: formBody,\s*\n?\s*redirect: 'error',\s*\n?\s*signal: ac\.signal,/);
     // Optional Idempotency-Key header — only sent when the caller supplies a key.
     expect(body).toMatch(
       /\.\.\.\(idempotencyKey !== undefined \? \{ 'Idempotency-Key': idempotencyKey \} : \{\}\),/,

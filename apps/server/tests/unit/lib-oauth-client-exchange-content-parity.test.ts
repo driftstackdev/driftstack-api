@@ -121,7 +121,7 @@ describe('lib/oauth-client-exchange content parity', () => {
     expect(body).toMatch(/const ac = new AbortController\(\);/);
     expect(body).toMatch(/const timer = setTimeout\(\(\) => ac\.abort\(\), timeoutMs\);/);
     expect(body).toMatch(
-      /const res = await fetchImpl\(url, \{ \.\.\.init, signal: ac\.signal \}\);/,
+      /const res = await fetchImpl\(url, \{ \.\.\.init, redirect: 'error', signal: ac\.signal \}\);/,
     );
     // The bounded body read is INSIDE the timer scope (bug-class fix bc72ff48 —
     // clearTimeout-after-fetch left body reads unbounded). Helper returns text.

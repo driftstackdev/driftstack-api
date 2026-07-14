@@ -25872,3 +25872,35 @@ tests reject unallocated/deprecated parent addresses, retain every earlier
 non-global/NAT64 boundary, and prove each routed exception remains allowed.
 Removing the parent block produces two focused failures (URL and raw-host paths),
 confirming the new coverage depends on the production rule rather than fixtures.
+
+## V-606 — external provider requests refuse redirects
+
+**Date:** 2026-07-14
+
+Set Fetch's redirect mode to `error` at every non-webhook external-provider
+boundary: Stripe, NowPayments, OAuth token/userinfo/GitHub-email calls, Anthropic
+task decomposition and key validation, incident broadcast, and health probing.
+The OAuth helper applies the rule after the caller-supplied init object so a
+future caller cannot weaken it. Timeouts, bounded/cancelled response handling,
+retry classification, injected fetch seams, and incident fire-and-forget
+semantics remain unchanged.
+
+This closes two related problems. A 307/308 could otherwise replay an
+authenticated POST, including a provider key, OAuth code/PKCE verifier/client
+secret, billing data, or incident payload, to the redirect target. A health URL
+could also redirect a server-side probe toward an internal endpoint. The Fetch
+Standard's `error` redirect mode turns the redirect into a network error instead
+of following it; each existing caller maps that through its established failure
+path.
+
+Verification:
+
+- request-shape tests pin `redirect: 'error'` for all seven boundaries and for
+  OAuth token, userinfo, and GitHub private-email fallback calls;
+- a real loopback HTTP server returns 307 to a second loopback server and proves
+  the incident payload reaches only the configured source (one hit) while the
+  redirect destination receives zero hits;
+- focused billing, OAuth, Anthropic, incident, health, response-lifecycle, and
+  source-parity suites pass with 229/229 tests;
+- strict server source/test TypeScript, targeted lint/format, diff, and hooks
+  pass.

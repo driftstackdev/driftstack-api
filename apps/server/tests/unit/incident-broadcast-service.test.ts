@@ -113,6 +113,7 @@ describe('V-553.B-30 IncidentBroadcastService.notifyCreated/Resolved', () => {
     const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://hooks.slack.com/services/T/B/X');
     expect(init.method).toBe('POST');
+    expect(init.redirect).toBe('error');
     const body = JSON.parse(init.body as string) as {
       text: string;
       attachments: Array<{ color: string; fields: Array<{ title: string; value: string }> }>;
