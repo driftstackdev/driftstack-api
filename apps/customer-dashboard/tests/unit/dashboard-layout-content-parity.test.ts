@@ -84,6 +84,17 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     );
   });
 
+  it('typed prompts ignore backdrop clicks so incidental taps cannot discard form state', () => {
+    const promptStart = body.indexOf('window.driftstackPrompt = function');
+    const promptEnd = body.indexOf('</script>', promptStart);
+    const prompt = body.slice(promptStart, promptEnd);
+
+    expect(prompt).not.toContain("overlay.addEventListener('click', onOverlay)");
+    expect(prompt).not.toContain('function onOverlay');
+    expect(prompt).toContain("cancel.addEventListener('click', onCancel)");
+    expect(prompt).toContain("if (e.key === 'Escape') { done(null); return; }");
+  });
+
   it('page-title pattern: "${title} · Driftstack"', () => {
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });

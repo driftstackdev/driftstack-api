@@ -479,14 +479,12 @@ const navItems = [
                 if (ok) ok.removeEventListener('click', onOk);
                 if (cancel) cancel.removeEventListener('click', onCancel);
                 if (input) input.removeEventListener('keydown', onKey);
-                overlay.removeEventListener('click', onOverlay);
                 document.removeEventListener('keydown', onDocKey);
                 if (prevFocus && prevFocus.focus) prevFocus.focus();
                 resolve(result);
               }
               function onOk() { done(input ? input.value : ''); }
               function onCancel() { done(null); }
-              function onOverlay(e) { if (e.target === overlay) done(null); }
               function onKey(e) { if (e.key === 'Enter') { e.preventDefault(); onOk(); } }
               function onDocKey(e) {
                 if (e.key === 'Escape') { done(null); return; }
@@ -500,7 +498,6 @@ const navItems = [
               if (ok) ok.addEventListener('click', onOk);
               if (cancel) cancel.addEventListener('click', onCancel);
               if (input) input.addEventListener('keydown', onKey);
-              overlay.addEventListener('click', onOverlay);
               document.addEventListener('keydown', onDocKey);
             });
           };

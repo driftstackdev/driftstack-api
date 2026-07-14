@@ -79,6 +79,17 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/if \(!response\.body\) clearDeadline\(\)/);
   });
 
+  it('typed prompts ignore backdrop clicks so incidental taps cannot discard form state', () => {
+    const promptStart = body.indexOf('window.driftstackPrompt = function');
+    const promptEnd = body.indexOf('</script>', promptStart);
+    const prompt = body.slice(promptStart, promptEnd);
+
+    expect(prompt).not.toContain("overlay.addEventListener('click', onOverlay)");
+    expect(prompt).not.toContain('function onOverlay');
+    expect(prompt).toContain("cancel.addEventListener('click', onCancel)");
+    expect(prompt).toContain("if (e.key === 'Escape') { done(null); return; }");
+  });
+
   it('12 live navItems in canonical order; absent surfaces stay out', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
