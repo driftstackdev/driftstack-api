@@ -21,13 +21,17 @@ const makeExecutable = (path: string, body: string): void => {
   chmodSync(path, 0o700);
 };
 
-const runMockedSignerSetup = (marker: string) => {
+const runMockedSignerSetup = (
+  marker: string,
+  codesignMode: 'success' | 'fail' | 'hang' = 'success',
+) => {
   const root = mkdtempSync(join(tmpdir(), 'driftstack-signing-test.'));
   const home = join(root, 'home');
   const bin = join(root, 'bin');
   const stateDir = join(home, 'Library/Application Support/Driftstack');
-  const markerPath = join(stateDir, 'local-signing-partition-v1.sha256');
+  const markerPath = join(stateDir, 'local-signing-partition-v2.sha256');
   const securityLog = join(root, 'security.log');
+  const codesignLog = join(root, 'codesign.log');
   mkdirSync(bin, { recursive: true });
   mkdirSync(stateDir, { recursive: true });
   writeFileSync(markerPath, `${marker}\n`);
@@ -53,6 +57,12 @@ esac
 esac
 `,
   );
+  makeExecutable(
+    join(bin, 'codesign'),
+    `printf '%s\n' "$*" >>"$CODESIGN_LOG"
+${codesignMode === 'hang' ? 'exec /bin/sleep 30' : codesignMode === 'fail' ? 'exit 72' : 'exit 0'}
+`,
+  );
 
   const result = spawnSync('bash', [resolve(REPO_ROOT, 'scripts/setup-local-gui-signing.sh')], {
     encoding: 'utf8',
@@ -61,12 +71,16 @@ esac
       HOME: home,
       PATH: `${bin}:${process.env.PATH ?? ''}`,
       SECURITY_LOG: securityLog,
+      CODESIGN_LOG: codesignLog,
+      DRIFTSTACK_CODESIGN_BIN: join(bin, 'codesign'),
+      DRIFTSTACK_SIGNING_CANARY_TIMEOUT_SECONDS: '1',
     },
   });
 
   return {
     cleanup: () => rmSync(root, { recursive: true, force: true }),
-    marker: readFileSync(markerPath, 'utf8').trim(),
+    codesignCalls: existsSync(codesignLog) ? readFileSync(codesignLog, 'utf8') : '',
+    marker: existsSync(markerPath) ? readFileSync(markerPath, 'utf8').trim() : undefined,
     result,
     securityCalls: readFileSync(securityLog, 'utf8'),
   };
@@ -76,17 +90,31 @@ const runMockedBuildInstall = (opts: {
   marker?: string;
   requestedIdentity?: string;
   args?: string[];
+  codesignMode?: 'success' | 'fail' | 'hang';
 }) => {
   const root = mkdtempSync(join(tmpdir(), 'driftstack-build-install-test.'));
   const home = join(root, 'home');
   const bin = join(root, 'bin');
+  const guiDir = join(root, 'gui');
+  const applicationsDir = join(root, 'Applications');
+  const bundleDir = join(guiDir, 'src-tauri/target/release/bundle/macos');
   const stateDir = join(home, 'Library/Application Support/Driftstack');
-  const markerPath = join(stateDir, 'local-signing-partition-v1.sha256');
+  const markerPath = join(stateDir, 'local-signing-partition-v2.sha256');
   const securityLog = join(root, 'security.log');
   const npmLog = join(root, 'npm.log');
   const codesignLog = join(root, 'codesign.log');
+  const installLog = join(root, 'install.log');
+  const eventLog = join(root, 'events.log');
   mkdirSync(bin, { recursive: true });
   mkdirSync(stateDir, { recursive: true });
+  mkdirSync(applicationsDir, { recursive: true });
+  for (const name of ['Driftstack', 'Driftstack Simulator']) {
+    const contents = join(bundleDir, `${name}.app/Contents`);
+    mkdirSync(contents, { recursive: true });
+    writeFileSync(join(contents, 'Info.plist'), 'mock plist\n');
+  }
+  mkdirSync(join(guiDir, 'src-tauri'), { recursive: true });
+  writeFileSync(join(guiDir, 'src-tauri/Entitlements.plist'), 'mock entitlements\n');
   if (opts.marker !== undefined) writeFileSync(markerPath, `${opts.marker}\n`);
 
   makeExecutable(
@@ -111,7 +139,38 @@ esac
 `,
   );
   makeExecutable(join(bin, 'npm'), `printf '%s\\n' "$*" >>"$NPM_LOG"`);
-  makeExecutable(join(bin, 'codesign'), `printf '%s\\n' "$*" >>"$CODESIGN_LOG"`);
+  makeExecutable(
+    join(bin, 'codesign'),
+    `printf '%s\\n' "$*" >>"$CODESIGN_LOG"
+printf 'codesign %s\\n' "$*" >>"$EVENT_LOG"
+${
+  opts.codesignMode === 'hang'
+    ? 'exec /bin/sleep 30'
+    : opts.codesignMode === 'fail'
+      ? 'exit 72'
+      : `case " $* " in
+  *" -d -r- "*"Driftstack Simulator.app"*) printf 'designated => anchor local and identifier "dev.driftstack.simulator"\\n' >&2 ;;
+  *" -d -r- "*) printf 'designated => anchor local and identifier "dev.driftstack.gui"\\n' >&2 ;;
+esac
+exit 0`
+}
+`,
+  );
+  makeExecutable(
+    join(bin, 'plistbuddy'),
+    `case "$*" in
+  *"Driftstack Simulator.app"*) printf 'dev.driftstack.simulator\\n' ;;
+  *) printf 'dev.driftstack.gui\\n' ;;
+esac
+`,
+  );
+  makeExecutable(
+    join(bin, 'ditto'),
+    `printf '%s\\n' "$*" >>"$INSTALL_LOG"
+printf 'install %s\\n' "$*" >>"$EVENT_LOG"
+cp -R "$1" "$2"
+`,
+  );
 
   const env = {
     ...process.env,
@@ -120,6 +179,13 @@ esac
     SECURITY_LOG: securityLog,
     NPM_LOG: npmLog,
     CODESIGN_LOG: codesignLog,
+    INSTALL_LOG: installLog,
+    EVENT_LOG: eventLog,
+    DRIFTSTACK_CODESIGN_BIN: join(bin, 'codesign'),
+    DRIFTSTACK_GUI_DIR: guiDir,
+    DRIFTSTACK_APPLICATIONS_DIR: applicationsDir,
+    DRIFTSTACK_PLIST_BUDDY_BIN: join(bin, 'plistbuddy'),
+    DRIFTSTACK_SIGNING_CANARY_TIMEOUT_SECONDS: '1',
     ...(opts.requestedIdentity !== undefined
       ? { APPLE_SIGNING_IDENTITY: opts.requestedIdentity }
       : { APPLE_SIGNING_IDENTITY: '' }),
@@ -133,6 +199,9 @@ esac
   return {
     cleanup: () => rmSync(root, { recursive: true, force: true }),
     codesignCalls: existsSync(codesignLog) ? readFileSync(codesignLog, 'utf8') : '',
+    events: existsSync(eventLog) ? readFileSync(eventLog, 'utf8') : '',
+    installCalls: existsSync(installLog) ? readFileSync(installLog, 'utf8') : '',
+    markerExists: existsSync(markerPath),
     npmCalls: existsSync(npmLog) ? readFileSync(npmLog, 'utf8') : '',
     result,
     securityCalls: existsSync(securityLog) ? readFileSync(securityLog, 'utf8') : '',
@@ -164,6 +233,42 @@ describe('GUI local signing and install contract', () => {
     expect(body).toContain('for target in "tauri:build" "tauri:build:simulator"');
     expect(body).toContain('npm run "$target" -- --bundles app');
     expect(body).not.toContain('npm run "$target"\n');
+    const signPair = body.indexOf('for name in "${BUNDLE_NAMES[@]}"');
+    const pairReady = body.indexOf(
+      'both source bundles are signed and verified; installing as one release pair',
+    );
+    const installPair = body.indexOf('for index in "${!BUNDLE_NAMES[@]}"');
+    const firstRemoval = body.indexOf('rm -rf "$DST"');
+    expect(signPair).toBeGreaterThan(-1);
+    expect(pairReady).toBeGreaterThan(signPair);
+    expect(installPair).toBeGreaterThan(pairReady);
+    expect(firstRemoval).toBeGreaterThan(installPair);
+  });
+
+  it('signs and verifies both mocked source bundles before either installed app changes', () => {
+    const result = runMockedBuildInstall({ marker: CERT_FINGERPRINT, args: [] });
+    try {
+      expect(result.result.status).toBe(0);
+      expect(result.npmCalls.trim().split('\n')).toEqual([
+        'run tauri:build -- --bundles app',
+        'run tauri:build:simulator -- --bundles app',
+      ]);
+      const events = result.events.trim().split('\n');
+      const firstInstall = events.findIndex((event) => event.startsWith('install '));
+      const sourceSigns = events
+        .slice(0, firstInstall)
+        .filter((event) => event.startsWith('codesign --force --deep'));
+      expect(firstInstall).toBeGreaterThan(-1);
+      expect(sourceSigns).toHaveLength(2);
+      expect(sourceSigns[0]).toContain('Driftstack.app');
+      expect(sourceSigns[1]).toContain('Driftstack Simulator.app');
+      expect(result.installCalls.trim().split('\n')).toHaveLength(2);
+      expect(result.result.stdout).toContain(
+        'both source bundles are signed and verified; installing as one release pair',
+      );
+    } finally {
+      result.cleanup();
+    }
   });
 
   it('fails before build unless the exact local certificate authorization marker matches', () => {
@@ -171,13 +276,14 @@ describe('GUI local signing and install contract', () => {
     try {
       expect(ready.result.status).toBe(0);
       expect(ready.result.stdout).toContain(
-        'prompt-free signing authorization: exact certificate marker verified',
+        'prompt-free signing authorization: exact certificate marker + canary verified',
       );
       expect(ready.securityCalls).toContain(
         'find-certificate -c Driftstack Local Development Signing -p',
       );
       expect(ready.npmCalls).toBe('');
-      expect(ready.codesignCalls).toBe('');
+      expect(ready.codesignCalls).toContain('--force --sign Driftstack Local Development Signing');
+      expect(ready.codesignCalls).toContain('--verify --strict');
     } finally {
       ready.cleanup();
     }
@@ -199,6 +305,29 @@ describe('GUI local signing and install contract', () => {
     }
   });
 
+  it('invalidates a matching marker when the bounded real signing proof fails or waits', () => {
+    for (const codesignMode of ['fail', 'hang'] as const) {
+      const startedAt = Date.now();
+      const blocked = runMockedBuildInstall({ marker: CERT_FINGERPRINT, codesignMode });
+      try {
+        expect(blocked.result.status).not.toBe(0);
+        expect(blocked.result.stderr).toContain('prompt-free codesign proof failed');
+        expect(blocked.result.stderr).toContain('Run scripts/setup-local-gui-signing.sh once');
+        expect(blocked.result.stderr).toContain(
+          'No GUI build, bundle codesign, or install work was started.',
+        );
+        expect(blocked.npmCalls).toBe('');
+        expect(blocked.codesignCalls).toContain(
+          '--force --sign Driftstack Local Development Signing',
+        );
+        expect(blocked.markerExists).toBe(false);
+        expect(Date.now() - startedAt).toBeLessThan(5_000);
+      } finally {
+        blocked.cleanup();
+      }
+    }
+  });
+
   it('does not apply the local authorization marker to an explicit Developer ID identity', () => {
     const developerId = 'Developer ID Application: Driftstack Test (TEAMID)';
     const result = runMockedBuildInstall({ requestedIdentity: developerId });
@@ -207,7 +336,7 @@ describe('GUI local signing and install contract', () => {
       expect(result.result.stdout).toContain(`stable signing identity: ${developerId}`);
       expect(result.securityCalls).not.toContain('find-certificate');
       expect(result.npmCalls).toBe('');
-      expect(result.codesignCalls).toBe('');
+      expect(result.codesignCalls).toContain(`--force --sign ${developerId}`);
     } finally {
       result.cleanup();
     }
@@ -235,10 +364,15 @@ describe('GUI local signing and install contract', () => {
     expect(body).toContain('SYSTEM_TRUSTED_CERT=1');
     expect(body).toContain('sudo -n security delete-certificate');
     expect(body).toContain('security add-trusted-cert -r trustRoot -p codeSign');
-    expect(body).toContain('READY_MARKER="$STATE_DIR/local-signing-partition-v1.sha256"');
+    expect(body).toContain('READY_MARKER="$STATE_DIR/local-signing-partition-v2.sha256"');
+    expect(body).toContain('LEGACY_READY_MARKER="$STATE_DIR/local-signing-partition-v1.sha256"');
     expect(body).toContain('openssl x509 -in "$certificate_file" -noout -fingerprint -sha256');
     expect(body).toContain('authorization_marker_matches "$FINGERPRINT"');
-    expect(body).toContain('signing-key authorization already completed for this exact identity');
+    expect(body).toContain(
+      'signing-key authorization already completed and canary-proven for this exact identity',
+    );
+    expect(body).toContain('verify_prompt_free_codesign "$IDENTITY_NAME"');
+    expect(body).toContain('no readiness marker was written');
     expect(body).toContain('write_authorization_marker "$FINGERPRINT"');
     expect(body).toContain('chmod 700 "$STATE_DIR"');
     expect(body).toContain('chmod 600 "$marker_tmp"');
@@ -255,10 +389,13 @@ describe('GUI local signing and install contract', () => {
     try {
       expect(matching.result.status).toBe(0);
       expect(matching.result.stdout).toContain(
-        'signing-key authorization already completed for this exact identity',
+        'signing-key authorization already completed and canary-proven for this exact identity',
       );
       expect(matching.securityCalls).not.toContain('set-key-partition-list');
       expect(matching.marker).toBe(CERT_FINGERPRINT);
+      expect(matching.codesignCalls).toContain(
+        '--force --sign Driftstack Local Development Signing',
+      );
     } finally {
       matching.cleanup();
     }
@@ -273,6 +410,20 @@ describe('GUI local signing and install contract', () => {
     }
   });
 
+  it('never writes a readiness marker when setup cannot prove prompt-free signing', () => {
+    for (const codesignMode of ['fail', 'hang'] as const) {
+      const setup = runMockedSignerSetup('C3'.repeat(32), codesignMode);
+      try {
+        expect(setup.result.status).not.toBe(0);
+        expect(setup.result.stderr).toContain('no readiness marker was written');
+        expect(setup.securityCalls.match(/^set-key-partition-list /gm)).toHaveLength(1);
+        expect(setup.marker).toBeUndefined();
+      } finally {
+        setup.cleanup();
+      }
+    }
+  });
+
   it('documents stable signing as the Keychain fix without weakening secret storage', () => {
     const body = read('apps/gui-client/PACKAGING.md');
 
@@ -284,13 +435,15 @@ describe('GUI local signing and install contract', () => {
     expect(body).toContain('scripts/setup-local-gui-signing.sh');
     expect(body).toContain('requires the exact');
     expect(body).toContain('before either Tauri build');
+    expect(body).toContain('disposable copy of `/usr/bin/true`');
+    expect(body).toMatch(/signs and verifies\s+both source bundles before replacing either/);
     expect(body).toMatch(/scopes the partition change to that\s+exact private key/);
     expect(body).toMatch(/requires the\s+`apple:` code-signing partition/);
     expect(body).toContain('without another password dialog');
     expect(body).toContain(
       'the script never reads, passes on a command line, or stores the password',
     );
-    expect(body).toMatch(/requests\s+only the macOS `\.app` target/);
+    expect(body).toMatch(/requests\s+only\s+the macOS `\.app` target/);
     expect(body).toContain('cannot replace Developer ID signing/notarisation');
   });
 });

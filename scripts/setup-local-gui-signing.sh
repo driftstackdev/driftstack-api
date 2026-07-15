@@ -14,7 +14,9 @@ IDENTITY_NAME="Driftstack Local Development Signing"
 LOGIN_KEYCHAIN="$(security default-keychain -d user | tr -d ' "')"
 SYSTEM_KEYCHAIN="/Library/Keychains/System.keychain"
 STATE_DIR="${HOME}/Library/Application Support/Driftstack"
-READY_MARKER="$STATE_DIR/local-signing-partition-v1.sha256"
+CODESIGN_BIN="${DRIFTSTACK_CODESIGN_BIN:-/usr/bin/codesign}"
+READY_MARKER="$STATE_DIR/local-signing-partition-v2.sha256"
+LEGACY_READY_MARKER="$STATE_DIR/local-signing-partition-v1.sha256"
 if [[ -z "$LOGIN_KEYCHAIN" ]]; then
   echo "error: no default user keychain found" >&2
   exit 1
@@ -94,10 +96,43 @@ write_authorization_marker() {
   local marker_tmp
   mkdir -p "$STATE_DIR"
   chmod 700 "$STATE_DIR"
-  marker_tmp="$(mktemp "$STATE_DIR/.local-signing-partition-v1.XXXXXX")"
+  marker_tmp="$(mktemp "$STATE_DIR/.local-signing-partition-v2.XXXXXX")"
   chmod 600 "$marker_tmp"
   printf '%s\n' "$fingerprint" >"$marker_tmp"
   mv -f "$marker_tmp" "$READY_MARKER"
+  rm -f "$LEGACY_READY_MARKER"
+}
+
+verify_prompt_free_codesign() {
+  local identity="$1"
+  local timeout_seconds="${DRIFTSTACK_SIGNING_CANARY_TIMEOUT_SECONDS:-8}"
+  local canary="$TMP_DIR/codesign-canary"
+  local result
+
+  if [[ ! "$timeout_seconds" =~ ^[0-9]+$ ]] \
+    || (( timeout_seconds < 1 || timeout_seconds > 30 )); then
+    echo "error: DRIFTSTACK_SIGNING_CANARY_TIMEOUT_SECONDS must be an integer from 1 to 30" >&2
+    return 1
+  fi
+  if [[ ! -x "$CODESIGN_BIN" ]]; then
+    echo "error: codesign executable is unavailable: $CODESIGN_BIN" >&2
+    return 1
+  fi
+
+  cp /usr/bin/true "$canary"
+  chmod 700 "$canary"
+  set +e
+  /usr/bin/perl -e \
+    'my $timeout = shift @ARGV; alarm $timeout; exec @ARGV or die "exec failed: $!\n"' \
+    "$timeout_seconds" \
+    "$CODESIGN_BIN" --force --sign "$identity" "$canary" \
+    >/dev/null 2>"$TMP_DIR/codesign.stderr"
+  result=$?
+  set -e
+  if (( result != 0 )) || ! "$CODESIGN_BIN" --verify --strict "$canary" >/dev/null 2>&1; then
+    echo "error: prompt-free codesign proof failed or exceeded ${timeout_seconds}s." >&2
+    return 1
+  fi
 }
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$IDENTITY_NAME\""; then
@@ -105,11 +140,20 @@ if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$IDENTITY_
   security find-certificate -c "$IDENTITY_NAME" -p "$LOGIN_KEYCHAIN" >"$CERT"
   FINGERPRINT="$(certificate_fingerprint "$CERT")"
   if authorization_marker_matches "$FINGERPRINT"; then
-    echo "==> signing-key authorization already completed for this exact identity"
-    echo "==> stable identity is ready for prompt-free GUI rebuilds"
-    exit 0
+    if verify_prompt_free_codesign "$IDENTITY_NAME"; then
+      echo "==> signing-key authorization already completed and canary-proven for this exact identity"
+      echo "==> stable identity is ready for prompt-free GUI rebuilds"
+      exit 0
+    fi
+    echo "==> prior authorization marker is stale; repairing the exact signing-key partition"
+    rm -f "$READY_MARKER"
   fi
   configure_codesign_partition "$CERT"
+  if ! verify_prompt_free_codesign "$IDENTITY_NAME"; then
+    rm -f "$READY_MARKER"
+    echo "error: signing authorization was not made prompt-free; no readiness marker was written" >&2
+    exit 1
+  fi
   write_authorization_marker "$FINGERPRINT"
   echo "==> stable identity is ready for prompt-free GUI rebuilds"
   exit 0
@@ -161,6 +205,11 @@ if ! security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$IDENTIT
   exit 1
 fi
 
+if ! verify_prompt_free_codesign "$IDENTITY_NAME"; then
+  rm -f "$READY_MARKER"
+  echo "error: signing authorization was not made prompt-free; no readiness marker was written" >&2
+  exit 1
+fi
 write_authorization_marker "$(certificate_fingerprint "$CERT")"
 
 echo "==> installed stable local identity: $IDENTITY_NAME"

@@ -135,16 +135,20 @@ scripts/build-install-gui.sh
 
 `--preflight` resolves a valid stable identity without compiling. For the local-only
 identity, it also reads the selected certificate fingerprint and requires the exact
-owner-only authorization marker written by `setup-local-gui-signing.sh`. A missing or
-rotated marker stops once with the setup instruction before either Tauri build, any
-`codesign`, or installation can start. This prevents one incomplete setup from
-turning a two-bundle update into several nested Keychain password prompts.
+owner-only v2 authorization marker written by `setup-local-gui-signing.sh`. It then
+performs one bounded signature on a disposable copy of `/usr/bin/true`; the marker is
+accepted only when that real private-key operation and signature verification finish
+without an authorization wait. A missing, rotated, stale, or ineffective marker is
+invalidated and stops with the setup instruction before either Tauri build, bundle
+signature, or installation can start. This turns a broken ACL into one bounded
+preflight failure instead of several nested main/Simulator Keychain prompts.
 
 The full command builds and signs both bundles with the same certificate anchor,
-rejects CDHash-only requirements, checks each bundle identifier, and proves the
-installed copy retained the exact designated requirement. This local path requests
-only the macOS `.app` target that it installs, so unrelated distribution packaging
-(DMG, NSIS, AppImage, and deb) cannot block a developer update.
+rejects CDHash-only requirements, checks each bundle identifier, and signs and verifies
+both source bundles before replacing either installed application. It then proves each
+installed copy retained the exact designated requirement. This local path requests only
+the macOS `.app` target that it installs, so unrelated distribution packaging (DMG,
+NSIS, AppImage, and deb) cannot block a developer update.
 `APPLE_SIGNING_IDENTITY` overrides local discovery for a valid Developer ID identity;
 that Apple-issued identity is validated against the keychain but does not use the
 local setup marker.

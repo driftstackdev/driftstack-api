@@ -13,11 +13,24 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-GUI_DIR="$ROOT_DIR/apps/gui-client"
-ENTITLEMENTS="$GUI_DIR/src-tauri/Entitlements.plist"
+GUI_DIR="${DRIFTSTACK_GUI_DIR:-$ROOT_DIR/apps/gui-client}"
+ENTITLEMENTS="${DRIFTSTACK_GUI_ENTITLEMENTS:-$GUI_DIR/src-tauri/Entitlements.plist}"
+APPLICATIONS_DIR="${DRIFTSTACK_APPLICATIONS_DIR:-/Applications}"
+PLIST_BUDDY_BIN="${DRIFTSTACK_PLIST_BUDDY_BIN:-/usr/libexec/PlistBuddy}"
+CODESIGN_BIN="${DRIFTSTACK_CODESIGN_BIN:-/usr/bin/codesign}"
 LOCAL_SIGNING_IDENTITY="Driftstack Local Development Signing"
 SIGNING_STATE_DIR="${HOME}/Library/Application Support/Driftstack"
-SIGNING_READY_MARKER="$SIGNING_STATE_DIR/local-signing-partition-v1.sha256"
+SIGNING_READY_MARKER="$SIGNING_STATE_DIR/local-signing-partition-v2.sha256"
+SIGNING_CANARY_DIR=""
+
+cleanup_signing_canary() {
+  if [[ -n "$SIGNING_CANARY_DIR" ]]; then
+    rm -rf "$SIGNING_CANARY_DIR"
+    SIGNING_CANARY_DIR=""
+  fi
+}
+trap cleanup_signing_canary EXIT
+trap 'exit 130' HUP INT TERM
 
 list_signing_identities() {
   security find-identity -v -p codesigning 2>/dev/null \
@@ -99,15 +112,53 @@ verify_local_signing_authorization() {
   fi
 }
 
+verify_prompt_free_codesign() {
+  local identity="$1"
+  local timeout_seconds="${DRIFTSTACK_SIGNING_CANARY_TIMEOUT_SECONDS:-8}"
+  local canary
+  local result
+
+  if [[ ! "$timeout_seconds" =~ ^[0-9]+$ ]] \
+    || (( timeout_seconds < 1 || timeout_seconds > 30 )); then
+    echo "error: DRIFTSTACK_SIGNING_CANARY_TIMEOUT_SECONDS must be an integer from 1 to 30" >&2
+    return 1
+  fi
+  if [[ ! -x "$CODESIGN_BIN" ]]; then
+    echo "error: codesign executable is unavailable: $CODESIGN_BIN" >&2
+    return 1
+  fi
+
+  SIGNING_CANARY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/driftstack-codesign-canary.XXXXXX")"
+  chmod 700 "$SIGNING_CANARY_DIR"
+  canary="$SIGNING_CANARY_DIR/codesign-canary"
+  cp /usr/bin/true "$canary"
+  chmod 700 "$canary"
+
+  set +e
+  /usr/bin/perl -e \
+    'my $timeout = shift @ARGV; alarm $timeout; exec @ARGV or die "exec failed: $!\n"' \
+    "$timeout_seconds" \
+    "$CODESIGN_BIN" --force --sign "$identity" "$canary" \
+    >/dev/null 2>"$SIGNING_CANARY_DIR/codesign.stderr"
+  result=$?
+  set -e
+  if (( result != 0 )) || ! "$CODESIGN_BIN" --verify --strict "$canary" >/dev/null 2>&1; then
+    cleanup_signing_canary
+    echo "error: prompt-free codesign proof failed or exceeded ${timeout_seconds}s." >&2
+    return 1
+  fi
+  cleanup_signing_canary
+}
+
 signature_requirement() {
-  codesign -d -r- "$1" 2>&1 | sed -nE 's/^#? ?designated => /designated => /p'
+  "$CODESIGN_BIN" -d -r- "$1" 2>&1 | sed -nE 's/^#? ?designated => /designated => /p'
 }
 
 verify_stable_signature() {
   local app="$1"
   local identifier="$2"
   local requirement
-  codesign --verify --deep --strict "$app"
+  "$CODESIGN_BIN" --verify --deep --strict "$app"
   requirement="$(signature_requirement "$app")"
   if [[ -z "$requirement" || "$requirement" == *cdhash* ]]; then
     echo "error: $app has an unstable/ad-hoc designated requirement: $requirement" >&2
@@ -123,9 +174,21 @@ verify_stable_signature() {
 
 SIGNING_IDENTITY="$(resolve_signing_identity)"
 verify_local_signing_authorization "$SIGNING_IDENTITY"
+if ! verify_prompt_free_codesign "$SIGNING_IDENTITY"; then
+  if [[ "$SIGNING_IDENTITY" == "$LOCAL_SIGNING_IDENTITY" ]]; then
+    rm -f "$SIGNING_READY_MARKER"
+    echo "Run scripts/setup-local-gui-signing.sh once, then rerun this command." >&2
+  else
+    echo "Repair prompt-free private-key access for the selected Developer ID identity." >&2
+  fi
+  echo "No GUI build, bundle codesign, or install work was started." >&2
+  exit 1
+fi
 echo "==> stable signing identity: $SIGNING_IDENTITY"
 if [[ "$SIGNING_IDENTITY" == "$LOCAL_SIGNING_IDENTITY" ]]; then
-  echo "==> prompt-free signing authorization: exact certificate marker verified"
+  echo "==> prompt-free signing authorization: exact certificate marker + canary verified"
+else
+  echo "==> prompt-free signing canary: verified"
 fi
 
 if [[ "${1:-}" == "--preflight" ]]; then
@@ -147,12 +210,15 @@ for target in "tauri:build" "tauri:build:simulator"; do
 done
 
 BUNDLE_DIR="src-tauri/target/release/bundle/macos"
-for name in "Driftstack" "Driftstack Simulator"; do
+BUNDLE_NAMES=("Driftstack" "Driftstack Simulator")
+BUNDLE_IDENTIFIERS=()
+BUNDLE_REQUIREMENTS=()
+
+for name in "${BUNDLE_NAMES[@]}"; do
   SRC="$BUNDLE_DIR/$name.app"
-  DST="/Applications/$name.app"
-  IDENTIFIER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$SRC/Contents/Info.plist")
-  echo "==> codesign + install $name.app ($IDENTIFIER)"
-  codesign \
+  IDENTIFIER=$("$PLIST_BUDDY_BIN" -c "Print :CFBundleIdentifier" "$SRC/Contents/Info.plist")
+  echo "==> codesign + verify $name.app ($IDENTIFIER)"
+  "$CODESIGN_BIN" \
     --force \
     --deep \
     --options runtime \
@@ -161,6 +227,18 @@ for name in "Driftstack" "Driftstack Simulator"; do
     --identifier "$IDENTIFIER" \
     "$SRC"
   SRC_REQUIREMENT="$(verify_stable_signature "$SRC" "$IDENTIFIER")"
+  BUNDLE_IDENTIFIERS+=("$IDENTIFIER")
+  BUNDLE_REQUIREMENTS+=("$SRC_REQUIREMENT")
+done
+
+echo "==> both source bundles are signed and verified; installing as one release pair"
+for index in "${!BUNDLE_NAMES[@]}"; do
+  name="${BUNDLE_NAMES[$index]}"
+  SRC="$BUNDLE_DIR/$name.app"
+  DST="$APPLICATIONS_DIR/$name.app"
+  IDENTIFIER="${BUNDLE_IDENTIFIERS[$index]}"
+  SRC_REQUIREMENT="${BUNDLE_REQUIREMENTS[$index]}"
+  echo "==> install $name.app ($IDENTIFIER)"
   rm -rf "$DST"
   ditto "$SRC" "$DST"
   DST_REQUIREMENT="$(verify_stable_signature "$DST" "$IDENTIFIER")"
