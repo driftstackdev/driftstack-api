@@ -9,7 +9,11 @@ import {
   decryptPlatformSecretValue,
   PLATFORM_SECRET_VALUE_V2_PREFIX,
 } from '../lib/platform-secret-value-encryption.js';
-import type { PlatformSecretMeta, PlatformSecretsRepo } from '../services/platform-secrets.js';
+import type {
+  PlatformSecretMeta,
+  PlatformSecretsRepo,
+  PlatformSecretSetOutcome,
+} from '../services/platform-secrets.js';
 import type { Database } from './client.js';
 import { platformSecrets } from './schema.js';
 
@@ -113,31 +117,56 @@ export class DrizzlePlatformSecretsRepo implements PlatformSecretsRepo {
     return rows[0]?.ciphertext ?? null;
   }
 
-  // Insert-or-update on the `name` primary key. Stamps `updated_at` on edit
+  // Serialize one name's existence check + write so callers receive an
+  // authoritative create/update outcome. Stamps `updated_at` on edit
   // (created_at keeps the first-set time) and records which owner key wrote it.
   async upsert(args: {
     name: string;
     ciphertext: Buffer;
     description: string | null;
     updatedByKeyId: string | null;
-  }): Promise<void> {
-    await this.database.db
-      .insert(platformSecrets)
-      .values({
-        name: args.name,
-        ciphertext: args.ciphertext,
-        description: args.description,
-        updatedByKeyId: args.updatedByKeyId,
-      })
-      .onConflictDoUpdate({
-        target: platformSecrets.name,
-        set: {
+  }): Promise<PlatformSecretSetOutcome> {
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`platform-secret-upsert:${args.name}`}, 0))`,
+      );
+      const [existing] = await tx
+        .select({ name: platformSecrets.name })
+        .from(platformSecrets)
+        .where(eq(platformSecrets.name, args.name))
+        .limit(1);
+
+      if (existing === undefined) {
+        const inserted = await tx
+          .insert(platformSecrets)
+          .values({
+            name: args.name,
+            ciphertext: args.ciphertext,
+            description: args.description,
+            updatedByKeyId: args.updatedByKeyId,
+          })
+          .returning({ name: platformSecrets.name });
+        if (inserted.length !== 1) {
+          throw new Error('Platform-secret insert returned an unexpected row count.');
+        }
+        return 'created';
+      }
+
+      const updated = await tx
+        .update(platformSecrets)
+        .set({
           ciphertext: args.ciphertext,
           description: args.description,
           updatedAt: sql`now()`,
           updatedByKeyId: args.updatedByKeyId,
-        },
-      });
+        })
+        .where(eq(platformSecrets.name, args.name))
+        .returning({ name: platformSecrets.name });
+      if (updated.length !== 1) {
+        throw new Error('Platform-secret update lost its locked row.');
+      }
+      return 'updated';
+    });
   }
 
   async remove(name: string): Promise<boolean> {

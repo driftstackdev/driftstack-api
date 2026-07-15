@@ -6,6 +6,7 @@
 import type {
   PlatformSecretMeta,
   PlatformSecretsRepo,
+  PlatformSecretSetOutcome,
 } from '../../../src/services/platform-secrets.js';
 
 export class InMemoryPlatformSecretsRepo implements PlatformSecretsRepo {
@@ -25,7 +26,7 @@ export class InMemoryPlatformSecretsRepo implements PlatformSecretsRepo {
     ciphertext: Buffer;
     description: string | null;
     updatedByKeyId: string | null;
-  }): Promise<void> {
+  }): Promise<PlatformSecretSetOutcome> {
     const existing = this.meta.get(args.name);
     this.blobs.set(args.name, args.ciphertext);
     this.meta.set(args.name, {
@@ -35,7 +36,7 @@ export class InMemoryPlatformSecretsRepo implements PlatformSecretsRepo {
       updatedAt: new Date(),
       updatedByKeyId: args.updatedByKeyId,
     });
-    return Promise.resolve();
+    return Promise.resolve(existing === undefined ? 'created' : 'updated');
   }
 
   remove(name: string): Promise<boolean> {

@@ -132,12 +132,20 @@ describe('owner platform-secrets routes (secrets Phase A slice 2) parity', () =>
     }
   });
 
-  it('create-vs-update statuses + lifecycle audit actions pinned', () => {
-    expect(body).toMatch(
-      /isUpdate \? \('secret\.updated' as const\) : \('secret\.created' as const\)/,
-    );
+  it('create-vs-update statuses + lifecycle audit actions derive from the atomic set outcome', () => {
+    expect(body).toContain('const outcome = await opts.secrets.set({');
+    expect(body).toContain("action = outcome === 'updated' ? 'secret.updated' : 'secret.created';");
     expect(body).toContain("action: 'secret.deleted',");
-    expect(body).toMatch(/reply\.code\(isUpdate \? 200 : 201\)/);
+    expect(body).toContain("reply.code(outcome === 'updated' ? 200 : 201)");
+    expect(body).toContain('status: outcome');
+  });
+
+  it('keeps metadata preclassification inside the PUT failure-audit boundary', () => {
+    const putStart = body.indexOf("'/v1/admin/owner/secrets/:name'");
+    const revealStart = body.indexOf("'/v1/admin/owner/secrets/:name/reveal'");
+    const put = body.slice(putStart, revealStart);
+    expect(put.indexOf('try {')).toBeLessThan(put.indexOf('await opts.secrets.list()'));
+    expect(put).toMatch(/catch \(err\)[\s\S]*action,[\s\S]*result: `error: \$\{code\}`/);
   });
 
   it('validates secret values by exact UTF-8 storage bytes before the service call', () => {

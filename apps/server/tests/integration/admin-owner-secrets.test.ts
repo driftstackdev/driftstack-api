@@ -13,6 +13,10 @@ import authPlugin from '../../src/middleware/auth.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import { registerAdminOwnerRoutes } from '../../src/routes/admin-owner.js';
 import { PlatformSecretsService } from '../../src/services/platform-secrets.js';
+import type {
+  PlatformSecretMeta,
+  PlatformSecretsRepo,
+} from '../../src/services/platform-secrets.js';
 import { InMemoryPlatformSecretsRepo } from './_helpers/in-memory-platform-secrets-repo.js';
 import { PricingService } from '../../src/services/pricing.js';
 import { AdminAuditService } from '../../src/services/admin-audit.js';
@@ -115,6 +119,7 @@ async function buildApp(
   /** Pass `null` to build a DISABLED-secrets deployment (MFA_ENCRYPTION_KEY unset). */
   encryptionKeyBase64: string | null = randomBytes(32).toString('base64'),
   authRepo: AccountAuthRepo = makeRepo(),
+  secretsRepo: PlatformSecretsRepo = new InMemoryPlatformSecretsRepo(),
 ): Promise<{ app: FastifyInstance; auditRepo: InMemoryAdminAuditLogRepo }> {
   const app = Fastify();
   registerErrorHandler(app);
@@ -136,7 +141,7 @@ async function buildApp(
       permissive_cors: false,
     },
     pricing: new PricingService(new InMemoryPricingRepo()),
-    secrets: new PlatformSecretsService(new InMemoryPlatformSecretsRepo(), encryptionKeyBase64),
+    secrets: new PlatformSecretsService(secretsRepo, encryptionKeyBase64),
     audit: new AdminAuditService(auditRepo),
   });
   await app.ready();
@@ -268,6 +273,77 @@ describe('owner secrets-management routes (secrets Phase A slice 2)', () => {
     });
     expect(oversized.statusCode).toBe(400);
     expect(oversized.body).not.toContain('é'.repeat(100));
+    await app.close();
+  });
+
+  it('derives five concurrent first-write responses and audits from the atomic set outcome', async () => {
+    let waiting = 0;
+    let release!: () => void;
+    const allListed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    class StaleListBarrierRepo extends InMemoryPlatformSecretsRepo {
+      override async listMeta(): Promise<PlatformSecretMeta[]> {
+        waiting += 1;
+        if (waiting === 5) release();
+        await allListed;
+        return super.listMeta();
+      }
+    }
+
+    const { app, auditRepo } = await buildApp(undefined, undefined, new StaleListBarrierRepo());
+    const values = Array.from({ length: 5 }, (_, index) => `concurrent-value-${index.toString()}`);
+    const responses = await Promise.all(
+      values.map((value) =>
+        app.inject({
+          method: 'PUT',
+          url: '/v1/admin/owner/secrets/concurrent_key',
+          headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+          payload: { value },
+        }),
+      ),
+    );
+
+    expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(1);
+    expect(responses.filter((response) => response.statusCode === 200)).toHaveLength(4);
+    expect(responses.map((response) => response.json<{ status: string }>().status).sort()).toEqual([
+      'created',
+      'updated',
+      'updated',
+      'updated',
+      'updated',
+    ]);
+    const audits = auditRepo.getAll();
+    expect(audits).toHaveLength(5);
+    expect(audits.filter((row) => row.action === 'secret.created')).toHaveLength(1);
+    expect(audits.filter((row) => row.action === 'secret.updated')).toHaveLength(4);
+    for (const value of values) expect(JSON.stringify(audits)).not.toContain(value);
+    await app.close();
+  });
+
+  it('audits a metadata-list failure without including the submitted value', async () => {
+    class FailingListRepo extends InMemoryPlatformSecretsRepo {
+      override listMeta(): Promise<PlatformSecretMeta[]> {
+        return Promise.reject(
+          Object.assign(new Error('metadata unavailable'), { name: 'StoreError' }),
+        );
+      }
+    }
+
+    const { app, auditRepo } = await buildApp(undefined, undefined, new FailingListRepo());
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/failed_key',
+      headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+      payload: { value: SECRET_VALUE },
+    });
+
+    expect(response.statusCode).toBeGreaterThanOrEqual(500);
+    const audits = auditRepo.getAll();
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.action).toBe('secret.updated');
+    expect(audits[0]?.result).toBe('error: store');
+    expect(JSON.stringify(audits)).not.toContain(SECRET_VALUE);
     await app.close();
   });
 });

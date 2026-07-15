@@ -211,17 +211,22 @@ export function registerAdminOwnerRoutes(
       const body = SetSecretBodySchema.safeParse(req.body);
       if (!body.success) throw new ValidationError(body.error.flatten());
 
-      // created vs updated for the audit action — a metadata read, no decrypt.
-      const existing = await opts.secrets.list();
-      const isUpdate = existing.some((m) => m.name === params.data.name);
-      const action = isUpdate ? ('secret.updated' as const) : ('secret.created' as const);
+      // Preclassify only for a meaningful failure audit if validation/storage
+      // fails before the atomic upsert returns. Success always uses the
+      // repository-authoritative outcome, never this metadata snapshot.
+      let action: 'secret.created' | 'secret.updated' = 'secret.updated';
       try {
-        await opts.secrets.set({
+        const existing = await opts.secrets.list();
+        action = existing.some((m) => m.name === params.data.name)
+          ? 'secret.updated'
+          : 'secret.created';
+        const outcome = await opts.secrets.set({
           name: params.data.name,
           value: body.data.value,
           description: body.data.description ?? null,
           updatedByKeyId: ctx.apiKey.id,
         });
+        action = outcome === 'updated' ? 'secret.updated' : 'secret.created';
         await opts.audit.record({
           adminAccountId: ctx.account.id,
           adminKeyId: ctx.apiKey.id,
@@ -232,8 +237,8 @@ export function registerAdminOwnerRoutes(
           result: 'success',
           ipAddress: readClientIp(req),
         });
-        void reply.code(isUpdate ? 200 : 201);
-        return { name: params.data.name, status: isUpdate ? 'updated' : 'created' };
+        void reply.code(outcome === 'updated' ? 200 : 201);
+        return { name: params.data.name, status: outcome };
       } catch (err) {
         const code =
           err instanceof Error && err.name

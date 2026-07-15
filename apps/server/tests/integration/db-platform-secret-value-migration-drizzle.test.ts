@@ -6,6 +6,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzlePlatformSecretsRepo } from '../../src/db/platform-secrets-repo.js';
+import { PlatformSecretsService } from '../../src/services/platform-secrets.js';
 import {
   decryptPlatformSecretValue,
   encryptPlatformSecretValue,
@@ -250,6 +251,28 @@ describe.skipIf(!RUN_DB_TESTS)(
         await migratorClient.end({ timeout: 5 });
         await blocker.end({ timeout: 5 });
       }
+    });
+
+    it('serializes five first writes into one created and four updated outcomes', async () => {
+      if (!client) return;
+      const service = new PlatformSecretsService(repoFor(client), KEY);
+      const values = Array.from({ length: 5 }, (_, index) => `value-${index.toString()}`);
+
+      const outcomes = await Promise.all(
+        values.map((value) => service.set({ name: 'concurrent_key', value })),
+      );
+
+      expect(outcomes.sort()).toEqual(['created', 'updated', 'updated', 'updated', 'updated']);
+      const [countRow] = await client<Array<{ total: number }>>`
+        SELECT count(*)::int AS total FROM platform_secrets WHERE name = 'concurrent_key'
+      `;
+      expect(countRow?.total).toBe(1);
+      const [stored] = await client<Array<{ ciphertext: Buffer }>>`
+        SELECT ciphertext FROM platform_secrets WHERE name = 'concurrent_key'
+      `;
+      expect(isPlatformSecretValueV2Envelope(stored!.ciphertext)).toBe(true);
+      const finalValue = decryptPlatformSecretValue(stored!.ciphertext, KEY, 'concurrent_key');
+      expect(values).toContain(finalValue);
     });
   },
 );

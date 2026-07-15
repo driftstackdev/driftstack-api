@@ -69,6 +69,7 @@ function makeRepo(): PlatformSecretsRepo & { store: Map<string, Buffer> } {
       return Promise.resolve(store.get(name) ?? null);
     },
     upsert(args) {
+      const outcome = store.has(args.name) ? 'updated' : 'created';
       store.set(args.name, args.ciphertext);
       meta.set(args.name, {
         name: args.name,
@@ -77,7 +78,7 @@ function makeRepo(): PlatformSecretsRepo & { store: Map<string, Buffer> } {
         updatedAt: new Date(),
         updatedByKeyId: args.updatedByKeyId,
       });
-      return Promise.resolve();
+      return Promise.resolve(outcome);
     },
     remove(name) {
       meta.delete(name);
@@ -90,18 +91,23 @@ describe('PlatformSecretsService', () => {
   it('set → reveal roundtrip; list exposes metadata only (never the value)', async () => {
     const repo = makeRepo();
     const svc = new PlatformSecretsService(repo, KEY);
-    await svc.set({ name: 'stripe_secret_key', value: 'sk-live-AAA', description: 'Stripe' });
-    expect(await svc.reveal('stripe_secret_key')).toBe('sk-live-AAA');
+    await expect(
+      svc.set({ name: 'stripe_secret_key', value: 'sk-live-AAA', description: 'Stripe' }),
+    ).resolves.toBe('created');
+    await expect(svc.set({ name: 'stripe_secret_key', value: 'sk-live-BBB' })).resolves.toBe(
+      'updated',
+    );
+    expect(await svc.reveal('stripe_secret_key')).toBe('sk-live-BBB');
     const list = await svc.list();
     expect(list).toHaveLength(1);
-    expect(JSON.stringify(list)).not.toContain('sk-live-AAA');
+    expect(JSON.stringify(list)).not.toContain('sk-live-BBB');
     // Stored at rest encrypted — the raw store never holds the plaintext.
     const stored = repo.store.get('stripe_secret_key');
-    expect(stored?.includes(Buffer.from('sk-live-AAA'))).toBe(false);
+    expect(stored?.includes(Buffer.from('sk-live-BBB'))).toBe(false);
     expect(stored?.subarray(0, Buffer.byteLength(PLATFORM_SECRET_VALUE_V2_PREFIX)).toString()).toBe(
       PLATFORM_SECRET_VALUE_V2_PREFIX,
     );
-    expect(decryptPlatformSecretValue(stored!, KEY, 'stripe_secret_key')).toBe('sk-live-AAA');
+    expect(decryptPlatformSecretValue(stored!, KEY, 'stripe_secret_key')).toBe('sk-live-BBB');
   });
 
   it('rejects a complete valid ciphertext relocated under another secret name', async () => {
@@ -135,8 +141,8 @@ describe('PlatformSecretsService', () => {
   it('enforces exact UTF-8 byte bounds + an oversized description', async () => {
     const svc = new PlatformSecretsService(makeRepo(), KEY);
     await expect(svc.set({ name: 'k', value: '' })).rejects.toThrow(ValidationError);
-    await expect(svc.set({ name: 'k', value: 'x'.repeat(8192) })).resolves.toBeUndefined();
-    await expect(svc.set({ name: 'k', value: 'é'.repeat(4096) })).resolves.toBeUndefined();
+    await expect(svc.set({ name: 'k', value: 'x'.repeat(8192) })).resolves.toBe('created');
+    await expect(svc.set({ name: 'k', value: 'é'.repeat(4096) })).resolves.toBe('updated');
     await expect(svc.set({ name: 'k', value: 'x'.repeat(8193) })).rejects.toThrow(ValidationError);
     await expect(svc.set({ name: 'k', value: 'é'.repeat(4097) })).rejects.toThrow(ValidationError);
     await expect(svc.set({ name: 'k', value: '\ud800' })).rejects.toThrow(ValidationError);

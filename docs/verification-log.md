@@ -27590,3 +27590,40 @@ whole-page prevalidation, and a deterministically blocked exact compare-and-swap
 that preserves a concurrent v2 successor. Strict server source-and-test
 TypeScript, targeted ESLint/Prettier, diff and whitespace checks, the full
 workspace typecheck, and the full configured workspace build are green.
+
+## V-658 — Platform-secret create/update outcomes are transaction-authoritative
+
+**Date:** 2026-07-14
+
+The owner platform-secret PUT route previously decided whether a write was a
+create or update from a metadata list read performed before the database upsert.
+Concurrent first writes could therefore both observe an absent name, both return
+HTTP 201 with `status: created`, and both emit `secret.created`, even though the
+primary-key upsert made one request overwrite the other. The metadata read also
+sat outside the route's failure-audit boundary, so a repository failure there
+could escape without the value-free D-025 error record promised by the route.
+
+The repository now returns an authoritative `created` or `updated` outcome from
+one transaction. A transaction-scoped 64-bit advisory lock derived from the
+validated stable name serializes the existence check and corresponding explicit
+insert or update. Both branches require exactly one returned row; a writer that
+bypasses the shared lock fails closed on conflict or a lost row instead of being
+silently misclassified. Existing edit behavior still updates ciphertext,
+description, editor key and `updated_at`, while the first `created_at` remains
+stable. The service forwards this outcome, and the in-memory fixture mirrors it.
+
+The route uses the atomic result exclusively for its success audit action, HTTP
+201/200 and response status. Its metadata preclassification remains only to
+label a failure that occurs before an outcome exists, and now runs inside the
+audited `try`; even a metadata-store exception produces one error audit whose
+payload contains the name but never the submitted value.
+
+The complete affected platform-secret matrix passes 7 files and 91/91 tests.
+All 4/4 connected PostgreSQL cases actually execute, including five concurrent
+first writes that yield exactly one `created`, four `updated`, one stored row,
+and one intact submitted v2 value. Five HTTP writes forced behind the same stale
+metadata barrier likewise produce exactly one 201/create audit and four
+200/update audits, while an injected list failure produces one value-free error
+audit. Strict server test TypeScript, the server build, targeted ESLint and
+Prettier, diff/whitespace checks, and the full configured workspace build are
+green.

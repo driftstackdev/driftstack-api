@@ -33,6 +33,8 @@ export interface PlatformSecretMeta {
   updatedByKeyId: string | null;
 }
 
+export type PlatformSecretSetOutcome = 'created' | 'updated';
+
 export interface PlatformSecretsRepo {
   /** Metadata for every stored secret — NEVER selects the ciphertext. */
   listMeta(): Promise<PlatformSecretMeta[]>;
@@ -44,7 +46,7 @@ export interface PlatformSecretsRepo {
     ciphertext: Buffer;
     description: string | null;
     updatedByKeyId: string | null;
-  }): Promise<void>;
+  }): Promise<PlatformSecretSetOutcome>;
   /** Delete a secret. Resolves false when the name didn't exist. */
   remove(name: string): Promise<boolean>;
 }
@@ -90,7 +92,7 @@ export class PlatformSecretsService {
     value: string;
     description?: string | null;
     updatedByKeyId?: string | null;
-  }): Promise<void> {
+  }): Promise<PlatformSecretSetOutcome> {
     const key = this.requireKey();
     if (!NAME_RE.test(args.name)) {
       throw new ValidationError({
@@ -115,7 +117,7 @@ export class PlatformSecretsService {
         fieldErrors: { description: [`must be at most ${MAX_DESCRIPTION_CHARS} characters`] },
       });
     }
-    await this.repo.upsert({
+    return this.repo.upsert({
       name: args.name,
       ciphertext: encryptPlatformSecretValue(args.value, key, args.name),
       description,
