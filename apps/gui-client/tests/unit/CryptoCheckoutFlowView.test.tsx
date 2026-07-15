@@ -135,7 +135,7 @@ describe('V-534.AC CryptoCheckoutFlowView', () => {
     expect(checkoutPosts.length).toBe(1);
   });
 
-  it('shows the "stub provider" support hint when provider=stub', async () => {
+  it('shows an actionable availability message without exposing provider internals', async () => {
     setupFetch({});
     render(<CryptoCheckoutFlowView defaultProduct="solo_manual" />);
     await waitFor(() => {
@@ -143,8 +143,10 @@ describe('V-534.AC CryptoCheckoutFlowView', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /Start checkout/i }));
     await waitFor(() => {
-      expect(screen.getByText(/stub mode/i)).toBeTruthy();
+      expect(screen.getByText(/Crypto checkout is unavailable on this server/i)).toBeTruthy();
+      expect(screen.getByText(/billing@driftstack\.dev/i)).toBeTruthy();
     });
+    expect(screen.queryByText(/stub mode/i)).toBeNull();
   });
 
   it.each([

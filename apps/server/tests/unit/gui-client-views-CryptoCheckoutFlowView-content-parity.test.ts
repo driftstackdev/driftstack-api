@@ -88,7 +88,7 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
     );
   });
 
-  it("Step 2 checkout state-machine: idle → 'Start checkout' button disabled when quote !== ready / loading → 'Minting order…' / error → ErrorBanner onDismiss=onReset / ready → order_id font-mono + V-534.AZ replayed banner 'Restored from your earlier attempt (no duplicate order minted).' + payment_address row when !== null + stub-provider notice 'Payment provider is in stub mode. Contact support to receive a real payment address.'", () => {
+  it("Step 2 checkout state-machine: idle → 'Start checkout' button disabled when quote !== ready / loading → 'Minting order…' / error → ErrorBanner onDismiss=onReset / ready → order_id font-mono + V-534.AZ replayed banner 'Restored from your earlier attempt (no duplicate order minted).' + payment_address row when !== null + actionable unavailable-provider notice", () => {
     expect(body).toMatch(
       /\{checkout\.state\.kind === 'idle' && \(\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{onStart\}\s*\n?\s*disabled=\{quote\.state\.kind !== 'ready'\}/,
     );
@@ -115,8 +115,9 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
       /Couldn’t copy the payment address\. Check clipboard permission and try again\./,
     );
     expect(body).toMatch(
-      /\{order\.provider === 'stub' && \(\s*\n?\s*<div className="text-ink-secondary">\s*\n?\s*Payment provider is in stub mode\. Contact support to receive a real payment\s*\n?\s*address\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /\{order\.provider === 'stub' && \(\s*\n?\s*<div className="text-ink-secondary">\s*\n?\s*Crypto checkout is unavailable on this server\. Use card checkout instead, or\s*\n?\s*contact billing@driftstack\.dev\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
     );
+    expect(body).not.toContain('Payment provider is in stub mode');
   });
 
   it("Step 3 live status section only renders when orderId !== null; CryptoOrderStatusBadge size='sm' on ready state; 'Loading…' on loading state; error state surfaces a dismissable ErrorBanner onDismiss={() => void order.refetch()} (Dismiss re-polls the order status rather than dead-ending on a stale error)", () => {

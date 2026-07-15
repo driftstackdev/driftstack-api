@@ -205,8 +205,8 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
                 )}
                 {order.provider === 'stub' && (
                   <div className="text-ink-secondary">
-                    Payment provider is in stub mode. Contact support to receive a real payment
-                    address.
+                    Crypto checkout is unavailable on this server. Use card checkout instead, or
+                    contact billing@driftstack.dev.
                   </div>
                 )}
                 {/* Don't dead-end after minting: the product select locks once an order exists,
