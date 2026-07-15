@@ -44,12 +44,20 @@ describe('GUI local signing and install contract', () => {
     expect(body).toContain('openssl genrsa -traditional -out "$KEY" 3072');
     expect(body).toContain('extendedKeyUsage=critical,codeSigning');
     expect(body).toContain('-T /usr/bin/codesign');
+    expect(body).toContain('openssl x509 -in "$certificate_file" -noout -ext subjectKeyIdentifier');
+    expect(body).toContain("-S 'apple-tool:,apple:,codesign:'");
+    expect(body).toContain('-a "$application_label"');
+    expect(body).toContain('-t private');
+    expect(body).toContain('configure_codesign_partition "$CERT"');
     expect(body).toContain('SYSTEM_KEYCHAIN="/Library/Keychains/System.keychain"');
     expect(body).toContain('sudo -n security add-trusted-cert');
     expect(body).toContain('SYSTEM_TRUSTED_CERT=1');
     expect(body).toContain('sudo -n security delete-certificate');
     expect(body).toContain('security add-trusted-cert -r trustRoot -p codeSign');
-    expect(body).not.toMatch(/unlock-keychain|set-key-partition-list| -A(?:\s|$)/);
+    expect(body).not.toMatch(/unlock-keychain| -A(?:\s|$)/);
+    const partitionSetup = body.match(/configure_codesign_partition\(\) \{([\s\S]*?)\n\}/)?.[1];
+    expect(partitionSetup).toBeDefined();
+    expect(partitionSetup).not.toMatch(/^\s*-k(?:\s|$)/m);
     expect(body).not.toMatch(/KEYCHAIN_PASSWORD|APPLE_PASSWORD/);
   });
 
@@ -62,9 +70,12 @@ describe('GUI local signing and install contract', () => {
     );
     expect(body).toContain("designated requirement is the executable's CDHash");
     expect(body).toContain('scripts/setup-local-gui-signing.sh');
-    expect(body).toContain('grants its private key only to `/usr/bin/codesign`');
+    expect(body).toMatch(/scopes the partition change to that\s+exact private key/);
+    expect(body).toMatch(/requires the\s+`apple:` code-signing partition/);
     expect(body).toContain('without another password dialog');
-    expect(body).toContain('the script never reads or\nstores that password');
+    expect(body).toContain(
+      'the script never reads, passes on a command line, or stores the password',
+    );
     expect(body).toMatch(/requests only the macOS `\.app`\s+target/);
     expect(body).toContain('cannot replace Developer ID signing/notarisation');
   });
