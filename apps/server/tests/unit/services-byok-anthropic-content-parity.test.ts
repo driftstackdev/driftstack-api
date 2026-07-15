@@ -99,6 +99,15 @@ describe('services/byok-anthropic content parity', () => {
     );
   });
 
+  it('set and ordinary read pass the exact owning account into the v2 envelope codec', () => {
+    expect(body).toMatch(
+      /encryptByokAnthropicKey\(\s*\n?\s*args\.plaintext,\s*\n?\s*this\.config\.encryptionKey,\s*\n?\s*args\.accountId,\s*\n?\s*\)/,
+    );
+    expect(body).toMatch(
+      /decryptByokAnthropicKey\(row\.ciphertext, this\.config\.encryptionKey, row\.accountId\)/,
+    );
+  });
+
   it("v2-#21 TTL-gate-bypass-via-header framing pinned: 'Per-request x-byok-anthropic-api-key headers bypass storage entirely so customers can always recover by passing a fresh key on the wire.' — pinned so the customer-recovery-path documentation survives (drift to gating headers behind the storage TTL would trap customers with a 90+ day stored key in the same expired-state on every request)", () => {
     expect(body).toMatch(
       /\/\/ Per-request `x-byok-anthropic-api-key` headers bypass storage\s*\n?\s*\/\/ entirely so customers can always recover by passing a fresh\s*\n?\s*\/\/ key on the wire\./,

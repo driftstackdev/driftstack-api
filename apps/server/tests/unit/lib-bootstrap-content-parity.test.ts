@@ -488,6 +488,15 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/\.\.\.\(refusalPatterns\.length > 0 \? \{ refusalPatterns \} : \{\}\)/);
   });
 
+  it('BYOK Anthropic byte envelopes migrate to account-bound v2 before service construction', () => {
+    expect(body).toContain('const byokAnthropicRepo = new DrizzleBYOKAnthropicRepo(dbHandle);');
+    expect(body).toContain('await byokAnthropicRepo.migrateCiphertextEnvelopes(');
+    expect(body).toContain('const MAX_BYOK_ANTHROPIC_BOOT_MIGRATION_ROWS = 10_000;');
+    expect(body).toContain('BYOK Anthropic key migration made no progress');
+    expect(body).toContain("component: 'byok-anthropic-key-encryption'");
+    expect(body).toContain('new BYOKAnthropicService(byokAnthropicRepo, {');
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

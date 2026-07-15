@@ -134,6 +134,27 @@ describe('BYOKAnthropicService', () => {
     expect((await svc.getMetadata({ accountId: accountB })).hasKey).toBe(false);
   });
 
+  it('rejects relocation of account A ciphertext into account B', async () => {
+    const repo = new InMemoryBYOKAnthropicRepo();
+    const svc = new BYOKAnthropicService(repo, {
+      encryptionKey: randomBytes(32).toString('base64'),
+    });
+    const accountA = '00000000-0000-0000-0000-00000000000a';
+    const accountB = '00000000-0000-0000-0000-00000000000b';
+    const now = new Date('2026-05-17T10:00:00Z');
+    await svc.setKey({ accountId: accountA, plaintext: 'sk-ant-api03-account-a', now });
+    const source = await repo.findByAccount(accountA);
+    expect(source?.ciphertext).not.toBeNull();
+    await repo.upsert({
+      accountId: accountB,
+      ciphertext: Buffer.from(source!.ciphertext!),
+      setAt: now,
+      now,
+    });
+    await expect(svc.getPlaintext({ accountId: accountB })).rejects.toThrow();
+    await expect(svc.getPlaintext({ accountId: accountA })).resolves.toBe('sk-ant-api03-account-a');
+  });
+
   // v2-#21 — stored-key TTL gate. Customer's stored key is treated as
   // absent at resolution time once it crosses the maxKeyAgeMs cutoff,
   // forcing the agent-sessions route's resolution chain to fall through

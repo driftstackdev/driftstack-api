@@ -115,7 +115,11 @@ export class BYOKAnthropicService {
     if (!looksLikeAnthropicKey(args.plaintext)) {
       throw new InvalidKeyFormatError();
     }
-    const ciphertext = encryptByokAnthropicKey(args.plaintext, this.config.encryptionKey);
+    const ciphertext = encryptByokAnthropicKey(
+      args.plaintext,
+      this.config.encryptionKey,
+      args.accountId,
+    );
     await this.repo.upsert({
       accountId: args.accountId,
       ciphertext,
@@ -166,7 +170,7 @@ export class BYOKAnthropicService {
         return null;
       }
     }
-    return decryptByokAnthropicKey(row.ciphertext, this.config.encryptionKey);
+    return decryptByokAnthropicKey(row.ciphertext, this.config.encryptionKey, row.accountId);
   }
 
   /** GET /v1/account/me/byok-anthropic-key — metadata for the dashboard

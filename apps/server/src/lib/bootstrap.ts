@@ -938,8 +938,40 @@ export async function createProductionDeps(
   // reuses the MFA key for operational simplicity). When absent, the
   // /v1/account/me/byok-anthropic-key* routes register their 503
   // disabled stubs via the activation-gate pattern.
+  const byokAnthropicRepo = new DrizzleBYOKAnthropicRepo(dbHandle);
+  if (config.mfaEncryptionKey !== undefined) {
+    const MAX_BYOK_ANTHROPIC_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await byokAnthropicRepo.migrateCiphertextEnvelopes(
+        config.mfaEncryptionKey,
+        500,
+      );
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `BYOK Anthropic key migration made no progress with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_BYOK_ANTHROPIC_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `BYOK Anthropic key migration exceeded the ${MAX_BYOK_ANTHROPIC_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
+      logger.info(
+        { component: 'byok-anthropic-key-encryption', scanned, converted, remaining },
+        'legacy BYOK Anthropic keys migrated to account-bound v2 before serving',
+      );
+    }
+  }
   const byokAnthropicService = config.mfaEncryptionKey
-    ? new BYOKAnthropicService(new DrizzleBYOKAnthropicRepo(dbHandle), {
+    ? new BYOKAnthropicService(byokAnthropicRepo, {
         encryptionKey: config.mfaEncryptionKey,
         // v2-#32 — warn-log when the v2-#21 TTL gate fires so ops can
         // correlate stale-key fall-throughs with downstream 502

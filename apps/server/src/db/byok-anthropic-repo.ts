@@ -9,13 +9,116 @@
 // set" sentinel — runtime resolution falls back to the request header,
 // then the deployment fallback `BYOK_ANTHROPIC_FALLBACK_KEY` env var.
 
-import { eq } from 'drizzle-orm';
+import { and, asc, count, eq, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { accounts } from './schema.js';
 import type { BYOKAnthropicKeyRow, BYOKAnthropicRepo } from '../services/byok-anthropic.js';
+import {
+  BYOK_ANTHROPIC_KEY_V2_PREFIX,
+  decryptByokAnthropicKey,
+  decryptLegacyByokAnthropicKey,
+  encryptByokAnthropicKey,
+} from '../lib/byok-anthropic-encryption.js';
+
+const MAX_BYOK_ANTHROPIC_MIGRATION_BATCH = 500;
+const BYOK_ANTHROPIC_KEY_V2_PREFIX_BYTES = Buffer.from(BYOK_ANTHROPIC_KEY_V2_PREFIX, 'utf8');
+
+function byokAnthropicCiphertextIsV2() {
+  return sql`${accounts.byokAnthropicApiKeyCiphertext} IS NOT NULL
+    AND substring(${accounts.byokAnthropicApiKeyCiphertext} from 1 for ${BYOK_ANTHROPIC_KEY_V2_PREFIX_BYTES.length}) = ${BYOK_ANTHROPIC_KEY_V2_PREFIX_BYTES}`;
+}
+
+function byokAnthropicCiphertextIsLegacy() {
+  return sql`${accounts.byokAnthropicApiKeyCiphertext} IS NOT NULL
+    AND NOT (${byokAnthropicCiphertextIsV2()})`;
+}
 
 export class DrizzleBYOKAnthropicRepo implements BYOKAnthropicRepo {
   constructor(private readonly database: Database) {}
+
+  /**
+   * Bootstrap-only no-DDL conversion from global context-free byte envelopes to
+   * purpose/account-bound v2. Every selected legacy key authenticates before the
+   * first UPDATE; each write exact-CASes the owning account and old bytea value.
+   */
+  async migrateCiphertextEnvelopes(
+    encryptionKeyBase64: string,
+    limit = MAX_BYOK_ANTHROPIC_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_BYOK_ANTHROPIC_MIGRATION_BATCH) {
+      throw new Error(
+        `BYOK Anthropic migration limit must be an integer from 1 to ${MAX_BYOK_ANTHROPIC_MIGRATION_BATCH.toString()}.`,
+      );
+    }
+
+    // Authenticate one already-bound row before considering legacy data. A
+    // wrong operator key therefore fails without rewriting anything, including
+    // on successor boots after the legacy set has drained to zero.
+    const [v2Probe] = await this.database.db
+      .select({
+        accountId: accounts.id,
+        ciphertext: accounts.byokAnthropicApiKeyCiphertext,
+      })
+      .from(accounts)
+      .where(byokAnthropicCiphertextIsV2())
+      .orderBy(asc(accounts.id))
+      .limit(1);
+    if (v2Probe !== undefined) {
+      if (v2Probe.ciphertext === null) {
+        throw new Error(`Account ${v2Probe.accountId} has an incomplete BYOK ciphertext.`);
+      }
+      decryptByokAnthropicKey(v2Probe.ciphertext, encryptionKeyBase64, v2Probe.accountId);
+    }
+
+    const rows = await this.database.db
+      .select({
+        accountId: accounts.id,
+        ciphertext: accounts.byokAnthropicApiKeyCiphertext,
+      })
+      .from(accounts)
+      .where(byokAnthropicCiphertextIsLegacy())
+      .orderBy(asc(accounts.id))
+      .limit(limit);
+
+    // Authenticate and shape-check the complete bounded page before its first
+    // write. Wrong key, malformed bytes or invalid plaintext leaves it intact.
+    const prepared = rows.map((row) => {
+      if (row.ciphertext === null) {
+        throw new Error(`Account ${row.accountId} has an incomplete BYOK ciphertext.`);
+      }
+      const plaintext = decryptLegacyByokAnthropicKey(row.ciphertext, encryptionKeyBase64);
+      return {
+        ...row,
+        ciphertext: row.ciphertext,
+        next: encryptByokAnthropicKey(plaintext, encryptionKeyBase64, row.accountId),
+      };
+    });
+
+    let converted = 0;
+    for (const row of prepared) {
+      const updated = await this.database.db
+        .update(accounts)
+        .set({
+          // Ciphertext-only maintenance write: preserve set/use/reminder and
+          // account updatedAt timestamps exactly.
+          byokAnthropicApiKeyCiphertext: row.next,
+        })
+        .where(
+          and(
+            eq(accounts.id, row.accountId),
+            eq(accounts.byokAnthropicApiKeyCiphertext, row.ciphertext),
+          ),
+        )
+        .returning({ id: accounts.id });
+      if (updated.length === 1) converted += 1;
+    }
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
+      .from(accounts)
+      .where(byokAnthropicCiphertextIsLegacy());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
+  }
 
   async findByAccount(accountId: string): Promise<BYOKAnthropicKeyRow | null> {
     const rows = await this.database.db

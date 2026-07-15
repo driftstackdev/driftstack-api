@@ -27309,3 +27309,38 @@ prevalidation, successor wrong-key probing, and a deterministically blocked
 record-CAS loser that preserves the concurrent v2 successor. Server source and
 test TypeScript, targeted lint/format, build, diff and whitespace checks are
 green.
+
+## V-651 — Anthropic BYOK ciphertext authenticates its owning account
+
+**Date:** 2026-07-14
+
+Anthropic BYOK API keys were previously stored in a context-free AES-256-GCM
+envelope. If the database boundary were already writable or corrupted, moving a
+valid ciphertext onto another account row could make the destination account
+use the source account's provider credential. This was not an unauthenticated
+network path, but the encrypted value could not authenticate its own owner.
+
+New writes carry an explicit v2 prefix and canonical JSON-array authenticated
+context containing a dedicated BYOK purpose/version and the normalized account
+UUID. Ordinary set and read paths supply that exact account and accept v2 only.
+Envelope and plaintext bounds are enforced before decryption; authenticated
+plaintext must round-trip as exact UTF-8 and retain the accepted Anthropic key
+shape. Wrong account, purpose, encryption key, truncation, extension, malformed
+UTF-8 or ciphertext modification fails closed. The prefixless reader is exposed
+only to bootstrap conversion.
+
+The no-DDL converter authenticates one existing v2 probe, then fully validates a
+bounded page of legacy values before its first write. Each conversion compares
+account ID plus the exact old bytea value and updates only the ciphertext, so
+provider-use, rotation-reminder, account-update and deletion timestamps are
+preserved. Rows awaiting deletion are included. Startup drains legacy values to
+zero with no-progress and 10,000-row guards, while the record compare-and-swap
+leaves a concurrent set or clear as the deterministic winner.
+
+The focused codec, service, bootstrap, route and content-guard matrix passes 6
+files and 98/98 tests; the expanded affected behavior matrix passes 11 files and
+78/78 tests. The isolated real-PostgreSQL proof passes 3/3 cases, including
+wrong-key byte/timestamp preservation, cross-account relocation refusal,
+whole-page prevalidation, successor wrong-key probing, and blocked migrations
+that preserve concurrent set and clear operations. Strict server source-and-test
+TypeScript, targeted ESLint/Prettier, diff and whitespace checks are green.

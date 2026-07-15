@@ -24,9 +24,15 @@ describe('lib/byok-anthropic-encryption content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("AI-CHAT BYOK Anthropic module-level framing pinned: 'per-customer encrypted key (migration 0041, Tier-3 verdicts LOCKED 2026-05-17). The bytea column on accounts.byok_anthropic_api_key_ciphertext stores a single blob [12 bytes IV | 16 bytes auth tag | N bytes ciphertext] so the GCM parameters travel with the ciphertext.' — pinned so the migration 0041 + Tier-3 lock-date + bytea-column-name + 12-IV + 16-tag + N-ciphertext envelope shape all stay documented", () => {
+  it('module framing pins explicit v2 bytes, account AAD, and bootstrap-only legacy input', () => {
     expect(body).toMatch(
-      /\/\/ AI-CHAT BYOK Anthropic — per-customer encrypted key \(migration 0041,\s*\n?\s*\/\/ Tier-3 verdicts LOCKED 2026-05-17\)\. The bytea column on\s*\n?\s*\/\/ `accounts\.byok_anthropic_api_key_ciphertext` stores a single blob\s*\n?\s*\/\/ `\[12 bytes IV \| 16 bytes auth tag \| N bytes ciphertext\]` so the GCM\s*\n?\s*\/\/ parameters travel with the ciphertext\./,
+      /New values in\s*\n?\s*\/\/ `accounts\.byok_anthropic_api_key_ciphertext` use an explicit v2 byte prefix\s*\n?\s*\/\/ followed by `\[12 bytes IV \| 16 bytes auth tag \| N bytes ciphertext\]`\./,
+    );
+    expect(body).toMatch(
+      /AES-GCM AAD binds a dedicated purpose\/version and the owning account UUID/,
+    );
+    expect(body).toMatch(
+      /The\s*\n?\s*\/\/ prefixless v1 form is accepted only by the bounded bootstrap converter\./,
     );
   });
 
@@ -60,27 +66,33 @@ describe('lib/byok-anthropic-encryption content parity', () => {
     );
   });
 
-  it("encryptByokAnthropicKey envelope-emission pinned: 'AES-256-GCM encrypt the customer's Anthropic API key. Returns the canonical [IV | tag | ciphertext] blob that the bytea column stores directly.' + empty-key throws + Buffer.concat([iv, tag, ciphertext]) order. Drift to a different field order would break the decrypt path on existing data; drift to encrypting empty would let database rows with empty ciphertext look meaningful", () => {
+  it('v2 encrypt pins purpose/account AAD and prefix|iv|tag|ciphertext order', () => {
     expect(body).toMatch(
-      /\/\*\* AES-256-GCM encrypt the customer's Anthropic API key\. Returns the\s*\n?\s*\*\s+canonical `\[IV \| tag \| ciphertext\]` blob that the `bytea` column\s*\n?\s*\*\s+stores directly\. \*\//,
+      /const BYOK_ANTHROPIC_KEY_AAD_PURPOSE = 'driftstack\.byok-anthropic-key';/,
     );
     expect(body).toMatch(
-      /if \(plaintext\.length === 0\) \{\s*\n?\s*throw new Error\('BYOK plaintext key is empty; refusing to encrypt'\);\s*\n?\s*\}/,
+      /export const BYOK_ANTHROPIC_KEY_V2_PREFIX = 'driftstack:byok-anthropic-key:v2:';/,
     );
     expect(body).toMatch(
-      /const cipher = createCipheriv\('aes-256-gcm', key, iv\);\s*\n?\s*const ciphertext = Buffer\.concat\(\[cipher\.update\(plaintext, 'utf8'\), cipher\.final\(\)\]\);\s*\n?\s*const tag = cipher\.getAuthTag\(\);\s*\n?\s*return Buffer\.concat\(\[iv, tag, ciphertext\]\);/,
+      /JSON\.stringify\(\[BYOK_ANTHROPIC_KEY_AAD_PURPOSE, 2, normalizeAccountId\(accountId\)\]\)/,
+    );
+    expect(body).toMatch(
+      /cipher\.setAAD\(buildAdditionalAuthenticatedData\(accountId\)\);[\s\S]*?return Buffer\.concat\(\[BYOK_ANTHROPIC_KEY_V2_PREFIX_BYTES, iv, tag, ciphertext\]\);/,
     );
   });
 
-  it('decryptByokAnthropicKey envelope-parse pinned: minimum-length check (>= IV + tag + 1) + extract iv/tag/ciphertext slices + setAuthTag + final() → branded plaintext. + operator-facing too-short error with byte counts. Drift to dropping the length check would crash on malformed rows; drift to a different slice order would diverge from the encrypt-side blob layout', () => {
+  it('ordinary read is v2-only, payload allocation is bounded, and legacy read is bootstrap-only', () => {
     expect(body).toMatch(
-      /if \(blob\.length < GCM_IV_BYTES \+ GCM_TAG_BYTES \+ 1\) \{\s*\n?\s*throw new Error\(\s*\n?\s*`BYOK ciphertext blob is \$\{blob\.length\} bytes; expected at least ` \+\s*\n?\s*`\$\{GCM_IV_BYTES \+ GCM_TAG_BYTES \+ 1\} \(iv \+ tag \+ >=1 byte ciphertext\)`,/,
+      /if \(!isByokAnthropicKeyV2Envelope\(blob\)\) \{\s*\n?\s*throw new Error\('BYOK Anthropic key storage is not a v2 envelope\.'\);/,
     );
     expect(body).toMatch(
-      /const iv = blob\.subarray\(0, GCM_IV_BYTES\);\s*\n?\s*const tag = blob\.subarray\(GCM_IV_BYTES, GCM_IV_BYTES \+ GCM_TAG_BYTES\);\s*\n?\s*const ciphertext = blob\.subarray\(GCM_IV_BYTES \+ GCM_TAG_BYTES\);/,
+      /blob\.length < BYOK_ANTHROPIC_KEY_MIN_PAYLOAD_BYTES \|\|\s*\n?\s*blob\.length > BYOK_ANTHROPIC_KEY_MAX_PAYLOAD_BYTES/,
     );
     expect(body).toMatch(
-      /decipher\.setAuthTag\(tag\);\s*\n?\s*const plaintext = Buffer\.concat\(\[decipher\.update\(ciphertext\), decipher\.final\(\)\]\)\.toString\('utf8'\);\s*\n?\s*return plaintext as BYOKAnthropicKeyPlaintext;/,
+      /if \(!Buffer\.from\(plaintext, 'utf8'\)\.equals\(plaintextBytes\)\) \{\s*\n?\s*throw new Error\('BYOK plaintext key is not valid UTF-8\.'\);/,
+    );
+    expect(body).toMatch(
+      /export function decryptLegacyByokAnthropicKey[\s\S]*?legacy reader refuses a v2 envelope/,
     );
   });
 
