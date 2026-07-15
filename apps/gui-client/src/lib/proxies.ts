@@ -1,4 +1,4 @@
-// Proxy registry — metadata in tauri-plugin-store, credentials in Keychain.
+// Proxy registry — metadata/ciphertext in tauri-plugin-store, vault key in Keychain.
 //
 // Stored under the same store file as settings (settings.json) but
 // keyed separately so a settings reset doesn't blow away proxies and
@@ -7,10 +7,12 @@
 // with this proxy" reference can stay valid.
 //
 // The settings file contains only non-secret display/routing metadata. SOCKS
-// passwords, OpenVPN profiles, and WireGuard private keys live in one versioned
-// OS-credential-store entry per proxy. listProxies hydrates those fields only in
-// memory. Legacy all-in-one rows are migrated on first read and purged from disk
-// even when the credential store is temporarily unavailable.
+// passwords, OpenVPN profiles, and WireGuard private keys are AES-GCM encrypted
+// per proxy in the plugin store. The one random vault key lives in the OS
+// credential store and is loaded once per process. listProxies hydrates secret
+// fields only in memory. Legacy plaintext rows and per-proxy Keychain entries
+// migrate ciphertext-first and are removed only after the encrypted write is
+// durable.
 
 import { invoke } from '@tauri-apps/api/core';
 import { LazyStore } from '@tauri-apps/plugin-store';
@@ -60,6 +62,13 @@ export interface ProxyDraft {
 
 const STORE_FILE = 'settings.json';
 const PROXIES_KEY = 'proxies';
+const SECRET_ENVELOPES_KEY = 'proxy_secret_envelopes_v2';
+const VAULT_KEY_NAME = 'proxy_vault_key';
+const VAULT_KEY_PREFIX = 'v1:';
+const VAULT_AAD_PURPOSE = 'driftstack-gui-proxy-secret';
+const MAX_PROXY_SECRET_BYTES = 128 * 1024;
+const AES_GCM_IV_BYTES = 12;
+// Read-only legacy namespace. New and updated secrets never write here.
 const SECRET_PREFIX = 'proxy_secret:';
 
 interface PersistedProxyConfig {
@@ -86,12 +95,20 @@ interface ProxySecretPayload {
   wireguard?: WireGuardConfigInput;
 }
 
+interface ProxySecretEnvelope {
+  version: 2;
+  iv: string;
+  ciphertext: string;
+}
+
 let store: LazyStore | null = null;
 // A protected value only needs to cross the native boundary once per process.
 // Apart from avoiding redundant IPC, this prevents multiple mounted views and
 // background polls from replaying the same macOS Keychain authorization prompt.
 const volatileSecrets = new Map<string, ProxySecretPayload>();
 const protectedLoadFailures = new Map<string, { message: string; retryAfter: number }>();
+let vaultKeyPromise: Promise<CryptoKey> | null = null;
+let vaultKeyFailure: { message: string; retryAfter: number } | null = null;
 const PROTECTED_LOAD_RETRY_MS = 30_000;
 function getStore(): LazyStore {
   if (store === null) {
@@ -283,7 +300,7 @@ async function listProxiesUnlocked(): Promise<ProxyConfig[]> {
     let protectedValue: ProxySecretPayload | null = null;
     let protectedLoadError: unknown = null;
     try {
-      protectedValue = await loadSecret(metadata.id);
+      protectedValue = await loadSecret(metadata);
     } catch (error) {
       // Invalid data is never a recoverable "credential store unavailable"
       // condition. Do not let a stale plaintext row override corrupted protected
@@ -299,7 +316,11 @@ async function listProxiesUnlocked(): Promise<ProxyConfig[]> {
       // the migrated value in memory for this launch, but purge the disk row.
       try {
         await saveSecretPayload(metadata.id, legacy);
-      } catch {
+      } catch (error) {
+        // Corrupt/unsupported protected storage is not a temporary lock. Keep
+        // the legacy row untouched and fail closed rather than purging its only
+        // recoverable copy into volatile memory.
+        if (isProtectedPayloadError(error)) throw error;
         volatileSecrets.set(metadata.id, legacy);
       }
       secret = legacy;
@@ -327,7 +348,7 @@ function isPersistedProxyConfig(v: unknown): v is PersistedProxyConfig {
   if (typeof v !== 'object' || v === null) return false;
   const r = v as Record<string, unknown>;
   return (
-    typeof r.id === 'string' &&
+    isSafeProxyId(r.id) &&
     typeof r.label === 'string' &&
     typeof r.host === 'string' &&
     Number.isInteger(r.port) &&
@@ -338,6 +359,10 @@ function isPersistedProxyConfig(v: unknown): v is PersistedProxyConfig {
     (r.serverId === undefined || typeof r.serverId === 'string') &&
     (r.scheme === undefined || isProxyScheme(r.scheme))
   );
+}
+
+function isSafeProxyId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
 
 function isProxyScheme(value: unknown): value is AccountProxyScheme {
@@ -365,6 +390,168 @@ function secretName(id: string): string {
   return `${SECRET_PREFIX}${id}`;
 }
 
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+function vaultAad(id: string, binding: ProxySecretPayload['binding']): ArrayBuffer {
+  return exactArrayBuffer(
+    new TextEncoder().encode(
+      JSON.stringify([
+        VAULT_AAD_PURPOSE,
+        2,
+        id,
+        binding.host,
+        binding.port,
+        binding.username,
+        binding.scheme,
+      ]),
+    ),
+  );
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  if (value.length === 0 || value.length > 180_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    throw new Error('Protected proxy credentials are corrupted.');
+  }
+  try {
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  } catch {
+    throw new Error('Protected proxy credentials are corrupted.');
+  }
+}
+
+async function loadVaultKey(): Promise<CryptoKey> {
+  if (vaultKeyPromise !== null) return vaultKeyPromise;
+  if (vaultKeyFailure !== null && Date.now() < vaultKeyFailure.retryAfter) {
+    throw new Error(vaultKeyFailure.message);
+  }
+
+  vaultKeyPromise = (async () => {
+    let stored = await invoke<string | null>('secret_load', { key: VAULT_KEY_NAME });
+    if (stored === null) {
+      const fresh = crypto.getRandomValues(new Uint8Array(32));
+      stored = `${VAULT_KEY_PREFIX}${bytesToBase64(fresh)}`;
+      await invoke('secret_save', { key: VAULT_KEY_NAME, value: stored });
+    }
+    if (!stored.startsWith(VAULT_KEY_PREFIX)) {
+      throw new Error('Protected proxy vault key has an unsupported format.');
+    }
+    const raw = base64ToBytes(stored.slice(VAULT_KEY_PREFIX.length));
+    if (raw.byteLength !== 32) {
+      throw new Error('Protected proxy vault key has an unsupported format.');
+    }
+    return crypto.subtle.importKey('raw', exactArrayBuffer(raw), 'AES-GCM', false, [
+      'encrypt',
+      'decrypt',
+    ]);
+  })();
+
+  try {
+    const key = await vaultKeyPromise;
+    vaultKeyFailure = null;
+    return key;
+  } catch (error) {
+    vaultKeyPromise = null;
+    const message =
+      error instanceof Error ? error.message : 'Protected proxy credentials are unavailable.';
+    vaultKeyFailure = { message, retryAfter: Date.now() + PROTECTED_LOAD_RETRY_MS };
+    throw error;
+  }
+}
+
+async function readSecretEnvelopes(): Promise<Record<string, unknown>> {
+  const value = await getStore().get<unknown>(SECRET_ENVELOPES_KEY);
+  if (value === undefined) return {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Protected proxy credentials are corrupted.');
+  }
+  return { ...(value as Record<string, unknown>) };
+}
+
+function isProxySecretEnvelope(value: unknown): value is ProxySecretEnvelope {
+  if (typeof value !== 'object' || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return row.version === 2 && typeof row.iv === 'string' && typeof row.ciphertext === 'string';
+}
+
+async function saveSecretEnvelope(id: string, secret: ProxySecretPayload): Promise<void> {
+  const plaintext = new TextEncoder().encode(JSON.stringify(secret));
+  if (plaintext.byteLength === 0 || plaintext.byteLength > MAX_PROXY_SECRET_BYTES) {
+    throw new Error('Protected proxy credentials exceed the storage limit.');
+  }
+  const key = await loadVaultKey();
+  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES));
+  const encrypted = await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: exactArrayBuffer(iv),
+      additionalData: vaultAad(id, secret.binding),
+    },
+    key,
+    exactArrayBuffer(plaintext),
+  );
+  const envelopes = await readSecretEnvelopes();
+  envelopes[id] = {
+    version: 2,
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(encrypted)),
+  } satisfies ProxySecretEnvelope;
+  await getStore().set(SECRET_ENVELOPES_KEY, envelopes);
+  await getStore().save();
+}
+
+async function loadSecretEnvelope(
+  metadata: PersistedProxyConfig,
+): Promise<ProxySecretPayload | null> {
+  const envelopes = await readSecretEnvelopes();
+  const stored = envelopes[metadata.id];
+  if (stored === undefined) return null;
+  if (!isProxySecretEnvelope(stored)) {
+    throw new Error('Protected proxy credentials have an unsupported format.');
+  }
+  const iv = base64ToBytes(stored.iv);
+  const ciphertext = base64ToBytes(stored.ciphertext);
+  if (iv.byteLength !== AES_GCM_IV_BYTES || ciphertext.byteLength < 17) {
+    throw new Error('Protected proxy credentials are corrupted.');
+  }
+  const key = await loadVaultKey();
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: exactArrayBuffer(iv),
+        additionalData: vaultAad(metadata.id, secretBinding(metadata)),
+      },
+      key,
+      exactArrayBuffer(ciphertext),
+    );
+    const bytes = new Uint8Array(decrypted);
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_PROXY_SECRET_BYTES) throw new Error();
+    const parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
+    if (!isProxySecretPayload(parsed)) throw new Error();
+    return parsed;
+  } catch {
+    throw new Error('Protected proxy credentials are corrupted.');
+  }
+}
+
+async function deleteSecretEnvelope(id: string): Promise<void> {
+  const envelopes = await readSecretEnvelopes();
+  if (envelopes[id] === undefined) return;
+  delete envelopes[id];
+  await getStore().set(SECRET_ENVELOPES_KEY, envelopes);
+  await getStore().save();
+}
+
 function secretPayload(proxy: ProxyConfig): ProxySecretPayload {
   return {
     version: 1,
@@ -380,33 +567,42 @@ async function saveSecret(proxy: ProxyConfig): Promise<void> {
 }
 
 async function saveSecretPayload(id: string, secret: ProxySecretPayload): Promise<void> {
-  await invoke('secret_save', { key: secretName(id), value: JSON.stringify(secret) });
+  await saveSecretEnvelope(id, secret);
   volatileSecrets.set(id, secret);
   protectedLoadFailures.delete(id);
 }
 
-async function loadSecret(id: string): Promise<ProxySecretPayload | null> {
-  const cached = volatileSecrets.get(id);
+async function loadSecret(metadata: PersistedProxyConfig): Promise<ProxySecretPayload | null> {
+  const cached = volatileSecrets.get(metadata.id);
   if (cached !== undefined) return cached;
 
-  const priorFailure = protectedLoadFailures.get(id);
+  const encrypted = await loadSecretEnvelope(metadata);
+  if (encrypted !== null) {
+    volatileSecrets.set(metadata.id, encrypted);
+    return encrypted;
+  }
+
+  // Read-only legacy migration path. Ciphertext is durably saved before the old
+  // per-proxy credential item is deleted, so interruption can only leave a safe
+  // duplicate—not lose the sole secret copy.
+  const priorFailure = protectedLoadFailures.get(metadata.id);
   if (priorFailure !== undefined && Date.now() < priorFailure.retryAfter) {
     throw new Error(priorFailure.message);
   }
 
   let value: string | null;
   try {
-    value = await invoke<string | null>('secret_load', { key: secretName(id) });
+    value = await invoke<string | null>('secret_load', { key: secretName(metadata.id) });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Protected proxy credentials unavailable.';
-    protectedLoadFailures.set(id, {
+    protectedLoadFailures.set(metadata.id, {
       message,
       retryAfter: Date.now() + PROTECTED_LOAD_RETRY_MS,
     });
     throw error;
   }
-  protectedLoadFailures.delete(id);
+  protectedLoadFailures.delete(metadata.id);
   if (value === null) return null;
   let parsed: unknown;
   try {
@@ -417,18 +613,34 @@ async function loadSecret(id: string): Promise<ProxySecretPayload | null> {
   if (!isProxySecretPayload(parsed)) {
     throw new Error('Protected proxy credentials have an unsupported format.');
   }
-  volatileSecrets.set(id, parsed);
+  if (!secretBindingMatches(parsed.binding, metadata)) {
+    throw new Error('Protected proxy credentials do not match proxy metadata.');
+  }
+  try {
+    await saveSecretEnvelope(metadata.id, parsed);
+    await invoke('secret_delete', { key: secretName(metadata.id) });
+  } catch {
+    // Preserve the still-protected legacy item and keep this launch usable. A
+    // future process retries the ciphertext-first migration.
+  }
+  volatileSecrets.set(metadata.id, parsed);
   return parsed;
 }
 
 async function deleteSecret(id: string): Promise<void> {
   volatileSecrets.delete(id);
   protectedLoadFailures.delete(id);
+  await deleteSecretEnvelope(id);
+  // Idempotent cleanup for pre-vault installations.
   await invoke('secret_delete', { key: secretName(id) });
 }
 
 function isProtectedPayloadError(error: unknown): boolean {
-  return error instanceof Error && error.message.startsWith('Protected proxy credentials');
+  return (
+    error instanceof Error &&
+    (error.message.startsWith('Protected proxy credentials') ||
+      error.message.startsWith('Protected proxy vault key'))
+  );
 }
 
 function hasLegacySecretFields(value: PersistedProxyConfig): boolean {

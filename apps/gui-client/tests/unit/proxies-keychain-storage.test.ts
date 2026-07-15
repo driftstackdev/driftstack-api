@@ -2,6 +2,7 @@
 // the OS credential store, never the settings.json proxy registry.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ProxyLibModule from '../../src/lib/proxies';
 
 const disk = new Map<string, unknown>();
 const keychain = new Map<string, string>();
@@ -40,8 +41,13 @@ vi.mock('@tauri-apps/plugin-store', () => ({
   },
 }));
 
-const { addProxy, listProxies, listProxyMetadata, removeProxy, updateProxy } =
-  await import('../../src/lib/proxies');
+type ProxyLib = typeof ProxyLibModule;
+let proxyLib: ProxyLib;
+
+async function reloadProxyLib(): Promise<void> {
+  vi.resetModules();
+  proxyLib = await import('../../src/lib/proxies');
+}
 
 const base = {
   label: 'Amsterdam',
@@ -51,15 +57,16 @@ const base = {
 };
 
 describe('proxy protected credential storage', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     disk.clear();
     keychain.clear();
     failSecretAccess = false;
     invoke.mockClear();
+    await reloadProxyLib();
   });
 
   it('adds SOCKS credentials to Keychain while persisting metadata only', async () => {
-    const added = await addProxy({ ...base, password: 'socks-secret', scheme: 'socks5' });
+    const added = await proxyLib.addProxy({ ...base, password: 'socks-secret', scheme: 'socks5' });
 
     expect(added.password).toBe('socks-secret');
     const persisted = disk.get('proxies') as Record<string, unknown>[];
@@ -69,19 +76,10 @@ describe('proxy protected credential storage', () => {
     expect(persisted[0]).not.toHaveProperty('wireguard');
     expect(JSON.stringify(persisted)).not.toContain('socks-secret');
 
-    const protectedValue = keychain.get(`proxy_secret:${added.id}`);
-    expect(protectedValue).toBeDefined();
-    expect(JSON.parse(protectedValue ?? '{}')).toEqual({
-      version: 1,
-      binding: {
-        host: base.host,
-        port: base.port,
-        username: base.username,
-        scheme: 'socks5',
-      },
-      password: 'socks-secret',
-    });
-    await expect(listProxies()).resolves.toEqual([added]);
+    expect(keychain.get('proxy_vault_key')).toMatch(/^v1:/);
+    expect([...keychain.keys()]).toEqual(['proxy_vault_key']);
+    expect(JSON.stringify(disk.get('proxy_secret_envelopes_v2'))).not.toContain('socks-secret');
+    await expect(proxyLib.listProxies()).resolves.toEqual([added]);
   });
 
   it('lists sanitized metadata without reading any protected value', async () => {
@@ -94,7 +92,7 @@ describe('proxy protected credential storage', () => {
     ]);
     keychain.set('proxy_secret:metadata-only', 'must-not-be-read');
 
-    await expect(listProxyMetadata()).resolves.toEqual([
+    await expect(proxyLib.listProxyMetadata()).resolves.toEqual([
       {
         id: 'metadata-only',
         ...base,
@@ -114,7 +112,7 @@ describe('proxy protected credential storage', () => {
       },
     ]);
 
-    const metadata = await listProxyMetadata();
+    const metadata = await proxyLib.listProxyMetadata();
     expect(metadata).toEqual([
       {
         id: 'legacy-metadata',
@@ -122,45 +120,58 @@ describe('proxy protected credential storage', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     ]);
-    expect(keychain.get('proxy_secret:legacy-metadata')).toContain('legacy-secret');
+    expect(keychain.get('proxy_vault_key')).toMatch(/^v1:/);
+    expect(keychain.has('proxy_secret:legacy-metadata')).toBe(false);
+    expect(JSON.stringify(disk.get('proxy_secret_envelopes_v2'))).not.toContain('legacy-secret');
     expect(JSON.stringify(disk.get('proxies'))).not.toContain('legacy-secret');
   });
 
   it('caches successful protected reads for the lifetime of the process', async () => {
-    disk.set('proxies', [
-      {
-        id: 'cache-once',
-        ...base,
-        createdAt: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
-    keychain.set(
-      'proxy_secret:cache-once',
-      JSON.stringify({
-        version: 1,
-        binding: { host: base.host, port: base.port, username: base.username, scheme: null },
-        password: 'cached-secret',
-      }),
-    );
+    await proxyLib.addProxy({ ...base, password: 'cached-secret' });
+    await reloadProxyLib();
+    invoke.mockClear();
 
-    await expect(listProxies()).resolves.toHaveLength(1);
-    await expect(listProxies()).resolves.toHaveLength(1);
+    await expect(proxyLib.listProxies()).resolves.toHaveLength(1);
+    await expect(proxyLib.listProxies()).resolves.toHaveLength(1);
     expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
+    expect(invoke).toHaveBeenCalledWith('secret_load', { key: 'proxy_vault_key' });
   });
 
   it('backs off after a protected-store denial instead of prompt-looping', async () => {
-    disk.set('proxies', [
-      {
-        id: 'denial-backoff',
-        ...base,
-        createdAt: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
+    await proxyLib.addProxy({ ...base, password: 'denied-secret' });
+    await reloadProxyLib();
+    invoke.mockClear();
     failSecretAccess = true;
 
-    await expect(listProxies()).rejects.toThrow('credential store locked');
-    await expect(listProxies()).rejects.toThrow('credential store locked');
+    await expect(proxyLib.listProxies()).rejects.toThrow('credential store locked');
+    await expect(proxyLib.listProxies()).rejects.toThrow('credential store locked');
     expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
+  });
+
+  it('hydrates five proxies with one Keychain read after a process restart', async () => {
+    for (let i = 0; i < 5; i++) {
+      await proxyLib.addProxy({
+        ...base,
+        label: `Proxy ${String(i + 1)}`,
+        host: `proxy-${String(i + 1)}.example.com`,
+        password: `secret-${String(i + 1)}`,
+      });
+    }
+    expect([...keychain.keys()]).toEqual(['proxy_vault_key']);
+    await reloadProxyLib();
+    invoke.mockClear();
+
+    const loaded = await proxyLib.listProxies();
+    expect(loaded.map((proxy) => proxy.password)).toEqual([
+      'secret-1',
+      'secret-2',
+      'secret-3',
+      'secret-4',
+      'secret-5',
+    ]);
+    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toEqual([
+      ['secret_load', { key: 'proxy_vault_key' }],
+    ]);
   });
 
   it('round-trips OpenVPN and WireGuard blocks only through protected storage', async () => {
@@ -178,14 +189,14 @@ describe('proxy protected credential storage', () => {
       dns: '1.1.1.1',
     };
 
-    const ovpn = await addProxy({
+    const ovpn = await proxyLib.addProxy({
       ...base,
       label: 'OVPN',
       password: null,
       scheme: 'openvpn',
       openvpn,
     });
-    const wg = await addProxy({
+    const wg = await proxyLib.addProxy({
       ...base,
       label: 'WG',
       password: null,
@@ -193,12 +204,16 @@ describe('proxy protected credential storage', () => {
       wireguard,
     });
 
-    const serializedDisk = JSON.stringify(disk.get('proxies'));
+    const serializedDisk = JSON.stringify([...disk.values()]);
     expect(serializedDisk).not.toContain('PRIVATE');
     expect(serializedDisk).not.toContain('vpn-password');
     expect(serializedDisk).not.toContain('wg-private-key');
-    expect((await listProxies()).find((proxy) => proxy.id === ovpn.id)?.openvpn).toEqual(openvpn);
-    expect((await listProxies()).find((proxy) => proxy.id === wg.id)?.wireguard).toEqual(wireguard);
+    expect((await proxyLib.listProxies()).find((proxy) => proxy.id === ovpn.id)?.openvpn).toEqual(
+      openvpn,
+    );
+    expect((await proxyLib.listProxies()).find((proxy) => proxy.id === wg.id)?.wireguard).toEqual(
+      wireguard,
+    );
   });
 
   it('migrates legacy secret-bearing rows and purges every plaintext field', async () => {
@@ -227,11 +242,16 @@ describe('proxy protected credential storage', () => {
       },
     ]);
 
-    const loaded = await listProxies();
+    const loaded = await proxyLib.listProxies();
     expect(loaded[0]?.password).toBe('legacy-socks-secret');
     expect(loaded[1]?.wireguard?.private_key).toBe('legacy-wg-private');
-    expect(keychain.get('proxy_secret:legacy-socks')).toContain('legacy-socks-secret');
-    expect(keychain.get('proxy_secret:legacy-wg')).toContain('legacy-wg-private');
+    expect([...keychain.keys()]).toEqual(['proxy_vault_key']);
+    expect(JSON.stringify(disk.get('proxy_secret_envelopes_v2'))).not.toContain(
+      'legacy-socks-secret',
+    );
+    expect(JSON.stringify(disk.get('proxy_secret_envelopes_v2'))).not.toContain(
+      'legacy-wg-private',
+    );
     const persisted = disk.get('proxies') as Record<string, unknown>[];
     for (const row of persisted) {
       expect(row).not.toHaveProperty('password');
@@ -260,15 +280,16 @@ describe('proxy protected credential storage', () => {
       }),
     );
 
-    const loaded = await listProxies();
+    const loaded = await proxyLib.listProxies();
     expect(loaded[0]?.password).toBe('current-protected-secret');
-    expect(keychain.get('proxy_secret:already-protected')).toContain('current-protected-secret');
+    expect(keychain.has('proxy_secret:already-protected')).toBe(false);
+    expect(keychain.get('proxy_vault_key')).toMatch(/^v1:/);
     expect(JSON.stringify(disk.get('proxies'))).not.toContain('stale-disk-secret');
   });
 
   it('purges a malformed non-array registry that may contain legacy credentials', async () => {
     disk.set('proxies', { password: 'orphaned-plaintext', private_key: 'orphaned-private' });
-    await expect(listProxies()).resolves.toEqual([]);
+    await expect(proxyLib.listProxies()).resolves.toEqual([]);
     expect(disk.get('proxies')).toEqual([]);
     expect(JSON.stringify(disk.get('proxies'))).not.toContain('orphaned');
   });
@@ -292,7 +313,7 @@ describe('proxy protected credential storage', () => {
       }),
     );
 
-    const loaded = await listProxies();
+    const loaded = await proxyLib.listProxies();
     expect(loaded).toHaveLength(1);
     expect(loaded[0]?.host).toBe(base.host);
     expect(disk.get('proxies')).toHaveLength(1);
@@ -309,34 +330,62 @@ describe('proxy protected credential storage', () => {
     ]);
     failSecretAccess = true;
 
-    const loaded = await listProxies();
+    const loaded = await proxyLib.listProxies();
     expect(loaded[0]?.password).toBe('only-in-memory-this-launch');
     expect(keychain.size).toBe(0);
     expect(JSON.stringify(disk.get('proxies'))).not.toContain('only-in-memory-this-launch');
-    await expect(listProxies()).resolves.toEqual(loaded);
+    await expect(proxyLib.listProxies()).resolves.toEqual(loaded);
+  });
+
+  it('fails closed without purging the only legacy copy when the vault key is corrupt', async () => {
+    disk.set('proxies', [
+      {
+        id: 'recoverable-legacy',
+        ...base,
+        password: 'recoverable-secret',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    keychain.set('proxy_vault_key', 'not-versioned');
+
+    await expect(proxyLib.listProxies()).rejects.toThrow('vault key has an unsupported format');
+    expect(JSON.stringify(disk.get('proxies'))).toContain('recoverable-secret');
+    expect(disk.get('proxy_secret_envelopes_v2')).toBeUndefined();
   });
 
   it('fails closed instead of adding a plaintext fallback when Keychain is locked', async () => {
     failSecretAccess = true;
-    await expect(addProxy({ ...base, password: 'must-not-fallback' })).rejects.toThrow(
+    await expect(proxyLib.addProxy({ ...base, password: 'must-not-fallback' })).rejects.toThrow(
       'credential store locked',
     );
     expect(disk.get('proxies')).toBeUndefined();
     expect(JSON.stringify([...disk.values()])).not.toContain('must-not-fallback');
   });
 
+  it('rejects an oversized secret before any ciphertext or metadata is persisted', async () => {
+    const oversized = 'x'.repeat(128 * 1024);
+    await expect(proxyLib.addProxy({ ...base, password: oversized })).rejects.toThrow(
+      'exceed the storage limit',
+    );
+    expect(disk.get('proxies')).toBeUndefined();
+    expect(disk.get('proxy_secret_envelopes_v2')).toBeUndefined();
+    expect(JSON.stringify([...disk.values()])).not.toContain(oversized);
+  });
+
   it('updates the protected payload without writing the replacement to disk', async () => {
-    const added = await addProxy({ ...base, password: 'old-secret' });
-    const updated = await updateProxy(added.id, { ...base, password: 'new-secret' });
+    const added = await proxyLib.addProxy({ ...base, password: 'old-secret' });
+    const updated = await proxyLib.updateProxy(added.id, { ...base, password: 'new-secret' });
 
     expect(updated?.password).toBe('new-secret');
-    expect(keychain.get(`proxy_secret:${added.id}`)).toContain('new-secret');
-    expect(JSON.stringify(disk.get('proxies'))).not.toContain('new-secret');
-    expect(JSON.stringify(disk.get('proxies'))).not.toContain('old-secret');
+    expect([...keychain.keys()]).toEqual(['proxy_vault_key']);
+    expect(JSON.stringify([...disk.values()])).not.toContain('new-secret');
+    expect(JSON.stringify([...disk.values()])).not.toContain('old-secret');
+    await reloadProxyLib();
+    await expect(proxyLib.listProxies()).resolves.toMatchObject([{ password: 'new-secret' }]);
   });
 
   it('removes a prior VPN private block when the proxy changes scheme', async () => {
-    const added = await addProxy({
+    const added = await proxyLib.addProxy({
       ...base,
       password: null,
       scheme: 'wireguard',
@@ -349,21 +398,31 @@ describe('proxy protected credential storage', () => {
       },
     });
 
-    const updated = await updateProxy(added.id, {
+    const updated = await proxyLib.updateProxy(added.id, {
       ...base,
       password: 'socks-password',
       scheme: 'socks5',
     });
     expect(updated?.wireguard).toBeUndefined();
-    expect(keychain.get(`proxy_secret:${added.id}`)).not.toContain('retired-private-key');
-    expect(keychain.get(`proxy_secret:${added.id}`)).toContain('socks-password');
+    expect(JSON.stringify([...disk.values()])).not.toContain('retired-private-key');
+    expect(JSON.stringify([...disk.values()])).not.toContain('socks-password');
+    await reloadProxyLib();
+    const reloaded = await proxyLib.listProxies();
+    expect(reloaded).toMatchObject([{ password: 'socks-password' }]);
+    expect(reloaded[0]?.wireguard).toBeUndefined();
   });
 
-  it('deletes the per-proxy protected entry after removing its metadata', async () => {
-    const added = await addProxy({ ...base, password: 'remove-me' });
-    expect(keychain.has(`proxy_secret:${added.id}`)).toBe(true);
-    await removeProxy(added.id);
+  it('deletes the per-proxy ciphertext after removing its metadata but retains the shared key', async () => {
+    const added = await proxyLib.addProxy({ ...base, password: 'remove-me' });
+    expect(
+      (disk.get('proxy_secret_envelopes_v2') as Record<string, unknown>)[added.id],
+    ).toBeDefined();
+    await proxyLib.removeProxy(added.id);
     expect(keychain.has(`proxy_secret:${added.id}`)).toBe(false);
+    expect(keychain.has('proxy_vault_key')).toBe(true);
+    expect(
+      (disk.get('proxy_secret_envelopes_v2') as Record<string, unknown>)[added.id],
+    ).toBeUndefined();
     expect(disk.get('proxies')).toEqual([]);
   });
 
@@ -376,7 +435,7 @@ describe('proxy protected credential storage', () => {
       },
     ]);
     keychain.set('proxy_secret:corrupt', '{not-json');
-    await expect(listProxies()).rejects.toThrow('credentials are corrupted');
+    await expect(proxyLib.listProxies()).rejects.toThrow('credentials are corrupted');
   });
 
   it('rejects sanitized metadata whose protected credential entry disappeared', async () => {
@@ -387,7 +446,7 @@ describe('proxy protected credential storage', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     ]);
-    await expect(listProxies()).rejects.toThrow('credentials are missing');
+    await expect(proxyLib.listProxies()).rejects.toThrow('credentials are missing');
   });
 
   it('rejects credentials bound to a different endpoint instead of misrouting them', async () => {
@@ -411,6 +470,18 @@ describe('proxy protected credential storage', () => {
         password: 'must-not-be-forwarded',
       }),
     );
-    await expect(listProxies()).rejects.toThrow('do not match proxy metadata');
+    await expect(proxyLib.listProxies()).rejects.toThrow('do not match proxy metadata');
+    expect(keychain.has('proxy_secret:swapped')).toBe(true);
+  });
+
+  it('rejects a ciphertext envelope relocated to another proxy id', async () => {
+    const first = await proxyLib.addProxy({ ...base, label: 'First', password: 'first-secret' });
+    const second = await proxyLib.addProxy({ ...base, label: 'Second', password: 'second-secret' });
+    const envelopes = disk.get('proxy_secret_envelopes_v2') as Record<string, unknown>;
+    envelopes[second.id] = envelopes[first.id];
+    disk.set('proxy_secret_envelopes_v2', envelopes);
+    await reloadProxyLib();
+
+    await expect(proxyLib.listProxies()).rejects.toThrow('credentials are corrupted');
   });
 });

@@ -64,6 +64,7 @@ fn safe_secret_suffix(value: &str, max_bytes: usize) -> bool {
 
 fn is_valid_main_gui_secret_key(key: &str) -> bool {
     key == "api_key"
+        || key == "proxy_vault_key"
         || key
             .strip_prefix("api_key:")
             .is_some_and(|suffix| safe_secret_suffix(suffix, 320))
@@ -1470,6 +1471,7 @@ mod tests {
     fn main_gui_secret_names_are_bounded_to_known_namespaces() {
         for key in [
             "api_key",
+            "proxy_vault_key",
             "api_key:api.driftstack.dev",
             "api_key:localhost_3000",
             "proxy_secret:550e8400-e29b-41d4-a716-446655440000",
@@ -1524,6 +1526,7 @@ mod tests {
         for denied in [
             "api_key",
             "api_key:api.driftstack.dev",
+            "proxy_vault_key",
             "proxy_secret:550e8400-e29b-41d4-a716-446655440000",
             "gui_control:agt_another-session",
         ] {

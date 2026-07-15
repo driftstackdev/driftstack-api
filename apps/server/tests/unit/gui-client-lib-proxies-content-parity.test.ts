@@ -22,17 +22,26 @@ describe('GUI proxy protected-storage content invariant', () => {
     expect(persisted).not.toMatch(/password|openvpn|wireguard|private_key|config_blob/);
     expect(body).toContain("const STORE_FILE = 'settings.json';");
     expect(body).toContain("const PROXIES_KEY = 'proxies';");
+    expect(body).toContain("const SECRET_ENVELOPES_KEY = 'proxy_secret_envelopes_v2';");
+    expect(body).toContain("const VAULT_KEY_NAME = 'proxy_vault_key';");
+    // Retained only so existing installations can migrate their old entries.
     expect(body).toContain("const SECRET_PREFIX = 'proxy_secret:';");
   });
 
-  it('stores a versioned protected payload per proxy', () => {
+  it('stores a versioned AES-GCM envelope per proxy under one cached Keychain vault key', () => {
     expect(body).toMatch(
       /interface ProxySecretPayload \{[\s\S]*?version: 1;[\s\S]*?binding: \{[\s\S]*?host: string;[\s\S]*?port: number;[\s\S]*?password: string \| null;[\s\S]*?openvpn\?: OpenVpnConfigInput;[\s\S]*?wireguard\?: WireGuardConfigInput;[\s\S]*?\n\}/,
     );
-    expect(body).toContain("await invoke('secret_save',");
-    expect(body).toContain("await invoke<string | null>('secret_load',");
-    expect(body).toContain("await invoke('secret_delete',");
-    expect(body).toContain('value: JSON.stringify(secret)');
+    expect(body).toMatch(
+      /interface ProxySecretEnvelope \{\s*\n?\s*version: 2;\s*\n?\s*iv: string;\s*\n?\s*ciphertext: string;/,
+    );
+    expect(body).toContain("await invoke<string | null>('secret_load', { key: VAULT_KEY_NAME })");
+    expect(body).toContain("await invoke('secret_save', { key: VAULT_KEY_NAME, value: stored })");
+    expect(body).toContain("crypto.subtle.importKey('raw', exactArrayBuffer(raw), 'AES-GCM'");
+    expect(body).toContain("name: 'AES-GCM'");
+    expect(body).toContain('additionalData: vaultAad(');
+    expect(body).toContain('let vaultKeyPromise: Promise<CryptoKey> | null = null;');
+    expect(body).not.toContain("invoke('secret_save', { key: secretName(");
   });
 
   it('persists only sanitized metadata across every mutation path', () => {
@@ -47,6 +56,8 @@ describe('GUI proxy protected-storage content invariant', () => {
     expect(body).toContain('const legacy = legacySecretPayload(raw);');
     expect(body).toContain('await saveSecretPayload(metadata.id, legacy);');
     expect(body).toContain('volatileSecrets.set(metadata.id, legacy);');
+    expect(body).toContain('await saveSecretEnvelope(metadata.id, parsed);');
+    expect(body).toContain("await invoke('secret_delete', { key: secretName(metadata.id) });");
     expect(body).toContain('if (rewriteDisk) await persist(hydrated);');
     expect(body).toContain('hydrated.push(hydrateProxy(metadata, secret));');
     expect(body).toMatch(
@@ -59,6 +70,7 @@ describe('GUI proxy protected-storage content invariant', () => {
     expect(body).toContain('const all = await listProxiesUnlocked();');
     expect(body).toContain('if (!Array.isArray(value))');
     expect(body).toContain('if (seenIds.has(raw.id))');
+    expect(body).toContain('/^[A-Za-z0-9_-]{1,128}$/.test(value)');
     expect(body).toContain("throw new Error('Protected proxy credentials are corrupted.');");
     expect(body).toContain(
       "throw new Error('Protected proxy credentials have an unsupported format.');",
@@ -72,9 +84,11 @@ describe('GUI proxy protected-storage content invariant', () => {
     expect(body).toContain('export async function listProxyMetadata()');
     expect(body).toContain('if (requiresSecretMigration)');
     expect(body).toContain('return (await listProxiesUnlocked()).map(toPersistedProxy);');
-    expect(body).toContain('const cached = volatileSecrets.get(id);');
+    expect(body).toContain('const cached = volatileSecrets.get(metadata.id);');
     expect(body).toContain('if (cached !== undefined) return cached;');
+    expect(body).toContain('if (vaultKeyPromise !== null) return vaultKeyPromise;');
     expect(body).toContain('const protectedLoadFailures = new Map');
+    expect(body).toContain('vaultKeyFailure');
     expect(body).toContain('Date.now() + PROTECTED_LOAD_RETRY_MS');
   });
 
