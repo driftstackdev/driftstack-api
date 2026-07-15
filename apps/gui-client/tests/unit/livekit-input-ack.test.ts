@@ -38,6 +38,35 @@ describe('per-Room committed input receipts', () => {
     expect(issues).toEqual([null, 'dropped', 'failed']);
   });
 
+  it('does not let an older applied receipt erase a newer failed input', () => {
+    const r = room();
+    const issues: Array<string | null> = [];
+    subscribeInputReceiptIssues(r, (issue) => issues.push(issue));
+    registerInputReceipt(r, 'older_1', 10_000);
+    registerInputReceipt(r, 'newer_1', 10_000);
+
+    handleInputAck(r, { type: 'inputAck', id: 'newer_1', status: 'failed' });
+    handleInputAck(r, { type: 'inputAck', id: 'older_1', status: 'applied' });
+
+    expect(issues).toEqual([null, 'failed']);
+    expect(pendingInputReceiptCount(r)).toBe(0);
+  });
+
+  it('does not let an older timeout overwrite a newer applied receipt', () => {
+    vi.useFakeTimers();
+    const r = room();
+    const issues: Array<string | null> = [];
+    subscribeInputReceiptIssues(r, (issue) => issues.push(issue));
+    registerInputReceipt(r, 'older_2', 5_000);
+    registerInputReceipt(r, 'newer_2', 10_000);
+
+    handleInputAck(r, { type: 'inputAck', id: 'newer_2', status: 'applied' });
+    vi.advanceTimersByTime(5_000);
+
+    expect(issues).toEqual([null, null]);
+    expect(pendingInputReceiptCount(r)).toBe(0);
+  });
+
   it('marks an unacknowledged committed boundary timed out at its deadline', () => {
     vi.useFakeTimers();
     const r = room();
@@ -94,5 +123,19 @@ describe('per-Room committed input receipts', () => {
     resetInputReceipts(r);
     vi.advanceTimersByTime(5_000);
     expect(pendingInputReceiptCount(r)).toBe(0);
+  });
+
+  it('reset clears the visible issue and starts a fresh settlement epoch', () => {
+    const r = room();
+    const issues: Array<string | null> = [];
+    subscribeInputReceiptIssues(r, (issue) => issues.push(issue));
+    registerInputReceipt(r, 'before_reset', 10_000);
+    handleInputAck(r, { type: 'inputAck', id: 'before_reset', status: 'failed' });
+
+    resetInputReceipts(r);
+    registerInputReceipt(r, 'after_reset', 10_000);
+    handleInputAck(r, { type: 'inputAck', id: 'after_reset', status: 'dropped' });
+
+    expect(issues).toEqual([null, 'failed', null, 'dropped']);
   });
 });
