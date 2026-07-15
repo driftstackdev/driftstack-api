@@ -28365,3 +28365,37 @@ and socket suite passes 15/15 tests; the expanded Fleet auth, activation,
 admission, registry and correlator matrix passes 14 files and 148/148 tests.
 Strict server source/test TypeScript, targeted ESLint/Prettier and
 diff/whitespace checks are green.
+
+---
+
+## V-678 — Fleet sends fail immediately unless the socket is open
+
+**Date:** 2026-07-15
+
+The Fleet transport and correlator error paths assumed `ws.send` throws for any
+socket that is not open. The installed implementation throws while CONNECTING,
+but a callback-less send in CLOSING or CLOSED silently accounts the bytes and
+returns. A genuine socket reproduction closed the server side and then sent 1
+KiB: `readyState` was 2, `bufferedAmount` rose from zero to 1,024, and no
+exception was raised. During the interval before the registry's close handler,
+correlated work could therefore remain pending and fire-and-forget session or
+node-control work could be logged as delivered without reaching the node.
+
+The route-local adapter now requires the socket's WHATWG state to equal OPEN
+(`1`) before checking its aggregate byte capacity or calling `send`.
+CONNECTING, CLOSING and CLOSED all throw the same bounded transport error
+immediately. Correlators keep their existing uniform settlement/cleanup path;
+fire-and-forget callers now receive an honest synchronous failure. The socket
+is not closed by admission, and a still-registered connection can send again if
+the transport reports OPEN.
+
+Pure boundary proof covers all four state values and pins open-state admission
+ahead of the 96 MiB capacity guard and physical send. A genuine WebSocket test
+forces only the server connection's visible state to CLOSING, proves a
+fire-and-forget control command throws and emits no client frame while the
+connection remains registered, then restores OPEN and receives the command on
+that same connection. Existing maximum-frame, aggregate-overflow, auth,
+inbound-admission, supersede and keepalive coverage remains unchanged. The
+direct route/real-socket suite passes 17/17 tests; the expanded Fleet matrix
+passes 14 files and 150/150 tests. Strict server source/test TypeScript,
+targeted ESLint/Prettier and diff/whitespace checks are green.

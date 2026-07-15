@@ -276,6 +276,58 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
     }
   });
 
+  it('refuses fire-and-forget delivery while the server socket is CLOSING and recovers when OPEN', async () => {
+    const ws = await connect({
+      authorization: `Bearer ${await freshJwt()}`,
+      [FLEET_NODE_ID_HEADER]: NODE_ID,
+    });
+    const conn = fx.fleetControlRegistry.get(NODE_ID);
+    expect(conn).toBeDefined();
+
+    const readyStateDescriptor = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'readyState');
+    if (readyStateDescriptor?.get === undefined) {
+      throw new Error('ws readyState getter is unavailable');
+    }
+    const readClientReadyState = readyStateDescriptor.get.bind(ws);
+    let serverReadyState: number = WebSocket.CLOSING;
+    Object.defineProperty(WebSocket.prototype, 'readyState', {
+      ...readyStateDescriptor,
+      get(this: WebSocket): number {
+        const serverSide = (this as unknown as { _isServer: boolean })._isServer;
+        return serverSide ? serverReadyState : (readClientReadyState() as number);
+      },
+    });
+
+    let clientFrames = 0;
+    let resolveDelivered!: (frame: { type: string; command: string }) => void;
+    const delivered = new Promise<{ type: string; command: string }>((resolve) => {
+      resolveDelivered = resolve;
+    });
+    ws.on('message', (data: WebSocket.RawData) => {
+      clientFrames += 1;
+      resolveDelivered(JSON.parse(rawToString(data)) as { type: string; command: string });
+    });
+
+    try {
+      expect(() => conn!.sendControlCommand({ type: 'controlCommand', command: 'cordon' })).toThrow(
+        'fleet control socket is not open',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(clientFrames).toBe(0);
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      expect(fx.fleetControlRegistry.get(NODE_ID)).toBe(conn);
+
+      serverReadyState = WebSocket.OPEN;
+      conn!.sendControlCommand({ type: 'controlCommand', command: 'cordon' });
+      await expect(delivered).resolves.toEqual({ type: 'controlCommand', command: 'cordon' });
+      expect(clientFrames).toBe(1);
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      expect(fx.fleetControlRegistry.get(NODE_ID)).toBe(conn);
+    } finally {
+      Object.defineProperty(WebSocket.prototype, 'readyState', readyStateDescriptor);
+    }
+  });
+
   it('an inbound frame bigger than the OLD 16 MiB cap (e.g. a large file-download reply) does not close the shared control socket or fail other in-flight correlator state', async () => {
     const ws = await connect({
       authorization: `Bearer ${await freshJwt()}`,

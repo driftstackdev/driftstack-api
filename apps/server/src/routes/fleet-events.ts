@@ -49,6 +49,8 @@ type AuthedUpgradeRequest = FastifyRequest & { fleetNodeId?: string };
 // which would otherwise leave the handler's `socket` as `any`. A real
 // ws.WebSocket is assignable to this (it has these exact methods).
 interface FleetSocket {
+  /** WHATWG/ws state number; OPEN is 1. */
+  readonly readyState: number;
   /** Bytes ws has accepted but the underlying network has not drained yet. */
   readonly bufferedAmount: number;
   send(data: string): void;
@@ -77,6 +79,13 @@ function messageToBuffer(data: WsMessageData): Buffer {
  * its bounded error outcome and clears its pending timer. The shared node socket
  * stays open, so a later request can proceed once the existing queue drains. */
 export const FLEET_WS_MAX_BUFFERED_BYTES = 96 * 1024 * 1024;
+export const FLEET_WS_OPEN_STATE = 1;
+
+export function assertFleetSocketOpen(readyState: number): void {
+  if (readyState !== FLEET_WS_OPEN_STATE) {
+    throw new Error('fleet control socket is not open');
+  }
+}
 
 export function assertFleetOutboundCapacity(bufferedAmount: number, frameBytes: number): void {
   if (bufferedAmount + frameBytes > FLEET_WS_MAX_BUFFERED_BYTES) {
@@ -85,6 +94,7 @@ export function assertFleetOutboundCapacity(bufferedAmount: number, frameBytes: 
 }
 
 function sendFleetFrame(socket: FleetSocket, data: string): void {
+  assertFleetSocketOpen(socket.readyState);
   assertFleetOutboundCapacity(socket.bufferedAmount, Buffer.byteLength(data, 'utf8'));
   socket.send(data);
 }

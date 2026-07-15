@@ -9,7 +9,9 @@ import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   FLEET_WS_MAX_BUFFERED_BYTES,
+  FLEET_WS_OPEN_STATE,
   assertFleetOutboundCapacity,
+  assertFleetSocketOpen,
 } from '../../src/routes/fleet-events.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -103,6 +105,26 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain('readonly bufferedAmount: number;');
     expect(body).toContain("Buffer.byteLength(data, 'utf8')");
     expect(body).toContain('(data) => sendFleetFrame(socket, data),');
+  });
+
+  it('refuses CONNECTING/CLOSING/CLOSED before capacity or send while OPEN remains admissible', () => {
+    expect(FLEET_WS_OPEN_STATE).toBe(1);
+    for (const nonOpenState of [0, 2, 3]) {
+      expect(() => assertFleetSocketOpen(nonOpenState)).toThrow('fleet control socket is not open');
+    }
+    expect(() => assertFleetSocketOpen(FLEET_WS_OPEN_STATE)).not.toThrow();
+
+    const sendHelper = body.slice(
+      body.indexOf('function sendFleetFrame'),
+      body.indexOf('export async function registerFleetEventsRoutes'),
+    );
+    expect(sendHelper.indexOf('assertFleetSocketOpen(socket.readyState)')).toBeGreaterThan(-1);
+    expect(sendHelper.indexOf('assertFleetOutboundCapacity(')).toBeGreaterThan(
+      sendHelper.indexOf('assertFleetSocketOpen(socket.readyState)'),
+    );
+    expect(sendHelper.indexOf('socket.send(data)')).toBeGreaterThan(
+      sendHelper.indexOf('assertFleetOutboundCapacity('),
+    );
   });
 
   it('handler wiring pinned: register node by nodeId; route inbound messages; explicit PONG of inbound pings (+ ws auto-pong) + 30s keepalive ping with NO terminate(); clearInterval + unregister on close + error', () => {
