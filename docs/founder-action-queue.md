@@ -113,16 +113,14 @@ the founder needs to do.
 - **Status:** PENDING
 - **Blocks:** customer-facing checkout + Stripe webhook handler
   resolving plans (V-082, V-088, V-089).
-- **Action:** Create 19 Stripe prices in the Stripe dashboard
-  matching ADR-004 SKU values:
+- **Action:** Create the 12 recurring Stripe prices in the live-mode dashboard
+  matching the current six paid-tier values:
   - 6 Manual ladder (Solo/Team/Agency × monthly + annual)
   - 6 API ladder (Starter/Builder/Scale × monthly + annual)
-  - 1 Enterprise (negotiated, annual-only)
-  - 3 Self-hosted SKU (Solo/Pro/Enterprise — Solo + Pro have monthly + annual = 4; Enterprise is annual-only = 1; total 5 here, balance with above to 19 total)
-  - 1 Trial pack one-time price ($2.99)
-- **Action:** Capture all price IDs into `DRIFTSTACK_TIER_PRICE_IDS`
-  - `STRIPE_TRIAL_PACK_PRICE_ID` env vars per
-    `docs/deployment/env-vars.md`.
+- **Action:** Capture all 12 price IDs in the six-tier
+  `DRIFTSTACK_TIER_PRICE_IDS` JSON map per `docs/deployment/env-vars.md`.
+  Enterprise remains sales-assisted and the perpetual free tier has no Stripe
+  price. The retired one-time trial pack must not be recreated.
 
 ### Stripe webhook secret
 

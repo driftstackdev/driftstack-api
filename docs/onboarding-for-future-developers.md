@@ -149,8 +149,8 @@ The Stripe API is hand-rolled in `apps/server/src/lib/stripe-api.ts` — no `str
 1. Get a test-mode `sk_test_…` key from the Stripe dashboard.
 2. Set `STRIPE_SECRET_KEY=sk_test_…` in your local `.env`.
 3. Set `DRIFTSTACK_TIER_PRICE_IDS` to a JSON map of `{ tier: { monthly, annual } }`. Test prices can be created via the Stripe dashboard.
-4. Set `STRIPE_TRIAL_PACK_PRICE_ID` to a one-time test price id.
-5. Set `STRIPE_WEBHOOK_SECRET=whsec_test_…` (from the dashboard's webhook endpoint config) to enable inbound webhook verification.
+4. Set `STRIPE_WEBHOOK_SECRET=whsec_…` (from the dashboard's test-mode webhook endpoint config) to enable inbound webhook verification.
+5. Run `node scripts/stripe-bootstrap-prices.mjs --dry-run` to verify the canonical six products and twelve recurring prices without creating duplicates.
 6. Use the Stripe CLI (`stripe listen --forward-to localhost:3000/v1/webhooks/stripe`) for end-to-end webhook testing.
 
 NEVER set live-mode Stripe keys in your local `.env`. Live keys go through SSH-write to the Hetzner production VM only, post-KvK; never via chat or PR per the operational register.

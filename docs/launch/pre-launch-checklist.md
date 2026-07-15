@@ -34,9 +34,9 @@ SDK + audit cleanup absorbed).
 | Account avatar (V-352b)                    | READY           | eng     | yes (READY)    | POST/DELETE /v1/account/me/avatar; presigned R2 GET; 2 MiB cap; PNG/JPEG/WebP                                                                        |
 | Account slug (V-298a)                      | READY           | eng     | n/a            | accounts.slug column + PATCH /v1/account/me + /settings UI. URL routing semantics deferred to founder design                                         |
 | Profile cloning (V-313)                    | READY           | eng     | n/a            | POST /v1/profiles/:id/clone with auto-derived "${source} (copy)" naming                                                                              |
-| Stripe Checkout (V-082) + webhooks (V-080) | READY           | eng     | yes (READY)    | subscription + trial-pack flows; webhook signature verify                                                                                            |
-| BillingService production wiring           | PENDING FOUNDER | founder | yes            | needs STRIPE_SECRET_KEY (live) + 19 price IDs per ADR-004 + STRIPE_WEBHOOK_SECRET. Live keys go via SSH-write only                                   |
-| Trial-pack mechanics (ADR-003)             | READY           | eng     | yes (READY)    | $2.99 / 14-day / once-per-account / $0.18/hr decrement                                                                                               |
+| Stripe Checkout (V-082) + webhooks (V-080) | READY           | eng     | yes (READY)    | six-tier recurring subscription checkout; webhook signature verify                                                                                   |
+| BillingService production wiring           | PENDING FOUNDER | founder | yes            | test mode is active; live launch needs `STRIPE_SECRET_KEY` + the 12-price six-tier map + `STRIPE_WEBHOOK_SECRET`. Live keys go via SSH-write only    |
+| Free entry tier                            | READY           | eng     | yes (READY)    | perpetual free tier; no card, expiry, one-time purchase, or prepaid credit                                                                           |
 | Rate limiting (V-251)                      | READY           | eng     | yes (READY)    | per-account token bucket + per-IP gates on auth endpoints                                                                                            |
 | Driver: mock                               | READY           | eng     | n/a            | dev/test only                                                                                                                                        |
 | Driver: webkit                             | PENDING ENG     | Agent 1 | yes            | cross-repo dep on Agent 1's V-203 Phase 2A + V-372–V-378 readback-path remediation. Agent 2 ValidationHarnessRecaptureBridge stays mocked until then |
@@ -90,7 +90,7 @@ SDK + audit cleanup absorbed).
 | Item                                                                  | Status          | Owner   | Blocks launch?                     | Notes                                                                        |
 | --------------------------------------------------------------------- | --------------- | ------- | ---------------------------------- | ---------------------------------------------------------------------------- |
 | Landing (`/`)                                                         | READY           | eng     | yes (READY)                        | brand identity + pricing pointer + value prop                                |
-| `/pricing` (ADR-004)                                                  | READY           | eng     | yes (READY)                        | two-ladder concurrent-only model; trial pack; self-hosted                    |
+| `/pricing` (current six-tier catalog)                                 | READY           | eng     | yes (READY)                        | free entry plus Manual/API recurring tiers; Enterprise is sales-assisted     |
 | `/security`                                                           | READY           | eng     | yes (READY)                        | six-pillar security framing (count corrected S26 2026-07-06 (#132))          |
 | `/faq`                                                                | READY           | eng     | yes (READY)                        | covers pricing model + Manual vs API + concurrency + self-hosted             |
 | `/about` + `/changelog` + `/self-hosted` + `/api-reference` + `/docs` | READY           | eng     | yes (READY)                        | all production-shaped                                                        |
@@ -180,7 +180,7 @@ Add to the above:
 
 1. BV KvK closure (~2026-05-21 target).
 2. Counsel review of legal pages (any verdict — accept / amend; latter forces a 1.x bump).
-3. Stripe live-mode keys + 19 price IDs (post-KvK; SSH-write only).
+3. Stripe live-mode keys + canonical 12 recurring price IDs (post-KvK; SSH-write only).
 4. macOS Apple Developer cert + Tauri Updater signing keys (for trustworthy GUI client distribution).
 5. First `gui-v0.1.0` tag fired (release pipeline produces signed binaries).
 
@@ -202,7 +202,7 @@ Remaining, in priority order:
 7. **First `gui-v0.1.0` tag** — produces signed binaries; can ship `.AppImage` first if Apple cert not yet set up.
 8. **BV KvK closure** (~2026-05-21 target) — unblocks live-mode Stripe + legal page placeholders → real values.
 9. **Counsel review of legal docs** — required before first paying customer per README's preserved gate.
-10. **Stripe live-mode keys + 19 price IDs** (post-KvK; SSH-write only) — unblocks BillingService at production.
+10. **Stripe live-mode keys + canonical 12 recurring price IDs** (post-KvK; SSH-write only) — switches BillingService from the currently active test-mode catalog to live mode.
 11. **First paying customer.**
 
 ## What's deferred post-launch (not blocking)

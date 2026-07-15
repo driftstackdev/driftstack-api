@@ -62,7 +62,7 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     expect(body).toMatch(/## 10\. Observability \+ operations/);
   });
 
-  it("Backend §1 key READY items + BillingService PENDING FOUNDER framing pinned: 'Auth flows (V-079)' + 'Web sessions (V-168) + API keys (V-049)' + 'Sessions (V-073 + V-100)' + 'Profiles (V-081)' + 'Webhooks (V-074 + V-091)' + 'Admin force-actions (V-100)' + 'MFA (V-353 cycle: a-h + V-358)' + 'BillingService production wiring | PENDING FOUNDER | founder' + 'needs STRIPE_SECRET_KEY (live) + 19 price IDs per ADR-004 + STRIPE_WEBHOOK_SECRET. Live keys go via SSH-write only' + 'Trial-pack mechanics (ADR-003) | READY' + 'Driver: webkit | PENDING ENG | Agent 1' + 'cross-repo dep on Agent 1's V-203 Phase 2A + V-372–V-378 readback-path remediation' — pinned so the V-079-auth + V-168-web-sessions + V-049-API-keys + V-073-V-100-sessions + V-081-profiles + V-074-V-091-webhooks + V-353-MFA + BillingService-PENDING-FOUNDER + 19-ADR-004-price-IDs + Agent-1-V-203/V-372-V-378-cross-repo commitment survives", () => {
+  it('Backend §1 key READY items + current BillingService live-mode gate are pinned', () => {
     expect(body).toMatch(/Auth flows \(V-079\)/);
     expect(body).toMatch(/Web sessions \(V-168\) \+ API keys \(V-049\)/);
     expect(body).toMatch(/Sessions \(V-073 \+ V-100\)/);
@@ -72,10 +72,14 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     expect(body).toMatch(/MFA \(V-353 cycle: a-h \+ V-358\)/);
     expect(body).toMatch(/BillingService production wiring\s*\|\s*PENDING FOUNDER\s*\|\s*founder/);
     expect(body).toMatch(
-      /needs STRIPE_SECRET_KEY \(live\) \+ 19 price IDs per ADR-004 \+ STRIPE_WEBHOOK_SECRET\./,
+      /test mode is active; live launch needs `STRIPE_SECRET_KEY` \+ the 12-price six-tier map \+ `STRIPE_WEBHOOK_SECRET`\./,
     );
     expect(body).toMatch(/Live keys go via SSH-write only/);
-    expect(body).toMatch(/Trial-pack mechanics \(ADR-003\)\s*\|\s*READY/);
+    expect(body).toMatch(/Free entry tier\s*\|\s*READY/);
+    expect(body).toMatch(
+      /perpetual free tier; no card, expiry, one-time purchase, or prepaid credit/,
+    );
+    expect(body).not.toMatch(/STRIPE_TRIAL_PACK_PRICE_ID/);
     expect(body).toMatch(/Driver: webkit\s*\|\s*PENDING ENG\s*\|\s*Agent 1/);
     expect(body).toMatch(
       /cross-repo dep on Agent 1's V-203 Phase 2A \+ V-372–V-378 readback-path remediation/,

@@ -13,7 +13,7 @@
 //     + Neon EU + Upstash EU.
 //   • CI/CD secrets: GitHub Environments + Sentry secrets +
 //     DEPLOY_DOTENV_BASE64 + V-148 allow-auto-merge.
-//   • Stripe ADR-002: 19 price IDs + webhook secret + Stripe Tax
+//   • Stripe ADR-002: 12 recurring price IDs + webhook secret + Stripe Tax
 //     + EU VAT reverse-charge.
 //   • Pricing TBD: BYOK markup multiplier + bundled-LLM per-token
 //     rate.
@@ -101,18 +101,17 @@ describe('W548.B /docs/founder-action-queue.md content parity', () => {
     expect(body).toMatch(/`\.github\/workflows\/dependabot-auto-merge\.yml` \(V-148\)\./);
   });
 
-  it("Stripe ADR-002 + 19-price-IDs + Stripe-Tax framing pinned: '## Stripe (ADR-002)' + '### Stripe price IDs' + 'Create 19 Stripe prices in the Stripe dashboard matching ADR-004 SKU values' + '6 Manual ladder (Solo/Team/Agency × monthly + annual)' + '6 API ladder (Starter/Builder/Scale × monthly + annual)' + '1 Enterprise (negotiated, annual-only)' + '3 Self-hosted SKU' + '1 Trial pack one-time price ($2.99)' + '`DRIFTSTACK_TIER_PRICE_IDS`' + '`STRIPE_TRIAL_PACK_PRICE_ID`' + '### Stripe webhook secret' + 'Stripe dashboard → Developers → Webhooks, create an endpoint pointing at `https://api.driftstack.dev/v1/webhooks/stripe`.' + 'STRIPE_WEBHOOK_SECRET' + '### Stripe Tax + EU VAT' + 'Enable Stripe Tax in dashboard. Verify Dutch BV tax registration is captured. Confirm reverse-charge handling for EU B2B customers — Stripe Tax computes automatically once enabled.' — pinned so the ADR-002+ADR-004 19-price-ID inventory (6-Manual + 6-API + 1-Enterprise + 3-Self-hosted + 1-Trial-pack) + Stripe-webhook-https://api.driftstack.dev/v1/webhooks/stripe + Stripe-Tax-Dutch-BV-reverse-charge-EU-B2B commitment survives", () => {
+  it('Stripe ADR-002 + current 12-recurring-price + Stripe-Tax framing pinned', () => {
     expect(body).toMatch(/## Stripe \(ADR-002\)/);
     expect(body).toMatch(/### Stripe price IDs/);
-    expect(body).toMatch(/Create 19 Stripe prices in the Stripe dashboard/);
-    expect(body).toMatch(/matching ADR-004 SKU values:/);
+    expect(body).toMatch(/Create the 12 recurring Stripe prices in the live-mode dashboard/);
+    expect(body).toMatch(/matching the current six paid-tier values:/);
     expect(body).toMatch(/- 6 Manual ladder \(Solo\/Team\/Agency × monthly \+ annual\)/);
     expect(body).toMatch(/- 6 API ladder \(Starter\/Builder\/Scale × monthly \+ annual\)/);
-    expect(body).toMatch(/- 1 Enterprise \(negotiated, annual-only\)/);
-    expect(body).toMatch(/- 3 Self-hosted SKU/);
-    expect(body).toMatch(/- 1 Trial pack one-time price \(\$2\.99\)/);
     expect(body).toMatch(/`DRIFTSTACK_TIER_PRICE_IDS`/);
-    expect(body).toMatch(/`STRIPE_TRIAL_PACK_PRICE_ID`/);
+    expect(body).toMatch(/Enterprise remains sales-assisted/);
+    expect(body).toMatch(/retired one-time trial pack must not be recreated/);
+    expect(body).not.toMatch(/`STRIPE_TRIAL_PACK_PRICE_ID`/);
     expect(body).toMatch(/### Stripe webhook secret/);
     expect(body).toMatch(/Stripe dashboard → Developers → Webhooks, create/);
     expect(body).toMatch(

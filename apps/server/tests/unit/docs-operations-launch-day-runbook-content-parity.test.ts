@@ -10,9 +10,8 @@
 //   • Operator = founder; out-of-band escalation = SSH access.
 //   • Cutover sequence: T-24h Pre-flight + T-1h Final-prep +
 //     T-0 Cutover + Day-1 monitoring + Day 2-7 stabilisation.
-//   • Stripe ADR-004: 1 trial pack + 8 paid × 2 periods = 17,
-//     plus 2 enterprise = 19 prices.
-//   • Smoke test happy-path: signup → verify → trial-pack →
+//   • Stripe current catalog: 6 paid tiers × 2 periods = 12 prices.
+//   • Smoke test happy-path: signup → verify → paid subscription →
 //     Stripe Checkout → GUI sign-in → session → screenshot →
 //     destroy → revoke key.
 //   • 3-rollback tier: image-level (1-2min) + workflow-level
@@ -63,12 +62,12 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
     );
     expect(body).toMatch(/### Stripe/);
     expect(body).toMatch(
-      /- \[ \] Stripe live-mode dashboard shows the 19 ADR-004 prices configured\./,
+      /- \[ \] Stripe live-mode dashboard shows the canonical 12 recurring prices configured/,
     );
     expect(body).toMatch(
-      /\(1 trial pack \+ 8 paid tiers × 2 periods = 17, plus 2 enterprise = 19\./,
+      /Solo\/Team\/Agency Manual and Starter\/Builder\/Scale API, each monthly \+ annual/,
     );
-    expect(body).toMatch(/If a tier-period combo is missing, it can't be checkout-targeted\.\)/);
+    expect(body).toMatch(/If a tier-period combo is missing, it can't be checkout-targeted\./);
     expect(body).toMatch(
       /- \[ \] `STRIPE_SECRET_KEY` in production \.env is `sk_live_…` \(NOT `sk_test_…`\)\./,
     );
@@ -91,18 +90,20 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
     expect(body).toMatch(/## Day 2-7: stabilisation/);
   });
 
-  it("Smoke test 10-step happy-path framing pinned: 'Visit `app.driftstack.dev/signup` → create account with a real email you control.' + 'Verify email via the link Postmark delivers.' + 'Land on welcome / select-tier → pick `trial_pack` → Stripe Checkout opens.' + 'Complete checkout with a real card (we'll refund or destroy the account after the test).' + 'Verify `/billing` reflects the trial-pack purchase.' + 'Open the GUI client → \"Sign in with browser\" → confirm → key minted.' + 'Spin up a session in the GUI → navigate to `https://example.com` → capture screenshot.' + 'Destroy session → list shows zero active.' + '`/account/me` → reflects subscription + concurrent counters correctly.' + '`/api-keys` → \"Desktop client\" key visible; revoke it → 401 from the GUI on the next call' + 'If any step fails, **abort launch**' — pinned so the 10-step happy-path-test + abort-launch-on-fail commitment survives", () => {
+  it('Smoke test 10-step recurring-subscription happy path remains pinned', () => {
     expect(body).toMatch(
       /1\. Visit `app\.driftstack\.dev\/signup` → create account with a real email you control\./,
     );
     expect(body).toMatch(/2\. Verify email via the link Postmark delivers\./);
     expect(body).toMatch(
-      /3\. Land on welcome \/ select-tier → pick `trial_pack` → Stripe Checkout opens\./,
+      /3\. Land on welcome \/ select-tier → choose Solo Manual monthly → Stripe Checkout opens\./,
     );
     expect(body).toMatch(
       /4\. Complete checkout with a real card \(we'll refund or destroy the account after the test\)\./,
     );
-    expect(body).toMatch(/5\. Verify `\/billing` reflects the trial-pack purchase\./);
+    expect(body).toMatch(
+      /5\. Verify `\/billing` reflects the active Solo Manual subscription and correct renewal cadence\./,
+    );
     expect(body).toMatch(
       /6\. Open the GUI client → "Sign in with browser" → confirm → key minted\./,
     );
@@ -117,6 +118,7 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
       /10\. `\/api-keys` → "Desktop client" key visible; revoke it → 401 from the GUI on the next call/,
     );
     expect(body).toMatch(/If any step fails, \*\*abort launch\*\*/);
+    expect(body).not.toMatch(/STRIPE_TRIAL_PACK_PRICE_ID/);
   });
 
   it("V-516 launch-day amendments framing pinned: '## V-516 launch-day amendments (post-Wave-11 state)' + '### T-24h additions' + '### T-0 additions' + '## Related docs' — pinned so the V-516-Wave-11-amendments + T-24h-additions + T-0-additions + Related-docs commitment survives", () => {

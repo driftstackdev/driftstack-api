@@ -31,7 +31,7 @@ End-to-end choreography for "launch day" — the day you flip from pre-launch / 
 
 ### Stripe
 
-- [ ] Stripe live-mode dashboard shows the 19 ADR-004 prices configured. (1 trial pack + 8 paid tiers × 2 periods = 17, plus 2 enterprise = 19. If a tier-period combo is missing, it can't be checkout-targeted.)
+- [ ] Stripe live-mode dashboard shows the canonical 12 recurring prices configured (Solo/Team/Agency Manual and Starter/Builder/Scale API, each monthly + annual). Enterprise is sales-assisted and the free tier has no Stripe price. If a tier-period combo is missing, it can't be checkout-targeted.
 - [ ] Stripe webhook endpoint configured, pointing at `https://api.driftstack.dev/v1/webhooks/stripe`. Webhook signing secret matches the `STRIPE_WEBHOOK_SECRET` in production .env.
 - [ ] `STRIPE_SECRET_KEY` in production .env is `sk_live_…` (NOT `sk_test_…`).
 - [ ] Run a synthetic test-mode checkout via the Stripe dashboard's webhook tester to verify production receives the event + records a row.
@@ -47,9 +47,9 @@ Run through this exact sequence on a fresh-but-real account against production:
 
 1. Visit `app.driftstack.dev/signup` → create account with a real email you control.
 2. Verify email via the link Postmark delivers.
-3. Land on welcome / select-tier → pick `trial_pack` → Stripe Checkout opens.
+3. Land on welcome / select-tier → choose Solo Manual monthly → Stripe Checkout opens.
 4. Complete checkout with a real card (we'll refund or destroy the account after the test).
-5. Verify `/billing` reflects the trial-pack purchase.
+5. Verify `/billing` reflects the active Solo Manual subscription and correct renewal cadence.
 6. Open the GUI client → "Sign in with browser" → confirm → key minted.
 7. Spin up a session in the GUI → navigate to `https://example.com` → capture screenshot.
 8. Destroy session → list shows zero active.
@@ -85,14 +85,13 @@ The actual cutover is small — most work was front-loaded into the V-258/V-259/
 ### 1. Flip Stripe to live mode
 
 - Stripe dashboard → toggle from Test → Live (top-right).
-- Verify that the 19 ADR-004 prices are present in live mode (they're separate from test-mode prices). If not, create them now using `docs/operations/stripe-price-ids.md` (TODO: this doc lands when V-281 ships, or refer to ADR-004 directly).
+- Verify that the canonical 12 recurring prices are present in live mode (they're separate from test-mode prices). Use `node scripts/stripe-bootstrap-prices.mjs --dry-run` with the live key to validate exact names, intervals and amounts before changing runtime configuration.
 - Update production .env on the Hetzner VM via SSH (NEVER via `gh secret set` from a chat-readable terminal):
   ```sh
   ssh driftstack@<production-host>
   cd /opt/driftstack
   sed -i 's/^STRIPE_SECRET_KEY=.*$/STRIPE_SECRET_KEY=sk_live_…/' .env
   sed -i 's/^DRIFTSTACK_TIER_PRICE_IDS=.*$/DRIFTSTACK_TIER_PRICE_IDS=…/' .env
-  sed -i 's/^STRIPE_TRIAL_PACK_PRICE_ID=.*$/STRIPE_TRIAL_PACK_PRICE_ID=price_…/' .env
   sed -i 's/^STRIPE_WEBHOOK_SECRET=.*$/STRIPE_WEBHOOK_SECRET=whsec_…/' .env
   docker compose up -d --force-recreate
   curl -fsS http://127.0.0.1:7780/health  # confirms restart succeeded
@@ -149,7 +148,7 @@ If any of these fire, treat as escalation:
 
 - **"My GUI client says 'Couldn't reach the control plane'"** — verify they're on `https://api.driftstack.dev` (not staging). Check `/v1/status` for any sub-processor degradation.
 - **"My API key isn't working"** — possible they revoked it via dashboard. Check `/v1/api-keys` list for their account; if revoked, ask them to mint a new one.
-- **"My trial pack ran out faster than expected"** — $0.18/hr decrement vs $2.99 cap = 16.6 hours. If they exhausted faster, check `account.audit-log` for the actual consumption.
+- **"I hit the free-tier session limit"** — confirm the account is still on `free`, inspect concurrent/duration-limit audit context, and point the customer to the appropriate recurring tier without changing their account manually.
 - **"I can't sign up; verification email never arrived"** — check Postmark dashboard for the address. Bounce / hard-fail / rate-limit can all be reasons. Re-send via the dashboard if the customer had a typo or the inbox was temporarily unreachable.
 - **"Stripe checkout shows the wrong price"** — verify ADR-004 price IDs in the live `DRIFTSTACK_TIER_PRICE_IDS` env match the prices actually configured in the Stripe live dashboard. Mismatch = customers see the WRONG product. Triage immediately.
 
@@ -289,8 +288,8 @@ If any red: stop, close the gap, re-verify.
   cadence.
 - `scripts/dr-rehearse.sh` — V-510 local-only DR rehearsal harness
   (Scenarios 2/4/6/7/8). Refuses to act on production hosts.
-- `docs/adr/ADR-004-pricing-restructure-two-ladder.md` — pricing values + 19 SKUs.
-- `docs/adr/ADR-003-paid-trial-pack-replaces-free-tier.md` — trial-pack mechanics.
+- `apps/marketing-site/src/data/pricing.ts` — current six-tier recurring catalog and free-entry truth.
+- `scripts/stripe-bootstrap-prices.mjs` — canonical Stripe product/price bootstrap and dry-run validator.
 
 ---
 

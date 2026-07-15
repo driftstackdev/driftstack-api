@@ -22,8 +22,8 @@ or a Driftstack-internal smoke test. Detected via:
 
 ## Hour 0 — first 60 minutes
 
-The customer just signed up. Most likely path next: pick a tier
-or grab the trial pack. Watch but don't intervene.
+The customer just signed up. Most likely path next: begin on the
+perpetual free tier or choose a recurring paid tier. Watch but don't intervene.
 
 ### Watch (don't touch)
 
@@ -84,7 +84,7 @@ If you observe ANY of:
 - The customer hits 50% of their concurrent cap
 - The customer's webhook returns >3 4xx responses in a row
 - Any `level: error` Sentry event tagged with their account_id
-- Trial pack credit drops below 50%
+- The customer hits the free-tier duration limit or repeatedly reaches a paid-tier cap
 
 → send a proactive Slack/email check-in: "Hey, I noticed X. Want
 to chat about what you're trying to do?" The customer values

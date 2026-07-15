@@ -16,7 +16,7 @@
 //   • Hour 1-24 active: session latency vs load-test baseline +
 //     V-485 tier-features gate + audit-log filter/export.
 //   • Proactive outreach triggers: 50% concurrent cap + 3 webhook
-//     4xx + any Sentry error + trial-pack < 50%.
+//     4xx + any Sentry error + free/duration or paid-cap pressure.
 //   • Day 2-7: what worked (private case study with consent) /
 //     what didn't (V-NNN P-1/P-2/P-3) / what's next.
 //   • Re-review after first customer + every 3 thereafter.
@@ -76,7 +76,7 @@ describe('W555.C /docs/runbooks/first-customer-day.md content parity', () => {
     expect(body).toMatch(/- \*\*Status page check-in\*\*/);
   });
 
-  it("Hour 1-24 + proactive-outreach triggers framing pinned: '## Hour 1–24 — first day' + '### Active monitoring' + '**Session creation latency** — pull the median + p99 from the load-test baseline (`docs/load-test/baselines/`) and compare to the customer's actual session creation. If p99 is >2× baseline, open an internal incident even if the customer hasn't reported anything (early signal).' + '**Tier-cap behaviour** — does the customer hit a 429 from the V-485 tier-features gate or the rate-limit bucket?' + '### Proactive outreach' + 'The customer hits 50% of their concurrent cap' + 'The customer's webhook returns >3 4xx responses in a row' + 'Any `level: error` Sentry event tagged with their account_id' + 'Trial pack credit drops below 50%' + 'The customer values proactive support over incident-response support.' — pinned so the Active-monitoring + V-485-tier-features-gate + 4-proactive-outreach-trigger + values-proactive-over-incident-response commitment survives", () => {
+  it('Hour 1-24 monitoring and four current proactive-outreach triggers remain pinned', () => {
     expect(body).toMatch(/## Hour 1–24 — first day/);
     expect(body).toMatch(/### Active monitoring/);
     expect(body).toMatch(/- \*\*Session creation latency\*\* — pull the median \+ p99 from the/);
@@ -90,7 +90,10 @@ describe('W555.C /docs/runbooks/first-customer-day.md content parity', () => {
     expect(body).toMatch(/- The customer hits 50% of their concurrent cap/);
     expect(body).toMatch(/- The customer's webhook returns >3 4xx responses in a row/);
     expect(body).toMatch(/- Any `level: error` Sentry event tagged with their account_id/);
-    expect(body).toMatch(/- Trial pack credit drops below 50%/);
+    expect(body).toMatch(
+      /- The customer hits the free-tier duration limit or repeatedly reaches a paid-tier cap/,
+    );
+    expect(body).not.toMatch(/Trial pack credit drops below 50%/);
     expect(body).toMatch(
       /The customer values\s*\n?\s*proactive support over incident-response support\./,
     );

@@ -35,6 +35,12 @@ function read(p: string): string {
 describe('W547.A /docs/onboarding-for-future-developers.md content parity', () => {
   const body = read(LIB);
 
+  it('uses the current six-product/twelve-price Stripe test-mode workflow', () => {
+    expect(body).toMatch(/Run `node scripts\/stripe-bootstrap-prices\.mjs --dry-run`/);
+    expect(body).toMatch(/canonical six products and twelve recurring prices/);
+    expect(body).not.toMatch(/Set `STRIPE_TRIAL_PACK_PRICE_ID`/);
+  });
+
   it("Header + audience + V-102 refresh + monorepo-shape framing pinned: '# Onboarding for future developers' + 'Audience' + 'future contributors (including future-you in 6 months when you've forgotten the local-dev steps).' + 'Last refresh: 2026-05-03 (V-102).' + 'one-stop \"how do I get this running locally + what's the dev loop\" reference' + 'single TypeScript monorepo with multiple workspaces (Astro marketing site, Astro customer dashboard, Tauri GUI client, Fastify control plane, several SDKs)' + 'npm install && npm run dev does most of what you need' — pinned so the V-102-last-refresh + future-self-in-6-months + npm-install-then-dev + monorepo-inventory commitment survives", () => {
     expect(body).toMatch(/^# Onboarding for future developers$/m);
     expect(body).toMatch(/\*\*Audience:\*\* future contributors/);
