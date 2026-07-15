@@ -32,6 +32,7 @@ describe('GUI local signing and install contract', () => {
     expect(body).toContain('mktemp -d');
     expect(body).toContain('trap cleanup EXIT');
     expect(body).toContain('security delete-identity -c "$IDENTITY_NAME"');
+    expect(body).toContain('security delete-certificate -c "$IDENTITY_NAME" "$LOGIN_KEYCHAIN"');
     expect(body).toContain('openssl genrsa -traditional -out "$KEY" 3072');
     expect(body).toContain('extendedKeyUsage=critical,codeSigning');
     expect(body).toContain('-T /usr/bin/codesign');

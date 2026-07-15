@@ -34,8 +34,10 @@ cleanup() {
       sudo -n security delete-certificate -c "$IDENTITY_NAME" "$SYSTEM_KEYCHAIN" \
         >/dev/null 2>&1 || true
     fi
-    security delete-identity -c "$IDENTITY_NAME" "$LOGIN_KEYCHAIN" >/dev/null 2>&1 ||
-      security delete-certificate -c "$IDENTITY_NAME" "$LOGIN_KEYCHAIN" >/dev/null 2>&1 || true
+    security delete-identity -c "$IDENTITY_NAME" "$LOGIN_KEYCHAIN" >/dev/null 2>&1 || true
+    # An untrusted/partial certificate may not be considered an identity even
+    # when delete-identity exits successfully, so always remove it separately.
+    security delete-certificate -c "$IDENTITY_NAME" "$LOGIN_KEYCHAIN" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
