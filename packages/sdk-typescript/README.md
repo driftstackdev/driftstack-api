@@ -140,7 +140,7 @@ client.billing.getState()
 client.billing.createCheckoutSession(body)
 client.billing.createPortalSession()
 
-client.cryptoOrders.quote(body)         // V-666 — preview price + crypto pay-range (no order)
+client.cryptoOrders.quote(body)         // V-666 — preview the fiat price (no order)
 client.cryptoOrders.createCheckout(body, opts?)  // mint an order; pass { idempotencyKey } to dedupe
 client.cryptoOrders.list(opts?)         // V-666.BR — filter by status; V-666.BU — cursor-paged
 client.cryptoOrders.listAll(opts?)      // async-iterate every page (alias: iterate)

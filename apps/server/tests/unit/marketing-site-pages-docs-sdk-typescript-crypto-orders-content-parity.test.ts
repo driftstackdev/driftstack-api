@@ -51,6 +51,13 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
     expect(body).toMatch(/await client\.cryptoOrders\.receipt\('ord_abc'\);/);
   });
 
+  it('quote is an authoritative fiat-price preview; crypto amount and address arrive only with checkout creation', () => {
+    expect(body).toMatch(
+      /Preview a tier's authoritative fiat price without minting an\s*\n?\s*order\. The exact crypto amount and deposit address are returned\s*\n?\s*only when you create the checkout:/,
+    );
+    expect(body).not.toMatch(/pay range|once NowPayments is wired up/i);
+  });
+
   it("Idempotency-Key pairing on createCheckout pinned: 'Always pair the call with an idempotencyKey so accidental double-submits don't mint duplicate orders' + 'On a duplicate key within the 24h window, the SDK returns the original order — same order_id, same created_at.' — pinned so the always-pair-with-key + 24h-window + same-order_id-same-created_at-on-replay commitment all survive (drift to dropping 24h window would create marketing↔server divergence with /docs/idempotency-keys)", () => {
     expect(body).toMatch(
       /Always pair the call with an <code>idempotencyKey<\/code> so\s*\n?\s*accidental double-submits don't mint duplicate orders/,

@@ -15,10 +15,6 @@ interface QuoteResponse {
   product: string;
   price_cents: number;
   price_currency: string;
-  provider: string;
-  pay_currency: string | null;
-  pay_min_amount: number | null;
-  pay_max_amount: number | null;
 }
 
 describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
@@ -77,8 +73,11 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
     expect(body.product).toBe('solo_manual');
     expect(body.price_cents).toBe(7900);
     expect(body.price_currency).toBe('EUR');
-    expect(body.provider).toBe('stub');
-    expect(body.pay_currency).toBeNull();
+    expect(body).toEqual({
+      product: 'solo_manual',
+      price_cents: 7900,
+      price_currency: 'EUR',
+    });
   });
 
   it('honours an explicit price_currency override', async () => {

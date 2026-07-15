@@ -19,8 +19,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>Quote</h2>
     <p>
-      Preview a tier's fiat-cents price (and the crypto pay range,
-      once NowPayments is wired up) without minting an order:
+      Preview a tier's authoritative fiat price without minting an
+      order. The exact crypto amount and deposit address are returned
+      only when you create the checkout:
     </p>
     <pre><code>{`const quote = await client.cryptoOrders.quote({ product: 'solo_manual' });
 console.log(quote.price_cents, quote.price_currency);`}</code></pre>

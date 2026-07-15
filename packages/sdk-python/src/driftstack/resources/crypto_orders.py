@@ -65,7 +65,7 @@ class CryptoOrdersResource:
 
     # Requires read:billing; broad read/account_owner also satisfy it.
     def quote(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-666.H — preview the fiat-cents price + crypto pay-range without minting an order."""
+        """V-666.H — preview the authoritative fiat price without minting an order."""
         return self._http.request(
             "POST",
             "/v1/billing/crypto-checkout/quote",

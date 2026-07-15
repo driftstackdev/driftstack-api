@@ -7,9 +7,8 @@
 //
 //   • V-666.H framing pinned: price preview endpoint; stateless;
 //     re-fetchable; minted-order vs quote distinction.
-//   • Provider stub framing pinned: pay_currency:null + provider:'stub';
-//     NowPayments /v1/estimate integration deferred to V-666.D
-//     follow-up.
+//   • Pricing-only boundary pinned: payment-specific crypto amount,
+//     currency and address belong to checkout creation.
 //   • SUPPORTED_PRODUCTS allowlist: 6 tiers (solo_manual, team_manual,
 //     agency_manual, api_starter, api_builder, api_scale).
 //   • Auth + rate-limit posture: requireAuth + global rate-limit bucket.
@@ -17,9 +16,7 @@
 //     letter uppercase ISO with regex validator.
 //   • Defensive 400 (not 500) when product not in TIER_PRICE_CENTS
 //     — "schema-vs-table desync" guard rationale.
-//   • Reply shape: {product, price_cents, price_currency (default EUR),
-//     provider:'stub', pay_currency:null, pay_min_amount:null,
-//     pay_max_amount:null}.
+//   • Reply shape: {product, price_cents, price_currency (default EUR)}.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -44,13 +41,11 @@ describe('W411.C apps/server/src/routes/billing-crypto-quote.ts content parity',
     );
   });
 
-  it('Stub provider framing pinned: pay_currency:null + provider:stub + NowPayments /v1/estimate deferred to V-666.D follow-up', () => {
+  it('Pricing-only boundary pinned: payment-specific values are returned only by checkout creation', () => {
     expect(body).toMatch(
-      /until the NowPayments client lands and we can call its\s*\n?\s*\/\/\s*`\/v1\/estimate` endpoint, the response is a stub `pay_currency: null`\s*\n?\s*\/\/\s*\+ computed fiat-cents from the tier table/,
+      /The response carries\s*\n?\s*\/\/ only the authoritative tier price in fiat cents\. The exact crypto\s*\n?\s*\/\/ currency, amount and deposit address are payment-specific values\s*\n?\s*\/\/ returned by checkout creation, never invented by this stateless preview\./,
     );
-    expect(body).toMatch(
-      /\/\/ V-666\.D follow-up: the NowPayments client will populate this\s*\n?\s*\/\/ by calling `POST \/v1\/estimate`\. Until then the front end\s*\n?\s*\/\/ shows "amount TBD on order creation"\./,
-    );
+    expect(body).not.toMatch(/provider: 'stub'|pay_currency: null|pay_min_amount|pay_max_amount/);
   });
 
   it('Stateless framing pinned: no DB write; re-fetching cheap; not rate-limited beyond global bucket', () => {
@@ -86,14 +81,10 @@ describe('W411.C apps/server/src/routes/billing-crypto-quote.ts content parity',
     );
   });
 
-  it('Reply shape: product + price_cents + price_currency default EUR + provider:stub + pay_currency/min/max null', () => {
+  it('Reply shape is exactly product + price_cents + price_currency default EUR', () => {
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: parsed\.data\.price_currency \?\? 'EUR',/,
+      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: parsed\.data\.price_currency \?\? 'EUR',\s*\n?\s*\}\);/,
     );
-    expect(body).toMatch(/provider: 'stub',/);
-    expect(body).toMatch(/pay_currency: null,/);
-    expect(body).toMatch(/pay_min_amount: null,/);
-    expect(body).toMatch(/pay_max_amount: null,/);
   });
 
   it('Validation: parsed = QuoteSchema.safeParse(req.body); ValidationError on failure', () => {

@@ -10,9 +10,8 @@
 //   so re-fetching is cheap and the route is not rate-limited beyond
 //   the global bucket'.
 //
-//   Stub framing — 'until the NowPayments client lands and we can
-//   call its /v1/estimate endpoint, the response is a stub
-//   pay_currency: null + computed fiat-cents from the tier table'.
+//   Pricing-only framing — exact crypto currency, amount and address
+//   belong to checkout creation, not this stateless preview.
 //
 //   SUPPORTED_PRODUCTS 6 tiers — solo_manual + team_manual +
 //     agency_manual + api_starter + api_builder + api_scale.
@@ -23,9 +22,8 @@
 //   Defensive 'No quote available for tier' — for schema/table
 //     drift; 400 not 500.
 //
-//   Response 7 fields — product + price_cents + price_currency (??
-//     'EUR') + provider:'stub' + pay_currency:null + pay_min_amount:
-//     null + pay_max_amount:null.
+//   Response 3 fields — product + price_cents + price_currency (??
+//     'EUR').
 //
 //   preHandler [requireAuth, rateLimit('global')].
 //
@@ -55,11 +53,11 @@ describe('W1021 routes/billing-crypto-quote V-666.H cross-source invariant', () 
     expect(p).toMatch(/cheap and the route is not rate-limited beyond the global bucket\./);
   });
 
-  it("CRITICAL stub framing — 'until the NowPayments client lands and we can call its /v1/estimate endpoint, the response is a stub pay_currency: null + computed fiat-cents from the tier table'.", () => {
+  it('CRITICAL pricing-only framing — payment-specific crypto values belong to checkout creation', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-quote.ts'));
-    expect(p).toMatch(/until the NowPayments client lands and we can call its/);
-    expect(p).toMatch(/`\/v1\/estimate` endpoint, the response is a stub `pay_currency: null`/);
-    expect(p).toMatch(/\+ computed fiat-cents from the tier table/);
+    expect(p).toMatch(/only the authoritative tier price in fiat cents/);
+    expect(p).toMatch(/currency, amount and deposit address are payment-specific values/);
+    expect(p).not.toMatch(/provider: 'stub'|pay_currency: null|pay_min_amount|pay_max_amount/);
   });
 
   it('CRITICAL SUPPORTED_PRODUCTS 6 tiers — solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale.', () => {
@@ -98,15 +96,11 @@ describe('W1021 routes/billing-crypto-quote V-666.H cross-source invariant', () 
     );
   });
 
-  it("CRITICAL response 7-field shape — product + price_cents + price_currency (?? 'EUR') + provider:'stub' + pay_currency:null + pay_min_amount:null + pay_max_amount:null.", () => {
+  it("CRITICAL response 3-field shape — product + price_cents + price_currency (?? 'EUR').", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-quote.ts'));
-    expect(p).toMatch(/product,/);
-    expect(p).toMatch(/price_cents: priceCents,/);
-    expect(p).toMatch(/price_currency: parsed\.data\.price_currency \?\? 'EUR',/);
-    expect(p).toMatch(/provider: 'stub',/);
-    expect(p).toMatch(/pay_currency: null,/);
-    expect(p).toMatch(/pay_min_amount: null,/);
-    expect(p).toMatch(/pay_max_amount: null,/);
+    expect(p).toMatch(
+      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: parsed\.data\.price_currency \?\? 'EUR',\s*\n?\s*\}\);/,
+    );
   });
 
   it("CRITICAL preHandler [requireAuth, requireScope('read:billing'), rateLimit('global')].", () => {

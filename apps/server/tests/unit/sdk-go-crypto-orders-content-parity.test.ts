@@ -107,9 +107,9 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
     expect(body).toMatch(/if len\(q\) == 0 \{\s*\n\s*return nil\s*\n\s*\}/);
   });
 
-  it('Quote — V-666.H POST /v1/billing/crypto-checkout/quote previews fiat-cents price + crypto pay-range WITHOUT minting an order. Drift to minting on quote would lose the "preview before commit" UX customers depend on for pricing transparency.', () => {
-    expect(body).toMatch(/\/\/ Quote previews the fiat-cents price \+ crypto pay-range without/);
-    expect(body).toMatch(/\/\/ minting an order \(V-666\.H\)\./);
+  it('Quote — V-666.H POST /v1/billing/crypto-checkout/quote previews the authoritative fiat price without minting an order.', () => {
+    expect(body).toMatch(/\/\/ Quote previews the authoritative fiat price without minting an/);
+    expect(body).toMatch(/\/\/ order \(V-666\.H\)\./);
     expect(body).toMatch(
       /func \(r \*CryptoOrdersResource\) Quote\(ctx context\.Context, body CryptoQuoteRequest\) \(CryptoQuoteResponse, error\)/,
     );

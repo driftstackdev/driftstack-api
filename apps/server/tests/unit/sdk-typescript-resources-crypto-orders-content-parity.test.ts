@@ -83,9 +83,9 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
     expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
   });
 
-  it('V-666.H quote verb — POST /v1/billing/crypto-checkout/quote with CryptoQuoteRequest body → Promise<CryptoQuoteResponse>. "preview the fiat-cents price + crypto pay-range without minting an order" framing pinned — drift to minting on quote would let customers accidentally pay just by previewing.', () => {
+  it('V-666.H quote verb — POST /v1/billing/crypto-checkout/quote with CryptoQuoteRequest body → Promise<CryptoQuoteResponse>. Authoritative fiat-price preview without minting an order.', () => {
     expect(body).toMatch(
-      /\/\*\* V-666\.H — preview the fiat-cents price \+ crypto pay-range without minting an order\. \*\//,
+      /\/\*\* V-666\.H — preview the authoritative fiat price without minting an order\. \*\//,
     );
     expect(body).toMatch(
       /quote\(body: CryptoQuoteRequest\): Promise<CryptoQuoteResponse> \{\s*\n?\s*return this\.http\.request<CryptoQuoteResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/crypto-checkout\/quote',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,

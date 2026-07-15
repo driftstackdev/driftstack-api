@@ -18,8 +18,8 @@
 //     (swept mapped to expired server-side before serialization).
 //   • CreateCryptoCheckoutRequest: product + price_cents int positive
 //     max 1M + price_currency 3-letter uppercase ISO regex.
-//   • Provider enum: stub|nowpayments + "stub until NowPayments
-//     merchant account lands" framing.
+//   • Provider enum: stub|nowpayments + support-assisted fallback
+//     framing.
 //   • V-666.AV expires_at informational pay-window deadline (null on
 //     non-pending).
 //   • V-666.BR ListCryptoOrdersQuery + V-666.BU cursor + V-666.BX
@@ -85,9 +85,9 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
     );
   });
 
-  it('CreateCryptoCheckoutResponse: order_id + product + price_cents + price_currency + status + provider stub|nowpayments + payment_address nullable + pay_currency nullable + pay_amount nullable (the crypto amount to send; returned by the route + documented in api/billing-crypto) + created_at; provider rationale "stub until NowPayments merchant lands"', () => {
+  it('CreateCryptoCheckoutResponse: order_id + product + price_cents + price_currency + status + provider stub|nowpayments + payment_address nullable + pay_currency nullable + pay_amount nullable (the crypto amount to send; returned by the route + documented in api/billing-crypto) + created_at; stub is the support-assisted fallback', () => {
     expect(body).toMatch(
-      /export const CreateCryptoCheckoutResponseSchema = z\.object\(\{\s*\n?\s*order_id: z\.string\(\),\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\),\s*\n?\s*price_currency: z\.string\(\),\s*\n?\s*status: CryptoOrderStatusSchema,\s*\n?\s*\/\*\* 'stub' until the NowPayments merchant account lands; 'nowpayments' thereafter\. \*\/\s*\n?\s*provider: z\.enum\(\['stub', 'nowpayments'\]\),\s*\n?\s*payment_address: z\.string\(\)\.nullable\(\),\s*\n?\s*pay_currency: z\.string\(\)\.nullable\(\),[\s\S]*?pay_amount: z\.number\(\)\.nullable\(\),\s*\n?\s*created_at: z\.string\(\),\s*\n?\s*\}\);/,
+      /export const CreateCryptoCheckoutResponseSchema = z\.object\(\{\s*\n?\s*order_id: z\.string\(\),\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\),\s*\n?\s*price_currency: z\.string\(\),\s*\n?\s*status: CryptoOrderStatusSchema,\s*\n?\s*\/\*\* Payment rail used for this checkout; `stub` is the support-assisted fallback\. \*\/\s*\n?\s*provider: z\.enum\(\['stub', 'nowpayments'\]\),\s*\n?\s*payment_address: z\.string\(\)\.nullable\(\),\s*\n?\s*pay_currency: z\.string\(\)\.nullable\(\),[\s\S]*?pay_amount: z\.number\(\)\.nullable\(\),\s*\n?\s*created_at: z\.string\(\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -122,13 +122,14 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
     );
   });
 
-  it('CryptoQuoteRequest (product + optional 3-letter uppercase price_currency) + Response (price + provider + pay_currency/min/max nullable)', () => {
+  it('CryptoQuoteRequest (product + optional 3-letter uppercase price_currency) + exact pricing-only response', () => {
     expect(body).toMatch(
       /export const CryptoQuoteRequestSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const CryptoQuoteResponseSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\),\s*\n?\s*price_currency: z\.string\(\),\s*\n?\s*provider: z\.enum\(\['stub', 'nowpayments'\]\),\s*\n?\s*pay_currency: z\.string\(\)\.nullable\(\),\s*\n?\s*pay_min_amount: z\.number\(\)\.nullable\(\),\s*\n?\s*pay_max_amount: z\.number\(\)\.nullable\(\),\s*\n?\s*\}\);/,
+      /export const CryptoQuoteResponseSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\),\s*\n?\s*price_currency: z\.string\(\),\s*\n?\s*\}\);/,
     );
+    expect(body).not.toMatch(/CryptoQuoteResponseSchema[\s\S]{0,300}pay_min_amount/);
   });
 
   it('V-666.AZ CryptoOrderReceipt framing + shape (order_id + issued_at + status + product + price + payment_id nullable + paid_at nullable + created_at) — JSON/text/PDF variants', () => {

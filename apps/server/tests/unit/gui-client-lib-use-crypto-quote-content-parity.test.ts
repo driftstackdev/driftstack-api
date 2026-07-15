@@ -13,9 +13,8 @@
 //     returns the price preview without minting an order. Re-fetches
 //     automatically when product or currency changes; supports manual
 //     mode for views that want to gate the request behind a button.'
-//   • CryptoQuoteData 7-field (product + price_cents + price_currency
-//     + provider + pay_currency nullable + pay_min_amount nullable +
-//     pay_max_amount nullable).
+//   • CryptoQuoteData exact 3-field pricing response (product +
+//     price_cents + price_currency).
 //   • UseCryptoQuoteOpts: product null-gateable + priceCurrency
 //     optional + manual? optional.
 //   • product===null short-circuit on both initial state and inside
@@ -49,10 +48,11 @@ describe('W473.A apps/gui-client/src/lib/use-crypto-quote.ts content parity', ()
     );
   });
 
-  it('CryptoQuoteData 7-field (product + price_cents + price_currency + provider + pay_currency nullable + pay_min_amount nullable + pay_max_amount nullable — all three pay_* fields nullable for the stub provider that has no on-chain pay info yet)', () => {
+  it('CryptoQuoteData exact pricing-only shape (product + price_cents + price_currency)', () => {
     expect(body).toMatch(
-      /export interface CryptoQuoteData \{\s*\n?\s*product: string;\s*\n?\s*price_cents: number;\s*\n?\s*price_currency: string;\s*\n?\s*provider: string;\s*\n?\s*pay_currency: string \| null;\s*\n?\s*pay_min_amount: number \| null;\s*\n?\s*pay_max_amount: number \| null;\s*\n?\s*\}/,
+      /export interface CryptoQuoteData \{\s*\n?\s*product: string;\s*\n?\s*price_cents: number;\s*\n?\s*price_currency: string;\s*\n?\s*\}/,
     );
+    expect(body).not.toMatch(/pay_min_amount|pay_max_amount|provider: string/);
   });
 
   it("CryptoQuoteState 4-variant union + UseCryptoQuoteOpts: product 'Tier product to quote. null = no fetch; result stays idle.' + priceCurrency? 'Defaults to the server's EUR.' + manual? 'Disable auto-fetch on mount + on dependency change. Default false.'", () => {

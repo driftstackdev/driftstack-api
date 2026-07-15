@@ -59,13 +59,13 @@ export const CreateCryptoCheckoutResponseSchema = z.object({
   price_cents: z.number().int(),
   price_currency: z.string(),
   status: CryptoOrderStatusSchema,
-  /** 'stub' until the NowPayments merchant account lands; 'nowpayments' thereafter. */
+  /** Payment rail used for this checkout; `stub` is the support-assisted fallback. */
   provider: z.enum(['stub', 'nowpayments']),
   payment_address: z.string().nullable(),
   pay_currency: z.string().nullable(),
   /**
    * The crypto amount to send, denominated in `pay_currency`. Null
-   * until the NowPayments merchant account lands (provider 'stub').
+   * for the support-assisted `stub` fallback or when upstream omits it.
    * Returned by POST /v1/billing/crypto-checkout (billing-crypto.ts)
    * and documented in /docs/api/billing-crypto.
    */
@@ -153,10 +153,6 @@ export const CryptoQuoteResponseSchema = z.object({
   product: z.string(),
   price_cents: z.number().int().positive(),
   price_currency: z.string(),
-  provider: z.enum(['stub', 'nowpayments']),
-  pay_currency: z.string().nullable(),
-  pay_min_amount: z.number().nullable(),
-  pay_max_amount: z.number().nullable(),
 });
 export type CryptoQuoteResponse = z.infer<typeof CryptoQuoteResponseSchema>;
 

@@ -3,10 +3,9 @@
 // Price preview for the crypto-checkout page. Customers hit this
 // before committing to actually opening an order (which would mint
 // an order_id + reserve a payment address). The response carries
-// the tier price in fiat-cents + a placeholder crypto pay range
-// (until the NowPayments client lands and we can call its
-// `/v1/estimate` endpoint, the response is a stub `pay_currency: null`
-// + computed fiat-cents from the tier table).
+// only the authoritative tier price in fiat cents. The exact crypto
+// currency, amount and deposit address are payment-specific values
+// returned by checkout creation, never invented by this stateless preview.
 //
 // Quote responses are stateless — no DB write — so re-fetching is
 // cheap and the route is not rate-limited beyond the global bucket.
@@ -80,13 +79,6 @@ export function registerCryptoQuoteRoutes(app: FastifyInstance, deps: CryptoQuot
         product,
         price_cents: priceCents,
         price_currency: parsed.data.price_currency ?? 'EUR',
-        // V-666.D follow-up: the NowPayments client will populate this
-        // by calling `POST /v1/estimate`. Until then the front end
-        // shows "amount TBD on order creation".
-        provider: 'stub',
-        pay_currency: null,
-        pay_min_amount: null,
-        pay_max_amount: null,
       });
     },
   );

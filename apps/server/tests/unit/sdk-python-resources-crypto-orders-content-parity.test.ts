@@ -106,9 +106,9 @@ describe('W584.B packages/sdk-python/src/driftstack/resources/crypto_orders.py c
     );
   });
 
-  it('Sync quote — V-666.H POST /v1/billing/crypto-checkout/quote. CRITICAL framing: "preview the fiat-cents price + crypto pay-range without minting an order." Drift to actually creating an order on quote would let customers accidentally pay just by previewing — disastrous for the buyer journey.', () => {
+  it('Sync quote — V-666.H POST /v1/billing/crypto-checkout/quote. Authoritative fiat-price preview without minting an order.', () => {
     expect(body).toMatch(
-      /def quote\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.H — preview the fiat-cents price \+ crypto pay-range without minting an order\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"POST",\s*\n\s*"\/v1\/billing\/crypto-checkout\/quote",\s*\n\s*json_body=coerce_body\(body\),\s*\n\s*\)/,
+      /def quote\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.H — preview the authoritative fiat price without minting an order\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"POST",\s*\n\s*"\/v1\/billing\/crypto-checkout\/quote",\s*\n\s*json_body=coerce_body\(body\),\s*\n\s*\)/,
     );
   });
 

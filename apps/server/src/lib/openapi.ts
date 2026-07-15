@@ -3635,7 +3635,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/proxy',
-    summary: 'Set customer-configurable proxy for a session (planning 133 Phase 1+)',
+    summary: 'Set the customer-configurable proxy for a session',
     tags: ['egress'],
     security: auth,
     request: {
@@ -4765,7 +4765,8 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Fiat-cents price + crypto pay-range (stub until NowPayments lands).',
+        description:
+          'Authoritative tier price in the requested fiat currency. This preview creates no order or payment address.',
         content: { 'application/json': { schema: CryptoQuoteResponseSchema } },
       },
       ...errors4xx,

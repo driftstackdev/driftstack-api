@@ -17,10 +17,6 @@ export interface CryptoQuoteData {
   product: string;
   price_cents: number;
   price_currency: string;
-  provider: string;
-  pay_currency: string | null;
-  pay_min_amount: number | null;
-  pay_max_amount: number | null;
 }
 
 export type CryptoQuoteState =
