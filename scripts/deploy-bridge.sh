@@ -181,7 +181,12 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
   ${REMOTE_CLONE}; \
   git checkout '$SHA'; \
   GIT_SHA=\$(git rev-parse --short HEAD); \
-  echo \"[bridge] HEAD=\$GIT_SHA\" >&2; \
+  APP_VERSION=\$(node -p \"require('./apps/server/package.json').version\"); \
+  if [[ ! \"\$APP_VERSION\" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?\$ ]]; then \
+    echo \"[bridge] invalid server package version: \$APP_VERSION\" >&2; \
+    exit 1; \
+  fi; \
+  echo \"[bridge] HEAD=\$GIT_SHA APP_VERSION=\$APP_VERSION\" >&2; \
   echo '[bridge] npm ci (lockfile-strict; include dev for build)' >&2; \
   npm ci --no-audit --include=dev > /tmp/deploy-install.log 2>&1 || (tail -50 /tmp/deploy-install.log; exit 1); \
   echo '[bridge] tsc --build api-types + webhook-delivery' >&2; \
@@ -241,6 +246,8 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
   # driftstack:driftstack).
   sed -i '/^GIT_SHA=/d' /opt/driftstack/api/.env; \
   echo \"GIT_SHA=\$GIT_SHA\" >> /opt/driftstack/api/.env; \
+  sed -i '/^APP_VERSION=/d' /opt/driftstack/api/.env; \
+  echo \"APP_VERSION=\$APP_VERSION\" >> /opt/driftstack/api/.env; \
   chown driftstack:driftstack /opt/driftstack/api/.env; \
   chmod 600 /opt/driftstack/api/.env; \
   # V-667.C-followup — apply pending DB migrations BEFORE restart so

@@ -157,6 +157,9 @@ async function checkVersionShape() {
     for (const k of required) {
       if (typeof body?.[k] !== 'string') return `/version missing string field "${k}"`;
     }
+    if (['', 'unknown', '0.0.0'].includes(body.version.trim())) {
+      return `/version contains placeholder build version "${body.version}"`;
+    }
     return null;
   });
 }

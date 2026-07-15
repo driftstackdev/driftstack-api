@@ -6,6 +6,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
@@ -18,6 +19,28 @@ const MIGRATE = join(REPO, 'apps', 'server', 'src', 'db', 'migrate.ts');
 
 function read(path: string): string {
   return readFileSync(path, 'utf8');
+}
+
+function runVerifierWithVersion(version: string) {
+  const source = `
+    import { pathToFileURL } from 'node:url';
+    process.argv = ['node', ${JSON.stringify(VERIFY)}, '--base-url', 'https://example.test'];
+    globalThis.fetch = async (input) => {
+      const pathname = new URL(String(input)).pathname;
+      if (pathname === '/version') {
+        return new Response(JSON.stringify({
+          version: ${JSON.stringify(version)},
+          git_sha: 'abc1234',
+          started_at: new Date().toISOString(),
+          node_version: process.version,
+          driver: 'mock',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    await import(pathToFileURL(${JSON.stringify(VERIFY)}).href + '?version-verifier-test');
+  `;
+  return spawnSync(process.execPath, ['--input-type=module', '-e', source], { encoding: 'utf8' });
 }
 
 describe('deploy-bridge runbook content parity', () => {
@@ -45,6 +68,28 @@ describe('deploy-bridge runbook content parity', () => {
     expect(bridge).toMatch(
       /ERROR: could not verify staging DB isolation — refusing staging deploy/,
     );
+  });
+
+  it('publishes the checked-out server package version and rejects runtime placeholders', () => {
+    expect(bridge).toMatch(
+      /APP_VERSION=\\\$\(node -p \\"require\('\.\/apps\/server\/package\.json'\)\.version\\"\)/,
+    );
+    expect(bridge).toMatch(/invalid server package version/);
+    expect(bridge).toMatch(/sed -i '\/\^APP_VERSION=\/d' \/opt\/driftstack\/api\/\.env/);
+    expect(bridge).toMatch(
+      /echo \\"APP_VERSION=\\\$APP_VERSION\\" >> \/opt\/driftstack\/api\/\.env/,
+    );
+    expect(verify).toContain("['', 'unknown', '0.0.0'].includes(body.version.trim())");
+
+    const placeholder = runVerifierWithVersion('0.0.0');
+    expect(placeholder.status).toBe(1);
+    expect(`${placeholder.stdout}${placeholder.stderr}`).toContain(
+      '/version contains placeholder build version "0.0.0"',
+    );
+
+    const real = runVerifierWithVersion('0.0.1');
+    expect(real.status).toBe(1); // Other deliberately invalid mocked endpoints still fail.
+    expect(`${real.stdout}${real.stderr}`).not.toContain('placeholder build version');
   });
 
   it('runbook invariant count matches the post-deploy-verify.mjs checks[] length', () => {

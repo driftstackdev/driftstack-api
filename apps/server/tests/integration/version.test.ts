@@ -35,6 +35,38 @@ describe('GET /version', () => {
     expect(Number.isNaN(new Date(body.started_at).getTime())).toBe(false);
   });
 
+  it('prefers the deploy-owned APP_VERSION when the service starts outside npm', async () => {
+    const previousAppVersion = process.env.APP_VERSION;
+    const previousNpmVersion = process.env.npm_package_version;
+    process.env.APP_VERSION = '1.2.3-release.4';
+    process.env.npm_package_version = '9.9.9';
+    try {
+      fx = await buildTestApp();
+      const res = await fx.app.inject({ method: 'GET', url: '/version' });
+      expect(res.json<VersionResponse>().version).toBe('1.2.3-release.4');
+    } finally {
+      if (previousAppVersion === undefined) delete process.env.APP_VERSION;
+      else process.env.APP_VERSION = previousAppVersion;
+      if (previousNpmVersion === undefined) delete process.env.npm_package_version;
+      else process.env.npm_package_version = previousNpmVersion;
+    }
+  });
+
+  it("reports 'unknown' instead of a fabricated version outside deploy and npm", async () => {
+    const previousAppVersion = process.env.APP_VERSION;
+    const previousNpmVersion = process.env.npm_package_version;
+    delete process.env.APP_VERSION;
+    delete process.env.npm_package_version;
+    try {
+      fx = await buildTestApp();
+      const res = await fx.app.inject({ method: 'GET', url: '/version' });
+      expect(res.json<VersionResponse>().version).toBe('unknown');
+    } finally {
+      if (previousAppVersion !== undefined) process.env.APP_VERSION = previousAppVersion;
+      if (previousNpmVersion !== undefined) process.env.npm_package_version = previousNpmVersion;
+    }
+  });
+
   it('reports GIT_SHA env value when set', async () => {
     const prev = process.env.GIT_SHA;
     process.env.GIT_SHA = 'abc1234';
