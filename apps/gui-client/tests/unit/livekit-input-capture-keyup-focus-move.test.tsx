@@ -20,7 +20,7 @@ vi.mock('../../src/lib/livekit', () => ({
 const { useInputCapture } = await import('../../src/lib/livekit-input-capture');
 import type { InputEvent, Room } from '../../src/lib/livekit';
 
-function mountCapture(): ReturnType<typeof render> {
+function mountCapture(): ReturnType<typeof render> & { video: HTMLVideoElement } {
   const video = document.createElement('video');
   document.body.appendChild(video);
   video.getBoundingClientRect = () =>
@@ -31,7 +31,7 @@ function mountCapture(): ReturnType<typeof render> {
     useInputCapture({ room: {} as Room, videoElement: video, enabled: true });
     return <span />;
   }
-  return render(<Wired />);
+  return Object.assign(render(<Wired />), { video });
 }
 
 function eventsFor(key: string, type: 'keyDown' | 'keyUp'): InputEvent[] {
@@ -50,6 +50,11 @@ function makeEditableInput(): HTMLInputElement {
   const input = document.createElement('input');
   document.body.appendChild(input);
   return input;
+}
+
+function dispatchKeyPair(key: string, code: string): void {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true }));
 }
 
 describe('useInputCapture — keyUp mirrors the keyDown forward decision', () => {
@@ -107,6 +112,66 @@ describe('useInputCapture — keyUp mirrors the keyDown forward decision', () =>
 
     expect(eventsFor('x', 'keyDown')).toHaveLength(0);
     expect(eventsFor('x', 'keyUp')).toHaveLength(0);
+  });
+
+  it('a key beginning on any focused GUI control forwards neither half', () => {
+    mountCapture();
+    const controls: Array<{ label: string; element: HTMLElement; key: string; code: string }> = [
+      { label: 'button', element: document.createElement('button'), key: 'Enter', code: 'Enter' },
+      {
+        label: 'select',
+        element: document.createElement('select'),
+        key: 'ArrowDown',
+        code: 'ArrowDown',
+      },
+      { label: 'link', element: document.createElement('a'), key: 'Enter', code: 'Enter' },
+      { label: 'role=tab', element: document.createElement('div'), key: ' ', code: 'Space' },
+    ];
+    controls[2].element.setAttribute('href', '#local');
+    controls[3].element.setAttribute('role', 'tab');
+    controls[3].element.tabIndex = 0;
+
+    for (const control of controls) {
+      document.body.appendChild(control.element);
+      control.element.focus();
+      expect(document.activeElement, control.label).toBe(control.element);
+      sendInputEvent.mockClear();
+      dispatchKeyPair(control.key, control.code);
+      expect(keyEvents(), control.label).toEqual([]);
+      control.element.remove();
+    }
+  });
+
+  it('body and the stream video retain remote keyboard ownership', () => {
+    const mounted = mountCapture();
+    expect(document.activeElement).toBe(document.body);
+    dispatchKeyPair('x', 'KeyX');
+    expect(keyEvents()).toEqual([
+      { type: 'keyDown', key: 'x' },
+      { type: 'keyUp', key: 'x' },
+    ]);
+
+    sendInputEvent.mockClear();
+    mounted.video.tabIndex = 0;
+    mounted.video.focus();
+    expect(document.activeElement).toBe(mounted.video);
+    dispatchKeyPair('y', 'KeyY');
+    expect(keyEvents()).toEqual([
+      { type: 'keyDown', key: 'y' },
+      { type: 'keyUp', key: 'y' },
+    ]);
+  });
+
+  it('a forwarded Tab still releases remotely after focus moves into a GUI button', () => {
+    mountCapture();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true }));
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    button.focus();
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab', code: 'Tab', bubbles: true }));
+
+    expect(eventsFor('Tab', 'keyDown')).toHaveLength(1);
+    expect(eventsFor('Tab', 'keyUp')).toHaveLength(1);
   });
 
   it('releases the stored down-time wire key when Shift changes A to a before keyUp', () => {

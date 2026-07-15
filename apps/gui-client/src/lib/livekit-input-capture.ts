@@ -1033,17 +1033,16 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       wheelPendingDy += e.deltaY * unit;
       if (wheelRaf === 0) wheelRaf = requestAnimationFrame(flushWheel);
     };
-    // True when focus is in an editable element (a text field / textarea /
-    // contenteditable). The keyboard listeners are bound on `window`, so without
-    // this guard typing into the in-window "Tell the agent" composer would ALSO
-    // forward every keystroke to the device. Skip forwarding while editing.
-    const editingLocally = (): boolean => {
+    // True when a LOCAL GUI element owns the keyboard. The listeners are bound on
+    // `window`, so checking only text editables lets Enter/Space/arrow activate a
+    // focused GUI button/link/select/tab AND operate the live phone on the same
+    // physical press. Root/body mean no local control owns focus, and the stream
+    // video explicitly represents remote control; every other focused element is
+    // local. The forwarded-key map below still owns keyUp after a forwarded key's
+    // default action moves focus from root/video into a local control.
+    const keyOwnedLocally = (): boolean => {
       const el = document.activeElement;
-      if (el === null) return false;
-      const tag = el.tagName;
-      return (
-        tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement).isContentEditable === true
-      );
+      return el !== null && el !== document.documentElement && el !== document.body && el !== video;
     };
     // The bare Escape key is the GUI's drawer-collapse shortcut (a document-level
     // keydown in SimulatorWindow). It has no iPhone-meaningful analogue for the
@@ -1058,7 +1057,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // Keys whose keyDown we forwarded to the device this capture run, tracked by
     // PHYSICAL key (e.code, stable across shift so a keyDown 'A' still matches its
     // keyUp 'a'). The keyUp gate MUST mirror the keyDown decision, not re-evaluate
-    // editingLocally()/isBareEscape() at keyup time: a key whose default action
+    // keyOwnedLocally()/isBareEscape() at keyup time: a key whose default action
     // moves GUI focus INTO an input (Tab / Shift+Tab into the address bar or the
     // "Tell the agent" composer) fires its keyUp while editingLocally() is now
     // true, so re-checking there would forward keyDown but drop keyUp → a stuck
@@ -1076,7 +1075,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       forwardedKeys.clear();
     };
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (editingLocally()) return;
+      if (keyOwnedLocally()) return;
       if (isBareEscape(e)) return;
       // BACKPRESSURE shed (mirrors pointer/wheel): do not put a NEW keyDown behind a
       // stalled ordered channel. Even a single delayed character or Enter can replay

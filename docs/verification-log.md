@@ -28165,3 +28165,36 @@ backpressure behaviors remain green. The focused matrix passes 2 files and
 files and 33/33 tests. Strict GUI and server-test TypeScript, targeted
 lint/format/diff, the full workspace typecheck and configured production build
 are green.
+
+---
+
+## V-672 — Focused GUI controls own keys that begin locally
+
+**Date:** 2026-07-15
+
+The live-input hook listens at `window` so a customer can type on the remote
+phone without first focusing the small stream video. Its local-focus guard,
+however, excluded only text inputs, textareas and contenteditable elements.
+Enter, Space or arrow keys beginning on a focused GUI button, link, select or
+custom control such as the simulator's `role="tab"` strip therefore activated
+the local control and were also forwarded to the phone. One physical action
+could switch or close a GUI tab while simultaneously operating the remote
+page.
+
+Keyboard ownership is now defined at the interaction boundary. Document root
+and body mean no local control owns focus, and the stream video explicitly
+represents remote input, so those states continue forwarding. Every other
+focused element owns a key that begins there, regardless of tag or ARIA role.
+The existing physical-key decision map remains the authority for key-up, so a
+remote-forwarded Tab or other key still receives its matching release when the
+key's default action moves focus into a local control before key-up.
+
+Focused verification proves button, link, select and `role="tab"` keys forward
+neither half; body and video key pairs still forward; and Tab still releases
+after focus moves into a GUI button. Existing input/composer isolation,
+Tab/Shift+Tab mirroring, physical `A`/`a` balancing, neutral teardown and
+reliable-channel backpressure remain green. The direct matrix passes 2 files
+and 24/24 tests; the expanded GUI Escape and server source-parity matrix passes
+4 files and 36/36 tests. Strict GUI and server-test TypeScript, targeted
+lint/format/diff, full workspace typechecking and the configured production
+build are green.
