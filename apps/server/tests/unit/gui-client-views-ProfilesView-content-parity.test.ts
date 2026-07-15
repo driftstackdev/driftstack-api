@@ -72,6 +72,33 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
+  it('serializes bulk organization and reports local/account persistence outcomes honestly', () => {
+    expect(body).toContain('const bulkOrganizationMutationInFlightRef = useRef(false);');
+    expect(body).toContain('aria-busy={bulkOrganizationBusy}');
+    expect(body.match(/await runBulkOrganization\(/g)).toHaveLength(4);
+
+    const start = body.indexOf('async function runBulkOrganization(');
+    const end = body.indexOf('async function handleBulkApply()', start);
+    const helper = body.slice(start, end);
+    expect(helper).toMatch(
+      /if \(selectedIds\.size === 0 \|\| bulkOrganizationMutationInFlightRef\.current\) return;/,
+    );
+    expect(helper).toContain('bulkOrganizationMutationInFlightRef.current = true;');
+    expect(helper).toContain('const next = await saveLocal(ids);');
+    expect(helper).toContain('await Promise.allSettled(');
+    expect(helper).toContain('await client.profiles.update(id, update);');
+    expect(helper).toContain('Saved on this Mac, but couldn’t sync');
+    expect(helper).toContain('Couldn’t save profile organization on this Mac.');
+    expect(helper).toContain('bulkOrganizationMutationInFlightRef.current = false;');
+    expect(helper.indexOf('if (failed > 0)')).toBeLessThan(helper.indexOf('clearDrafts();'));
+    expect(helper.indexOf('if (failed > 0)')).toBeLessThan(
+      helper.indexOf('setSelectedIds(new Set());'),
+    );
+
+    const handlers = body.slice(end, body.indexOf('// Bulk export', end));
+    expect(handlers).not.toMatch(/profiles\s*\.update\([\s\S]{0,120}?catch\(\(\) => undefined\)/);
+  });
+
   it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
     expect(body).toMatch(
       /Proxy credentials are\s*\n?\s*protected locally and synced encrypted to your account when used for a session\./,

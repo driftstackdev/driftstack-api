@@ -171,7 +171,8 @@ function reseedMeta(): void {
 
 describe('ProfilesView organization management', () => {
   beforeEach(() => {
-    profilesUpdate.mockClear();
+    profilesUpdate.mockReset();
+    profilesUpdate.mockResolvedValue({ id: 'prof_1' });
     saveOrganization.mockClear();
     removeFolder.mockClear();
     renameFolder.mockClear();
@@ -471,6 +472,81 @@ describe('ProfilesView organization management', () => {
       // The selection is dismissed — the bulk bar's "N selected" chip is gone,
       // matching Apply / Clear folder / Remove tag (it used to stay up).
       await waitFor(() => expect(screen.queryByText(/selected/)).toBeNull());
+    });
+
+    it('keeps the exact retry state and suppresses success when one account PATCH fails', async () => {
+      profilesUpdate.mockRejectedValueOnce(new Error('/Users/customer/Library/secret-token'));
+      await selectBoth();
+      fireEvent.change(screen.getByLabelText('Bulk tag'), { target: { value: 'warmup' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+      expect(
+        await screen.findByText(
+          'Saved on this Mac, but couldn’t sync 1 of 2 profiles to your account. Check your connection and retry.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Updated 2 profiles.')).toBeNull();
+      expect(screen.getByText('2 selected')).toBeInTheDocument();
+      expect(screen.getByLabelText('Bulk tag')).toHaveValue('warmup');
+      expect(screen.queryByText(/secret-token/)).toBeNull();
+      expect(profilesUpdate).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+      expect(await screen.findByText('Updated 2 profiles.')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText(/selected/)).toBeNull());
+      expect(screen.queryByText(/couldn’t sync/)).toBeNull();
+      expect(profilesUpdate).toHaveBeenCalledTimes(4);
+    });
+
+    it('reports a local save failure safely without PATCHing or losing the selection', async () => {
+      saveProfilesMetaBulk.mockRejectedValueOnce(new Error('/private/store/database.json'));
+      await selectBoth();
+      fireEvent.click(screen.getByRole('button', { name: 'Clear folder' }));
+
+      expect(
+        await screen.findByText(
+          'Couldn’t save profile organization on this Mac. Check app storage and try again.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText('2 selected')).toBeInTheDocument();
+      expect(screen.queryByText(/private\/store/)).toBeNull();
+      expect(screen.queryByText(/Cleared the folder on/)).toBeNull();
+      expect(profilesUpdate).not.toHaveBeenCalled();
+    });
+
+    it('serializes rapid alternate bulk organization actions before the first await', async () => {
+      let releaseFirstPatch: ((value: unknown) => void) | undefined;
+      const heldPatch = new Promise<unknown>((resolve) => {
+        releaseFirstPatch = resolve;
+      });
+      profilesUpdate.mockImplementationOnce(() => heldPatch);
+      await selectBoth();
+      fireEvent.change(screen.getByLabelText('Bulk folder'), { target: { value: 'Work' } });
+
+      const apply = screen.getByRole('button', { name: 'Apply' });
+      const alternate = screen.getByRole('button', { name: 'Clear folder' });
+      act(() => {
+        apply.click();
+        alternate.click();
+      });
+
+      await waitFor(() => expect(profilesUpdate).toHaveBeenCalledTimes(2));
+      expect(saveProfilesMetaBulk).toHaveBeenCalledTimes(1);
+      expect(saveProfilesMetaBulk).toHaveBeenCalledWith(
+        expect.arrayContaining(['prof_1', 'prof_2']),
+        { folder: 'Work' },
+        'merge',
+        expect.anything(),
+      );
+      expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+      await act(async () => {
+        releaseFirstPatch?.({ id: 'prof_1' });
+        await heldPatch;
+      });
+      expect(await screen.findByText('Updated 2 profiles.')).toBeInTheDocument();
+      expect(saveProfilesMetaBulk).toHaveBeenCalledTimes(1);
+      expect(profilesUpdate).toHaveBeenCalledTimes(2);
     });
   });
 });

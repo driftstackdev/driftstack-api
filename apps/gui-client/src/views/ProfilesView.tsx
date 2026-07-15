@@ -620,6 +620,11 @@ export function ProfilesView({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkFolder, setBulkFolder] = useState('');
   const [bulkTag, setBulkTag] = useState('');
+  const [bulkOrganizationBusy, setBulkOrganizationBusy] = useState(false);
+  // React's disabled state commits after the handler returns. Keep one synchronous
+  // owner across every bulk organization action so rapid same-turn clicks (or an
+  // alternate action) cannot duplicate local writes and account PATCHes.
+  const bulkOrganizationMutationInFlightRef = useRef(false);
   const [bulkExporting, setBulkExporting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkLaunching, setBulkLaunching] = useState(false);
@@ -2194,70 +2199,107 @@ export function ProfilesView({
     });
   }
 
+  async function runBulkOrganization(
+    saveLocal: (ids: string[]) => Promise<ProfilesMetaMap>,
+    accountUpdateFor: (id: string, next: ProfilesMetaMap) => UpdateProfileRequest | null,
+    successNotice: (count: number) => string,
+    clearDrafts: () => void,
+  ): Promise<void> {
+    if (selectedIds.size === 0 || bulkOrganizationMutationInFlightRef.current) return;
+    bulkOrganizationMutationInFlightRef.current = true;
+    setBulkOrganizationBusy(true);
+    setState((s) => ({ ...s, notice: null }));
+    const ids = [...selectedIds];
+    try {
+      const next = await saveLocal(ids);
+      setProfilesMeta(next);
+
+      let failed = ids.length;
+      if (client) {
+        const outcomes = await Promise.allSettled(
+          ids.map(async (id) => {
+            const update = accountUpdateFor(id, next);
+            if (update === null) throw new Error('missing locally-saved profile organization');
+            await client.profiles.update(id, update);
+          }),
+        );
+        failed = outcomes.filter((outcome) => outcome.status === 'rejected').length;
+      }
+
+      if (failed > 0) {
+        const noun = ids.length === 1 ? 'profile' : 'profiles';
+        setState((s) => ({
+          ...s,
+          error: `Saved on this Mac, but couldn’t sync ${failed.toString()} of ${ids.length.toString()} ${noun} to your account. Check your connection and retry.`,
+          notice: null,
+        }));
+        return;
+      }
+
+      clearDrafts();
+      setSelectedIds(new Set());
+      setState((s) => ({ ...s, error: null, notice: successNotice(ids.length) }));
+    } catch {
+      setState((s) => ({
+        ...s,
+        error: 'Couldn’t save profile organization on this Mac. Check app storage and try again.',
+        notice: null,
+      }));
+    } finally {
+      bulkOrganizationMutationInFlightRef.current = false;
+      setBulkOrganizationBusy(false);
+    }
+  }
+
   async function handleBulkApply(): Promise<void> {
     if (selectedIds.size === 0) return;
     const meta: { folder?: string; tags?: string[] } = {};
     if (bulkFolder.trim().length > 0) meta.folder = bulkFolder.trim();
     if (bulkTag.trim().length > 0) meta.tags = [bulkTag.trim()];
     if (meta.folder === undefined && meta.tags === undefined) return;
-    const next = await saveProfilesMetaBulk(
-      [...selectedIds],
-      meta,
-      'merge',
-      // Personal-only prune (see refresh seed-down).
-      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
-    );
-    setProfilesMeta(next);
-    // Phase 2 write-through (same best-effort contract as the single-
-    // profile organize save): push each selected profile's merged result.
-    if (client) {
-      for (const id of selectedIds) {
+    await runBulkOrganization(
+      (ids) =>
+        saveProfilesMetaBulk(
+          ids,
+          meta,
+          'merge',
+          // Personal-only prune (see refresh seed-down).
+          activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+        ),
+      (id, next) => {
         const saved = next[id];
-        if (!saved) continue;
-        void client.profiles
-          .update(id, {
-            folder: saved.folder.length > 0 ? saved.folder : null,
-            tags: saved.tags,
-          })
-          .catch(() => undefined);
-      }
-    }
-    const n = selectedIds.size;
-    setSelectedIds(new Set());
-    setBulkFolder('');
-    setBulkTag('');
-    // Confirm the bulk organize instead of just clearing the selection (audit 2026-07-08 —
-    // it read as "I clicked Apply and the bar just vanished"). Mirrors handleClone/Export.
-    setState((s) => ({ ...s, notice: `Updated ${String(n)} profile${n === 1 ? '' : 's'}.` }));
+        return saved
+          ? { folder: saved.folder.length > 0 ? saved.folder : null, tags: saved.tags }
+          : null;
+      },
+      (n) => `Updated ${n.toString()} profile${n === 1 ? '' : 's'}.`,
+      () => {
+        setBulkFolder('');
+        setBulkTag('');
+      },
+    );
   }
 
   // 2026-06-19 (founder GUI-improvement audit) — handleBulkApply is additive
   // only. These two SUBTRACT: clear the folder off every selected profile, and
-  // remove a named tag from each. Both mirror the additive write-through (local
-  // meta + a PATCH each, best-effort).
+  // remove a named tag from each. Both use the same local-first + awaited account
+  // write-through lane as the additive action.
 
   // Clear the folder on every selected profile (folder → '' / null).
   async function handleBulkClearFolder(): Promise<void> {
     if (selectedIds.size === 0) return;
-    const next = await saveProfilesMetaBulk(
-      [...selectedIds],
-      { folder: '' },
-      'replace',
-      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+    await runBulkOrganization(
+      (ids) =>
+        saveProfilesMetaBulk(
+          ids,
+          { folder: '' },
+          'replace',
+          activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+        ),
+      () => ({ folder: null }),
+      (n) => `Cleared the folder on ${n.toString()} profile${n === 1 ? '' : 's'}.`,
+      () => setBulkFolder(''),
     );
-    setProfilesMeta(next);
-    if (client) {
-      for (const id of selectedIds) {
-        void client.profiles.update(id, { folder: null }).catch(() => undefined);
-      }
-    }
-    const n = selectedIds.size;
-    setSelectedIds(new Set());
-    setBulkFolder('');
-    setState((s) => ({
-      ...s,
-      notice: `Cleared the folder on ${String(n)} profile${n === 1 ? '' : 's'}.`,
-    }));
   }
 
   // Remove the named tag from every selected profile (subtract via the new
@@ -2265,60 +2307,42 @@ export function ProfilesView({
   async function handleBulkRemoveTag(): Promise<void> {
     const tag = bulkTag.trim();
     if (selectedIds.size === 0 || tag.length === 0) return;
-    const next = await saveProfilesMetaBulk(
-      [...selectedIds],
-      { tags: [tag] },
-      'remove',
-      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
-    );
-    setProfilesMeta(next);
-    if (client) {
-      for (const id of selectedIds) {
+    await runBulkOrganization(
+      (ids) =>
+        saveProfilesMetaBulk(
+          ids,
+          { tags: [tag] },
+          'remove',
+          activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+        ),
+      (id, next) => {
         const saved = next[id];
-        if (!saved) continue;
-        void client.profiles.update(id, { tags: saved.tags }).catch(() => undefined);
-      }
-    }
-    const n = selectedIds.size;
-    setSelectedIds(new Set());
-    setBulkTag('');
-    setState((s) => ({
-      ...s,
-      notice: `Removed "${tag}" from ${String(n)} profile${n === 1 ? '' : 's'}.`,
-    }));
+        return saved ? { tags: saved.tags } : null;
+      },
+      (n) => `Removed "${tag}" from ${n.toString()} profile${n === 1 ? '' : 's'}.`,
+      () => setBulkTag(''),
+    );
   }
 
   // Set (or clear, with '') a chosen icon on every selected profile — applied
-  // immediately on pick. Icon is a local-only convenience (no server column),
-  // so no write-through.
+  // immediately on pick to the local cache, then mirrored to each account row.
   async function handleBulkIcon(icon: string): Promise<void> {
     if (selectedIds.size === 0) return;
-    const next = await saveProfilesMetaBulk(
-      [...selectedIds],
-      { icon },
-      'merge',
-      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
-    );
-    setProfilesMeta(next);
-    // Per-account sync — write each icon through to the server profile row.
-    if (client) {
-      for (const id of selectedIds) {
-        void client.profiles
-          .update(id, { icon: icon.length > 0 ? icon : null })
-          .catch(() => undefined);
-      }
-    }
-    // Dismiss the selection like every other bulk action (Apply folder/tag, Clear
-    // folder, Remove tag) — leaving it active here was inconsistent + surprising.
-    const n = selectedIds.size;
-    setSelectedIds(new Set());
-    setState((s) => ({
-      ...s,
-      notice:
+    await runBulkOrganization(
+      (ids) =>
+        saveProfilesMetaBulk(
+          ids,
+          { icon },
+          'merge',
+          activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+        ),
+      () => ({ icon: icon.length > 0 ? icon : null }),
+      (n) =>
         icon.length > 0
-          ? `Set the icon on ${String(n)} profile${n === 1 ? '' : 's'}.`
-          : `Cleared the icon on ${String(n)} profile${n === 1 ? '' : 's'}.`,
-    }));
+          ? `Set the icon on ${n.toString()} profile${n === 1 ? '' : 's'}.`
+          : `Cleared the icon on ${n.toString()} profile${n === 1 ? '' : 's'}.`,
+      () => undefined,
+    );
   }
 
   // Bulk export — snapshot each selected profile via profiles.export (the v1
@@ -2972,6 +2996,7 @@ export function ProfilesView({
       {selectedIds.size > 0 && (
         <div
           data-component="bulk-bar"
+          aria-busy={bulkOrganizationBusy}
           // rounded-2xl (not rounded-full) so the wrapped multi-row state at narrow
           // widths reads as an intentional card rather than a mangled pill (audit #19);
           // the bar holds 10+ controls and wraps once the viewport gets tight.
@@ -2984,7 +3009,7 @@ export function ProfilesView({
             type="button"
             className="btn-primary flex items-center gap-1.5 px-3 py-1 text-xs disabled:opacity-50"
             onClick={() => void handleBulkLaunch()}
-            disabled={bulkLaunching}
+            disabled={bulkLaunching || bulkOrganizationBusy}
             title="Open a browser session for each selected profile"
           >
             <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
@@ -2999,12 +3024,14 @@ export function ProfilesView({
             folders={allFolders}
             value={bulkFolder}
             onChange={setBulkFolder}
+            disabled={bulkOrganizationBusy}
           />
           {/* Subtract — clear the folder off every selected profile (2026-06-19). */}
           <button
             type="button"
             className="rounded px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-raised hover:text-ink-primary"
             onClick={() => void handleBulkClearFolder()}
+            disabled={bulkOrganizationBusy}
             title="Remove the selected profiles from their folder"
           >
             Clear folder
@@ -3015,13 +3042,14 @@ export function ProfilesView({
             className="w-32 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
             value={bulkTag}
             onChange={(e) => setBulkTag(e.target.value)}
+            disabled={bulkOrganizationBusy}
           />
           {/* Subtract — remove the typed tag from every selected profile (2026-06-19). */}
           <button
             type="button"
             className="rounded px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-raised hover:text-ink-primary disabled:opacity-50"
             onClick={() => void handleBulkRemoveTag()}
-            disabled={bulkTag.trim().length === 0}
+            disabled={bulkOrganizationBusy || bulkTag.trim().length === 0}
             title="Remove the tag from the selected profiles"
           >
             Remove tag
@@ -3030,6 +3058,7 @@ export function ProfilesView({
             aria-label="Set icon"
             className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
             value="__noop"
+            disabled={bulkOrganizationBusy}
             onChange={(e) => {
               const v = e.target.value;
               if (v === '__noop') return;
@@ -3048,16 +3077,19 @@ export function ProfilesView({
             type="button"
             className="btn-primary px-2.5 py-1 text-xs"
             onClick={() => void handleBulkApply()}
-            disabled={bulkFolder.trim().length === 0 && bulkTag.trim().length === 0}
+            disabled={
+              bulkOrganizationBusy ||
+              (bulkFolder.trim().length === 0 && bulkTag.trim().length === 0)
+            }
           >
-            Apply
+            {bulkOrganizationBusy ? 'Saving…' : 'Apply'}
           </button>
           {IMPORT_EXPORT_ENABLED && (
             <button
               type="button"
               className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-50"
               onClick={() => void handleBulkExport()}
-              disabled={bulkExporting}
+              disabled={bulkExporting || bulkOrganizationBusy}
               title="Download the selected profiles as a portable JSON export"
             >
               {bulkExporting ? 'Exporting…' : 'Export'}
@@ -3068,7 +3100,7 @@ export function ProfilesView({
             type="button"
             className="rounded px-2.5 py-1 text-xs font-medium text-status-error transition-colors hover:bg-status-error/10 disabled:opacity-50"
             onClick={() => void handleBulkDelete()}
-            disabled={bulkDeleting}
+            disabled={bulkDeleting || bulkOrganizationBusy}
             title="Delete the selected profiles (asks for confirmation)"
           >
             {bulkDeleting ? 'Deleting…' : 'Delete'}
@@ -3076,7 +3108,11 @@ export function ProfilesView({
           <button
             type="button"
             className="text-xs text-ink-muted hover:text-ink-primary"
-            onClick={() => setSelectedIds(new Set())}
+            onClick={() => {
+              if (bulkOrganizationMutationInFlightRef.current) return;
+              setSelectedIds(new Set());
+            }}
+            disabled={bulkOrganizationBusy}
           >
             Clear
           </button>
@@ -4745,12 +4781,14 @@ function FolderPicker({
   folders,
   ariaLabel,
   noneLabel,
+  disabled = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   folders: string[];
   ariaLabel: string;
   noneLabel: string;
+  disabled?: boolean;
 }): JSX.Element {
   const isCustom = value.length > 0 && !folders.includes(value);
   const [mode, setMode] = useState<'pick' | 'new'>(isCustom ? 'new' : 'pick');
@@ -4770,6 +4808,7 @@ function FolderPicker({
           aria-label={ariaLabel}
           className="w-36 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
           value={folders.includes(value) ? value : ''}
+          disabled={disabled}
           onChange={(e) => {
             if (e.target.value === '__new__') {
               setMode('new');
@@ -4797,11 +4836,13 @@ function FolderPicker({
             className="w-32 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
           />
           <button
             type="button"
             aria-label="Back to folder list"
             className="text-xs text-ink-muted hover:text-ink-primary"
+            disabled={disabled}
             onClick={() => {
               setMode('pick');
               onChange('');

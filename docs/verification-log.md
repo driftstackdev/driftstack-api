@@ -28399,3 +28399,37 @@ inbound-admission, supersede and keepalive coverage remains unchanged. The
 direct route/real-socket suite passes 17/17 tests; the expanded Fleet matrix
 passes 14 files and 150/150 tests. Strict server source/test TypeScript,
 targeted ESLint/Prettier and diff/whitespace checks are green.
+
+---
+
+## V-679 — Bulk profile organization reports durable outcomes honestly
+
+**Date:** 2026-07-15
+
+The Profiles bulk bar saved folder, tag and icon changes into the protected local
+cache, detached every selected profile's account `PATCH`, swallowed each rejection
+and immediately cleared the selection/drafts with an unconditional success banner.
+A disconnected or partially failing account sync could therefore claim that every
+profile was updated even when none or only some of the server rows changed. Making
+those requests awaitable also exposed a same-turn duplicate-entry window because
+React's disabled state cannot synchronously serialize two handlers.
+
+All four organization actions — Apply folder/tag, Clear folder, Remove tag and
+Set/Clear icon — now enter one shared synchronous mutation lane before the first
+local or network await. The admitted action keeps local-first persistence, then
+awaits every selected account update with bounded all-settled accounting. Only
+total synchronization clears the exact selection/drafts and publishes success.
+A local-store failure instead shows safe local-storage guidance and sends no
+account request. A missing client or partial/total account failure shows how many
+selected profiles remain unsynced, never exposes the raw error, suppresses success
+and preserves the exact retry state. Retrying is idempotent and clears the error
+and selection only after every row succeeds. The bulk controls expose honest busy
+and disabled state while the lane is owned.
+
+Direct behavior/content proof passes 41/41 tests. It pins one local write and one
+account update per row under rapid alternate activation, partial failure count,
+safe-copy/no-success behavior, retained selection and draft, successful retry, and
+local failure with zero account requests. The expanded Profiles lifecycle,
+organization, loading, launch, filter, sort, table and content matrix passes 17
+files with 147 tests and 6 intentional skips. Strict GUI and server-test
+TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green.
