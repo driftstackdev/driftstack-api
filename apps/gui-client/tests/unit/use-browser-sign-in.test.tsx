@@ -221,6 +221,41 @@ describe('useBrowserSignIn — error paths', () => {
     );
   });
 
+  it('does not declare success when the issued key cannot be persisted', async () => {
+    const onSuccess = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error('securityd denied /Users/customer/Library/Keychains token=issued-secret'),
+      )
+      .mockResolvedValueOnce(undefined);
+    const bound = makeResponse({
+      status: 'bound',
+      api_key: 'ds_live_issued_key',
+      account_id: 'acc_4b51130b-4621-4d14-affe-89470fe6a297',
+    });
+    fetchSpy
+      .mockResolvedValueOnce(makeResponse(initiateBody))
+      .mockResolvedValueOnce(bound)
+      .mockResolvedValueOnce(makeResponse(initiateBody))
+      .mockResolvedValueOnce(bound);
+
+    const { result } = renderHook(() => useBrowserSignIn(defaultOpts(onSuccess)));
+    act(() => result.current.start());
+
+    await waitFor(() => expect(result.current.state.kind).toBe('error'), { timeout: 200 });
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(result.current.state.kind === 'error' && result.current.state.message).toBe(
+      "Authorized, but the API key couldn't be saved. Check system credential access and try again.",
+    );
+    expect(result.current.state.kind === 'error' && result.current.state.message).not.toMatch(
+      /securityd|\/Users|Keychains|token=|issued-secret|ds_live_/i,
+    );
+
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.state.kind).toBe('success'), { timeout: 200 });
+    expect(onSuccess).toHaveBeenCalledTimes(2);
+  });
+
   it('exchange returns expired → error state', async () => {
     fetchSpy
       .mockResolvedValueOnce(makeResponse(initiateBody))

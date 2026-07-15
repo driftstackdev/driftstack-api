@@ -320,8 +320,19 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       }
       if (body.status === 'bound' && body.api_key && body.account_id) {
         stop();
+        try {
+          await opts.onSuccess(body.api_key, body.account_id);
+        } catch (error) {
+          setState({
+            kind: 'error',
+            message: humanizeError(
+              error,
+              "Authorized, but the API key couldn't be saved. Check system credential access and try again.",
+            ),
+          });
+          return;
+        }
         setState({ kind: 'success' });
-        await opts.onSuccess(body.api_key, body.account_id);
       }
     } catch {
       // network blip — silent retry

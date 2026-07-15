@@ -146,7 +146,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /if \(res\.status >= 400 && res\.status < 500\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: await readApiErrorMessage\(res\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(body\.status === 'expired'\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\n?\s*\}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(body\.status === 'bound' && body\.api_key && body\.account_id\) \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{ kind: 'success' \}\);\s*\n?\s*await opts\.onSuccess\(body\.api_key, body\.account_id\);\s*\n?\s*\}/,
+      /if \(body\.status === 'expired'\) \{[\s\S]*?if \(body\.status === 'bound' && body\.api_key && body\.account_id\) \{\s*\n?\s*stop\(\);\s*\n?\s*try \{\s*\n?\s*await opts\.onSuccess\(body\.api_key, body\.account_id\);[\s\S]*?catch \(error\) \{[\s\S]*?kind: 'error',[\s\S]*?humanizeError\([\s\S]*?return;\s*\n?\s*\}\s*\n?\s*setState\(\{ kind: 'success' \}\);/,
     );
     expect(body).toMatch(/\/\/ network blip — silent retry/);
   });
