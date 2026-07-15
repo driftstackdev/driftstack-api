@@ -901,4 +901,50 @@ describe('SimulatorWindow — keyboard auto-show from inputFocused (#6)', () => 
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
   });
+
+  it('clears focused keyboard ownership on AI takeover and does not resurrect it on handback', async () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+
+    sessionState.current = {
+      mode: 'ai',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
+
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The old focus belonged to the agent-owned interval. Only a fresh page
+    // focus signal may raise the keyboard after control returns to the founder.
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+  });
 });

@@ -113,6 +113,13 @@ import {
   type SessionFileHandle,
 } from '../lib/agent-session-control';
 
+/** Human input is an allowlisted ownership state, not merely "anything except AI".
+ * `null` is the control API's still-loading/unknown state; failing open there can
+ * forward a tap or raise the keyboard before we know who owns the session. */
+function isHumanControlMode(mode: SessionMode | null): mode is 'manual' | 'pair' {
+  return mode === 'manual' || mode === 'pair';
+}
+
 /** Frame chrome heights (px) used to derive the window size from the device's
  *  real screen aspect: toolbar above the bezel, the bezel's p-[10px] padding,
  *  and the in-screen status strip the video sits below. */
@@ -633,10 +640,9 @@ export function DeviceToolbar({
   /** On-screen iOS keyboard visibility + its toggle (founder 2026-06-25). */
   keyboardVisible: boolean;
   onToggleKeyboard: () => void;
-  /** False in AI mode — the agent is driving, so manual input is off. Finding #5:
-   *  the ⌨ toggle is dead in AI mode (both keyboard render sites gate on
-   *  controlMode !== 'ai'), so disable it rather than letting it light up "pressed"
-   *  while nothing appears (and nudge the window for a keyboard that never shows). */
+  /** False while ownership is unknown, in AI mode, or when the device reports
+   *  input unavailable. Disable the toggle rather than showing a keyboard that
+   *  cannot safely forward to the device. */
   inputEnabled?: boolean;
   inputUnavailableReason?: 'agent' | 'device';
 }): JSX.Element {
@@ -4377,7 +4383,11 @@ export function SimulatorWindow(): JSX.Element {
         // grace, after late focus from the page we just left can no longer reopen the
         // keyboard. Frames without inputFocused remain no-ops, and AI mode stays gated
         // because that focus belongs to the agent rather than the founder.
-        if (typeof msg.inputFocused === 'boolean' && controlModeRef.current !== 'ai') {
+        if (
+          typeof msg.inputFocused === 'boolean' &&
+          isHumanControlMode(controlModeRef.current) &&
+          manualInputAvailableRef.current !== false
+        ) {
           const rawFocusTabId =
             typeof msg.tabId === 'string' && msg.tabId !== '' ? msg.tabId : null;
           const focusTabId =
@@ -5253,13 +5263,11 @@ export function SimulatorWindow(): JSX.Element {
     return pointerToViewport(e.nativeEvent, video, deviceLogicalRef.current) === null;
   };
   const showTap = (e: ReactPointerEvent<HTMLDivElement>): void => {
-    // Finding #6 — no tap feedback in AI mode. Input capture is off (the host is
-    // interactive={controlMode !== 'ai'}), so the tap is never sent to the device; a
-    // ripple/fingertip-press there would falsely signal "it worked" on a silent no-op
-    // (the same confusion the off-surface guard below prevents). The taps.map render is
-    // also gated on controlMode !== 'ai', but early-returning here avoids the wasted
-    // touchPoint state churn too. (controlMode is a closure read — safe at call time.)
-    if (controlMode === 'ai') return;
+    // No tap feedback unless human input is positively owned. Input capture is off
+    // while ownership is unknown/in AI mode/device-disabled, so a ripple there would
+    // falsely signal "it worked" on a silent no-op (the same confusion the off-surface
+    // guard below prevents).
+    if (!humanInputEnabled) return;
     const host = screenHostRef.current;
     if (host === null) return;
     const r = host.getBoundingClientRect();
@@ -5356,22 +5364,23 @@ export function SimulatorWindow(): JSX.Element {
   const streamingHealth = sessionCapabilityReport?.streaming_state;
   const egressHealth = sessionCapabilityReport?.egress_state;
   const streamingUnavailable = streamingHealth === 'blank' || streamingHealth === 'failed';
+  const humanInputEnabled = isHumanControlMode(controlMode) && manualInputAvailable !== false;
   useEffect(() => {
-    if (manualInputAvailable !== false) return;
+    if (humanInputEnabled) return;
     touchCursorRef.current?.hide();
     setDotPressed(false);
     keyboardVisibleRef.current = false;
     keyboardOverlayRef.current = false;
     setKeyboardVisible(false);
-  }, [manualInputAvailable]);
+  }, [humanInputEnabled]);
   // #6 — a fresh-reads mirror for the long-lived onData effect (deps [room, ...], so
   // it does NOT re-subscribe on every controlMode change): without this the
   // inputFocused→keyboard handler would close over a STALE mode and could pop the
   // keyboard for the agent's own typing after a manual↔AI switch mid-session.
   const controlModeRef = useRef(controlMode);
-  useEffect(() => {
-    controlModeRef.current = controlMode;
-  }, [controlMode]);
+  controlModeRef.current = controlMode;
+  const manualInputAvailableRef = useRef(manualInputAvailable);
+  manualInputAvailableRef.current = manualInputAvailable;
   // Distinguishes a CONFIRMED mode (a successful getAgentSession round-trip) from
   // one DEFAULTED to 'manual' because the control HTTP API was unreachable (e.g.
   // the separate Simulator app reopened without its per-session control key). The
@@ -6622,7 +6631,7 @@ export function SimulatorWindow(): JSX.Element {
             }
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}
-            inputEnabled={controlMode !== 'ai' && manualInputAvailable !== false}
+            inputEnabled={humanInputEnabled}
             inputUnavailableReason={manualInputAvailable === false ? 'device' : 'agent'}
           />
           {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between
@@ -6991,7 +7000,7 @@ export function SimulatorWindow(): JSX.Element {
                   // bg-black so any object-contain margin around the aspect-locked
                   // video reads as bezel-black, never a light see-through border
                   // (founder 2026-06-23 white-border / A3 W2827).
-                  className={`relative min-h-0 flex-1 bg-black ${controlMode === 'ai' || manualInputAvailable === false ? '' : 'cursor-none'}`}
+                  className={`relative min-h-0 flex-1 bg-black ${humanInputEnabled ? 'cursor-none' : ''}`}
                   onPointerDownCapture={
                     inputCongested || manualInputAvailable === false ? undefined : showTap
                   }
@@ -7021,7 +7030,7 @@ export function SimulatorWindow(): JSX.Element {
                     // Forward mouse/keyboard to the device only in manual/pair
                     // mode; in AI mode the agent is driving, so local input would
                     // fight it.
-                    interactive={controlMode !== 'ai' && manualInputAvailable !== false}
+                    interactive={humanInputEnabled}
                     onVideoDimensions={handleVideoDimensions}
                     onRoom={handleRoom}
                     onStateChange={(s) => setConnState(s.kind)}
@@ -7059,9 +7068,7 @@ export function SimulatorWindow(): JSX.Element {
                     pointer over the screen (the PC arrow is hidden via cursor-none
                     on the host). Shrinks + brightens on press. pointer-events-none
                     so it never intercepts the real tap. */}
-                  {controlMode !== 'ai' && manualInputAvailable !== false && (
-                    <TouchCursorOverlay ref={touchCursorRef} />
-                  )}
+                  {humanInputEnabled && <TouchCursorOverlay ref={touchCursorRef} />}
                   {/* iOS tap cursor — a ring that blooms at each tap point then
                     fades. pointer-events-none so it never intercepts the tap. */}
                   {manualInputAvailable !== false && <TapRippleOverlay ref={tapRippleRef} />}
@@ -7077,7 +7084,7 @@ export function SimulatorWindow(): JSX.Element {
                     correctly hit the keyboard. Anchored INSIDE simulator-screen so its
                     bottom-row corners follow the rounded display mask — which is what a
                     real on-screen iPhone keyboard does (it lives inside the display). */}
-                  {keyboardOverlay && controlMode !== 'ai' && manualInputAvailable !== false && (
+                  {keyboardOverlay && humanInputEnabled && (
                     <div
                       data-tauri-drag-region="false"
                       data-component="ios-keyboard-overlay"
@@ -7113,28 +7120,25 @@ export function SimulatorWindow(): JSX.Element {
                   input would fight it). Emits the SAME keyDown/keyUp the host keyboard
                   does — pure chrome, no fingerprint change (the viewport-resize that
                   WOULD change the page's view is deferred to A3, W2992). */}
-              {keyboardVisible &&
-                !keyboardOverlay &&
-                controlMode !== 'ai' &&
-                manualInputAvailable !== false && (
-                  <div
-                    data-tauri-drag-region="false"
-                    data-component="ios-keyboard-docked"
-                    className="shrink-0"
-                  >
-                    <IOSKeyboard
-                      room={room}
-                      width={inputLogical.width}
-                      onDismiss={() => {
-                        if (!keyboardVisibleRef.current) return;
-                        keyboardVisibleRef.current = false;
-                        keyboardOverlayRef.current = false;
-                        setKeyboardVisible(false);
-                        fitWindow(browserMode);
-                      }}
-                    />
-                  </div>
-                )}
+              {keyboardVisible && !keyboardOverlay && humanInputEnabled && (
+                <div
+                  data-tauri-drag-region="false"
+                  data-component="ios-keyboard-docked"
+                  className="shrink-0"
+                >
+                  <IOSKeyboard
+                    room={room}
+                    width={inputLogical.width}
+                    onDismiss={() => {
+                      if (!keyboardVisibleRef.current) return;
+                      keyboardVisibleRef.current = false;
+                      keyboardOverlayRef.current = false;
+                      setKeyboardVisible(false);
+                      fitWindow(browserMode);
+                    }}
+                  />
+                </div>
+              )}
             </div>
             {/* Activity-bar drawer (founder 2026-06-24) — the icon RAIL is ALWAYS
               docked beside the phone (VS Code's activity bar). The window widens by

@@ -24,6 +24,7 @@ import { render, fireEvent, act } from '@testing-library/react';
 const sendNavigate = vi.fn(() => Promise.resolve());
 const sendActivateTab = vi.fn(() => Promise.resolve('req_test'));
 const getAgentSession = vi.fn((): Promise<unknown> => new Promise(() => {}));
+let dataHandler: ((payload: Uint8Array) => void) | null = null;
 
 // Browser mode defaults ON (founder 2026-06-21), which hosts the URL bar in the
 // toolbar and hides the panel's NavigateAddressBar. These tests exercise the
@@ -35,6 +36,7 @@ beforeEach(() => {
   sendActivateTab.mockResolvedValue('req_test');
   getAgentSession.mockReset();
   getAgentSession.mockImplementation(() => new Promise(() => {}));
+  dataHandler = null;
   const store = new Map<string, string>([
     ['ds-sim-browser-mode', '0'],
     ['ds-sim-navigated', '1'],
@@ -62,6 +64,7 @@ vi.mock('../../src/lib/livekit', () => ({
   sendActivateTab,
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
+    DataReceived: 'dataReceived',
     Disconnected: 'disconnected',
     Reconnecting: 'reconnecting',
     Reconnected: 'reconnected',
@@ -69,7 +72,9 @@ vi.mock('../../src/lib/livekit', () => ({
 }));
 
 const fakeRoom = {
-  on: vi.fn(),
+  on: vi.fn((event: string, cb: (payload: Uint8Array) => void) => {
+    if (event === 'dataReceived') dataHandler = cb;
+  }),
   off: vi.fn(),
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
@@ -140,6 +145,54 @@ function renderSim() {
 }
 
 describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
+  it('fails closed while control ownership is unknown, then enables only after manual resolves', async () => {
+    let resolveControl: ((value: unknown) => void) | null = null;
+    const heldControl = new Promise((resolve) => {
+      resolveControl = resolve;
+    });
+    getAgentSession.mockImplementation(() => heldControl);
+    const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom));
+
+    expect(panelCbs.interactive).toBe(false);
+    expect(container.querySelector('[data-component="simulator-keyboard-toggle"]')).toBeDisabled();
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ state: 'loaded', url: 'https://example.com/', inputFocused: true }),
+        ),
+      );
+    });
+    expect(container.querySelector('[data-component="ios-keyboard-overlay"]')).toBeNull();
+
+    await act(async () => {
+      resolveControl?.({
+        mode: 'manual',
+        pairKind: null,
+        terminal: false,
+        status: 'active',
+        closedReason: null,
+      });
+      await Promise.resolve();
+    });
+    expect(panelCbs.interactive).toBe(true);
+    expect(
+      container.querySelector('[data-component="simulator-keyboard-toggle"]'),
+    ).not.toBeDisabled();
+
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ state: 'loaded', url: 'https://example.com/', inputFocused: true }),
+        ),
+      );
+    });
+    expect(container.querySelector('[data-component="simulator-keyboard-toggle"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
   it('shows the badge on a failed input-publish, then CLEARS it when a room (re)connects', () => {
     const { container } = renderSim();
     // No badge initially.

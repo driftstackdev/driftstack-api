@@ -12,7 +12,7 @@
 
 import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, fireEvent, within, act } from '@testing-library/react';
+import { render, fireEvent, within, act, waitFor } from '@testing-library/react';
 
 const sendTabListUpdate = vi.fn(() => Promise.resolve());
 const sendActivateTab = vi.fn(() => Promise.resolve('req_1'));
@@ -249,8 +249,16 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
   });
 
-  it('keeps keyboard focus scoped to the active tab across rapid switches and stale frames', () => {
+  it('keeps keyboard focus scoped to the active tab across rapid switches and stale frames', async () => {
     const { container } = renderSim();
+    // Human input now fails closed until the control read positively resolves to
+    // manual/pair. This suite's control mock is manual; wait for that ownership
+    // boundary before exercising tab-scoped focus behavior.
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-component="simulator-keyboard-toggle"]'),
+      ).not.toBeDisabled(),
+    );
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
     const firstPayload = lastTabListCall();
     const tabAId = (firstPayload.tabs[0] as { id: string }).id;

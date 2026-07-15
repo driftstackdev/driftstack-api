@@ -18,6 +18,30 @@ vi.mock('../../src/lib/livekit', () => ({
   },
 }));
 
+vi.mock('../../src/lib/agent-session-control', () => ({
+  getAgentSession: () =>
+    Promise.resolve({
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    }),
+  getAgentSessionPageState: () => Promise.resolve(null),
+  getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
+  setAgentSessionCookies: vi.fn(),
+  navigateAgentSessionHistory: vi.fn(),
+  uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
+  listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
+  fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
+  setSessionMode: vi.fn(),
+  takeoverSession: vi.fn(),
+  handbackSession: vi.fn(),
+  sendAgentMessage: vi.fn(),
+  endAgentSession: vi.fn(),
+  AgentSessionControlError: class extends Error {},
+}));
+
 // The transport diagnostic hook reads a live RTCStatsReport; in jsdom there's no
 // real track, so drive it with a controllable stub for the fallback-badge test.
 const EMPTY_CONN = {
@@ -411,12 +435,21 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(container.querySelector('[data-component="simulator-drawer"]')).not.toBeNull();
   });
 
-  it('iOS tap cursor: a pointer-down on the screen blooms a tap-ripple ring (purely visual — never intercepts the tap)', () => {
-    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+  it('iOS tap cursor: a pointer-down on the screen blooms a tap-ripple ring (purely visual — never intercepts the tap)', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_input&name=iPhone%2017',
+    );
     const { container } = render(
       <RecordingsProvider>
         <SimulatorWindow />
       </RecordingsProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-component="simulator-keyboard-toggle"]'),
+      ).not.toBeDisabled(),
     );
     const host = container.querySelector('[data-component="simulator-screen-host"]');
     expect(host).not.toBeNull();
@@ -453,12 +486,21 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(ripple?.className).not.toContain('border-2');
   });
 
-  it('iOS touch-point cursor: the screen host hides the PC arrow (cursor-none) and a pointer-move over the screen shows a fingertip dot that never intercepts the tap', () => {
-    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+  it('iOS touch-point cursor: the screen host hides the PC arrow (cursor-none) and a pointer-move over the screen shows a fingertip dot that never intercepts the tap', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_input&name=iPhone%2017',
+    );
     const { container } = render(
       <RecordingsProvider>
         <SimulatorWindow />
       </RecordingsProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-component="simulator-keyboard-toggle"]'),
+      ).not.toBeDisabled(),
     );
     const host = container.querySelector('[data-component="simulator-screen-host"]');
     expect(host).not.toBeNull();
