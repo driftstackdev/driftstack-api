@@ -39,11 +39,9 @@ function read(p: string): string {
 describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + V-666 CryptoOrdersResource binds /v1/billing/crypto-* + customer-facing-only + non-refundable framing pinned (Crypto payments are terminal once minted; admin endpoints stay on the REST surface, not surfaced here)', () => {
+  it('file exists at canonical path + CryptoOrdersResource binds /v1/billing/crypto-* + customer-facing-only + non-refundable framing pinned (crypto payments are terminal once minted; admin endpoints stay on the REST surface, not surfaced here)', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(
-      /\/\/ CryptoOrdersResource handles \/v1\/billing\/crypto-\* endpoints \(V-666\)\./,
-    );
+    expect(body).toMatch(/\/\/ CryptoOrdersResource handles \/v1\/billing\/crypto-\* endpoints\./);
     expect(body).toMatch(
       /\/\/ Customer-facing only; admin endpoints aren't exposed here \(use the/,
     );
@@ -51,7 +49,7 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
     expect(body).toMatch(/^type CryptoOrdersResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
-  it('7 untyped-pending-OpenAPI map[string]any type aliases pinned (CryptoQuoteRequest + CryptoQuoteResponse + CreateCryptoCheckoutRequest + CryptoOrderEnvelope + CryptoOrderReceipt + CancelCryptoOrderResponse + UpdateCryptoOrderNoteRequest). Drift to a concrete struct without a V-666 codegen pass would lock in a shape that the server can still evolve.', () => {
+  it('7 forward-compatible map[string]any type aliases pinned (CryptoQuoteRequest + CryptoQuoteResponse + CreateCryptoCheckoutRequest + CryptoOrderEnvelope + CryptoOrderReceipt + CancelCryptoOrderResponse + UpdateCryptoOrderNoteRequest). Drift to a concrete struct would lock in a shape that the server can still evolve.', () => {
     expect(body).toMatch(/^type CryptoQuoteRequest = map\[string\]any$/m);
     expect(body).toMatch(/^type CryptoQuoteResponse = map\[string\]any$/m);
     expect(body).toMatch(/^type CreateCryptoCheckoutRequest = map\[string\]any$/m);
@@ -59,7 +57,9 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
     expect(body).toMatch(/^type CryptoOrderReceipt = map\[string\]any$/m);
     expect(body).toMatch(/^type CancelCryptoOrderResponse = map\[string\]any$/m);
     expect(body).toMatch(/^type UpdateCryptoOrderNoteRequest = map\[string\]any$/m);
-    expect(body).toMatch(/Untyped pending an OpenAPI codegen pass for V-666\./);
+    expect(body).toMatch(/The map preserves forward compatibility as quote fields evolve\./);
+    expect(body).toMatch(/Read documented fields by key and tolerate additional response fields\./);
+    expect(body).not.toMatch(/Untyped pending|codegen|\bV-\d+\b|\bW\d+\b/);
   });
 
   it("ListCryptoOrdersResponse — envelope shape {orders, next_cursor?} with NextCursor *string nullable + omitempty json tag. Pinned struct shape so a regen can't silently drop next_cursor (would break customers paginating with the cursor-walking Iterate variant).", () => {
@@ -109,7 +109,7 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
 
   it('Quote — V-666.H POST /v1/billing/crypto-checkout/quote previews the authoritative fiat price without minting an order.', () => {
     expect(body).toMatch(/\/\/ Quote previews the authoritative fiat price without minting an/);
-    expect(body).toMatch(/\/\/ order \(V-666\.H\)\./);
+    expect(body).toMatch(/\/\/ order\. Requires read:billing/);
     expect(body).toMatch(
       /func \(r \*CryptoOrdersResource\) Quote\(ctx context\.Context, body CryptoQuoteRequest\) \(CryptoQuoteResponse, error\)/,
     );
@@ -120,17 +120,13 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
     expect(body).toMatch(
       /\/\/ CreateCheckoutOptions tunes \[CryptoOrdersResource\.CreateCheckout\]\./,
     );
-    expect(body).toMatch(/\/\/ IdempotencyKey is forwarded as the Idempotency-Key header/);
-    expect(body).toMatch(
-      /\/\/ \(V-666\.AO\)\. On a duplicate key within the 24h window the server/,
-    );
+    expect(body).toMatch(/\/\/ IdempotencyKey is forwarded as the Idempotency-Key header\./);
+    expect(body).toMatch(/\/\/ On a duplicate key within the 24h window the server/);
     expect(body).toMatch(/\/\/ returns the original order envelope, never a second one\./);
     expect(body).toMatch(
       /^type CreateCheckoutOptions struct \{\s*\n[\s\S]*?IdempotencyKey \*string\s*\n\}/m,
     );
-    expect(body).toMatch(
-      /\/\/ CreateCheckout mints a new crypto order \(V-666\.C\)\. Pair with an/,
-    );
+    expect(body).toMatch(/\/\/ CreateCheckout mints a new crypto order\. Pair with an/);
     expect(body).toMatch(/\/\/ IdempotencyKey so retries don't mint duplicates\./);
     expect(body).toMatch(
       /func \(r \*CryptoOrdersResource\) CreateCheckout\(\s*\n\s*ctx context\.Context,\s*\n\s*body CreateCryptoCheckoutRequest,\s*\n\s*opts \*CreateCheckoutOptions,\s*\n\) \(CryptoOrderEnvelope, error\)/,
@@ -144,7 +140,7 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
 
   it('List — V-666.G/.BR/.BU/.BX GET /v1/billing/crypto-orders newest-first + accepts nil opts for defaults + passes opts.query() to the request builder (which handles the nil-short-circuit + empty-bag-nil ergonomics)', () => {
     expect(body).toMatch(/\/\/ List lists the caller account's crypto orders newest-first/);
-    expect(body).toMatch(/\(V-666\.G \/ \.BR \/ \.BU \/ \.BX\)\. Pass nil opts for defaults\./);
+    expect(body).toMatch(/and accepts nil opts for defaults\./);
     expect(body).toMatch(
       /func \(r \*CryptoOrdersResource\) List\(ctx context\.Context, opts \*ListCryptoOrdersOptions\) \(\*ListCryptoOrdersResponse, error\)/,
     );
@@ -157,7 +153,7 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
     expect(body).toMatch(
       /\/\/ Iterate is the cursor-walking variant of \[CryptoOrdersResource\.List\]/,
     );
-    expect(body).toMatch(/\(V-666\.BU\)\. The visit callback is invoked once per order; return/);
+    expect(body).toMatch(/The visit callback is invoked once per order; return/);
     expect(body).toMatch(/\/\/ false from visit to stop iteration early \(no further pages are/);
     expect(body).toMatch(/\/\/ fetched\)\. Cursor handoff is managed internally; do NOT set/);
     expect(body).toMatch(/\/\/ opts\.Cursor when calling Iterate\./);
@@ -178,7 +174,7 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
   });
 
   it('Get — V-666.G GET /v1/billing/crypto-orders/{id} reads a single order envelope. URL-escapes the orderID so a malformed id cannot inject path traversal.', () => {
-    expect(body).toMatch(/\/\/ Get reads a single order envelope \(V-666\.G\)\./);
+    expect(body).toMatch(/\/\/ Get reads a single order envelope\./);
     expect(body).toMatch(
       /func \(r \*CryptoOrdersResource\) Get\(ctx context\.Context, orderID string\) \(CryptoOrderEnvelope, error\)/,
     );
@@ -189,7 +185,9 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
 
   it('UpdateNote — V-666.Q PATCH /v1/billing/crypto-orders/{id} updates the customer-facing free-text note. PATCH semantics (partial update; the note is the only mutable field on a minted order — drift to PUT would invite full-envelope rewrites).', () => {
     expect(body).toMatch(/\/\/ UpdateNote updates the customer-facing free-text note on an order/);
-    expect(body).toMatch(/\(V-666\.Q\)\./);
+    expect(body).toMatch(
+      /\/\/ UpdateNote updates the customer-facing free-text note on an order\./,
+    );
     expect(body).toMatch(
       /func \(r \*CryptoOrdersResource\) UpdateNote\(\s*\n\s*ctx context\.Context,\s*\n\s*orderID string,\s*\n\s*body UpdateCryptoOrderNoteRequest,\s*\n\) \(CryptoOrderEnvelope, error\)/,
     );
@@ -200,7 +198,7 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
 
   it('Cancel — V-666.J POST /v1/billing/crypto-orders/{id}/cancel + status-code error contract pinned: 409 once past pending + 404 on foreign-account/missing. The 409 prevents customers from cancelling an order the chain has already accepted; the 404 collapses "not yours" with "not real" into the same response so we don\'t leak the existence of other accounts\' order ids.', () => {
     expect(body).toMatch(
-      /\/\/ Cancel abandons a pending order \(V-666\.J\)\. 409 once the order has/,
+      /\/\/ Cancel abandons a pending order\. The server returns 409 once the order has/,
     );
     expect(body).toMatch(/\/\/ moved past pending; 404 if it doesn't exist or belongs to another/);
     expect(body).toMatch(/\/\/ account\./);
@@ -213,9 +211,7 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
   });
 
   it('Receipt — V-666.M GET /v1/billing/crypto-orders/{id}/receipt returns the JSON receipt only. "For PDF / .txt variants, hit the corresponding REST endpoint directly" — pinned so customers know this SDK verb is JSON-only and PDF/.txt aren\'t silently dropped from the surface.', () => {
-    expect(body).toMatch(
-      /\/\/ Receipt fetches the JSON receipt for an order \(V-666\.M\)\. For PDF \//,
-    );
+    expect(body).toMatch(/\/\/ Receipt fetches the JSON receipt for an order\. For PDF \//);
     expect(body).toMatch(/\/\/ \.txt variants, hit the corresponding REST endpoint directly\./);
     expect(body).toMatch(
       /func \(r \*CryptoOrdersResource\) Receipt\(ctx context\.Context, orderID string\) \(CryptoOrderReceipt, error\)/,

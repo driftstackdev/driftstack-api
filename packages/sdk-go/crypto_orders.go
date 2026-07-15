@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// CryptoOrdersResource handles /v1/billing/crypto-* endpoints (V-666).
+// CryptoOrdersResource handles /v1/billing/crypto-* endpoints.
 //
 // Customer-facing only; admin endpoints aren't exposed here (use the
 // REST surface directly). Crypto payments are non-refundable.
@@ -15,11 +15,11 @@ type CryptoOrdersResource struct {
 }
 
 // CryptoQuoteRequest is the body for [CryptoOrdersResource.Quote].
-// Untyped pending an OpenAPI codegen pass for V-666.
+// The map preserves forward compatibility as quote fields evolve.
 type CryptoQuoteRequest = map[string]any
 
 // CryptoQuoteResponse is the response from [CryptoOrdersResource.Quote].
-// Untyped pending an OpenAPI codegen pass.
+// Read documented fields by key and tolerate additional response fields.
 type CryptoQuoteResponse = map[string]any
 
 // CreateCryptoCheckoutRequest is the body for [CryptoOrdersResource.CreateCheckout].
@@ -86,7 +86,7 @@ func (o *ListCryptoOrdersOptions) query() url.Values {
 }
 
 // Quote previews the authoritative fiat price without minting an
-// order (V-666.H). Requires read:billing; broad read or
+// order. Requires read:billing; broad read or
 // account_owner also satisfies it.
 func (r *CryptoOrdersResource) Quote(ctx context.Context, body CryptoQuoteRequest) (CryptoQuoteResponse, error) {
 	var out CryptoQuoteResponse
@@ -103,13 +103,13 @@ func (r *CryptoOrdersResource) Quote(ctx context.Context, body CryptoQuoteReques
 
 // CreateCheckoutOptions tunes [CryptoOrdersResource.CreateCheckout].
 type CreateCheckoutOptions struct {
-	// IdempotencyKey is forwarded as the Idempotency-Key header
-	// (V-666.AO). On a duplicate key within the 24h window the server
+	// IdempotencyKey is forwarded as the Idempotency-Key header.
+	// On a duplicate key within the 24h window the server
 	// returns the original order envelope, never a second one.
 	IdempotencyKey *string
 }
 
-// CreateCheckout mints a new crypto order (V-666.C). Pair with an
+// CreateCheckout mints a new crypto order. Pair with an
 // IdempotencyKey so retries don't mint duplicates.
 func (r *CryptoOrdersResource) CreateCheckout(
 	ctx context.Context,
@@ -133,7 +133,7 @@ func (r *CryptoOrdersResource) CreateCheckout(
 }
 
 // List lists the caller account's crypto orders newest-first
-// (V-666.G / .BR / .BU / .BX). Pass nil opts for defaults.
+// and accepts nil opts for defaults.
 func (r *CryptoOrdersResource) List(ctx context.Context, opts *ListCryptoOrdersOptions) (*ListCryptoOrdersResponse, error) {
 	var out ListCryptoOrdersResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -148,7 +148,7 @@ func (r *CryptoOrdersResource) List(ctx context.Context, opts *ListCryptoOrdersO
 }
 
 // Iterate is the cursor-walking variant of [CryptoOrdersResource.List]
-// (V-666.BU). The visit callback is invoked once per order; return
+// The visit callback is invoked once per order; return
 // false from visit to stop iteration early (no further pages are
 // fetched). Cursor handoff is managed internally; do NOT set
 // opts.Cursor when calling Iterate.
@@ -189,7 +189,7 @@ func (r *CryptoOrdersResource) Iterate(
 	}
 }
 
-// Get reads a single order envelope (V-666.G).
+// Get reads a single order envelope.
 func (r *CryptoOrdersResource) Get(ctx context.Context, orderID string) (CryptoOrderEnvelope, error) {
 	var out CryptoOrderEnvelope
 	if err := r.client.do(ctx, requestOptions{
@@ -202,8 +202,7 @@ func (r *CryptoOrdersResource) Get(ctx context.Context, orderID string) (CryptoO
 	return out, nil
 }
 
-// UpdateNote updates the customer-facing free-text note on an order
-// (V-666.Q).
+// UpdateNote updates the customer-facing free-text note on an order.
 func (r *CryptoOrdersResource) UpdateNote(
 	ctx context.Context,
 	orderID string,
@@ -221,7 +220,7 @@ func (r *CryptoOrdersResource) UpdateNote(
 	return out, nil
 }
 
-// Cancel abandons a pending order (V-666.J). 409 once the order has
+// Cancel abandons a pending order. The server returns 409 once the order has
 // moved past pending; 404 if it doesn't exist or belongs to another
 // account.
 func (r *CryptoOrdersResource) Cancel(ctx context.Context, orderID string) (CancelCryptoOrderResponse, error) {
@@ -236,7 +235,7 @@ func (r *CryptoOrdersResource) Cancel(ctx context.Context, orderID string) (Canc
 	return out, nil
 }
 
-// Receipt fetches the JSON receipt for an order (V-666.M). For PDF /
+// Receipt fetches the JSON receipt for an order. For PDF /
 // .txt variants, hit the corresponding REST endpoint directly.
 func (r *CryptoOrdersResource) Receipt(ctx context.Context, orderID string) (CryptoOrderReceipt, error) {
 	var out CryptoOrderReceipt
