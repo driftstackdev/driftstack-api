@@ -509,6 +509,9 @@ export interface AgentSessionsRoutesDeps {
   transcriptEventBus?: AgentSessionEventBus;
   /** Heartbeat interval for the SSE stream (ms). Defaults to 30s. */
   transcriptHeartbeatMs?: number;
+  /** Maximum concurrent transcript streams per authenticated account.
+   * Defaults to 10; one client normally opens one stream per viewed session. */
+  transcriptMaxStreamsPerAccount?: number;
   /** Heartbeat interval for the long-running POST /message SSE representation.
    *  Defaults to 15s (comfortably below SDK/edge idle deadlines). Test-injectable. */
   agentMessageHeartbeatMs?: number;
@@ -1613,6 +1616,7 @@ export function registerAgentSessionsRoutes(
     bundledTurnConcurrency,
     transcriptEventBus,
     transcriptHeartbeatMs = 30_000,
+    transcriptMaxStreamsPerAccount = 10,
     agentMessageHeartbeatMs = 15_000,
     guiControlKeyEncryptionKey,
     guiControlKeyTtlMs = 24 * 60 * 60 * 1000,
@@ -3232,6 +3236,9 @@ export function registerAgentSessionsRoutes(
   // disconnect: client sends the last `index` it saw; server replays
   // every entry with index > last-id, then live-streams new appends.
   if (transcriptEventBus !== undefined) {
+    const requireTranscriptRead = app.requireScope('read:sessions');
+    const activeTranscriptStreamsByAccount = new Map<string, number>();
+
     app.get<{ Params: { id: string }; Querystring: { ds_token?: string } }>(
       '/v1/agent-sessions/:id/transcript',
       // SSE: EventSource can't set an Authorization header, so this
@@ -3239,17 +3246,21 @@ export function registerAgentSessionsRoutes(
       // contract — apps/docs api/agent-sessions). requireAuthEventSource
       // reads the query fallback; the header still wins when present.
       {
-        preHandler: [
-          app.requireAuthEventSource,
-          app.requireScope('read:sessions'),
-          app.rateLimit('global'),
-        ],
+        preHandler: [app.requireAuthEventSource, requireTranscriptRead, app.rateLimit('global')],
       },
       async (req, reply) => {
         const ctx = requireCtx(req);
         const session = await sessions.get(req.params.id);
         if (session === null || !callerCanAccessAgentSession(ctx, session.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+        const authenticatedAccountId = ctx.account.id;
+        const active = activeTranscriptStreamsByAccount.get(authenticatedAccountId) ?? 0;
+        if (active >= transcriptMaxStreamsPerAccount) {
+          throw new RateLimitedError(
+            30,
+            `At most ${transcriptMaxStreamsPerAccount.toString()} concurrent transcript streams are allowed per account.`,
+          );
         }
         const lastEventIdHeader = req.headers['last-event-id'];
         const lastEventId =
@@ -3258,70 +3269,108 @@ export function registerAgentSessionsRoutes(
             : -1;
         const resumeFrom = Number.isFinite(lastEventId) ? lastEventId : -1;
 
-        reply.raw.writeHead(200, {
-          'content-type': 'text/event-stream; charset=utf-8',
-          'cache-control': 'no-cache, no-transform',
-          connection: 'keep-alive',
-          'x-accel-buffering': 'no',
-        });
-        reply.raw.write(': stream open\n\n');
-
-        // Replay every transcript entry past the resume point. The
-        // client's Last-Event-ID is exclusive (replay strictly after).
-        for (let i = resumeFrom + 1; i < session.transcript.length; i += 1) {
-          const entry = session.transcript[i];
-          if (entry === undefined) continue;
-          reply.raw.write(`id: ${i.toString()}\n`);
-          reply.raw.write('event: transcript.entry\n');
-          reply.raw.write(
-            `data: ${JSON.stringify({ index: i, entry: publicTranscriptEntry(entry) })}\n\n`,
-          );
-        }
-
-        const liveSent = new Set<number>();
-        // W383 — backpressure guard. A stalled client (TCP window full) would
-        // otherwise let live transcript events buffer unboundedly in the socket
-        // (reply.raw.writableLength grows without bound → server OOM). Past a
-        // generous high-water mark we close the stream; the client's EventSource
-        // auto-reconnects with Last-Event-ID and the replay loop above resumes
-        // it, so no transcript entry is lost. A healthy client drains
-        // immediately (writableLength ≈ 0) and never trips this.
         const MAX_SSE_BUFFER_BYTES = 4_000_000;
-        const unsubscribe = transcriptEventBus.subscribe(req.params.id, (event) => {
-          if (event.index <= resumeFrom) return;
-          if (liveSent.has(event.index)) return;
-          // Skip indices the replay loop already wrote (avoid dupes
-          // on the connect-then-publish race; both write the same
-          // {index, entry} payload so a downstream dedupe IS safe,
-          // but we elide here to keep the stream tight).
-          if (event.index < session.transcript.length) return;
-          liveSent.add(event.index);
-          reply.raw.write(`id: ${event.index.toString()}\n`);
-          reply.raw.write('event: transcript.entry\n');
-          reply.raw.write(
-            `data: ${JSON.stringify({ index: event.index, entry: publicTranscriptEntry(event.entry) })}\n\n`,
-          );
-          if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
-        });
-        const heartbeat = setInterval(() => {
-          reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
-        }, transcriptHeartbeatMs);
-        heartbeat.unref();
-
         let closed = false;
+        let acquired = false;
+        let unsubscribe = (): void => {};
+        let heartbeat: ReturnType<typeof setInterval> | undefined = undefined;
         const cleanup = (): void => {
-          // Idempotent — invoked from the backpressure guard above AND the
-          // close/error handlers below; double-end() / double-unsubscribe is
-          // avoided so the paths can't race.
           if (closed) return;
           closed = true;
-          clearInterval(heartbeat);
+          if (heartbeat !== undefined) clearInterval(heartbeat);
           unsubscribe();
+          if (acquired) {
+            acquired = false;
+            const remaining =
+              (activeTranscriptStreamsByAccount.get(authenticatedAccountId) ?? 1) - 1;
+            if (remaining <= 0) activeTranscriptStreamsByAccount.delete(authenticatedAccountId);
+            else activeTranscriptStreamsByAccount.set(authenticatedAccountId, remaining);
+          }
           reply.raw.end();
+        };
+        const closeIfBackpressured = (): void => {
+          if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
         };
         req.raw.on('close', cleanup);
         req.raw.on('error', cleanup);
-        reply.hijack();
+
+        try {
+          reply.raw.writeHead(200, {
+            'content-type': 'text/event-stream; charset=utf-8',
+            'cache-control': 'no-cache, no-transform',
+            connection: 'keep-alive',
+            'x-accel-buffering': 'no',
+          });
+          reply.raw.write(': stream open\n\n');
+
+          // Replay every transcript entry past the resume point. The
+          // client's Last-Event-ID is exclusive (replay strictly after).
+          for (let i = resumeFrom + 1; i < session.transcript.length; i += 1) {
+            const entry = session.transcript[i];
+            if (entry === undefined) continue;
+            reply.raw.write(`id: ${i.toString()}\n`);
+            reply.raw.write('event: transcript.entry\n');
+            reply.raw.write(
+              `data: ${JSON.stringify({ index: i, entry: publicTranscriptEntry(entry) })}\n\n`,
+            );
+          }
+
+          const liveSent = new Set<number>();
+          // W383 — backpressure guard. A stalled client (TCP window full) would
+          // otherwise let live transcript events buffer unboundedly in the socket
+          // (reply.raw.writableLength grows without bound → server OOM). Past a
+          // generous high-water mark we close the stream; the client's EventSource
+          // auto-reconnects with Last-Event-ID and the replay loop above resumes
+          // it, so no transcript entry is lost. A healthy client drains
+          // immediately (writableLength ≈ 0) and never trips this.
+          unsubscribe = transcriptEventBus.subscribe(req.params.id, (event) => {
+            if (closed) return;
+            if (event.index <= resumeFrom) return;
+            if (liveSent.has(event.index)) return;
+            // Skip indices the replay loop already wrote (avoid dupes
+            // on the connect-then-publish race; both write the same
+            // {index, entry} payload so a downstream dedupe IS safe,
+            // but we elide here to keep the stream tight).
+            if (event.index < session.transcript.length) return;
+            liveSent.add(event.index);
+            reply.raw.write(`id: ${event.index.toString()}\n`);
+            reply.raw.write('event: transcript.entry\n');
+            reply.raw.write(
+              `data: ${JSON.stringify({ index: event.index, entry: publicTranscriptEntry(event.entry) })}\n\n`,
+            );
+            closeIfBackpressured();
+          });
+
+          let heartbeatAuthInFlight = false;
+          heartbeat = setInterval(() => {
+            if (closed || heartbeatAuthInFlight) return;
+            heartbeatAuthInFlight = true;
+            void (async () => {
+              await app.requireAuthEventSource(req, reply);
+              if (closed) return;
+              await requireTranscriptRead(req, reply);
+              if (closed) return;
+              if (!callerCanAccessAgentSession(requireCtx(req), session.accountId)) {
+                cleanup();
+                return;
+              }
+              reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+              closeIfBackpressured();
+            })()
+              .catch(cleanup)
+              .finally(() => {
+                heartbeatAuthInFlight = false;
+              });
+          }, transcriptHeartbeatMs);
+          heartbeat.unref();
+
+          activeTranscriptStreamsByAccount.set(authenticatedAccountId, active + 1);
+          acquired = true;
+          reply.hijack();
+        } catch (error) {
+          cleanup();
+          throw error;
+        }
       },
     );
   }

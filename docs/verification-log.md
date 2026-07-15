@@ -28230,3 +28230,39 @@ The direct status/SLA and source-guard matrix passes 3 files and 44/44 tests;
 the expanded status route/bus/docs/site matrix passes 17 files and 192/192
 tests. Strict server source/test TypeScript, targeted ESLint/Prettier and
 diff/whitespace checks are green.
+
+---
+
+## V-674 — Transcript streams revalidate authorization and bound live capacity
+
+**Date:** 2026-07-15
+
+The agent-transcript SSE route authenticated and authorized only before it
+hijacked the response. Heartbeats then wrote indefinitely without rechecking
+the token, `read:sessions` scope or current owner/team-admin relationship, so a
+revoked or narrowed credential could retain an already-open transcript feed.
+The route also had no concurrent-stream ceiling and applied its four-megabyte
+socket high-water check only after live transcript events, not heartbeats. A
+captured-handler reproduction opened twelve same-account streams and retained
+all twelve listeners at a 4,000,001-byte heartbeat backlog with zero repeated
+authorization checks.
+
+The route now shares one granular read guard between initial connection and
+heartbeat revalidation. Each heartbeat refreshes authentication, rechecks the
+scope and confirms current owner/team-admin access before writing. Failure,
+event backlog, heartbeat backlog and socket close/error converge on one
+idempotent cleanup. A default ten-stream ceiling is keyed by authenticated
+account, acquired only after subscription, timer and cleanup are fully wired,
+and released exactly once. An in-flight heartbeat guard also prevents slow
+authorization checks from overlapping. Last-Event-ID replay, public transcript
+redaction, healthy framing and the cross-account 404 boundary are unchanged.
+
+Captured-handler verification proves ten accepts and an eleventh typed 429,
+per-account isolation, released-slot reuse, zero capacity consumption after a
+synchronous setup failure, revoked-token and narrowed-scope teardown, removed
+team-admin access, event/heartbeat backlog cleanup exactly once, and exclusive
+Last-Event-ID replay plus healthy live frames. The direct lifecycle/content
+suite passes 13/13 tests; the expanded route, event-bus, auth, token-redaction
+and documentation matrix passes 8 files and 198/198 tests. Strict server
+source/test TypeScript, targeted ESLint/Prettier, diff/whitespace checks,
+full-workspace typechecking and the configured production build are green.
