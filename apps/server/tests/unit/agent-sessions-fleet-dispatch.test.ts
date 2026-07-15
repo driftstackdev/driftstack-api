@@ -1418,6 +1418,67 @@ describe('dispatchSessionEndOnClose', () => {
     expect(JSON.parse(sent[0]!)).toMatchObject({ type: 'sessionEnd', sessionId: 'agt_close3' });
   });
 
+  it('connected send failure queues one teardown that drains on the next reconnect', async () => {
+    const registry = new FleetControlRegistry();
+    registry.register('owner-node', () => {
+      throw new Error('socket send failed');
+    });
+    const log = logger();
+
+    await expect(
+      dispatchSessionEndOnClose({
+        sessionId: 'agt_connected_send_failed',
+        nodeId: 'owner-node',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+    expect(registry.pendingTeardownCount('owner-node')).toBe(1);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'agt_connected_send_failed',
+        nodeId: 'owner-node',
+        queued: true,
+      }),
+      expect.stringContaining('sessionEnd dispatch failed'),
+    );
+
+    const sent: string[] = [];
+    registry.register('owner-node', (data) => sent.push(data));
+    expect(registry.pendingTeardownCount('owner-node')).toBe(0);
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toEqual({
+      type: 'sessionEnd',
+      sessionId: 'agt_connected_send_failed',
+    });
+  });
+
+  it('a logger failure after send returns neither rejects close nor queues a duplicate teardown', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register('owner-node', (data) => sent.push(data));
+    const log = {
+      info: vi.fn(() => {
+        throw new Error('logger unavailable');
+      }),
+      warn: vi.fn(),
+    };
+
+    await expect(
+      dispatchSessionEndOnClose({
+        sessionId: 'agt_sent_before_log_failure',
+        nodeId: 'owner-node',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+    expect(sent).toHaveLength(1);
+    expect(registry.pendingTeardownCount('owner-node')).toBe(0);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
   it('best-effort: a repo failure is swallowed (close must not fail)', async () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, () => {});

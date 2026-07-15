@@ -27959,3 +27959,44 @@ one admin HTML guard exceeded its ten-second timeout under full-suite load.
 The affected files immediately pass isolated (3/3 and 11/11 respectively).
 They are recorded for a separate test-isolation cleanup and were not folded
 into this lifecycle change.
+
+---
+
+## V-666 — Failed session teardown delivery survives reconnect boundaries
+
+**Date:** 2026-07-15
+
+The bounded pending-teardown queue covered sessions closed while their owning
+node was already offline, but two deterministic failure paths could still lose
+the only `sessionEnd`. A connected socket send that threw was logged and
+discarded. During reconnect, the registry deleted an owning node's entire
+pending set before attempting any sends, so an exception was swallowed and
+that teardown could never be retried.
+
+Close dispatch now distinguishes whether the socket send returned. A known-node
+exception before return records one bounded, Set-deduplicated teardown for the
+next reconnect; an observability exception after a successful return cannot
+queue a duplicate or make the customer close fail. Offline queuing and warning
+logs are likewise isolated from logger failures. Errors before safe target
+resolution remain best-effort because assigning them to an arbitrary node would
+be incorrect.
+
+Reconnect drain now iterates a stable snapshot, removes each session only after
+its send returns, retains ambiguous failures for a later reconnect, and
+continues delivering later IDs. A send callback that synchronously records
+another teardown cannot extend the current drain without bound. Existing
+per-node capacity 256 with oldest-drop policy, Set deduplication, owner-node and
+legacy fallback targeting, registration availability, close-never-throws
+semantics, and stale/repeated box-side no-op behavior remain unchanged.
+
+Deterministic coverage proves a connected send exception queues exactly one
+teardown and the next reconnect drains it; a logger exception after a returned
+send neither rejects close nor queues a duplicate. Registry coverage proves a
+failed first ID remains pending while a later ID drains, then a subsequent
+reconnect drains the retained ID exactly once. The focused gate passes 2 files
+and 98/98 tests; the expanded fleet-dispatch and close matrix passes 7 files and
+160/160 tests. Strict server source/test TypeScript, full-workspace typechecking,
+targeted ESLint/Prettier and diff/whitespace checks, and the configured
+full-workspace production build are green. The build includes 15 admin pages,
+24 dashboard pages, 62 docs pages plus 61 indexed pages, 546 GUI modules, 69
+marketing pages, the server and 7 status pages.

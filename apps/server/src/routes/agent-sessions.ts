@@ -1448,10 +1448,9 @@ export async function runProxyPrelaunchGate(args: {
  *
  * Mirrors dispatchSessionAssignOnCreate: no-op unless the fleet control plane is
  * wired (inert in prod), best-effort (never throws — close must not fail on a
- * dispatch hiccup), at-most-once. v0 routes to findAnyWithLivekit (the same
- * single-node assumption the create-side dispatch uses); the harness ignores a
- * sessionEnd for a session it doesn't hold, so a stray send is a harmless no-op.
- * A session→node map (multi-node) is a later enhancement.
+ * dispatch hiccup). Failed known-node sends enter one bounded reconnect queue;
+ * the harness ignores a repeated or stale sessionEnd for a session it doesn't
+ * hold, so retry after an ambiguous socket failure is a harmless no-op.
  */
 export async function dispatchSessionEndOnClose(args: {
   sessionId: string;
@@ -1468,10 +1467,11 @@ export async function dispatchSessionEndOnClose(args: {
 }): Promise<void> {
   const { sessionId, nodeId, fleetControlRegistry, fleetNodesRepo, logger } = args;
   if (fleetControlRegistry === undefined || fleetNodesRepo === undefined) return;
+  let targetNodeId: string | null = nodeId ?? null;
+  let sendReturned = false;
   try {
     // Target the OWNING node when known (migration 0086); else fall back to the region-
     // blind latest-registered node (legacy rows only).
-    let targetNodeId: string | null = nodeId ?? null;
     if (targetNodeId === null) {
       const mac = await fleetNodesRepo.findAnyWithLivekit();
       if (mac === null) return;
@@ -1487,26 +1487,53 @@ export async function dispatchSessionEndOnClose(args: {
       // robust fix for the founder's "End-session doesn't tear down" symptom,
       // independent of the -1011 WSS root cause.
       fleetControlRegistry.recordPendingTeardown(targetNodeId, sessionId);
-      logger?.info(
-        { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId },
-        'node offline — queued sessionEnd for re-dispatch on reconnect',
-      );
+      try {
+        logger?.info(
+          { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId },
+          'node offline — queued sessionEnd for re-dispatch on reconnect',
+        );
+      } catch {
+        /* observability cannot turn an already-queued teardown into a failure */
+      }
       return;
     }
     conn.sendSessionEnd(serializeSessionEnd(sessionId));
-    logger?.info(
-      { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId },
-      'dispatched sessionEnd to fleet node',
-    );
+    sendReturned = true;
+    try {
+      logger?.info(
+        { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId },
+        'dispatched sessionEnd to fleet node',
+      );
+    } catch {
+      /* a logger failure cannot replay a sessionEnd that already returned */
+    }
   } catch (err) {
-    logger?.warn(
-      {
-        component: 'fleet-session-dispatch',
-        sessionId,
-        err: err instanceof Error ? err.message : String(err),
-      },
-      'sessionEnd dispatch failed (session close unaffected)',
-    );
+    // A known-target send that threw has ambiguous delivery. Retain one
+    // bounded idempotent teardown so the next reconnect tries again. Failures
+    // before target resolution cannot be queued safely.
+    let queued = false;
+    if (!sendReturned && targetNodeId !== null) {
+      try {
+        fleetControlRegistry.recordPendingTeardown(targetNodeId, sessionId);
+        queued = true;
+      } catch {
+        /* the customer close still owns the response; box sweeps backstop */
+      }
+    }
+    try {
+      logger?.warn(
+        {
+          component: 'fleet-session-dispatch',
+          sessionId,
+          nodeId: targetNodeId,
+          queued,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        'sessionEnd dispatch failed (session close unaffected)',
+      );
+    } catch {
+      /* close-never-throws includes observability failures */
+    }
   }
 }
 

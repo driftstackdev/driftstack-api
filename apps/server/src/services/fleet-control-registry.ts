@@ -90,9 +90,7 @@ import {
 export type FleetNodeSocketSend = (data: string) => void;
 
 export type FleetInboundAdmission =
-  | 'accepted'
-  | 'uncorrelated-large-frame'
-  | 'parse-budget-exhausted';
+  'accepted' | 'uncorrelated-large-frame' | 'parse-budget-exhausted';
 
 /**
  * One authenticated fleet-node connection. Owns the node's dispatch correlator
@@ -795,17 +793,23 @@ export class FleetControlRegistry {
     // Pending-teardown drain (founder bug, A3 W2859): re-dispatch sessionEnd for any
     // session whose close couldn't reach the box while this node's WSS was down. The
     // node is connected again now, so the teardown lands + the box frees the slot /
-    // kills the orphaned browser. Best-effort: a failed re-dispatch must not break
-    // registration; a stale sessionId (session already gone) is a box-side no-op.
+    // kills the orphaned browser. Remove each id only AFTER its send returns. A send
+    // exception is ambiguous and remains for the next reconnect; it must not abort
+    // later ids or registration. A stale/repeated id is a box-side no-op.
     const pending = this.pendingTeardowns.get(nodeId);
     if (pending !== undefined) {
-      this.pendingTeardowns.delete(nodeId);
-      for (const sessionId of pending) {
+      // Snapshot so a send callback that synchronously records another teardown
+      // cannot extend this drain without bound. The newly-added id stays queued.
+      for (const sessionId of [...pending]) {
         try {
           conn.sendSessionEnd(serializeSessionEnd(sessionId));
+          pending.delete(sessionId);
         } catch {
-          /* swallow — one failed re-dispatch must not abort the rest or registration */
+          /* retain — one failed re-dispatch must not abort later ids or registration */
         }
+      }
+      if (pending.size === 0 && this.pendingTeardowns.get(nodeId) === pending) {
+        this.pendingTeardowns.delete(nodeId);
       }
     }
     return conn;

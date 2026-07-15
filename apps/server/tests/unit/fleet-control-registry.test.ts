@@ -714,6 +714,30 @@ describe('FleetControlRegistry', () => {
     expect(JSON.parse(sent[0]!)).toMatchObject({ type: 'sessionEnd', sessionId: 'ses_orphan' });
   });
 
+  it('retains a failed reconnect teardown while continuing later ids, then drains it on a later reconnect', () => {
+    const reg = new FleetControlRegistry();
+    reg.recordPendingTeardown('node-1', 'ses_retry');
+    reg.recordPendingTeardown('node-1', 'ses_later');
+
+    const firstReconnectSent: string[] = [];
+    expect(() =>
+      reg.register('node-1', (data) => {
+        const frame = JSON.parse(data) as { sessionId: string };
+        if (frame.sessionId === 'ses_retry') throw new Error('socket still unavailable');
+        firstReconnectSent.push(frame.sessionId);
+      }),
+    ).not.toThrow();
+    expect(firstReconnectSent).toEqual(['ses_later']);
+    expect(reg.pendingTeardownCount('node-1')).toBe(1);
+
+    const secondReconnectSent: string[] = [];
+    reg.register('node-1', (data) => {
+      secondReconnectSent.push((JSON.parse(data) as { sessionId: string }).sessionId);
+    });
+    expect(secondReconnectSent).toEqual(['ses_retry']);
+    expect(reg.pendingTeardownCount('node-1')).toBe(0);
+  });
+
   it('bounds the pending-teardown queue per node (drops oldest at the 256 cap)', () => {
     const reg = new FleetControlRegistry();
     for (let i = 0; i < 300; i += 1) reg.recordPendingTeardown('node-1', `ses_${i}`);
