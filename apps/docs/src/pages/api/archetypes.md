@@ -53,9 +53,9 @@ never included. `default_archetype_id` is the value the platform currently
 chooses when `POST /v1/sessions` or `POST /v1/profiles` omits an archetype.
 
 Direct session creation, profile creation, and profile import accept only an
-`id` present in the current response. A well-formed but unknown, reference-only,
-or planned id returns `400 ValidationFailed` on the `archetype` field before a
-browser, profile row, or driver allocation is attempted.
+`id` present in the current response. Any other id returns
+`400 ValidationFailed` on the `archetype` field before a browser, profile row,
+or driver allocation is attempted.
 
 ## Generate a create payload from the live catalog
 

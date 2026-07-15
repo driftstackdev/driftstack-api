@@ -109,8 +109,8 @@ iOS 18.7 / Safari 26.4 archetype when omitted (`LOCKED_ARCHETYPE_ID`
 `production_customer`.
 
 When supplied directly, `archetype` must be an `id` returned by the current
-[`GET /v1/archetypes`](/api/archetypes/) catalog. Unknown, reference-only, and
-planned ids return `400 ValidationFailed` on the `archetype` field before the
+[`GET /v1/archetypes`](/api/archetypes/) catalog. Any id absent from that
+response returns `400 ValidationFailed` on the `archetype` field before the
 server creates a session row or asks the driver to allocate a browser. Fetch
 the catalog at runtime or use its `default_archetype_id`; do not synthesize an
 id from device/version strings.

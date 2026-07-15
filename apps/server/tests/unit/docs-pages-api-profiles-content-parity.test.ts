@@ -102,8 +102,9 @@ describe('W763 docs /api/profiles content parity', () => {
 
     expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
     expect(p).toMatch(
-      /A well-formed unknown, reference-only, or planned id is rejected before\s*\n?the profile repository is read or written\./,
+      /Any id absent from the current response is rejected before the profile\s*\n?repository is read or written\./,
     );
+    expect(p).not.toMatch(/\bplanned id\b|reference-only/i);
     expect(p).toMatch(
       /Import is a new-profile write, so `envelope\.profile\.archetype` must be present\s*\n?in the current selectable catalog\./,
     );

@@ -96,9 +96,9 @@ profile (200, not 201 — the API surface uses 200 for both
 idempotent and one-shot resource creation).
 
 Use `GET /v1/archetypes` to generate the request from the live selectable
-catalog. A well-formed unknown, reference-only, or planned id is rejected before
-the profile repository is read or written. Omitting the field selects the
-catalog's `default_archetype_id`.
+catalog. Any id absent from the current response is rejected before the profile
+repository is read or written. Omitting the field selects the catalog's
+`default_archetype_id`.
 
 Errors:
 

@@ -32,8 +32,9 @@ describe('docs /api/archetypes live-contract parity', () => {
 
   it('pins direct-write rejection and stored-profile compatibility', () => {
     expect(page).toMatch(
-      /A well-formed but unknown, reference-only,\s*\n?or planned id returns `400 ValidationFailed` on the `archetype` field before a\s*\n?browser, profile row, or driver allocation is attempted\./,
+      /Any other id returns\s*\n?`400 ValidationFailed` on the `archetype` field before a browser, profile row,\s*\n?or driver allocation is attempted\./,
     );
+    expect(page).not.toMatch(/\bplanned\b|reference-only/i);
     expect(page).toMatch(
       /Existing stored profiles keep their pinned archetype\s*\n?even if it later leaves the selectable catalog/,
     );

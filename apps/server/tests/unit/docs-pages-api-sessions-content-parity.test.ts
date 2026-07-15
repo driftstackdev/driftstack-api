@@ -101,8 +101,9 @@ describe('W761 docs /api/sessions content parity', () => {
 
     expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
     expect(p).toMatch(
-      /Unknown, reference-only, and\s*\n?planned ids return `400 ValidationFailed` on the `archetype` field before the\s*\n?server creates a session row or asks the driver to allocate a browser\./,
+      /Any id absent from that\s*\n?response returns `400 ValidationFailed` on the `archetype` field before the\s*\n?server creates a session row or asks the driver to allocate a browser\./,
     );
+    expect(p).not.toMatch(/\bplanned ids?\b|reference-only/i);
     expect(p).toMatch(
       /Profile-backed launches inherit the already-stored profile archetype\.[\s\S]*?existing profile remains launchable if its pinned id is\s*\n?no longer offered for new direct creates\./,
     );
