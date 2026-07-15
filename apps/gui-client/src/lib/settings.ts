@@ -248,8 +248,11 @@ export async function loadSettings(): Promise<DriftstackSettings> {
 // one another. The lock mirrors the folders/tags sibling stores. (#7)
 const settingsWriteLock = makeWriteLock();
 
-export async function saveSettings(s: DriftstackSettings): Promise<void> {
-  return settingsWriteLock(() => saveSettingsUnlocked(s));
+export async function saveSettings(
+  s: DriftstackSettings,
+  options: { credentialUnchanged?: boolean } = {},
+): Promise<void> {
+  return settingsWriteLock(() => saveSettingsUnlocked(s, options));
 }
 
 /**
@@ -272,7 +275,10 @@ export async function persistBaseUrl(baseUrl: string): Promise<void> {
   });
 }
 
-async function saveSettingsUnlocked(s: DriftstackSettings): Promise<void> {
+async function saveSettingsUnlocked(
+  s: DriftstackSettings,
+  options: { credentialUnchanged?: boolean },
+): Promise<void> {
   // settings.json is strictly non-secret for EVERY deployment. Per-host
   // switching remains supported by the scoped keychain entry name.
   await getStore().set(SETTINGS_KEY, {
@@ -284,9 +290,19 @@ async function saveSettingsUnlocked(s: DriftstackSettings): Promise<void> {
   });
   await getStore().save();
 
+  // Theme, telemetry and Start URL changes do not need to touch the OS
+  // credential store when the key/deployment tuple is unchanged. Besides being
+  // redundant, that write can open another platform authorization prompt.
+  if (options.credentialUnchanged === true) return;
+
   const scopedName = keychainNameFor(s.baseUrl);
   if (s.apiKey !== null && s.apiKey.length > 0) {
-    await keychainSave(scopedName, s.apiKey);
+    if (!(await keychainSave(scopedName, s.apiKey))) {
+      // The non-secret settings write above may still have succeeded and the
+      // caller keeps the key in memory, but an explicit Save must not claim
+      // durable success when the credential store rejected the secret.
+      throw new Error('credential store write failed');
+    }
     return;
   }
   // Sign-out wipes the current scoped secret + legacy single-entry name.

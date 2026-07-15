@@ -75,9 +75,11 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     );
     expect(body).toMatch(/refreshAccountMe: \(\) => Promise<void>;/);
     expect(body).toMatch(
-      /\/\*\* Update settings \+ persist\. Returns once the on-disk write resolves\. \*\//,
+      /\/\*\* Update settings \+ persist\. Background callers remain best-effort; explicit/,
     );
-    expect(body).toMatch(/update: \(next: Partial<DriftstackSettings>\) => Promise<void>;/);
+    expect(body).toMatch(
+      /update:\s*\(\s*next: Partial<DriftstackSettings>,\s*options\?: \{ reportPersistenceFailure\?: boolean \},\s*\) => Promise<void>;/,
+    );
     expect(body).toMatch(
       /^export const SettingsContext = createContext<SettingsContextValue \| null>\(null\);$/m,
     );
@@ -111,12 +113,19 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     // Contract fragments (merge ORDER + setSettings + persist + [settings] dep). saveSettings
     // is now wrapped in a best-effort try/catch so a persist failure can't blank the app via an
     // unhandled rejection (#9) — assert the durable contract, not the exact whitespace.
-    expect(body).toContain('async (next: Partial<DriftstackSettings>) => {');
-    expect(body).toContain('const merged: DriftstackSettings = { ...settings, ...next };');
-    expect(body).toContain('setSettings(merged);');
-    expect(body).toContain('await saveSettings(merged);');
     expect(body).toMatch(
-      /const update = useCallback\([\s\S]{0,1000}?\n\s*\[settings\],\s*\n\s*\);/,
+      /async \(\s*next: Partial<DriftstackSettings>,\s*options\?: \{ reportPersistenceFailure\?: boolean \},?\s*\) => \{/,
+    );
+    expect(body).toContain('const merged: DriftstackSettings = { ...settings, ...next };');
+    expect(body).toMatch(
+      /const credentialUnchanged =\s*merged\.apiKey === settings\.apiKey && merged\.baseUrl === settings\.baseUrl;/,
+    );
+    expect(body).toContain('if (!reportPersistenceFailure) setSettings(merged);');
+    expect(body).toContain('await saveSettings(merged, { credentialUnchanged });');
+    expect(body).toContain('if (reportPersistenceFailure) setSettings(merged);');
+    expect(body).toContain('if (reportPersistenceFailure) throw e;');
+    expect(body).toMatch(
+      /const update = useCallback\([\s\S]{0,1800}?\n\s*\[settings\],\s*\n\s*\);/,
     );
   });
 

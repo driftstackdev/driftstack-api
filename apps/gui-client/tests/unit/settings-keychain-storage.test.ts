@@ -62,6 +62,25 @@ describe('settings API-key protected storage', () => {
     expect(JSON.stringify(persisted)).not.toContain('ds_live_self_hosted_secret');
   });
 
+  it('does not touch the credential store for a known-unchanged key/deployment tuple', async () => {
+    keychain.set('api_key:api.driftstack.dev', 'ds_live_existing');
+    invoke.mockClear();
+
+    await saveSettings(
+      {
+        ...DEFAULT_SETTINGS,
+        baseUrl: 'https://api.driftstack.dev',
+        apiKey: 'ds_live_existing',
+        telemetryOptIn: true,
+      },
+      { credentialUnchanged: true },
+    );
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(keychain.get('api_key:api.driftstack.dev')).toBe('ds_live_existing');
+    expect(disk.get('driftstack')).toMatchObject({ telemetryOptIn: true });
+  });
+
   it('migrates and purges legacy flat + multi-host plaintext keys on first load', async () => {
     disk.set('driftstack', {
       baseUrl: 'http://localhost:3000',
@@ -96,6 +115,21 @@ describe('settings API-key protected storage', () => {
 
     const loaded = await loadSettings();
     expect(loaded.apiKey).toBe('ds_live_memory_only');
+    expect(keychain.size).toBe(0);
+    expect(JSON.stringify(disk.get('driftstack'))).not.toContain('ds_live_memory_only');
+  });
+
+  it('rejects an ordinary save when the key remains memory-only', async () => {
+    failSaves = true;
+
+    await expect(
+      saveSettings({
+        ...DEFAULT_SETTINGS,
+        baseUrl: 'https://api.driftstack.dev',
+        apiKey: 'ds_live_memory_only',
+      }),
+    ).rejects.toThrow('credential store write failed');
+
     expect(keychain.size).toBe(0);
     expect(JSON.stringify(disk.get('driftstack'))).not.toContain('ds_live_memory_only');
   });

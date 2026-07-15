@@ -68,7 +68,9 @@ describe('GUI settings protected API-key storage invariant', () => {
       /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl: s\.baseUrl,\s*themeMode: s\.themeMode,\s*themeAccent: s\.themeAccent,\s*telemetryOptIn: s\.telemetryOptIn,\s*startUrl: s\.startUrl,?\s*\}\);/,
     );
     expect(body).not.toMatch(/\.\.\.\(!useKeychain && hasKey/);
-    expect(body).toMatch(/await keychainSave\(scopedName, s\.apiKey\);/);
+    expect(body).toMatch(/if \(!\(await keychainSave\(scopedName, s\.apiKey\)\)\) \{/);
+    expect(body).toContain("throw new Error('credential store write failed');");
+    expect(body).toContain('if (options.credentialUnchanged === true) return;');
   });
 
   it('sign-out deletes both the scoped and legacy keychain entries', () => {

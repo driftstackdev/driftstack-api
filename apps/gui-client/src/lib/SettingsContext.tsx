@@ -42,8 +42,13 @@ interface SettingsContextValue {
   authExpired: boolean;
   /** Dismiss the central re-auth prompt. */
   dismissAuthExpired: () => void;
-  /** Update settings + persist. Returns once the on-disk write resolves. */
-  update: (next: Partial<DriftstackSettings>) => Promise<void>;
+  /** Update settings + persist. Background callers remain best-effort; explicit
+   * save flows can request a rejection so they can report that persistence did
+   * not complete and leave the prior in-memory value available for retry. */
+  update: (
+    next: Partial<DriftstackSettings>,
+    options?: { reportPersistenceFailure?: boolean },
+  ) => Promise<void>;
 }
 
 export const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -92,17 +97,25 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
   }, [settings.baseUrl, settings.telemetryOptIn]);
 
   const update = useCallback(
-    async (next: Partial<DriftstackSettings>) => {
+    async (next: Partial<DriftstackSettings>, options?: { reportPersistenceFailure?: boolean }) => {
       const merged: DriftstackSettings = { ...settings, ...next };
-      setSettings(merged);
-      // Persistence is best-effort — the in-memory state is already applied above. A
-      // keychain/store write failure must NOT become an unhandled rejection: every caller
-      // does `void update(...)`, so it would trip the global fatal overlay and blank the
-      // whole app (e.g. on a theme/accent toggle). (#9)
+      const reportPersistenceFailure = options?.reportPersistenceFailure === true;
+      const credentialUnchanged =
+        merged.apiKey === settings.apiKey && merged.baseUrl === settings.baseUrl;
+      // Background appearance/preferences changes keep the historical
+      // best-effort behavior. An explicit Save commits in-memory state only
+      // after persistence succeeds, so a reported failure stays retryable.
+      if (!reportPersistenceFailure) setSettings(merged);
+      // Persistence stays best-effort for default callers: a keychain/store
+      // failure must not turn a void theme update into a global rejection. The
+      // explicit path is awaited by customer-facing save flows and rejects so
+      // they can render a bounded, actionable failure. (#9)
       try {
-        await saveSettings(merged);
+        await saveSettings(merged, { credentialUnchanged });
+        if (reportPersistenceFailure) setSettings(merged);
       } catch (e) {
-        console.warn('[settings] persist failed (kept in memory):', e);
+        console.warn('[settings] persist failed:', e);
+        if (reportPersistenceFailure) throw e;
       }
     },
     [settings],

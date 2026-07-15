@@ -56,6 +56,14 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toContain('invalidateKeyValidation();');
   });
 
+  it('serializes settings persistence before React state commits and surfaces a safe failure', () => {
+    expect(body).toContain('const saveInFlightRef = useRef(false);');
+    expect(body).toContain('if (startUrlInvalid || saveInFlightRef.current) return;');
+    expect(body).toMatch(
+      /saveInFlightRef\.current = true;[\s\S]*?await update\([\s\S]*?catch \(err\) \{[\s\S]*?title: "Couldn't save settings"[\s\S]*?return;[\s\S]*?finally \{[\s\S]*?saveInFlightRef\.current = false;/,
+    );
+  });
+
   it("V-241 + V-242 + V-272 framing pinned: 'V-241: API key now stored in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service); the masked input edits the keychain entry transparently via Tauri commands.' + 'V-242: telemetry toggle — Sentry crash-only opt-in. Defaults ON for cloud customers, OFF for self-hosted. Customer can override either direction.' + 'V-272: account info block + sign-out button. First-run hint rewritten to point at the V-268 browser sign-in flow instead of the stale \"npm run admin:create-key\" instruction.'", () => {
     expect(body).toMatch(
       /\/\/ V-241: API key now stored in OS keychain \(macOS Keychain \/ Windows\s*\n?\s*\/\/ Credential Manager \/ Linux Secret Service\); the masked input edits\s*\n?\s*\/\/ the keychain entry transparently via Tauri commands\./,

@@ -236,6 +236,11 @@ export function SettingsView(): JSX.Element {
   // resolution (rapid toggling, different keychain/store latencies) or a key the
   // user typed after switching can't clobber the latest intent (audit wja3dfl5t).
   const keyRestoreTokenRef = useRef(0);
+  // React state does not commit synchronously, so `saving` alone cannot stop
+  // two clicks dispatched in the same turn. Keep the persistence boundary in
+  // a ref as well: this is especially important when `update` opens the OS
+  // credential store, where duplicate writes can multiply authorization UI.
+  const saveInFlightRef = useRef(false);
   // Monotonic token for the post-save key validation (see handleSave) — a newer
   // Save supersedes an older in-flight validation so a stale verdict can't land.
   const validateTokenRef = useRef(0);
@@ -367,11 +372,14 @@ export function SettingsView(): JSX.Element {
   const browserSignIn = useBrowserSignIn({
     baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
     onSuccess: async (issuedKey, _accountId) => {
-      await update({
-        apiKey: issuedKey,
-        baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
-        telemetryOptIn: draftTelemetry,
-      });
+      await update(
+        {
+          apiKey: issuedKey,
+          baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
+          telemetryOptIn: draftTelemetry,
+        },
+        { reportPersistenceFailure: true },
+      );
       setDraftKey(issuedKey);
       setSavedAt(Date.now());
     },
@@ -396,7 +404,8 @@ export function SettingsView(): JSX.Element {
     // Guard a non-empty-but-invalid Start URL: don't run the save (which would
     // silently keep the old value while showing 'Saved.'). The button is also
     // disabled on this, but a programmatic call still bails for safety.
-    if (startUrlInvalid) return;
+    if (startUrlInvalid || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setSaving(true);
     const url = draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:3000';
     // A blank field clears to the default; a non-empty field is guaranteed valid
@@ -409,17 +418,31 @@ export function SettingsView(): JSX.Element {
     // forever. (audit)
     const nextStartUrl = normalizeNavigateUrl(draftStartUrl) ?? DEFAULT_SETTINGS.startUrl;
     try {
-      await update({
-        apiKey: draftKey.length > 0 ? draftKey : null,
-        baseUrl: url,
-        telemetryOptIn: draftTelemetry,
-        startUrl: nextStartUrl,
-      });
+      await update(
+        {
+          apiKey: draftKey.length > 0 ? draftKey : null,
+          baseUrl: url,
+          telemetryOptIn: draftTelemetry,
+          startUrl: nextStartUrl,
+        },
+        { reportPersistenceFailure: true },
+      );
       // Reflect the persisted value back into the field so a blank-clear shows the
       // default it reset to (instead of staying blank + re-arming `dirty`).
       setDraftStartUrl(nextStartUrl);
       setSavedAt(Date.now());
+    } catch (err) {
+      pushToast({
+        title: "Couldn't save settings",
+        body: humanizeError(
+          err,
+          'Check that Driftstack can access your system credential store, then try again.',
+        ),
+        tone: 'error',
+      });
+      return;
     } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
     }
 

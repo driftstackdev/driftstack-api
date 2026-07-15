@@ -187,6 +187,91 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     expect(startInput.value).toBe('https://driftstack.dev');
   });
 
+  it('coalesces rapid Save clicks into one credential-store write', async () => {
+    let releaseUpdate!: () => void;
+    const update = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseUpdate = resolve;
+        }),
+    );
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: null,
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+        startUrl: 'https://driftstack.dev',
+      },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update,
+    });
+    renderWithToasts();
+
+    fireEvent.change(screen.getByPlaceholderText('https://driftstack.dev'), {
+      target: { value: 'https://example.com' },
+    });
+    const save = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(save);
+    fireEvent.click(save);
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+    releaseUpdate();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled());
+  });
+
+  it('shows a safe persistence failure, skips key validation, and permits one retry', async () => {
+    const update = vi
+      .fn<MockSettings['update']>()
+      .mockRejectedValueOnce(
+        new Error('securityd denied /Users/customer/Library/Keychains token=private-key'),
+      )
+      .mockResolvedValueOnce();
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ git_sha: 'settings-test' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: null,
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+        startUrl: 'https://driftstack.dev',
+      },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update,
+    });
+    renderWithToasts();
+
+    fireEvent.change(screen.getByPlaceholderText('https://driftstack.dev'), {
+      target: { value: 'https://example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText("Couldn't save settings")).toBeInTheDocument();
+    expect(screen.getByText(/system credential store, then try again/i)).toBeInTheDocument();
+    expect(screen.queryByText(/securityd|\/Users\/customer|token=private-key/i)).toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/v1/account/me'))).toBe(
+      false,
+    );
+    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+  });
+
   it('the Connected banner masks the key with the shared prefix-aware mask (not 16 contiguous chars)', () => {
     const realKey = 'ds_live_abcdef0123456789zzzz';
     useSettingsMock.mockReturnValue({

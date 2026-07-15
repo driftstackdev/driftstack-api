@@ -7,19 +7,26 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { useSettings, SettingsProvider } from '../../src/lib/SettingsContext';
 
 // ── module mocks ───────────────────────────────────────────────
-// loadSettings resolves whatever the test seeds; saveSettings is a no-op.
+// loadSettings resolves whatever the test seeds; saveSettings can be failed to
+// prove the provider's default best-effort vs explicit-reporting boundary.
 let seededSettings: { apiKey: string | null; baseUrl: string; telemetryOptIn: boolean | null } = {
   apiKey: 'ds_live_a',
   baseUrl: 'https://api.driftstack.dev',
   telemetryOptIn: null,
 };
+let persistError: Error | null = null;
+let lastCredentialUnchanged: boolean | undefined;
 vi.mock('../../src/lib/settings', () => ({
   DEFAULT_SETTINGS: { apiKey: null, baseUrl: 'http://localhost:3000', telemetryOptIn: null },
   loadSettings: () => Promise.resolve(seededSettings),
-  saveSettings: () => Promise.resolve(),
+  saveSettings: (_settings: unknown, options?: { credentialUnchanged?: boolean }) => {
+    lastCredentialUnchanged = options?.credentialUnchanged;
+    return persistError === null ? Promise.resolve() : Promise.reject(persistError);
+  },
 }));
 vi.mock('../../src/lib/telemetry', () => ({ initTelemetry: vi.fn() }));
 
@@ -55,11 +62,14 @@ vi.mock('../../src/lib/client', () => ({
 // A consumer that surfaces the live activeWorkspace + lets the test drive
 // update() and setActiveWorkspace().
 function Probe(): JSX.Element {
-  const { activeWorkspace, setActiveWorkspace, update, accountMe } = useSettings();
+  const { activeWorkspace, setActiveWorkspace, update, accountMe, settings } = useSettings();
+  const [persistOutcome, setPersistOutcome] = useState('idle');
   return (
     <div>
       <span data-testid="ws">{activeWorkspace ?? 'personal'}</span>
       <span data-testid="me-email">{accountMe?.email ?? 'none'}</span>
+      <span data-testid="persist-outcome">{persistOutcome}</span>
+      <span data-testid="current-base">{settings.baseUrl}</span>
       <button type="button" onClick={() => setActiveWorkspace('acct_team')}>
         pick-team
       </button>
@@ -86,6 +96,39 @@ function Probe(): JSX.Element {
         }}
       >
         change-base
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void update(
+            { baseUrl: 'https://reported.example.com' },
+            { reportPersistenceFailure: true },
+          ).then(
+            () => setPersistOutcome('saved'),
+            () => setPersistOutcome('failed'),
+          );
+        }}
+      >
+        report-save
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void update({ baseUrl: 'https://background.example.com' }).then(
+            () => setPersistOutcome('best-effort'),
+            () => setPersistOutcome('unexpected-rejection'),
+          );
+        }}
+      >
+        background-save
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void update({ telemetryOptIn: true }).then(() => setPersistOutcome('preferences-saved'));
+        }}
+      >
+        preferences-save
       </button>
     </div>
   );
@@ -129,6 +172,35 @@ beforeEach(() => {
   };
   meTeams = [];
   meReject = false;
+  persistError = null;
+  lastCredentialUnchanged = undefined;
+});
+
+describe('SettingsContext — persistence outcome boundary', () => {
+  it('rejects only when an explicit save asks to report persistence failure', async () => {
+    persistError = new Error('credential store locked');
+    renderProvider();
+
+    screen.getByRole('button', { name: 'report-save' }).click();
+    await waitFor(() => expect(screen.getByTestId('persist-outcome')).toHaveTextContent('failed'));
+    expect(screen.getByTestId('current-base')).toHaveTextContent('https://api.driftstack.dev');
+
+    screen.getByRole('button', { name: 'background-save' }).click();
+    await waitFor(() =>
+      expect(screen.getByTestId('persist-outcome')).toHaveTextContent('best-effort'),
+    );
+    expect(screen.getByTestId('current-base')).toHaveTextContent('https://background.example.com');
+  });
+
+  it('marks preferences-only updates so persistence skips credential access', async () => {
+    renderProvider();
+
+    screen.getByRole('button', { name: 'preferences-save' }).click();
+    await waitFor(() =>
+      expect(screen.getByTestId('persist-outcome')).toHaveTextContent('preferences-saved'),
+    );
+    expect(lastCredentialUnchanged).toBe(true);
+  });
 });
 
 // P2 #4 — accountMe must NOT show the previous account's email/tier/caps after an
