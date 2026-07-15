@@ -146,6 +146,11 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(
       /export const PROXIES_PER_TIER: Record<AccountTier, number \| 'custom'> = \{\s*\n?\s*free: 1,\s*\n?\s*solo_manual: 10,\s*\n?\s*team_manual: 25,\s*\n?\s*agency_manual: 50,\s*\n?\s*api_starter: 25,\s*\n?\s*api_builder: 100,\s*\n?\s*api_scale: 500,\s*\n?\s*enterprise: 'custom',\s*\n?\s*\};/,
     );
+    expect(body).toMatch(
+      /owner-scoped saved-proxy create gate enforces every numeric\s*\n?\s*\* tier atomically/,
+    );
+    expect(body).toMatch(/Enterprise uses its negotiated custom allowance/);
+    expect(body).not.toMatch(/egress backend partly stubbed|enforced when it lands/i);
   });
 
   it('6.g MAX_SESSION_MINUTES_PER_TIER: free 20-min auto-destroy cap; paid tiers null (unlimited)', () => {

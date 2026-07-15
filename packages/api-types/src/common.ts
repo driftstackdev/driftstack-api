@@ -202,8 +202,9 @@ export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
  * permitted), so free gets exactly 1 (BYO SOCKS5; no OpenVPN/WireGuard —
  * see TierFeatures.vpnEgress). Paid tiers scale up + unlock VPN egress.
  * `'custom'` = negotiated (Enterprise). Mirrors the PROFILES_PER_TIER
- * shape; server-side enforcement reads this at the saved-proxy create
- * gate (egress backend partly stubbed today → enforced when it lands).
+ * shape. The owner-scoped saved-proxy create gate enforces every numeric
+ * tier atomically; Enterprise uses its negotiated custom allowance rather
+ * than inheriting an invented generic limit.
  */
 export const PROXIES_PER_TIER: Record<AccountTier, number | 'custom'> = {
   free: 1,
