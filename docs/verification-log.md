@@ -28861,3 +28861,39 @@ Focused proof passes 2 files and 81/81 tests; the expanded Simulator window matr
 passes 17 files and 259/259 tests. GUI TypeScript, targeted ESLint, Prettier and
 diff/whitespace checks are green. No native/harness build, install, relaunch, deploy
 or customer-session action was performed.
+
+---
+
+## V-692 — Warm tab activation no longer impersonates a reload
+
+**Date:** 2026-07-15
+
+The harness previously emitted a target `page_state{state:"loading"}` before it knew
+whether an `activateTab` request required navigation. A cached live tab then used only
+`switchToWindow` and reported `wasWarm:true`, but the GUI had already re-armed its
+window-global loading chrome. Because the warm acknowledgement removes the black
+switch cover before the final URL/title reads and loaded stamp finish, a real
+no-navigation switch could briefly look like a full page reload.
+
+The legacy single-WebContent path still emits loading at switch start because it
+always reloads. With warm tabs enabled, classification now owns the signal. A cached
+live bring-to-front and a cached-handle failure that never navigates emit no synthetic
+loading. A cold first-touch or affirmatively evicted target emits the same target
+loading frame only after a new context and rollback owner are proven and immediately
+before its real `/url` navigation. The moved publication is followed by the existing
+browser/WebDriver identity guard, so a concurrent reap cannot navigate or repopulate
+session state after teardown.
+
+Exact-funnel proof records cold `loading → navigation → loaded`, then warms B→A and
+records only terminal loaded with `wasWarm:true`, zero `/window/new` and zero `/url`.
+A cached non-eviction failure records no page lifecycle. A held cold loading
+publication is reaped, then its exact canceled task is released and awaited; it issues
+no navigation and leaves zero warm-handle, task, generation or other per-session
+owners. Gate-off legacy proof retains loading→loaded. The focused lifecycle proof
+passes 4/4 tests, the expanded tab/warm matrix passes 46/46, and teardown/residual
+symmetry passes 2/2.
+
+This change does not hide genuine cache eviction. With the current fleet cache size
+of two, a three-tab return may still take an honest cold navigation after eviction.
+No cache-size, GUI, API, fork, environment, native build/sign/install/relaunch,
+deployment or customer-session action was performed.
