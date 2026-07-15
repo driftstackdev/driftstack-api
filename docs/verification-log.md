@@ -28033,3 +28033,36 @@ bounded-relay, fleet-routing, diagnostic, bootstrap and protocol matrix passes
 8 files and 202/202 tests. Strict server source/test TypeScript,
 full-workspace typechecking, targeted ESLint/Prettier and diff/whitespace checks,
 and the configured full-workspace production build are green.
+
+---
+
+## V-668 — Agent transcript migration verifiers isolate database encryption domains
+
+**Date:** 2026-07-15
+
+The two real-Postgres agent-session suites previously shared the migrated
+`public.agent_sessions` table while intentionally configuring different
+transcript keys. Because the production bootstrap migrator authenticates a
+global v2 probe before rewriting any legacy row, either verifier could select
+a sibling suite's temporary ciphertext and correctly reject it under the wrong
+key. Each file passed alone, but the exact paired run failed 2 of 12 tests and
+reported one unhandled rejection, making the connected release gate
+nondeterministic without exposing a production encryption defect.
+
+Each suite now creates a UUID-named schema, clones the already-migrated
+`public.accounts` and `public.agent_sessions` table shapes, and attaches every
+connection in its multi-connection pool through PostgreSQL's startup
+`search_path` option. Setup asserts `current_schema()` before enabling the
+tests, and an explicitly requested database run fails rather than silently
+skipping when setup is unavailable. Cleanup closes the pool and drops only its
+own schema. The migration CAS proof also attaches a rejection observer while
+the row lock is held and rolls back only while its transaction remains open,
+removing a misleading post-commit warning without weakening the awaited
+assertion.
+
+The formerly failing paired run passes 12/12 with zero unhandled rejections;
+the files independently pass 3/3 and 9/9. The full adjacent real-Postgres
+agent-session family passes 3 files and 13/13 tests. Strict server test
+TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green. No
+runtime repository, schema migration, encryption format or production behavior
+changed.

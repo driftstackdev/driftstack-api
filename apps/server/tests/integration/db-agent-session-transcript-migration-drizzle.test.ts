@@ -15,9 +15,12 @@ import { encryptAgentTranscript } from '../../src/services/agent-transcript-encr
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
 const KEY = Buffer.alloc(32, 71).toString('base64');
+const TEST_SCHEMA = `agent_transcript_migration_${randomUUID().replaceAll('-', '')}`;
 
 let dbReachable = false;
+let admin: ReturnType<typeof postgres> | null = null;
 let client: ReturnType<typeof postgres> | null = null;
 const seededAccounts: string[] = [];
 
@@ -39,27 +42,34 @@ async function seedAccount(label: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  if (!RUN_DB_TESTS) return;
+  admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
-    await probe`SELECT 1`;
-    await probe.end({ timeout: 1 });
-  } catch {
-    await probe.end({ timeout: 1 }).catch(() => {});
-    return;
+    await admin`SELECT 1`;
+  } catch (error) {
+    await admin.end({ timeout: 1 }).catch(() => {});
+    admin = null;
+    throw error;
   }
-  client = postgres(DB_URL, { max: 6 });
-  try {
-    await client`SELECT 1 FROM agent_sessions LIMIT 0`;
-    dbReachable = true;
-  } catch {
-    await client.end({ timeout: 1 }).catch(() => {});
-    client = null;
-  }
+  await admin.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
+  await admin.unsafe(`CREATE TABLE "${TEST_SCHEMA}".accounts (LIKE public.accounts INCLUDING ALL)`);
+  await admin.unsafe(
+    `CREATE TABLE "${TEST_SCHEMA}".agent_sessions (LIKE public.agent_sessions INCLUDING ALL)`,
+  );
+  client = postgres(DB_URL, {
+    max: 6,
+    connection: { options: `-c search_path=${TEST_SCHEMA}` },
+  });
+  const [current] = await client<Array<{ value: string }>>`SELECT current_schema() AS value`;
+  expect(current?.value).toBe(TEST_SCHEMA);
+  dbReachable = true;
 });
 
 afterAll(async () => {
-  if (client) {
-    await client.end({ timeout: 5 });
+  if (client) await client.end({ timeout: 5 });
+  if (admin) {
+    await admin.unsafe(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`).catch(() => {});
+    await admin.end({ timeout: 5 });
   }
 });
 
@@ -73,7 +83,7 @@ afterEach(async () => {
   }
 });
 
-describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+describe.skipIf(!RUN_DB_TESTS)(
   'agent-session transcript v2 migration (Drizzle path, real Postgres)',
   () => {
     it('preflights v1 before writes, migrates arrays/v1, and binds exact row context', async () => {
@@ -213,13 +223,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
       const blocker = await client.reserve();
       let migration: Promise<{ scanned: number; converted: number; remaining: number }> | undefined;
+      let transactionOpen = false;
       try {
         await blocker`BEGIN`;
+        transactionOpen = true;
         await blocker`SELECT id FROM agent_sessions WHERE id = ${session.id} FOR UPDATE`;
         let settled = false;
         migration = repo.migrateTranscriptEnvelopes(1).finally(() => {
           settled = true;
         });
+        void migration.catch(() => {});
 
         let waitingOnLock = false;
         for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -249,6 +262,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           WHERE id = ${session.id}
         `;
         await blocker`COMMIT`;
+        transactionOpen = false;
 
         const migrationResult = await migration;
         expect(waitingOnLock).toBe(true);
@@ -260,7 +274,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         });
         expect((await repo.get(session.id))?.transcript).toEqual(newer);
       } finally {
-        await blocker`ROLLBACK`.catch(() => {});
+        if (transactionOpen) await blocker`ROLLBACK`.catch(() => {});
         await migration?.catch(() => {});
         blocker.release();
       }

@@ -32,33 +32,40 @@ import type { TranscriptEntry } from '../../src/services/agent-decomposer.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
 const TRANSCRIPT_KEY = Buffer.alloc(32, 11).toString('base64');
+const TEST_SCHEMA = `agent_sessions_concurrency_${randomUUID().replaceAll('-', '')}`;
 
 let dbReachable = false;
+let admin: ReturnType<typeof postgres> | null = null;
 let client: ReturnType<typeof postgres> | null = null;
 // accountIds seeded — cleaned in FK order: agent_sessions → accounts.
 const seeded: string[] = [];
 
 beforeAll(async () => {
-  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  if (!RUN_DB_TESTS) return;
+  admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
-    await probe`SELECT 1`;
-    dbReachable = true;
-    await probe.end({ timeout: 1 });
-  } catch {
-    await probe.end({ timeout: 1 }).catch(() => {});
-    return;
+    await admin`SELECT 1`;
+  } catch (error) {
+    await admin.end({ timeout: 1 }).catch(() => {});
+    admin = null;
+    throw error;
   }
+  await admin.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
+  await admin.unsafe(`CREATE TABLE "${TEST_SCHEMA}".accounts (LIKE public.accounts INCLUDING ALL)`);
+  await admin.unsafe(
+    `CREATE TABLE "${TEST_SCHEMA}".agent_sessions (LIKE public.agent_sessions INCLUDING ALL)`,
+  );
   // max: 5 so concurrent transactions get distinct connections — the
   // FOR-UPDATE row lock, not connection serialisation, is what's exercised.
-  client = postgres(DB_URL, { max: 5 });
-  try {
-    await client`SELECT 1 FROM agent_sessions LIMIT 0`;
-  } catch {
-    dbReachable = false;
-    await client.end({ timeout: 1 }).catch(() => {});
-    client = null;
-  }
+  client = postgres(DB_URL, {
+    max: 5,
+    connection: { options: `-c search_path=${TEST_SCHEMA}` },
+  });
+  const [current] = await client<Array<{ value: string }>>`SELECT current_schema() AS value`;
+  expect(current?.value).toBe(TEST_SCHEMA);
+  dbReachable = true;
 });
 
 afterAll(async () => {
@@ -69,9 +76,13 @@ afterAll(async () => {
     }
     await client.end({ timeout: 5 });
   }
+  if (admin) {
+    await admin.unsafe(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`).catch(() => {});
+    await admin.end({ timeout: 5 });
+  }
 });
 
-describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+describe.skipIf(!RUN_DB_TESTS)(
   'agent_sessions debitTokens/appendTranscript atomicity under concurrency (Drizzle path, real Postgres)',
   () => {
     it('concurrent debitTokens never lose an update (FOR UPDATE row lock serialises → 100-30-40=30)', async () => {
