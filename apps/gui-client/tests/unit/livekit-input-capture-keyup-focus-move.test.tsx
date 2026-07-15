@@ -20,7 +20,7 @@ vi.mock('../../src/lib/livekit', () => ({
 const { useInputCapture } = await import('../../src/lib/livekit-input-capture');
 import type { InputEvent, Room } from '../../src/lib/livekit';
 
-function mountCapture(): void {
+function mountCapture(): ReturnType<typeof render> {
   const video = document.createElement('video');
   document.body.appendChild(video);
   video.getBoundingClientRect = () =>
@@ -31,13 +31,19 @@ function mountCapture(): void {
     useInputCapture({ room: {} as Room, videoElement: video, enabled: true });
     return <span />;
   }
-  render(<Wired />);
+  return render(<Wired />);
 }
 
 function eventsFor(key: string, type: 'keyDown' | 'keyUp'): InputEvent[] {
   return sendInputEvent.mock.calls
     .map((c) => c[1] as InputEvent)
     .filter((e) => e.type === type && (e as { key: string }).key === key);
+}
+
+function keyEvents(): InputEvent[] {
+  return sendInputEvent.mock.calls
+    .map((c) => c[1] as InputEvent)
+    .filter((e) => e.type === 'keyDown' || e.type === 'keyUp');
 }
 
 function makeEditableInput(): HTMLInputElement {
@@ -101,5 +107,80 @@ describe('useInputCapture — keyUp mirrors the keyDown forward decision', () =>
 
     expect(eventsFor('x', 'keyDown')).toHaveLength(0);
     expect(eventsFor('x', 'keyUp')).toHaveLength(0);
+  });
+
+  it('releases the stored down-time wire key when Shift changes A to a before keyUp', () => {
+    mountCapture();
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'A',
+        code: 'KeyA',
+        shiftKey: true,
+        bubbles: true,
+      }),
+    );
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a', code: 'KeyA', bubbles: true }));
+
+    expect(keyEvents()).toEqual([
+      { type: 'keyDown', key: 'A', modifiers: ['shift'] },
+      { type: 'keyUp', key: 'A' },
+    ]);
+  });
+
+  it('balance-releases a changed repeat value before forwarding its successor', () => {
+    mountCapture();
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'A',
+        code: 'KeyA',
+        shiftKey: true,
+        bubbles: true,
+      }),
+    );
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'a',
+        code: 'KeyA',
+        repeat: true,
+        bubbles: true,
+      }),
+    );
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'a', code: 'KeyA', bubbles: true }));
+
+    expect(keyEvents()).toEqual([
+      { type: 'keyDown', key: 'A', modifiers: ['shift'] },
+      { type: 'keyUp', key: 'A' },
+      { type: 'keyDown', key: 'a' },
+      { type: 'keyUp', key: 'a' },
+    ]);
+  });
+
+  it('teardown releases every stored key with a neutral modifier snapshot', () => {
+    const mounted = mountCapture();
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Shift',
+        code: 'ShiftLeft',
+        shiftKey: true,
+        bubbles: true,
+      }),
+    );
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'A',
+        code: 'KeyA',
+        shiftKey: true,
+        bubbles: true,
+      }),
+    );
+
+    mounted.unmount();
+
+    expect(keyEvents()).toEqual([
+      { type: 'keyDown', key: 'Shift', modifiers: ['shift'] },
+      { type: 'keyDown', key: 'A', modifiers: ['shift'] },
+      { type: 'keyUp', key: 'Shift' },
+      { type: 'keyUp', key: 'A' },
+    ]);
   });
 });

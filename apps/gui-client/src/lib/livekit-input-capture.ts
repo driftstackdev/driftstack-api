@@ -1064,14 +1064,14 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // true, so re-checking there would forward keyDown but drop keyUp → a stuck
     // key (or stuck Shift corrupting every later key) on the remote device (Fable
     // GUI LiveKit re-audit). Always forward the keyUp iff we forwarded its keyDown.
-    const forwardedKeys = new Map<
-      string,
-      { key: string; modifiers?: readonly CanonicalModifier[] }
-    >();
+    const forwardedKeys = new Map<string, string>();
     const keyId = (e: KeyboardEvent): string => (e.code !== '' ? e.code : e.key);
     const releaseForwardedKeys = (): void => {
-      for (const forwarded of forwardedKeys.values()) {
-        send({ type: 'keyUp', ...forwarded }, true);
+      for (const key of forwardedKeys.values()) {
+        // Cleanup is authoritative: an absent modifier snapshot makes the harness
+        // reconcile every remotely-held modifier to neutral before releasing the
+        // stored down-time key value.
+        send({ type: 'keyUp', key }, true);
       }
       forwardedKeys.clear();
     };
@@ -1085,24 +1085,48 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // remote modifier/key is stranded. Self-heals when the buffer reports low again.
       if (reliableCongested) return;
       const modifiers = modifiersFromEvent(e);
-      const forwarded = {
-        key: e.key,
-        ...(modifiers !== undefined ? { modifiers } : {}),
-      };
-      forwardedKeys.set(keyId(e), forwarded);
-      send({ type: 'keyDown', ...forwarded }, true);
+      const id = keyId(e);
+      const priorKey = forwardedKeys.get(id);
+      // `KeyboardEvent.code` identifies the physical key, while `event.key` can
+      // change during a held-key repeat as modifiers/layout state changes. Balance
+      // the old W3C value before pressing its successor; otherwise both values stay
+      // held remotely and the final physical keyUp can release only one of them.
+      if (priorKey !== undefined && priorKey !== e.key) {
+        send(
+          {
+            type: 'keyUp',
+            key: priorKey,
+            ...(modifiers !== undefined ? { modifiers } : {}),
+          },
+          true,
+        );
+      }
+      forwardedKeys.set(id, e.key);
+      send(
+        {
+          type: 'keyDown',
+          key: e.key,
+          ...(modifiers !== undefined ? { modifiers } : {}),
+        },
+        true,
+      );
     };
     const onKeyUp = (e: KeyboardEvent): void => {
       // Mirror the keyDown decision: only forward the up for a key whose down we
       // forwarded (so composer typing still never leaks), but do so regardless of
       // the CURRENT editing/escape state so a focus-moving key can't strand a
       // half-press on the device.
-      if (!forwardedKeys.delete(keyId(e))) return;
+      const id = keyId(e);
+      const forwardedKey = forwardedKeys.get(id);
+      if (forwardedKey === undefined) return;
+      forwardedKeys.delete(id);
       const modifiers = modifiersFromEvent(e);
       send(
         {
           type: 'keyUp',
-          key: e.key,
+          // Release the exact stateful W3C value pressed at keyDown. The current
+          // DOM key may differ after a Shift/layout transition (`A` → `a`).
+          key: forwardedKey,
           ...(modifiers !== undefined ? { modifiers } : {}),
         },
         true,

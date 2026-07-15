@@ -28130,3 +28130,38 @@ escapes the receiver nor starts overflow work. The direct file passes 9/9 and
 the shared primitive plus all current consumers pass 9 files and 95/95 tests.
 Strict server source/test TypeScript, focused tests, targeted lint/format/diff,
 the full workspace typecheck and configured production build are green.
+
+---
+
+## V-671 — Physical key releases preserve the down-time wire identity
+
+**Date:** 2026-07-15
+
+The GUI correctly indexed forwarded keys by physical `KeyboardEvent.code`, but
+the matching key-up discarded the stored entry and sent the current
+`KeyboardEvent.key`. Modifier or layout changes can alter that value while the
+same physical key remains held (`keydown "A"` followed by `keyup "a"`). The
+harness maps those strings to distinct stateful WebDriver key values, so the
+new value did not release the original one even though local bookkeeping
+considered the key complete. A changed-value repeat could likewise leave both
+values held, and teardown reused down-time modifier snapshots instead of
+authoritatively reconciling the remote modifier state to neutral.
+
+The capture hook now retains the exact down-time wire key per physical code. A
+matching up releases that stored value with the current modifier snapshot. If
+a repeat changes the wire value for one physical code, the prior value is
+balance-released before the successor is stored and pressed. Blur, reliable-
+channel congestion and unmount release every stored value without a modifier
+field, which makes the harness reconcile held modifiers to the neutral set.
+The wire schema, receipt behavior and ordinary same-value repeat path are
+unchanged.
+
+Focused verification proves `A` down followed by `a` up releases `A`, a
+changed-value repeat orders `down A → up A → down a → up a`, and teardown of a
+held Shift chord emits neutral key-ups for both stored values. The existing
+Tab/Shift+Tab focus transition, local composer isolation and reliable-channel
+backpressure behaviors remain green. The focused matrix passes 2 files and
+21/21 tests; the expanded GUI Escape and server source-parity matrix passes 4
+files and 33/33 tests. Strict GUI and server-test TypeScript, targeted
+lint/format/diff, the full workspace typecheck and configured production build
+are green.
