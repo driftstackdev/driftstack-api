@@ -77,6 +77,47 @@ describe('POST/GET /v1/account/me/proxies', () => {
     expect(create.json<ProxyMeta>().has_password).toBe(false);
     expect(create.json<ProxyMeta>().scheme).toBe('http');
   });
+
+  it('enforces the calling account tier cap atomically', async () => {
+    const cappedCreate = vi.spyOn(InMemoryAccountProxiesRepo.prototype, 'createIfUnderLimit');
+    fx = await buildTestApp({ tier: 'free' });
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'only', host: 'one.proxy.example', port: 1080 },
+    });
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'blocked', host: 'two.proxy.example', port: 1080 },
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(400);
+    expect(second.body).toContain('Proxy limit reached (1).');
+    expect(cappedCreate).toHaveBeenCalledTimes(2);
+    expect(cappedCreate.mock.calls.every((call) => call[2] === 1)).toBe(true);
+  });
+
+  it('does not invent a numeric cap for an Enterprise custom contract', async () => {
+    const create = vi.spyOn(InMemoryAccountProxiesRepo.prototype, 'create');
+    const cappedCreate = vi.spyOn(InMemoryAccountProxiesRepo.prototype, 'createIfUnderLimit');
+    fx = await buildTestApp({ tier: 'enterprise' });
+
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'contract', host: 'enterprise.proxy.example', port: 1080 },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(create).toHaveBeenCalledOnce();
+    expect(cappedCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe('PUT /v1/account/me/proxies/:id', () => {

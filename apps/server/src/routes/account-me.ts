@@ -17,6 +17,7 @@ import {
   AccountProxyUpdateSchema,
   AVATAR_MAX_BYTES,
   PROFILES_PER_TIER,
+  PROXIES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
   UpdateAccountMeRequestSchema,
   UploadAvatarRequestSchema,
@@ -54,7 +55,6 @@ import {
  *  dashboard render doesn't churn signed URLs but short enough that
  *  rotating the bucket secret invalidates outstanding URLs in <1h. */
 const AVATAR_PRESIGN_TTL_SECONDS = 60 * 60;
-const MAX_PROXIES_PER_ACCOUNT = 100;
 
 export interface AccountMeRoutesOptions {
   /** Session count source — same repo SessionsService uses. */
@@ -553,23 +553,24 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const vpn = buildVpnSecretAndConfig(ctx.account.id, id, parsed.data);
       const wrappedPassword =
         vpn === null ? wrapProxyPassword(ctx.account.id, id, parsed.data.password) : null;
-      const row = await accountProxiesRepo.createIfUnderLimit(
-        ctx.account.id,
-        {
-          id,
-          label: parsed.data.label,
-          scheme: parsed.data.scheme,
-          host: parsed.data.host,
-          port: parsed.data.port,
-          username: parsed.data.username,
-          wrappedPassword,
-          ...(vpn !== null ? { wrappedSecret: vpn.wrappedSecret, config: vpn.config } : {}),
-        },
-        MAX_PROXIES_PER_ACCOUNT,
-      );
+      const input = {
+        id,
+        label: parsed.data.label,
+        scheme: parsed.data.scheme,
+        host: parsed.data.host,
+        port: parsed.data.port,
+        username: parsed.data.username,
+        wrappedPassword,
+        ...(vpn !== null ? { wrappedSecret: vpn.wrappedSecret, config: vpn.config } : {}),
+      };
+      const proxyCap = PROXIES_PER_TIER[ctx.account.tier];
+      const row =
+        proxyCap === 'custom'
+          ? await accountProxiesRepo.create(ctx.account.id, input)
+          : await accountProxiesRepo.createIfUnderLimit(ctx.account.id, input, proxyCap);
       if (row === null) {
         throw new BadRequestError(
-          `Proxy limit reached (${String(MAX_PROXIES_PER_ACCOUNT)}). Delete an existing proxy to add another.`,
+          `Proxy limit reached (${String(proxyCap)}). Delete an existing proxy to add another.`,
         );
       }
       await emitProxyAudit(request, ctx.account.id, 'proxy.created', row);
