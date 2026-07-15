@@ -628,6 +628,9 @@ export function ProfilesView({
   const [trashView, setTrashView] = useState(false);
   const [trashed, setTrashed] = useState<Profile[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
+  const [trashDataAvailable, setTrashDataAvailable] = useState(false);
+  const [trashLoadError, setTrashLoadError] = useState<string | null>(null);
+  const trashLoadGenerationRef = useRef(0);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [purgingId, setPurgingId] = useState<string | null>(null);
   // 2026-06-20 — bulk trash actions run as a SEQUENTIAL per-row loop over the
@@ -926,22 +929,44 @@ export function ProfilesView({
   );
 
   // L4b — load the account's trashed profiles for the recycle-bin view.
-  // Best-effort: an older server without /trash (404/405) just yields [].
+  // An older server without /trash (404/405) is a verified unsupported/empty
+  // result. Every other failure is unavailable, never empty; generation fencing
+  // prevents an older retry from overwriting a newer authoritative snapshot.
   const loadTrash = useCallback(async (): Promise<void> => {
     if (!client || typeof client.profiles.listTrash !== 'function') {
       setTrashed([]);
+      setTrashDataAvailable(true);
+      setTrashLoadError(null);
       return;
     }
+    const generation = ++trashLoadGenerationRef.current;
     setTrashLoading(true);
+    setTrashDataAvailable(false);
+    setTrashLoadError(null);
     try {
       const page = await client.profiles.listTrash();
+      if (generation !== trashLoadGenerationRef.current) return;
       setTrashed(page.data);
-    } catch {
-      setTrashed([]);
+      setTrashDataAvailable(true);
+    } catch (err) {
+      if (generation !== trashLoadGenerationRef.current) return;
+      const status = (err as { status?: number } | null)?.status;
+      if (status === 404 || status === 405) {
+        setTrashed([]);
+        setTrashDataAvailable(true);
+      } else {
+        setTrashLoadError(
+          friendlyError(
+            err,
+            settings.baseUrl,
+            "Couldn't load the recycle bin. Check your connection and try again.",
+          ),
+        );
+      }
     } finally {
-      setTrashLoading(false);
+      if (generation === trashLoadGenerationRef.current) setTrashLoading(false);
     }
-  }, [client]);
+  }, [client, settings.baseUrl]);
 
   // L4b — restore a trashed profile, then refresh both the trash list and the
   // live profile list. A 409 (a live profile took the name) surfaces as a
@@ -3379,6 +3404,8 @@ export function ProfilesView({
                 <TrashPanel
                   trashed={trashed}
                   loading={trashLoading}
+                  dataAvailable={trashDataAvailable}
+                  loadError={trashLoadError}
                   restoringId={restoringId}
                   purgingId={purgingId}
                   bulkBusy={bulkTrashBusy}
@@ -3387,6 +3414,7 @@ export function ProfilesView({
                   onPurge={(id, name) => void handlePurge(id, name)}
                   onRestoreAll={(ids) => void handleRestoreAll(ids)}
                   onEmptyTrash={(ids) => void handleEmptyTrash(ids)}
+                  onRetry={() => void loadTrash()}
                   onBack={() => setTrashView(false)}
                 />
               ) : viewMode === 'grid' ? (
@@ -5806,6 +5834,8 @@ type TrashSortBy = 'deleted' | 'name' | 'device';
 function TrashPanel({
   trashed,
   loading,
+  dataAvailable,
+  loadError,
   restoringId,
   purgingId,
   bulkBusy,
@@ -5814,10 +5844,13 @@ function TrashPanel({
   onPurge,
   onRestoreAll,
   onEmptyTrash,
+  onRetry,
   onBack,
 }: {
   trashed: Profile[];
   loading: boolean;
+  dataAvailable: boolean;
+  loadError: string | null;
   restoringId: string | null;
   purgingId: string | null;
   bulkBusy: boolean;
@@ -5826,6 +5859,7 @@ function TrashPanel({
   onPurge: (id: string, name: string) => void;
   onRestoreAll: (ids: ReadonlyArray<string>) => void;
   onEmptyTrash: (ids: ReadonlyArray<string>) => void;
+  onRetry: () => void;
   onBack: () => void;
 }): JSX.Element {
   const [query, setQuery] = useState('');
@@ -5883,7 +5917,7 @@ function TrashPanel({
           ← Back to profiles
         </button>
       </div>
-      {!loading && trashed.length > 0 && (
+      {!loading && dataAvailable && trashed.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="search"
@@ -5940,6 +5974,20 @@ function TrashPanel({
       )}
       {loading ? (
         <p className="py-8 text-center text-xs text-ink-muted">Loading…</p>
+      ) : loadError !== null ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-status-error/30 bg-status-error/10 px-4 py-5 text-center"
+        >
+          <p className="text-xs text-status-error">{loadError}</p>
+          <button type="button" onClick={onRetry} className="btn-secondary mt-3 text-xs">
+            Retry
+          </button>
+        </div>
+      ) : !dataAvailable ? (
+        <p className="rounded-lg border border-dashed border-surface-divider py-10 text-center text-xs text-ink-muted">
+          Recycle-bin status is unavailable. Retry before judging its contents.
+        </p>
       ) : trashed.length === 0 ? (
         <p className="rounded-lg border border-dashed border-surface-divider py-10 text-center text-xs text-ink-muted">
           Trash is empty.

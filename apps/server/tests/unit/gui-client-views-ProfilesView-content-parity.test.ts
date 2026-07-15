@@ -47,6 +47,17 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toContain("bulkAction === 'empty'");
   });
 
+  it('distinguishes verified-empty recycle-bin data from load failure', () => {
+    expect(body).toContain('const trashLoadGenerationRef = useRef(0);');
+    expect(body).toMatch(/const generation = \+\+trashLoadGenerationRef\.current;/);
+    expect(body).toMatch(/if \(generation !== trashLoadGenerationRef\.current\) return;/);
+    expect(body).toMatch(/status === 404 \|\| status === 405/);
+    expect(body).toContain("Couldn't load the recycle bin. Check your connection and try again.");
+    expect(body).toContain('dataAvailable={trashDataAvailable}');
+    expect(body).toContain('loadError={trashLoadError}');
+    expect(body).toContain('Retry before judging its contents.');
+  });
+
   it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
     expect(body).toMatch(
       /Proxy credentials are\s*\n?\s*protected locally and synced encrypted to your account when used for a session\./,

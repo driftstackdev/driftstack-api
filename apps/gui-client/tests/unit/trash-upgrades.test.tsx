@@ -65,16 +65,20 @@ function trashedProfiles() {
 const restoreSpy = vi.fn((_id: string) => Promise.resolve({}));
 const purgeSpy = vi.fn((_id: string) => Promise.resolve({}));
 const confirmSpy = vi.fn(() => Promise.resolve(true));
+const listTrashSpy = vi.fn(() => Promise.resolve({ data: trashedProfiles() }));
 
 function deferred<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
 } {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 vi.mock('../../src/lib/SettingsContext', () => {
@@ -87,7 +91,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
           for (const p of live()) yield p;
         },
         update: vi.fn(() => Promise.resolve()),
-        listTrash: () => Promise.resolve({ data: trashedProfiles() }),
+        listTrash: () => listTrashSpy(),
         restore: (id: string) => restoreSpy(id),
         purge: (id: string) => purgeSpy(id),
       },
@@ -171,6 +175,67 @@ beforeEach(() => {
   purgeSpy.mockImplementation((_id: string) => Promise.resolve({}));
   confirmSpy.mockReset();
   confirmSpy.mockImplementation(() => Promise.resolve(true));
+  listTrashSpy.mockReset();
+  listTrashSpy.mockImplementation(() => Promise.resolve({ data: trashedProfiles() }));
+});
+
+describe('TrashPanel load truth', () => {
+  it('renders a retryable failure rather than false empty on a load error', async () => {
+    listTrashSpy.mockRejectedValueOnce(new TypeError('network down'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Live One')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Trash/ }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(screen.queryByText('Trash is empty.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    cleanup();
+  });
+
+  it('recovers from a failed load through Retry', async () => {
+    listTrashSpy.mockRejectedValueOnce(new TypeError('network down'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Live One')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Trash/ }));
+    const retry = await screen.findByRole('button', { name: 'Retry' });
+
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.getByText('Amsterdam Shopper')).toBeTruthy());
+    expect(screen.queryByRole('alert')).toBeNull();
+    cleanup();
+  });
+
+  it('lets the newest overlapping load own the recycle-bin snapshot', async () => {
+    const first = deferred<{ data: ReturnType<typeof trashedProfiles> }>();
+    listTrashSpy
+      .mockImplementationOnce(() => first.promise)
+      .mockResolvedValueOnce({ data: [trashedProfiles()[1]!] });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Live One')).toBeTruthy());
+    const trash = screen.getByRole('button', { name: /Trash/ });
+
+    fireEvent.click(trash);
+    fireEvent.click(trash);
+    fireEvent.click(trash);
+    await waitFor(() => expect(screen.getByText('Berlin Buyer')).toBeTruthy());
+    first.resolve({ data: trashedProfiles() });
+    await act(async () => Promise.resolve());
+
+    expect(screen.queryByText('Amsterdam Shopper')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    cleanup();
+  });
+
+  it('renders empty only after an authoritative empty response', async () => {
+    listTrashSpy.mockResolvedValueOnce({ data: [] });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('Live One')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Trash/ }));
+
+    await waitFor(() => expect(screen.getByText('Trash is empty.')).toBeTruthy());
+    expect(screen.queryByRole('alert')).toBeNull();
+    cleanup();
+  });
 });
 
 describe('TrashPanel search / sort', () => {
