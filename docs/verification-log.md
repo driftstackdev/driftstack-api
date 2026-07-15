@@ -27478,3 +27478,43 @@ The focused reminder/force-rotation/grace-notice/cleanup/bootstrap matrix passes
 6 files and 72/72 tests. Strict server source-and-test TypeScript (including the
 server build), targeted ESLint, targeted Prettier, diff, and whitespace checks
 are green.
+
+## V-655 — Outbound webhook signing secrets authenticate their endpoint tuple
+
+**Date:** 2026-07-14
+
+Outbound webhook HMAC secrets were encrypted at rest, but the original envelope
+did not authenticate the owning account, endpoint, or semantic role. A complete
+valid ciphertext could therefore still authenticate after same-account row
+relocation. This required corruption or write access at the database boundary,
+not an unauthenticated request, but the stored value could not prove which
+webhook endpoint it belonged to.
+
+New endpoint creation preallocates the final UUID and writes an explicit v2
+AES-256-GCM envelope whose canonical JSON-array context contains a dedicated
+purpose/version, normalized account and endpoint UUIDs, and the signing-secret
+role. Ordinary delivery, rotation, reminder and repository reads accept v2 only
+and supply that exact tuple for both the current and previous secret slots.
+Complete fixed-size canonical-base64 bounds are checked before decryption;
+authenticated bytes must be exact UTF-8 and match the established
+`whsec_<32 lowercase base32>` schema. Wrong account, endpoint, purpose, key,
+envelope shape, truncation, extension, malformed UTF-8, ciphertext modification,
+or same-/cross-account relocation fails closed.
+
+The no-DDL bootstrap bridge is the only path that accepts canonical plaintext or
+the context-free v1 envelope. It first authenticates an existing v2 probe, then
+prevalidates every current and previous value in the complete bounded page before
+its first write. Each rewrite compares endpoint ID, account and both exact old
+secret slots, updates only those two columns, and leaves timestamps and endpoint
+metadata untouched. Startup drains to zero synchronously with no-progress and
+10,000-row guards; the former post-start upgrade interval is removed so workers
+cannot observe mixed storage generations.
+
+The expanded webhook/bootstrap/delivery matrix passes 22 files and 309/309 tests.
+The connected PostgreSQL proof passes 5/5 cases, including bounded legacy
+conversion, whole-page wrong-key byte/timestamp preservation, same- and
+cross-account relocation refusal, wrong-key v2 probing, and a deterministically
+blocked four-field compare-and-swap that preserves a concurrent v2 successor.
+Strict server source-and-test TypeScript, targeted ESLint/Prettier, diff and
+whitespace checks are green. The full workspace build is green with its required
+`PUBLIC_API_BASE_URL` build-time configuration.

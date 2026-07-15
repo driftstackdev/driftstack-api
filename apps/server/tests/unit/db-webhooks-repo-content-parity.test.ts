@@ -57,16 +57,31 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed implementation of WebhooksRepo\./);
   });
 
-  it('imports: and/desc/eq/gt/isNotNull/isNull/lte/lt/ne/or/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
+  it('imports record identity plus migration/query helpers and the established service/schema types', () => {
     // gt/lte (Arc 3 sub-slice 28.5 follow-up) are typed drizzle
     // comparison operators, not raw `sql` template interpolation — they
     // sidestep the drizzle-orm Date-param-in-raw-sql crash class
     // entirely (docs/internal/drizzle-date-param-workaround.md), same
     // rationale as the existing lt(webhookEndpoints.secretCreatedAt, cutoff)
     // / lt(webhookEndpoints.secretPrevExpiresAt, args.now) call sites below.
-    expect(body).toMatch(
-      /import \{ and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, or, sql \} from 'drizzle-orm';/,
-    );
+    expect(body).toContain("import { randomUUID } from 'node:crypto';");
+    for (const token of [
+      'and',
+      'asc',
+      'count',
+      'desc',
+      'eq',
+      'gt',
+      'isNotNull',
+      'isNull',
+      'lte',
+      'lt',
+      'ne',
+      'or',
+      'sql',
+    ]) {
+      expect(body).toMatch(new RegExp(`\\b${token}\\b`));
+    }
     expect(body).toMatch(
       /import type \{\s*\n?\s*EndpointDeliveryCounts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*NewWebhookDeliveryInput,\s*\n?\s*NewWebhookEndpointInput,\s*\n?\s*WebhookDeliveryRow,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhookEndpointRow,\s*\n?\s*WebhookEventType,\s*\n?\s*WebhooksRepo,\s*\n?\s*\} from '\.\.\/services\/webhooks\.js';/,
     );
@@ -75,9 +90,10 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
-  it("insertEndpoint: 6-field values (accountId + url + secret + secretPrefix + events + description); throws 'insertEndpoint returned no row'", () => {
+  it("insertEndpoint preallocates the final UUID and encrypts under its account+endpoint tuple; throws 'insertEndpoint returned no row'", () => {
+    expect(body).toMatch(/const endpointId = randomUUID\(\);/);
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*url: input\.url,\s*\n?\s*secret: this\.encryptForStorage\(input\.secret\),\s*\n?\s*secretPrefix: input\.secretPrefix,\s*\n?\s*events: input\.events,\s*\n?\s*description: input\.description,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
+      /\.values\(\{\s*\n?\s*id: endpointId,\s*\n?\s*accountId: input\.accountId,[\s\S]*?secret: this\.encryptForStorage\(input\.secret, \{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*endpointId,\s*\n?\s*\}\),[\s\S]*?description: input\.description,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
     );
     expect(body).toMatch(/if \(!row\) throw new Error\('insertEndpoint returned no row'\);/);
   });
@@ -225,18 +241,26 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
-  it('toEndpointRow: 20-field WebhookEndpointRow (id + accountId + url + secret + secretPrefix + secretPrev + secretPrevExpiresAt + secretCreatedAt + lastReminderSentAt + graceWindowEndsAt + forceRotatedAt + events + description + active + consecutiveFailures + lastSuccessAt + lastFailureAt + disabledAt + 2 timestamps; secretCreatedAt + lastReminderSentAt added in v2-#10 migration 0048; graceWindowEndsAt + forceRotatedAt added in v2-#28 force-rotation slice)', () => {
+  it('toEndpointRow requires the key and binds both current/previous ordinary reads to account+endpoint', () => {
     expect(body).toMatch(
-      /function toEndpointRow\([\s\S]*?secretEncryptionKeyBase64: string \| undefined,[\s\S]*?\): WebhookEndpointRow \{\s*\n?\s*return \{[\s\S]*?secret: readWebhookSecret\(r\.secret, secretEncryptionKeyBase64\),[\s\S]*?secretPrev:[\s\S]*?readWebhookSecret\(r\.secretPrev, secretEncryptionKeyBase64\)[\s\S]*?updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toEndpointRow\([\s\S]*?if \(secretEncryptionKeyBase64 === undefined\)[\s\S]*?const context = \{ accountId: r\.accountId, endpointId: r\.id \};[\s\S]*?secret: readWebhookSecret\(r\.secret, secretEncryptionKeyBase64, context\),[\s\S]*?readWebhookSecret\(r\.secretPrev, secretEncryptionKeyBase64, context\)[\s\S]*?updatedAt: r\.updatedAt,/,
     );
   });
 
-  it('encrypts new writes, authenticates reads, and upgrades legacy rows with exact-value compare-and-set guards', () => {
-    expect(body).toMatch(/secret: this\.encryptForStorage\(input\.secret\)/);
-    expect(body).toMatch(/secret: this\.encryptForStorage\(input\.newSecret\)/);
-    expect(body).toMatch(/async encryptLegacySecrets\(limit = 500\)/);
+  it('prevalidates bounded legacy pages and exact-CASes id+account+both old slots while updating secrets only', () => {
+    expect(body).toMatch(/const MAX_WEBHOOK_SECRET_MIGRATION_BATCH = 500;/);
+    expect(body).toMatch(/const prepared = rows\.map\(\(row\) =>/);
+    expect(body).toMatch(/convertWebhookSecretToV2\(row\.secret, encryptionKey, context\)/);
+    expect(body).toMatch(/async encryptLegacySecrets\([\s\S]*?remaining: number/);
     expect(body).toMatch(/eq\(webhookEndpoints\.secret, row\.secret\)/);
-    expect(body).toMatch(/readWebhookSecret\(r\.secret, secretEncryptionKeyBase64\)/);
+    expect(body).toMatch(/eq\(webhookEndpoints\.accountId, row\.accountId\)/);
+    expect(body).toMatch(
+      /webhookEndpoints\.secretPrev\} IS NOT DISTINCT FROM \$\{row\.secretPrev\}/,
+    );
+    expect(body).toMatch(/\.set\(\{ secret, secretPrev \}\)/);
+    expect(body).toMatch(/return \{ scanned: rows\.length, converted, remaining:/);
+    expect(body).toMatch(/\.where\(webhookSecretsAreV2\(\)\)/);
+    expect(body).toMatch(/\.where\(webhookSecretsAreNotV2\(\)\)/);
   });
 
   it('file exists at canonical path', () => {

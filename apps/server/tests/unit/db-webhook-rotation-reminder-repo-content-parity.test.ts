@@ -54,14 +54,21 @@ describe('db/webhook-rotation-reminder-repo content parity', () => {
     );
   });
 
-  it('19-field SELECT shape pinned: id + accountId + url + secret + secretPrefix + secretPrev + secretPrevExpiresAt + secretCreatedAt + lastReminderSentAt + graceWindowEndsAt + forceRotatedAt + events + description + active + consecutiveFailures + lastSuccessAt + lastFailureAt + disabledAt + createdAt + updatedAt + accountEmail (join). Drift to omitting any column would mismatch the WebhookEndpointRow shape the reminder service consumes', () => {
+  it('the joined materializer binds both secret slots to the selected account+endpoint tuple and fails clearly without a key', () => {
     expect(body).toMatch(/secretPrev: webhookEndpoints\.secretPrev,/);
     expect(body).toMatch(/secretPrevExpiresAt: webhookEndpoints\.secretPrevExpiresAt,/);
     expect(body).toMatch(/graceWindowEndsAt: webhookEndpoints\.graceWindowEndsAt,/);
     expect(body).toMatch(/forceRotatedAt: webhookEndpoints\.forceRotatedAt,/);
     expect(body).toMatch(/consecutiveFailures: webhookEndpoints\.consecutiveFailures,/);
-    expect(body).toMatch(/secret: readWebhookSecret\(r\.secret, this\.secretEncryptionKeyBase64\)/);
-    expect(body).toMatch(/readWebhookSecret\(r\.secretPrev, this\.secretEncryptionKeyBase64\)/);
+    expect(body).toMatch(
+      /private requireEncryptionKey\(\): string \{[\s\S]*?Webhook secret encryption key is unavailable/,
+    );
+    expect(body).toMatch(
+      /secret: readWebhookSecret\(r\.secret, this\.requireEncryptionKey\(\), \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*endpointId: r\.id,\s*\n?\s*\}\)/,
+    );
+    expect(body).toMatch(
+      /readWebhookSecret\(r\.secretPrev, this\.requireEncryptionKey\(\), \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*endpointId: r\.id,\s*\n?\s*\}\)/,
+    );
   });
 
   it("markReminderSent updates ONLY lastReminderSentAt framing pinned: .set({ lastReminderSentAt: args.now }) + void sql to suppress unused-import warn. Drift to bumping updatedAt would create artificial 'customer mutated' signals on every reminder cycle (vs the actual customer-driven mutation events)", () => {

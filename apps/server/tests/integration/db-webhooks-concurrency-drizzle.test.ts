@@ -20,11 +20,17 @@
 //     `driftstack` schema migrated; this test always runs there.
 //   - Local dev: skips if the DATABASE_URL postgres is unreachable.
 
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
+import { encryptPlatformSecret } from '../../src/lib/platform-secret-encryption.js';
+import {
+  WEBHOOK_SECRET_V1_PREFIX,
+  WEBHOOK_SECRET_V2_PREFIX,
+  encryptWebhookSecret,
+} from '../../src/lib/webhook-secret-encryption.js';
 import type * as schema from '../../src/db/schema.js';
 import type { NewWebhookEndpointInput } from '../../src/services/webhooks.js';
 
@@ -77,10 +83,11 @@ async function seedAccount(client: ReturnType<typeof postgres>): Promise<string>
 }
 
 function mkInput(accountId: string, i: number): NewWebhookEndpointInput {
+  const secretChar = 'abcdefghij'[i % 10]!;
   return {
     accountId,
     url: `https://hooks.example/${accountId.slice(0, 4)}-${i.toString()}`,
-    secret: `whsec_${randomUUID()}`,
+    secret: `whsec_${secretChar.repeat(32)}`,
     secretPrefix: `whsec_${i.toString()}`,
     events: ['session.completed'],
     description: null,
@@ -112,10 +119,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(winner.secret).toMatch(/^whsec_/);
       const [stored] =
         await client`SELECT secret FROM webhook_endpoints WHERE account_id = ${accountId}`;
-      expect(stored?.secret).toContain('driftstack:webhook-secret:v1:');
+      expect(stored?.secret).toContain(WEBHOOK_SECRET_V2_PREFIX);
       expect(stored?.secret).not.toContain(winner.secret);
 
-      const rotatedPlaintext = 'whsec_rotated_database_snapshot_must_not_forge';
+      const rotatedPlaintext = `whsec_${'r'.repeat(32)}`;
       const rotated = await repo.rotateSecret({
         id: winner.id,
         accountId,
@@ -128,8 +135,8 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(rotated?.secretPrev).toBe(winner.secret);
       const [storedRotated] =
         await client`SELECT secret, secret_prev FROM webhook_endpoints WHERE id = ${winner.id}`;
-      expect(storedRotated?.secret).toContain('driftstack:webhook-secret:v1:');
-      expect(storedRotated?.secret_prev).toContain('driftstack:webhook-secret:v1:');
+      expect(storedRotated?.secret).toContain(WEBHOOK_SECRET_V2_PREFIX);
+      expect(storedRotated?.secret_prev).toContain(WEBHOOK_SECRET_V2_PREFIX);
       expect(JSON.stringify(storedRotated)).not.toContain(rotatedPlaintext);
       expect(JSON.stringify(storedRotated)).not.toContain(winner.secret);
     });
@@ -158,28 +165,197 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         { secretEncryptionKeyBase64: WEBHOOK_KEY },
       );
       const accountId = await seedAccount(client);
-      const current = 'whsec_legacy_current_database_snapshot';
-      const previous = 'whsec_legacy_previous_database_snapshot';
+      const current = `whsec_${'c'.repeat(32)}`;
+      const previous = `whsec_${'d'.repeat(32)}`;
+      const previousV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(
+        previous,
+        WEBHOOK_KEY,
+      ).toString('base64')}`;
       const [inserted] = await client`
         INSERT INTO webhook_endpoints
           (account_id, url, secret, secret_prefix, secret_prev, secret_prev_expires_at, events, description)
         VALUES
-          (${accountId}, 'https://hooks.example/legacy', ${current}, 'whsec_legac', ${previous}, NOW() + INTERVAL '1 day', ARRAY['session.completed']::webhook_event_type[], NULL)
+          (${accountId}, 'https://hooks.example/legacy', ${current}, 'whsec_cccccc', ${previousV1}, NOW() + INTERVAL '1 day', ARRAY['session.completed']::webhook_event_type[], NULL)
         RETURNING id
       `;
       const endpointId = String(inserted?.id);
 
-      const upgraded = await repo.encryptLegacySecrets(10_000);
-      expect(upgraded.converted).toBeGreaterThanOrEqual(1);
+      const upgraded = await repo.encryptLegacySecrets(500);
+      expect(upgraded).toEqual({ scanned: 1, converted: 1, remaining: 0 });
       const [stored] =
         await client`SELECT secret, secret_prev FROM webhook_endpoints WHERE id = ${endpointId}`;
-      expect(stored?.secret).toContain('driftstack:webhook-secret:v1:');
-      expect(stored?.secret_prev).toContain('driftstack:webhook-secret:v1:');
+      expect(stored?.secret).toContain(WEBHOOK_SECRET_V2_PREFIX);
+      expect(stored?.secret_prev).toContain(WEBHOOK_SECRET_V2_PREFIX);
       expect(JSON.stringify(stored)).not.toContain(current);
       expect(JSON.stringify(stored)).not.toContain(previous);
       const read = await repo.findEndpoint(endpointId, accountId);
       expect(read?.secret).toBe(current);
       expect(read?.secretPrev).toBe(previous);
+    });
+
+    it('prevalidates the whole page, preserves timestamps, and rejects same/cross-account relocation', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleWebhooksRepo(
+        { client, db, close: async () => {} },
+        { secretEncryptionKeyBase64: WEBHOOK_KEY },
+      );
+      const accountA = await seedAccount(client);
+      const accountB = await seedAccount(client);
+      const idA1 = randomUUID();
+      const idA2 = randomUUID();
+      const idB1 = randomUUID();
+      const secretA1 = `whsec_${'k'.repeat(32)}`;
+      const secretA2 = `whsec_${'m'.repeat(32)}`;
+      const secretB1 = `whsec_${'n'.repeat(32)}`;
+      const wrongKey = randomBytes(32).toString('base64');
+      const invalidV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(
+        secretA2,
+        wrongKey,
+      ).toString('base64')}`;
+      const updatedAt = new Date('2026-07-14T22:50:00.000Z');
+      const updatedAtIso = updatedAt.toISOString();
+
+      await client`
+        INSERT INTO webhook_endpoints
+          (id, account_id, url, secret, secret_prefix, events, description, updated_at)
+        VALUES
+          (${idA1}, ${accountA}, 'https://hooks.example/a1', ${secretA1}, 'whsec_kkkkkk', ARRAY['session.completed']::webhook_event_type[], NULL, ${updatedAtIso}::timestamptz),
+          (${idA2}, ${accountA}, 'https://hooks.example/a2', ${invalidV1}, 'whsec_mmmmmm', ARRAY['session.completed']::webhook_event_type[], NULL, ${updatedAtIso}::timestamptz),
+          (${idB1}, ${accountB}, 'https://hooks.example/b1', ${secretB1}, 'whsec_nnnnnn', ARRAY['session.completed']::webhook_event_type[], NULL, ${updatedAtIso}::timestamptz)
+      `;
+
+      const before = await client<
+        Array<{ id: string; secret: string; updated_at: string }>
+      >`SELECT id::text, secret, updated_at FROM webhook_endpoints WHERE id IN (${idA1}, ${idA2}, ${idB1}) ORDER BY id`;
+      await expect(repo.encryptLegacySecrets(500)).rejects.toThrow();
+      const afterFailure = await client<
+        Array<{ id: string; secret: string; updated_at: string }>
+      >`SELECT id::text, secret, updated_at FROM webhook_endpoints WHERE id IN (${idA1}, ${idA2}, ${idB1}) ORDER BY id`;
+      expect(afterFailure).toEqual(before);
+
+      const repairedV1 = `${WEBHOOK_SECRET_V1_PREFIX}${encryptPlatformSecret(
+        secretA2,
+        WEBHOOK_KEY,
+      ).toString('base64')}`;
+      await client`UPDATE webhook_endpoints SET secret = ${repairedV1} WHERE id = ${idA2}`;
+      await expect(repo.encryptLegacySecrets(500)).resolves.toEqual({
+        scanned: 3,
+        converted: 3,
+        remaining: 0,
+      });
+      const migrated = await client<
+        Array<{ id: string; secret: string; updated_at: string }>
+      >`SELECT id::text, secret, updated_at FROM webhook_endpoints WHERE id IN (${idA1}, ${idA2}, ${idB1}) ORDER BY id`;
+      expect(migrated.every((row) => row.secret.startsWith(WEBHOOK_SECRET_V2_PREFIX))).toBe(true);
+      expect(
+        migrated.every((row) => new Date(row.updated_at).toISOString() === updatedAt.toISOString()),
+      ).toBe(true);
+
+      const byId = new Map(migrated.map((row) => [row.id, row.secret]));
+      await client`
+        UPDATE webhook_endpoints SET secret = CASE id
+          WHEN ${idA1}::uuid THEN ${byId.get(idA2)!}
+          WHEN ${idA2}::uuid THEN ${byId.get(idA1)!}
+          ELSE secret END
+        WHERE id IN (${idA1}, ${idA2})
+      `;
+      await expect(repo.findEndpoint(idA1, accountA)).rejects.toThrow();
+      await expect(repo.findEndpoint(idA2, accountA)).rejects.toThrow();
+
+      await client`
+        UPDATE webhook_endpoints SET secret = CASE id
+          WHEN ${idA1}::uuid THEN ${byId.get(idA1)!}
+          WHEN ${idA2}::uuid THEN ${byId.get(idA2)!}
+          WHEN ${idB1}::uuid THEN ${byId.get(idA1)!}
+          ELSE secret END
+        WHERE id IN (${idA1}, ${idA2}, ${idB1})
+      `;
+      await expect(repo.findEndpoint(idB1, accountB)).rejects.toThrow();
+      await client`UPDATE webhook_endpoints SET secret = ${byId.get(idB1)!} WHERE id = ${idB1}`;
+
+      const wrongKeyRepo = new DrizzleWebhooksRepo(
+        { client, db, close: async () => {} },
+        { secretEncryptionKeyBase64: wrongKey },
+      );
+      await expect(wrongKeyRepo.encryptLegacySecrets(500)).rejects.toThrow();
+      const afterWrongKey = await client<
+        Array<{ id: string; secret: string; updated_at: string }>
+      >`SELECT id::text, secret, updated_at FROM webhook_endpoints WHERE id IN (${idA1}, ${idA2}, ${idB1}) ORDER BY id`;
+      expect(afterWrongKey).toEqual(migrated);
+    });
+
+    it('loses the exact four-field migration CAS safely to a concurrent v2 successor', async () => {
+      if (!dbReachable || !client) return;
+      const accountId = await seedAccount(client);
+      const endpointId = randomUUID();
+      const legacy = `whsec_${'p'.repeat(32)}`;
+      const successor = encryptWebhookSecret(`whsec_${'q'.repeat(32)}`, WEBHOOK_KEY, {
+        accountId,
+        endpointId,
+      });
+      const updatedAt = new Date('2026-07-14T22:51:00.000Z');
+      const updatedAtIso = updatedAt.toISOString();
+      await client`
+        INSERT INTO webhook_endpoints
+          (id, account_id, url, secret, secret_prefix, events, description, updated_at)
+        VALUES
+          (${endpointId}, ${accountId}, 'https://hooks.example/cas', ${legacy}, 'whsec_pppppp', ARRAY['session.completed']::webhook_event_type[], NULL, ${updatedAtIso}::timestamptz)
+      `;
+
+      const blocker = postgres(DB_URL, { max: 1 });
+      const migratorClient = postgres(DB_URL, { max: 1 });
+      const [backend] = await migratorClient<Array<{ pid: number }>>`
+        SELECT pg_backend_pid()::int AS pid
+      `;
+      const migratorDb = drizzle(migratorClient) as unknown as ReturnType<
+        typeof drizzle<typeof schema>
+      >;
+      const migratorRepo = new DrizzleWebhooksRepo(
+        { client: migratorClient, db: migratorDb, close: async () => {} },
+        { secretEncryptionKeyBase64: WEBHOOK_KEY },
+      );
+      let migration: Promise<{ scanned: number; converted: number; remaining: number }> | null =
+        null;
+      let blocked = false;
+      let transactionOpen = false;
+      try {
+        await blocker`BEGIN`;
+        transactionOpen = true;
+        await blocker`SELECT id FROM webhook_endpoints WHERE id = ${endpointId} FOR UPDATE`;
+        migration = migratorRepo.encryptLegacySecrets(500);
+        void migration.catch(() => {});
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const [activity] = await client<Array<{ waiting: boolean }>>`
+            SELECT wait_event_type = 'Lock' AS waiting
+            FROM pg_stat_activity
+            WHERE pid = ${backend!.pid} AND state = 'active'
+            LIMIT 1
+          `;
+          if (activity?.waiting === true) {
+            blocked = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        await blocker`
+          UPDATE webhook_endpoints SET secret = ${successor} WHERE id = ${endpointId}
+        `;
+        await blocker`COMMIT`;
+        transactionOpen = false;
+
+        await expect(migration).resolves.toEqual({ scanned: 1, converted: 0, remaining: 0 });
+        expect(blocked).toBe(true);
+        const [stored] = await client<
+          Array<{ secret: string; updated_at: string }>
+        >`SELECT secret, updated_at FROM webhook_endpoints WHERE id = ${endpointId}`;
+        expect(stored?.secret).toBe(successor);
+        expect(new Date(stored.updated_at).toISOString()).toBe(updatedAt.toISOString());
+      } finally {
+        if (transactionOpen) await blocker`ROLLBACK`.catch(() => {});
+        await blocker.end({ timeout: 5 }).catch(() => {});
+        await migratorClient.end({ timeout: 5 }).catch(() => {});
+      }
     });
   },
 );

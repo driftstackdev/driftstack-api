@@ -97,19 +97,22 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/new recipe writes fail closed/);
   });
 
-  it('wires and verifies webhook secret encryption, then runs a bounded legacy conversion batch before workers start', () => {
+  it('wires webhook encryption and synchronously drains every legacy row to record-bound v2 before serving', () => {
     expect(body).toMatch(
       /const webhooksRepo = new DrizzleWebhooksRepo\(dbHandle, \{[\s\S]*?secretEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\);/,
     );
-    expect(body).toMatch(/const upgraded = await webhooksRepo\.encryptLegacySecrets\(500\);/);
+    expect(body).toMatch(/const MAX_WEBHOOK_SECRET_BOOT_MIGRATION_ROWS = 10_000;/);
+    expect(body).toMatch(/const batch = await webhooksRepo\.encryptLegacySecrets\(500\);/);
+    expect(body).toMatch(/while \(remaining > 0\);/);
+    expect(body).toMatch(/batch\.scanned === 0 \|\| batch\.converted === 0/);
+    expect(body).toMatch(/scanned >= MAX_WEBHOOK_SECRET_BOOT_MIGRATION_ROWS/);
+    expect(body).toMatch(/record-bound v2 before serving/);
     expect(body).toMatch(
       /encrypted webhook secrets are unreadable and new secret writes fail closed/,
     );
-    expect(body).toMatch(/const WEBHOOK_SECRET_UPGRADE_INTERVAL_MS = 60_000;/);
-    expect(body).toMatch(/if \(webhookSecretUpgradeInFlight\) return;/);
-    expect(body).toMatch(
-      /if \(webhookSecretUpgradeTimer\) clearInterval\(webhookSecretUpgradeTimer\);/,
-    );
+    expect(body).not.toMatch(/WEBHOOK_SECRET_UPGRADE_INTERVAL_MS/);
+    expect(body).not.toMatch(/webhookSecretUpgradeTimer/);
+    expect(body).not.toMatch(/webhookSecretUpgradeInFlight/);
   });
 
   it('header framing pinned: pure-factory; pass-in deps NOT lazy; every external connection (Postgres pool, Redis, R2, Sentry, Postmark) opened HERE so SIGTERM handler closes them deterministically', () => {

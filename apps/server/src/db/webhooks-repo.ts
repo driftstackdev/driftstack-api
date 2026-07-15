@@ -1,6 +1,22 @@
 // Drizzle-backed implementation of WebhooksRepo.
 
-import { and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, or, sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  isNotNull,
+  isNull,
+  lte,
+  lt,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { WebhookEventTypeSchema } from '@driftstack/api-types';
 import {
   decodeDeliveryCursor,
@@ -8,10 +24,11 @@ import {
   type DeliveryCursor,
 } from '../lib/keyset-cursor.js';
 import {
+  convertWebhookSecretToV2,
   encryptWebhookSecret,
-  isEncryptedWebhookSecret,
   readWebhookSecret,
-  WEBHOOK_SECRET_ENVELOPE_PREFIX,
+  WEBHOOK_SECRET_V2_PREFIX,
+  type WebhookSecretEncryptionContext,
 } from '../lib/webhook-secret-encryption.js';
 import type {
   EndpointDeliveryCounts,
@@ -32,8 +49,21 @@ import { accounts, webhookDeliveries, webhookEndpoints } from './schema.js';
 // reclaims it. 5 min ≫ the 10s per-attempt delivery timeout, so a slow (not
 // crashed) delivery is never reclaimed out from under an active worker.
 const RECLAIM_STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
+const MAX_WEBHOOK_SECRET_MIGRATION_BATCH = 500;
+const WEBHOOK_SECRET_V2_STORAGE_PATTERN = `^${WEBHOOK_SECRET_V2_PREFIX}[A-Za-z0-9+/]{88}$`;
 
 const HISTORICAL_SILENT_WEBHOOK_EVENTS = new Set(['quota.warning_80pct', 'quota.exceeded']);
+
+function webhookSecretsAreV2(): SQL {
+  return sql`(
+    ${webhookEndpoints.secret} ~ ${WEBHOOK_SECRET_V2_STORAGE_PATTERN}
+    AND (${webhookEndpoints.secretPrev} IS NULL OR ${webhookEndpoints.secretPrev} ~ ${WEBHOOK_SECRET_V2_STORAGE_PATTERN})
+  )`;
+}
+
+function webhookSecretsAreNotV2(): SQL {
+  return sql`NOT (${webhookSecretsAreV2()})`;
+}
 
 /**
  * The PostgreSQL enum retains two never-emitted quota values for migration
@@ -73,122 +103,112 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     this.secretEncryptionKeyBase64 = options.secretEncryptionKeyBase64;
   }
 
-  private encryptForStorage(plaintext: string): string {
+  private requireEncryptionKey(): string {
     if (this.secretEncryptionKeyBase64 === undefined) {
       throw new Error('Webhook secret encryption key is unavailable.');
     }
-    return encryptWebhookSecret(plaintext, this.secretEncryptionKeyBase64);
+    return this.secretEncryptionKeyBase64;
   }
 
-  private async encryptLegacyRow(row: {
-    id: string;
-    secret: string;
-    secretPrev: string | null;
-  }): Promise<boolean> {
-    const secret = isEncryptedWebhookSecret(row.secret)
-      ? row.secret
-      : this.encryptForStorage(row.secret);
-    const secretPrev =
-      row.secretPrev === null || isEncryptedWebhookSecret(row.secretPrev)
-        ? row.secretPrev
-        : this.encryptForStorage(row.secretPrev);
-    if (secret === row.secret && secretPrev === row.secretPrev) return false;
-    const prevMatches =
-      row.secretPrev === null
-        ? isNull(webhookEndpoints.secretPrev)
-        : eq(webhookEndpoints.secretPrev, row.secretPrev);
-    const updated = await this.database.db
-      .update(webhookEndpoints)
-      .set({ secret, secretPrev })
-      .where(
-        and(eq(webhookEndpoints.id, row.id), eq(webhookEndpoints.secret, row.secret), prevMatches),
-      )
-      .returning({ id: webhookEndpoints.id });
-    return updated.length === 1;
+  private encryptForStorage(plaintext: string, context: WebhookSecretEncryptionContext): string {
+    return encryptWebhookSecret(plaintext, this.requireEncryptionKey(), context);
   }
 
   /**
-   * Bounded, compare-and-set legacy upgrader. It never clobbers a concurrent
-   * rotation: both current and previous values must still equal the selected
-   * snapshot. Repeated bootstrap ticks drain old plaintext rows without a
-   * table rewrite or long-held lock.
+   * Bootstrap-only no-DDL bridge to record-bound v2. It authenticates a v2
+   * successor probe, prevalidates the complete page before its first write,
+   * and exact-CASes both old secret slots without moving endpoint metadata.
    */
-  async encryptLegacySecrets(limit = 500): Promise<{ scanned: number; converted: number }> {
-    if (this.secretEncryptionKeyBase64 === undefined) {
-      throw new Error('Webhook secret encryption key is unavailable.');
+  async encryptLegacySecrets(
+    limit = MAX_WEBHOOK_SECRET_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_WEBHOOK_SECRET_MIGRATION_BATCH) {
+      throw new Error(
+        `Webhook secret migration limit must be an integer from 1 to ` +
+          `${MAX_WEBHOOK_SECRET_MIGRATION_BATCH.toString()}.`,
+      );
     }
-    const legacyPrefixPattern = `${WEBHOOK_SECRET_ENVELOPE_PREFIX}%`;
-    // Boot-time key verification: authenticate at least one existing envelope
-    // before workers start. A syntactically valid but wrong deployment key must
-    // fail startup instead of silently turning every delivery into retries.
-    const [encryptedProbe] = await this.database.db
+    const encryptionKey = this.requireEncryptionKey();
+
+    const [v2Probe] = await this.database.db
       .select({
+        id: webhookEndpoints.id,
+        accountId: webhookEndpoints.accountId,
         secret: webhookEndpoints.secret,
         secretPrev: webhookEndpoints.secretPrev,
       })
       .from(webhookEndpoints)
-      .where(
-        or(
-          sql`${webhookEndpoints.secret} LIKE ${legacyPrefixPattern}`,
-          sql`${webhookEndpoints.secretPrev} LIKE ${legacyPrefixPattern}`,
-        ),
-      )
+      .where(webhookSecretsAreV2())
+      .orderBy(asc(webhookEndpoints.id))
       .limit(1);
-    if (encryptedProbe) {
-      if (isEncryptedWebhookSecret(encryptedProbe.secret)) {
-        readWebhookSecret(encryptedProbe.secret, this.secretEncryptionKeyBase64);
-      }
-      if (
-        encryptedProbe.secretPrev !== null &&
-        isEncryptedWebhookSecret(encryptedProbe.secretPrev)
-      ) {
-        readWebhookSecret(encryptedProbe.secretPrev, this.secretEncryptionKeyBase64);
+    if (v2Probe !== undefined) {
+      const context = { accountId: v2Probe.accountId, endpointId: v2Probe.id };
+      readWebhookSecret(v2Probe.secret, encryptionKey, context);
+      if (v2Probe.secretPrev !== null) {
+        readWebhookSecret(v2Probe.secretPrev, encryptionKey, context);
       }
     }
+
     const rows = await this.database.db
       .select({
         id: webhookEndpoints.id,
+        accountId: webhookEndpoints.accountId,
         secret: webhookEndpoints.secret,
         secretPrev: webhookEndpoints.secretPrev,
       })
       .from(webhookEndpoints)
-      .where(
-        or(
-          sql`${webhookEndpoints.secret} NOT LIKE ${legacyPrefixPattern}`,
-          and(
-            isNotNull(webhookEndpoints.secretPrev),
-            sql`${webhookEndpoints.secretPrev} NOT LIKE ${legacyPrefixPattern}`,
-          ),
-        ),
-      )
+      .where(webhookSecretsAreNotV2())
+      .orderBy(asc(webhookEndpoints.id))
       .limit(limit);
-    let converted = 0;
-    for (const row of rows) {
-      if (await this.encryptLegacyRow(row)) converted += 1;
-    }
-    return { scanned: rows.length, converted };
-  }
 
-  private async encryptEndpointLegacySecrets(id: string): Promise<void> {
-    const [row] = await this.database.db
-      .select({
-        id: webhookEndpoints.id,
-        secret: webhookEndpoints.secret,
-        secretPrev: webhookEndpoints.secretPrev,
-      })
+    const prepared = rows.map((row) => {
+      const context = { accountId: row.accountId, endpointId: row.id };
+      return {
+        row,
+        secret: convertWebhookSecretToV2(row.secret, encryptionKey, context),
+        secretPrev:
+          row.secretPrev === null
+            ? null
+            : convertWebhookSecretToV2(row.secretPrev, encryptionKey, context),
+      };
+    });
+
+    let converted = 0;
+    for (const { row, secret, secretPrev } of prepared) {
+      const updated = await this.database.db
+        .update(webhookEndpoints)
+        .set({ secret, secretPrev })
+        .where(
+          and(
+            eq(webhookEndpoints.id, row.id),
+            eq(webhookEndpoints.accountId, row.accountId),
+            eq(webhookEndpoints.secret, row.secret),
+            sql`${webhookEndpoints.secretPrev} IS NOT DISTINCT FROM ${row.secretPrev}`,
+          ),
+        )
+        .returning({ id: webhookEndpoints.id });
+      if (updated.length === 1) converted += 1;
+    }
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
       .from(webhookEndpoints)
-      .where(eq(webhookEndpoints.id, id))
-      .limit(1);
-    if (row) await this.encryptLegacyRow(row);
+      .where(webhookSecretsAreNotV2());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
   }
 
   async insertEndpoint(input: NewWebhookEndpointInput): Promise<WebhookEndpointRow> {
+    const endpointId = randomUUID();
     const [row] = await this.database.db
       .insert(webhookEndpoints)
       .values({
+        id: endpointId,
         accountId: input.accountId,
         url: input.url,
-        secret: this.encryptForStorage(input.secret),
+        secret: this.encryptForStorage(input.secret, {
+          accountId: input.accountId,
+          endpointId,
+        }),
         secretPrefix: input.secretPrefix,
         events: input.events,
         description: input.description,
@@ -221,12 +241,17 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
           and(eq(webhookEndpoints.accountId, input.accountId), eq(webhookEndpoints.active, true)),
         );
       if ((countRow?.count ?? 0) >= limit) return null;
+      const endpointId = randomUUID();
       const [row] = await tx
         .insert(webhookEndpoints)
         .values({
+          id: endpointId,
           accountId: input.accountId,
           url: input.url,
-          secret: this.encryptForStorage(input.secret),
+          secret: this.encryptForStorage(input.secret, {
+            accountId: input.accountId,
+            endpointId,
+          }),
           secretPrefix: input.secretPrefix,
           events: input.events,
           description: input.description,
@@ -341,9 +366,6 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     graceExpiresAt: Date;
     now: Date;
   }): Promise<WebhookEndpointRow | null> {
-    // Upgrade a legacy current/previous value before the atomic SQL copy below,
-    // so rotation can never move a plaintext active key into secret_prev.
-    await this.encryptEndpointLegacySecrets(input.id);
     // postgres-js cannot bind a raw Date interpolated inside sql``. Drizzle
     // handles Date values in typed .set(), but these CASE/WHERE fragments are
     // raw SQL, so bind an ISO string and cast explicitly to timestamptz.
@@ -374,7 +396,10 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     const [row] = await this.database.db
       .update(webhookEndpoints)
       .set({
-        secret: this.encryptForStorage(input.newSecret),
+        secret: this.encryptForStorage(input.newSecret, {
+          accountId: input.accountId,
+          endpointId: input.id,
+        }),
         secretPrefix: input.newPrefix,
         // Normally the outgoing current secret moves INTO the prev slot for the
         // dual-sign grace. EXCEPTION (V-359.G.2, Fable audit 2026-07-03): when
@@ -482,11 +507,17 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       id: r.id,
       accountId: r.accountId,
       url: r.url,
-      secret: readWebhookSecret(r.secret, this.secretEncryptionKeyBase64),
+      secret: readWebhookSecret(r.secret, this.requireEncryptionKey(), {
+        accountId: r.accountId,
+        endpointId: r.id,
+      }),
       secretPrefix: r.secretPrefix,
       secretPrev:
         r.secretPrev !== null
-          ? readWebhookSecret(r.secretPrev, this.secretEncryptionKeyBase64)
+          ? readWebhookSecret(r.secretPrev, this.requireEncryptionKey(), {
+              accountId: r.accountId,
+              endpointId: r.id,
+            })
           : null,
       secretPrevExpiresAt: r.secretPrevExpiresAt,
       secretCreatedAt: r.secretCreatedAt,
@@ -572,11 +603,17 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       id: r.id,
       accountId: r.accountId,
       url: r.url,
-      secret: readWebhookSecret(r.secret, this.secretEncryptionKeyBase64),
+      secret: readWebhookSecret(r.secret, this.requireEncryptionKey(), {
+        accountId: r.accountId,
+        endpointId: r.id,
+      }),
       secretPrefix: r.secretPrefix,
       secretPrev:
         r.secretPrev !== null
-          ? readWebhookSecret(r.secretPrev, this.secretEncryptionKeyBase64)
+          ? readWebhookSecret(r.secretPrev, this.requireEncryptionKey(), {
+              accountId: r.accountId,
+              endpointId: r.id,
+            })
           : null,
       secretPrevExpiresAt: r.secretPrevExpiresAt,
       secretCreatedAt: r.secretCreatedAt,
@@ -634,9 +671,16 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     graceWindowEndsAt: Date;
     now: Date;
   }): Promise<WebhookEndpointRow | null> {
-    // Same legacy-upgrade fence as customer rotation: the SQL copy into
-    // secret_prev must only ever copy an encrypted active value.
-    await this.encryptEndpointLegacySecrets(input.id);
+    // The dormant force-rotation service does not carry accountId in its
+    // established interface. Resolve the owning tuple before encrypting, then
+    // exact-condition that same account on the UPDATE so a row replacement or
+    // deletion cannot attach the new ciphertext to a different context.
+    const [contextRow] = await this.database.db
+      .select({ accountId: webhookEndpoints.accountId })
+      .from(webhookEndpoints)
+      .where(eq(webhookEndpoints.id, input.id))
+      .limit(1);
+    if (contextRow === undefined) return null;
     // Mirrors rotateSecret (V-359 dual-sign path) PLUS writes the
     // sub-slice 28.1 columns. forceRotatedAt stamps the rotation
     // event so the daily sweep doesn't loop; graceWindowEndsAt is
@@ -651,7 +695,10 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     const [row] = await this.database.db
       .update(webhookEndpoints)
       .set({
-        secret: this.encryptForStorage(input.newSecret),
+        secret: this.encryptForStorage(input.newSecret, {
+          accountId: contextRow.accountId,
+          endpointId: input.id,
+        }),
         secretPrefix: input.newPrefix,
         secretPrev: sql`${webhookEndpoints.secret}`,
         secretPrevExpiresAt: input.graceWindowEndsAt,
@@ -662,7 +709,13 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
         graceExpiringNotifiedAt: null,
         updatedAt: input.now,
       })
-      .where(and(eq(webhookEndpoints.id, input.id), isNull(webhookEndpoints.disabledAt)))
+      .where(
+        and(
+          eq(webhookEndpoints.id, input.id),
+          eq(webhookEndpoints.accountId, contextRow.accountId),
+          isNull(webhookEndpoints.disabledAt),
+        ),
+      )
       .returning();
     return row ? toEndpointRow(row, this.secretEncryptionKeyBase64) : null;
   }
@@ -1013,14 +1066,20 @@ function toEndpointRow(
   r: typeof webhookEndpoints.$inferSelect,
   secretEncryptionKeyBase64: string | undefined,
 ): WebhookEndpointRow {
+  if (secretEncryptionKeyBase64 === undefined) {
+    throw new Error('Webhook secret encryption key is unavailable.');
+  }
+  const context = { accountId: r.accountId, endpointId: r.id };
   return {
     id: r.id,
     accountId: r.accountId,
     url: r.url,
-    secret: readWebhookSecret(r.secret, secretEncryptionKeyBase64),
+    secret: readWebhookSecret(r.secret, secretEncryptionKeyBase64, context),
     secretPrefix: r.secretPrefix,
     secretPrev:
-      r.secretPrev !== null ? readWebhookSecret(r.secretPrev, secretEncryptionKeyBase64) : null,
+      r.secretPrev !== null
+        ? readWebhookSecret(r.secretPrev, secretEncryptionKeyBase64, context)
+        : null,
     secretPrevExpiresAt: r.secretPrevExpiresAt,
     secretCreatedAt: r.secretCreatedAt,
     lastReminderSentAt: r.lastReminderSentAt,

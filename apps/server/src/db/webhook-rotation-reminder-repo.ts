@@ -24,6 +24,13 @@ export class DrizzleWebhookRotationReminderRepo implements WebhookRotationRemind
     this.secretEncryptionKeyBase64 = options.secretEncryptionKeyBase64;
   }
 
+  private requireEncryptionKey(): string {
+    if (this.secretEncryptionKeyBase64 === undefined) {
+      throw new Error('Webhook secret encryption key is unavailable.');
+    }
+    return this.secretEncryptionKeyBase64;
+  }
+
   async findEndpointsNeedingRotationReminder(args: {
     now: Date;
     thresholdDays: number;
@@ -80,11 +87,17 @@ export class DrizzleWebhookRotationReminderRepo implements WebhookRotationRemind
       id: r.id,
       accountId: r.accountId,
       url: r.url,
-      secret: readWebhookSecret(r.secret, this.secretEncryptionKeyBase64),
+      secret: readWebhookSecret(r.secret, this.requireEncryptionKey(), {
+        accountId: r.accountId,
+        endpointId: r.id,
+      }),
       secretPrefix: r.secretPrefix,
       secretPrev:
         r.secretPrev !== null
-          ? readWebhookSecret(r.secretPrev, this.secretEncryptionKeyBase64)
+          ? readWebhookSecret(r.secretPrev, this.requireEncryptionKey(), {
+              accountId: r.accountId,
+              endpointId: r.id,
+            })
           : null,
       secretPrevExpiresAt: r.secretPrevExpiresAt,
       secretCreatedAt: r.secretCreatedAt,

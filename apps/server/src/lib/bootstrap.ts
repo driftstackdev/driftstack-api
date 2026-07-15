@@ -349,11 +349,33 @@ export async function createProductionDeps(
       : {}),
   });
   if (config.mfaEncryptionKey !== undefined) {
-    const upgraded = await webhooksRepo.encryptLegacySecrets(500);
-    if (upgraded.scanned > 0) {
+    const MAX_WEBHOOK_SECRET_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await webhooksRepo.encryptLegacySecrets(500);
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `Webhook signing-secret migration made no progress with ${remaining.toString()} ` +
+            'legacy rows remaining.',
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_WEBHOOK_SECRET_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `Webhook signing-secret migration exceeded the ` +
+            `${MAX_WEBHOOK_SECRET_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ` +
+            `${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
       logger.info(
-        { component: 'webhook-secret-encryption', ...upgraded },
-        'legacy webhook signing secrets encrypted in bounded bootstrap batch',
+        { component: 'webhook-secret-encryption', scanned, converted, remaining },
+        'legacy webhook signing secrets migrated to record-bound v2 before serving',
       );
     }
   } else {
@@ -2638,43 +2660,6 @@ export async function createProductionDeps(
       }, ROTATION_REMINDER_INTERVAL_MS);
   byokAnthropicRotationReminderTimer?.unref();
 
-  // Drain pre-envelope D-023 rows in bounded batches. The first batch ran
-  // synchronously above so a wrong key fails boot before workers start; this
-  // non-overlapping follow-up retires any remainder without a table rewrite or
-  // a long deployment lock, then stops itself once the query finds none.
-  const WEBHOOK_SECRET_UPGRADE_INTERVAL_MS = 60_000;
-  let webhookSecretUpgradeInFlight = false;
-  let webhookSecretUpgradeTimer: NodeJS.Timeout | null = null;
-  if (config.mfaEncryptionKey !== undefined) {
-    webhookSecretUpgradeTimer = setInterval(() => {
-      if (webhookSecretUpgradeInFlight) return;
-      webhookSecretUpgradeInFlight = true;
-      void webhooksRepo
-        .encryptLegacySecrets(500)
-        .then((result) => {
-          if (result.scanned > 0) {
-            logger.info(
-              { component: 'webhook-secret-encryption', ...result },
-              'legacy webhook signing secrets encrypted in bounded follow-up batch',
-            );
-          } else if (webhookSecretUpgradeTimer !== null) {
-            clearInterval(webhookSecretUpgradeTimer);
-            webhookSecretUpgradeTimer = null;
-          }
-        })
-        .catch((err: unknown) => {
-          logger.error(
-            { component: 'webhook-secret-encryption', err },
-            'legacy webhook signing-secret conversion failed; interval will retry',
-          );
-        })
-        .finally(() => {
-          webhookSecretUpgradeInFlight = false;
-        });
-    }, WEBHOOK_SECRET_UPGRADE_INTERVAL_MS);
-    webhookSecretUpgradeTimer.unref();
-  }
-
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
   // sweep. Tick every 5 seconds: walks tracker.findStaleSessions()
   // + fires heartbeat-timeout transition + agent_session.pair_mode.timeout
@@ -2818,7 +2803,6 @@ export async function createProductionDeps(
     if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
     if (webhookGraceExpiringNoticeTimer) clearInterval(webhookGraceExpiringNoticeTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
-    if (webhookSecretUpgradeTimer) clearInterval(webhookSecretUpgradeTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
     clearInterval(webhookDeliveryTimer);
     try {
