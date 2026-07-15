@@ -130,4 +130,22 @@ describe('db/agent-sessions-repo content parity', () => {
       /return row \? rowToRecord\(row, this\.transcriptEncryptionKeyBase64\) : null/,
     );
   });
+
+  it('setNodeId is an atomic active-only ownership claim, so a terminal row can never receive a late fleet assignment', () => {
+    expect(body).toMatch(/async setNodeId\(id: string, nodeId: string\)/);
+    expect(body).toMatch(
+      /\.where\(and\(eq\(agentSessions\.id, id\), eq\(agentSessions\.status, 'active'\)\)\)/,
+    );
+    expect(body).toMatch(
+      /return row \? rowToRecord\(row, this\.transcriptEncryptionKeyBase64\) : null/,
+    );
+  });
+
+  it('closeWithReasonOutcome atomically elects one close side-effect owner while preserving closeWithReason compatibility', () => {
+    expect(body).toMatch(/return \(await this\.closeWithReasonOutcome\(id, reason\)\)\.session;/);
+    expect(body).toMatch(/async closeWithReasonOutcome\(/);
+    expect(body).toMatch(/notInArray\(agentSessions\.status, \['closed'\]\)/);
+    expect(body).toMatch(/return \{ kind: 'closed', session:/);
+    expect(body).toMatch(/return \{ kind: 'already_closed', session: existing \};/);
+  });
 });

@@ -50,6 +50,7 @@ import {
 } from '../services/agent-session-transcript-encryption.js';
 import {
   AgentSessionErrorEventSchema,
+  type CloseAgentSessionResult,
   type AgentSessionErrorEvent,
   type AgentSessionListPage,
   type AgentSessionRecord,
@@ -591,6 +592,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
   }
 
   async closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {
+    return (await this.closeWithReasonOutcome(id, reason)).session;
+  }
+
+  async closeWithReasonOutcome(id: string, reason: string): Promise<CloseAgentSessionResult> {
     // TOCTOU-race fix (audit 2026-07-01) — this used to be a plain
     // read-then-write: a `get()` (only to preserve closedAt on a re-close),
     // then an UNCONDITIONAL `UPDATE … WHERE id=$id`. That left a real race
@@ -602,14 +607,14 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     // safe (read-before-write), but closed_reason was not — surfaced to
     // customers via GET /v1/agent-sessions/:id's closed_reason field.
     //
-    // Fixed: a single UPDATE … WHERE id=$id AND status='active' RETURNING *,
-    // mirroring closeActiveByNodeExcept's atomic-sweep pattern below. The
-    // WHERE requires status='active', so a matching row is ALWAYS mid its
-    // FIRST close transition (a closed row never flips back to active) —
+    // Fixed: a single UPDATE … WHERE id=$id AND status!='closed' RETURNING *,
+    // mirroring closeActiveByNodeExcept's atomic-sweep pattern below. A
+    // matching row is ALWAYS in its FIRST terminal transition (a closed row
+    // never flips back), while a challenge-paused session remains closeable.
     // closed_at is therefore always "now" here; no read-before-write needed.
     //
     // A 0-row result means another closer's UPDATE already won the race (the
-    // row is no longer 'active') — or, rarely, the id is genuinely unknown.
+    // row is already 'closed') — or, rarely, the id is genuinely unknown.
     // Treated as a safe no-op: re-fetch and return the CURRENT row (whatever
     // its real closed_reason is) instead of throwing/re-writing, so none of
     // this method's call sites (grepped: the never-dispatched egress-close in
@@ -622,17 +627,17 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     const updated = await this.database.db
       .update(agentSessions)
       .set({ status: 'closed', closedReason: reason, closedAt: now, updatedAt: now })
-      .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
+      .where(and(eq(agentSessions.id, id), notInArray(agentSessions.status, ['closed'])))
       .returning();
     const row = updated[0];
     if (row) {
-      return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+      return { kind: 'closed', session: rowToRecord(row, this.transcriptEncryptionKeyBase64) };
     }
     const existing = await this.get(id);
     if (!existing) {
       throw new Error(`AgentSession ${id} not found`);
     }
-    return existing;
+    return { kind: 'already_closed', session: existing };
   }
 
   async reapOrphanedActiveBefore(cutoff: Date): Promise<number> {
@@ -661,13 +666,14 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
 
   async setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null> {
     // Worker-disconnect fix (2026-06-19) — persist which node a session was
-    // dispatched to. A dispatch can race a DELETE, so an unknown id returns
-    // null (the best-effort dispatch caller ignores the result), never throws.
+    // dispatched to. This UPDATE is the atomic active-only ownership claim:
+    // a dispatch can race DELETE, a reaper, or worker close, so missing and
+    // terminal rows both return null and can never receive a later assignment.
     const now = this.clock();
     const updated = await this.database.db
       .update(agentSessions)
       .set({ nodeId, updatedAt: now })
-      .where(eq(agentSessions.id, id))
+      .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
       .returning();
     const row = updated[0];
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;

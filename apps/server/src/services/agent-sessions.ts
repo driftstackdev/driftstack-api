@@ -202,6 +202,14 @@ export interface AgentSessionListPage {
   nextCursor: string | null;
 }
 
+/**
+ * Result of an atomic terminal transition when the caller owns downstream
+ * teardown side effects only if it performed the first close.
+ */
+export type CloseAgentSessionResult =
+  | { kind: 'closed'; session: AgentSessionRecord }
+  | { kind: 'already_closed'; session: AgentSessionRecord };
+
 export interface AgentSessionsRepo {
   create(args: CreateAgentSessionArgs): Promise<AgentSessionRecord>;
 
@@ -247,6 +255,7 @@ export interface AgentSessionsRepo {
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
+  closeWithReasonOutcome(id: string, reason: string): Promise<CloseAgentSessionResult>;
 
   /** Atomically persist a harness error only when the reporting node is still
    * the session owner. Closed sessions are allowed because errorEvent follows
@@ -288,10 +297,11 @@ export interface AgentSessionsRepo {
   /**
    * Worker-disconnect fix (2026-06-19, migration 0086) — record which fleet
    * node a session was dispatched to. Called by dispatchSessionAssignOnCreate
-   * after the sessionAssign is sent. Best-effort at the call site (a write
-   * failure must not break session-create), so this just persists the pointer
-   * the disconnect reaper later matches on. No-op (returns null) when the
-   * session id is unknown — a dispatch can race a DELETE.
+   * immediately before sessionAssign is sent. Best-effort at the call site (a
+   * write failure must not break session-create), so this persists the pointer
+   * the disconnect reaper later matches on. This is also the atomic active-only
+   * ownership claim: returns null when the session is missing OR a close won
+   * during dispatch preparation, so terminal rows can never be assigned.
    */
   setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null>;
 
@@ -659,15 +669,22 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     return Promise.resolve(updated);
   }
 
-  closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {
+  async closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {
+    return (await this.closeWithReasonOutcome(id, reason)).session;
+  }
+
+  closeWithReasonOutcome(id: string, reason: string): Promise<CloseAgentSessionResult> {
     const rec = this.records.get(id);
     if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
-    // Mirror the production repo's atomic WHERE status='active' close: the
+    // Mirror the production repo's atomic WHERE status!='closed' close: the
     // first terminal transition owns both closedAt and closedReason. A later
     // customer/worker/runtime closer is an idempotent read, never a reason
-    // overwrite. This in-memory method is synchronous, so checking the current
-    // immutable record also serializes Promise.all callers deterministically.
-    if (rec.status !== 'active') return Promise.resolve(rec);
+    // overwrite. A paused session remains explicitly closeable. This in-memory
+    // method is synchronous, so checking the current immutable record also
+    // serializes Promise.all callers deterministically.
+    if (rec.status === 'closed') {
+      return Promise.resolve({ kind: 'already_closed', session: rec });
+    }
     const now = this.clock();
     const updated: AgentSessionRecord = {
       ...rec,
@@ -680,7 +697,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: now,
     };
     this.records.set(id, updated);
-    return Promise.resolve(updated);
+    return Promise.resolve({ kind: 'closed', session: updated });
   }
 
   reapOrphanedActiveBefore(cutoff: Date): Promise<number> {
@@ -704,9 +721,10 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
 
   setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null> {
     const rec = this.records.get(id);
-    // A dispatch can race a DELETE — an unknown id is a no-op (returns null),
-    // never a throw, so the best-effort dispatch caller can ignore the result.
-    if (!rec) return Promise.resolve(null);
+    // A dispatch can race any terminal closer. Missing or already-closed rows
+    // fail the ownership claim as a no-op, so the caller never sends an assign
+    // for a terminal API session.
+    if (!rec || rec.status !== 'active') return Promise.resolve(null);
     const updated: AgentSessionRecord = { ...rec, nodeId, updatedAt: this.clock() };
     this.records.set(id, updated);
     return Promise.resolve(updated);

@@ -228,7 +228,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // budget-exhausted close) would BOTH succeed, and whichever UPDATE
     // committed LAST always won — silently overwriting the earlier closer's
     // true closed_reason. The fix makes the UPDATE atomic + conditional
-    // (`WHERE id=$id AND status='active'`), so only the FIRST of two
+    // (`WHERE id=$id AND status!='closed'`), so only the FIRST of two
     // concurrent closers actually writes; the second's WHERE no longer
     // matches and it safely no-ops (returns the winner's row unchanged).
     it('concurrent closeWithReason calls never both win: exactly one reason is persisted, never overwritten by the loser (real Postgres, distinct connections)', async () => {
@@ -249,7 +249,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       // earlier's closed_reason (a non-deterministic 'reason-A' or 'reason-B'
       // depending purely on commit order, with NO guarantee the row reflects
       // the call that "really" tore the session down first). The atomic
-      // `WHERE status='active'` fix guarantees exactly ONE of the two writes
+      // `WHERE status!='closed'` fix guarantees exactly ONE of the two writes
       // actually lands; the other's WHERE no longer matches once the first
       // commits, so it reads back and returns the winner's row untouched
       // rather than re-writing over it.
@@ -272,6 +272,88 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       // the loser.
       expect(a.closedAt?.getTime()).toBe(after?.closedAt?.getTime());
       expect(b.closedAt?.getTime()).toBe(after?.closedAt?.getTime());
+    });
+
+    it('five concurrent close outcomes elect exactly one teardown owner (real Postgres, distinct connections)', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-close-outcome-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+
+      const outcomes = await Promise.all(
+        Array.from({ length: 5 }, (_, index) =>
+          repo.closeWithReasonOutcome(session.id, `contender-${index}`),
+        ),
+      );
+      const winner = outcomes.find((outcome) => outcome.kind === 'closed');
+
+      expect(outcomes.filter((outcome) => outcome.kind === 'closed')).toHaveLength(1);
+      expect(outcomes.filter((outcome) => outcome.kind === 'already_closed')).toHaveLength(4);
+      expect(winner).toBeDefined();
+      expect(
+        outcomes.every((outcome) => outcome.session.closedReason === winner!.session.closedReason),
+      ).toBe(true);
+      expect(
+        outcomes.every(
+          (outcome) => outcome.session.closedAt?.getTime() === winner!.session.closedAt?.getTime(),
+        ),
+      ).toBe(true);
+      expect(await repo.get(session.id)).toEqual(winner!.session);
+    });
+
+    it('close-before-claim refuses fleet ownership and preserves the complete terminal row', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-claim-close-first-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+      const closed = await repo.closeWithReason(session.id, 'customer-closed');
+
+      await expect(repo.setNodeId(session.id, 'node-too-late')).resolves.toBeNull();
+      expect(await repo.get(session.id)).toEqual(closed);
+      expect(await repo.get(session.id)).toMatchObject({
+        status: 'closed',
+        closedReason: 'customer-closed',
+        nodeId: null,
+      });
+    });
+
+    it('claim-before-close persists one owner, then every late ownership claim is inert', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-claim-first-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+      const claimed = await repo.setNodeId(session.id, 'node-owner');
+      expect(claimed).toMatchObject({ status: 'active', nodeId: 'node-owner' });
+
+      const closed = await repo.closeWithReason(session.id, 'customer-closed');
+      expect(closed).toMatchObject({
+        status: 'closed',
+        closedReason: 'customer-closed',
+        nodeId: 'node-owner',
+      });
+      await expect(repo.setNodeId(session.id, 'node-too-late')).resolves.toBeNull();
+      expect(await repo.get(session.id)).toEqual(closed);
     });
   },
 );

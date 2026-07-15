@@ -1341,6 +1341,69 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(read.json<{ status: string }>().status).toBe('closed');
   });
 
+  it('five concurrent DELETEs all return 204 while exactly one close winner emits the destroy audit', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    const repo = fx.agentSessionsRepo!;
+    const realGet = repo.get.bind(repo);
+    const realClose = repo.closeWithReasonOutcome.bind(repo);
+    const outcomeKinds: string[] = [];
+    let preReads = 0;
+    let releasePreReads!: () => void;
+    const allPreReads = new Promise<void>((resolve) => {
+      releasePreReads = resolve;
+    });
+
+    // Force every route request to authorize against the same active snapshot.
+    // Without an atomic outcome, all five would then own downstream effects.
+    vi.spyOn(repo, 'get').mockImplementation(async (sessionId) => {
+      const snapshot = await realGet(sessionId);
+      if (sessionId === id && snapshot?.status !== 'closed' && preReads < 5) {
+        preReads += 1;
+        if (preReads === 5) releasePreReads();
+        await allPreReads;
+      }
+      return snapshot;
+    });
+    vi.spyOn(repo, 'closeWithReasonOutcome').mockImplementation(async (sessionId, reason) => {
+      const outcome = await realClose(sessionId, reason);
+      outcomeKinds.push(outcome.kind);
+      return outcome;
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        fx.app.inject({
+          method: 'DELETE',
+          url: `/v1/agent-sessions/${id}`,
+          headers: { authorization: `Bearer ${fx.plaintext}` },
+        }),
+      ),
+    );
+
+    expect(responses.map((response) => response.statusCode)).toEqual([204, 204, 204, 204, 204]);
+    expect(outcomeKinds.filter((kind) => kind === 'closed')).toHaveLength(1);
+    expect(outcomeKinds.filter((kind) => kind === 'already_closed')).toHaveLength(4);
+    expect(await realGet(id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer-closed',
+    });
+    const destroyRows = fx.accountAuditRepo
+      .getAll()
+      .filter(
+        (row) =>
+          row.action === 'agent_session.destroyed' &&
+          row.targetResourceId === `agent_session_${id}`,
+      );
+    expect(destroyRows).toHaveLength(1);
+  });
+
   it('clarify path: short task → 200 with kind:clarify + clarifying_question', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

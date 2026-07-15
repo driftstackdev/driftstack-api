@@ -39,10 +39,11 @@ describe('W650 pageState evict-on-close (customer DELETE) drift guard', () => {
   });
 
   it('evicts the agent session pageState on the customer DELETE close path', () => {
-    // The customer-close handler closes the session, then evicts the in-memory
-    // pageState (idempotent + optional-chained — no-op when the store/fleet
-    // plane is unwired). Discrete pins (avoid a long \s*\n? chain).
-    expect(body).toMatch(/await sessions\.closeWithReason\(req\.params\.id, 'customer-closed'\);/);
+    // The atomic close winner evicts the in-memory pageState (optional-chained
+    // no-op when unwired); concurrent idempotent losers return before eviction.
+    expect(body).toMatch(/const closeOutcome = await sessions\.closeWithReasonOutcome\(/);
+    expect(body).toMatch(/if \(closeOutcome\.kind === 'already_closed'\) \{/);
+    expect(body).toMatch(/const closed = closeOutcome\.session;/);
     expect(body).toMatch(/sessionPageStateStore\?\.delete\(req\.params\.id\);/);
   });
 

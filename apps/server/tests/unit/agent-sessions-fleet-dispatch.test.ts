@@ -453,14 +453,14 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(log.warn).toHaveBeenCalled();
   });
 
-  it('a setNodeId null return (row deleted mid-dispatch) SKIPS the assign', async () => {
+  it('a setNodeId null return (row missing or terminal mid-dispatch) SKIPS the assign', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     const log = logger();
     const deletedSessions = {
-      // setNodeId returns null when the id lost a race with DELETE → the session
-      // is gone; there is nothing to dispatch.
+      // setNodeId returns null when the row is missing or a close won; there is
+      // no active session to dispatch.
       setNodeId: () => Promise.resolve(null),
     } as unknown as InMemoryAgentSessionsRepo;
     await expect(
@@ -476,6 +476,40 @@ describe('dispatchSessionAssignOnCreate', () => {
     ).resolves.toBeUndefined();
     expect(sent).toHaveLength(0);
     expect(log.warn).toHaveBeenCalled();
+  });
+
+  it('a real closed row that wins during dispatch preparation receives no node owner and no sessionAssign', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const log = logger();
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const closed = await agentSessions.closeWithReason(created.id, 'customer-closed');
+
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: created.id,
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sent).toHaveLength(0);
+    expect(await agentSessions.get(created.id)).toEqual(closed);
+    expect(await agentSessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer-closed',
+      nodeId: null,
+    });
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: created.id }),
+      'session row absent or terminal at node_id ownership claim; skipping assign',
+    );
   });
 
   it('resolves the live connection by node_id (the registry key), NOT the fleet_nodes uuid (migration 0085 / Path C)', async () => {
@@ -1110,6 +1144,42 @@ describe('dispatchSessionEndOnClose', () => {
     expect(sent).toHaveLength(1);
     expect(JSON.parse(sent[0]!)).toEqual({ type: 'sessionEnd', sessionId: 'agt_close1' });
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('five close contenders dispatch exactly one sessionEnd from the authoritative winner', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (data) => sent.push(data));
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+    });
+    await agentSessions.setNodeId(created.id, NODE_ID);
+
+    const outcomes = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        agentSessions.closeWithReasonOutcome(created.id, `contender-${index}`),
+      ),
+    );
+    await Promise.all(
+      outcomes.map((outcome) =>
+        outcome.kind === 'closed'
+          ? dispatchSessionEndOnClose({
+              sessionId: outcome.session.id,
+              nodeId: outcome.session.nodeId,
+              fleetControlRegistry: registry,
+              fleetNodesRepo: repoReturning(macWithLivekit()),
+              logger: logger(),
+            })
+          : Promise.resolve(),
+      ),
+    );
+
+    expect(outcomes.filter((outcome) => outcome.kind === 'closed')).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.kind === 'already_closed')).toHaveLength(4);
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toEqual({ type: 'sessionEnd', sessionId: created.id });
   });
 
   it('no-op when the fleet control plane is not wired (prod) — registry/repo undefined', async () => {

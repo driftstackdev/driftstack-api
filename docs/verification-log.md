@@ -27758,3 +27758,48 @@ zero created events, happy-path persisted ready state, and a hung cleanup that
 times out without replacing the original store error. Full workspace
 typechecking, targeted ESLint/Prettier and diff/whitespace checks, and the
 configured full workspace build are green.
+
+## V-662 — Agent-session fleet ownership and close side effects are terminal-safe
+
+**Date:** 2026-07-15
+
+Agent-session dispatch persisted `node_id` by ID alone. Because customer and
+worker closes preserve a terminal row instead of deleting it, a close that won
+while profile, proxy, or LiveKit preparation was awaiting could still receive a
+node owner; the non-null result then authorized a `sessionAssign`, starting a
+browser worker for an already-closed API session. Separately, customer DELETE
+used a stale status pre-read before an atomic close that returned only the
+stored row. Concurrent requests could all pre-read active, all return 204, and
+all dispatch `sessionEnd`, clear caches/counters, and emit destroyed audits even
+though only one close actually changed the row.
+
+`setNodeId` is now an atomic active-only ownership claim in both repositories:
+the exact session ID and `status='active'` must match in the same update. A
+missing or terminal row returns null, so dispatch stops before the external
+assign and the complete terminal row remains unchanged. The ordinary active
+path still persists the owner before sending exactly one assignment.
+
+The repositories also expose `closeWithReasonOutcome`, which atomically returns
+either `closed` with the committed row or `already_closed` with the first
+closer's authoritative row. The existing `closeWithReason` remains a
+compatibility delegate for runtime, worker, and sweeper callers. Customer DELETE
+uses the outcome: every contender returns 204, but only the `closed` winner may
+dispatch teardown, evict per-session state/counters, or emit the destroyed
+audit. Teardown targets the node captured by the atomic close rather than the
+route's earlier snapshot, so an ownership claim that committed before close is
+not lost. A challenge-paused row remains closeable; a closed row retains its
+first reason and timestamps. This closes terminal-before-claim and duplicate
+close effects; later external send-versus-close delivery ordering remains a
+separate protocol/reconciliation concern and is not overclaimed here.
+
+The expanded connected matrix passes 15 files and 365/365 tests. All 8/8
+PostgreSQL cases execute, including close-before-claim terminal preservation,
+claim-before-close followed by inert late claims, and five concurrent close
+outcomes with exactly one winner and four authoritative losers. A deterministic
+five-way HTTP barrier proves five 204 responses, one close winner, four losers,
+one terminal row, and one destroyed audit; complete fleet-dispatch coverage
+proves a closed row receives zero assignments. Runtime terminal-close,
+disconnect-reaper, orphan-sweeper, budget and cache-eviction families remain
+green. Strict server source-and-test TypeScript, targeted ESLint/Prettier and
+diff/whitespace checks, the full workspace typecheck, and the configured full
+workspace build are green.

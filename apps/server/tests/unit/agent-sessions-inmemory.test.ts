@@ -375,6 +375,24 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(await repo.get(created.id)).toEqual(first);
   });
 
+  it('closeWithReasonOutcome elects exactly one side-effect owner across five contenders', async () => {
+    const repo = new InMemoryAgentSessionsRepo(() => new Date('2026-05-16T00:10:00Z'));
+    const created = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+
+    const outcomes = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        repo.closeWithReasonOutcome(created.id, `contender-${index}`),
+      ),
+    );
+
+    expect(outcomes.filter((outcome) => outcome.kind === 'closed')).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.kind === 'already_closed')).toHaveLength(4);
+    expect(outcomes.map((outcome) => outcome.session)).toEqual(
+      Array.from({ length: 5 }, () => outcomes[0]!.session),
+    );
+    expect(await repo.get(created.id)).toEqual(outcomes[0]!.session);
+  });
+
   // ─── Worker-disconnect fix (2026-06-19, migration 0086) ─────────────
 
   it('0086 setNodeId: persists node_id + bumps updatedAt; create() leaves node_id null', async () => {
@@ -389,9 +407,28 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect((await repo.get(rec.id))!.nodeId).toBe('mac-macstadium-us-001');
   });
 
-  it('0086 setNodeId: an unknown id is a no-op returning null (a dispatch can race a DELETE) — never throws', async () => {
+  it('0086 setNodeId: an unknown id is a no-op returning null — never throws', async () => {
     const repo = new InMemoryAgentSessionsRepo();
     await expect(repo.setNodeId('agt_does_not_exist', 'node-x')).resolves.toBeNull();
+  });
+
+  it('0086 setNodeId: a close winner makes the active-only ownership claim return null without mutating terminal fields', async () => {
+    let now = new Date('2026-06-19T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    now = new Date('2026-06-19T00:05:00Z');
+    const closed = await repo.closeWithReason(rec.id, 'customer-closed');
+
+    now = new Date('2026-06-19T00:10:00Z');
+    await expect(repo.setNodeId(rec.id, 'node-too-late')).resolves.toBeNull();
+
+    const after = await repo.get(rec.id);
+    expect(after).toEqual(closed);
+    expect(after).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer-closed',
+      nodeId: null,
+    });
   });
 
   it('0086 closeActiveByNode: closes ONLY this node’s active sessions; another node’s, an already-closed one, and a never-dispatched (null node_id) one are untouched', async () => {

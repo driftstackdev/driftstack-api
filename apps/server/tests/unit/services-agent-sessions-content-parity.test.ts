@@ -91,7 +91,7 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(/updatedAt: Date;/);
   });
 
-  it("AgentSessionsRepo 14-method surface pinned: create + get + listByAccount + appendTranscript + debitTokens + closeWithReason + reapOrphanedActiveBefore + setNodeId + closeActiveByNode + closeActiveByNodeExcept + findByIdempotencyKey + setPairModeState + compareAndSetPairModeState + setGuiControlKey. Drift to dropping a method would break the contract that lets the executor + dashboard chat UI work against either InMemoryRepo or DrizzleRepo without knowing which backend they're talking to", () => {
+  it('AgentSessionsRepo close contract pins both the compatibility row result and atomic side-effect ownership outcome. Drift would break the executor/dashboard abstraction or let concurrent DELETEs duplicate teardown and audit', () => {
     expect(body).toMatch(/export interface AgentSessionsRepo \{/);
     expect(body).toMatch(/create\(args: CreateAgentSessionArgs\): Promise<AgentSessionRecord>;/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSessionRecord \| null>;/);
@@ -106,11 +106,20 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(
       /closeWithReason\(id: string, reason: string\): Promise<AgentSessionRecord>;/,
     );
+    expect(body).toMatch(/export type CloseAgentSessionResult =/);
+    expect(body).toMatch(/\| \{ kind: 'closed'; session: AgentSessionRecord \}/);
+    expect(body).toMatch(/\| \{ kind: 'already_closed'; session: AgentSessionRecord \};/);
+    expect(body).toMatch(
+      /closeWithReasonOutcome\(id: string, reason: string\): Promise<CloseAgentSessionResult>;/,
+    );
     expect(body).toMatch(/reapOrphanedActiveBefore\(cutoff: Date\): Promise<number>;/);
     // Worker-disconnect fix (2026-06-19, migration 0086) — session→node
     // pointer + node-scoped bulk-close that the disconnect reaper drives.
     expect(body).toMatch(
       /setNodeId\(id: string, nodeId: string\): Promise<AgentSessionRecord \| null>;/,
+    );
+    expect(body).toMatch(
+      /if \(!rec \|\| rec\.status !== 'active'\) return Promise\.resolve\(null\);/,
     );
     expect(body).toMatch(/closeActiveByNode\(nodeId: string, reason: string\): Promise<number>;/);
     // W2813 bootId consumer — node-restart variant that keeps the new boot's

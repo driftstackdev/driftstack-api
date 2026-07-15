@@ -1124,10 +1124,10 @@ export async function dispatchSessionAssignOnCreate(args: {
     // exact-owner guards now fail closed there, but a swallowed write failure would
     // still strand it active+NULL forever (a phantom concurrency slot the disconnect
     // reaper cannot attribute), so assignment remains strictly after persistence.
-    // So: persist first; if the write fails or the row was deleted mid-dispatch, do
+    // So: persist first; if the write fails or the row became terminal mid-dispatch, do
     // NOT send the assign — leave the session unowned (no node holds it) for the 12h
-    // orphan_reap backstop, never owned-but-NULL. setNodeId returns null when the id
-    // lost a race with DELETE (session gone → nothing to dispatch).
+    // orphan_reap backstop, never owned-but-NULL. setNodeId is an atomic
+    // active-only claim and returns null when the row is missing OR a closer won.
     if (agentSessions !== undefined) {
       let persisted: Awaited<ReturnType<typeof agentSessions.setNodeId>>;
       try {
@@ -1147,7 +1147,7 @@ export async function dispatchSessionAssignOnCreate(args: {
       if (persisted === null) {
         logger?.warn(
           { component: 'fleet-session-dispatch', sessionId },
-          'session row absent at node_id persist (deleted mid-dispatch); skipping assign',
+          'session row absent or terminal at node_id ownership claim; skipping assign',
         );
         return;
       }
@@ -4457,28 +4457,32 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
-      // Idempotent DELETE: if the session is ALREADY closed (by the customer
-      // earlier, a reaper, or a worker terminal-close), return 204 WITHOUT
-      // re-closing. closeWithReason is not status-anchored, so re-closing would
-      // clobber the real closedReason (e.g. 'worker-disconnected' → 'customer-closed',
-      // losing the teardown cause), emit a DUPLICATE agent_session.destroyed audit,
-      // and re-dispatch a redundant sessionEnd to an already-dead node
-      // (audit w93vi1teq #1). A 'paused' session is still closeable — only an
-      // already-'closed' row short-circuits.
+      // Fast sequential idempotency path. The atomic close outcome below is
+      // still authoritative because concurrent DELETEs can all pre-read this
+      // same active row. A 'paused' session is closeable; only closed stops.
       if (pre.status === 'closed') {
         return reply.code(204).send();
       }
-      // Audit attribution: the session's owning account. Identical to
-      // ctx.account.id on the account path, and the only meaningful
-      // account on the control-key path (no request-account context).
-      const auditAccountId = pre.accountId;
-      await sessions.closeWithReason(req.params.id, 'customer-closed');
+      const closeOutcome = await sessions.closeWithReasonOutcome(req.params.id, 'customer-closed');
+      // Exactly one concurrent closer owns teardown, cache eviction, counters,
+      // and audit. Every loser remains an idempotent 204 without duplicating
+      // customer-visible or worker-visible effects.
+      if (closeOutcome.kind === 'already_closed') {
+        return reply.code(204).send();
+      }
+      const closed = closeOutcome.session;
+      // Audit attribution: the authoritative close winner's owning account.
+      // Identical to ctx.account.id on the account path, and the only
+      // meaningful account on the control-key path (no request-account context).
+      const auditAccountId = closed.accountId;
       // Free the harness slot for a profile/fleet-backed session: tell the node
       // to tear the session down. Best-effort + gated (inert when the fleet
       // control plane isn't wired); never blocks the close.
       await dispatchSessionEndOnClose({
         sessionId: req.params.id,
-        nodeId: pre.nodeId,
+        // The ownership claim can win after this route's pre-read. Target the
+        // node captured by the atomic close, never a stale pre-read snapshot.
+        nodeId: closed.nodeId,
         fleetControlRegistry,
         fleetNodesRepo,
         logger: req.log,

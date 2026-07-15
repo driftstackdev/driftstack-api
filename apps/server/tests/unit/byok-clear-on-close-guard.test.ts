@@ -48,8 +48,11 @@ describe('Q.1.c BYOK plaintext-clear-on-close (both route close paths) drift gua
   // through. These pins make the customer-close clear path independently
   // regression-protected too.
   it('clears the cached BYOK plaintext on the customer DELETE close path (second clear site)', () => {
-    // The customer-close handler closes then evicts.
-    expect(body).toMatch(/await sessions\.closeWithReason\(req\.params\.id, 'customer-closed'\);/);
+    // The atomic close winner evicts; concurrent idempotent losers return 204
+    // before any teardown/cache/audit side effect.
+    expect(body).toMatch(/const closeOutcome = await sessions\.closeWithReasonOutcome\(/);
+    expect(body).toMatch(/if \(closeOutcome\.kind === 'already_closed'\) \{/);
+    expect(body).toMatch(/const closed = closeOutcome\.session;/);
     expect(body).toMatch(/clear the cached plaintext on customer close/);
     // BOTH route-layer clear sites must be present (message-route close +
     // customer DELETE) — a count pin so neither can be dropped silently.
