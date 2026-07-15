@@ -28100,3 +28100,33 @@ families pass 8 files and 86/86 tests. Strict server source/test TypeScript,
 targeted ESLint/Prettier and diff/whitespace checks, full-workspace typechecking
 and the configured production build are green. No consumer signature, schema,
 wire protocol or queue bound changed.
+
+---
+
+## V-670 — Session error events inherit bounded relay callback containment
+
+**Date:** 2026-07-15
+
+The session error-event consumer maintained a second copy of the shared
+per-node latest-state queue. Its 512-session and eight-concurrent bounds were
+correct, but a rejected persistence call followed by a throwing error logger
+could reject the detached chain, and a throwing overflow logger could escape
+the synchronous fleet receive path. The process-wide rejection backstop kept
+this defense-in-depth issue from becoming an active crash incident.
+
+The consumer now filters node-scoped frames before passing a session-scoped
+type to `makeBoundedNodeLatestRelay`. Its public limit constants alias the
+shared primitive, while its existing owner-node persistence, customer-safe
+summary/detail scrubbing, warning text and `session.errored` notification are
+unchanged. The hardened primitive contains rejected or synchronous processors,
+throwing error observers and throwing saturation observers while preserving
+immediate first-work start, newest-per-session coalescing, one warning per
+saturated node-state lifetime and empty-state cleanup.
+
+Direct verification preserves all seven prior behaviors and adds proofs that a
+throwing error logger emits zero unhandled rejections while the newest
+same-session successor drains, and that a throwing overflow logger neither
+escapes the receiver nor starts overflow work. The direct file passes 9/9 and
+the shared primitive plus all current consumers pass 9 files and 95/95 tests.
+Strict server source/test TypeScript, focused tests, targeted lint/format/diff,
+the full workspace typecheck and configured production build are green.

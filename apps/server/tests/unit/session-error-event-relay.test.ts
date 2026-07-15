@@ -195,4 +195,58 @@ describe('makeSessionErrorEventRelay', () => {
       expect.stringContaining('exceeded its relay session budget'),
     );
   });
+
+  it('contains a throwing error logger, releases the slot, drains the newest successor, and emits no unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      let calls = 0;
+      const repo = {
+        recordErrorEvent: vi.fn((_id: string, _node: string, event: { code: string }) => {
+          calls += 1;
+          if (calls === 1) return Promise.reject(new Error('persistence failed'));
+          return Promise.resolve({ id: `agt_${event.code}`, accountId: 'acc_1' } as never);
+        }),
+      };
+      const log = logger();
+      vi.mocked(log.error).mockImplementation(() => {
+        throw new Error('error logger failed');
+      });
+      const relay = makeSessionErrorEventRelay(repo, new NotificationEventBus(), log);
+
+      expect(() => {
+        relay(frame({ sessionId: 'agt_1', code: 'first_error' }), 'node-1');
+        relay(frame({ sessionId: 'agt_1', code: 'newest_error' }), 'node-1');
+      }).not.toThrow();
+      await vi.waitFor(() => expect(repo.recordErrorEvent).toHaveBeenCalledTimes(2));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(log.error).toHaveBeenCalledTimes(1);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  it('contains a throwing overflow logger and starts no overflow work', () => {
+    const repo = {
+      recordErrorEvent: vi.fn(() => new Promise<never>(() => undefined)),
+    };
+    const log = logger();
+    vi.mocked(log.warn).mockImplementation(() => {
+      throw new Error('overflow logger failed');
+    });
+    const relay = makeSessionErrorEventRelay(repo, new NotificationEventBus(), log);
+    for (let i = 0; i < ERROR_EVENT_RELAY_MAX_SESSIONS_PER_NODE; i += 1) {
+      relay(frame({ sessionId: `agt_budget_${i}` }), 'node-1');
+    }
+
+    expect(() => relay(frame({ sessionId: 'agt_overflow_1' }), 'node-1')).not.toThrow();
+    expect(() => relay(frame({ sessionId: 'agt_overflow_2' }), 'node-1')).not.toThrow();
+    expect(repo.recordErrorEvent).toHaveBeenCalledTimes(ERROR_EVENT_RELAY_MAX_CONCURRENT_PER_NODE);
+    expect(log.warn).toHaveBeenCalledTimes(1);
+  });
 });
