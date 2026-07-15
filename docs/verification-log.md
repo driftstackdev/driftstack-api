@@ -28433,3 +28433,34 @@ local failure with zero account requests. The expanded Profiles lifecycle,
 organization, loading, launch, filter, sort, table and content matrix passes 17
 files with 147 tests and 6 intentional skips. Strict GUI and server-test
 TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green.
+
+---
+
+## V-680 — Account taxonomy saves preserve caller order
+
+**Date:** 2026-07-15
+
+The GUI persists the complete folder/icon/tag taxonomy with a whole-object account
+`PUT`. Multiple calls for the same signed-in workspace previously started
+immediately and could overlap. A bounded reproduction held an older `Old` response,
+issued a newer `New` save and observed both requests start before `Old` settled. If
+server processing completed in the opposite order, the old full object became the
+last database write and silently erased the newer rail mutation.
+
+Taxonomy saves now enter a short-lived FIFO lane keyed by normalized API origin,
+credential and effective-account scope. A same-scope successor starts only after
+its predecessor has received and disposed its response or rejected. Each caller
+still observes its own outcome; predecessor rejection is consumed only to admit
+the next intent and cannot poison it. Distinct workspace/account scopes remain
+concurrent. The final tail removes its process-memory-only scope key with an
+identity check, so an older caller cannot delete a newer active tail and credential
+keys do not accumulate. No lane key is logged or persisted. GET behavior and the
+exact PUT URL, headers, body, timeout, response disposal and error contract are
+unchanged.
+
+Direct transport proof passes 12/12 tests. It holds `Old`, queues `New`, then queues
+`Newest` while `New` remains active to pin both FIFO body order and identity-safe
+cleanup; it also proves failed-caller/successor recovery and independent effective-
+account concurrency. The expanded organization seed, deadline and response-body
+matrix passes 4 files and 24/24 tests. Strict GUI TypeScript, targeted
+ESLint/Prettier and diff/whitespace checks are green.

@@ -22,8 +22,27 @@ export interface AccountOrganization {
   tags: string[];
 }
 
+// Each PUT replaces the complete taxonomy. Keep same-account writes in caller
+// order so an older slow request cannot finish after and overwrite a newer one.
+// Keys are process-memory-only and identity-cleaned after the final settlement;
+// never log or persist them because they include the credential needed to keep
+// different signed-in accounts in independent lanes.
+const organizationSaveTails = new Map<string, Promise<void>>();
+
+function normalizedBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '');
+}
+
 function orgUrl(baseUrl: string): string {
-  return `${baseUrl.replace(/\/+$/, '')}/v1/account/me/organization`;
+  return `${normalizedBaseUrl(baseUrl)}/v1/account/me/organization`;
+}
+
+function organizationSaveScopeKey(
+  baseUrl: string,
+  apiKey: string,
+  effectiveAccount: string | null,
+): string {
+  return JSON.stringify([normalizedBaseUrl(baseUrl), apiKey, effectiveAccount]);
 }
 
 /** Builds the auth headers, adding the workspace scope header when a team
@@ -75,7 +94,7 @@ export async function fetchOrganization(
  *  the caller's perspective — a failure leaves the local cache as the source.
  *  Pass the active workspace (owner account id) or null for personal scope so
  *  the write lands on the SAME account the profiles do. */
-export async function saveOrganization(
+async function saveOrganizationNow(
   baseUrl: string,
   apiKey: string,
   org: AccountOrganization,
@@ -90,4 +109,29 @@ export async function saveOrganization(
   const ok = res.ok;
   await disposeResponseBody(res);
   if (!ok) throw new Error(`organization save failed: ${status.toString()}`);
+}
+
+export async function saveOrganization(
+  baseUrl: string,
+  apiKey: string,
+  org: AccountOrganization,
+  effectiveAccount: string | null = null,
+): Promise<void> {
+  const scopeKey = organizationSaveScopeKey(baseUrl, apiKey, effectiveAccount);
+  const predecessor = organizationSaveTails.get(scopeKey);
+  const current =
+    predecessor === undefined
+      ? saveOrganizationNow(baseUrl, apiKey, org, effectiveAccount)
+      : predecessor
+          // The predecessor's caller still observes its rejection. This catch
+          // only prevents that failure from poisoning the next queued intent.
+          .catch(() => undefined)
+          .then(() => saveOrganizationNow(baseUrl, apiKey, org, effectiveAccount));
+  organizationSaveTails.set(scopeKey, current);
+  try {
+    await current;
+  } finally {
+    // A newer caller may already own this key. Only the last tail removes it.
+    if (organizationSaveTails.get(scopeKey) === current) organizationSaveTails.delete(scopeKey);
+  }
 }

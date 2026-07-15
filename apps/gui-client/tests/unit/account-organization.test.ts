@@ -1,7 +1,11 @@
 // org-sync phase 3c transport — GET/PUT /v1/account/me/organization.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchOrganization, saveOrganization } from '../../src/lib/account-organization';
+import {
+  fetchOrganization,
+  saveOrganization,
+  type AccountOrganization,
+} from '../../src/lib/account-organization';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -138,5 +142,109 @@ describe('saveOrganization', () => {
       tags: [],
     });
     expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('runs same-scope whole-object saves FIFO and keeps a queued tail identity-owned', async () => {
+    let releaseFirst: ((response: Response) => void) | undefined;
+    let releaseSecond: ((response: Response) => void) | undefined;
+    const firstResponse = new Promise<Response>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const secondResponse = new Promise<Response>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => firstResponse)
+      .mockImplementationOnce(() => secondResponse)
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const older = saveOrganization('https://api.driftstack.dev/', 'ds_key', {
+      folders: [{ name: 'Old' }],
+      tags: [],
+    });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const newer = saveOrganization('https://api.driftstack.dev', 'ds_key', {
+      folders: [{ name: 'New' }],
+      tags: [],
+    });
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    releaseFirst?.(new Response(null, { status: 204 }));
+    await older;
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    const newest = saveOrganization('https://api.driftstack.dev', 'ds_key', {
+      folders: [{ name: 'Newest' }],
+      tags: [],
+    });
+    await Promise.resolve();
+    // The older caller's finally must not delete the still-active New tail.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    releaseSecond?.(new Response(null, { status: 204 }));
+    await Promise.all([newer, newest]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(
+      fetchMock.mock.calls.map((call) => {
+        const init = call[1] as RequestInit;
+        const body = JSON.parse(init.body as string) as AccountOrganization;
+        return body.folders[0]?.name;
+      }),
+    ).toEqual(['Old', 'New', 'Newest']);
+  });
+
+  it('rejects the failed caller without poisoning its same-scope successor', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const failed = saveOrganization('https://api.driftstack.dev', 'ds_key', {
+      folders: [{ name: 'Old' }],
+      tags: [],
+    });
+    const recovered = saveOrganization('https://api.driftstack.dev', 'ds_key', {
+      folders: [{ name: 'New' }],
+      tags: [],
+    });
+
+    await expect(failed).rejects.toThrow('organization save failed: 503');
+    await expect(recovered).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows distinct effective-account scopes to save concurrently', async () => {
+    let releaseOwner: ((response: Response) => void) | undefined;
+    const heldOwner = new Promise<Response>((resolve) => {
+      releaseOwner = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => heldOwner)
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ownerSave = saveOrganization(
+      'https://api.driftstack.dev',
+      'ds_key',
+      { folders: [{ name: 'Owner' }], tags: [] },
+      'acc_owner',
+    );
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const otherSave = saveOrganization(
+      'https://api.driftstack.dev',
+      'ds_key',
+      { folders: [{ name: 'Other' }], tags: [] },
+      'acc_other',
+    );
+
+    await expect(otherSave).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    releaseOwner?.(new Response(null, { status: 204 }));
+    await ownerSave;
   });
 });
