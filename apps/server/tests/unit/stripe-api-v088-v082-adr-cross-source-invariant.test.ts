@@ -23,7 +23,6 @@
 //     - POST /v1/customers
 //     - GET  /v1/customers (search by email)
 //     - POST /v1/checkout/sessions  (subscription mode)
-//     - POST /v1/checkout/sessions  (payment mode for trial-pack)
 //     - POST /v1/billing_portal/sessions'.
 //
 //   3 default constants — DEFAULT_API_VERSION '2024-12-18.acacia' +
@@ -37,10 +36,6 @@
 //   the Checkout init still succeeds — Stripe just doesn't compute
 //   tax'.
 //
-//   ADR-003 trial-pack one-time-mode framing — 'Create a Checkout
-//   Session in payment mode for a one-time price (the trial pack per
-//   ADR-003). Same correlation pattern via client_reference_id'.
-//
 //   client_reference_id framing — 'is the local account UUID —
 //   surfaced back to us in the checkout.session.completed webhook
 //   event for correlation'.
@@ -49,13 +44,7 @@
 //     price] + line_items[0][quantity]:'1' + success_url + cancel_url
 //     + client_reference_id + automatic_tax[enabled]:'true'.
 //
-//   Payment-mode 7-field body — mode:'payment' + customer +
-//     line_items[0][price] + line_items[0][quantity]:'1' +
-//     success_url + cancel_url + client_reference_id.
-//
-//   Per-mode metadata round-trip — subscription_data[metadata][k] for
-//     subscription mode, payment_intent_data[metadata][k] for
-//     one-time mode.
+//   Subscription metadata round-trip — subscription_data[metadata][k].
 //
 //   Form-encoded customer metadata — 'metadata[k]: v' shape for POST
 //     /v1/customers.
@@ -121,14 +110,14 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
 
   // ─── V-082 endpoint set ──────────────────────────────────────
 
-  it('CRITICAL V-082 endpoint set framing lists 5 endpoints — POST /v1/customers + GET /v1/customers (search by email) + POST /v1/checkout/sessions (subscription mode) + POST /v1/checkout/sessions (payment mode for trial-pack) + POST /v1/billing_portal/sessions. The 5-endpoint inventory is the V-082 touched-surface contract.', () => {
+  it('CRITICAL live operation framing lists customer create/search, subscription Checkout and Billing Portal while the retired payment-mode trial-pack surface stays absent.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
     expect(p).toMatch(/This client covers the minimum endpoints V-082 needs:/);
     expect(p).toMatch(/- POST \/v1\/customers/);
     expect(p).toMatch(/- GET\s+\/v1\/customers \(search by email\)/);
     expect(p).toMatch(/- POST \/v1\/checkout\/sessions\s+\(subscription mode\)/);
-    expect(p).toMatch(/- POST \/v1\/checkout\/sessions\s+\(payment mode for trial-pack\)/);
     expect(p).toMatch(/- POST \/v1\/billing_portal\/sessions/);
+    expect(p).not.toMatch(/payment mode for trial-pack/);
   });
 
   // ─── 3 default constants ─────────────────────────────────────
@@ -203,27 +192,13 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
     expect(p).toMatch(/body\[`subscription_data\[metadata\]\[\$\{k\}\]`\] = v;/);
   });
 
-  // ─── ADR-003 payment-mode framing ────────────────────────────
+  // ─── Retired payment-mode surface ────────────────────────────
 
-  it("CRITICAL ADR-003 one-time-mode framing — 'Create a Checkout Session in payment mode for a one-time price (the trial pack per ADR-003). Same correlation pattern via client_reference_id'. The ADR-003 trial-pack + payment-mode + same-client-ref design is the V-082 + ADR-003 contract.", () => {
+  it('CRITICAL retired one-time trial-pack Checkout method and payment-mode metadata remain absent from the live client.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
-    expect(p).toMatch(/Create a Checkout Session in `payment` mode for a one-time price/);
-    expect(p).toMatch(/\(the trial pack per ADR-003\)\. Same correlation pattern via/);
-    expect(p).toMatch(/`client_reference_id`\./);
-  });
-
-  // ─── Payment-mode 7-field body ───────────────────────────────
-
-  it("CRITICAL payment-mode body has 7 form fields — mode:'payment' + customer + line_items[0][price] + line_items[0][quantity]:'1' + success_url + cancel_url + client_reference_id. The 7-field body intentionally drops automatic_tax (one-time payment per ADR-003).", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
-    expect(p).toMatch(/mode: 'payment',/);
-  });
-
-  // ─── Payment-mode metadata round-trip ────────────────────────
-
-  it("CRITICAL payment-mode metadata round-trips via 'payment_intent_data[metadata][k]' (so it lands on the resulting payment-intent). The payment_intent_data prefix mirrors the subscription_data shape for one-time payments.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
-    expect(p).toMatch(/body\[`payment_intent_data\[metadata\]\[\$\{k\}\]`\] = v;/);
+    expect(p).not.toMatch(/createOneTimeCheckoutSession/);
+    expect(p).not.toMatch(/mode: 'payment'/);
+    expect(p).not.toMatch(/payment_intent_data\[metadata\]/);
   });
 
   // ─── Billing-portal 2-field body ─────────────────────────────

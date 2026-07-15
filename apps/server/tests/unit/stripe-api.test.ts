@@ -144,29 +144,6 @@ describe('StripeApiClient.createSubscriptionCheckoutSession', () => {
   });
 });
 
-describe('StripeApiClient.createOneTimeCheckoutSession', () => {
-  it('builds the payment-mode body correctly', async () => {
-    const { fetchImpl, calls } = makeStubFetch([
-      {
-        status: 200,
-        body: { id: 'cs_test_one', url: 'https://checkout.stripe.com/c/pay/cs_test_one' },
-      },
-    ]);
-    const client = makeClient(fetchImpl);
-    await client.createOneTimeCheckoutSession({
-      customerId: 'cus_y',
-      priceId: 'price_trial',
-      successUrl: 'https://app/x',
-      cancelUrl: 'https://app/y',
-      clientReferenceId: 'acc_uuid',
-    });
-    const body = calls[0]!.init.body as string;
-    expect(body).toContain('mode=payment');
-    expect(body).not.toContain('mode=subscription');
-    expect(body).toContain('client_reference_id=acc_uuid');
-  });
-});
-
 describe('StripeApiClient.createBillingPortalSession', () => {
   it('POSTs customer + return_url', async () => {
     const { fetchImpl, calls } = makeStubFetch([

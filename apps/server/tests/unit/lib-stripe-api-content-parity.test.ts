@@ -10,13 +10,11 @@
 //   • DEFAULT_API_VERSION = '2024-12-18.acacia'.
 //   • DEFAULT_TIMEOUT_MS = 10_000.
 //   • DEFAULT_BASE_URL = 'https://api.stripe.com'.
-//   • 5 touched endpoints framing (Customers / search / 2x Checkout /
+//   • 4 touched operations framing (Customers / search / subscription Checkout /
 //     Billing Portal).
 //   • createSubscriptionCheckoutSession: mode='subscription' +
 //     ADR-002 automatic_tax[enabled]='true' + Checkout address collection
 //     + client_reference_id correlation.
-//   • createOneTimeCheckoutSession: mode='payment' (ADR-003 trial-
-//     pack) — no automatic_tax (one-time price).
 //   • createBillingPortalSession.
 //   • post(): URLSearchParams form body, BasicAuth = base64(`${sk}:`),
 //     Stripe-Version header, AbortController timeout, JSON parse +
@@ -67,12 +65,12 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     );
   });
 
-  it('5 covered endpoints pinned in module-comment touched-surface list', () => {
+  it('4 live operations pinned in module-comment touched-surface list', () => {
     expect(body).toMatch(/POST \/v1\/customers/);
     expect(body).toMatch(/GET {2}\/v1\/customers \(search by email\)/);
     expect(body).toMatch(/POST \/v1\/checkout\/sessions {2}\(subscription mode\)/);
-    expect(body).toMatch(/POST \/v1\/checkout\/sessions {2}\(payment mode for trial-pack\)/);
     expect(body).toMatch(/POST \/v1\/billing_portal\/sessions/);
+    expect(body).not.toMatch(/payment mode for trial-pack/);
   });
 
   it('Default constants: API_VERSION="2024-12-18.acacia", TIMEOUT_MS=10_000, BASE_URL="https://api.stripe.com"', () => {
@@ -137,12 +135,10 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     );
   });
 
-  it('createOneTimeCheckoutSession: mode=payment (ADR-003 trial-pack) + payment_intent_data metadata', () => {
-    expect(body).toMatch(
-      /Create a Checkout Session in `payment` mode for a one-time price\s*\n?\s*\*\s*\(the trial pack per ADR-003\)\. Same correlation pattern via\s*\n?\s*\*\s*`client_reference_id`/,
-    );
-    expect(body).toMatch(/mode: 'payment',/);
-    expect(body).toMatch(/body\[`payment_intent_data\[metadata\]\[\$\{k\}\]`\] = v;/);
+  it('retired one-time trial-pack Checkout surface stays absent', () => {
+    expect(body).not.toMatch(/createOneTimeCheckoutSession/);
+    expect(body).not.toMatch(/mode: 'payment'/);
+    expect(body).not.toMatch(/payment_intent_data\[metadata\]/);
   });
 
   it('createBillingPortalSession: customer + return_url → /v1/billing_portal/sessions', () => {

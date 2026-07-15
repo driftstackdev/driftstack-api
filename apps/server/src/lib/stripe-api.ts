@@ -26,7 +26,6 @@
 //   - POST /v1/customers
 //   - GET  /v1/customers (search by email)
 //   - POST /v1/checkout/sessions  (subscription mode)
-//   - POST /v1/checkout/sessions  (payment mode for trial-pack)
 //   - POST /v1/billing_portal/sessions
 //
 // New endpoint touches land here as one method per Stripe resource.
@@ -162,36 +161,6 @@ export class StripeApiClient {
       body,
       args.idempotencyKey,
     );
-  }
-
-  /**
-   * Create a Checkout Session in `payment` mode for a one-time price
-   * (the trial pack per ADR-003). Same correlation pattern via
-   * `client_reference_id`.
-   */
-  async createOneTimeCheckoutSession(args: {
-    customerId: string;
-    priceId: string;
-    successUrl: string;
-    cancelUrl: string;
-    clientReferenceId: string;
-    metadata?: Record<string, string>;
-  }): Promise<{ id: string; url: string }> {
-    const body: Record<string, string> = {
-      mode: 'payment',
-      customer: args.customerId,
-      'line_items[0][price]': args.priceId,
-      'line_items[0][quantity]': '1',
-      success_url: args.successUrl,
-      cancel_url: args.cancelUrl,
-      client_reference_id: args.clientReferenceId,
-    };
-    if (args.metadata !== undefined) {
-      for (const [k, v] of Object.entries(args.metadata)) {
-        body[`payment_intent_data[metadata][${k}]`] = v;
-      }
-    }
-    return this.post<{ id: string; url: string }>('/v1/checkout/sessions', body);
   }
 
   // ── Billing Portal ────────────────────────────────────────────────────
