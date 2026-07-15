@@ -1807,7 +1807,7 @@ export function registerAgentSessionsRoutes(
         // server is authoritative) gives the customer an instant, honest message.
         if (owned.scheme === 'http') {
           throw new BadRequestError(
-            'HTTP proxies cannot drive a browser session yet — use a SOCKS5, OpenVPN, or WireGuard proxy.',
+            'HTTP proxies are unsupported for browser sessions on this deployment — use a SOCKS5, OpenVPN, or WireGuard proxy.',
           );
         }
         // NOTE: the LIVE pre-launch probe is deliberately NOT run here. It runs

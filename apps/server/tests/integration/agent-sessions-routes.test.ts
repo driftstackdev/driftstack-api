@@ -304,7 +304,9 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     // never leaks a phantom active slot (#16) and the GUI gets an instant honest
     // message instead of a 30s "the proxy may be down" timeout.
     expect(res.statusCode).toBe(400);
-    expect(res.json<{ detail?: string }>().detail).toMatch(/HTTP proxies cannot drive/);
+    expect(res.json<{ detail?: string }>().detail).toBe(
+      'HTTP proxies are unsupported for browser sessions on this deployment — use a SOCKS5, OpenVPN, or WireGuard proxy.',
+    );
   });
 
   // ── #63 LIVE proxy pre-launch validation gate ─────────────────────────────
