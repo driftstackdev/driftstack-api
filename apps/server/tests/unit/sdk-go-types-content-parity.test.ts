@@ -212,9 +212,12 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     expect(body).toMatch(
       /^type Event struct \{\s*\n\s*ID\s+string\s+`json:"id"`\s*\n\s*Type\s+WebhookEventType `json:"type"`\s*\n\s*CreatedAt time\.Time\s+`json:"created_at"`\s*\n\s*Data\s+json\.RawMessage\s+`json:"data"`\s*\n\}/m,
     );
-    expect(body).toMatch(/\/\/ Profile — V-426\./);
-    expect(body).toMatch(/\/\/ CreateProfileRequest — V-426\./);
-    expect(body).toMatch(/\/\/ UpdateProfileRequest — V-426\./);
+    expect(body).toMatch(/\/\/ Profile matches the public ProfileSchema/);
+    expect(body).toMatch(
+      /Archetype defaults to the live catalog's default_archetype_id when omitted;/,
+    );
+    expect(body).toMatch(/call GET \/v1\/archetypes instead of hard-coding a device generation/);
+    expect(body).toMatch(/\/\/ UpdateProfileRequest matches the server's update-profile request\./);
     // doc-150 item 5 — per-profile sealed-store size (*int64, can exceed 2^31)
     // + save-back time on the Profile struct.
     expect(body).toMatch(/SizeBytes\s+\*int64\s+`json:"size_bytes"`/);

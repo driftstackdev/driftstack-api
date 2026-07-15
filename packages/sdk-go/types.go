@@ -692,10 +692,10 @@ type APIKeyRevokedData struct {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Profiles (V-081)
+// Profiles
 // ──────────────────────────────────────────────────────────────────
 
-// Profile — V-426. Matches the public ProfileSchema returned by
+// Profile matches the public ProfileSchema returned by
 // /v1/profiles. Per-profile browser state (persona / storage_state /
 // notes) lives in the WebKit driver layer, not the control plane;
 // the customer API surfaces only the metadata below. `Description`
@@ -725,10 +725,9 @@ type Profile struct {
 	DeletedAt *time.Time `json:"deleted_at"`
 }
 
-// CreateProfileRequest — V-426. Server's CreateProfileRequestSchema
-// is `{ name, archetype?, description?, folder?, tags? }`. `Archetype` defaults
-// server-side to the locked iPhone-16-Pro / iOS / Safari archetype
-// when omitted (V-136 LOCKED_ARCHETYPE_ID).
+// CreateProfileRequest matches the server's create-profile request.
+// Archetype defaults to the live catalog's default_archetype_id when omitted;
+// call GET /v1/archetypes instead of hard-coding a device generation.
 type CreateProfileRequest struct {
 	Name        string   `json:"name"`
 	Archetype   string   `json:"archetype,omitempty"`
@@ -739,7 +738,7 @@ type CreateProfileRequest struct {
 	Note        string   `json:"note,omitempty"` // short inline note (≤280)
 }
 
-// UpdateProfileRequest — V-426. Server's UpdateProfileRequestSchema
+// UpdateProfileRequest matches the server's update-profile request.
 // is `{ name?, description?, folder?, tags? }`. All optional. Tags is
 // an exact-set replace. Note: `omitempty` means a nil Folder is
 // omitted (field untouched) — same explicit-null limitation as
