@@ -33,9 +33,10 @@ describe('docs sdk/go-quickstart content parity', () => {
     expect(body).not.toMatch(/Go 1\.21\+/);
   });
 
-  it('alpha-pin-to-sha caveat pinned: drift to claiming a stable v1 release would mislead customers about API-stability guarantees during alpha', () => {
-    expect(body).toMatch(/The Go SDK is alpha until the first tagged release lands/);
-    expect(body).toMatch(/Pin to a\s*\n?\s*>?\s*specific commit during the alpha by running/);
+  it('pre-1.0 exact-pin guidance is current and contains no future tag promise', () => {
+    expect(body).toMatch(/The Go SDK is pre-1\.0\. Replace `<commit>` with an exact commit SHA/);
+    expect(body).toMatch(/production builds remain reproducible/);
+    expect(body).not.toMatch(/first tagged release|lands/i);
   });
 
   it("install command + canonical import path pinned: `go get github.com/driftstackdev/driftstack-api/packages/sdk-go` + the `driftstack` import alias. Drift would silently break customers' module imports", () => {

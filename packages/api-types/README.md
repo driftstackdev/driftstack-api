@@ -2,7 +2,7 @@
 
 Zod schemas + TypeScript types for the public [Driftstack](https://driftstack.dev) API. The single source of truth for the API contract — the OpenAPI 3.1 spec is generated from these schemas, the official TypeScript SDK ([@driftstack/sdk](https://www.npmjs.com/package/@driftstack/sdk)) re-exports the inferred types, and other-language SDKs (Python, Go) generate types from the OpenAPI spec.
 
-> **Status:** alpha. Pre-launch contract; subject to change before `1.0.0`. Pin a specific version in production usage until then.
+> **Status:** pre-1.0. Pin an exact package version in production; all supported schemas and compatibility rules are documented below.
 
 ## Install
 
@@ -44,7 +44,7 @@ function handle(session: Session) {
 
 ## Versioning
 
-`0.x.y` — breaking changes can land in any minor version while we're below `1.0`. Pin to a specific version in production. Once we're at `1.0`, semver applies normally; breaking schema changes mean a major bump.
+`0.x.y` follows SemVer's pre-1.0 rules: breaking changes use a minor version and compatible fixes use a patch version. Pin an exact version in production and review the changelog before upgrading.
 
 ## License
 

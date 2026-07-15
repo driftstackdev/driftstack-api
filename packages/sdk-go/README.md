@@ -2,12 +2,12 @@
 
 Stealth iPhone Safari automation, called from Go. Single-package, zero non-stdlib runtime dependencies, context-aware throughout.
 
-> **Status:** alpha. Not yet tagged. The package builds, tests pass, examples compile. Tag `v0.1.0` once the publish step lands.
+> **Status:** pre-1.0. The package builds, tests pass, and examples compile. Pin an exact commit or Go pseudo-version for reproducible deployments.
 
 ## Install
 
 ```bash
-go get github.com/driftstackdev/driftstack-api/packages/sdk-go
+go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<commit>
 ```
 
 Requires Go 1.22+ (the module's `go.mod` declares `go 1.22`; uses `errors.As`, `context.Cancel*`, and the `slices` package).
@@ -58,7 +58,7 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | `client.Egress`           | `AttachToSession`, `GetSessionProxy`, `ListProxies`, `CreateProxy`, `UpdateProxy`, `DeleteProxy`, `TestProxy` (per-session + reusable proxy egress) |
 | `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` (V-313)                                                                             |
 | `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` (V-312)                                                                  |
-| `client.Recipes`          | `Create`, `List`, `Iterate`, `Get`, `Delete` (AI-B4 — snapshot an agent-session's intent_log; execution stays v1.1)                                 |
+| `client.Recipes`          | `Create`, `List`, `Iterate`, `Get`, `Delete` (snapshot and manage an agent-session's intent_log; no execute method)                                 |
 | `client.APIKeys`          | `Create`, `List`, `Rotate` (V-296), `Revoke`                                                                                                        |
 | `client.Usage`            | `CurrentPeriod`                                                                                                                                     |
 | `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                       |

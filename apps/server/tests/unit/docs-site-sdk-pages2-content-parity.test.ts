@@ -15,7 +15,7 @@ function read(p: string): string {
 }
 
 describe('W602 apps/docs/sdk close-out pages content parity', () => {
-  it('installation.md: OpenAPI 3.1 single source + 3-language sections (TS published + Python alpha PyPI-pending + Go alpha) + Node >=18 native fetch + Python 3.10+ + Go 1.22+ + per-language resource catalogue + DriftstackError base class + zero-non-stdlib-runtime-deps for Go pinned', () => {
+  it('installation.md: OpenAPI 3.1 source + published TS and exact-pinned pre-1.0 Python/Go installation + resource catalogues pinned', () => {
     const body = read(INSTALL);
     expect(body).toMatch(/^title: SDK installation$/m);
     expect(body).toMatch(/^# SDK installation$/m);
@@ -45,8 +45,12 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/client\.auditLog\.export\(\); \/\/ GDPR Article 20 JSON/);
     expect(body).toMatch(/\*\*Errors:\*\* every error extends `DriftstackError`\./);
     expect(body).toMatch(/^## Python$/m);
-    expect(body).toMatch(/\*\*Status:\*\* alpha\. The SDK is built, tested, and wheel-buildable\./);
-    expect(body).toMatch(/The dist name is `driftstack-sdk`; the import name is `driftstack`\./);
+    expect(body).toMatch(
+      /\*\*Status:\*\* pre-1\.0\. The SDK is built, tested, and wheel-buildable\./,
+    );
+    expect(body).toMatch(
+      /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
+    );
     expect(body).toMatch(/\*\*Requirements:\*\* Python 3\.10\+/);
     expect(body).toMatch(
       /Inputs accept either a Pydantic model OR a plain `dict`\. Outputs are typed Pydantic models\./,

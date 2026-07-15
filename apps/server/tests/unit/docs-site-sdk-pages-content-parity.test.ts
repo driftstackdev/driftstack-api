@@ -45,15 +45,15 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
       );
     });
 
-    it('Python card — driftstack-sdk, pip install command + status "alpha; PyPI tag pending". The "PyPI tag pending" framing is load-bearing because it tells customers the install will need to come from a git ref or wheel during alpha, not pip\'s package index.', () => {
+    it('Python card — source-install command + current pre-1.0 status, with no registry promise.', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">pip install driftstack-sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: alpha; PyPI tag pending<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">pip install …#subdirectory=packages\/sdk-python<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: source install; pre-1\.0<\/p>/,
       );
     });
 
-    it('Go card — sdk-go, go get github.com/driftstackdev/... + status "alpha; first tag pending". "First tag pending" framing tells customers the SDK is still pin-to-sha territory during alpha (no semver tag yet).', () => {
+    it('Go card — source-module command + current pre-1.0 status, with no future tag promise.', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">go get github\.com\/driftstackdev\/\.\.\.<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: alpha; first tag pending<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">go get github\.com\/driftstackdev\/\.\.\.<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: source module; pre-1\.0<\/p>/,
       );
     });
 
@@ -119,7 +119,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(PY)).toBe(true);
   });
 
-  it('go-quickstart.md: laser-focused-5-minute framing + Go 1.22+ (2026-06-24: go.mod declares go 1.22) + go-get module path + alpha pin-to-sha guidance + ctx + client.Close() defer pattern pinned. Re-enabled by slice 320 post the R4 V-NNN scrub (V-504 anchor removed; doc leads with bare em-dash)', () => {
+  it('go-quickstart.md: Go 1.22+, exact source pin, ctx + client.Close lifecycle pinned', () => {
     const body = read(GO);
     expect(body).toMatch(/^title: Go quickstart$/m);
     expect(body).toMatch(/^# Go quickstart$/m);
@@ -127,8 +127,8 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/- Go 1\.22\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
     expect(body).not.toMatch(/- Go 1\.21\+/);
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
-    expect(body).toMatch(/> The Go SDK is alpha until the first tagged release lands\./);
-    expect(body).toMatch(/specific commit during the alpha/);
+    expect(body).toMatch(/> The Go SDK is pre-1\.0\. Replace `<commit>` with an exact commit SHA/);
+    expect(body).toMatch(/production builds remain reproducible/);
     expect(body).toMatch(
       /driftstack "github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go"/,
     );

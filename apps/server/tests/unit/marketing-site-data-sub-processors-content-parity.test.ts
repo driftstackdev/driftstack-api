@@ -26,7 +26,7 @@
 //   • V-478 SubProcessorChangeLogEntry framing pinned + 4-value
 //     kind union ('added'|'removed'|'material_change'|
 //     'register_published') + 'register_published' baseline marker
-//     'pre-launch baseline marker. The register has been on-record
+//     'initial transparency baseline. The register has been on-record
 //     from this date forward.'
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -127,9 +127,9 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
     );
   });
 
-  it("SubProcessorChangeLogEntry: 4-value kind union ('added'|'removed'|'material_change'|'register_published') + 5-field (date + kind + subject + summary + effective_at) + 'register_published' baseline marker framing 'pre-launch baseline marker. The register has been on-record from this date forward.'", () => {
+  it("SubProcessorChangeLogEntry: 4-value kind union + five fields + current 'initial transparency baseline' framing", () => {
     expect(body).toMatch(
-      /\*\s+- `register_published`: pre-launch baseline marker\. The register has\s*\n?\s*\*\s+been on-record from this date forward\./,
+      /\*\s+- `register_published`: initial transparency baseline\. The register has\s*\n?\s*\*\s+been on-record from this date forward\./,
     );
     expect(body).toMatch(
       /export interface SubProcessorChangeLogEntry \{\s*\n?\s*date: string;\s*\n?\s*kind: 'added' \| 'removed' \| 'material_change' \| 'register_published';/,

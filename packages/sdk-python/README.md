@@ -2,15 +2,15 @@
 
 Stealth iPhone Safari automation, called from Python. Sync (`Driftstack`) and async (`AsyncDriftstack`) clients in one package, sharing the same typed resources, error hierarchy, and retry policy.
 
-> **Status:** alpha. The SDK is built, tested, and wheel-buildable, but **not yet published to PyPI** — gated on entity setup. Until then, install from a local checkout or a tagged commit.
+> **Status:** pre-1.0. The SDK is built, tested, and wheel-buildable. Install from a pinned source commit for reproducible deployments.
 
 ## Install
 
 ```bash
-pip install driftstack-sdk
+pip install "driftstack-sdk @ git+https://github.com/driftstackdev/driftstack-api.git@<commit>#subdirectory=packages/sdk-python"
 ```
 
-The dist name on PyPI is `driftstack-sdk`; the import name is `driftstack`.
+Replace `<commit>` with an exact full commit SHA. The distribution name is `driftstack-sdk`; the import name is `driftstack`.
 
 Requires Python 3.10+.
 
@@ -53,7 +53,7 @@ Every public API endpoint is a typed method on a resource accessor:
 | `client.egress`            | `attach_to_session`, `get_session_proxy`, `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy` (per-session + reusable proxy egress)  |
 | `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                       |
 | `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                         |
-| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (AI-B4 — snapshot an agent-session's intent_log; execution stays v1.1)                                           |
+| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (snapshot and manage an agent-session's intent_log; no execute method)                                           |
 | `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                  |
 | `client.usage`             | `current_period`                                                                                                                                              |
 | `client.webhooks`          | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307)                                                         |

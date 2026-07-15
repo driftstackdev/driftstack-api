@@ -129,7 +129,7 @@ export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-07-07';
  *   - `material_change`: an existing entry's region / purpose / transfer
  *     mechanism changed in a way that triggers Art 28(2). Cosmetic edits
  *     (rewording, typo fixes) do NOT land here.
- *   - `register_published`: pre-launch baseline marker. The register has
+ *   - `register_published`: initial transparency baseline. The register has
  *     been on-record from this date forward.
  */
 export interface SubProcessorChangeLogEntry {
@@ -172,8 +172,8 @@ export const SUB_PROCESSOR_CHANGELOG: SubProcessorChangeLogEntry[] = [
     kind: 'register_published',
     subject: '',
     summary:
-      'Initial sub-processor register published as part of pre-launch ' +
-      'transparency. The register reflects the sub-processors in ' +
+      'Initial sub-processor transparency register published. The ' +
+      'register reflects the sub-processors in ' +
       'production at the time of publication; future material changes ' +
       'are recorded here, each with the 30-day notice GDPR ' +
       'Article 28(2) requires.',

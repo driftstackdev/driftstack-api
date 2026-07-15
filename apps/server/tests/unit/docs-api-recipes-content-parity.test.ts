@@ -23,19 +23,17 @@ describe('docs/api/recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Recipes overview framing pinned: 'A recipe is an immutable snapshot of a finished agent-session — the structured intent_log plus the full transcript at the moment of capture. Recipes let customers replay the same flow later without re-paying the LLM decompose cost.' — pinned so the immutable-snapshot + intent_log+transcript + replay-without-decompose-cost contract all stay documented", () => {
+  it('Recipes overview pins the immutable snapshot as a durable reference without claiming replay', () => {
     expect(body).toMatch(
-      /A \*\*recipe\*\* is an immutable snapshot of a finished\s*\n?\s*\[agent-session\]\(\/api\/agent-sessions\/\) — the structured intent_log\s*\n?\s*plus the full transcript at the moment of capture\. Recipes let\s*\n?\s*customers replay the same flow later without re-paying the LLM\s*\n?\s*decompose cost\./,
+      /A \*\*recipe\*\* is an immutable snapshot of a finished\s*\n?\s*\[agent-session\]\(\/api\/agent-sessions\/\) — the structured intent_log\s*\n?\s*plus the full transcript at the moment of capture\. Recipes preserve\s*\n?\s*a completed flow as a durable reference without re-running decomposition/,
     );
   });
 
-  it("v1.0 create/list/read/delete surface + execute-stays-v1.1 framing pinned: 'The v1.0 surface covers create, list, read, and delete: POST /v1/recipes, GET /v1/recipes, GET /v1/recipes/{id}, and DELETE /v1/recipes/{id}. Recipe execution — replaying a recipe against a new agent-session — lands at v1.1 (D2/D3 scope per the v2-#37 queue).' — pinned so the read/management path is documented as SHIPPED while execution stays gated on the harness executor (drift to re-listing list/get/delete as 'upcoming' would under-document the live surface; drift to documenting execute as shipped would over-promise the harness-gated path)", () => {
+  it('current create/list/read/delete surface and explicit no-execute boundary are pinned', () => {
     expect(body).toMatch(
-      /The v1\.0 surface covers create, list, read, and delete:\s*\n?\s*`POST \/v1\/recipes`, `GET \/v1\/recipes`, `GET \/v1\/recipes\/\{id\}`, and\s*\n?\s*`DELETE \/v1\/recipes\/\{id\}`\. Recipe execution — replaying a recipe/,
+      /The current surface covers create, list, read, and delete:\s*\n?\s*`POST \/v1\/recipes`, `GET \/v1\/recipes`, `GET \/v1\/recipes\/\{id\}`, and\s*\n?\s*`DELETE \/v1\/recipes\/\{id\}`\. There is no recipe-execution endpoint/,
     );
-    expect(body).toMatch(
-      /against a new agent-session — lands at v1\.1 \(D2\/D3 scope per the\s*\n?\s*v2-#37 queue\)\./,
-    );
+    expect(body).toMatch(/start a new agent-session to run another task\./);
   });
 
   it('Resource shape and public-detail redaction pinned: list metadata stays compact; detail retains sensitive selectors/order/marker but never returns saved type values to read scope', () => {
@@ -72,17 +70,12 @@ describe('docs/api/recipes content parity', () => {
     );
   });
 
-  it('Errors table 4-row roster pinned: 400 validation + 404 not-found + 401 unauthorized + 503 feature-unavailable. + Upcoming-v1.1 reduced to the single execute endpoint (list/get/delete shipped at v1.0, so only POST /v1/recipes/{id}/execute remains gated on the harness executor) — pinned so the 4-error-status + execution-stays-the-only-upcoming-endpoint contract stay documented', () => {
+  it('Errors table 4-row roster pinned, with no speculative Upcoming section', () => {
     expect(body).toMatch(/\|\s*400 \| validation/);
     expect(body).toMatch(/\|\s*404 \| not-found/);
     expect(body).toMatch(/\|\s*401 \| unauthorized/);
     expect(body).toMatch(/\|\s*503 \| feature-unavailable/);
-    expect(body).toMatch(
-      /## Upcoming \(v1\.1\)\s*\n\s*\n- `POST \/v1\/recipes\/\{id\}\/execute` — replay a recipe against a new\s*\n\s*agent-session, skipping the decompose step/,
-    );
-    // list/get/delete are no longer "upcoming" — they must NOT appear
-    // under any "land at v1.1" / "Upcoming" framing now that they ship.
-    expect(body).not.toMatch(/- `GET \/v1\/recipes` — list the calling account's recipes/);
+    expect(body).not.toMatch(/## Upcoming|lands at v1\.1|\/recipes\/\{id\}\/execute/);
   });
 
   it('List endpoint documented as shipped: GET /v1/recipes cursor-paginated (limit 1-100 default 50 + opaque cursor + { data, has_more, next_cursor } envelope, intent_log omitted from list items) — pinned so the read path is documented as live and matches the keyset-pagination contract the route + SDKs implement', () => {

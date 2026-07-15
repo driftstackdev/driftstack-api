@@ -18,11 +18,11 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 ## 1. Install
 
 ```bash
-go get github.com/driftstackdev/driftstack-api/packages/sdk-go
+go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<commit>
 ```
 
-> The Go SDK is alpha until the first tagged release lands. Pin to a
-> specific commit during the alpha by running
+> The Go SDK is pre-1.0. Replace `<commit>` with an exact commit SHA or
+> Go pseudo-version so production builds remain reproducible.
 > `go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<sha>`.
 
 ## 2. Configure the client

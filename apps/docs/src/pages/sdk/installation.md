@@ -149,15 +149,15 @@ client.account.me();
 
 ## Python
 
-**Status:** alpha. The SDK is built, tested, and wheel-buildable. The first PyPI release tags shortly after launch verification.
+**Status:** pre-1.0. The SDK is built, tested, and wheel-buildable. Pin an exact source commit for reproducible deployments.
 
-**Install (when published):**
+**Install:**
 
 ```bash
-pip install driftstack-sdk
+pip install "driftstack-sdk @ git+https://github.com/driftstackdev/driftstack-api.git@<commit>#subdirectory=packages/sdk-python"
 ```
 
-The dist name is `driftstack-sdk`; the import name is `driftstack`.
+Replace `<commit>` with an exact full commit SHA. The distribution name is `driftstack-sdk`; the import name is `driftstack`.
 
 **Requirements:** Python 3.10+.
 
@@ -193,7 +193,7 @@ asyncio.run(main())
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `client.sessions`          | `create`, `list`, `iterate`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`           |
 | `client.agent_sessions`    | `create`, `get`, `message`, `close`, `takeover`, `handback`, `livekit_token` (sync + async)                                                   |
-| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (only `execute`/replay lands at v1.1)                                                            |
+| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (recipe management only; no execute method)                                                      |
 | `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                             |
 | `client.api_keys`          | `create`, `list`, `rotate` , `revoke`                                                                                                         |
 | `client.usage`             | `current_period`                                                                                                                              |
@@ -211,12 +211,12 @@ Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydan
 
 ## Go
 
-**Status:** alpha. Builds, tests pass, examples compile. The first tagged release lands shortly after launch verification.
+**Status:** pre-1.0. Builds and tests pass, and examples compile. Pin an exact commit or Go pseudo-version for reproducible deployments.
 
 **Install:**
 
 ```bash
-go get github.com/driftstackdev/driftstack-api/packages/sdk-go
+go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<commit>
 ```
 
 **Requirements:** Go 1.22+ (the toolchain floor declared in `go.mod`).
@@ -259,7 +259,7 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 | ----------------- | --- | ------ | --- | ------------------------------------------------------------------------ |
 | Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState/extract/search/login |
 | Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken                  |
-| Recipes           | ✅  | ✅     | ✅  | create/list/get/delete ship at v1.0; only execute (replay) lands at v1.1 |
+| Recipes           | ✅  | ✅     | ✅  | create/list/get/delete; no execute method                                |
 | Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                                |
 | Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                              |
 | API keys          | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                                         |

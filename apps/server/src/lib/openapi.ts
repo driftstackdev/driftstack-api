@@ -6699,7 +6699,7 @@ export function generateOpenApiSpec(): OpenAPIObject {
       title: 'Driftstack API',
       version: '0.0.1',
       description: [
-        'Driftstack API — stealth iPhone Safari automation. Pre-launch contract; subject to change.',
+        'Driftstack API for iPhone Safari automation. Versioned public contract under /v1.',
         '',
         '## Team RBAC: X-Driftstack-Account header (V-326e)',
         '',

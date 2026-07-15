@@ -99,7 +99,7 @@ client.recipes.create(body)             // AI-B4 — snapshot an agent-session's
 client.recipes.list(query?)             // cursor-paginated, newest first
 client.recipes.iterate(opts?)
 client.recipes.get(id)                  // recipe + public intent_log; secret type values omitted
-client.recipes.delete(id)               // execution stays v1.1 (harness-executor-gated)
+client.recipes.delete(id)               // recipe management only; no execute method
 
 client.apiKeys.create(body)             // requires admin scope
 client.apiKeys.list()

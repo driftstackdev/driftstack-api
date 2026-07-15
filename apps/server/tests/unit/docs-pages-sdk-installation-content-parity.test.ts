@@ -165,11 +165,15 @@ describe('W778 docs /sdk/installation content parity', () => {
     );
   });
 
-  it("CRITICAL Python dist-name vs import-name framing pinned. The 'The dist name is driftstack-sdk; the import name is driftstack' wording is the load-bearing pypi-vs-import contract.", () => {
+  it('CRITICAL Python source install and distribution-name vs import-name framing pinned.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/The dist name is `driftstack-sdk`; the import name is `driftstack`\./);
-    expect(p).toMatch(/pip install driftstack-sdk/);
+    expect(p).toMatch(
+      /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
+    );
+    expect(p).toMatch(
+      /pip install "driftstack-sdk @ git\+https:[^\n]+@<commit>#subdirectory=packages\/sdk-python"/,
+    );
   });
 
   it('CRITICAL Python 3.10+ + sync+async dual-client framing pinned. Driftstack (sync) + AsyncDriftstack (async) with context-manager idiom matches the V-452 SDK idioms.', () => {

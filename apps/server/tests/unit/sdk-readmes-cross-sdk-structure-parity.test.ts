@@ -38,13 +38,13 @@ describe('W814 cross-SDK README structure parity', () => {
 
   // ─── Status: alpha / pre-1.0 framing ──────────────────────────
 
-  it('CRITICAL each SDK README has a `> **Status:**` callout. TS: pre-1.0 + stable surface; Python: alpha + not yet published to PyPI; Go: alpha + not yet tagged + v0.1.0 once publish step lands. Drift would lose the load-bearing maturity signaling.', () => {
+  it('CRITICAL each SDK README has current pre-1.0 status and reproducible-install guidance without future publication promises.', () => {
     expect(read(TS)).toMatch(/> \*\*Status:\*\* pre-1\.0\. Stable surface for the API contract/);
     expect(read(PY)).toMatch(
-      /> \*\*Status:\*\* alpha\. The SDK is built, tested, and wheel-buildable, but \*\*not yet published to PyPI\*\*/,
+      /> \*\*Status:\*\* pre-1\.0\. The SDK is built, tested, and wheel-buildable\. Install from a pinned source commit/,
     );
     expect(read(GO)).toMatch(
-      /> \*\*Status:\*\* alpha\. Not yet tagged\. The package builds, tests pass, examples compile\./,
+      /> \*\*Status:\*\* pre-1\.0\. The package builds, tests pass, and examples compile\. Pin an exact commit or Go pseudo-version/,
     );
   });
 
@@ -70,20 +70,24 @@ describe('W814 cross-SDK README structure parity', () => {
 
   // ─── Install commands (each SDK's package manager) ────────────
 
-  it("CRITICAL each SDK README install section has the canonical package-manager invocation. TS: 'npm install @driftstack/sdk' (+pnpm + yarn). Python: 'pip install driftstack-sdk'. Go: 'go get github.com/driftstackdev/driftstack-api/packages/sdk-go'.", () => {
+  it('CRITICAL each SDK README has a working current install command; source-only SDKs require an exact commit.', () => {
     expect(read(TS)).toMatch(/npm install @driftstack\/sdk/);
     expect(read(TS)).toMatch(/pnpm add @driftstack\/sdk/);
     expect(read(TS)).toMatch(/yarn add @driftstack\/sdk/);
-    expect(read(PY)).toMatch(/pip install driftstack-sdk/);
-    expect(read(GO)).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
+    expect(read(PY)).toMatch(
+      /pip install "driftstack-sdk @ git\+https:[^\n]+@<commit>#subdirectory=packages\/sdk-python"/,
+    );
+    expect(read(GO)).toMatch(
+      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@<commit>/,
+    );
   });
 
   // ─── Python-specific dist-vs-import note ──────────────────────
 
-  it("CRITICAL Python README pins the dist-name-vs-import-name distinction. 'The dist name on PyPI is `driftstack-sdk`; the import name is `driftstack`' is the load-bearing 'pip install / from driftstack import' clarification.", () => {
+  it('CRITICAL Python README pins the distribution-name-vs-import-name distinction.', () => {
     const p = read(PY);
     expect(p).toMatch(
-      /The dist name on PyPI is `driftstack-sdk`; the import name is `driftstack`\./,
+      /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
     );
     expect(p).toMatch(/Requires Python 3\.10\+\./);
   });

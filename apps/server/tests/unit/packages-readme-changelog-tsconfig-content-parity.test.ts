@@ -18,15 +18,13 @@ function read(p: string): string {
 }
 
 describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => {
-  it('api-types/README.md: @driftstack/api-types alpha Zod-schemas + TS-types single-source-of-truth + transitive-dep-of-@driftstack/sdk + 7-section export list (resource schemas + V-079 auth + V-082 billing + discriminated unions + common shapes + closed enums + PROBLEM_TYPES 22 stable types) + 0.x.y pre-1.0 versioning + MIT pinned', () => {
+  it('api-types/README.md: @driftstack/api-types pre-1.0 Zod-schemas + TS-types single-source-of-truth + exact pin guidance + 7-section export list + SemVer pre-1.0 rules + MIT pinned', () => {
     const body = read(P('api-types/README.md'));
     expect(body).toMatch(/^# @driftstack\/api-types$/m);
     expect(body).toMatch(/Zod schemas \+ TypeScript types for the public \[Driftstack\]/);
     expect(body).toMatch(/The single source of truth for the API contract/);
     expect(body).toMatch(/the OpenAPI 3\.1 spec is generated from these schemas/);
-    expect(body).toMatch(
-      /\*\*Status:\*\* alpha\. Pre-launch contract; subject to change before `1\.0\.0`\./,
-    );
+    expect(body).toMatch(/\*\*Status:\*\* pre-1\.0\. Pin an exact package version in production/);
     expect(body).toMatch(/^## Install$/m);
     expect(body).toMatch(/^npm install @driftstack\/api-types$/m);
     expect(body).toMatch(/transitive dependency of `@driftstack\/sdk`/);
@@ -50,7 +48,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     );
     expect(body).toMatch(/\*\*Stable problem-type URIs:\*\* `PROBLEM_TYPES`/);
     expect(body).toMatch(/^## Versioning$/m);
-    expect(body).toMatch(/`0\.x\.y` — breaking changes can land in any minor version/);
+    expect(body).toMatch(/`0\.x\.y` follows SemVer's pre-1\.0 rules/);
     expect(body).toMatch(/^## License$/m);
     expect(body).toMatch(/^MIT\.$/m);
     expect(existsSync(P('api-types/README.md'))).toBe(true);
@@ -89,14 +87,16 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(existsSync(P('sdk-typescript/README.md'))).toBe(true);
   });
 
-  it('sdk-go/README.md: alpha + zero-non-stdlib runtime deps + context-aware throughout + go get url + Go 1.22+ (go.mod declares go 1.22) + driftstack.New(apiKey)+Close+ctx-first Quickstart + 11-row Resources accessor table (Sessions/Profiles/ProfileSnapshots V-312/APIKeys V-296/Usage etc) pinned', () => {
+  it('sdk-go/README.md: pre-1.0 + pinned source install + zero-non-stdlib runtime deps + context-aware throughout + Go 1.22+ + lifecycle/resources pinned', () => {
     const body = read(P('sdk-go/README.md'));
     expect(body).toMatch(/^# Driftstack Go SDK$/m);
     expect(body).toMatch(
       /Stealth iPhone Safari automation, called from Go\. Single-package, zero non-stdlib runtime dependencies, context-aware throughout\./,
     );
-    expect(body).toMatch(/\*\*Status:\*\* alpha\. Not yet tagged\./);
-    expect(body).toMatch(/^go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go$/m);
+    expect(body).toMatch(/\*\*Status:\*\* pre-1\.0\. The package builds, tests pass/);
+    expect(body).toMatch(
+      /^go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@<commit>$/m,
+    );
     expect(body).toMatch(/Requires Go 1\.22\+/);
     expect(body).toMatch(/^## Quickstart$/m);
     expect(body).toMatch(
@@ -124,17 +124,18 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(existsSync(P('sdk-go/README.md'))).toBe(true);
   });
 
-  it('sdk-python/README.md: alpha not-on-PyPI yet + driftstack-sdk dist name / driftstack import name + Python 3.10+ + sync Driftstack + async AsyncDriftstack + 10-row Resources accessor table (sessions/profiles/profile_snapshots V-312/api_keys V-296/usage/webhooks V-307/team V-298/billing/auth/account V-385) pinned', () => {
+  it('sdk-python/README.md: pre-1.0 pinned source install + driftstack-sdk distribution / driftstack import + Python 3.10+ + sync/async resource surface pinned', () => {
     const body = read(P('sdk-python/README.md'));
     expect(body).toMatch(/^# Driftstack Python SDK$/m);
     expect(body).toMatch(
       /Stealth iPhone Safari automation, called from Python\. Sync \(`Driftstack`\) and async \(`AsyncDriftstack`\) clients in one package/,
     );
-    expect(body).toMatch(/\*\*Status:\*\* alpha\./);
-    expect(body).toMatch(/\*\*not yet published to PyPI\*\* — gated on entity setup/);
-    expect(body).toMatch(/^pip install driftstack-sdk$/m);
+    expect(body).toMatch(/\*\*Status:\*\* pre-1\.0\. The SDK is built, tested/);
     expect(body).toMatch(
-      /The dist name on PyPI is `driftstack-sdk`; the import name is `driftstack`\./,
+      /pip install "driftstack-sdk @ git\+https:\/\/github\.com\/driftstackdev\/driftstack-api\.git@<commit>#subdirectory=packages\/sdk-python"/,
+    );
+    expect(body).toMatch(
+      /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
     );
     expect(body).toMatch(/Requires Python 3\.10\+\./);
     expect(body).toMatch(/^## Quickstart \(sync\)$/m);

@@ -1,22 +1,21 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Recipes
-description: Snapshot a finished agent-session into a replayable recipe — capture the structured intent_log + transcript without re-paying decompose cost.
+description: Save a finished agent-session as a recipe — capture its structured intent_log and transcript as a durable reference.
 ---
 
 # Recipes
 
 A **recipe** is an immutable snapshot of a finished
 [agent-session](/api/agent-sessions/) — the structured intent_log
-plus the full transcript at the moment of capture. Recipes let
-customers replay the same flow later without re-paying the LLM
-decompose cost.
+plus the full transcript at the moment of capture. Recipes preserve
+a completed flow as a durable reference without re-running decomposition
+to inspect its intent plan.
 
-The v1.0 surface covers create, list, read, and delete:
+The current surface covers create, list, read, and delete:
 `POST /v1/recipes`, `GET /v1/recipes`, `GET /v1/recipes/{id}`, and
-`DELETE /v1/recipes/{id}`. Recipe execution — replaying a recipe
-against a new agent-session — lands at v1.1 (D2/D3 scope per the
-v2-#37 queue).
+`DELETE /v1/recipes/{id}`. There is no recipe-execution endpoint;
+start a new agent-session to run another task.
 
 ## Resource shape
 
@@ -85,7 +84,7 @@ Response `200 OK`:
 
 Each `data` entry is the resource shape above **without** the
 `intent_log` array — list items carry only `intent_count` for
-payload weight. Fetch a single recipe to get the public replay
+payload weight. Fetch a single recipe to get the public saved
 steps. `next_cursor` is `null` on the last page.
 
 ## Suggest a label/description
@@ -147,7 +146,7 @@ historical snapshot survives any later session activity.
 
 Recipe payloads are encrypted at rest. Public detail serialization
 works from a copy and removes sensitive type values without changing
-the stored intent log, preserving exact server-side replay while
+the stored intent log, preserving the exact server-side snapshot while
 preventing a read-only API key or device key from retrieving saved
 credentials.
 
@@ -166,11 +165,3 @@ recipe is still useful as a transcript-only snapshot.
 |    404 | not-found           | `agent_session_id` doesn't exist or belongs to another account           |
 |    401 | unauthorized        | missing or invalid bearer token                                          |
 |    503 | feature-unavailable | activation gate off (recipe library or agent-sessions repo not wired)    |
-
-## Upcoming (v1.1)
-
-- `POST /v1/recipes/{id}/execute` — replay a recipe against a new
-  agent-session, skipping the decompose step
-
-This ships in the v1.1 D2/D3 scope per the Driftstack design
-verdict on the v2-#37 queue.

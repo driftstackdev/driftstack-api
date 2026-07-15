@@ -1,5 +1,5 @@
 // Drift-guard: the install commands in apps/docs/src/pages/sdk/installation.md
-// must reference the SDKs' ACTUAL published package identities.
+// must reference the SDKs' actual package identities and current install source.
 //
 // Why: if a package is renamed (npm name, PyPI dist name, or Go module
 // path) without updating the install doc, customers literally cannot
@@ -34,13 +34,13 @@ describe('sdk/installation.md ↔ actual published package identities', () => {
     expect(DOC, `installation.md import example must use ${name}`).toContain(`from '${name}'`);
   });
 
-  it('Python: documents the real PyPI dist name from pyproject.toml', () => {
+  it('Python: documents the real dist name in a pinned repository-source install', () => {
     const py = read('packages/sdk-python/pyproject.toml');
     const m = py.match(/^name\s*=\s*"([^"]+)"/m);
     const distName = m?.[1];
     expect(distName, 'pyproject.toml must declare a name').toBeTruthy();
-    expect(DOC, `installation.md must document pip install ${distName}`).toContain(
-      `pip install ${distName as string}`,
+    expect(DOC).toContain(
+      `pip install "${distName as string} @ git+https://github.com/driftstackdev/driftstack-api.git@<commit>#subdirectory=packages/sdk-python"`,
     );
   });
 

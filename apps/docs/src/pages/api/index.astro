@@ -37,9 +37,9 @@ import DocLayout from '../../layouts/DocLayout.astro';
       surface; complements regular driver sessions.
     </li>
     <li>
-      <a href="/api/recipes/">Recipes</a> — snapshot a finished agent-session's intent_log +
-      transcript as a replayable recipe. Create / list / read / delete ship at v1.0; only execute
-      (replay) lands at v1.1.
+      <a href="/api/recipes/">Recipes</a> — save a finished agent-session's intent_log +
+      transcript as a durable reference. The current API supports create / list / read / delete;
+      it does not expose recipe execution.
     </li>
     <li>
       <a href="/api/bundled-llm/">Bundled LLM</a> — opt-in consent, monthly soft cap, used /

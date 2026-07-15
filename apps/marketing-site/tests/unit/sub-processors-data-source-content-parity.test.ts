@@ -138,11 +138,9 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(body).toMatch(/Disabled by default; engaged only when explicitly initiated\./);
   });
 
-  it('Stripe row: BYOK metered billing + BTW reverse-charge via Stripe Tax', () => {
-    // S20c 2026-07-06 plain-language pass: BYOK spelled out, BTW
-    // identified as Dutch VAT; all four purposes survive.
+  it('Stripe row: bundled-AI billing + BYOK direct-provider boundary + BTW reverse-charge via Stripe Tax', () => {
     expect(body).toMatch(
-      /Payment processing, subscription management, usage-based billing for the bring-your-own-key \(BYOK\) AI option, and VAT \(Dutch BTW\) reverse-charge handling via Stripe Tax/,
+      /Payment processing, subscription management, billing for Driftstack-bundled AI usage, and VAT \(Dutch BTW\) reverse-charge handling via Stripe Tax\. BYOK AI usage is billed directly by the model provider, not Stripe through Driftstack\./,
     );
     expect(body).toMatch(/Stripe Payments Europe Ltd \(Ireland\)/);
   });
@@ -201,7 +199,7 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(body).toMatch(
       /`material_change`: an existing entry's region \/ purpose \/ transfer\s+\*\s*mechanism changed/,
     );
-    expect(body).toMatch(/`register_published`: pre-launch baseline marker/);
+    expect(body).toMatch(/`register_published`: initial transparency baseline/);
   });
 
   it('"Cosmetic edits (rewording, typo fixes) do NOT land here" honesty pinned', () => {
@@ -214,7 +212,7 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     );
     expect(body).toMatch(/date: '2026-05-10',\s*\n?\s*kind: 'register_published',/);
     expect(body).toMatch(
-      /Initial sub-processor register published as part of pre-launch ' \+\s*\n?\s*'transparency/,
+      /Initial sub-processor transparency register published\. The ' \+\s*\n?\s*'register reflects/,
     );
     expect(body).toMatch(/effective_at: '2026-05-10',/);
   });
