@@ -12,7 +12,7 @@
 // the "configure under Settings" nudge.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DriftstackError } from '../../src/lib/client';
 
 interface MockClient {
@@ -35,6 +35,14 @@ interface MockSettings {
   update: (next: Record<string, unknown>) => Promise<void>;
 }
 const useSettingsMock = vi.fn<() => MockSettings>();
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => useSettingsMock(),
@@ -65,6 +73,92 @@ afterEach(() => {
 });
 
 describe('ConnectivityView API-key row masking (audit)', () => {
+  it('single-flights a same-turn Run check and exposes the busy state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('background version probe unavailable'))),
+    );
+    const pending = deferred<{ data: unknown[] }>();
+    const list = vi.fn(() => pending.promise);
+    useSettingsMock.mockReturnValue(settingsWithClient({ sessions: { list } }));
+
+    render(<ConnectivityView embedded />);
+    const run = screen.getByRole('button', { name: 'Run check' });
+    fireEvent.click(run);
+    fireEvent.click(run);
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    const checking = screen.getByRole('button', { name: 'Checking…' });
+    expect(checking).toBeDisabled();
+    expect(checking).toHaveAttribute('aria-busy', 'true');
+
+    pending.resolve({ data: [] });
+    expect(await screen.findByText('API replied with 0 sessions on the first page.')).toBeTruthy();
+  });
+
+  it('drops a late authenticated result after URL/key/client authority changes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('background version probe unavailable'))),
+    );
+    const oldPending = deferred<{ data: unknown[] }>();
+    const oldList = vi.fn(() => oldPending.promise);
+    const newList = vi.fn(() => Promise.resolve({ data: [] }));
+    let current = settingsWithClient({ sessions: { list: oldList } });
+    useSettingsMock.mockImplementation(() => current);
+
+    const { rerender } = render(<ConnectivityView embedded />);
+    fireEvent.click(screen.getByRole('button', { name: 'Run check' }));
+    await waitFor(() => expect(oldList).toHaveBeenCalledTimes(1));
+
+    current = {
+      ...settingsWithClient({ sessions: { list: newList } }),
+      settings: {
+        ...baseSettings('ds_live_new').settings,
+        baseUrl: 'https://staging.driftstack.dev',
+      },
+    };
+    rerender(<ConnectivityView embedded />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run check' })).toBeEnabled());
+
+    oldPending.resolve({ data: ['stale'] });
+    await Promise.resolve();
+    expect(screen.queryByText('API replied with 1 session on the first page.')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run check' }));
+    expect(await screen.findByText('API replied with 0 sessions on the first page.')).toBeTruthy();
+    expect(newList).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the old server identity immediately while a new URL probe is pending', async () => {
+    const nextVersion = deferred<Response>();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ version: '1.0.0', git_sha: 'abcdef0123', driver: 'mock' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockReturnValueOnce(nextVersion.promise);
+    vi.stubGlobal('fetch', fetchMock);
+    let current = baseSettings(null);
+    useSettingsMock.mockImplementation(() => current);
+
+    const { rerender, unmount } = render(<ConnectivityView embedded />);
+    expect(await screen.findByText('mock')).toBeTruthy();
+    expect(screen.getByText('1.0.0 · abcdef0')).toBeTruthy();
+
+    current = {
+      ...baseSettings(null),
+      settings: { ...baseSettings(null).settings, baseUrl: 'https://staging.driftstack.dev' },
+    };
+    rerender(<ConnectivityView embedded />);
+    await waitFor(() => expect(screen.queryByText('mock')).toBeNull());
+    expect(screen.queryByText('1.0.0 · abcdef0')).toBeNull();
+    unmount();
+  });
+
   it('bounds the background version probe and aborts it on unmount', () => {
     let capturedSignal: AbortSignal | undefined;
     vi.stubGlobal(

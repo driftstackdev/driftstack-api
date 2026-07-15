@@ -6,7 +6,7 @@
 // /healthz route — every authenticated endpoint exercises the same
 // auth + rate-limit + DB chain, and `list` is the cheapest one.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
 import { disposeResponseBody } from '../lib/dispose-response-body';
@@ -32,6 +32,11 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
   const { client, settings } = useSettings();
   const [result, setResult] = useState<CheckResult | null>(null);
   const [running, setRunning] = useState(false);
+  // Settings changes create a new diagnostic authority. Late results from the
+  // prior URL/key/client must not render under the new settings, and a ref is
+  // required to close the same-render gap before the Run button disables.
+  const authorityGenerationRef = useRef(0);
+  const checkInFlightRef = useRef(false);
   // V-337 — surface the server's driver mode + version when we can
   // reach the public /version endpoint. Helps the founder spot
   // "you're talking to a mock server" mismatches without running
@@ -39,7 +44,23 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
   const [serverInfo, setServerInfo] = useState<ServerVersion | null>(null);
 
   useEffect(() => {
+    const generation = ++authorityGenerationRef.current;
+    checkInFlightRef.current = false;
+    setRunning(false);
+    setResult(null);
+    return () => {
+      if (authorityGenerationRef.current === generation) {
+        authorityGenerationRef.current += 1;
+        checkInFlightRef.current = false;
+      }
+    };
+  }, [client, settings.apiKey, settings.baseUrl]);
+
+  useEffect(() => {
     let cancelled = false;
+    // Never display the prior server's identity under a newly selected URL
+    // while its fresh /version probe is still pending.
+    setServerInfo(null);
     const trimmed = settings.baseUrl.replace(/\/+$/, '');
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 8_000);
@@ -66,12 +87,15 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
   }, [settings.baseUrl]);
 
   async function runCheck(): Promise<void> {
-    if (!client) return;
+    if (!client || checkInFlightRef.current) return;
+    const generation = authorityGenerationRef.current;
+    checkInFlightRef.current = true;
     setRunning(true);
     const start = performance.now();
     try {
       const page = await client.sessions.list({ limit: 1 });
       const durationMs = Math.round(performance.now() - start);
+      if (generation !== authorityGenerationRef.current) return;
       setResult({
         ok: true,
         durationMs,
@@ -79,6 +103,7 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
       });
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
+      if (generation !== authorityGenerationRef.current) return;
       const detail = humanizeError(
         err,
         'Connectivity check failed. Verify the API URL and key in Settings, then try again.',
@@ -86,7 +111,10 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
       const errorKind = err instanceof DriftstackError ? err.kind : 'unknown';
       setResult({ ok: false, durationMs, detail, errorKind });
     } finally {
-      setRunning(false);
+      if (generation === authorityGenerationRef.current) {
+        checkInFlightRef.current = false;
+        setRunning(false);
+      }
     }
   }
 
@@ -141,6 +169,7 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
           className="btn-primary"
           onClick={() => void runCheck()}
           disabled={!client || running}
+          aria-busy={running}
         >
           {running ? 'Checking…' : 'Run check'}
         </button>

@@ -82,6 +82,7 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
   });
 
   it('/version fetch effect is bounded, cache-fresh, and aborts on URL change/unmount', () => {
+    expect(body).toMatch(/setServerInfo\(null\);/);
     expect(body).toMatch(/const controller = new AbortController\(\);/);
     expect(body).toMatch(/window\.setTimeout\(\(\) => controller\.abort\(\), 8_000\)/);
     expect(body).toMatch(
@@ -109,8 +110,25 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
       "const errorKind = err instanceof DriftstackError ? err.kind : 'unknown';",
     );
     expect(body).toContain('setResult({ ok: false, durationMs, detail, errorKind });');
-    expect(body).toContain('finally {\n      setRunning(false);');
+    expect(body).toMatch(/if \(!client \|\| checkInFlightRef\.current\) return;/);
+    expect(body).toMatch(/const generation = authorityGenerationRef\.current;/);
+    expect(body).toMatch(/if \(generation !== authorityGenerationRef\.current\) return;/);
+    expect(body).toMatch(
+      /finally \{[ \t]*(?:\r?\n[ \t]*)?if \(generation === authorityGenerationRef\.current\) \{[ \t]*(?:\r?\n[ \t]*)?checkInFlightRef\.current = false;[ \t]*(?:\r?\n[ \t]*)?setRunning\(false\);/,
+    );
+    expect(body).toMatch(
+      /disabled=\{!client \|\| running\}[ \t]*(?:\r?\n[ \t]*)?aria-busy=\{running\}/,
+    );
     expect(body).not.toContain("err instanceof Error ? err.message : 'unknown error'");
+  });
+
+  it('settings authority clears stale diagnostics and invalidates prior check completions', () => {
+    expect(body).toMatch(/const authorityGenerationRef = useRef\(0\);/);
+    expect(body).toMatch(/const checkInFlightRef = useRef\(false\);/);
+    expect(body).toMatch(
+      /const generation = \+\+authorityGenerationRef\.current;[\s\S]*?checkInFlightRef\.current = false;[\s\S]*?setRunning\(false\);[\s\S]*?setResult\(null\);/,
+    );
+    expect(body).toMatch(/\}, \[client, settings\.apiKey, settings\.baseUrl\]\);/);
   });
 
   it("API-key masking + 'not set' fallback: settings.apiKey === null → 'not set — configure under Settings' in text-status-error else maskApiKey(settings.apiKey) — the shared, prefix-aware mask (consistency standardization, replacing the old non-standard inline slice(0,8)…slice(-4)); apiKey unmasked has 'configure under Settings' nudge so user knows where to set it", () => {
