@@ -64,6 +64,24 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
+  it('serializes BYOK set/test/clear under one tokenized owner, including the automatic post-save test', () => {
+    expect(body).toContain("type ByokActionKind = 'saving' | 'testing' | 'clearing';");
+    expect(body).toContain(
+      'const byokActionRef = useRef<{ token: number; kind: ByokActionKind } | null>(null);',
+    );
+    expect(body).toMatch(
+      /function claimByokAction\(kind: ByokActionKind\): number \| null \{\s*if \(byokActionRef\.current !== null\) return null;/,
+    );
+    expect(body).toMatch(
+      /await client\.account\.setByokAnthropicKey\(key\);[\s\S]*?await client\.account\.getByokAnthropicKey\(\);[\s\S]*?setByokActionPhase\(token, 'testing'\);\s*await runByokTest\(token\);/,
+    );
+    expect(body).toMatch(
+      /const token = claimByokAction\('clearing'\);[\s\S]*?await client\.account\.clearByokAnthropicKey\(\);[\s\S]*?if \(!ownsByokAction\(token\)\) return;/,
+    );
+    expect(body).toContain('disabled={byokBusy}');
+    expect(body).toContain('disabled={byokBusy || byokKeyDraft.trim().length === 0}');
+  });
+
   it("V-241 + V-242 + V-272 framing pinned: 'V-241: API key now stored in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service); the masked input edits the keychain entry transparently via Tauri commands.' + 'V-242: telemetry toggle — Sentry crash-only opt-in. Defaults ON for cloud customers, OFF for self-hosted. Customer can override either direction.' + 'V-272: account info block + sign-out button. First-run hint rewritten to point at the V-268 browser sign-in flow instead of the stale \"npm run admin:create-key\" instruction.'", () => {
     expect(body).toMatch(
       /\/\/ V-241: API key now stored in OS keychain \(macOS Keychain \/ Windows\s*\n?\s*\/\/ Credential Manager \/ Linux Secret Service\); the masked input edits\s*\n?\s*\/\/ the keychain entry transparently via Tauri commands\./,

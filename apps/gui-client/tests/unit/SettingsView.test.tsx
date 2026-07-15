@@ -27,10 +27,67 @@ interface MockSettings {
     startUrl?: string;
   };
   loading: boolean;
-  client: null;
+  client: MockClient | null;
   accountMe: null;
   refreshAccountMe: () => Promise<void>;
   update: (next: Record<string, unknown>) => Promise<void>;
+}
+
+interface MockClient {
+  account: {
+    getBundledLlmSettings: () => Promise<{
+      consent: boolean;
+      monthly_cap_usd_cents: number;
+    }>;
+    getBundledLlmStatus: () => Promise<{
+      consent: boolean;
+      cap_cents: number;
+      used_this_month_cents: number;
+      remaining_cents: number;
+      refused_count_this_month: number;
+      month_started_at: string;
+    }>;
+    updateBundledLlmSettings: (body: {
+      consent: boolean;
+      monthly_cap_usd_cents: number;
+    }) => Promise<{ consent: boolean; monthly_cap_usd_cents: number }>;
+    getByokAnthropicKey: () => Promise<{
+      has_key: boolean;
+      set_at: string | null;
+      last_used_at: string | null;
+    }>;
+    setByokAnthropicKey: (key: string) => Promise<{ set_at: string }>;
+    testByokAnthropicKey: () => Promise<{ ok: true } | { ok: false; reason: string }>;
+    clearByokAnthropicKey: () => Promise<void>;
+  };
+}
+
+function makeClient(overrides: Partial<MockClient['account']> = {}): MockClient {
+  return {
+    account: {
+      getBundledLlmSettings: vi.fn(() =>
+        Promise.resolve({ consent: false, monthly_cap_usd_cents: 0 }),
+      ),
+      getBundledLlmStatus: vi.fn(() =>
+        Promise.resolve({
+          consent: false,
+          cap_cents: 0,
+          used_this_month_cents: 0,
+          remaining_cents: 0,
+          refused_count_this_month: 0,
+          month_started_at: '2026-07-01T00:00:00.000Z',
+        }),
+      ),
+      updateBundledLlmSettings: vi.fn((body) => Promise.resolve(body)),
+      getByokAnthropicKey: vi.fn(() =>
+        Promise.resolve({ has_key: false, set_at: null, last_used_at: null }),
+      ),
+      setByokAnthropicKey: vi.fn(() => Promise.resolve({ set_at: '2026-07-15T00:00:00.000Z' })),
+      testByokAnthropicKey: vi.fn(() => Promise.resolve({ ok: true as const })),
+      clearByokAnthropicKey: vi.fn(() => Promise.resolve()),
+      ...overrides,
+    },
+  };
 }
 const useSettingsMock = vi.fn<() => MockSettings>();
 
@@ -52,11 +109,14 @@ vi.mock('../../src/lib/browser-sign-in', () => ({
 
 const { SettingsView } = await import('../../src/views/SettingsView');
 const { ToastProvider } = await import('../../src/lib/toasts');
+const { ConfirmProvider } = await import('../../src/components/ConfirmProvider');
 
 function renderWithToasts(): ReturnType<typeof render> {
   return render(
     <ToastProvider>
-      <SettingsView />
+      <ConfirmProvider>
+        <SettingsView />
+      </ConfirmProvider>
     </ToastProvider>,
   );
 }
@@ -439,5 +499,180 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     expect(screen.getByText('Saved. Validating key…')).toBeInTheDocument();
     view.unmount();
     expect(validationSignal?.aborted).toBe(true);
+  });
+
+  it('owns BYOK Test and Clear as one action so a cleared key cannot regain stale Working state', async () => {
+    let releaseTest!: (result: { ok: true }) => void;
+    let releaseClear!: () => void;
+    const testByokAnthropicKey = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          releaseTest = resolve;
+        }),
+    );
+    const clearByokAnthropicKey = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseClear = resolve;
+        }),
+    );
+    const client = makeClient({
+      getByokAnthropicKey: vi.fn(() =>
+        Promise.resolve({
+          has_key: true,
+          set_at: '2026-07-15T00:00:00.000Z',
+          last_used_at: null,
+        }),
+      ),
+      testByokAnthropicKey,
+      clearByokAnthropicKey,
+    });
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: 'ds_live_x',
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+      },
+      loading: false,
+      client,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    renderWithToasts();
+
+    const test = await screen.findByRole('button', { name: 'Test Anthropic key' });
+    const clear = screen.getByRole('button', { name: 'Clear' });
+    fireEvent.click(test);
+    fireEvent.click(test);
+
+    expect(testByokAnthropicKey).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Test Anthropic key' })).toBeDisabled();
+    expect(clear).toBeDisabled();
+    fireEvent.click(clear);
+    expect(clearByokAnthropicKey).not.toHaveBeenCalled();
+
+    releaseTest({ ok: true });
+    expect(await screen.findByText('✓ Working')).toBeInTheDocument();
+    await waitFor(() => expect(clear).not.toBeDisabled());
+
+    fireEvent.click(clear);
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear key' }));
+    await waitFor(() => expect(clearByokAnthropicKey).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Clearing…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Test Anthropic key' })).toBeDisabled();
+
+    releaseClear();
+    expect(await screen.findByPlaceholderText('sk-ant-…')).toBeInTheDocument();
+    expect(screen.queryByText('✓ Working')).toBeNull();
+  });
+
+  it('owns BYOK Set through metadata refresh and its one automatic connection test', async () => {
+    let releaseSet!: () => void;
+    let releaseTest!: (result: { ok: true }) => void;
+    const setByokAnthropicKey = vi.fn(
+      () =>
+        new Promise<{ set_at: string }>((resolve) => {
+          releaseSet = () => resolve({ set_at: '2026-07-15T00:00:00.000Z' });
+        }),
+    );
+    const testByokAnthropicKey = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          releaseTest = resolve;
+        }),
+    );
+    const getByokAnthropicKey = vi
+      .fn<MockClient['account']['getByokAnthropicKey']>()
+      .mockResolvedValueOnce({ has_key: false, set_at: null, last_used_at: null })
+      .mockResolvedValue({
+        has_key: true,
+        set_at: '2026-07-15T00:00:00.000Z',
+        last_used_at: null,
+      });
+    const client = makeClient({
+      getByokAnthropicKey,
+      setByokAnthropicKey,
+      testByokAnthropicKey,
+    });
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: 'ds_live_x',
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+      },
+      loading: false,
+      client,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    renderWithToasts();
+
+    const draft = await screen.findByPlaceholderText('sk-ant-…');
+    fireEvent.change(draft, { target: { value: 'sk-ant-customer-secret' } });
+    const set = screen.getByRole('button', { name: 'Set key' });
+    fireEvent.click(set);
+    fireEvent.click(set);
+
+    expect(setByokAnthropicKey).toHaveBeenCalledTimes(1);
+    expect(setByokAnthropicKey).toHaveBeenCalledWith('sk-ant-customer-secret');
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+    releaseSet();
+    await waitFor(() => expect(testByokAnthropicKey).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Test Anthropic key' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
+
+    releaseTest({ ok: true });
+    expect(await screen.findByText('✓ Working')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Test Anthropic key' })).not.toBeDisabled();
+    expect(testByokAnthropicKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a failed BYOK Set owner for one honest retry', async () => {
+    const setByokAnthropicKey = vi
+      .fn<MockClient['account']['setByokAnthropicKey']>()
+      .mockRejectedValueOnce(new Error('provider write failed with secret=private'))
+      .mockResolvedValueOnce({ set_at: '2026-07-15T00:00:00.000Z' });
+    const getByokAnthropicKey = vi
+      .fn<MockClient['account']['getByokAnthropicKey']>()
+      .mockResolvedValueOnce({ has_key: false, set_at: null, last_used_at: null })
+      .mockResolvedValue({
+        has_key: true,
+        set_at: '2026-07-15T00:00:00.000Z',
+        last_used_at: null,
+      });
+    const testByokAnthropicKey = vi.fn(() => Promise.resolve({ ok: true as const }));
+    const client = makeClient({
+      getByokAnthropicKey,
+      setByokAnthropicKey,
+      testByokAnthropicKey,
+    });
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: 'ds_live_x',
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+      },
+      loading: false,
+      client,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    renderWithToasts();
+
+    fireEvent.change(await screen.findByPlaceholderText('sk-ant-…'), {
+      target: { value: 'sk-ant-retry' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Set key' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't save your Anthropic key/i);
+    expect(screen.queryByText(/secret=private|provider write failed/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set key' }));
+    await waitFor(() => expect(setByokAnthropicKey).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('✓ Working')).toBeInTheDocument();
+    expect(testByokAnthropicKey).toHaveBeenCalledTimes(1);
   });
 });

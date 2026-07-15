@@ -49,6 +49,8 @@ type TestState =
   | { kind: 'ok'; version: string }
   | { kind: 'fail'; message: string };
 
+type ByokActionKind = 'saving' | 'testing' | 'clearing';
+
 export function SettingsView(): JSX.Element {
   const confirm = useConfirm();
   const { push: pushToast } = useToasts();
@@ -93,14 +95,45 @@ export function SettingsView(): JSX.Element {
 
   const [byok, setByok] = useState<ByokAnthropicKeyMetadata | null>(null);
   const [byokKeyDraft, setByokKeyDraft] = useState('');
-  const [byokSaving, setByokSaving] = useState(false);
   const [byokSaveError, setByokSaveError] = useState<string | null>(null);
-  const [byokClearing, setByokClearing] = useState(false);
+  const [byokActionKind, setByokActionKind] = useState<ByokActionKind | null>(null);
+  const byokActionRef = useRef<{ token: number; kind: ByokActionKind } | null>(null);
+  const byokActionTokenRef = useRef(0);
+  const byokBusy = byokActionKind !== null;
   const [byokTestState, setByokTestState] = useState<
     { kind: 'idle' } | { kind: 'testing' } | { kind: 'ok' } | { kind: 'fail'; reason: string }
   >({ kind: 'idle' });
 
+  function claimByokAction(kind: ByokActionKind): number | null {
+    if (byokActionRef.current !== null) return null;
+    const token = ++byokActionTokenRef.current;
+    byokActionRef.current = { token, kind };
+    setByokActionKind(kind);
+    return token;
+  }
+
+  function ownsByokAction(token: number): boolean {
+    return byokActionRef.current?.token === token;
+  }
+
+  function setByokActionPhase(token: number, kind: ByokActionKind): void {
+    if (!ownsByokAction(token)) return;
+    byokActionRef.current = { token, kind };
+    setByokActionKind(kind);
+  }
+
+  function releaseByokAction(token: number): void {
+    if (!ownsByokAction(token)) return;
+    byokActionRef.current = null;
+    setByokActionKind(null);
+  }
+
   useEffect(() => {
+    // A replacement SDK client invalidates every result owned by the prior
+    // deployment/account. The token check below also makes unmount harmless.
+    byokActionTokenRef.current += 1;
+    byokActionRef.current = null;
+    setByokActionKind(null);
     if (!client) return;
     let cancelled = false;
     setBundledLlmLoad('loading');
@@ -135,6 +168,8 @@ export function SettingsView(): JSX.Element {
     );
     return () => {
       cancelled = true;
+      byokActionTokenRef.current += 1;
+      byokActionRef.current = null;
     };
   }, [client]);
 
@@ -165,39 +200,59 @@ export function SettingsView(): JSX.Element {
   }
 
   async function handleSetByokKey(): Promise<void> {
-    if (!client || byokKeyDraft.trim().length === 0) return;
-    setByokSaving(true);
+    const key = byokKeyDraft.trim();
+    if (!client || key.length === 0) return;
+    const token = claimByokAction('saving');
+    if (token === null) return;
     setByokSaveError(null);
     setByokTestState({ kind: 'idle' });
     try {
-      await client.account.setByokAnthropicKey(byokKeyDraft.trim());
+      await client.account.setByokAnthropicKey(key);
+      if (!ownsByokAction(token)) return;
       const meta = await client.account.getByokAnthropicKey();
+      if (!ownsByokAction(token)) return;
       setByok(meta);
       setByokKeyDraft('');
       pushToast({ title: 'Your Anthropic key is saved', tone: 'success' });
+
+      // Auto-verify under the SAME owner as the save. Releasing between the
+      // write and test lets Clear race the test and later render a stale
+      // "Working" result for a key that no longer exists.
+      setByokActionPhase(token, 'testing');
+      await runByokTest(token);
     } catch (err) {
-      setByokSaveError(friendlySettingsActionError(err, 'save-provider-key'));
-      setByokSaving(false);
-      return;
+      if (ownsByokAction(token)) {
+        setByokSaveError(friendlySettingsActionError(err, 'save-provider-key'));
+      }
+    } finally {
+      releaseByokAction(token);
     }
-    setByokSaving(false);
-    // Auto-verify the just-saved key (mirrors the W577 api-key validate-after-save): this
-    // credential decides who AI usage bills to, so a typo must surface NOW, not read
-    // "saved" and only fail later when the user happens to click Test (audit 2026-07-08).
-    await handleTestByokKey();
   }
 
-  async function handleTestByokKey(): Promise<void> {
-    if (!client) return;
+  async function runByokTest(token: number): Promise<void> {
+    if (!client || !ownsByokAction(token)) return;
     setByokTestState({ kind: 'testing' });
     try {
       const result = await client.account.testByokAnthropicKey();
+      if (!ownsByokAction(token)) return;
       setByokTestState(result.ok ? { kind: 'ok' } : { kind: 'fail', reason: result.reason });
     } catch (err) {
+      if (!ownsByokAction(token)) return;
       setByokTestState({
         kind: 'fail',
         reason: friendlySettingsActionError(err, 'test-provider-key'),
       });
+    }
+  }
+
+  async function handleTestByokKey(): Promise<void> {
+    if (!client) return;
+    const token = claimByokAction('testing');
+    if (token === null) return;
+    try {
+      await runByokTest(token);
+    } finally {
+      releaseByokAction(token);
     }
   }
 
@@ -210,20 +265,23 @@ export function SettingsView(): JSX.Element {
       ))
     )
       return;
-    setByokClearing(true);
+    const token = claimByokAction('clearing');
+    if (token === null) return;
     try {
       await client.account.clearByokAnthropicKey();
+      if (!ownsByokAction(token)) return;
       setByok({ has_key: false, set_at: null, last_used_at: null });
       setByokTestState({ kind: 'idle' });
       pushToast({ title: 'Key cleared', tone: 'success' });
     } catch (err) {
+      if (!ownsByokAction(token)) return;
       pushToast({
         title: 'Could not clear key',
         body: friendlySettingsActionError(err, 'clear-provider-key'),
         tone: 'error',
       });
     } finally {
-      setByokClearing(false);
+      releaseByokAction(token);
     }
   }
 
@@ -1112,19 +1170,19 @@ export function SettingsView(): JSX.Element {
                   <button
                     type="button"
                     onClick={() => void handleTestByokKey()}
-                    disabled={byokTestState.kind === 'testing'}
+                    disabled={byokBusy}
                     aria-label="Test Anthropic key"
                     className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
                   >
-                    {byokTestState.kind === 'testing' ? 'Testing…' : 'Test connection'}
+                    {byokActionKind === 'testing' ? 'Testing…' : 'Test connection'}
                   </button>
                   <button
                     type="button"
                     onClick={() => void handleClearByokKey()}
-                    disabled={byokClearing}
+                    disabled={byokBusy}
                     className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
                   >
-                    {byokClearing ? 'Clearing…' : 'Clear'}
+                    {byokActionKind === 'clearing' ? 'Clearing…' : 'Clear'}
                   </button>
                   {byokTestState.kind === 'ok' && (
                     <span className="text-2xs text-status-ready">✓ Working</span>
@@ -1148,10 +1206,10 @@ export function SettingsView(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => void handleSetByokKey()}
-                  disabled={byokSaving || byokKeyDraft.trim().length === 0}
+                  disabled={byokBusy || byokKeyDraft.trim().length === 0}
                   className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
                 >
-                  {byokSaving ? 'Saving…' : 'Set key'}
+                  {byokActionKind === 'saving' ? 'Saving…' : 'Set key'}
                 </button>
               </div>
             )}
