@@ -375,6 +375,53 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(same.pairModeState).toBeNull();
   });
 
+  it('active-only GUI-key/mode setters preserve a close winner while unconditional fixture setters remain compatible', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    const firstKey = Buffer.from('active-key');
+    await expect(
+      repo.setGuiControlKeyIfActive({
+        id: rec.id,
+        ciphertext: firstKey,
+        expiresAt: new Date('2026-07-16T00:00:00.000Z'),
+      }),
+    ).resolves.toMatchObject({ guiControlKeyCiphertext: firstKey });
+    await expect(
+      repo.setModeIfActive(rec.id, 'pair', { kind: 'ai-driving' }),
+    ).resolves.toMatchObject({ mode: 'pair', pairModeState: { kind: 'ai-driving' } });
+
+    const closed = await repo.closeWithReason(rec.id, 'customer-closed');
+    await expect(
+      repo.setGuiControlKeyIfActive({
+        id: rec.id,
+        ciphertext: Buffer.from('late-key'),
+        expiresAt: new Date('2026-07-17T00:00:00.000Z'),
+      }),
+    ).resolves.toBeNull();
+    await expect(repo.setModeIfActive(rec.id, 'manual', null)).resolves.toBeNull();
+    await expect(
+      repo.setGuiControlKeyIfActive({
+        id: 'agt_missing',
+        ciphertext: Buffer.from('missing'),
+        expiresAt: null,
+      }),
+    ).resolves.toBeNull();
+    await expect(repo.setModeIfActive('agt_missing', 'manual', null)).resolves.toBeNull();
+    expect(await repo.get(rec.id)).toEqual(closed);
+
+    // Deliberately preserve the unconditional setters for direct fixture setup.
+    const fixtureKey = Buffer.from('fixture-key');
+    await repo.setGuiControlKey({ id: rec.id, ciphertext: fixtureKey, expiresAt: null });
+    await repo.setMode(rec.id, 'manual', null);
+    expect(await repo.get(rec.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer-closed',
+      guiControlKeyCiphertext: fixtureKey,
+      mode: 'manual',
+      pairModeState: null,
+    });
+  });
+
   it('v2-#19 closeWithReason: first close owns timestamp AND reason; re-close is an idempotent read', async () => {
     let now = new Date('2026-05-16T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);

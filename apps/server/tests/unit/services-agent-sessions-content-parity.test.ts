@@ -144,6 +144,8 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(
       /setGuiControlKey\(args: \{\s*\n?\s*id: string;\s*\n?\s*ciphertext: Buffer \| null;\s*\n?\s*expiresAt: Date \| null;\s*\n?\s*\}\): Promise<AgentSessionRecord>;/,
     );
+    expect(body).toMatch(/setGuiControlKeyIfActive\(args: \{/);
+    expect(body).toMatch(/setModeIfActive\(/);
   });
 
   it("InMemoryAgentSessionsRepo framing pinned: 'In-memory implementation for tests + dev mode. Production wires the Drizzle-backed repo (AI-A.c follow-up). The two share this exact interface so the executor + dashboard chat UI never have to know which backend they're talking to.' + 'Thread-safety: the repo is intended for single-threaded use (Node's single event loop suffices for the API server). Concurrent calls to debitTokens on the same id are serialized by the JS event loop.' — pinned so the dual-backend interface + the Node-event-loop thread-safety rationale stay documented", () => {
@@ -155,12 +157,16 @@ describe('services/agent-sessions content parity', () => {
     );
   });
 
-  it('active-only runtime mutations return null on missing/terminal rows and preserve unconditional fixture compatibility', () => {
+  it('active-only runtime and terminal-metadata mutations return null on missing/terminal rows and preserve unconditional fixture compatibility', () => {
     expect(body).toMatch(/appendTranscriptIfActive\(/);
     expect(body).toMatch(/debitTokensIfActive\(/);
-    expect((body.match(/rec === undefined \|\| rec\.status !== 'active'/g) ?? []).length).toBe(2);
+    expect(body).toMatch(/setGuiControlKeyIfActive\(/);
+    expect(body).toMatch(/setModeIfActive\(/);
+    expect((body.match(/rec === undefined \|\| rec\.status !== 'active'/g) ?? []).length).toBe(4);
     expect(body).toMatch(/appendTranscript\(id: string, entry: TranscriptEntry\)/);
     expect(body).toMatch(/debitTokens\(id: string, tokens: number\)/);
+    expect(body).toMatch(/setGuiControlKey\(args: \{/);
+    expect(body).toMatch(/setMode\(id: string, mode: AgentSessionMode/);
   });
 
   it("agt_inmem_<padded-counter> id prefix pinned. Drift would break test fixtures that grep for 'agt_inmem_' to identify in-memory rows; drift to dropping padStart(8, '0') would let sort-by-id break on 11th+ in-memory row (lexical sort: '10' < '2')", () => {

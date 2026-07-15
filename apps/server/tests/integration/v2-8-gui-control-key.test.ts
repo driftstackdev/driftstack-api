@@ -1,6 +1,6 @@
 // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key auto-mint integration.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createCipheriv, randomBytes } from 'node:crypto';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -65,6 +65,64 @@ describe('Arc 2 v2-#8 sub-slice 8.4 GET /v1/agent-sessions/:id/gui-control-key',
     );
     expect(r1.json<{ minted: boolean }>().minted).toBe(true);
     expect(r2.json<{ minted: boolean }>().minted).toBe(false);
+  });
+
+  it('closed sessions reject an existing-key echo without returning the credential', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    const minted = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(minted.statusCode).toBe(200);
+    expect(minted.json<{ gui_control_key: string }>().gui_control_key).toMatch(/^gck_/);
+
+    await fx.agentSessionsRepo!.closeWithReason(id, 'customer-closed');
+    const rejected = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json<Record<string, unknown>>()).not.toHaveProperty('gui_control_key');
+  });
+
+  it('a close winner during mint returns 409 and never discloses or persists the generated key', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    const repo = fx.agentSessionsRepo!;
+    const original = repo.setGuiControlKeyIfActive.bind(repo);
+    vi.spyOn(repo, 'setGuiControlKeyIfActive').mockImplementationOnce(async (args) => {
+      await repo.closeWithReason(args.id, 'customer-closed');
+      return original(args);
+    });
+
+    const rejected = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json<Record<string, unknown>>()).not.toHaveProperty('gui_control_key');
+    expect(await repo.get(id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer-closed',
+      guiControlKeyCiphertext: null,
+      guiControlKeyExpiresAt: null,
+    });
   });
 
   it('account-authenticated GET replaces a non-expired legacy unbound key, then remains idempotent', async () => {

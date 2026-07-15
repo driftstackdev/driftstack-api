@@ -818,6 +818,25 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return rowToRecord(row, this.transcriptEncryptionKeyBase64);
   }
 
+  async setGuiControlKeyIfActive(args: {
+    id: string;
+    ciphertext: Buffer | null;
+    expiresAt: Date | null;
+  }): Promise<AgentSessionRecord | null> {
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({
+        guiControlKeyCiphertext: args.ciphertext,
+        guiControlKeyExpiresAt: args.expiresAt,
+        updatedAt: now,
+      })
+      .where(and(eq(agentSessions.id, args.id), eq(agentSessions.status, 'active')))
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
+  }
+
   async setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord> {
     const now = this.clock();
     const updated = await this.database.db
@@ -888,6 +907,21 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       throw new Error(`AgentSession ${id} not found`);
     }
     return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+  }
+
+  async setModeIfActive(
+    id: string,
+    mode: 'manual' | 'ai' | 'pair',
+    pairModeState: unknown,
+  ): Promise<AgentSessionRecord | null> {
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ mode, pairModeState, updatedAt: now })
+      .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
   async findByIdempotencyKey(

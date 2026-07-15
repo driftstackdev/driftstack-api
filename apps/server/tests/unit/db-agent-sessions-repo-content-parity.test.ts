@@ -94,6 +94,24 @@ describe('db/agent-sessions-repo content parity', () => {
     expect((body.match(/\.for\('update'\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 
+  it('active-only GUI-key and mode setters predicate the metadata write itself on status=active', () => {
+    expect(body).toMatch(/async setGuiControlKeyIfActive\(/);
+    expect(body).toMatch(/async setModeIfActive\(/);
+    expect(body).toMatch(
+      /\.where\(and\(eq\(agentSessions\.id, args\.id\), eq\(agentSessions\.status, 'active'\)\)\)/,
+    );
+    expect(body).toMatch(
+      /\.where\(and\(eq\(agentSessions\.id, id\), eq\(agentSessions\.status, 'active'\)\)\)/,
+    );
+    expect(
+      (
+        body.match(
+          /return row \? rowToRecord\(row, this\.transcriptEncryptionKeyBase64\) : null/g,
+        ) ?? []
+      ).length,
+    ).toBeGreaterThanOrEqual(4);
+  });
+
   it('createIfUnderActiveCap uses the canonical cross-surface profile lock, checks both agent + legacy live tables, and returns the competing public session id', () => {
     expect(body).toMatch(/import \{ agentSessions, sessions \} from '\.\/schema\.js';/);
     expect(body).toMatch(

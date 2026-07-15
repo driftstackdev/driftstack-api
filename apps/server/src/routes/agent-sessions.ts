@@ -3321,6 +3321,11 @@ export function registerAgentSessionsRoutes(
         if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
+        if (rec.status !== 'active') {
+          throw new ConflictError(
+            `AgentSession ${req.params.id} is ${rec.status}; GUI control keys require an active session.`,
+          );
+        }
         const now = new Date();
         // Mint when no key exists, the existing one has expired, or it is a
         // legacy/corrupt/context-mismatched blob. Only this account-authenticated
@@ -3348,11 +3353,18 @@ export function registerAgentSessionsRoutes(
             sessionId: rec.id,
           });
           const expiresAt = new Date(now.getTime() + guiControlKeyTtlMs);
-          await sessions.setGuiControlKey({
+          const committed = await sessions.setGuiControlKeyIfActive({
             id: req.params.id,
             ciphertext,
             expiresAt,
           });
+          if (committed === null) {
+            // A close won after the owned active read. Do not disclose the
+            // generated plaintext because its ciphertext never committed.
+            throw new ConflictError(
+              `AgentSession ${req.params.id} is no longer active; GUI control key was not minted.`,
+            );
+          }
           return {
             gui_control_key: plaintext,
             expires_at: expiresAt.toISOString(),
@@ -3617,7 +3629,7 @@ export function registerAgentSessionsRoutes(
   // Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode.
   // Top-level mode setter for the AI-chat / manual / pair toggle on
   // the per-session workbench page. Atomic dual-column write of
-  // `mode` + `pair_mode_state` via sessions.setMode:
+  // `mode` + `pair_mode_state` via sessions.setModeIfActive:
   //   - target 'pair' → pair_mode_state = initialPairModeState()
   //   - target 'manual' / 'ai' → pair_mode_state = null
   // Idempotent: a no-op mode transition returns the existing row.
@@ -3685,7 +3697,15 @@ export function registerAgentSessionsRoutes(
       }
       const nextPairModeState: PairModeState | null =
         target === 'pair' ? initialPairModeState() : null;
-      const updated = await sessions.setMode(req.params.id, target, nextPairModeState);
+      const updated = await sessions.setModeIfActive(req.params.id, target, nextPairModeState);
+      if (updated === null) {
+        // The lifecycle predicate is part of the same UPDATE as the mode
+        // mutation. A close winner receives neither a late overwrite nor the
+        // customer audit entry below.
+        throw new ConflictError(
+          `AgentSession ${req.params.id} is no longer active; mode was not changed.`,
+        );
+      }
       // Slice 6 follow-up 2026-05-20 — customer audit log entry. The
       // mode change is a meaningful state transition (especially
       // ai → manual / pair → ai for incident investigation). Best-effort:

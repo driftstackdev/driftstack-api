@@ -308,7 +308,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(await repo.get(session.id)).toEqual(winner!.session);
     });
 
-    it('a close transaction that wins the row lock makes waiting active-only append/debit mutations return null', async () => {
+    it('a close transaction that wins the row lock makes every waiting active-only session mutation return null', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleAgentSessionsRepo(
@@ -350,16 +350,28 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         body: 'must not land',
       });
       const lateDebit = repo.debitTokensIfActive(session.id, 400);
+      const lateGuiKey = repo.setGuiControlKeyIfActive({
+        id: session.id,
+        ciphertext: Buffer.from('must-not-land'),
+        expiresAt: new Date('2026-07-16T00:00:00.000Z'),
+      });
+      const lateMode = repo.setModeIfActive(session.id, 'pair', { kind: 'ai-driving' });
       releaseClose();
       await closeTransaction;
 
       await expect(lateAppend).resolves.toBeNull();
       await expect(lateDebit).resolves.toBeNull();
+      await expect(lateGuiKey).resolves.toBeNull();
+      await expect(lateMode).resolves.toBeNull();
       expect(await repo.get(session.id)).toMatchObject({
         status: 'closed',
         closedReason: 'customer-closed',
         tokenBudgetRemaining: 1000,
         transcript: [],
+        guiControlKeyCiphertext: null,
+        guiControlKeyExpiresAt: null,
+        mode: 'ai',
+        pairModeState: null,
       });
     });
 

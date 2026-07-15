@@ -1908,6 +1908,41 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('Slice 3 close winner at mode commit returns 409, preserves terminal metadata, and emits no mode audit', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    const repo = fx.agentSessionsRepo!;
+    const original = repo.setModeIfActive.bind(repo);
+    vi.spyOn(repo, 'setModeIfActive').mockImplementationOnce(
+      async (sessionId, mode, pairModeState) => {
+        await repo.closeWithReason(sessionId, 'customer-closed');
+        return original(sessionId, mode, pairModeState);
+      },
+    );
+    const auditsBefore = fx.accountAuditRepo.getAll().length;
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(await repo.get(id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer-closed',
+      mode: 'ai',
+      pairModeState: null,
+    });
+    expect(fx.accountAuditRepo.getAll()).toHaveLength(auditsBefore);
+  });
+
   it('Slice 3 POST /:id/mode on never-existed id returns 404 (cross-account guard rejects before setMode)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const res = await fx.app.inject({

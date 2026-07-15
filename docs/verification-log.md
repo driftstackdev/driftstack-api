@@ -27909,3 +27909,53 @@ it does not claim impossible cross-system atomicity. Another API replica can
 still commit close in the final interval between the last database read and an
 already-starting external socket send. Linearizing that edge requires a future
 database outbox or intent lease together with a harness-side terminal fence.
+
+---
+
+## V-665 — Terminal sessions cannot mint credentials or receive late mode writes
+
+**Date:** 2026-07-15
+
+The account-authenticated GUI-control-key route previously read ownership but
+did not require an active agent session. A closed row could therefore echo an
+existing plaintext control credential or mint and persist a new encrypted one.
+The mode route checked active status before an owner-tier lookup, then used an
+unconditional update; a close that committed during that await could be
+followed by a late mode/pair-state overwrite and a false mode-change audit.
+
+Both repositories now expose active-only GUI-key and mode mutations. Their
+status predicate is part of the same write as the metadata change and returns
+null for missing or terminal rows; the unconditional setters remain available
+for direct fixture setup. The key route rejects a closed session before
+decrypting or generating a credential. A generated plaintext is returned only
+after its active-only ciphertext write commits; a close winner receives a 409
+without the credential. The mode route similarly returns a conflict when the
+conditional update loses, before recording an audit event.
+
+Deterministic route coverage proves a valid key cannot be echoed after close,
+forces close immediately before key persistence and requires no plaintext or
+ciphertext to escape, and forces close immediately before a mode commit while
+requiring the terminal row's mode/pair state and audit count to remain
+unchanged. In-memory coverage proves active compatibility, null outcomes for
+terminal/missing rows, and preservation of unconditional fixture setters. A
+connected PostgreSQL transaction holds the close row lock while all four
+active-only transcript, debit, GUI-key and mode mutations wait; after commit,
+all return null and the complete terminal snapshot remains unchanged.
+
+The focused six-file gate passes 207/207 tests. The expanded lifecycle,
+control-key and pair-mode matrix passes 14 files and 277/277 tests, with every
+PostgreSQL case executed. The configured exhaustive server tree passes 1,814
+files and 19,999 tests with 130 configured skips. Strict server source/test
+TypeScript, full-workspace typechecking, targeted ESLint/Prettier and
+whitespace checks, and the configured full-workspace production build are
+green; the build includes 15 admin pages, 24 dashboard pages, 62 docs pages
+plus 61 indexed pages, 546 GUI modules, 69 marketing pages, the server and 7
+status pages.
+
+An intentionally connected exhaustive diagnostic also exposed two unrelated
+baseline verifier-isolation effects: the global transcript migrator can scan a
+parallel test file's temporary rows encrypted under a different test key, and
+one admin HTML guard exceeded its ten-second timeout under full-suite load.
+The affected files immediately pass isolated (3/3 and 11/11 respectively).
+They are recorded for a separate test-isolation cleanup and were not folded
+into this lifecycle change.

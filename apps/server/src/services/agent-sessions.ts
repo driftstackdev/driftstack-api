@@ -390,6 +390,15 @@ export interface AgentSessionsRepo {
    */
   setMode(id: string, mode: AgentSessionMode, pairModeState: unknown): Promise<AgentSessionRecord>;
 
+  /** Atomically change mode only while the session remains active. Missing or
+   * terminal rows return null so a close winner cannot receive a late mode or
+   * pair-state overwrite. The unconditional setter remains for fixtures. */
+  setModeIfActive(
+    id: string,
+    mode: AgentSessionMode,
+    pairModeState: unknown,
+  ): Promise<AgentSessionRecord | null>;
+
   /**
    * Arc 2 sub-slice 8.4 (v2-#8) — write the encrypted
    * gui_control_key blob + its 24h-TTL expiry timestamp. Called by
@@ -401,6 +410,15 @@ export interface AgentSessionsRepo {
     ciphertext: Buffer | null;
     expiresAt: Date | null;
   }): Promise<AgentSessionRecord>;
+
+  /** Persist a GUI control credential only while the session remains active.
+   * Missing or terminal rows return null so callers never disclose plaintext
+   * for a key that lost a concurrent close. */
+  setGuiControlKeyIfActive(args: {
+    id: string;
+    ciphertext: Buffer | null;
+    expiresAt: Date | null;
+  }): Promise<AgentSessionRecord | null>;
 }
 
 /**
@@ -651,6 +669,23 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     return Promise.resolve(updated);
   }
 
+  setGuiControlKeyIfActive(args: {
+    id: string;
+    ciphertext: Buffer | null;
+    expiresAt: Date | null;
+  }): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(args.id);
+    if (rec === undefined || rec.status !== 'active') return Promise.resolve(null);
+    const updated: AgentSessionRecord = {
+      ...rec,
+      guiControlKeyCiphertext: args.ciphertext,
+      guiControlKeyExpiresAt: args.expiresAt,
+      updatedAt: this.clock(),
+    };
+    this.records.set(args.id, updated);
+    return Promise.resolve(updated);
+  }
+
   setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord> {
     const rec = this.records.get(id);
     if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
@@ -689,6 +724,23 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
   setMode(id: string, mode: AgentSessionMode, pairModeState: unknown): Promise<AgentSessionRecord> {
     const rec = this.records.get(id);
     if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
+    const updated: AgentSessionRecord = {
+      ...rec,
+      mode,
+      pairModeState,
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  setModeIfActive(
+    id: string,
+    mode: AgentSessionMode,
+    pairModeState: unknown,
+  ): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (rec === undefined || rec.status !== 'active') return Promise.resolve(null);
     const updated: AgentSessionRecord = {
       ...rec,
       mode,
