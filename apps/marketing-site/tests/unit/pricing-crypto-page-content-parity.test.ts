@@ -4,8 +4,8 @@
 // experience claims for crypto-payment evaluators:
 //
 //   • V-674 + V-666 family posture framing pinned: documents the
-//     ACTUAL current flow (request quote → support sends address
-//     out-of-band → IPN settles) not the V-666.D future state.
+//     ACTUAL current flow (request quote → billing sends address
+//     out-of-band → IPN settles) without a self-serve promise.
 //   • W247.C — labels derived from API_TIERS data source (single
 //     source of truth, hard-coded prices would drift).
 //   • 6 CRYPTO_PAYABLE_TIER_IDS in canonical order: solo_manual /
@@ -21,8 +21,8 @@
 //     from a fictional 1-hour auto-cancel claim the backend never implemented).
 //   • "Crypto payments are non-refundable" pinned + /legal/refunds
 //     cross-link (load-bearing commercial-policy claim).
-//   • 4-step checkout flow (dashboard → mint order → broadcast
-//     transfer → settle on confirmations).
+//   • 4-step invoice flow (email billing → receive provider-backed
+//     invoice → broadcast transfer → settle on confirmations).
 //   • 3 failure modes pinned: underpayment / late payment / wrong
 //     currency.
 //   • Tax: USD-denominated invoices (matches card-billing).
@@ -45,13 +45,12 @@ function read(p: string): string {
 describe('W376.C marketing-site /pricing/crypto page content parity', () => {
   const body = read(PAGE);
 
-  it('V-674 + V-666 family posture framing pinned (current flow, not future state)', () => {
+  it('V-674 + V-666 family posture framing pinned to the current handled invoice flow', () => {
     expect(body).toMatch(/V-674 — crypto-payments pricing page/);
     expect(body).toMatch(/V-666 \/\s*\n?\s*\/\/\s*V-666\.B \/ V-666\.C/);
-    expect(body).toMatch(
-      /this page describes what the\s*\n?\s*\/\/\s*customer actually experiences today \(not the future state\)/,
-    );
-    expect(body).toMatch(/V-666\.D follow-up wires\s*\n?\s*\/\/\s*a NowPayments merchant account/);
+    expect(body).toMatch(/customer-facing path is a handled crypto/);
+    expect(body).toMatch(/without promising a\s*\n?\s*\/\/\s*self-serve checkout/);
+    expect(body).not.toMatch(/stubbed|follow-up wires|future state/i);
   });
 
   it('W247.C — labels derived from API_TIERS data source (no two-source-of-truth drift)', () => {
@@ -117,14 +116,19 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
     );
   });
 
-  it('4-step checkout flow pinned (dashboard → create order → send transfer → settle on confirmations; S20b plain words, same flow)', () => {
-    expect(body).toMatch(/From your account dashboard, pick the tier and click/);
+  it('4-step invoice flow pinned (email billing → provider-backed invoice → send transfer → settle on confirmations)', () => {
     expect(body).toMatch(
-      /Driftstack creates an order through NowPayments and shows\s+you a one-time deposit address \+ the exact amount to send\./,
+      /Email <a href="mailto:billing@driftstack\.dev">billing@driftstack\.dev<\/a>/,
+    );
+    expect(body).toMatch(
+      /Driftstack creates the provider-backed invoice and sends\s+you the exact amount, network, pay window, and one-time deposit address\./,
     );
     expect(body).toMatch(/You send the transfer\. The exchange or wallet\s+you use is up to you/);
     expect(body).toMatch(
-      /NowPayments watches the blockchain; once your transfer reaches\s+the required number of confirmations, Driftstack switches your\s+account to the new tier\./,
+      /NowPayments watches the blockchain; once your transfer reaches\s+the required number of confirmations, Driftstack activates your\s+tier and sends the receipt\./,
+    );
+    expect(body).not.toMatch(
+      /pick the tier and click|unlocks automatically|no support ticket needed/,
     );
   });
 

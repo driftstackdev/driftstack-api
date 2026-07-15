@@ -5,13 +5,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // V-666.B / V-666.C crypto-checkout posture for customers who land
 // on `/pricing/crypto` from the marketing nav.
 //
-// Posture (current): the checkout endpoint mints an order but
-// payment-address minting is stubbed — the customer-facing flow is
-// "request quote, support sends a payment address out-of-band, IPN
-// settles." That arrangement holds until the V-666.D follow-up wires
-// a NowPayments merchant account; this page describes what the
-// customer actually experiences today (not the future state) so the
-// page doesn't promise a flow we can't deliver.
+// Posture (current): the customer-facing path is a handled crypto
+// invoice. The customer requests a quote, billing sends the exact
+// provider-backed payment address out-of-band, and the IPN settles the
+// order. This page describes that working flow without promising a
+// self-serve checkout that is not active on every deployment.
 
 // W247.C — labels derived from API_TIERS (single source of truth in
 // marketing-site/src/data/pricing.ts). Hard-coded prices here drifted
@@ -59,12 +57,13 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     </div>
   </section>
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert prose-headings:font-semibold">
-    <p class="lead text-lg text-tk-ink-2"><strong class="text-tk-ink">Bitcoin, Ether, USDC, USDT</strong> — every self-serve paid tier accepts crypto via NowPayments.</p>
+    <p class="lead text-lg text-tk-ink-2"><strong class="text-tk-ink">Bitcoin, Ether, USDC, USDT</strong> — every paid tier can be purchased through a handled crypto invoice.</p>
 
     <p>
-      Payment settles on the blockchain itself: once your transfer has the
-      required number of confirmations, your account unlocks automatically —
-      in the normal case, no support ticket needed.
+      Email <a href="mailto:billing@driftstack.dev">billing@driftstack.dev</a>
+      with the tier and currency you want to use. We send the exact quote,
+      network, amount, and one-time payment address. Once NowPayments confirms
+      the transfer on-chain, Driftstack activates the tier and sends your receipt.
     </p>
 
     <h2>Supported tiers</h2>
@@ -107,16 +106,16 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
 
     <h2>How the checkout works</h2>
     <ol>
-      <li>From your account dashboard, pick the tier and click
-        <strong>Pay with crypto</strong>.</li>
-      <li>Driftstack creates an order through NowPayments and shows
-        you a one-time deposit address + the exact amount to send.</li>
+      <li>Email <a href="mailto:billing@driftstack.dev">billing@driftstack.dev</a>
+        with the tier and currency you want to use.</li>
+      <li>Driftstack creates the provider-backed invoice and sends
+        you the exact amount, network, pay window, and one-time deposit address.</li>
       <li>You send the transfer. The exchange or wallet
         you use is up to you — we only need to see the transfer land
         at the address NowPayments issued.</li>
       <li>NowPayments watches the blockchain; once your transfer reaches
-        the required number of confirmations, Driftstack switches your
-        account to the new tier.</li>
+        the required number of confirmations, Driftstack activates your
+        tier and sends the receipt.</li>
     </ol>
 
     <p class="rounded-md border border-status-warning bg-status-warning/15 p-3 text-sm">
