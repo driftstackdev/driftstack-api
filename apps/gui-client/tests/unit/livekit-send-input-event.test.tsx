@@ -41,6 +41,7 @@ import {
   ReliableInputCongestedError,
   setReliableInputCongested,
 } from '../../src/lib/livekit-input-congestion';
+import { pendingInputReceiptCount, resetInputReceipts } from '../../src/lib/livekit-input-ack';
 
 interface MinimalRoom {
   localParticipant: {
@@ -99,6 +100,45 @@ describe('sendInputEvent', () => {
     setReliableInputCongested(room, true);
     await sendInputEvent(room, { type: 'ping', timestamp: 1 }, { reliable: false });
     expect(publishData).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds a unique ASCII receipt id only to committed input boundaries', async () => {
+    const { room, publishData } = makeRoom();
+    await sendInputEvent(room, { type: 'tap', x: 1, y: 2 });
+    await sendInputEvent(room, { type: 'touchEnd', x: 1, y: 2, touchId: 3 });
+    await sendInputEvent(room, { type: 'keyUp', key: 'Enter' });
+    await sendInputEvent(room, { type: 'text', text: 'ok' });
+    const calls = publishData.mock.calls as unknown as Array<[Uint8Array, { reliable: boolean }]>;
+    const ids = calls.map(([data]) => {
+      const decoded = JSON.parse(new TextDecoder().decode(data)) as { id?: unknown };
+      expect(decoded.id).toMatch(/^[A-Za-z0-9_-]{1,64}$/u);
+      return decoded.id;
+    });
+    expect(new Set(ids).size).toBe(4);
+    expect(pendingInputReceiptCount(room)).toBe(4);
+    resetInputReceipts(room);
+  });
+
+  it('keeps high-rate, start, ping, navigation, and tab-control frames receipt-free', async () => {
+    const { room, publishData } = makeRoom();
+    await sendInputEvent(room, { type: 'touchStart', x: 1, y: 2, touchId: 3 });
+    await sendInputEvent(room, { type: 'touchMove', x: 2, y: 3, touchId: 3 }, { reliable: false });
+    await sendInputEvent(room, { type: 'wheel', x: 1, y: 2, deltaX: 0, deltaY: 3 });
+    await sendInputEvent(room, { type: 'keyDown', key: 'Enter' });
+    await sendInputEvent(room, { type: 'ping', timestamp: 1 }, { reliable: false });
+    await sendInputEvent(room, { type: 'navigate', url: 'https://example.com/' });
+    const calls = publishData.mock.calls as unknown as Array<[Uint8Array, { reliable: boolean }]>;
+    for (const [data] of calls) {
+      expect(JSON.parse(new TextDecoder().decode(data))).not.toHaveProperty('id');
+    }
+    expect(pendingInputReceiptCount(room)).toBe(0);
+  });
+
+  it('cancels a registered receipt when publish itself fails', async () => {
+    const publishData = vi.fn(() => Promise.reject(new Error('send failed')));
+    const room = { localParticipant: { publishData } } as unknown as Room;
+    await expect(sendInputEvent(room, { type: 'tap', x: 1, y: 2 })).rejects.toThrow(/send failed/);
+    expect(pendingInputReceiptCount(room)).toBe(0);
   });
 
   it('JSON-encodes a mouseMove event + UTF-8 encodes the JSON string', async () => {
@@ -494,7 +534,8 @@ describe('sendText', () => {
     const { room, publishData } = makeRoom();
     await sendText(room, 'hunter2 pa$$word');
     const call = firstCall(publishData);
-    expect(decodeEvent(call)).toEqual({ type: 'text', text: 'hunter2 pa$$word' });
+    expect(decodeEvent(call)).toMatchObject({ type: 'text', text: 'hunter2 pa$$word' });
+    expect(decodeEvent(call)).toHaveProperty('id');
     expect(call.opts.reliable).toBe(true);
     // exactly one publish — a long paste must never fan out into per-char keyDowns
     // (that flood is the reliable-channel HOL problem this event exists to avoid).
@@ -504,7 +545,7 @@ describe('sendText', () => {
   it('preserves unicode + newlines round-trip through the UTF-8 JSON wire', async () => {
     const { room, publishData } = makeRoom();
     await sendText(room, 'café\n日本語\ttab');
-    expect(decodeEvent(firstCall(publishData))).toEqual({
+    expect(decodeEvent(firstCall(publishData))).toMatchObject({
       type: 'text',
       text: 'café\n日本語\ttab',
     });
@@ -522,7 +563,7 @@ describe('sendText', () => {
     const { room, publishData } = makeRoom();
     const text = 'é'.repeat(MAX_DEVICE_TEXT_BYTES / 2);
     await sendText(room, text);
-    expect(decodeEvent(firstCall(publishData))).toEqual({ type: 'text', text });
+    expect(decodeEvent(firstCall(publishData))).toMatchObject({ type: 'text', text });
   });
 });
 

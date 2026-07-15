@@ -43,12 +43,12 @@ describe('gui-client/lib/livekit content parity', () => {
       "| { type: 'mouseDown'; x: number; y: number; button: 0 | 1 | 2 }",
       "| { type: 'mouseUp'; x: number; y: number; button: 0 | 1 | 2 }",
       "| { type: 'keyDown'; key: string; modifiers?: readonly string[] }",
-      "| { type: 'keyUp'; key: string; modifiers?: readonly string[] }",
+      "| { type: 'keyUp'; key: string; modifiers?: readonly string[]; id?: string }",
       "| { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }",
-      "| { type: 'tap'; x: number; y: number }",
+      "| { type: 'tap'; x: number; y: number; id?: string }",
       "| { type: 'touchStart'; x: number; y: number; touchId: number }",
       "| { type: 'touchMove'; x: number; y: number; touchId: number }",
-      "| { type: 'touchEnd'; x: number; y: number; touchId: number }",
+      "| { type: 'touchEnd'; x: number; y: number; touchId: number; id?: string }",
       "| { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }",
       "| { type: 'navigate'; url: string }",
       "| { type: 'ping'; timestamp: number };",
@@ -77,10 +77,19 @@ describe('gui-client/lib/livekit content parity', () => {
     expect(body).toMatch(/adaptiveStream pauses\/downgrades a track based/);
   });
 
-  it("sendInputEvent reliable=true default framing pinned: 'lossy: false (TCP-style; mouse/key events MUST arrive in order). For high-frequency mouseMove streams, callers can opt-in to lossy: true to drop intermediate frames if the link congests — acceptable trade for cursor-tracking only.' + opts.reliable ?? true + JSON.stringify(event) → publishData. Drift to reliable=false default would let click/keypress events drop silently", () => {
+  it("sendInputEvent reliable=true default framing pinned: 'lossy: false (TCP-style; mouse/key events MUST arrive in order). For high-frequency mouseMove streams, callers can opt-in to lossy: true to drop intermediate frames if the link congests — acceptable trade for cursor-tracking only.' + opts.reliable ?? true + receipt-aware wireEvent → publishData. Drift to reliable=false default would let click/keypress events drop silently", () => {
     expect(body).toContain('const reliable = opts.reliable ?? true;');
-    expect(body).toContain('const data = new TextEncoder().encode(JSON.stringify(event));');
+    expect(body).toContain('const data = new TextEncoder().encode(JSON.stringify(wireEvent));');
     expect(body).toContain('await room.localParticipant.publishData(data, { reliable });');
+  });
+
+  it('committed-input receipt ids are limited to tap/touchEnd/keyUp/text and registered before publish with cancellation on failure', () => {
+    expect(body).toMatch(
+      /event\.type === 'tap' \|\|[\s\S]{0,120}event\.type === 'touchEnd' \|\|[\s\S]{0,120}event\.type === 'keyUp' \|\|[\s\S]{0,120}event\.type === 'text'/,
+    );
+    expect(body).toContain('registerInputReceipt(room, receiptId, deadlineMs);');
+    expect(body).toContain('if (receiptId !== null) cancelInputReceipt(room, receiptId);');
+    expect(body).not.toMatch(/event\.type === 'touchMove'[\s\S]{0,80}crypto\.randomUUID/);
   });
 
   it("sendInputEvent swallows benign LiveKit teardown errors (PC manager closed) so a fire-and-forget publish after room teardown can't blank the app, and re-throws genuine failures", () => {

@@ -19,6 +19,7 @@ import { Room, RoomEvent } from 'livekit-client';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { isReliableInputCongested, ReliableInputCongestedError } from './livekit-input-congestion';
 import { isBenignTeardownError } from './livekit-errors';
+import { cancelInputReceipt, registerInputReceipt } from './livekit-input-ack';
 
 export { isBenignTeardownError } from './livekit-errors';
 
@@ -29,14 +30,14 @@ export type InputEvent =
   | { type: 'mouseDown'; x: number; y: number; button: 0 | 1 | 2 }
   | { type: 'mouseUp'; x: number; y: number; button: 0 | 1 | 2 }
   | { type: 'keyDown'; key: string; modifiers?: readonly string[] }
-  | { type: 'keyUp'; key: string; modifiers?: readonly string[] }
+  | { type: 'keyUp'; key: string; modifiers?: readonly string[]; id?: string }
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
   // Touch vocab (2026-06-08 product directive; device-CSS px; harness owns dynamics).
   // Lock-step with packages/api-types InputEventSchema + Agent 1's harness.
-  | { type: 'tap'; x: number; y: number }
+  | { type: 'tap'; x: number; y: number; id?: string }
   | { type: 'touchStart'; x: number; y: number; touchId: number }
   | { type: 'touchMove'; x: number; y: number; touchId: number }
-  | { type: 'touchEnd'; x: number; y: number; touchId: number }
+  | { type: 'touchEnd'; x: number; y: number; touchId: number; id?: string }
   | { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }
   // URL navigation over the SAME reliable data channel as taps (A3 W2668; founder
   // "can't press the URL bar"). The fork's rendered iOS-Safari URL bar is browser
@@ -77,7 +78,7 @@ export type InputEvent =
   // Agent 1's harness types it via performKeyActions (per-key human hold, un-flooded +
   // non-robotic). A GUI↔box transport detail like navigate / tab ops — NOT part of the
   // customer InputEventSchema (see packages/api-types agent-tab-ops).
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; id?: string }
   | { type: 'ping'; timestamp: number };
 
 /** Payload for `sendTabListUpdate` — the InputEvent body minus the discriminant. */
@@ -300,15 +301,37 @@ export async function sendInputEvent(
   ) {
     throw new ReliableInputCongestedError();
   }
-  const data = new TextEncoder().encode(JSON.stringify(event));
+  // Only committed input boundaries request a harness receipt. High-rate moves,
+  // starts, raw wheel, ping, navigation and tab control keep their old wire shape.
+  // The harness replies only after the session-scoped injector finishes.
+  const receiptId =
+    event.type === 'tap' ||
+    event.type === 'touchEnd' ||
+    event.type === 'keyUp' ||
+    event.type === 'text'
+      ? crypto.randomUUID()
+      : null;
+  const wireEvent = receiptId === null ? event : { ...event, id: receiptId };
+  const data = new TextEncoder().encode(JSON.stringify(wireEvent));
   const maxEncodedBytes =
     event.type === 'tabListUpdate' ? MAX_TAB_SNAPSHOT_BYTES : MAX_INPUT_EVENT_BYTES;
   if (data.byteLength > maxEncodedBytes) {
     throw new RangeError(`Input event ${event.type} exceeds ${maxEncodedBytes} encoded bytes`);
   }
+  if (receiptId !== null) {
+    // Bulk text is applied with human key cadence on the harness, so its deadline
+    // scales with character count instead of falsely declaring a healthy long paste
+    // dead after the ordinary 5-second tap/key boundary.
+    const deadlineMs =
+      event.type === 'text'
+        ? Math.min(15 * 60_000, Math.max(15_000, Array.from(event.text).length * 200))
+        : undefined;
+    registerInputReceipt(room, receiptId, deadlineMs);
+  }
   try {
     await room.localParticipant.publishData(data, { reliable });
   } catch (err) {
+    if (receiptId !== null) cancelInputReceipt(room, receiptId);
     // A publish that runs after the room/engine has been torn down rejects with
     // "PC manager is closed" (livekit UnexpectedConnectionState) or a
     // client-initiated-disconnect error. These are benign teardown races (window

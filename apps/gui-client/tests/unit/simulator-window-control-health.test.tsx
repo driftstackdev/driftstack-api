@@ -11,6 +11,8 @@
 //   3. A reliable-channel congestion latch that never receives its buffer-low
 //      event has a deterministic full Room reconnect instead of pausing input
 //      forever behind a passive badge.
+//   4. Harness inputAck dropped/failed/deadline outcomes use the same actionable
+//      badge and are cleared across renderer ownership/reconnect boundaries.
 //
 // A controllable AgentSessionPanel mock exposes onPublishError + onRoom so the
 // test can drive the failed-publish → recovery sequence (the real panel needs a
@@ -125,6 +127,8 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
+const { handleInputAck, pendingInputReceiptCount, registerInputReceipt } =
+  await import('../../src/lib/livekit-input-ack');
 
 function renderSim() {
   window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_x');
@@ -145,6 +149,45 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
     expect(container.querySelector('[data-component="control-unreachable-badge"]')).not.toBeNull();
     // A fresh/reconnected room clears it (the latch is gone).
     act(() => panelCbs.onRoom?.(fakeRoom));
+    expect(container.querySelector('[data-component="control-unreachable-badge"]')).toBeNull();
+  });
+
+  it('surfaces truthful receipt failure copy and clears it on a confirmed input', () => {
+    const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => {
+      registerInputReceipt(fakeRoom as never, 'input_1', 10_000);
+      handleInputAck(fakeRoom as never, {
+        type: 'inputAck',
+        id: 'input_1',
+        status: 'dropped',
+      });
+    });
+    expect(
+      container.querySelector('[data-component="control-unreachable-badge"]'),
+    ).toHaveTextContent('Device dropped the last input');
+
+    act(() => {
+      registerInputReceipt(fakeRoom as never, 'input_2', 10_000);
+      handleInputAck(fakeRoom as never, {
+        type: 'inputAck',
+        id: 'input_2',
+        status: 'applied',
+      });
+    });
+    expect(container.querySelector('[data-component="control-unreachable-badge"]')).toBeNull();
+  });
+
+  it('invalidates pending receipts when tab ownership changes', async () => {
+    localStorage.setItem('ds-sim-browser-mode', '1');
+    const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => registerInputReceipt(fakeRoom as never, 'old_tab_input', 10_000));
+    expect(pendingInputReceiptCount(fakeRoom as never)).toBe(1);
+
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
+    await act(async () => Promise.resolve());
+    expect(pendingInputReceiptCount(fakeRoom as never)).toBe(0);
     expect(container.querySelector('[data-component="control-unreachable-badge"]')).toBeNull();
   });
 });

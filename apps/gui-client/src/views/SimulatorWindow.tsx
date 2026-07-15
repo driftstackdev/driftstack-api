@@ -29,6 +29,12 @@ import {
   type Room,
 } from '../lib/livekit';
 import { ReliableInputCongestedError } from '../lib/livekit-input-congestion';
+import {
+  handleInputAck,
+  resetInputReceipts,
+  subscribeInputReceiptIssues,
+  type InputReceiptIssue,
+} from '../lib/livekit-input-ack';
 import { useRecordings, type Recording } from '../lib/recordings';
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { exportCookies } from '../lib/cookie-export';
@@ -2853,6 +2859,7 @@ export function SimulatorWindow(): JSX.Element {
   // (the LiveKit data channel is effectively dead, so taps/keys aren't reaching
   // the device). Surfaced as a small badge rather than blocking the view.
   const [controlUnreachable, setControlUnreachable] = useState(false);
+  const [controlReceiptIssue, setControlReceiptIssue] = useState<InputReceiptIssue>(null);
   // Temporary ordered-channel backpressure. Fresh input is deliberately paused
   // during this window so it cannot replay late against another page; unlike
   // controlUnreachable this self-clears on buffer drain and needs no reconnect.
@@ -4122,6 +4129,17 @@ export function SimulatorWindow(): JSX.Element {
   }, []);
   useEffect(() => {
     if (room === null) return;
+    const unsubscribe = subscribeInputReceiptIssues(room, (issue) => {
+      setControlReceiptIssue(issue);
+      setControlUnreachable(issue !== null);
+    });
+    return () => {
+      unsubscribe();
+      resetInputReceipts(room);
+    };
+  }, [room]);
+  useEffect(() => {
+    if (room === null) return;
     const onData = (payload: Uint8Array): void => {
       try {
         const msg = JSON.parse(new TextDecoder().decode(payload)) as {
@@ -4169,7 +4187,13 @@ export function SimulatorWindow(): JSX.Element {
           // ProfileBlob.openTabs set on profile reopen so the bar repopulates.
           tabs?: unknown;
           activeTabId?: unknown;
+          id?: unknown;
+          status?: unknown;
         };
+        // A committed input receipt belongs to this exact Room. Consume it before
+        // the page-state discriminator so it never becomes an unrecognised-frame
+        // warning. Unknown/late ids are inert; strict validation lives in the helper.
+        if (handleInputAck(room, msg)) return;
         // activateTabResult — correlate by requestId against our optimistic switch.
         // ok (or a missing ok with no error) → confirmed, drop the pending record. A
         // rejection (ok:false / error) → revert to the tab that was active before, and
@@ -4554,6 +4578,16 @@ export function SimulatorWindow(): JSX.Element {
       }
     };
   }, [room, writeTabPageState, applyStalledState, showNotice, resetPageChromeForSwitch]);
+
+  // Receipts intentionally omit tab identity. A tab ownership change therefore
+  // invalidates every pending id before the new renderer can accept input. A
+  // reconnect reaches `connected` again and clears the same per-Room state.
+  useEffect(() => {
+    if (room === null) return;
+    resetInputReceipts(room);
+    setControlReceiptIssue(null);
+    setControlUnreachable(false);
+  }, [room, activeTabId, connState]);
 
   // Live URL via the page-state API (A3 W2730): the box reports pageState over the
   // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
@@ -6723,7 +6757,15 @@ export function SimulatorWindow(): JSX.Element {
                       data-component="control-unreachable-badge"
                       className="pointer-events-auto flex items-center gap-2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
                     >
-                      <span>Control may not be reaching the device</span>
+                      <span>
+                        {controlReceiptIssue === 'timeout'
+                          ? 'Device did not confirm the last input'
+                          : controlReceiptIssue === 'dropped'
+                            ? 'Device dropped the last input'
+                            : controlReceiptIssue === 'failed'
+                              ? 'Device could not apply the last input'
+                              : 'Control may not be reaching the device'}
+                      </span>
                       <button
                         type="button"
                         data-component="control-unreachable-reconnect"
