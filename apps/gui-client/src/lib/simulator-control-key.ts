@@ -11,6 +11,7 @@ const CONTROL_SECRET_PREFIX = 'gui_control:';
 const LEGACY_GCK_STORE_PREFIX = 'ds-gck-';
 const protectedControlKeys = new Map<string, string>();
 const protectedLoadFailures = new Map<string, { message: string; retryAfter: number }>();
+const protectedWriteTails = new Map<string, Promise<void>>();
 const PROTECTED_LOAD_RETRY_MS = 30_000;
 
 function isSafeControlSessionId(sessionId: string): boolean {
@@ -19,6 +20,15 @@ function isSafeControlSessionId(sessionId: string): boolean {
 
 function controlSecretName(sessionId: string): string {
   return `${CONTROL_SECRET_PREFIX}${sessionId}`;
+}
+
+function serializeProtectedWrite(sessionId: string, operation: () => Promise<void>): Promise<void> {
+  const previous = protectedWriteTails.get(sessionId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  protectedWriteTails.set(sessionId, current);
+  return current.finally(() => {
+    if (protectedWriteTails.get(sessionId) === current) protectedWriteTails.delete(sessionId);
+  });
 }
 
 function takeLegacyControlKeys(): Map<string, string> {
@@ -72,10 +82,17 @@ export async function loadProtectedControlKey(sessionId: string): Promise<string
 
 export async function persistControlKey(sessionId: string, key: string): Promise<void> {
   if (!isSafeControlSessionId(sessionId) || key === '') return;
-  const { invoke } = await import('@tauri-apps/api/core');
-  await invoke('secret_save', { key: controlSecretName(sessionId), value: key });
-  protectedControlKeys.set(sessionId, key);
-  protectedLoadFailures.delete(sessionId);
+  if (protectedControlKeys.get(sessionId) === key) return;
+  return serializeProtectedWrite(sessionId, async () => {
+    // A same-session opener event often carries the still-live 24-hour key.
+    // Re-check inside the serialized lane so simultaneous React effects also
+    // collapse to one OS credential-store write and at most one authorization.
+    if (protectedControlKeys.get(sessionId) === key) return;
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('secret_save', { key: controlSecretName(sessionId), value: key });
+    protectedControlKeys.set(sessionId, key);
+    protectedLoadFailures.delete(sessionId);
+  });
 }
 
 export async function migrateLegacyControlKeys(
@@ -109,8 +126,14 @@ export async function clearPersistedControlKey(sessionId: string): Promise<void>
   } catch {
     // Nothing else to clear on disk.
   }
-  const { invoke } = await import('@tauri-apps/api/core');
-  await invoke('secret_delete', { key: controlSecretName(sessionId) });
+  return serializeProtectedWrite(sessionId, async () => {
+    // Re-clear after any already-started save. Session end must be the final
+    // operation, never allow a late save completion to resurrect the key.
+    protectedControlKeys.delete(sessionId);
+    protectedLoadFailures.delete(sessionId);
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('secret_delete', { key: controlSecretName(sessionId) });
+  });
 }
 
 /** Retain only the non-secret routing fields after the initial query is parsed. */

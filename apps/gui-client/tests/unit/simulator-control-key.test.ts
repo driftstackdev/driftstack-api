@@ -70,6 +70,54 @@ describe('simulator control-key protected storage', () => {
     expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(0);
   });
 
+  it('does not re-save an identical key already cached by this Simulator process', async () => {
+    await persistControlKey('agt_repeat', 'gck_same');
+    invoke.mockClear();
+
+    await persistControlKey('agt_repeat', 'gck_same');
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(keychain.get('gui_control:agt_repeat')).toBe('gck_same');
+  });
+
+  it('single-flights simultaneous identical saves and orders a newer value last', async () => {
+    await Promise.all([
+      persistControlKey('agt_simultaneous', 'gck_first'),
+      persistControlKey('agt_simultaneous', 'gck_first'),
+    ]);
+    expect(invoke.mock.calls.filter(([command]) => command === 'secret_save')).toHaveLength(1);
+
+    await Promise.all([
+      persistControlKey('agt_simultaneous', 'gck_second'),
+      persistControlKey('agt_simultaneous', 'gck_final'),
+    ]);
+    expect(keychain.get('gui_control:agt_simultaneous')).toBe('gck_final');
+  });
+
+  it('makes explicit clear win over an already-started save', async () => {
+    let releaseSave: (() => void) | undefined;
+    invoke.mockImplementationOnce(
+      (command: string, args: { key: string; value?: string }): Promise<unknown> => {
+        expect(command).toBe('secret_save');
+        return new Promise<void>((resolve) => {
+          releaseSave = () => {
+            keychain.set(args.key, args.value ?? '');
+            resolve();
+          };
+        });
+      },
+    );
+
+    const save = persistControlKey('agt_end_race', 'gck_racing');
+    await vi.waitFor(() => expect(releaseSave).toBeTypeOf('function'));
+    const clear = clearPersistedControlKey('agt_end_race');
+    releaseSave?.();
+    await Promise.all([save, clear]);
+
+    expect(keychain.has('gui_control:agt_end_race')).toBe(false);
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual(['secret_save', 'secret_delete']);
+  });
+
   it('purges every legacy value but migrates only the active session', async () => {
     storage.setItem('ds-gck-agt_first', 'gck_first');
     storage.setItem('ds-gck-agt_second', 'gck_second');
