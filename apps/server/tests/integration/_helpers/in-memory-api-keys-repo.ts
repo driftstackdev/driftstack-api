@@ -11,6 +11,8 @@ import type { ApiKeyRow } from '../../../src/services/auth.js';
 import type {
   ApiKeysRepo,
   NewApiKeyInput,
+  RevokeApiKeyInput,
+  RevokeApiKeyRepoResult,
   RotateApiKeyInput,
   RotateApiKeyRepoResult,
 } from '../../../src/services/api-keys.js';
@@ -65,14 +67,18 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
     return Promise.resolve(this.byId.get(id) ?? null);
   }
 
-  markRevoked(id: string, at: Date): Promise<void> {
-    const r = this.byId.get(id);
-    if (r) {
-      const updated: ApiKeyRow = { ...r, revokedAt: at };
-      this.byId.set(id, updated);
-      if (this.authRepoMirror) this.authRepoMirror.upsertApiKey(updated);
+  revokeApiKeyAtomic(input: RevokeApiKeyInput): Promise<RevokeApiKeyRepoResult> {
+    const current = this.byId.get(input.id);
+    if (!current || (input.accountId !== null && current.accountId !== input.accountId)) {
+      return Promise.resolve({ kind: 'not_found' });
     }
-    return Promise.resolve();
+    if (current.revokedAt !== null) {
+      return Promise.resolve({ kind: 'already_revoked', key: { ...current } });
+    }
+    const updated: ApiKeyRow = { ...current, revokedAt: input.revokedAt };
+    this.byId.set(input.id, updated);
+    if (this.authRepoMirror) this.authRepoMirror.upsertApiKey(updated);
+    return Promise.resolve({ kind: 'revoked', key: { ...updated } });
   }
 
   setExpiresAt(id: string, expiresAt: Date): Promise<void> {

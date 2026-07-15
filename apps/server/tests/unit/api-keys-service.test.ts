@@ -20,6 +20,7 @@ import {
   type RevocationWebhookEmitter,
 } from '../../src/services/api-keys.js';
 import type { AccountContext, AccountRow, ApiKeyRow } from '../../src/services/auth.js';
+import type { AuthCache } from '../../src/services/auth-cache.js';
 import { LegalAcceptanceRequiredError } from '../../src/lib/errors.js';
 
 function makeAccount(overrides: Partial<AccountRow> = {}): AccountRow {
@@ -118,11 +119,18 @@ function makeRepo(initial: ApiKeyRow[] = []): {
     findApiKey: (id, accountId) =>
       Promise.resolve(state.rows.find((r) => r.id === id && r.accountId === accountId) ?? null),
     findApiKeyUnscoped: (id) => Promise.resolve(state.rows.find((r) => r.id === id) ?? null),
-    markRevoked: (id, at) => {
-      const r = state.rows.find((row) => row.id === id);
-      if (r) r.revokedAt = at;
-      state.revoked.push({ id, at });
-      return Promise.resolve();
+    revokeApiKeyAtomic: (input) => {
+      const r = state.rows.find(
+        (row) =>
+          row.id === input.id && (input.accountId === null || row.accountId === input.accountId),
+      );
+      if (!r) return Promise.resolve({ kind: 'not_found' });
+      if (r.revokedAt !== null) {
+        return Promise.resolve({ kind: 'already_revoked', key: { ...r } });
+      }
+      r.revokedAt = input.revokedAt;
+      state.revoked.push({ id: input.id, at: input.revokedAt });
+      return Promise.resolve({ kind: 'revoked', key: { ...r } });
     },
     setExpiresAt: (id, at) => {
       const r = state.rows.find((row) => row.id === id);
@@ -473,7 +481,11 @@ describe('V-553.B-20 ApiKeysService.rotate', () => {
     const repo: ApiKeysRepo = {
       ...base,
       rotateApiKeyAtomic: async (input) => {
-        await base.markRevoked(input.oldKeyId, revokeWonAt);
+        await base.revokeApiKeyAtomic({
+          id: input.oldKeyId,
+          accountId: input.accountId,
+          revokedAt: revokeWonAt,
+        });
         return base.rotateApiKeyAtomic(input);
       },
     };
@@ -554,6 +566,43 @@ describe('V-553.B-20 ApiKeysService.revoke', () => {
     expect(hookCalls[0]?.eventType).toBe('api_key.revoked');
     expect(auditCalls[0]?.action).toBe('api_key.revoked');
     expect(auditCalls[0]?.targetResourceId).toBe('key_k_x');
+  });
+
+  it('emits cache invalidation, webhook, and audit exactly once across concurrent first revokes', async () => {
+    const { repo, state } = makeRepo([makeKey({ id: 'k_x', accountId: 'acc_1' })]);
+    const { webhooks, calls: hookCalls } = makeWebhooks();
+    const { audit, calls: auditCalls } = makeAudit();
+    const invalidated: string[] = [];
+    const authCache: AuthCache = {
+      get: () => Promise.resolve(null),
+      set: () => Promise.resolve(),
+      invalidateKey: (id) => {
+        invalidated.push(id);
+        return Promise.resolve();
+      },
+      invalidateAccount: () => Promise.resolve(),
+    };
+    const svc = new ApiKeysService(repo, authCache, webhooks, null, audit);
+
+    const outcomes = await Promise.all(
+      Array.from({ length: 5 }, () => svc.revoke(ctxWith(['account_owner']), 'k_x')),
+    );
+
+    expect(outcomes.filter(Boolean)).toHaveLength(1);
+    expect(state.revoked).toHaveLength(1);
+    expect(invalidated).toEqual(['k_x']);
+    expect(hookCalls).toHaveLength(1);
+    expect(auditCalls).toHaveLength(1);
+    expect(state.rows[0]?.revokedAt).toEqual(state.revoked[0]?.at);
+  });
+
+  it('keeps customer revocation account-scoped at the atomic repository boundary', async () => {
+    const { repo, state } = makeRepo([makeKey({ id: 'k_x', accountId: 'acc_other' })]);
+    const svc = new ApiKeysService(repo);
+
+    await expect(svc.revoke(ctxWith(['account_owner']), 'k_x')).rejects.toThrow(/not found/);
+    expect(state.revoked).toHaveLength(0);
+    expect(state.rows[0]?.revokedAt).toBeNull();
   });
 });
 

@@ -125,7 +125,13 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(rotated.kind).toBe('rotated');
       if (rotated.kind !== 'rotated') throw new Error('rotation unexpectedly lost');
 
-      await repo.markRevoked(oldKey.id, new Date('2026-07-13T12:00:01.000Z'));
+      await expect(
+        repo.revokeApiKeyAtomic({
+          id: oldKey.id,
+          accountId,
+          revokedAt: new Date('2026-07-13T12:00:01.000Z'),
+        }),
+      ).resolves.toMatchObject({ kind: 'revoked' });
       const rows = await client`
         SELECT id, revoked_at, expires_at
           FROM api_keys

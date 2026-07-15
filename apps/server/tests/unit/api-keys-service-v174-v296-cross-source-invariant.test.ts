@@ -28,8 +28,8 @@
 //
 //   ApiKeysRepo 6+-method interface: insertApiKey + listApiKeys
 //     + findApiKey (account-scoped) + findApiKeyUnscoped (admin
-//     force-actions only) + markRevoked + setExpiresAt (V-296
-//     idempotent last-write-wins) + listAcrossAccounts (admin tool).
+//     force-actions only) + atomic scoped/unscoped revoke outcome +
+//     setExpiresAt + atomic rotation + listAcrossAccounts (admin tool).
 //
 //   V-296 setExpiresAt framing — 'set expires_at on an existing
 //   key. Used by rotate() to schedule the old key's automatic
@@ -129,11 +129,23 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
     expect(p).toMatch(/listApiKeys\(accountId: string\): Promise<ApiKeyRow\[\]>;/);
     expect(p).toMatch(/findApiKey\(id: string, accountId: string\): Promise<ApiKeyRow \| null>;/);
     expect(p).toMatch(/findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null>;/);
-    expect(p).toMatch(/markRevoked\(id: string, at: Date\): Promise<void>;/);
+    expect(p).toMatch(
+      /revokeApiKeyAtomic\(input: RevokeApiKeyInput\): Promise<RevokeApiKeyRepoResult>;/,
+    );
     expect(p).toMatch(/setExpiresAt\(id: string, expiresAt: Date\): Promise<void>;/);
     expect(p).toMatch(
       /rotateApiKeyAtomic\(input: RotateApiKeyInput\): Promise<RotateApiKeyRepoResult>;/,
     );
+  });
+
+  it('CRITICAL revoke input makes tenant scoping explicit and the result carries persisted authority', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(/export interface RevokeApiKeyInput \{/);
+    expect(p).toMatch(/accountId: string \| null;/);
+    expect(p).toMatch(/revokedAt: Date;/);
+    expect(p).toContain('export type RevokeApiKeyRepoResult =');
+    expect(p).toContain("{ kind: 'revoked' | 'already_revoked'; key: ApiKeyRow }");
+    expect(p).toContain("{ kind: 'not_found' };");
   });
 
   // ─── findApiKeyUnscoped admin-only framing ───────────────────

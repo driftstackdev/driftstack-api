@@ -24,8 +24,8 @@
 //   bypasses account-scoping).
 //
 //   API-key revoke: key_-prefixed id, idempotent on already-revoked,
-//   uses apiKeysRepo.findApiKeyUnscoped, invalidates authCache after
-//   markRevoked per D-020.
+//   uses an explicitly admin-unscoped atomic outcome inside D-025,
+//   and invalidates authCache only for the persisted winner.
 //
 //   D-020 authCache.invalidateKey is best-effort (try/catch — cache
 //   failure non-fatal).
@@ -130,12 +130,13 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
 
   // ─── API-key revoke + D-020 ──────────────────────────────────
 
-  it('CRITICAL API-key revoke — key_-prefixed id + findApiKeyUnscoped + idempotent on already-revoked + authCache.invalidateKey AFTER markRevoked. The post-write cache invalidation is the D-020 invariant.', () => {
+  it('CRITICAL API-key revoke — explicit unscoped atomic outcome inside D-025; authoritative loser marker; winner-only cache invalidation.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(p).toMatch(/uuidFromPrefixedId\(request\.params\.id, 'key'\)/);
-    expect(p).toMatch(/apiKeysRepo\.findApiKeyUnscoped\(keyId\)/);
-    expect(p).toMatch(/if \(key\.revokedAt !== null\) \{/);
-    expect(p).toMatch(/apiKeysRepo\.markRevoked\(key\.id, revokedAt\);/);
+    expect(p).toContain('const result = await apiKeysRepo.revokeApiKeyAtomic({');
+    expect(p).toContain('accountId: null,');
+    expect(p).toContain("if (result.kind === 'already_revoked') {");
+    expect(p).toContain('resolvedInputPayload = { ...inputPayload, idempotent: true };');
     expect(p).toMatch(/authCache\.invalidateKey\(key\.id\)/);
   });
 

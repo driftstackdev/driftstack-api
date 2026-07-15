@@ -9,7 +9,7 @@
 //   • findApiKey: account-scoped via and(eq(id), eq(accountId)) + limit 1.
 //   • findApiKeyUnscoped: id-only lookup (no account scope) for
 //     cross-account introspection.
-//   • markRevoked: update revokedAt where id.
+//   • revokeApiKeyAtomic: conditional scoped update with persisted outcome.
 //   • setExpiresAt: update expiresAt where id.
 //   • rotateApiKeyAtomic: transaction + locked tenant-scoped old row;
 //     validates active authority before inserting successor + expiring old.
@@ -44,6 +44,8 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     expect(body).toMatch(/import type \{ ApiKeyRow \} from '\.\.\/services\/auth\.js';/);
     expect(body).toContain('ApiKeysRepo,');
     expect(body).toContain('NewApiKeyInput,');
+    expect(body).toContain('RevokeApiKeyInput,');
+    expect(body).toContain('RevokeApiKeyRepoResult,');
     expect(body).toContain('RotateApiKeyInput,');
     expect(body).toContain('RotateApiKeyRepoResult,');
     expect(body).toContain("} from '../services/api-keys.js';");
@@ -71,10 +73,17 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     );
   });
 
-  it('markRevoked: update set revokedAt where id; setExpiresAt: update set expiresAt where id', () => {
-    expect(body).toMatch(
-      /async markRevoked\(id: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\.update\(apiKeys\)\.set\(\{ revokedAt: at \}\)\.where\(eq\(apiKeys\.id, id\)\);\s*\n?\s*\}/,
+  it('revokeApiKeyAtomic: explicit scope + active-only returning winner + authoritative loser read; setExpiresAt remains narrow', () => {
+    expect(body).toContain(
+      'async revokeApiKeyAtomic(input: RevokeApiKeyInput): Promise<RevokeApiKeyRepoResult>',
     );
+    expect(body).toContain(
+      'input.accountId === null ? undefined : eq(apiKeys.accountId, input.accountId)',
+    );
+    expect(body).toContain('.where(and(scope, isNull(apiKeys.revokedAt)))');
+    expect(body).toContain("if (revoked) return { kind: 'revoked', key: toApiKeyRow(revoked) };");
+    expect(body).toContain("if (!existing) return { kind: 'not_found' };");
+    expect(body).toContain("return { kind: 'already_revoked', key };");
     expect(body).toMatch(
       /async setExpiresAt\(id: string, expiresAt: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\.update\(apiKeys\)\.set\(\{ expiresAt \}\)\.where\(eq\(apiKeys\.id, id\)\);\s*\n?\s*\}/,
     );

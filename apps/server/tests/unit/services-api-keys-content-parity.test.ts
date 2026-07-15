@@ -71,7 +71,9 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(
       /\/\*\* Find an API key by id WITHOUT account scoping \(admin force-actions only\)\. \*\/\s*\n?\s*findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null>;/,
     );
-    expect(body).toMatch(/markRevoked\(id: string, at: Date\): Promise<void>;/);
+    expect(body).toMatch(
+      /revokeApiKeyAtomic\(input: RevokeApiKeyInput\): Promise<RevokeApiKeyRepoResult>;/,
+    );
     expect(body).toContain(
       'Narrow expiration update retained for compatibility. Rotation must use',
     );
@@ -154,9 +156,13 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     );
   });
 
-  it('revoke: idempotent on already-revoked; cache.invalidateKey on revoke; webhook api_key.revoked enqueue + audit', () => {
-    expect(body).toMatch(/if \(key\.revokedAt !== null\) return; \/\/ idempotent/);
-    expect(body).toMatch(/await this\.repo\.markRevoked\(keyId, revokedAt\);/);
+  it('revoke: atomic scoped outcome; idempotent loser; winner-only cache/webhook/audit', () => {
+    expect(body).toContain('const outcome = await this.repo.revokeApiKeyAtomic({');
+    expect(body).toContain('accountId,');
+    expect(body).toMatch(
+      /if \(outcome\.kind === 'already_revoked'\) return false; \/\/ idempotent/,
+    );
+    expect(body).toContain('const revokedAt = key.revokedAt;');
     expect(body).toMatch(/await this\.authCache\.invalidateKey\(keyId\);/);
     expect(body).toMatch(
       /await this\.webhooks\.enqueueEvent\(accountId, 'api_key\.revoked', \{\s*\n?\s*api_key_id: `key_\$\{keyId\}`,\s*\n?\s*name: key\.name,\s*\n?\s*revoked_at: revokedAt\.toISOString\(\),/,
@@ -164,6 +170,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(
       /action: 'api_key\.revoked',\s*\n?\s*targetResourceId: `key_\$\{keyId\}`,\s*\n?\s*payload: \{ name: key\.name, revoked_at: revokedAt\.toISOString\(\) \},/,
     );
+    expect(body).toContain('return true;');
   });
 
   it('Constructor: 5-arg shape (repo + 4 nullable collaborators: authCache + webhooks + legalGate + accountAudit)', () => {

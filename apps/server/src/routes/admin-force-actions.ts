@@ -34,6 +34,12 @@ const ForceActionBodySchema = z
   })
   .optional();
 
+type DeferredAuditValue<T> = T | (() => T);
+
+function resolveAuditValue<T>(value: DeferredAuditValue<T>): T {
+  return typeof value === 'function' ? (value as () => T)() : value;
+}
+
 export interface AdminForceActionsRoutesOptions {
   sessionRepo: SessionRepo;
   apiKeysRepo: ApiKeysRepo;
@@ -55,9 +61,9 @@ export function registerAdminForceActionRoutes(
     request: FastifyRequest,
     action: AdminAuditAction,
     args: {
-      targetAccountId: string | null;
+      targetAccountId: DeferredAuditValue<string | null>;
       targetResourceId: string;
-      inputPayload: Record<string, unknown>;
+      inputPayload: DeferredAuditValue<Record<string, unknown>>;
       perform: () => Promise<T>;
     },
   ): Promise<T> {
@@ -69,23 +75,24 @@ export function registerAdminForceActionRoutes(
         adminAccountId: ctx.account.id,
         adminKeyId: ctx.apiKey.id,
         action,
-        targetAccountId: args.targetAccountId,
+        targetAccountId: resolveAuditValue(args.targetAccountId),
         targetResourceId: args.targetResourceId,
-        inputPayload: args.inputPayload,
+        inputPayload: resolveAuditValue(args.inputPayload),
         result: 'success',
         ipAddress: readClientIp(request),
       });
       return result;
     } catch (err) {
-      const code =
+      const normalizedCode =
         err instanceof Error && err.name ? err.name.toLowerCase().replace(/error$/, '') : 'unknown';
+      const code = normalizedCode || 'unknown';
       await audit.record({
         adminAccountId: ctx.account.id,
         adminKeyId: ctx.apiKey.id,
         action,
-        targetAccountId: args.targetAccountId,
+        targetAccountId: resolveAuditValue(args.targetAccountId),
         targetResourceId: args.targetResourceId,
-        inputPayload: args.inputPayload,
+        inputPayload: resolveAuditValue(args.inputPayload),
         result: `error: ${code}`,
         ipAddress: readClientIp(request),
       });
@@ -171,33 +178,31 @@ export function registerAdminForceActionRoutes(
       if (!parsed.success) throw new BadRequestError('Invalid body.');
       const reason = parsed.data?.reason;
 
-      const key = await apiKeysRepo.findApiKeyUnscoped(keyId);
-      if (!key) throw new NotFoundError(`API key "${keyId}" not found.`);
-
-      const targetAccountId = key.accountId;
       const inputPayload = reason !== undefined ? { reason } : {};
-
-      if (key.revokedAt !== null) {
-        await audit.record({
-          adminAccountId: ctx.account.id,
-          adminKeyId: ctx.apiKey.id,
-          action: 'api_key.revoked_by_admin',
-          targetAccountId,
-          targetResourceId: keyId,
-          inputPayload: { ...inputPayload, idempotent: true },
-          result: 'success',
-          ipAddress: readClientIp(request),
-        });
-        return { id: `key_${key.id}`, revoked_at: key.revokedAt.toISOString() };
-      }
-
-      const revokedAt = new Date();
-      await withAudit(request, 'api_key.revoked_by_admin', {
-        targetAccountId,
+      let targetAccountId: string | null = null;
+      let resolvedInputPayload: Record<string, unknown> = inputPayload;
+      const outcome = await withAudit(request, 'api_key.revoked_by_admin', {
+        targetAccountId: () => targetAccountId,
         targetResourceId: keyId,
-        inputPayload,
+        inputPayload: () => resolvedInputPayload,
         perform: async () => {
-          await apiKeysRepo.markRevoked(key.id, revokedAt);
+          const result = await apiKeysRepo.revokeApiKeyAtomic({
+            id: keyId,
+            accountId: null,
+            revokedAt: new Date(),
+          });
+          if (result.kind === 'not_found') {
+            throw new NotFoundError(`API key "${keyId}" not found.`);
+          }
+          const key = result.key;
+          targetAccountId = key.accountId;
+          if (key.revokedAt === null) {
+            throw new Error('revokeApiKeyAtomic returned a revoked row without revokedAt');
+          }
+          if (result.kind === 'already_revoked') {
+            resolvedInputPayload = { ...inputPayload, idempotent: true };
+            return result;
+          }
           // Invalidate any cached AccountContext entries for this key
           // so the next auth read sees the revocation immediately
           // (D-020 cache invalidation pattern).
@@ -208,9 +213,17 @@ export function registerAdminForceActionRoutes(
               /* cache failure non-fatal */
             }
           }
+          return result;
         },
       });
-      return { id: `key_${key.id}`, revoked_at: revokedAt.toISOString() };
+      const persistedRevokedAt = outcome.key.revokedAt;
+      if (persistedRevokedAt === null) {
+        throw new Error('audited API-key revoke returned no persisted timestamp');
+      }
+      return {
+        id: `key_${outcome.key.id}`,
+        revoked_at: persistedRevokedAt.toISOString(),
+      };
     },
   );
 }

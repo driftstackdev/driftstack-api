@@ -11,7 +11,8 @@
 //     - findApiKey(id, accountId): scoped lookup with accountId
 //       guard.
 //     - findApiKeyUnscoped(id): admin-only lookup without accountId.
-//     - markRevoked(id, at): sets revokedAt timestamp.
+//     - revokeApiKeyAtomic(input): conditionally revokes one scoped row
+//       and returns the one persisted authority to concurrent losers.
 //     - setExpiresAt(id, expiresAt): updates expiresAt.
 //     - rotateApiKeyAtomic(input): locks the tenant-scoped current row
 //       before validating authority and writing both rotation rows.
@@ -66,7 +67,9 @@ describe('W991 db/api-keys-repo cross-source invariant', () => {
       /async findApiKey\(id: string, accountId: string\): Promise<ApiKeyRow \| null> \{/,
     );
     expect(p).toMatch(/async findApiKeyUnscoped\(id: string\): Promise<ApiKeyRow \| null> \{/);
-    expect(p).toMatch(/async markRevoked\(id: string, at: Date\): Promise<void> \{/);
+    expect(p).toMatch(
+      /async revokeApiKeyAtomic\(input: RevokeApiKeyInput\): Promise<RevokeApiKeyRepoResult> \{/,
+    );
     expect(p).toMatch(/async setExpiresAt\(id: string, expiresAt: Date\): Promise<void> \{/);
     expect(p).toContain(
       'async rotateApiKeyAtomic(input: RotateApiKeyInput): Promise<RotateApiKeyRepoResult>',
@@ -103,13 +106,16 @@ describe('W991 db/api-keys-repo cross-source invariant', () => {
     expect(p).toMatch(/\.from\(apiKeys\)\.where\(eq\(apiKeys\.id, id\)\)\.limit\(1\);/);
   });
 
-  // ─── markRevoked + setExpiresAt ──────────────────────────────
+  // ─── atomic revoke + setExpiresAt ────────────────────────────
 
-  it('CRITICAL markRevoked sets revokedAt timestamp. The set-revokedAt pattern is what makes revocation a soft-delete (history preserved for audit).', () => {
+  it('CRITICAL revokeApiKeyAtomic uses explicit account scope, active-only update, returning winner, and persisted loser outcome.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/api-keys-repo.ts'));
-    expect(p).toMatch(
-      /\.update\(apiKeys\)\.set\(\{ revokedAt: at \}\)\.where\(eq\(apiKeys\.id, id\)\);/,
+    expect(p).toContain(
+      'input.accountId === null ? undefined : eq(apiKeys.accountId, input.accountId)',
     );
+    expect(p).toContain('.set({ revokedAt: input.revokedAt })');
+    expect(p).toContain('.where(and(scope, isNull(apiKeys.revokedAt)))');
+    expect(p).toContain("return { kind: 'already_revoked', key };");
   });
 
   it('CRITICAL setExpiresAt updates expiresAt (no other fields). The narrow-update keeps key-rotation paths from accidentally clobbering name/scopes.', () => {

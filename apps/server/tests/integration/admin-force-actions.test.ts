@@ -205,14 +205,81 @@ describe('POST /v1/admin/api-keys/:id/revoke', () => {
     expect(second.json<{ revoked_at: string }>().revoked_at).toBeTruthy();
   });
 
-  it('404 NotFound on unknown key id', async () => {
+  it('serializes five concurrent first revokes onto one timestamp and four idempotent audits', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'concurrent-admin-revoke', scopes: ['read'] },
+    });
+    const keyId = created.json<{ id: string }>().id;
+
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        fx.app.inject({
+          method: 'POST',
+          url: `/v1/admin/api-keys/${keyId}/revoke`,
+          headers: auth(fx),
+          payload: { reason: 'concurrent security cleanup' },
+        }),
+      ),
+    );
+
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200, 200, 200, 200]);
+    const timestamps = responses.map(
+      (response) => response.json<{ revoked_at: string }>().revoked_at,
+    );
+    expect(new Set(timestamps).size).toBe(1);
+    const events = fx.adminAuditRepo
+      .getAll()
+      .filter(
+        (row) =>
+          row.action === 'api_key.revoked_by_admin' &&
+          row.targetResourceId === keyId.replace(/^key_/, ''),
+      );
+    expect(events).toHaveLength(5);
+    expect(events.filter((row) => row.inputPayload?.idempotent === true)).toHaveLength(4);
+    expect(events.filter((row) => row.inputPayload?.idempotent !== true)).toHaveLength(1);
+    expect(events.every((row) => row.result === 'success')).toBe(true);
+  });
+
+  it('404 NotFound on unknown key id and records the failed D-025 attempt', async () => {
     fx = await buildTestApp();
+    const keyId = '00000000-0000-4000-8000-000000000099';
     const res = await fx.app.inject({
       method: 'POST',
-      url: '/v1/admin/api-keys/key_00000000-0000-4000-8000-000000000099/revoke',
+      url: `/v1/admin/api-keys/key_${keyId}/revoke`,
       headers: auth(fx),
     });
     expect(res.statusCode).toBe(404);
+    const event = fx.adminAuditRepo
+      .getAll()
+      .find((row) => row.action === 'api_key.revoked_by_admin' && row.targetResourceId === keyId);
+    expect(event?.targetAccountId).toBeNull();
+    expect(event?.inputPayload).toEqual({});
+    expect(event?.result).toBe('error: notfound');
+  });
+
+  it('audits an atomic repository failure without leaking request values', async () => {
+    fx = await buildTestApp();
+    const keyId = '00000000-0000-4000-8000-000000000098';
+    fx.apiKeysRepo.revokeApiKeyAtomic = () => Promise.reject(new Error('repository unavailable'));
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/api-keys/key_${keyId}/revoke`,
+      headers: auth(fx),
+      payload: { reason: 'bounded operator reason' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    const event = fx.adminAuditRepo
+      .getAll()
+      .find((row) => row.action === 'api_key.revoked_by_admin' && row.targetResourceId === keyId);
+    expect(event?.targetAccountId).toBeNull();
+    expect(event?.inputPayload).toEqual({ reason: 'bounded operator reason' });
+    expect(event?.result).toBe('error: unknown');
   });
 
   it('403 Forbidden without admin scope', async () => {

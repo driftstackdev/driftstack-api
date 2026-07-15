@@ -5,6 +5,8 @@ import type { ApiKeyRow } from '../services/auth.js';
 import type {
   ApiKeysRepo,
   NewApiKeyInput,
+  RevokeApiKeyInput,
+  RevokeApiKeyRepoResult,
   RotateApiKeyInput,
   RotateApiKeyRepoResult,
 } from '../services/api-keys.js';
@@ -55,8 +57,28 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
     return row ? toApiKeyRow(row) : null;
   }
 
-  async markRevoked(id: string, at: Date): Promise<void> {
-    await this.database.db.update(apiKeys).set({ revokedAt: at }).where(eq(apiKeys.id, id));
+  async revokeApiKeyAtomic(input: RevokeApiKeyInput): Promise<RevokeApiKeyRepoResult> {
+    const scope = and(
+      eq(apiKeys.id, input.id),
+      input.accountId === null ? undefined : eq(apiKeys.accountId, input.accountId),
+    );
+    const [revoked] = await this.database.db
+      .update(apiKeys)
+      .set({ revokedAt: input.revokedAt })
+      .where(and(scope, isNull(apiKeys.revokedAt)))
+      .returning();
+    if (revoked) return { kind: 'revoked', key: toApiKeyRow(revoked) };
+
+    // A concurrent first revoke can make the conditional update lose. Read
+    // the same explicit scope again so the loser returns the one persisted
+    // timestamp instead of overwriting it or inventing its own authority.
+    const [existing] = await this.database.db.select().from(apiKeys).where(scope).limit(1);
+    if (!existing) return { kind: 'not_found' };
+    const key = toApiKeyRow(existing);
+    if (key.revokedAt === null) {
+      throw new Error('revokeApiKeyAtomic lost its update without a persisted revocation');
+    }
+    return { kind: 'already_revoked', key };
   }
 
   async setExpiresAt(id: string, expiresAt: Date): Promise<void> {

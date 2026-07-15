@@ -84,13 +84,26 @@ export type RotateApiKeyRepoResult =
     }
   | { kind: 'not_found' | 'revoked' | 'expired' };
 
+export interface RevokeApiKeyInput {
+  id: string;
+  /** Customer revocation must supply its owner account. Admin force-actions
+   *  must opt into the unscoped path explicitly with null. */
+  accountId: string | null;
+  revokedAt: Date;
+}
+
+export type RevokeApiKeyRepoResult =
+  { kind: 'revoked' | 'already_revoked'; key: ApiKeyRow } | { kind: 'not_found' };
+
 export interface ApiKeysRepo {
   insertApiKey(input: NewApiKeyInput): Promise<ApiKeyRow>;
   listApiKeys(accountId: string): Promise<ApiKeyRow[]>;
   findApiKey(id: string, accountId: string): Promise<ApiKeyRow | null>;
   /** Find an API key by id WITHOUT account scoping (admin force-actions only). */
   findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null>;
-  markRevoked(id: string, at: Date): Promise<void>;
+  /** Conditionally revoke one active row and return the persisted authority.
+   *  Exactly one concurrent first caller can receive `revoked`. */
+  revokeApiKeyAtomic(input: RevokeApiKeyInput): Promise<RevokeApiKeyRepoResult>;
   /** Narrow expiration update retained for compatibility. Rotation must use
    *  rotateApiKeyAtomic() so its authority check and both writes serialize. */
   setExpiresAt(id: string, expiresAt: Date): Promise<void>;
@@ -483,7 +496,7 @@ export class ApiKeysService {
     ctx: AccountContext,
     keyId: string,
     opts: { effectiveAccountId?: string } = {},
-  ): Promise<void> {
+  ): Promise<boolean> {
     throwIfMissingScope(ctx, 'account_owner');
     assertNotDeviceKey(ctx, 'revoke API keys');
 
@@ -491,12 +504,21 @@ export class ApiKeysService {
     // account. Route layer enforces 'admin' team role.
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
 
-    const key = await this.repo.findApiKey(keyId, accountId);
-    if (!key) throw new NotFoundError(`API key "${keyId}" not found.`);
-    if (key.revokedAt !== null) return; // idempotent
+    const outcome = await this.repo.revokeApiKeyAtomic({
+      id: keyId,
+      accountId,
+      revokedAt: new Date(),
+    });
+    if (outcome.kind === 'not_found') {
+      throw new NotFoundError(`API key "${keyId}" not found.`);
+    }
+    if (outcome.kind === 'already_revoked') return false; // idempotent
 
-    const revokedAt = new Date();
-    await this.repo.markRevoked(keyId, revokedAt);
+    const key = outcome.key;
+    const revokedAt = key.revokedAt;
+    if (revokedAt === null) {
+      throw new Error('revokeApiKeyAtomic returned a revoked row without revokedAt');
+    }
     // Pop the cache entry so the revoked key stops authenticating
     // immediately, not after the 30s TTL. Wrap in try/catch — a cache
     // failure must not propagate as a revoke failure.
@@ -543,6 +565,7 @@ export class ApiKeysService {
         /* swallow */
       }
     }
+    return true;
   }
 
   /**
@@ -561,8 +584,7 @@ export class ApiKeysService {
     let n = 0;
     for (const key of keys) {
       if (key.revokedAt !== null) continue;
-      await this.revoke(ctx, key.id, { effectiveAccountId: accountId });
-      n++;
+      if (await this.revoke(ctx, key.id, { effectiveAccountId: accountId })) n++;
     }
     return n;
   }

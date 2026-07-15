@@ -27627,3 +27627,44 @@ metadata barrier likewise produce exactly one 201/create audit and four
 audit. Strict server test TypeScript, the server build, targeted ESLint and
 Prettier, diff/whitespace checks, and the full configured workspace build are
 green.
+
+## V-659 — API-key revocation has one persisted winner and authoritative audit history
+
+**Date:** 2026-07-14
+
+Customer and admin API-key revocation previously read an active row and then
+performed a separate unconditional `revoked_at` update. Concurrent first
+revokes could all observe the active state, overwrite the timestamp, and emit
+duplicate customer webhooks and audit entries. The key still became revoked,
+so this was not an authorization bypass, but it violated the documented
+idempotency contract and made security history disagree about the authoritative
+revocation time. The admin route's unscoped lookup also ran before its D-025
+wrapper, leaving missing-row and repository-read failures unaudited.
+
+The repository now accepts an explicit key ID, candidate timestamp, and
+`accountId: string|null`: customers must supply their owner account, while
+admin force-actions must deliberately choose the unscoped `null` form. A
+conditional `UPDATE` affects only a matching active row and returns the
+persisted winner. A concurrent loser re-reads the same explicit scope and
+returns `already_revoked` with the one stored row and timestamp; an absent or
+wrong-account row returns `not_found`. A lost update without a persisted
+revocation fails closed.
+
+Customer service invalidates the auth cache and emits the revoke webhook and
+customer audit only for the `revoked` winner. Concurrent losers and later
+retries remain silent, and the bulk account-reclamation count advances only for
+rows it actually revokes. Admin force-actions place the repository outcome
+inside a deferred D-025 boundary: the winner invalidates the cache, every
+loser/retry records `idempotent:true`, all successful responses return the
+persisted timestamp, and lookup/store failures produce an error audit with a
+nullable target account. A generic `Error` now records `error: unknown` rather
+than an empty error label.
+
+The expanded API-key/auth/cache/webhook/admin matrix passes 18 executable files
+and 326/326 tests; the two real-database files are gated in the ordinary run.
+With the connected database loaded, all 4/4 PostgreSQL cases execute and pass,
+including five concurrent first revokes with exactly one winner, four
+authoritative losers, one stored timestamp, wrong-account refusal, explicit
+admin-unscoped behavior, and both rotation/revocation commit orders. Strict
+server test TypeScript, targeted ESLint/Prettier, server compilation,
+diff/whitespace checks, and the full configured workspace build are green.

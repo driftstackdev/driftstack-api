@@ -81,14 +81,17 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     );
   });
 
-  it('withAudit wrapper: D-025 success + error dual-write; targetAccountId/targetResourceId/inputPayload/perform thunk; err.name lowercase /error$/ strip', () => {
+  it('withAudit wrapper: D-025 success + error dual-write with deferred target/payload authority', () => {
     expect(body).toMatch(/Wrap a force-action with audit-on-success \+ audit-on-error per D-025\./);
     expect(body).toMatch(
-      /async function withAudit<T>\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*args: \{\s*\n?\s*targetAccountId: string \| null;\s*\n?\s*targetResourceId: string;\s*\n?\s*inputPayload: Record<string, unknown>;\s*\n?\s*perform: \(\) => Promise<T>;\s*\n?\s*\},\s*\n?\s*\): Promise<T> \{/,
+      /async function withAudit<T>\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*args: \{\s*\n?\s*targetAccountId: DeferredAuditValue<string \| null>;\s*\n?\s*targetResourceId: string;\s*\n?\s*inputPayload: DeferredAuditValue<Record<string, unknown>>;\s*\n?\s*perform: \(\) => Promise<T>;\s*\n?\s*\},\s*\n?\s*\): Promise<T> \{/,
     );
+    expect(body).toContain('targetAccountId: resolveAuditValue(args.targetAccountId),');
+    expect(body).toContain('inputPayload: resolveAuditValue(args.inputPayload),');
     expect(body).toMatch(
-      /const code =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
+      /const normalizedCode =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
     );
+    expect(body).toContain("const code = normalizedCode || 'unknown';");
   });
 
   it("Session destroy idempotency: status === 'destroyed' → audit with idempotent:true + return existing destroyed_at", () => {
@@ -109,13 +112,14 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     );
   });
 
-  it('API key revoke idempotency: revokedAt !== null → audit with idempotent:true + return existing revoked_at ISO', () => {
-    expect(body).toMatch(
-      /if \(key\.revokedAt !== null\) \{\s*\n?\s*await audit\.record\(\{[\s\S]+?action: 'api_key\.revoked_by_admin',[\s\S]+?inputPayload: \{ \.\.\.inputPayload, idempotent: true \},/,
-    );
-    expect(body).toMatch(
-      /return \{ id: `key_\$\{key\.id\}`, revoked_at: key\.revokedAt\.toISOString\(\) \};/,
-    );
+  it('API key revoke uses atomic authoritative outcome and marks concurrent losers idempotent', () => {
+    expect(body).toContain('const outcome = await withAudit(request,');
+    expect(body).toContain('const result = await apiKeysRepo.revokeApiKeyAtomic({');
+    expect(body).toContain('accountId: null,');
+    expect(body).toContain("if (result.kind === 'already_revoked') {");
+    expect(body).toContain('resolvedInputPayload = { ...inputPayload, idempotent: true };');
+    expect(body).toContain('const persistedRevokedAt = outcome.key.revokedAt;');
+    expect(body).toContain('revoked_at: persistedRevokedAt.toISOString(),');
   });
 
   it('D-020 cache invalidation on key revoke: authCache.invalidateKey(key.id); failure non-fatal (swallow); pattern rationale comment', () => {
@@ -133,9 +137,8 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     expect(body).toMatch(
       /if \(!session\) throw new NotFoundError\(`Session "\$\{sessionId\}" not found\.`\);/,
     );
-    expect(body).toMatch(
-      /if \(!key\) throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/,
-    );
+    expect(body).toMatch(/if \(result\.kind === 'not_found'\) \{/);
+    expect(body).toMatch(/throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/);
   });
 
   it('imports: FastifyInstance/FastifyRequest + zod + AdminAuditService/Action + SessionRepo + ApiKeysRepo + Driver + AuthCache + BadRequestError/NotFoundError + requireScope helper', () => {
