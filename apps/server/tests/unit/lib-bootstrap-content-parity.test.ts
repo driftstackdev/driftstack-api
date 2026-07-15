@@ -83,16 +83,17 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/new writes fail closed/);
   });
 
-  it('wires recipe payload encryption, runs a bounded boot conversion, and drains legacy rows without overlapping', () => {
+  it('wires recipe payload encryption and synchronously drains legacy rows to record-bound v2', () => {
     expect(body).toMatch(
       /const recipesRepo = new DrizzleRecipesRepo\(dbHandle, \{[\s\S]*?payloadEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\);/,
     );
-    expect(body).toMatch(/const upgraded = await recipesRepo\.encryptLegacyPayloads\(500\);/);
-    expect(body).toMatch(/if \(recipePayloadUpgradeInFlight\) return;/);
-    expect(body).toMatch(/\.encryptLegacyPayloads\(500\)/);
-    expect(body).toMatch(
-      /if \(recipePayloadUpgradeTimer\) clearInterval\(recipePayloadUpgradeTimer\);/,
-    );
+    expect(body).toMatch(/const MAX_RECIPE_PAYLOAD_BOOT_MIGRATION_ROWS = 10_000;/);
+    expect(body).toMatch(/await recipesRepo\.migratePayloadEnvelopes\(500\)/);
+    expect(body).toMatch(/while \(remaining > 0\);/);
+    expect(body).toMatch(/batch\.scanned === 0 \|\| batch\.converted === 0/);
+    expect(body).toMatch(/scanned >= MAX_RECIPE_PAYLOAD_BOOT_MIGRATION_ROWS/);
+    expect(body).toMatch(/record-bound v2 before serving/);
+    expect(body).not.toMatch(/recipePayloadUpgradeTimer/);
     expect(body).toMatch(/new recipe writes fail closed/);
   });
 

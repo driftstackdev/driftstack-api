@@ -27344,3 +27344,43 @@ wrong-key byte/timestamp preservation, cross-account relocation refusal,
 whole-page prevalidation, successor wrong-key probing, and blocked migrations
 that preserve concurrent set and clear operations. Strict server source-and-test
 TypeScript, targeted ESLint/Prettier, diff and whitespace checks are green.
+
+## V-652 — Saved recipe payloads authenticate account, recipe, and column slot
+
+**Date:** 2026-07-14
+
+Saved recipe intent logs and transcript snapshots previously used context-free
+AES-256-GCM JSONB envelopes. If the database boundary were already writable or
+corrupted, moving either complete ciphertext to another recipe could make an
+owner-scoped read return another account's credentials or customer/model text.
+This was not an unauthenticated network path, but neither encrypted value could
+authenticate its tenant, immutable recipe, or semantic storage slot.
+
+New writes use distinct v2 envelope kinds and canonical JSON-array authenticated
+context containing a dedicated purpose/version, normalized account UUID, stable
+`rec_<uuid>` identity, and `intent_log` or `transcript_snapshot` slot. Ordinary
+create/list/get paths accept v2 only and supply that exact tuple. The intentionally
+mutable `agent_session_id` is excluded, so the schema's ON DELETE SET NULL
+transition cannot brick a surviving immutable recipe. Complete ciphertext bounds
+and canonical base64 are checked before allocation/decryption; authenticated
+plaintext must round-trip as exact UTF-8, parse as JSON, and satisfy the canonical
+intent or transcript schema. Wrong account, recipe, slot, purpose, key, envelope
+shape, truncation, extension, malformed UTF-8 or ciphertext modification fails
+closed.
+
+The no-DDL bootstrap converter authenticates an existing bound tuple, then
+prevalidates every payload in a bounded legacy page before its first write.
+Plaintext arrays and the old intent/transcript v1 envelopes are available only to
+that converter. Each rewrite compares recipe ID, account and both exact prior
+JSONB values, updates only both encrypted columns, and leaves recipe metadata
+timestamps untouched. Startup now drains to zero synchronously with no-progress
+and 10,000-row guards; the former post-start migration interval is removed.
+
+The affected recipe matrix passes 24 files and 205/205 tests with 3 database-gated
+skips, and the bootstrap guard passes 36/36. The isolated connected PostgreSQL
+proof passes 3/3 cases: wrong-key byte/timestamp preservation, plaintext/v1
+conversion, same- and cross-account record relocation refusal, source-session
+nulling readability, whole-page prevalidation, successor wrong-key probing, and
+a deterministically blocked five-field compare-and-swap that preserves the
+concurrent v2 successor. Strict server source-and-test TypeScript, targeted
+ESLint/Prettier and the server build are green.

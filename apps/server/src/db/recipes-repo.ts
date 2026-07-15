@@ -5,8 +5,8 @@
 // Key shape rules (matching the in-memory variant + migration 0044):
 //   - text PK `rec_<uuid>` minted at create.
 //   - jsonb intent_log + transcript_snapshot store versioned AES-GCM envelopes.
-//     Legacy plaintext arrays remain readable and are converted by a bounded
-//     compare-and-set bootstrap upgrader.
+//     Legacy plaintext arrays and context-free v1 envelopes are readable only
+//     by a bounded compare-and-set bootstrap upgrader.
 //   - Label trim + length + description length validation lives in
 //     the service-layer `validateLabelAndDescription`; the DB CHECK
 //     constraint is the belt-and-suspenders backstop for that.
@@ -14,18 +14,18 @@
 //     orchestrator handoff #3 Q.5.
 
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, lt, or, sql, type SQL } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { recipes } from './schema.js';
 import {
-  encryptAgentTranscript,
-  isEncryptedAgentTranscript,
-  readAgentTranscript,
-} from '../services/agent-transcript-encryption.js';
-import {
+  convertRecipeIntentLogToV2,
+  convertRecipeTranscriptSnapshotToV2,
   encryptRecipeIntentLog,
-  isEncryptedRecipeIntentLog,
+  encryptRecipeTranscriptSnapshot,
   readRecipeIntentLog,
+  readRecipeTranscriptSnapshot,
+  RECIPE_INTENT_LOG_ENVELOPE_KIND,
+  RECIPE_TRANSCRIPT_SNAPSHOT_ENVELOPE_KIND,
 } from '../services/recipe-payload-encryption.js';
 import type {
   CreateRecipeArgs,
@@ -37,19 +37,38 @@ import type {
 
 const DEFAULT_RECIPE_PAGE = 50;
 const MAX_RECIPE_PAGE = 100;
+const MAX_RECIPE_PAYLOAD_MIGRATION_BATCH = 500;
+
+function recipePayloadsAreV2(): SQL {
+  return sql`(
+    (${recipes.intentLog}->>'kind') IS NOT DISTINCT FROM ${RECIPE_INTENT_LOG_ENVELOPE_KIND}
+    AND (${recipes.intentLog}->>'version') IS NOT DISTINCT FROM '2'
+    AND (${recipes.transcriptSnapshot}->>'kind') IS NOT DISTINCT FROM ${RECIPE_TRANSCRIPT_SNAPSHOT_ENVELOPE_KIND}
+    AND (${recipes.transcriptSnapshot}->>'version') IS NOT DISTINCT FROM '2'
+  )`;
+}
+
+function recipePayloadsAreNotV2(): SQL {
+  return sql`NOT (${recipePayloadsAreV2()})`;
+}
 
 function rowToRecord(
   row: typeof recipes.$inferSelect,
   payloadEncryptionKeyBase64: string | undefined,
 ): RecipeRecord {
+  const context = { accountId: row.accountId, recipeId: row.id };
   return {
     id: row.id,
     accountId: row.accountId,
     agentSessionId: row.agentSessionId,
     label: row.label,
     description: row.description,
-    intentLog: readRecipeIntentLog(row.intentLog, payloadEncryptionKeyBase64),
-    transcriptSnapshot: readAgentTranscript(row.transcriptSnapshot, payloadEncryptionKeyBase64),
+    intentLog: readRecipeIntentLog(row.intentLog, payloadEncryptionKeyBase64, context),
+    transcriptSnapshot: readRecipeTranscriptSnapshot(
+      row.transcriptSnapshot,
+      payloadEncryptionKeyBase64,
+      context,
+    ),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -94,87 +113,100 @@ export class DrizzleRecipesRepo implements RecipesRepo {
     return this.payloadEncryptionKeyBase64;
   }
 
-  private async encryptLegacyRow(row: {
-    id: string;
-    intentLog: unknown;
-    transcriptSnapshot: unknown;
-  }): Promise<boolean> {
-    const key = this.requireEncryptionKey();
-    const intentLog = isEncryptedRecipeIntentLog(row.intentLog)
-      ? row.intentLog
-      : encryptRecipeIntentLog(readRecipeIntentLog(row.intentLog, key), key);
-    const transcriptSnapshot = isEncryptedAgentTranscript(row.transcriptSnapshot)
-      ? row.transcriptSnapshot
-      : encryptAgentTranscript(readAgentTranscript(row.transcriptSnapshot, key), key);
-    if (intentLog === row.intentLog && transcriptSnapshot === row.transcriptSnapshot) return false;
-
-    // Both JSON snapshots must still match the selected bytes. Recipes are
-    // insert-once, but this CAS also makes delete/legacy-upgrade races harmless
-    // and prevents a future update surface from being clobbered.
-    const updated = await this.database.db
-      .update(recipes)
-      .set({ intentLog, transcriptSnapshot })
-      .where(
-        and(
-          eq(recipes.id, row.id),
-          sql`${recipes.intentLog} = ${JSON.stringify(row.intentLog)}::jsonb`,
-          sql`${recipes.transcriptSnapshot} = ${JSON.stringify(row.transcriptSnapshot)}::jsonb`,
-        ),
-      )
-      .returning({ id: recipes.id });
-    return updated.length === 1;
-  }
-
   /**
-   * Bounded legacy plaintext converter. The encrypted probe authenticates at
-   * least one existing envelope before the app starts serving; a wrong key
-   * therefore fails boot instead of making saved recipes unreadable later.
+   * Bootstrap-only no-DDL conversion from plaintext/context-free v1 JSONB to
+   * purpose/account/recipe/slot-bound v2. Every selected page authenticates and
+   * validates completely before its first exact-CAS maintenance write.
    */
-  async encryptLegacyPayloads(limit = 500): Promise<{ scanned: number; converted: number }> {
+  async migratePayloadEnvelopes(
+    limit = MAX_RECIPE_PAYLOAD_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RECIPE_PAYLOAD_MIGRATION_BATCH) {
+      throw new Error(
+        `Recipe payload migration limit must be an integer from 1 to ${MAX_RECIPE_PAYLOAD_MIGRATION_BATCH.toString()}.`,
+      );
+    }
     const key = this.requireEncryptionKey();
-    const [encryptedProbe] = await this.database.db
+
+    // Authenticate one already-bound payload tuple even after legacy rows have
+    // drained. A wrong operator key therefore fails every successor boot.
+    const [v2Probe] = await this.database.db
       .select({
+        id: recipes.id,
+        accountId: recipes.accountId,
         intentLog: recipes.intentLog,
         transcriptSnapshot: recipes.transcriptSnapshot,
       })
       .from(recipes)
-      .where(
-        or(
-          sql`jsonb_typeof(${recipes.intentLog}) = 'object'`,
-          sql`jsonb_typeof(${recipes.transcriptSnapshot}) = 'object'`,
-        ),
-      )
+      .where(recipePayloadsAreV2())
+      .orderBy(asc(recipes.id))
       .limit(1);
-    if (encryptedProbe !== undefined) {
-      readRecipeIntentLog(encryptedProbe.intentLog, key);
-      readAgentTranscript(encryptedProbe.transcriptSnapshot, key);
+    if (v2Probe !== undefined) {
+      const context = { accountId: v2Probe.accountId, recipeId: v2Probe.id };
+      readRecipeIntentLog(v2Probe.intentLog, key, context);
+      readRecipeTranscriptSnapshot(v2Probe.transcriptSnapshot, key, context);
     }
 
     const rows = await this.database.db
       .select({
         id: recipes.id,
+        accountId: recipes.accountId,
         intentLog: recipes.intentLog,
         transcriptSnapshot: recipes.transcriptSnapshot,
       })
       .from(recipes)
-      .where(
-        or(
-          sql`jsonb_typeof(${recipes.intentLog}) = 'array'`,
-          sql`jsonb_typeof(${recipes.transcriptSnapshot}) = 'array'`,
-        ),
+      .where(recipePayloadsAreNotV2())
+      // Context-free encrypted objects authenticate before plaintext arrays;
+      // immutable recipe identity then makes page selection deterministic.
+      .orderBy(
+        sql`CASE WHEN jsonb_typeof(${recipes.intentLog}) = 'object'
+          OR jsonb_typeof(${recipes.transcriptSnapshot}) = 'object' THEN 0 ELSE 1 END`,
+        asc(recipes.id),
       )
       .limit(limit);
+
+    const prepared = rows.map((row) => {
+      const context = { accountId: row.accountId, recipeId: row.id };
+      return {
+        row,
+        intentLog: convertRecipeIntentLogToV2(row.intentLog, key, context),
+        transcriptSnapshot: convertRecipeTranscriptSnapshotToV2(
+          row.transcriptSnapshot,
+          key,
+          context,
+        ),
+      };
+    });
+
     let converted = 0;
-    for (const row of rows) {
-      if (await this.encryptLegacyRow(row)) converted += 1;
+    for (const { row, intentLog, transcriptSnapshot } of prepared) {
+      const updated = await this.database.db
+        .update(recipes)
+        .set({ intentLog, transcriptSnapshot })
+        .where(
+          and(
+            eq(recipes.id, row.id),
+            eq(recipes.accountId, row.accountId),
+            sql`${recipes.intentLog} IS NOT DISTINCT FROM ${JSON.stringify(row.intentLog)}::jsonb`,
+            sql`${recipes.transcriptSnapshot} IS NOT DISTINCT FROM ${JSON.stringify(row.transcriptSnapshot)}::jsonb`,
+          ),
+        )
+        .returning({ id: recipes.id });
+      if (updated.length === 1) converted += 1;
     }
-    return { scanned: rows.length, converted };
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
+      .from(recipes)
+      .where(recipePayloadsAreNotV2());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
   }
 
   async create(args: CreateRecipeArgs): Promise<RecipeRecord> {
     const key = this.requireEncryptionKey();
     const validated = validateLabelAndDescription(args.label, args.description);
     const id = `rec_${randomUUID()}`;
+    const context = { accountId: args.accountId, recipeId: id };
     const now = this.clock();
     const inserted = await this.database.db
       .insert(recipes)
@@ -184,8 +216,8 @@ export class DrizzleRecipesRepo implements RecipesRepo {
         agentSessionId: args.agentSessionId,
         label: validated.label,
         description: validated.description,
-        intentLog: encryptRecipeIntentLog(args.intentLog, key),
-        transcriptSnapshot: encryptAgentTranscript(args.transcriptSnapshot, key),
+        intentLog: encryptRecipeIntentLog(args.intentLog, key, context),
+        transcriptSnapshot: encryptRecipeTranscriptSnapshot(args.transcriptSnapshot, key, context),
         createdAt: now,
         updatedAt: now,
       })

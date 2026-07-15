@@ -2,7 +2,7 @@
 // Drizzle implementation of RecipesRepo (migration 0044). Production
 // wires this; tests/dev use InMemoryRecipesRepo from services/recipes.ts.
 // Key shape rules: text PK rec_<uuid> + encrypted jsonb snapshots +
-// bounded legacy conversion + service-layer label/description
+// bounded record-bound legacy conversion + service-layer label/description
 // validation + no update/delete surface in v1.0 (write-only per
 // orchestrator handoff #3 Q.5).
 
@@ -34,7 +34,7 @@ describe('db/recipes-repo content parity', () => {
 
   it('documents encrypted JSONB payloads and bounded compare-and-set legacy conversion', () => {
     expect(body).toMatch(
-      /\/\/\s+- text PK `rec_<uuid>` minted at create\.\s*\n?\s*\/\/\s+- jsonb intent_log \+ transcript_snapshot store versioned AES-GCM envelopes\.\s*\n?\s*\/\/\s+Legacy plaintext arrays remain readable and are converted by a bounded\s*\n?\s*\/\/\s+compare-and-set bootstrap upgrader\./,
+      /\/\/\s+- text PK `rec_<uuid>` minted at create\.\s*\n?\s*\/\/\s+- jsonb intent_log \+ transcript_snapshot store versioned AES-GCM envelopes\.\s*\n?\s*\/\/\s+Legacy plaintext arrays and context-free v1 envelopes are readable only\s*\n?\s*\/\/\s+by a bounded compare-and-set bootstrap upgrader\./,
     );
     expect(body).toMatch(
       /\/\/\s+- Label trim \+ length \+ description length validation lives in\s*\n?\s*\/\/\s+the service-layer `validateLabelAndDescription`; the DB CHECK\s*\n?\s*\/\/\s+constraint is the belt-and-suspenders backstop for that\./,
@@ -44,31 +44,40 @@ describe('db/recipes-repo content parity', () => {
     );
   });
 
-  it('rowToRecord decrypts and runtime-validates both JSONB payloads before returning a recipe', () => {
+  it('rowToRecord binds and runtime-validates both JSONB payloads to account + recipe', () => {
+    expect(body).toMatch(/const context = \{ accountId: row\.accountId, recipeId: row\.id \};/);
     expect(body).toMatch(
-      /intentLog: readRecipeIntentLog\(row\.intentLog, payloadEncryptionKeyBase64\),\s*\n?\s*transcriptSnapshot: readAgentTranscript\(row\.transcriptSnapshot, payloadEncryptionKeyBase64\),/,
+      /intentLog: readRecipeIntentLog\(row\.intentLog, payloadEncryptionKeyBase64, context\),/,
     );
+    expect(body).toMatch(/transcriptSnapshot: readRecipeTranscriptSnapshot\(/);
   });
 
-  it('new writes fail closed without a key and persist only encrypted envelopes', () => {
+  it('new writes fail closed without a key and persist only record-bound v2 envelopes', () => {
     expect(body).toMatch(/throw new Error\('Recipe payload encryption key is unavailable\.'\);/);
-    expect(body).toMatch(/intentLog: encryptRecipeIntentLog\(args\.intentLog, key\),/);
+    expect(body).toMatch(/const context = \{ accountId: args\.accountId, recipeId: id \};/);
+    expect(body).toMatch(/intentLog: encryptRecipeIntentLog\(args\.intentLog, key, context\),/);
     expect(body).toMatch(
-      /transcriptSnapshot: encryptAgentTranscript\(args\.transcriptSnapshot, key\),/,
+      /transcriptSnapshot: encryptRecipeTranscriptSnapshot\(args\.transcriptSnapshot, key, context\),/,
     );
   });
 
-  it('legacy conversion authenticates an encrypted probe, finds arrays, and compare-and-sets both snapshots', () => {
-    expect(body).toMatch(/async encryptLegacyPayloads\(limit = 500\)/);
-    expect(body).toMatch(/readRecipeIntentLog\(encryptedProbe\.intentLog, key\);/);
-    expect(body).toMatch(/readAgentTranscript\(encryptedProbe\.transcriptSnapshot, key\);/);
-    expect(body).toMatch(/jsonb_typeof\(\$\{recipes\.intentLog\}\) = 'array'/);
+  it('migration probes v2, prevalidates pages, exact-CASes both snapshots, and counts remaining', () => {
+    expect(body).toMatch(/async migratePayloadEnvelopes\(/);
+    expect(body).toMatch(/readRecipeIntentLog\(v2Probe\.intentLog, key, context\);/);
     expect(body).toMatch(
-      /\$\{recipes\.intentLog\} = \$\{JSON\.stringify\(row\.intentLog\)\}::jsonb/,
+      /readRecipeTranscriptSnapshot\(v2Probe\.transcriptSnapshot, key, context\);/,
+    );
+    expect(body).toMatch(/const prepared = rows\.map\(\(row\) => \{/);
+    expect(body).toMatch(/convertRecipeIntentLogToV2\(row\.intentLog, key, context\)/);
+    expect(body).toMatch(/convertRecipeTranscriptSnapshotToV2\(/);
+    expect(body).toMatch(/eq\(recipes\.accountId, row\.accountId\)/);
+    expect(body).toMatch(
+      /\$\{recipes\.intentLog\} IS NOT DISTINCT FROM \$\{JSON\.stringify\(row\.intentLog\)\}::jsonb/,
     );
     expect(body).toMatch(
-      /\$\{recipes\.transcriptSnapshot\} = \$\{JSON\.stringify\(row\.transcriptSnapshot\)\}::jsonb/,
+      /\$\{recipes\.transcriptSnapshot\} IS NOT DISTINCT FROM \$\{JSON\.stringify\(row\.transcriptSnapshot\)\}::jsonb/,
     );
+    expect(body).toMatch(/return \{ scanned: rows\.length, converted, remaining:/);
   });
 
   it("validateLabelAndDescription 1-120-char-label-after-trim + 2000-char-description-cap framing pinned: trimmedLabel.length < 1 || > 120 → 'Recipe label must be 1-120 characters after trim' + description.length > 2000 → 'Recipe description must be <= 2000 characters' + empty-string description coerces to null. Drift to dropping the trim would let whitespace-only labels through; drift to allowing > 2000-char descriptions would bloat the jsonb column", () => {

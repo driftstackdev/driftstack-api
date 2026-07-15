@@ -1014,11 +1014,30 @@ export async function createProductionDeps(
       : {}),
   });
   if (config.mfaEncryptionKey !== undefined) {
-    const upgraded = await recipesRepo.encryptLegacyPayloads(500);
-    if (upgraded.scanned > 0) {
+    const MAX_RECIPE_PAYLOAD_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await recipesRepo.migratePayloadEnvelopes(500);
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `Recipe payload migration made no progress with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_RECIPE_PAYLOAD_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `Recipe payload migration exceeded the ${MAX_RECIPE_PAYLOAD_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
       logger.info(
-        { component: 'recipe-payload-encryption', ...upgraded },
-        'legacy recipe payloads encrypted in bounded bootstrap batch',
+        { component: 'recipe-payload-encryption', scanned, converted, remaining },
+        'legacy recipe payloads migrated to record-bound v2 before serving',
       );
     }
   } else {
@@ -2634,42 +2653,6 @@ export async function createProductionDeps(
     webhookSecretUpgradeTimer.unref();
   }
 
-  // The synchronous batch above authenticates the key and converts the first
-  // bounded page before serving. Drain any remainder without a table rewrite or
-  // overlapping ticks, then stop once no plaintext arrays remain.
-  const RECIPE_PAYLOAD_UPGRADE_INTERVAL_MS = 60_000;
-  let recipePayloadUpgradeInFlight = false;
-  let recipePayloadUpgradeTimer: NodeJS.Timeout | null = null;
-  if (config.mfaEncryptionKey !== undefined) {
-    recipePayloadUpgradeTimer = setInterval(() => {
-      if (recipePayloadUpgradeInFlight) return;
-      recipePayloadUpgradeInFlight = true;
-      void recipesRepo
-        .encryptLegacyPayloads(500)
-        .then((result) => {
-          if (result.scanned > 0) {
-            logger.info(
-              { component: 'recipe-payload-encryption', ...result },
-              'legacy recipe payloads encrypted in bounded follow-up batch',
-            );
-          } else if (recipePayloadUpgradeTimer !== null) {
-            clearInterval(recipePayloadUpgradeTimer);
-            recipePayloadUpgradeTimer = null;
-          }
-        })
-        .catch((err: unknown) => {
-          logger.error(
-            { component: 'recipe-payload-encryption', err },
-            'legacy recipe payload conversion failed; interval will retry',
-          );
-        })
-        .finally(() => {
-          recipePayloadUpgradeInFlight = false;
-        });
-    }, RECIPE_PAYLOAD_UPGRADE_INTERVAL_MS);
-    recipePayloadUpgradeTimer.unref();
-  }
-
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
   // sweep. Tick every 5 seconds: walks tracker.findStaleSessions()
   // + fires heartbeat-timeout transition + agent_session.pair_mode.timeout
@@ -2838,7 +2821,6 @@ export async function createProductionDeps(
     if (webhookGraceExpiringNoticeTimer) clearInterval(webhookGraceExpiringNoticeTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     if (webhookSecretUpgradeTimer) clearInterval(webhookSecretUpgradeTimer);
-    if (recipePayloadUpgradeTimer) clearInterval(recipePayloadUpgradeTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
     clearInterval(webhookDeliveryTimer);
     try {
