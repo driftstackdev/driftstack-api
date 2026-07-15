@@ -64,9 +64,9 @@ describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.as
     );
   });
 
-  it('Duplicate-charge framing pinned. Re-enabled by slice 257 after restoring the V-666.AO anchor on the idempotency-keys sentence at crypto-orders-ops-runbook.astro:65 (anchor stripped to bare space + indentation lost)', () => {
+  it('Duplicate-charge idempotency and reconciliation framing pinned', () => {
     expect(body).toMatch(/Crypto orders don't touch cards — that's the Stripe surface\./);
-    expect(body).toMatch(/double-click → handled by V-666\.AO idempotency keys/);
+    expect(body).toMatch(/double-click → handled by idempotency keys/);
     expect(body).toMatch(
       /Check the <code>idempotency-metrics<\/code> endpoint —\s*\n?\s*does the <code>replays<\/code> count match/,
     );
@@ -92,9 +92,9 @@ describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.as
     expect(body).toMatch(/This event is customer-subscribable/);
   });
 
-  it('V-666.BY CSV export with date-range + status filter framing pinned. Re-enabled by slice 257 after restoring the V-666.BY anchor on the date-range scoping paragraph at crypto-orders-ops-runbook.astro:131', () => {
+  it('CSV export date-range and status-filter framing pinned', () => {
     expect(body).toMatch(
-      /V-666\.BY: scope the export to a date window with\s*\n?\s*<code>\?created_after<\/code> \+ <code>\?created_before<\/code>\s*\n?\s*\(ISO 8601\)\. Both work on the JSON list, the CSV endpoint, and\s*\n?\s*the admin GUI's From\/To inputs\. Combine with\s*\n?\s*<code>\?status=paid<\/code> for a nightly paid-only reconcile\./,
+      /Scope the export to a date window with\s*\n?\s*<code>\?created_after<\/code> \+ <code>\?created_before<\/code>\s*\n?\s*\(ISO 8601\)\. Both work on the JSON list, the CSV endpoint, and\s*\n?\s*the admin GUI's From\/To inputs\. Combine with\s*\n?\s*<code>\?status=paid<\/code> for a nightly paid-only reconcile\./,
     );
     expect(body).toMatch(
       /GET \/v1\/admin\/crypto-orders\.csv\?status=paid&created_after=2026-05-01T00:00:00Z&created_before=2026-05-12T00:00:00Z/,

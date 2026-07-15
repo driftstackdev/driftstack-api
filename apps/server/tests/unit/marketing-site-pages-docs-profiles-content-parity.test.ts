@@ -114,8 +114,8 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     );
   });
 
-  it('Snapshots V-312 framing pinned. Re-enabled by slice 247 after restoring the (V-312) parenthetical on the <h2>Snapshots</h2> heading at profiles.astro:137 (same anchor-stripped-to-bare-space drift pattern as slices 235-239)', () => {
-    expect(body).toMatch(/<h2>Snapshots \(V-312\)<\/h2>/);
+  it('Snapshots contract framing pinned with a customer-facing heading', () => {
+    expect(body).toMatch(/<h2>Snapshots<\/h2>/);
     expect(body).toMatch(/POST \/v1\/profiles\/prof_…\/snapshots/);
     expect(body).toMatch(/"id": "psnap_…"/);
     expect(body).toMatch(/"parent_profile_id": "prof_…"/);

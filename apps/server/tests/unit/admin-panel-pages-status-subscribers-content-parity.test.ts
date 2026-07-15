@@ -40,9 +40,9 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
     );
   });
 
-  it("Page framing pinned: 'Email addresses subscribed to status.driftstack.dev incident notifications. Confirmed subscribers receive emails when public incidents are posted or resolved (V-295c3-followup fan-out). Force-unsubscribe writes admin_audit_log via V-281 dual-write.' — pinned so the customer-visible audit-trail contract survives", () => {
+  it('Page framing pins incident email fan-out and forced-unsubscribe audit behavior', () => {
     expect(body).toMatch(
-      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s*\n?\s*subscribers receive emails when public incidents are posted or resolved \(V-295c3-followup\s*\n?\s*fan-out\)\. Force-unsubscribe writes admin_audit_log via V-281 dual-write\./,
+      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s*\n?\s*subscribers receive emails when public incidents are posted or resolved\. A forced\s*\n?\s*unsubscribe is also written to the admin audit log\./,
     );
   });
 
@@ -63,9 +63,9 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
     expect(body).toMatch(/<span class="text-xs text-tk-ink-3">no action<\/span>/);
   });
 
-  it("Tombstoned-row email display: sub.email present → escapeHtml(sub.email) else '<span class=\"font-mono text-xs text-tk-ink-3\">(purged — V-295c3-tombstone)</span>' — pinned so the 90d-post-unsubscribe purge cron's null-email tombstone renders as an explicit '(purged)' marker referencing the V-295c3-tombstone slice (not a bare empty cell that looks broken)", () => {
+  it('Tombstoned-row email display renders the completed retention purge instead of a blank cell', () => {
     expect(body).toMatch(
-      /const emailDisplay = sub\.email\s*\n?\s*\? escapeHtml\(sub\.email\)\s*\n?\s*: '<span class="font-mono text-xs text-tk-ink-3">\(purged — V-295c3-tombstone\)<\/span>';/,
+      /const emailDisplay = sub\.email\s*\n?\s*\? escapeHtml\(sub\.email\)\s*\n?\s*: '<span class="font-mono text-xs text-tk-ink-3">\(purged after retention period\)<\/span>';/,
     );
   });
 
@@ -148,9 +148,9 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
     expect(body).not.toMatch(/\bfetch\(/);
   });
 
-  it("Pagination framing pinned: 'Subscribers list paginated server-side (default 50 per page; ?limit=&offset= query params for paging). Confirmed-and-still-subscribed rows trigger fan-out emails on public incident state changes (V-295c3-followup). Tombstoned rows (90d post-unsubscribe via V-295c3-tombstone purge cron) appear with email = null.' — pinned so the pagination contract + tombstone lifecycle stay documented to admins", () => {
+  it('Pagination framing pins fan-out and the scheduled 90-day tombstone purge', () => {
     expect(body).toMatch(
-      /Subscribers list paginated server-side \(default 50 per page; <code>\?limit=&amp;offset=<\/code>\s*\n?\s*query params for paging\)\. Confirmed-and-still-subscribed rows trigger fan-out emails on\s*\n?\s*public incident state changes \(V-295c3-followup\)\. Tombstoned rows \(90d post-unsubscribe via\s*\n?\s*V-295c3-tombstone purge cron\) appear with email = <code>null<\/code>\./,
+      /Subscribers list paginated server-side \(default 50 per page; <code>\?limit=&amp;offset=<\/code>\s*\n?\s*query params for paging\)\. Confirmed-and-still-subscribed rows trigger fan-out emails on\s*\n?\s*public incident state changes\. Tombstoned rows appear with email = <code>null<\/code> after\s*\n?\s*the scheduled 90-day post-unsubscribe purge\./,
     );
   });
 

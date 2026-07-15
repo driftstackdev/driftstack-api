@@ -39,14 +39,16 @@ describe('docs/api/byok-anthropic content parity', () => {
     expect(body).toMatch(/`has_key` is the only stable signal\./);
   });
 
-  it("AES-256-GCM at-rest framing pinned: 'encrypted at rest via AES-256-GCM (sealed with MFA_ENCRYPTION_KEY)' + '[12-byte IV | 16-byte auth tag | ciphertext]' canonical blob shape + 'accounts.byok_anthropic_key_blob (bytea)' storage column + 'shared with the v2-#8 sub-slice 8.4 gui_control_key encryption per Q2=C' — pinned so the AES-256-GCM + IV/tag/ciphertext envelope + Q2=C shared-key-with-gui_control_key contract all stay documented", () => {
+  it('AES-256-GCM at-rest envelope, storage column, and shared GUI-control-key authority stay documented without internal work-item labels', () => {
     expect(body).toMatch(
       /encrypted at rest via AES-256-GCM \(sealed\s*\n?\s*with `MFA_ENCRYPTION_KEY`\)/,
     );
     expect(body).toMatch(
       /The\s*\n?\s*canonical blob shape is `\[12-byte IV \| 16-byte auth tag \|\s*\n?\s*ciphertext\]`\. Storage column: `accounts\.byok_anthropic_key_blob`\s*\n?\s*\(bytea\)\./,
     );
-    expect(body).toMatch(/Q2=C/);
+    expect(body).toMatch(
+      /deployment's `MFA_ENCRYPTION_KEY` env var \(shared with encrypted\s*\n?\s*GUI control keys\)/,
+    );
   });
 
   it('Q3 account_owner-vs-members framing pinned for mutations; GET requires broad read because credential timestamps are account-wide metadata', () => {
@@ -61,9 +63,9 @@ describe('docs/api/byok-anthropic content parity', () => {
     );
   });
 
-  it("90-day-staleness + 60-day-reminder TTL framing pinned (v2-#21): 'Stored keys carry an implicit 90-day staleness window. After 60 days the customer receives a one-time Postmark reminder email (sendByokAnthropicKeyRotationReminder). After 90 days the BYOKAnthropicService.getPlaintext({ now }) call returns null (treats the stored key as absent), forcing the resolution chain to fall through to header / bundled / fallback per the agent session route's posture.' + 'Customers can refresh the staleness window by PUTting the same key (resets set_at) — the timestamp update is enough to satisfy the 90-day gate.' — pinned so the v2-#21 + 90d-staleness + 60d-reminder + getPlaintext-returns-null-on-stale + PUT-resets-set_at contract all stay documented", () => {
+  it('90-day staleness, 60-day reminder, and PUT refresh behavior stay documented', () => {
     expect(body).toMatch(
-      /## TTL \+ rotation reminders \(v2-#21\)\s*\n?\s*\s*\n?\s*Stored keys carry an implicit 90-day staleness window\. After 60\s*\n?\s*days the customer receives a one-time Postmark reminder email\s*\n?\s*\(`sendByokAnthropicKeyRotationReminder`\)\. After 90 days the\s*\n?\s*`BYOKAnthropicService\.getPlaintext\(\{ now \}\)` call returns null/,
+      /## TTL \+ rotation reminders\s*\n?\s*\s*\n?\s*Stored keys carry an implicit 90-day staleness window\. After 60\s*\n?\s*days the customer receives a one-time Postmark reminder email\s*\n?\s*\(`sendByokAnthropicKeyRotationReminder`\)\. After 90 days the\s*\n?\s*`BYOKAnthropicService\.getPlaintext\(\{ now \}\)` call returns null/,
     );
     expect(body).toMatch(
       /Customers can refresh the staleness window by PUTting the same\s*\n?\s*key \(resets `set_at`\)/,
@@ -99,9 +101,9 @@ describe('docs/api/byok-anthropic content parity', () => {
     expect(body).toMatch(/\|\s*503 \| feature-unavailable/);
   });
 
-  it("V-494 secret-filter Sentry-breadcrumb framing pinned: 'The plaintext key is encrypted at rest + never logged. Sentry breadcrumbs around the route paths scrub via the V-494 secret filter.' — pinned so the V-494 + Sentry-breadcrumb scrubbing contract stays documented", () => {
+  it('secret-redaction framing keeps plaintext out of logs and Sentry breadcrumbs', () => {
     expect(body).toMatch(
-      /- The plaintext key is encrypted at rest \+ never logged\. Sentry\s*\n?\s*breadcrumbs around the route paths scrub via the V-494 secret\s*\n?\s*filter\./,
+      /- The plaintext key is encrypted at rest \+ never logged\. Sentry\s*\n?\s*breadcrumbs around the route paths use the shared secret-redaction\s*\n?\s*filter\./,
     );
   });
 });

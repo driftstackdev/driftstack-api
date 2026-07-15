@@ -75,7 +75,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     );
   });
 
-  it('Auth + authz 4-bullet framing pinned. Re-enabled by slice 278 after restoring the V-074 anchor on the account-audit-log bullet at docs/security-overview.astro:81 (the other 3 bullets — scope-ladder + MFA + driftstack_internal_admin — were intact)', () => {
+  it('Auth + authz 4-bullet framing pins audit-log behavior without internal labels', () => {
     expect(body).toMatch(
       /Customer keys are scoped: <code>read<\/code> \/\s*\n?\s*<code>write<\/code> \/ <code>account_owner<\/code>\. We default to\s*\n?\s*least-privilege; the dashboard's "create key" flow defaults to\s*\n?\s*<code>read<\/code> with an explicit checkbox to widen\./,
     );
@@ -86,7 +86,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
       /Admin actions are gated behind a separate\s*\n?\s*<code>driftstack_internal_admin<\/code> scope that no customer\s*\n?\s*key can hold\./,
     );
     expect(body).toMatch(
-      /Every login event \+ every key mint\/revoke is captured in the\s*\n?\s*account audit log \(V-074\); customers can self-serve a full\s*\n?\s*log export\./,
+      /Every login event \+ every key mint\/revoke is captured in the\s*\n?\s*account audit log; customers can self-serve a full\s*\n?\s*log export\./,
     );
   });
 

@@ -47,7 +47,7 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
     );
   });
 
-  it('5-filter set + 6-state status enum + V-666.BY date-range anchor pinned. Re-enabled by slice 237 after restoring the V-666.BY anchor on the created_after/before list-item at admin-csv-export.astro:46 (same anchor-dropped-to-bare-space pattern as the slice 235/236 V-304a/V-304b restores)', () => {
+  it('5-filter set, 6-state status enum, and date-range behavior pinned', () => {
     expect(body).toMatch(/<code>status<\/code> — one of/);
     expect(body).toMatch(
       /<code>pending<\/code>, <code>confirming<\/code>, <code>paid<\/code>,\s*\n?\s*<code>failed<\/code>, <code>partial<\/code>, <code>cancelled<\/code>\./,
@@ -55,7 +55,7 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
     expect(body).toMatch(/<code>search<\/code> — free-text match across/);
     expect(body).toMatch(/<code>account_id<\/code> — restrict to one account\./);
     expect(body).toMatch(
-      /<code>created_after<\/code> \/ <code>created_before<\/code> —\s*\n?\s*ISO-8601 date-range filter \(V-666\.BY\)\./,
+      /<code>created_after<\/code> \/ <code>created_before<\/code> —\s*\n?\s*ISO-8601 date-range filter\./,
     );
     expect(body).toMatch(/<code>limit<\/code> — integer 1–1000\. Defaults to 1000\./);
   });

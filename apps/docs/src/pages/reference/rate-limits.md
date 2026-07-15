@@ -24,7 +24,7 @@ Every authenticated request consumes from exactly one bucket:
 - **`agent_sessions:message`** —
   `POST /v1/agent-sessions/:id/message` only. Isolated from
   `global` so an LLM-driven message loop can't drain the
-  global cap (v2-#8 sub-slice 8.20).
+  global cap, so an LLM-driven message loop cannot exhaust unrelated API capacity.
 - **`agent_sessions:input_event`** —
   `POST /v1/agent-sessions/:id/input-event` only. Sized for
   high-frequency live input (≤120Hz `mouseMove` / `touchMove`); isolated so an

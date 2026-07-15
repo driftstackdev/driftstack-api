@@ -68,8 +68,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             Cross-account list. Filters: <code>status</code>,
             <code>search</code>, <code>payment_id</code>,
             <code>account_id</code>, <code>created_after</code> /
-            <code>created_before</code> (V-666.BY). Cursor-paginated
-            via <code>next_cursor</code> (V-666.AM).
+            <code>created_before</code>. Cursor-paginated via
+            <code>next_cursor</code>.
           </td>
         </tr>
         <tr>
@@ -82,7 +82,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </tr>
         <tr>
           <td><code>GET /v1/admin/crypto-orders/idempotency-metrics</code></td>
-          <td>Counters for first-write vs replay vs body-mismatch on the customer checkout endpoint (V-666.AP / V-666.AR).</td>
+          <td>Counters for first-write vs replay vs body-mismatch on the customer checkout endpoint.</td>
         </tr>
         <tr>
           <td><code>GET /v1/admin/crypto-orders/pending-age</code></td>

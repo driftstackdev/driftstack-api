@@ -21,10 +21,10 @@ const EVENT_TYPES = [
   { name: 'session.completed', desc: 'Fires when a session is destroyed cleanly (non-error end of life). Payload carries { session_id, duration_ms }.' },
   { name: 'session.failed', desc: 'Fires when a session ends in an errored state.' },
   { name: 'api_key.revoked', desc: 'Fires when an API key is revoked from the dashboard.' },
-  { name: 'session.egress_capability_changed', desc: 'Arc 5 EGRESS eg.7.e — fires when a session\'s egress capability state changes (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.' },
-  { name: 'crypto.order.paid', desc: 'V-666 — fires when a crypto order transitions to the terminal paid state (NowPayments IPN settled). Subscribe to grant entitlements server-side without polling /v1/billing/crypto-orders.' },
-  { name: 'crypto.order.failed', desc: 'V-666 — fires when a crypto order transitions to the terminal failed state (address-window expired, NowPayments failed/refunded). Subscribe to drive support workflows on settlement-failure.' },
-  { name: 'session.challenge_detected', desc: 'W393 — fires when the in-session harness flags a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge and it resumes. Subscribe to route challenge alerts into your own ops surface.' },
+  { name: 'session.egress_capability_changed', desc: 'Fires when a session\'s egress capability state changes (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.' },
+  { name: 'crypto.order.paid', desc: 'Fires when a crypto order transitions to the terminal paid state (NowPayments IPN settled). Subscribe to grant entitlements server-side without polling /v1/billing/crypto-orders.' },
+  { name: 'crypto.order.failed', desc: 'Fires when a crypto order transitions to the terminal failed state (address-window expired, NowPayments failed/refunded). Subscribe to drive support workflows on settlement-failure.' },
+  { name: 'session.challenge_detected', desc: 'Fires when the in-session harness flags a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge and it resumes. Subscribe to route challenge alerts into your own ops surface.' },
   { name: 'session.profile_save_failed', desc: 'Fires when a profile-backed session could not persist its updated profile store at teardown (the session itself succeeded). Terminal — the next restore of that profile will be stale. Subscribe if you rely on persisted profile state.' },
 ];
 ---

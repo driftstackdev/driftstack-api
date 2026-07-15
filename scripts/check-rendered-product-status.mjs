@@ -22,6 +22,15 @@ const FORBIDDEN = [
   /\bon (?:the|our) roadmap\b/giu,
 ];
 
+const INTERNAL_MARKERS = [
+  /\bV-NNN\b/gu,
+  /\bV-\d{3,}(?:\.[A-Z]{1,3}|[a-z]\d*)?\b/gu,
+  /\bW\d{3,}(?:\.[A-Z]{1,3})?\b/gu,
+  /\bv2-#\d+\b/giu,
+  /\bsub-slice\b/giu,
+  /\bArc\s+\d+\b/gu,
+];
+
 // Current request-timing semantics, not an unshipped-product promise.
 const ALLOWED_PHRASES = ['Authentication is deferred to the first request'];
 
@@ -62,6 +71,17 @@ function renderedText(html) {
   return text;
 }
 
+function customerVisibleText(html) {
+  return decodeEntities(
+    html
+      .replace(/<!--[\s\S]*?-->/gu, ' ')
+      .replace(/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1\s*>/giu, ' ')
+      .replace(/<[^>]+>/gu, ' '),
+  )
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
 function hasForbidden(text) {
   return FORBIDDEN.some((pattern) => {
     pattern.lastIndex = 0;
@@ -76,6 +96,21 @@ assert.equal(hasForbidden(renderedText('<script>"coming soon"</script><main>Live
 assert.equal(hasForbidden(renderedText('<pre>deferred</pre><main>Live</main>')), false);
 assert.equal(
   hasForbidden(renderedText('<main>Authentication is deferred to the first request</main>')),
+  false,
+);
+
+assert.equal(hasForbidden(customerVisibleText('<main>Live</main><pre>V-666.BY</pre>')), false);
+assert.equal(
+  INTERNAL_MARKERS.some((pattern) => pattern.test(customerVisibleText('<pre>V-666.BY</pre>'))),
+  true,
+);
+assert.equal(
+  INTERNAL_MARKERS.some((pattern) => {
+    pattern.lastIndex = 0;
+    return pattern.test(
+      customerVisibleText('<!-- V-666 --><script>"W393"</script><main>Live</main>'),
+    );
+  }),
   false,
 );
 
@@ -94,7 +129,8 @@ for (const app of APPS) {
   const files = await htmlFiles(dist);
   fileCount += files.length;
   for (const file of files) {
-    const text = renderedText(await readFile(file, 'utf8'));
+    const html = await readFile(file, 'utf8');
+    const text = renderedText(html);
     for (const pattern of FORBIDDEN) {
       pattern.lastIndex = 0;
       const match = pattern.exec(text);
@@ -102,6 +138,15 @@ for (const app of APPS) {
       const start = Math.max(0, match.index - 80);
       const end = Math.min(text.length, match.index + match[0].length + 80);
       failures.push(`${relative(ROOT, file)}: …${text.slice(start, end)}…`);
+    }
+    const visible = customerVisibleText(html);
+    for (const pattern of INTERNAL_MARKERS) {
+      pattern.lastIndex = 0;
+      const match = pattern.exec(visible);
+      if (match === null) continue;
+      const start = Math.max(0, match.index - 80);
+      const end = Math.min(visible.length, match.index + match[0].length + 80);
+      failures.push(`${relative(ROOT, file)}: …${visible.slice(start, end)}…`);
     }
   }
 }

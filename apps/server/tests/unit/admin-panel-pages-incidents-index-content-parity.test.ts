@@ -48,9 +48,9 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
     );
   });
 
-  it("CF Pages mirror framing pinned: 'Posting an incident writes incident.created to the admin audit log. Public incidents propagate to status.driftstack.dev (CF Pages mirror) within ~60s via Hetzner cron + R2 (V-295c).' — pinned so the propagation pathway (Hetzner cron → R2 → CF Pages) stays documented for ops (drift to dropping the V-295c reference would hide the slice that owns the propagation)", () => {
+  it('CF Pages mirror cadence, Hetzner poller, R2, and audit behavior stay documented without an internal label', () => {
     expect(body).toMatch(
-      /Posting an incident writes <code>incident\.created<\/code> to the admin audit log\.\s*\n?\s*Public incidents propagate to status\.driftstack\.dev \(CF Pages mirror\) within ~60s\s*\n?\s*via Hetzner cron \+ R2 \(V-295c\)\./,
+      /Posting an incident writes <code>incident\.created<\/code> to the admin audit log\.\s*\n?\s*Public incidents propagate to status\.driftstack\.dev through the Cloudflare Pages mirror\s*\n?\s*within about 60 seconds via the Hetzner poller and R2\./,
     );
   });
 

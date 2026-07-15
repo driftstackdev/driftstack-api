@@ -56,10 +56,11 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
     );
   });
 
-  it('list() default limit=50 + status filter V-666.BR + 6-status-enum + 400-on-unknown + limit-clamped-1-100 framing pinned. Re-enabled by slice 259 after restoring V-666.BR on the status-filter comment + V-666.AU on the events-print comment at sdk-python-crypto-orders.astro:51,55', () => {
+  it('list() default limit=50 + status filter + event timeline + 6-status enum + bounds pinned', () => {
     expect(body).toMatch(/page = client\.crypto_orders\.list\(\)/);
     expect(body).toMatch(/page\["orders"\]/);
-    expect(body).toMatch(/V-666\.BR/);
+    expect(body).toMatch(/# Narrow to a single status server-side\./);
+    expect(body).toMatch(/print\(single\["events"\]\) {2}# Event timeline/);
     expect(body).toMatch(
       /<code>status<\/code> accepts <code>pending<\/code>,\s*\n?\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*\n?\s*<code>partial<\/code>, or <code>cancelled<\/code>\. Unknown values\s*\n?\s*return a 400\. <code>limit<\/code> is clamped to 1\.\.=100\./,
     );

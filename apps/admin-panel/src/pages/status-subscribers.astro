@@ -25,8 +25,8 @@ const apiBaseUrl = resolveApiBaseUrl();
        <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Email addresses subscribed to status.driftstack.dev incident notifications. Confirmed
-          subscribers receive emails when public incidents are posted or resolved (V-295c3-followup
-          fan-out). Force-unsubscribe writes admin_audit_log via V-281 dual-write.
+          subscribers receive emails when public incidents are posted or resolved. A forced
+          unsubscribe is also written to the admin audit log.
         </p>
       </div>
       {/* 2026-05-22 — live auto-poll. Same pattern as ab41f9d8. */}
@@ -105,8 +105,8 @@ const apiBaseUrl = resolveApiBaseUrl();
     <p class="mt-6 text-xs text-tk-ink-3">
       Subscribers list paginated server-side (default 50 per page; <code>?limit=&amp;offset=</code>
       query params for paging). Confirmed-and-still-subscribed rows trigger fan-out emails on
-      public incident state changes (V-295c3-followup). Tombstoned rows (90d post-unsubscribe via
-      V-295c3-tombstone purge cron) appear with email = <code>null</code>.
+      public incident state changes. Tombstoned rows appear with email = <code>null</code> after
+      the scheduled 90-day post-unsubscribe purge.
     </p>
   </div>
 
@@ -274,7 +274,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           : '<span class="text-xs text-tk-ink-3">no action</span>';
         const emailDisplay = sub.email
           ? escapeHtml(sub.email)
-          : '<span class="font-mono text-xs text-tk-ink-3">(purged — V-295c3-tombstone)</span>';
+          : '<span class="font-mono text-xs text-tk-ink-3">(purged after retention period)</span>';
         return (
           '<li data-subscriber-email="' +
           escapeHtml(sub.email ? String(sub.email).toLowerCase() : '') +

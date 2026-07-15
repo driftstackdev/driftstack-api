@@ -128,8 +128,8 @@ corresponding account-audit event.
 ## Encryption at rest
 
 The plaintext is encrypted with AES-256-GCM keyed by the
-deployment's `MFA_ENCRYPTION_KEY` env var (shared with the
-v2-#8 sub-slice 8.4 gui_control_key encryption per Q2=C). The
+deployment's `MFA_ENCRYPTION_KEY` env var (shared with encrypted
+GUI control keys). The
 canonical blob shape is `[12-byte IV | 16-byte auth tag |
 ciphertext]`. Storage column: `accounts.byok_anthropic_key_blob`
 (bytea).
@@ -138,7 +138,7 @@ Rotation of `MFA_ENCRYPTION_KEY` invalidates every existing BYOK
 key — customers re-set after the rotation runbook fires (see
 docs/runbooks/mfa-encryption-key-rotation.md).
 
-## TTL + rotation reminders (v2-#21)
+## TTL + rotation reminders
 
 Stored keys carry an implicit 90-day staleness window. After 60
 days the customer receives a one-time Postmark reminder email
@@ -165,7 +165,7 @@ satisfy the 90-day gate.
 ## Privacy
 
 - The plaintext key is encrypted at rest + never logged. Sentry
-  breadcrumbs around the route paths scrub via the V-494 secret
+  breadcrumbs around the route paths use the shared secret-redaction
   filter.
 - The API server sends the connection-test request only to the fixed
   Anthropic model-list endpoint. It does not run inference, read or proxy

@@ -48,11 +48,11 @@ page = client.crypto_orders.list()
 for o in page["orders"]:
     print(o["order_id"], o["status"], o["expires_at"])
 
-# Narrow to a single status server-side (V-666.BR).
+# Narrow to a single status server-side.
 paid = client.crypto_orders.list(status="paid", limit=25)
 
 single = client.crypto_orders.get("ord_abc123def456")
-print(single["events"])  # V-666.AU event timeline`}</code></pre>
+print(single["events"])  # Event timeline`}</code></pre>
     <p>
       <code>status</code> accepts <code>pending</code>,
       <code>confirming</code>, <code>paid</code>, <code>failed</code>,

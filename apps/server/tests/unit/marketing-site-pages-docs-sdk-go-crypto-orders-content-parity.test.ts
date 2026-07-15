@@ -37,9 +37,9 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
     );
   });
 
-  it('client.CryptoOrders + V-666 surface + admin-not-exposed framing pinned. Re-enabled by slice 258 after restoring the V-666 anchor on the lead-paragraph at sdk-go-crypto-orders.astro:15', () => {
+  it('client.CryptoOrders customer surface and admin-not-exposed framing pinned', () => {
     expect(body).toMatch(
-      /The <code>client\.CryptoOrders<\/code> resource wraps every\s*\n?\s*customer-facing endpoint on the V-666 surface\. Admin endpoints\s*\n?\s*are not exposed; integrators that need them call the REST\s*\n?\s*surface directly\./,
+      /The <code>client\.CryptoOrders<\/code> resource wraps every\s*\n?\s*customer-facing crypto-order endpoint\. Admin endpoints\s*\n?\s*are not exposed; integrators that need them call the REST\s*\n?\s*surface directly\./,
     );
   });
 
@@ -62,10 +62,10 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
     );
   });
 
-  it('List + 6-status enum + V-666.BR + 400-on-unknown + 1..=100 limit clamp framing pinned. Re-enabled by slice 258 after verifying V-666.BR + the 6-status enum still exist verbatim at sdk-go-crypto-orders.astro:58+69-72', () => {
+  it('List + 6-status enum + 400-on-unknown + 1..=100 limit clamp framing pinned', () => {
     expect(body).toMatch(/page, err := client\.CryptoOrders\.List\(ctx, nil\)/);
     expect(body).toMatch(/for _, o := range page\.Orders \{/);
-    expect(body).toMatch(/V-666\.BR/);
+    expect(body).toMatch(/\/\/ Narrow to a single status server-side\./);
     expect(body).toMatch(/&driftstack\.ListCryptoOrdersOptions\{/);
     expect(body).toMatch(
       /<code>Status<\/code> accepts <code>pending<\/code>,\s*\n?\s*<code>confirming<\/code>, <code>paid<\/code>, <code>failed<\/code>,\s*\n?\s*<code>partial<\/code>, or <code>cancelled<\/code>\. Unknown values\s*\n?\s*return a 400\. <code>Limit<\/code> is clamped to 1\.\.=100\./,

@@ -67,10 +67,10 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
     );
   });
 
-  it('V-666.BR status filter + V-666.BU cursor + V-666.AU events timeline anchors pinned — pinned so the 3 engineering-V-anchors (V-666.BR / V-666.BU / V-666.AU) survive (drift to dropping V-666.AU would orphan the events-timeline feature from its origin; drift to dropping V-666.BU would orphan cursor pagination)', () => {
-    expect(body).toMatch(/\/\/ V-666\.BR — narrow to a single status server-side\./);
-    expect(body).toMatch(/\/\/ V-666\.BU — explicit cursor paging\./);
-    expect(body).toMatch(/single\.events\); \/\/ V-666\.AU timeline/);
+  it('status filter, cursor paging, and event timeline examples stay explicit without internal labels', () => {
+    expect(body).toMatch(/\/\/ Narrow to a single status server-side\./);
+    expect(body).toMatch(/\/\/ Explicit cursor paging\./);
+    expect(body).toMatch(/single\.events\); \/\/ Event timeline/);
   });
 
   it("6-state status filter enum: pending + confirming + paid + failed + partial + cancelled + 'limit clamped to 1..=100; the default is 50.' — pinned so the 6-state enum (consistent with admin CSV + docs/crypto-orders-polling-vs-webhooks) + the limit-default-50-with-1-100-range survive (drift to dropping a state would orphan that status from filterable view; drift to a different limit default would create marketing↔SDK divergence)", () => {

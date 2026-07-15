@@ -152,8 +152,8 @@ If you've configured a webhook endpoint, terminal session events fire on the bus
 
 - `session.completed` — session destroyed cleanly (customer-driven destroy, or the free-tier duration cap).
 - `session.failed` — session terminated due to a runtime / driver error.
-- `session.egress_capability_changed` — Arc 5 EGRESS eg.7.e — the session's egress capability state changed (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.
-- `session.challenge_detected` — W393 — the in-session harness flagged a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.
+- `session.egress_capability_changed` — the session's egress capability state changed (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.
+- `session.challenge_detected` — the in-session harness flagged a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.
 - `session.profile_save_failed` — a profile-backed session did not replace the stored profile at teardown. Failure reasons are terminal and the next restore will be stale; `superseded` is benign and means a newer saved profile won the conditional write.
 
 Intermediate state transitions (e.g. a hypothetical `session.created`) are not on the bus today — the create + destroy round-trip is fast enough that polling `sessions.getState` covers in-flight needs. See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.

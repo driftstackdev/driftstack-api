@@ -177,7 +177,7 @@ surface.
 
 ### `crypto.order.failed`
 
-V-666 — fires when a NowPayments-backed crypto checkout order
+Fires when a NowPayments-backed crypto checkout order
 transitions to a terminal state. Wired end-to-end 2026-05-22
 (migration 0064 + bootstrap WebhooksService emitter sink).
 
@@ -229,7 +229,7 @@ orders`.
 
 ### `session.challenge_detected`
 
-W393 — fires when the in-session harness ChallengeDetector flags a
+Fires when the in-session harness ChallengeDetector flags a
 bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / … —
 14 types) on the page the session is navigating. The harness
 auto-pauses the session (no further action intents run) and surfaces

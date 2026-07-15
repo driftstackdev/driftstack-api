@@ -150,8 +150,8 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <p class="mt-8 text-xs text-tk-ink-3">
       Posting an incident writes <code>incident.created</code> to the admin audit log.
-      Public incidents propagate to status.driftstack.dev (CF Pages mirror) within ~60s
-      via Hetzner cron + R2 (V-295c).
+      Public incidents propagate to status.driftstack.dev through the Cloudflare Pages mirror
+      within about 60 seconds via the Hetzner poller and R2.
     </p>
   </div>
 

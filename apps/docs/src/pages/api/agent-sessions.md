@@ -357,7 +357,7 @@ Event types emitted:
     (decomposer output: plan-executed, clarify, or refuse), or
     `'operator'` (manual-mode pass-through — the customer's
     own UI/script logging directly without invoking the
-    decomposer; Arc 2 sub-slice 8.6).
+    decomposer).
   - `body` — free-text for user / operator turns; serialised
     `DecomposeResult` JSON for agent turns.
   - `at` — ISO 8601 timestamp.

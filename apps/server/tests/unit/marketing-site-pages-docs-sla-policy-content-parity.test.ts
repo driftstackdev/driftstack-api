@@ -97,8 +97,8 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
     );
   });
 
-  it('Measurement framing pinned. Re-enabled by slice 292 after restoring V-295b anchor on the health-probe-service phrase at sla-policy.astro:77', () => {
-    expect(body).toMatch(/our health-probe service \(V-295b\)/);
+  it('Measurement framing pins the automated health-probe service', () => {
+    expect(body).toMatch(/our automated health-probe service/);
     expect(body).toMatch(
       /<li><code>GET \/health<\/code> — the API health endpoint \(alias\s*\n?\s*<code>\/healthz<\/code>\)\.<\/li>/,
     );

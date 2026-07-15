@@ -210,6 +210,6 @@ For replay see [/webhooks/replay](/webhooks/replay/).
 Read endpoints (GET) accept any valid bearer with `read` scope.
 Write endpoints (POST, PATCH, DELETE, send-test, rotate-secret)
 require `account_owner` scope (the dashboard scope; a broad `admin`
-key also satisfies it via the V-174 alias). Team RBAC
+key also satisfies it through the legacy `admin` alias). Team RBAC
 (`X-Driftstack-Account` header) is honored: member roles can read
 the owner's endpoints; admin members can also write.

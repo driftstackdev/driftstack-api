@@ -63,17 +63,18 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
     );
   });
 
-  it('11-admin-crypto-orders endpoint surface pinned. Re-enabled by slice 238 after restoring V-666.BY + V-666.AM + V-666.AP/V-666.AR anchors on admin-api.astro:72-73,86 (three anchors stripped to bare-space-period in the same drift pattern as 235-237)', () => {
+  it('11-admin-crypto-orders endpoint, filters, cursor, and idempotency metrics surface pinned', () => {
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders<\/code><\/td>/);
-    expect(body).toMatch(/V-666\.BY/);
-    expect(body).toMatch(/V-666\.AM/);
+    expect(body).toMatch(
+      /<code>created_after<\/code> \/\s*\n?\s*<code>created_before<\/code>\. Cursor-paginated via\s*\n?\s*<code>next_cursor<\/code>\./,
+    );
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders\.csv<\/code><\/td>/);
     expect(body).toMatch(/<td>Same filter set, CSV export \(up to 1000 rows \/ call\)\.<\/td>/);
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders\/stats<\/code><\/td>/);
     expect(body).toMatch(
       /<td><code>GET \/v1\/admin\/crypto-orders\/idempotency-metrics<\/code><\/td>/,
     );
-    expect(body).toMatch(/V-666\.AP \/ V-666\.AR/);
+    expect(body).toMatch(/Counters for first-write vs replay vs body-mismatch/);
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders\/pending-age<\/code><\/td>/);
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders\/daily\?days=N<\/code><\/td>/);
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders\/:order_id<\/code><\/td>/);

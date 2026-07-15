@@ -50,14 +50,14 @@ for (const o of orders) {
   console.log(o.order_id, o.status, o.expires_at);
 }
 
-// V-666.BR — narrow to a single status server-side.
+// Narrow to a single status server-side.
 const { orders: paid } = await client.cryptoOrders.list({
   status: 'paid',
   limit: 25,
 });
 
 const single = await client.cryptoOrders.get('ord_abc123def456');
-console.log(single.events); // V-666.AU timeline`}</code></pre>
+console.log(single.events); // Event timeline`}</code></pre>
     <p>
       <code>status</code> accepts <code>pending</code>,
       <code>confirming</code>, <code>paid</code>, <code>failed</code>,
@@ -67,7 +67,7 @@ console.log(single.events); // V-666.AU timeline`}</code></pre>
     </p>
 
     <h2>Pagination</h2>
-    <pre><code>{`// V-666.BU — explicit cursor paging.
+    <pre><code>{`// Explicit cursor paging.
 let cursor: string | undefined;
 while (true) {
   const page = await client.cryptoOrders.list({ status: 'paid', cursor });

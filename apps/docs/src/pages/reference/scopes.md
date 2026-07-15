@@ -60,7 +60,7 @@ There are three categories of scopes, in order of breadth:
 > `write:webhooks` / `admin:webhooks` scope. Account-configuration surfaces
 > are deliberately gated at the account-control level rather than at
 > granular write level. (A broad `admin` key still satisfies `account_owner`
-> via the V-174 alias.)
+> through the legacy `admin` alias.)
 
 > **Note — agent-session endpoints require the broad `write` scope.**
 > Driver-session routes accept the granular `write:sessions`, but
@@ -143,5 +143,5 @@ sites (`apps/server/src/lib/errors-helpers.ts` +
 41-case unit test at
 `apps/server/tests/unit/scope-check.test.ts`.
 
-Any scope additions land via V-NNN slice that updates the
-schema, both predicate sites, and this docs page.
+Any scope addition must update the schema, both predicate sites,
+and this documentation in the same change.

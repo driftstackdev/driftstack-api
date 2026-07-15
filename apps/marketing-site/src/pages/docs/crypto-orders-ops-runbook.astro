@@ -62,7 +62,7 @@ Authorization: Bearer $ADMIN_KEY</code></pre>
     <p>
       Crypto orders don't touch cards — that's the Stripe surface.
       Confirm whether the duplicate is crypto-vs-crypto (likely
-      double-click → handled by V-666.AO idempotency keys) or
+      double-click → handled by idempotency keys) or
       crypto-vs-Stripe (handle on the Stripe side). For two crypto
       orders on the same customer/product:
     </p>
@@ -130,7 +130,7 @@ Authorization: Bearer $ADMIN_KEY</code></pre>
       JSON list (<a href="/docs/admin-api-pagination/">cursor docs</a>).
     </p>
     <p>
-      V-666.BY: scope the export to a date window with
+      Scope the export to a date window with
       <code>?created_after</code> + <code>?created_before</code>
       (ISO 8601). Both work on the JSON list, the CSV endpoint, and
       the admin GUI's From/To inputs. Combine with

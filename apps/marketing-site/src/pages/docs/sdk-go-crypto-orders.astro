@@ -12,7 +12,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <p class="lead">
       The <code>client.CryptoOrders</code> resource wraps every
-      customer-facing endpoint on the V-666 surface. Admin endpoints
+      customer-facing crypto-order endpoint. Admin endpoints
       are not exposed; integrators that need them call the REST
       surface directly.
     </p>
@@ -55,7 +55,7 @@ for _, o := range page.Orders {
     fmt.Println(o["order_id"], o["status"], o["expires_at"])
 }
 
-// Narrow to a single status server-side (V-666.BR).
+// Narrow to a single status server-side.
 status := "paid"
 limit  := 25
 paid, _ := client.CryptoOrders.List(ctx, &driftstack.ListCryptoOrdersOptions{
@@ -64,7 +64,7 @@ paid, _ := client.CryptoOrders.List(ctx, &driftstack.ListCryptoOrdersOptions{
 })
 
 single, _ := client.CryptoOrders.Get(ctx, "ord_abc123def456")
-fmt.Println(single["events"]) // V-666.AU timeline`}</code></pre>
+fmt.Println(single["events"]) // Event timeline`}</code></pre>
     <p>
       <code>Status</code> accepts <code>pending</code>,
       <code>confirming</code>, <code>paid</code>, <code>failed</code>,
