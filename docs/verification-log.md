@@ -28066,3 +28066,37 @@ agent-session family passes 3 files and 13/13 tests. Strict server test
 TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green. No
 runtime repository, schema migration, encryption format or production behavior
 changed.
+
+---
+
+## V-669 — Bounded node relays contain processor and observer failures locally
+
+**Date:** 2026-07-15
+
+The shared latest-state relay attached a rejection handler only after invoking
+its processor. A synchronous processor throw could therefore escape the
+receive call. Its asynchronous rejection handler called `onError` without a
+guard, so a throwing logger/observer rejected the detached chain; a local
+`unhandledRejection` observer reproduced that path. The synchronous overflow
+observer was likewise unguarded. Production's process-level rejection backstop
+normally counts and logs an ordinary detached rejection, so this is local
+defense-in-depth rather than evidence of an active crash incident.
+
+Processor results are now normalized through `Promise.resolve` inside a
+synchronous `try/catch`. This preserves every consumer's established
+immediate-start behavior while converting a synchronous throw into the same
+contained rejection path as an asynchronous failure. The error observer is
+guarded inside that handler, so observability failure cannot reject the chain
+or prevent `finally` from releasing the session slot, draining its newest
+successor and deleting empty node state. The one-per-saturated-state overflow
+observer is also guarded after the frame has been authoritatively shed.
+
+Direct coverage proves the existing 512-session, 8-concurrent, per-node,
+newest-successor and saturation-notice contracts, ordinary asynchronous failure
+continuation, synchronous-throw continuation, throwing-error-observer slot
+release with zero unhandled rejection, and throwing-overflow-observer receive
+containment. The direct file passes 7/7 tests and all seven current consumer
+families pass 8 files and 86/86 tests. Strict server source/test TypeScript,
+targeted ESLint/Prettier and diff/whitespace checks, full-workspace typechecking
+and the configured production build are green. No consumer signature, schema,
+wire protocol or queue bound changed.

@@ -108,4 +108,82 @@ describe('makeBoundedNodeLatestRelay', () => {
       expect.objectContaining({ reportingNodeId: 'node-1', sessionId: 'agt_fail' }),
     );
   });
+
+  it('contains a synchronous processor throw and drains the newest same-session successor', async () => {
+    const seen: string[] = [];
+    const processFrame = vi.fn((frame: Frame): Promise<void> => {
+      seen.push(frame.value);
+      if (frame.value === 'throws') throw new Error('synchronous adapter failure');
+      return Promise.resolve();
+    });
+    const { onError, relay } = relayWith(processFrame);
+
+    expect(() => {
+      relay({ sessionId: 'agt_1', value: 'throws' }, 'node-1');
+      relay({ sessionId: 'agt_1', value: 'successor' }, 'node-1');
+    }).not.toThrow();
+
+    await vi.waitFor(() => expect(seen).toEqual(['throws', 'successor']));
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ reportingNodeId: 'node-1', sessionId: 'agt_1' }),
+    );
+  });
+
+  it('contains a throwing error observer, releases the slot, and emits no unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    const values: string[] = [];
+    const processFrame = vi.fn((frame: Frame) => {
+      values.push(frame.value);
+      return frame.value === 'reject'
+        ? Promise.reject(new Error('processor rejected'))
+        : Promise.resolve();
+    });
+    const onError = vi.fn(() => {
+      throw new Error('logger failed');
+    });
+    const relay = makeBoundedNodeLatestRelay({
+      getSessionId: (frame: Frame) => frame.sessionId,
+      process: processFrame,
+      onError,
+      onOverflow: vi.fn(),
+    });
+
+    try {
+      relay({ sessionId: 'agt_1', value: 'reject' }, 'node-1');
+      relay({ sessionId: 'agt_1', value: 'successor' }, 'node-1');
+      await vi.waitFor(() => expect(values).toEqual(['reject', 'successor']));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  it('contains a throwing overflow observer without starting overflow work', async () => {
+    const processFrame = vi.fn(() => new Promise<void>(() => undefined));
+    const onOverflow = vi.fn(() => {
+      throw new Error('overflow logger failed');
+    });
+    const relay = makeBoundedNodeLatestRelay({
+      getSessionId: (frame: Frame) => frame.sessionId,
+      process: processFrame,
+      onError: vi.fn(),
+      onOverflow,
+    });
+    for (let i = 0; i < BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS; i += 1) {
+      relay({ sessionId: `agt_${i}`, value: 'state' }, 'node-1');
+    }
+
+    expect(() => relay({ sessionId: 'agt_overflow', value: 'state' }, 'node-1')).not.toThrow();
+    expect(onOverflow).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() =>
+      expect(processFrame).toHaveBeenCalledTimes(BOUNDED_NODE_LATEST_RELAY_MAX_CONCURRENT),
+    );
+  });
 });

@@ -68,10 +68,27 @@ export function makeBoundedNodeLatestRelay<T>(
       const [sessionId, frame] = next;
       state.pending.delete(sessionId);
       state.inFlight.add(sessionId);
-      void options
-        .process(frame, reportingNodeId)
+      // Preserve the established immediate-start contract while normalizing a
+      // future/non-async processor's synchronous throw into the same rejected
+      // promise path as an asynchronous failure.
+      let processing: Promise<void>;
+      try {
+        processing = Promise.resolve(options.process(frame, reportingNodeId));
+      } catch (error) {
+        processing = Promise.reject(
+          error instanceof Error
+            ? error
+            : new Error('Bounded relay processor threw a non-Error value.', { cause: error }),
+        );
+      }
+      void processing
         .catch((error: unknown) => {
-          options.onError({ error, frame, reportingNodeId, sessionId });
+          try {
+            options.onError({ error, frame, reportingNodeId, sessionId });
+          } catch {
+            // Observability is deliberately best-effort. A throwing logger or
+            // callback must not reject this detached chain and strand its slot.
+          }
         })
         .finally(() => {
           state.inFlight.delete(sessionId);
@@ -102,12 +119,17 @@ export function makeBoundedNodeLatestRelay<T>(
     if (activeSessionCount(state) >= BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS) {
       if (!state.overflowReported) {
         state.overflowReported = true;
-        options.onOverflow({
-          frame,
-          reportingNodeId,
-          sessionBudget: BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
-          sessionId,
-        });
+        try {
+          options.onOverflow({
+            frame,
+            reportingNodeId,
+            sessionBudget: BOUNDED_NODE_LATEST_RELAY_MAX_SESSIONS,
+            sessionId,
+          });
+        } catch {
+          // Shedding is authoritative even if its one saturated-state observer
+          // fails; never turn log/metrics failure into a receive-path throw.
+        }
       }
       return;
     }
