@@ -318,8 +318,8 @@ func (r *ProfilesResource) Transfer(ctx context.Context, profileID string, body 
 // ALWAYS returns HTTP 200; branch on Status, never the HTTP code:
 //   - "ok"          → caches cleared; BytesReclaimed freed, SizeBytes is the new
 //     (smaller) sealed-store size persisted server-side.
-//   - "unavailable" → nothing to trim (fresh profile / storage trim not wired /
-//     no connected node). Reason is human-readable. Not an error.
+//   - "unavailable" → nothing to trim (fresh profile or no connected
+//     storage-capable node). Reason is human-readable. Not an error.
 //   - "timeout"     → the session node did not respond in time. Safe to retry.
 //   - "error"       → the node reported a failure; the stored blob is untouched.
 //

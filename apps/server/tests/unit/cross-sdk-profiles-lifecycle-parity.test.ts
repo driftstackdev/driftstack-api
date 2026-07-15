@@ -257,6 +257,10 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     // fields (size_bytes / bytes_reclaimed on ok; reason on unavailable/error).
     expect(ts).toMatch(/TrimProfileResponse/);
     expect(go).toMatch(/type TrimProfileResponse struct/);
+    expect(ts).toMatch(/fresh profile or no connected\s*\n?\s*\*\s*storage-capable node/);
+    expect(go).toMatch(/fresh profile or no connected\s*\n?\s*\/\/\s*storage-capable node/);
+    expect(ts).not.toMatch(/storage trim not wired/);
+    expect(go).not.toMatch(/storage trim not wired/);
     expect(go).toMatch(/SizeBytes\s+int64\s+`json:"size_bytes,omitempty"`/);
     expect(go).toMatch(/BytesReclaimed\s+int64\s+`json:"bytes_reclaimed,omitempty"`/);
   });

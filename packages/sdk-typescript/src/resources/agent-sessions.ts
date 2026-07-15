@@ -1,5 +1,4 @@
-// AgentSessionsResource — typed methods for /v1/agent-sessions/*
-// (AI-CHAT route surface landed in commit 611ddc8f).
+// AgentSessionsResource — typed methods for /v1/agent-sessions/*.
 //
 // Four methods mirror the route handlers:
 //   create({ token_budget?, driftstack_session_id? })
@@ -7,10 +6,9 @@
 //   message(id, user_message)
 //   close(id)
 //
-// The activation gate on the server (route registers as 503 stub
-// until the LLM key path is enabled for the deployment) means callers
-// should expect FeatureUnavailableError until AI chat ships. SDK
-// surface is stable so dashboard + e2e tests can compile against it now.
+// AI-backed operations depend on the deployment's configured BYOK or
+// bundled-LLM provider. Deployments without one return the stable
+// FeatureUnavailableError; the remaining session surface stays available.
 
 import type { PaginationQueryInput } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';

@@ -643,8 +643,8 @@ renderer (hung JS / compositor deadlock) — distinct from `errored`
 (a hard page error) and `loading` (a navigation in flight). `error`
 is `null` except on `errored` states. `page_state` is `null` when
 nothing has been reported yet, the last report is older than the
-freshness bound, the session is closed, or the fleet control plane
-is not wired.
+freshness bound, the session is closed, or live fleet state is
+unavailable in the deployment.
 
 ## Read the cookie jar
 
@@ -816,7 +816,7 @@ Filter via
 |    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                              |
 |    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                      |
 |    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                           |
-|    503 | feature-unavailable          | deployment activation gate is off (no LLM key path wired)                                                    |
+|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment                                               |
 
 The pair-mode state-machine transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on

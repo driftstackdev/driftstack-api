@@ -90,5 +90,10 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       /use the desktop Simulator or publish input through\s*\n?\s*the LiveKit DataChannel documented in the/,
     );
     expect(body).not.toMatch(/Agent\s+[123]|until[^.]{0,120}lands/iu);
+    expect(body).toMatch(/live fleet state is\s*\n?\s*unavailable in the deployment\./);
+    expect(body).toMatch(/no BYOK or bundled-LLM provider is available in the deployment/);
+    expect(body).not.toMatch(
+      /control plane\s*\n?\s*is not wired|activation gate is off|key path wired/,
+    );
   });
 });

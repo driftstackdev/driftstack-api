@@ -1,7 +1,7 @@
 """Cursor-pagination iterator helpers.
 
-V-126 — Python parity with TS SDK V-118/V-119. Every Driftstack list
-endpoint returns ``{ data: [...], next_cursor: str | None }``. Hand-
+Driftstack list endpoints return
+``{ data: [...], next_cursor: str | None }``. Hand-
 rolled while-loops over ``next_cursor`` are easy to bug on (cursor
 handoff, forgetting to break on null). These helpers wrap the pattern:
 sync version returns a regular generator; async version returns an
@@ -9,8 +9,8 @@ async generator.
 
 The helpers duck-type the page object — any pydantic ``BaseModel`` with
 ``.data`` / ``.next_cursor`` attributes works, as does a raw ``dict``
-with the same keys (untyped resources like ProfilesResource currently
-return raw dicts pending a future codegen pass).
+with the same keys. Resources that return raw dictionaries intentionally
+retain forward compatibility with additional response fields.
 
 Usage::
 

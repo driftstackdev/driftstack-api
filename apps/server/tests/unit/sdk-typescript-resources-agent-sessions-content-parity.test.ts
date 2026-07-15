@@ -23,13 +23,14 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('Module-level AgentSessionsResource framing pinned: AI-CHAT route surface + 503-stub-until-LLM-key-enabled activation gate. Drift to dropping the activation-gate caveat would let SDK consumers expect a stable 2xx contract that the server cannot deliver until the LLM key path is wired', () => {
+  it('Module-level AgentSessionsResource framing pins stable provider availability without internal rollout mechanics', () => {
     expect(body).toMatch(
-      /\/\/ AgentSessionsResource — typed methods for \/v1\/agent-sessions\/\*\s*\n?\s*\/\/ \(AI-CHAT route surface landed in commit 611ddc8f\)\./,
+      /\/\/ AgentSessionsResource — typed methods for \/v1\/agent-sessions\/\*\./,
     );
     expect(body).toMatch(
-      /The activation gate on the server \(route registers as 503 stub\s*\n?\s*\/\/ until the LLM key path is enabled for the deployment\) means callers\s*\n?\s*\/\/ should expect FeatureUnavailableError until AI chat ships\./,
+      /AI-backed operations depend on the deployment's configured BYOK or\s*\n?\s*\/\/ bundled-LLM provider\. Deployments without one return the stable\s*\n?\s*\/\/ FeatureUnavailableError; the remaining session surface stays available\./,
     );
+    expect(body).not.toMatch(/503 stub|until AI chat ships|activation gate/);
   });
 
   it('LiveKitInfo interface pinned: ws_url + room + token + participant_identity + expires_at (all required, all strings). Drift to optional or shape-change would break livekit-client.Room.connect contract', () => {

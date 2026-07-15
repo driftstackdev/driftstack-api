@@ -88,7 +88,7 @@ Cursor, CreatedAfter, CreatedBefore}`), `Iterate` (visit callback
   walks every cursor page — return `false` to stop early), `Get`,
   `UpdateNote`, `Cancel`, `Receipt`. New `ListCryptoOrdersResponse`
   struct exposes `Orders` + `NextCursor`. Returned envelopes are
-  `map[string]any` pending an OpenAPI codegen pass. Crypto payments
+  forward-compatible `map[string]any` envelopes. Crypto payments
   are non-refundable; cancellation only works while pending.
 - **`requestOptions.headers`** (internal) — resource methods can now
   attach extra request headers (used today by

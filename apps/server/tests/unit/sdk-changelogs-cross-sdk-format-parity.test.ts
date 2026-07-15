@@ -29,6 +29,12 @@ describe('W813 cross-SDK CHANGELOG.md format parity', () => {
     expect(existsSync(GO)).toBe(true);
   });
 
+  it('Go crypto release note describes the live forward-compatible envelope without deferred-codegen wording', () => {
+    const go = read(GO);
+    expect(go).toMatch(/forward-compatible `map\[string\]any` envelopes/);
+    expect(go).not.toMatch(/pending an OpenAPI codegen pass/);
+  });
+
   // ─── Header shape ─────────────────────────────────────────────
 
   it('CRITICAL all 3 SDK CHANGELOGs start with `# Changelog` + Keep-a-Changelog + SemVer attribution. Drift to a different header style would break docs auto-aggregation.', () => {

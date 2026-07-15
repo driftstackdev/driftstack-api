@@ -27,12 +27,10 @@ function read(p: string): string {
 describe('W586.B packages/sdk-python/src/driftstack/pagination.py content parity', () => {
   const body = read(LIB);
 
-  it('Module docstring + V-126 framing + V-118/V-119 TS SDK parity + envelope { data, next_cursor } + duck-typing pydantic-or-dict + usage example sync+async pinned', () => {
+  it('Module docstring + envelope { data, next_cursor } + duck-typing pydantic-or-dict + forward-compatible raw dictionaries + usage example sync+async pinned', () => {
     expect(body).toMatch(/^"""Cursor-pagination iterator helpers\.\n/);
-    expect(body).toMatch(/V-126 — Python parity with TS SDK V-118\/V-119\. Every Driftstack list/);
-    expect(body).toMatch(
-      /endpoint returns ``\{ data: \[\.\.\.\], next_cursor: str \| None \}``\. Hand-/,
-    );
+    expect(body).toMatch(/Driftstack list endpoints return/);
+    expect(body).toMatch(/``\{ data: \[\.\.\.\], next_cursor: str \| None \}``\. Hand-/);
     expect(body).toMatch(/rolled while-loops over ``next_cursor`` are easy to bug on \(cursor/);
     expect(body).toMatch(
       /handoff, forgetting to break on null\)\. These helpers wrap the pattern:/,
@@ -43,8 +41,11 @@ describe('W586.B packages/sdk-python/src/driftstack/pagination.py content parity
     expect(body).toMatch(
       /``\.data`` \/ ``\.next_cursor`` attributes works, as does a raw ``dict``/,
     );
-    expect(body).toMatch(/with the same keys \(untyped resources like ProfilesResource currently/);
-    expect(body).toMatch(/return raw dicts pending a future codegen pass\)\./);
+    expect(body).toMatch(
+      /with the same keys\. Resources that return raw dictionaries intentionally/,
+    );
+    expect(body).toMatch(/retain forward compatibility with additional response fields\./);
+    expect(body).not.toMatch(/pending a future codegen pass/);
     expect(body).toMatch(/for session in client\.sessions\.iterate\(limit=50\):/);
     expect(body).toMatch(/async for session in aclient\.sessions\.iterate\(limit=50\):/);
   });
