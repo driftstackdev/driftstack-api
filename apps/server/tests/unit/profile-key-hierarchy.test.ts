@@ -145,7 +145,13 @@ describe('mintWrappedProfileDek / unwrapProfileDek', () => {
     const m = decodeMasterKey(MASTER);
     const wrapped = wrapProfileDek(m, ACCT_A, PROFILE_A, mintDek());
     const payloadText = wrapped.slice(PROFILE_DEK_V2_PREFIX.length);
-    const noncanonical = `${payloadText.slice(0, -1)}=`;
+    // Keep the required 80-character envelope length while replacing one base64
+    // character with whitespace, which Node's permissive decoder ignores. The
+    // round-trip canonical check must reject this deterministically. Replacing
+    // the final character with `=` was random: for some preceding sextets it is
+    // the canonical encoding of a shorter 59-byte payload, so the fixed-length
+    // guard correctly fired before this assertion instead.
+    const noncanonical = `${payloadText.slice(0, -1)}\n`;
     expect(() =>
       unwrapProfileDek(m, ACCT_A, PROFILE_A, `${PROFILE_DEK_V2_PREFIX}${noncanonical}`),
     ).toThrow(/canonical base64/);
