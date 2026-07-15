@@ -114,10 +114,10 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(
       /insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,\s*opts\?: \{ profileId\?: string \},?\s*\): Promise<SessionRecord \| null>;/,
     );
-    // DoS hardening — bind the real driver id onto a reservation row (the
-    // create flow reserves the cap slot BEFORE the slow worker dispatch).
+    // DoS hardening — activate exactly the still-live reservation after the
+    // create flow reserves the cap slot BEFORE slow worker dispatch.
     expect(body).toMatch(
-      /setSessionDriverSessionId\(id: string, driverSessionId: string\): Promise<void>;/,
+      /activateSessionReservation\(input: \{\s*id: string;\s*reservationDriverSessionId: string;\s*driverSessionId: string;\s*\}\): Promise<SessionRecord \| null>;/,
     );
     expect(body).toMatch(
       /\/\*\* Find a session by id, scoped to the supplied account\. \*\/\s*\n?\s*findSession\(id: string, accountId: string\): Promise<SessionRecord \| null>;/,
@@ -190,10 +190,10 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/const limit = concurrentSessionLimitFor\(tier\);/);
   });
 
-  it('create (DoS hardening): the cap slot is RESERVED atomically via insertSessionIfUnderLimit BEFORE driver.createSession — an over-cap create (null result) throws ConcurrencyLimitError with ZERO worker spun; a dispatch failure releases the reservation row; the real driver id is bound after dispatch', () => {
+  it('create (DoS hardening): reserve precedes dispatch and one exact CAS binds the real id + ready; a destroy winner is cleaned up and never published ready', () => {
     // The whole fix: reserve-first so an over-cap / failed create never spins
     // a worker (no orphan to best-effort-teardown). Pin the ordering + the
-    // reservation placeholder + the dispatch-failure release + the bind.
+    // reservation placeholder + dispatch-failure release + atomic activation.
     expect(body).toMatch(/const reservationDriverId = `reserving:\$\{randomUUID\(\)\}`;/);
     expect(body).toMatch(/const reserved = await this\.deps\.repo\.insertSessionIfUnderLimit\(/);
     // The reservation insert precedes the worker dispatch in source order.
@@ -208,9 +208,14 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(
       /\.updateSessionStatus\(reserved\.id, 'errored', \{ destroyedAt: new Date\(\) \}\)/,
     );
-    // Real driver id bound onto the reserved row after dispatch.
+    // Real driver id + ready status are committed by one exact-reservation CAS.
     expect(body).toMatch(
-      /await this\.deps\.repo\.setSessionDriverSessionId\(reserved\.id, driverResult\.driverSessionId\);/,
+      /const activated = await this\.deps\.repo\.activateSessionReservation\(\{\s*id: reserved\.id,\s*reservationDriverSessionId: reservationDriverId,\s*driverSessionId: driverResult\.driverSessionId,\s*\}\);/,
+    );
+    // A destroy/expiry/suspension winner makes the CAS return null: bounded
+    // cleanup targets the newly-created real worker, then the typed 410 wins.
+    expect(body).toMatch(
+      /if \(activated === null\) \{[\s\S]*?destroyDriverSessionWithTimeout\(\(\) =>[\s\S]*?this\.deps\.driver\.destroy\(driverResult\.driverSessionId\)[\s\S]*?throw new SessionDestroyedError\(\);/,
     );
   });
 
@@ -252,8 +257,9 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/await Promise\.race\(\[destroy\(\), timeout\]\);/);
     expect(body).toContain("new Error('Session driver destroy timed out.')");
     const boundedCalls = body.match(/destroyDriverSessionWithTimeout\(/g) ?? [];
-    // One declaration + customer destroy + duration sweep + suspension reclaim.
-    expect(boundedCalls).toHaveLength(4);
+    // One declaration + two post-dispatch create cleanups + customer destroy +
+    // duration sweep + suspension reclaim.
+    expect(boundedCalls).toHaveLength(6);
   });
 
   it('destroy: emits session.completed webhook + V-304a session.success.first email + V-216 session.destroyed audit all try/catch swallow', () => {

@@ -7,7 +7,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { SESSION_DESTROY_DRIVER_TIMEOUT_MS, SessionsService } from '../../src/services/sessions.js';
-import { ConcurrencyLimitError } from '../../src/lib/errors.js';
+import { ConcurrencyLimitError, SessionDestroyedError } from '../../src/lib/errors.js';
 import type {
   SessionRepo,
   SessionRecord,
@@ -80,10 +80,10 @@ class StubRepo implements SessionRepo {
    *  (simulates the atomic cap guard rejecting a concurrent-race loser) —
    *  exercises the create() over-cap orphan rollback + ConcurrencyLimitError. */
   overCapOnInsert = false;
-  /** Opt-in (default null): when set, setSessionDriverSessionId rejects with it
+  /** Opt-in (default null): when set, activateSessionReservation rejects with it
    *  — simulates a post-dispatch DB-write failure AFTER the worker is live.
    *  Exercises the create() post-dispatch slot-release path. */
-  throwOnSetDriverSessionId: Error | null = null;
+  throwOnActivateSessionReservation: Error | null = null;
   /** Opt-in (default null): when set, recordEvent rejects for the matching
    *  event type — exercises the create() best-effort created-event guard (a
    *  post-success event write must not fail the request + leak the live session). */
@@ -123,13 +123,31 @@ class StubRepo implements SessionRepo {
     if (active >= limit) return Promise.resolve(null);
     return this.insertSession(input);
   }
-  setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void> {
-    if (this.throwOnSetDriverSessionId !== null) {
-      return Promise.reject(this.throwOnSetDriverSessionId);
+  activateSessionReservation(input: {
+    id: string;
+    reservationDriverSessionId: string;
+    driverSessionId: string;
+  }): Promise<SessionRecord | null> {
+    if (this.throwOnActivateSessionReservation !== null) {
+      return Promise.reject(this.throwOnActivateSessionReservation);
     }
-    const r = this.sessions.get(id);
-    if (r) this.sessions.set(id, { ...r, driverSessionId, updatedAt: new Date() });
-    return Promise.resolve();
+    const r = this.sessions.get(input.id);
+    if (
+      !r ||
+      r.driverSessionId !== input.reservationDriverSessionId ||
+      r.status !== 'creating' ||
+      r.destroyedAt !== null
+    ) {
+      return Promise.resolve(null);
+    }
+    const updated: SessionRecord = {
+      ...r,
+      driverSessionId: input.driverSessionId,
+      status: 'ready',
+      updatedAt: new Date(),
+    };
+    this.sessions.set(input.id, updated);
+    return Promise.resolve(updated);
   }
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const r = this.sessions.get(id);
@@ -283,6 +301,9 @@ class ThrowingDriver implements Driver {
   private throwOnDestroy: Error | null = null;
   private hangOnDestroy = false;
 
+  /** Runs after a real driver id is allocated but before createSession resolves. */
+  onCreateSession: ((driverSessionId: string) => void) | null = null;
+
   /** Opt-in: runs at the START of getState() — a seam to simulate a CONCURRENT
    *  destroy landing during the box round-trip (before getState's stale write-
    *  back), exercising the resurrection guard. */
@@ -320,7 +341,9 @@ class ThrowingDriver implements Driver {
       return Promise.reject(err);
     }
     this.nextId += 1;
-    return Promise.resolve({ driverSessionId: `mock-${this.nextId.toString()}` });
+    const driverSessionId = `mock-${this.nextId.toString()}`;
+    this.onCreateSession?.(driverSessionId);
+    return Promise.resolve({ driverSessionId });
   }
   navigate(): Promise<{ url: string; finalUrl: string; status: number; durationMs: number }> {
     this.throwIfArmed();
@@ -673,14 +696,14 @@ describe('SessionsService — V-090 driver-failure capture', () => {
 
   it('create: a POST-dispatch DB-write failure releases the slot + tears down the orphaned worker + loud-logs', async () => {
     // Billing-integrity hardening — the worker dispatch SUCCEEDED, then the
-    // setSessionDriverSessionId write throws. Without a guard the row would be
+    // activateSessionReservation write throws. Without a guard the row would be
     // stuck at status=creating, destroyedAt=NULL forever, leaking a concurrency
     // slot (paid tiers have no minute-cap so the duration sweeper never reaps
     // it; the worker is live so the disconnect reaper won't either).
     const { service, repo, driver, loggedErrors } = buildService();
     const ctx = buildCtx();
     const writeErr = new Error('post-dispatch DB write failed');
-    repo.throwOnSetDriverSessionId = writeErr;
+    repo.throwOnActivateSessionReservation = writeErr;
 
     let caught: unknown;
     try {
@@ -703,12 +726,61 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect(loggedErrors[0]?.obj.session_id).toBe('sess-0000');
   });
 
+  it('create: a hung cleanup after activation-store failure is bounded and preserves the original store error', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver } = buildService();
+      const ctx = buildCtx();
+      const writeErr = new Error('activation store failed');
+      repo.throwOnActivateSessionReservation = writeErr;
+      driver.primeDestroyHang();
+
+      const rejection = expect(
+        service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' }),
+      ).rejects.toBe(writeErr);
+      await vi.advanceTimersByTimeAsync(SESSION_DESTROY_DRIVER_TIMEOUT_MS);
+      await rejection;
+
+      expect(repo.read('sess-0000')).toMatchObject({ status: 'errored' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('create: a SUCCESSFUL reservation + dispatch spins exactly one worker, no teardown', async () => {
-    const { service, driver } = buildService();
+    const { service, driver, repo } = buildService();
     const ctx = buildCtx();
-    await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const created = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
     // No teardown on the happy path — the session is live + tracked.
     expect(driver.destroyedIds).toEqual([]);
+    expect(created.status).toBe('ready');
+    expect(created.driverSessionId).toBe('mock-1');
+    expect(repo.read(created.id)).toMatchObject({ status: 'ready', driverSessionId: 'mock-1' });
+  });
+
+  it('create: a destroy that wins during slow dispatch keeps the terminal reservation immutable, reaps the real worker, and never publishes ready', async () => {
+    const { service, driver, repo } = buildService();
+    const ctx = buildCtx();
+    const destroyedAt = new Date('2026-07-14T23:37:00.000Z');
+
+    driver.onCreateSession = () => {
+      // The reservation is synchronously visible before driver dispatch. Stand
+      // in for admin/suspension/duration/customer destroy winning while the
+      // driver is starting, before create can activate the row.
+      repo.forceTerminal('sess-0000', 'destroyed', destroyedAt);
+    };
+
+    await expect(
+      service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' }),
+    ).rejects.toBeInstanceOf(SessionDestroyedError);
+
+    const terminal = repo.read('sess-0000');
+    expect(terminal).toMatchObject({ status: 'destroyed', destroyedAt });
+    expect(terminal?.driverSessionId).toMatch(/^reserving:/);
+    expect(driver.destroyedIds).toEqual(['mock-1']);
+    expect(repo.events.filter((event) => event.type === 'created')).toHaveLength(0);
   });
 
   it('destroy: a driver.destroy() throw STILL releases the slot (row marked destroyed) + re-throws (#4)', async () => {

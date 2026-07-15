@@ -218,5 +218,115 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(driverCalls).toBe(0);
       expect((await repo.findSession(session.id, accountId))?.status).toBe('creating');
     });
+
+    it('keeps a destroy-winning reservation terminal and makes the blocked activation CAS lose', async () => {
+      if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey();
+      const reservationDriverSessionId = `reserving:${randomUUID()}`;
+      const realDriverSessionId = `drv_real_${randomUUID()}`;
+      const session = await repo.insertSession({
+        ...sessionInput(accountId, apiKeyId),
+        driverSessionId: reservationDriverSessionId,
+      });
+
+      let signalDestroyEntered!: () => void;
+      const destroyEntered = new Promise<void>((resolve) => {
+        signalDestroyEntered = resolve;
+      });
+      let releaseDestroy!: () => void;
+      const destroyRelease = new Promise<void>((resolve) => {
+        releaseDestroy = resolve;
+      });
+      const destroyPromise = repo.destroySessionSerialized(
+        {
+          id: session.id,
+          accountId,
+          destroyedAt: new Date('2026-07-14T23:37:00.000Z'),
+          event: { type: 'destroyed', payload: { source: 'race-proof' }, durationMs: null },
+        },
+        async (locked) => {
+          // Destroy acquired row authority before create could activate, so it
+          // sees only the exact placeholder. The service later cleans up the
+          // real worker by its newly-returned id.
+          expect(locked.driverSessionId).toBe(reservationDriverSessionId);
+          signalDestroyEntered();
+          await destroyRelease;
+        },
+      );
+      await destroyEntered;
+
+      let activationSettled = false;
+      const activationPromise = repo
+        .activateSessionReservation({
+          id: session.id,
+          reservationDriverSessionId,
+          driverSessionId: realDriverSessionId,
+        })
+        .finally(() => {
+          activationSettled = true;
+        });
+      // The activation UPDATE must wait behind destroy's row lock, not observe
+      // or overwrite an uncommitted transition.
+      await sleep(20);
+      expect(activationSettled).toBe(false);
+      releaseDestroy();
+
+      const [destroyed, activated] = await Promise.all([destroyPromise, activationPromise]);
+      expect(destroyed.kind).toBe('destroyed');
+      expect(activated).toBeNull();
+      const [stored] = await client`
+        SELECT status, driver_session_id, destroyed_at
+          FROM sessions
+         WHERE id = ${session.id}
+      `;
+      expect(stored?.status).toBe('destroyed');
+      expect(stored?.driver_session_id).toBe(reservationDriverSessionId);
+      expect(stored?.destroyed_at).not.toBeNull();
+      const [eventCount] = await client`
+        SELECT count(*)::int AS count
+          FROM session_events
+         WHERE session_id = ${session.id}
+           AND type = 'destroyed'
+      `;
+      expect(eventCount?.count).toBe(1);
+    });
+
+    it('commits real driver id + ready atomically when activation wins, so later destroy targets the real worker', async () => {
+      if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey();
+      const reservationDriverSessionId = `reserving:${randomUUID()}`;
+      const realDriverSessionId = `drv_real_${randomUUID()}`;
+      const session = await repo.insertSession({
+        ...sessionInput(accountId, apiKeyId),
+        driverSessionId: reservationDriverSessionId,
+      });
+
+      const activated = await repo.activateSessionReservation({
+        id: session.id,
+        reservationDriverSessionId,
+        driverSessionId: realDriverSessionId,
+      });
+      expect(activated).toMatchObject({ status: 'ready', driverSessionId: realDriverSessionId });
+
+      let destroyedDriverSessionId: string | null = null;
+      const destroyed = await repo.destroySessionSerialized(
+        {
+          id: session.id,
+          accountId,
+          destroyedAt: new Date('2026-07-14T23:38:00.000Z'),
+          event: { type: 'destroyed', payload: null, durationMs: null },
+        },
+        (locked) => {
+          destroyedDriverSessionId = locked.driverSessionId;
+          return Promise.resolve();
+        },
+      );
+      expect(destroyed.kind).toBe('destroyed');
+      expect(destroyedDriverSessionId).toBe(realDriverSessionId);
+    });
   },
 );

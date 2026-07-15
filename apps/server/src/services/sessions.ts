@@ -224,11 +224,16 @@ export interface SessionRepo {
     opts?: { profileId?: string },
   ): Promise<SessionRecord | null>;
   /**
-   * DoS hardening — bind the real driver session id onto a session row that
-   * was inserted with a placeholder id to RESERVE its concurrency slot before
-   * the (slow) worker dispatch. Called once the worker is live.
+   * Atomically activate an exact create reservation after the slow driver
+   * dispatch. Returns null when the reservation was removed, terminalized, or
+   * replaced while the driver was starting. The real driver id and `ready`
+   * status commit together so create can never publish a synthetic ready row.
    */
-  setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void>;
+  activateSessionReservation(input: {
+    id: string;
+    reservationDriverSessionId: string;
+    driverSessionId: string;
+  }): Promise<SessionRecord | null>;
   /** Find a session by id, scoped to the supplied account. */
   findSession(id: string, accountId: string): Promise<SessionRecord | null>;
   /** Find a session by id WITHOUT account scoping (admin force-actions only). */
@@ -490,10 +495,10 @@ export class SessionsService {
     }
 
     // Bind the real driver session id onto the reserved row now that the
-    // worker is live, then advance to 'ready'.
+    // worker is live AND advance it to 'ready' in one exact-reservation CAS.
     //
-    // Billing-integrity hardening — these two writes run AFTER a successful
-    // dispatch with NO guard previously. A throw here left the row stuck at
+    // Billing-integrity hardening — this write runs AFTER a successful
+    // dispatch. A throw here previously left the row stuck at
     // status='creating', destroyedAt=NULL forever: it keeps counting against
     // countActiveSessions, and on paid tiers (null minute-cap) the duration
     // sweeper never reaps it and the worker is live so the disconnect reaper
@@ -503,10 +508,42 @@ export class SessionsService {
     // LOUD-log, and rethrow the original error.
     let record: SessionRecord;
     try {
-      await this.deps.repo.setSessionDriverSessionId(reserved.id, driverResult.driverSessionId);
-      record = { ...reserved, driverSessionId: driverResult.driverSessionId };
-      await this.deps.repo.updateSessionStatus(record.id, 'ready');
+      const activated = await this.deps.repo.activateSessionReservation({
+        id: reserved.id,
+        reservationDriverSessionId: reservationDriverId,
+        driverSessionId: driverResult.driverSessionId,
+      });
+      if (activated === null) {
+        // A concurrent destroy/expiry/suspension won while the external driver
+        // was starting. The terminal row is authoritative and MUST remain
+        // untouched; tear down the now-unclaimed real worker and surface the
+        // existing typed terminal response instead of fabricating a ready row.
+        try {
+          await destroyDriverSessionWithTimeout(() =>
+            this.deps.driver.destroy(driverResult.driverSessionId),
+          );
+        } catch (cleanupError) {
+          try {
+            this.deps.logger?.error?.(
+              {
+                component: 'sessions-service',
+                event: 'post_dispatch_activation_lost_cleanup_failed',
+                account_id: accountId,
+                session_id: reserved.id,
+                driver_session_id: driverResult.driverSessionId,
+                err: cleanupError,
+              },
+              'session reservation was terminalized during dispatch and real-worker cleanup failed',
+            );
+          } catch {
+            // Swallow; logging is best-effort and the terminal response remains authoritative.
+          }
+        }
+        throw new SessionDestroyedError();
+      }
+      record = activated;
     } catch (err) {
+      if (err instanceof SessionDestroyedError) throw err;
       // Release the reserved slot so it stops counting against the cap.
       // Best-effort; a release failure must not mask the original error.
       await this.deps.repo
@@ -514,7 +551,9 @@ export class SessionsService {
         .catch(() => {});
       // Tear down the orphaned live worker (the row is now a tombstone, so
       // nothing else will ever destroy it). Best-effort.
-      await this.deps.driver.destroy(driverResult.driverSessionId).catch(() => {});
+      await destroyDriverSessionWithTimeout(() =>
+        this.deps.driver.destroy(driverResult.driverSessionId),
+      ).catch(() => {});
       try {
         this.deps.logger?.error?.(
           {

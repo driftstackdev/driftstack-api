@@ -27722,3 +27722,39 @@ rerun. Twelve other files remained red from out-of-lane stale documentation,
 archetype/profile fixtures, generated OpenAPI, public disabled-copy and crypto
 quote guards. They are preserved as a separate cleanup queue rather than being
 mixed into this session-lifecycle change.
+
+## V-661 — Session reservation activation is atomic with teardown
+
+**Date:** 2026-07-14
+
+Session creation reserved a visible `creating` row, waited for slow external
+driver startup, then performed two unchecked writes: it replaced the
+placeholder driver ID and separately attempted to advance the status to
+`ready`. A concurrent destroy, duration expiry, or suspension could terminalize
+the reservation during startup. Creation would then overwrite the terminal
+row's placeholder with the newly returned real driver ID, silently lose its
+terminal-sticky ready write, and return a synthetic ready record while the real
+worker remained live and unowned.
+
+The repository now exposes one exact-reservation activation operation. A single
+conditional update requires the session ID, original placeholder driver ID,
+`status='creating'`, and a null destroy timestamp, then commits the real driver
+ID and ready status together. It returns the committed row on success and null
+when teardown or another transition won. A destroy winner remains authoritative:
+creation does not mutate the terminal row, bounded-destroys the newly started
+real worker, emits no created event or audit, and raises the existing typed
+`SessionDestroyedError`. An activation winner commits the real ID before a
+later serialized destroy locks the row, so that destroy targets the real worker.
+Post-dispatch store-error cleanup is also bounded and still preserves the
+original database error.
+
+The complete connected session/admin lifecycle matrix passes 14 files and
+205/205 tests. All 5/5 PostgreSQL cases execute, including a destroy transaction
+holding row authority while activation blocks, then returns null without
+changing the terminal placeholder, plus the inverse ordering where activation
+wins and the destroy callback observes the real driver ID. Deterministic unit
+coverage proves terminal-row immutability, real-worker cleanup, typed failure,
+zero created events, happy-path persisted ready state, and a hung cleanup that
+times out without replacing the original store error. Full workspace
+typechecking, targeted ESLint/Prettier and diff/whitespace checks, and the
+configured full workspace build are green.

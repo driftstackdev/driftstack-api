@@ -148,15 +148,29 @@ export class DrizzleSessionRepo implements SessionRepo {
     });
   }
 
-  // DoS hardening — bind the real driver session id onto a row inserted with
-  // a placeholder id to reserve its concurrency slot before the slow worker
-  // dispatch. Touches only the driver_session_id (+ updatedAt); status is
-  // advanced separately by the create flow.
-  async setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void> {
-    await this.database.db
+  // Atomically claim the exact still-live reservation after slow external
+  // dispatch. A destroy may terminalize the visible `creating` row while the
+  // driver starts; matching id alone would then overwrite its placeholder and
+  // let the service return a stale synthetic `ready`. The complete CAS makes
+  // driver id + ready one transition and reports a lost race as null.
+  async activateSessionReservation(input: {
+    id: string;
+    reservationDriverSessionId: string;
+    driverSessionId: string;
+  }): Promise<SessionRecord | null> {
+    const [row] = await this.database.db
       .update(sessions)
-      .set({ driverSessionId, updatedAt: new Date() })
-      .where(eq(sessions.id, id));
+      .set({ driverSessionId: input.driverSessionId, status: 'ready', updatedAt: new Date() })
+      .where(
+        and(
+          eq(sessions.id, input.id),
+          eq(sessions.driverSessionId, input.reservationDriverSessionId),
+          eq(sessions.status, 'creating'),
+          isNull(sessions.destroyedAt),
+        ),
+      )
+      .returning();
+    return row ? toSessionRecord(row) : null;
   }
 
   async findSession(id: string, accountId: string): Promise<SessionRecord | null> {
