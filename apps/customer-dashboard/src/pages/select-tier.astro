@@ -1,14 +1,18 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import {
+  MAX_SESSION_MINUTES_PER_TIER,
   PROFILES_PER_TIER,
+  PROXIES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
+  TIER_FEATURES,
+  TIER_STORAGE_BYTES_CAP,
   type AccountTier,
 } from '@driftstack/api-types';
 
-// V-184a — onboarding step 4. Tier picker. Tier 1 minimal placeholder
-// surface — full Tier 3 visual (feature comparison table, tier
-// highlights, AI-agent gating row, etc.) lands in V-184b draft.
+// V-184a — onboarding step 4 and the post-onboarding plan picker.
+// The comparison rows below are derived from the same api-types tables
+// enforced by the server, so checkout decisions never depend on copied caps.
 //
 // "Change plan" reuse: this same page is reachable from /billing
 // "Change plan" link (post-onboarding). Every account starts on the
@@ -20,8 +24,6 @@ import {
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 
-// Tier 1 placeholder list — V-184b will replace with rich comparison
-// surface. Pulled from api-types so values stay aligned with backend.
 const TIERS: {
   id: AccountTier;
   label: string;
@@ -45,6 +47,36 @@ const TIERS: {
 const TIER_LABELS: Record<string, string> = Object.fromEntries(
   TIERS.map((t) => [t.id, t.label]),
 );
+
+function storageLabel(tier: AccountTier): string {
+  return `${String(TIER_STORAGE_BYTES_CAP[tier] / 2 ** 30)} GiB`;
+}
+
+function proxyLabel(tier: AccountTier): string {
+  const cap = PROXIES_PER_TIER[tier];
+  return cap === 'custom' ? 'Custom' : String(cap);
+}
+
+function durationLabel(tier: AccountTier): string {
+  const minutes = MAX_SESSION_MINUTES_PER_TIER[tier];
+  return minutes === null ? 'Unlimited' : `${String(minutes)} min`;
+}
+
+function accessLabel(tier: AccountTier): string {
+  const features = TIER_FEATURES[tier];
+  if (features.apiAccess && features.vpnEgress) return 'API + VPN';
+  if (features.apiAccess) return 'API';
+  if (features.vpnEgress) return 'VPN';
+  return 'Desktop only';
+}
+
+function aiLabel(tier: AccountTier): string {
+  const features = TIER_FEATURES[tier];
+  if (!features.aiAgent || features.llmBilling === null) return 'Not included';
+  if (features.llmBilling === 'byok_only') return 'BYOK';
+  if (features.llmBilling === 'byok_or_bundled') return 'BYOK or $0.10/turn';
+  return 'BYOK or contracted bundled';
+}
 ---
 
 <DashboardLayout title="Select tier" withSidebar={false}>
@@ -59,9 +91,10 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
         Pick a plan.
       </h1>
     <p class="mt-3 text-sm text-tk-ink-2">
-      All tiers run the same engine. Only concurrent caps and profile
-      counts change between them — there's no fingerprint or feature
-      gating. Cancel or downgrade anytime — your plan stays active
+      Every tier runs the same verified browser engine and can use every
+      currently available archetype. Operational limits and optional capabilities
+      differ — compare concurrency, profiles, storage, saved proxies, access,
+      and AI billing below. Cancel or downgrade anytime — your plan stays active
       through the end of the period you've already paid for. We don't
       provide automatic refunds for unused time. If you're an EU/UK
       consumer and want to cancel within 14 days of first subscribing,
@@ -95,9 +128,9 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
       </h2>
       <p class="mt-2 text-sm text-tk-ink-2" data-field="plan-note-body">
         Free includes 1 profile, 1 concurrent session, and sessions up
-        to 20 minutes each — drive them from the API or GUI, no card
-        required, and it never expires. Upgrade below for more concurrency,
-        more profiles, longer sessions, and the AI agent.
+        to 20 minutes each in the desktop GUI — no card required, and it
+        never expires. API access, VPN egress, and the AI agent require a
+        paid tier.
       </p>
     </div>
 
@@ -136,6 +169,26 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
                 <dd class="font-mono">
                   {String(PROFILES_PER_TIER[t.id])}
                 </dd>
+              </div>
+              <div class="flex justify-between gap-4">
+                <dt>Session duration</dt>
+                <dd class="font-mono text-right">{durationLabel(t.id)}</dd>
+              </div>
+              <div class="flex justify-between gap-4">
+                <dt>Profile storage</dt>
+                <dd class="font-mono text-right">{storageLabel(t.id)}</dd>
+              </div>
+              <div class="flex justify-between gap-4">
+                <dt>Saved proxies</dt>
+                <dd class="font-mono text-right">{proxyLabel(t.id)}</dd>
+              </div>
+              <div class="flex justify-between gap-4">
+                <dt>Access</dt>
+                <dd class="font-mono text-right">{accessLabel(t.id)}</dd>
+              </div>
+              <div class="flex justify-between gap-4">
+                <dt>AI agent</dt>
+                <dd class="font-mono text-right">{aiLabel(t.id)}</dd>
               </div>
             </dl>
             <button

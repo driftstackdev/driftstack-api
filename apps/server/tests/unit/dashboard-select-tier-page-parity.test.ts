@@ -24,11 +24,11 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('CRITICAL V-184a onboarding-step-4 anchor + V-184b deferred-rich-comparison framing pinned. The page is Tier 1 minimal placeholder; full feature-comparison table lands in V-184b draft.', () => {
+  it('CRITICAL V-184a onboarding/change-plan anchor + canonical enforced comparison framing pinned without deferred placeholder copy.', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/V-184a — onboarding step 4\. Tier picker\. Tier 1 minimal placeholder/);
-    expect(p).toMatch(/full Tier 3 visual \(feature comparison table, tier/);
-    expect(p).toMatch(/highlights, AI-agent gating row, etc\.\) lands in V-184b draft/);
+    expect(p).toMatch(/V-184a — onboarding step 4 and the post-onboarding plan picker/);
+    expect(p).toMatch(/comparison rows below are derived from the same api-types tables/);
+    expect(p).not.toMatch(/minimal placeholder|lands in V-184b|will replace with rich comparison/);
   });
 
   it('CRITICAL "Change plan" reuse framing pinned. The page is reachable BOTH from V-184a onboarding AND from /billing "Change plan" — every account starts on the perpetual free tier; cards upgrade to a paid tier.', () => {
@@ -53,10 +53,10 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     expect(p).toMatch(/btn\.textContent = 'Redirecting…'/);
   });
 
-  it('CRITICAL api-types imports pinned — PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS + AccountTier. The 3 imports are what keep dashboard tier-display synced with backend canonical records (W730 + W728). Drift to inlining would let display diverge.', () => {
+  it('CRITICAL canonical cap/feature imports keep every displayed tier difference synced with server enforcement.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /import \{\s*\n\s+PROFILES_PER_TIER,\s*\n\s+TIER_CONCURRENT_SESSION_LIMITS,\s*\n\s+type AccountTier,\s*\n\}\s*from\s+'@driftstack\/api-types'/,
+      /import \{[\s\S]*?MAX_SESSION_MINUTES_PER_TIER,[\s\S]*?PROFILES_PER_TIER,[\s\S]*?PROXIES_PER_TIER,[\s\S]*?TIER_CONCURRENT_SESSION_LIMITS,[\s\S]*?TIER_FEATURES,[\s\S]*?TIER_STORAGE_BYTES_CAP,[\s\S]*?type AccountTier,[\s\S]*?\}\s*from\s+'@driftstack\/api-types'/,
     );
   });
 
@@ -93,11 +93,12 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     );
   });
 
-  it('CRITICAL "All tiers run the same engine" no-fingerprint/feature-gating framing pinned + legal-grounded refund-honesty rewrite. The "no fingerprint or feature gating" customer-facing claim is unchanged; the false automated "14-day pro-rated refund" promise (refunds are admin-manual only — no automated mechanism exists) is replaced with: plan stays active through the paid period, no automatic refunds for unused time, EU/UK 14-day withdrawal handled case-by-case via support@driftstack.dev, crypto non-refundable.', () => {
+  it('CRITICAL shared engine/archetype boundary and real enforced differences are explicit while legal refund copy remains intact.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /All tiers run the same engine\. Only concurrent caps and profile\s*\n\s+counts change between them — there's no fingerprint or feature\s*\n\s+gating/,
+      /Every tier runs the same verified browser engine and can use every\s+currently available archetype\. Operational limits and optional capabilities\s+differ — compare concurrency, profiles, storage, saved proxies, access,\s+and AI billing below/,
     );
+    expect(p).not.toMatch(/Only concurrent caps and profile\s+counts change/);
     expect(p).toMatch(
       /Cancel or downgrade anytime — your plan stays active\s+through the end of the period you've already paid for\. We don't\s+provide automatic refunds for unused time\./,
     );
