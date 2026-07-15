@@ -13,8 +13,8 @@
 //   • 5 touched endpoints framing (Customers / search / 2x Checkout /
 //     Billing Portal).
 //   • createSubscriptionCheckoutSession: mode='subscription' +
-//     ADR-002 automatic_tax[enabled]='true' + client_reference_id
-//     correlation.
+//     ADR-002 automatic_tax[enabled]='true' + Checkout address collection
+//     + client_reference_id correlation.
 //   • createOneTimeCheckoutSession: mode='payment' (ADR-003 trial-
 //     pack) — no automatic_tax (one-time price).
 //   • createBillingPortalSession.
@@ -118,12 +118,13 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     );
   });
 
-  it('createSubscriptionCheckoutSession: mode=subscription + ADR-002 automatic_tax[enabled]=true + client_reference_id', () => {
+  it('createSubscriptionCheckoutSession: mode=subscription + ADR-002 automatic tax with Checkout-collected customer address + client_reference_id', () => {
     expect(body).toMatch(/mode: 'subscription',/);
     expect(body).toMatch(
-      /BTW reverse-charge handling \(per ADR-002\): Stripe Tax must be\s*\n?\s*\/\/\s*enabled for the account; the line below tells Stripe Checkout\s*\n?\s*\/\/\s*to compute tax automatically\. Safe to leave on for live \+ test\s*\n?\s*\/\/\s*accounts; if Stripe Tax isn't enabled the Checkout init still\s*\n?\s*\/\/\s*succeeds — Stripe just doesn't compute tax/,
+      /BTW reverse-charge handling \(per ADR-002\): Stripe Tax must be\s*\n?\s*\/\/\s*enabled for the account\. Automatic tax also requires a customer\s*\n?\s*\/\/\s*tax location; newly-created Driftstack customers have no stored\s*\n?\s*\/\/\s*address, so Checkout must collect and save the billing address\.\s*\n?\s*\/\/\s*Omitting customer_update\[address\] makes Stripe reject the session\s*\n?\s*\/\/\s*before the hosted page can open/,
     );
     expect(body).toMatch(/'automatic_tax\[enabled\]': 'true',/);
+    expect(body).toMatch(/'customer_update\[address\]': 'auto',/);
     expect(body).toMatch(/client_reference_id: args\.clientReferenceId,/);
     expect(body).toMatch(/'line_items\[0\]\[price\]': args\.priceId,/);
     expect(body).toMatch(/'line_items\[0\]\[quantity\]': '1',/);

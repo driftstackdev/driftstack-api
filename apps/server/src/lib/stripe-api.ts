@@ -144,11 +144,13 @@ export class StripeApiClient {
       cancel_url: args.cancelUrl,
       client_reference_id: args.clientReferenceId,
       // BTW reverse-charge handling (per ADR-002): Stripe Tax must be
-      // enabled for the account; the line below tells Stripe Checkout
-      // to compute tax automatically. Safe to leave on for live + test
-      // accounts; if Stripe Tax isn't enabled the Checkout init still
-      // succeeds — Stripe just doesn't compute tax.
+      // enabled for the account. Automatic tax also requires a customer
+      // tax location; newly-created Driftstack customers have no stored
+      // address, so Checkout must collect and save the billing address.
+      // Omitting customer_update[address] makes Stripe reject the session
+      // before the hosted page can open.
       'automatic_tax[enabled]': 'true',
+      'customer_update[address]': 'auto',
     };
     if (args.metadata !== undefined) {
       for (const [k, v] of Object.entries(args.metadata)) {

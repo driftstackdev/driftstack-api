@@ -137,6 +137,7 @@ describe('StripeApiClient.createSubscriptionCheckoutSession', () => {
     expect(body).toContain('line_items%5B0%5D%5Bprice%5D=price_y');
     expect(body).toContain('client_reference_id=acc_uuid');
     expect(body).toContain('automatic_tax%5Benabled%5D=true');
+    expect(body).toContain('customer_update%5Baddress%5D=auto');
     expect(body).toContain('subscription_data%5Bmetadata%5D%5Bplan%5D=api_builder');
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers['Idempotency-Key']).toBe('checkout-attempt-123');

@@ -162,9 +162,9 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
     expect(p).toMatch(/body\[`metadata\[\$\{k\}\]`\] = v;/);
   });
 
-  // ─── Subscription-mode 7-field body ──────────────────────────
+  // ─── Subscription-mode 9-field body ──────────────────────────
 
-  it("CRITICAL subscription-mode body has 7 form fields — mode:'subscription' + customer + line_items[0][price] + line_items[0][quantity]:'1' + success_url + cancel_url + client_reference_id + automatic_tax[enabled]:'true' (ADR-002). The 7-field body is the V-082 subscription-checkout contract.", () => {
+  it("CRITICAL subscription-mode body has 9 form fields — mode:'subscription' + customer + line_items[0][price] + line_items[0][quantity]:'1' + success_url + cancel_url + client_reference_id + automatic_tax[enabled]:'true' + customer_update[address]:'auto' (ADR-002). The 9-field body is the V-082 subscription-checkout contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
     expect(p).toMatch(/mode: 'subscription',/);
     expect(p).toMatch(/customer: args\.customerId,/);
@@ -174,17 +174,18 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
     expect(p).toMatch(/cancel_url: args\.cancelUrl,/);
     expect(p).toMatch(/client_reference_id: args\.clientReferenceId,/);
     expect(p).toMatch(/'automatic_tax\[enabled\]': 'true',/);
+    expect(p).toMatch(/'customer_update\[address\]': 'auto',/);
   });
 
   // ─── ADR-002 automatic_tax framing ───────────────────────────
 
-  it("CRITICAL ADR-002 automatic_tax framing — 'BTW reverse-charge handling (per ADR-002): Stripe Tax must be enabled for the account; the line below tells Stripe Checkout to compute tax automatically. Safe to leave on for live + test accounts; if Stripe Tax isn't enabled the Checkout init still succeeds — Stripe just doesn't compute tax'. The Stripe-Tax-must-be-enabled + safe-on-by-default design is the ADR-002 BTW contract.", () => {
+  it('CRITICAL ADR-002 automatic-tax framing requires Checkout to collect and persist a tax-location address for newly-created Stripe customers.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/stripe-api.ts'));
     expect(p).toMatch(/BTW reverse-charge handling \(per ADR-002\): Stripe Tax must be/);
-    expect(p).toMatch(/enabled for the account; the line below tells Stripe Checkout/);
-    expect(p).toMatch(/to compute tax automatically\. Safe to leave on for live \+ test/);
-    expect(p).toMatch(/accounts; if Stripe Tax isn't enabled the Checkout init still/);
-    expect(p).toMatch(/succeeds — Stripe just doesn't compute tax\./);
+    expect(p).toMatch(/enabled for the account\. Automatic tax also requires a customer/);
+    expect(p).toMatch(/tax location; newly-created Driftstack customers have no stored/);
+    expect(p).toMatch(/address, so Checkout must collect and save the billing address\./);
+    expect(p).toMatch(/'customer_update\[address\]': 'auto',/);
   });
 
   // ─── client_reference_id correlation framing ─────────────────
