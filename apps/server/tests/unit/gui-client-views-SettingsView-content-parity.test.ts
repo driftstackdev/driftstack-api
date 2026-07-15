@@ -82,6 +82,19 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toContain('disabled={byokBusy || byokKeyDraft.trim().length === 0}');
   });
 
+  it('serializes AI billing persistence under a lifecycle-fenced owner and freezes its draft boundary', () => {
+    expect(body).toContain('const bundledLlmSaveRef = useRef<{ token: number } | null>(null);');
+    expect(body).toMatch(
+      /if \(bundledLlmSaveRef\.current !== null\) return;[\s\S]*?bundledLlmSaveRef\.current = \{ token \};[\s\S]*?await client\.account\.updateBundledLlmSettings/,
+    );
+    expect(body).toMatch(
+      /if \(bundledLlmSaveRef\.current\?\.token !== token\) return;[\s\S]*?setBundledLlmSavedAt\(Date\.now\(\)\)/,
+    );
+    expect(
+      body.match(/disabled=\{bundledLlmSaving \|\| bundledLlmLoad !== 'loaded'\}/g),
+    ).toHaveLength(3);
+  });
+
   it("V-241 + V-242 + V-272 framing pinned: 'V-241: API key now stored in OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service); the masked input edits the keychain entry transparently via Tauri commands.' + 'V-242: telemetry toggle — Sentry crash-only opt-in. Defaults ON for cloud customers, OFF for self-hosted. Customer can override either direction.' + 'V-272: account info block + sign-out button. First-run hint rewritten to point at the V-268 browser sign-in flow instead of the stale \"npm run admin:create-key\" instruction.'", () => {
     expect(body).toMatch(
       /\/\/ V-241: API key now stored in OS keychain \(macOS Keychain \/ Windows\s*\n?\s*\/\/ Credential Manager \/ Linux Secret Service\); the masked input edits\s*\n?\s*\/\/ the keychain entry transparently via Tauri commands\./,

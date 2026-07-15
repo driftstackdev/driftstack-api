@@ -92,6 +92,8 @@ export function SettingsView(): JSX.Element {
   const [bundledLlmSaving, setBundledLlmSaving] = useState(false);
   const [bundledLlmSaveError, setBundledLlmSaveError] = useState<string | null>(null);
   const [bundledLlmSavedAt, setBundledLlmSavedAt] = useState<number | null>(null);
+  const bundledLlmSaveRef = useRef<{ token: number } | null>(null);
+  const bundledLlmSaveTokenRef = useRef(0);
 
   const [byok, setByok] = useState<ByokAnthropicKeyMetadata | null>(null);
   const [byokKeyDraft, setByokKeyDraft] = useState('');
@@ -131,6 +133,9 @@ export function SettingsView(): JSX.Element {
   useEffect(() => {
     // A replacement SDK client invalidates every result owned by the prior
     // deployment/account. The token check below also makes unmount harmless.
+    bundledLlmSaveTokenRef.current += 1;
+    bundledLlmSaveRef.current = null;
+    setBundledLlmSaving(false);
     byokActionTokenRef.current += 1;
     byokActionRef.current = null;
     setByokActionKind(null);
@@ -168,6 +173,8 @@ export function SettingsView(): JSX.Element {
     );
     return () => {
       cancelled = true;
+      bundledLlmSaveTokenRef.current += 1;
+      bundledLlmSaveRef.current = null;
       byokActionTokenRef.current += 1;
       byokActionRef.current = null;
     };
@@ -180,6 +187,11 @@ export function SettingsView(): JSX.Element {
       setBundledLlmSaveError('Enter a valid monthly limit.');
       return;
     }
+    // React's disabled state lands after the event returns. Claim the write
+    // synchronously so a rapid click cannot start a second whole-object PATCH.
+    if (bundledLlmSaveRef.current !== null) return;
+    const token = ++bundledLlmSaveTokenRef.current;
+    bundledLlmSaveRef.current = { token };
     setBundledLlmSaving(true);
     setBundledLlmSaveError(null);
     try {
@@ -187,15 +199,21 @@ export function SettingsView(): JSX.Element {
         consent: bundledLlmConsentDraft,
         monthly_cap_usd_cents: capCents,
       });
+      if (bundledLlmSaveRef.current?.token !== token) return;
       setBundledLlm(updated);
       setBundledLlmConsentDraft(updated.consent);
       setBundledLlmCapDraft((updated.monthly_cap_usd_cents / 100).toFixed(2));
       setBundledLlmSavedAt(Date.now());
       pushToast({ title: 'AI billing settings saved', tone: 'success' });
     } catch (err) {
-      setBundledLlmSaveError(friendlySettingsActionError(err, 'save-ai-billing'));
+      if (bundledLlmSaveRef.current?.token === token) {
+        setBundledLlmSaveError(friendlySettingsActionError(err, 'save-ai-billing'));
+      }
     } finally {
-      setBundledLlmSaving(false);
+      if (bundledLlmSaveRef.current?.token === token) {
+        bundledLlmSaveRef.current = null;
+        setBundledLlmSaving(false);
+      }
     }
   }
 
@@ -1084,7 +1102,7 @@ export function SettingsView(): JSX.Element {
               <input
                 type="checkbox"
                 checked={bundledLlmConsentDraft}
-                disabled={bundledLlmLoad !== 'loaded'}
+                disabled={bundledLlmSaving || bundledLlmLoad !== 'loaded'}
                 onChange={(e) => {
                   setBundledLlmConsentDraft(e.target.checked);
                   setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit
@@ -1104,7 +1122,7 @@ export function SettingsView(): JSX.Element {
                   min="0"
                   step="0.01"
                   value={bundledLlmCapDraft}
-                  disabled={bundledLlmLoad !== 'loaded'}
+                  disabled={bundledLlmSaving || bundledLlmLoad !== 'loaded'}
                   onChange={(e) => {
                     setBundledLlmCapDraft(e.target.value);
                     setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit

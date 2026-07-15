@@ -501,6 +501,111 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     expect(validationSignal?.aborted).toBe(true);
   });
 
+  it('owns one AI billing PATCH and freezes the consent/cap draft until it settles', async () => {
+    let releaseSave!: (value: { consent: boolean; monthly_cap_usd_cents: number }) => void;
+    const updateBundledLlmSettings = vi.fn(
+      () =>
+        new Promise<{ consent: boolean; monthly_cap_usd_cents: number }>((resolve) => {
+          releaseSave = resolve;
+        }),
+    );
+    const client = makeClient({ updateBundledLlmSettings });
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: 'ds_live_x',
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+      },
+      loading: false,
+      client,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    renderWithToasts();
+
+    const consent = await screen.findByRole<HTMLInputElement>('checkbox');
+    const cap = screen.getByRole<HTMLInputElement>('spinbutton');
+    fireEvent.click(consent);
+    fireEvent.change(cap, { target: { value: '25.00' } });
+    const save = screen.getByRole('button', { name: 'Save AI billing settings' });
+    fireEvent.click(save);
+    fireEvent.click(save);
+
+    expect(updateBundledLlmSettings).toHaveBeenCalledTimes(1);
+    expect(updateBundledLlmSettings).toHaveBeenCalledWith({
+      consent: true,
+      monthly_cap_usd_cents: 2500,
+    });
+    expect(consent).toBeDisabled();
+    expect(cap).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save AI billing settings' })).toBeDisabled();
+
+    releaseSave({ consent: true, monthly_cap_usd_cents: 2500 });
+    expect(await screen.findByText('Saved.')).toBeInTheDocument();
+    await waitFor(() => expect(consent).not.toBeDisabled());
+    expect(cap).not.toBeDisabled();
+  });
+
+  it('invalidates an older AI billing save on client replacement and releases failure for retry', async () => {
+    let resolveOld!: (value: { consent: boolean; monthly_cap_usd_cents: number }) => void;
+    const oldUpdate = vi
+      .fn<MockClient['account']['updateBundledLlmSettings']>()
+      .mockRejectedValueOnce(new Error('private billing backend detail'))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      );
+    const oldClient = makeClient({ updateBundledLlmSettings: oldUpdate });
+    const newClient = makeClient({
+      getBundledLlmSettings: vi.fn(() =>
+        Promise.resolve({ consent: false, monthly_cap_usd_cents: 500 }),
+      ),
+    });
+    let currentClient = oldClient;
+    useSettingsMock.mockImplementation(() => ({
+      settings: {
+        apiKey: 'ds_live_x',
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+      },
+      loading: false,
+      client: currentClient,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    }));
+    const view = renderWithToasts();
+
+    const cap = await screen.findByRole<HTMLInputElement>('spinbutton');
+    fireEvent.change(cap, { target: { value: '10.00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save AI billing settings' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't save/i);
+    expect(screen.queryByText(/private billing backend detail/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save AI billing settings' }));
+    expect(oldUpdate).toHaveBeenCalledTimes(2);
+
+    currentClient = newClient;
+    view.rerender(
+      <ToastProvider>
+        <ConfirmProvider>
+          <SettingsView />
+        </ConfirmProvider>
+      </ToastProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLInputElement>('spinbutton').value).toBe('5.00'),
+    );
+
+    resolveOld({ consent: true, monthly_cap_usd_cents: 1000 });
+    await Promise.resolve();
+    expect(screen.getByRole<HTMLInputElement>('spinbutton').value).toBe('5.00');
+    expect(screen.queryByText('Saved.')).toBeNull();
+  });
+
   it('owns BYOK Test and Clear as one action so a cleared key cannot regain stale Working state', async () => {
     let releaseTest!: (result: { ok: true }) => void;
     let releaseClear!: () => void;
