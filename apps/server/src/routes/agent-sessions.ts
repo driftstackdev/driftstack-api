@@ -911,6 +911,15 @@ export async function dispatchSessionAssignOnCreate(args: {
   ) {
     return;
   }
+  // A successful active-only ownership claim followed by a synchronous socket
+  // throw is ambiguous: the frame may have reached the peer before the local
+  // transport surfaced the failure. Retain the exact connection + owner so the
+  // catch path can close the row and immediately tear down that same possible
+  // assignment. Pre-claim failures leave these unset and need only close the row.
+  let claimedNodeId: string | null = null;
+  let claimedConnection: FleetControlConnection | undefined;
+  let assignSendAttempted = false;
+  let assignSendReturned = false;
   try {
     // Connectivity-aware node selection (multi-box region fix). `findNearestWithLivekit`
     // returns only the SINGLE region-nearest LiveKit node; if THAT box's control-WSS is
@@ -1151,8 +1160,12 @@ export async function dispatchSessionAssignOnCreate(args: {
         );
         return;
       }
+      claimedNodeId = dispatchedNodeId;
+      claimedConnection = conn;
     }
+    assignSendAttempted = true;
     conn.sendSessionAssign(assign);
+    assignSendReturned = true;
     logger?.info(
       {
         component: 'fleet-session-dispatch',
@@ -1176,16 +1189,105 @@ export async function dispatchSessionAssignOnCreate(args: {
       },
       'sessionAssign dispatch failed (session create unaffected)',
     );
-    // #16 — an UnsafeProxyHostError is a fail-closed egress decision (the SSRF
-    // re-guard rejected the customer's proxy host); the session was never
-    // dispatched and never will be, so close the row's phantom 'active' slot
-    // exactly like the resolved===null branch. Other dispatch errors (transient
-    // R2/registry hiccups) are NOT closed here — they may be retryable and the
-    // wall-clock orphan reaper is the correct backstop for a genuinely stuck row.
+    // A logger failure after sendSessionAssign returned is not a dispatch
+    // failure. Do not close a live, successfully-dispatched session merely
+    // because best-effort observability threw.
+    if (assignSendReturned) return;
+    // #16 — preserve the established fail-closed egress reason for an SSRF
+    // re-guard refusal. Every other outer failure is terminal: there is no
+    // retry caller, so leaving the row active would consume a slot until the
+    // orphan reaper and leave the GUI waiting for a publisher that never starts.
     if (err instanceof UnsafeProxyHostError) {
       await closeUnresolvedEgressSession(agentSessions, sessionId, logger);
+      return;
     }
+    await closeFailedSessionAssign({
+      agentSessions,
+      fleetControlRegistry,
+      sessionId,
+      claimedNodeId,
+      claimedConnection,
+      assignSendAttempted,
+      logger,
+    });
   }
+}
+
+/**
+ * Reconcile a terminal create-time dispatch failure. A pre-claim failure only
+ * closes the never-dispatched row. When the active-only ownership claim
+ * committed and sendSessionAssign then threw, delivery is ambiguous: only the
+ * authoritative close winner sends sessionEnd on that SAME connection. If the
+ * teardown send also fails, retain one bounded pending teardown for the node's
+ * next registration. Never replay sessionAssign.
+ */
+async function closeFailedSessionAssign(args: {
+  agentSessions: AgentSessionsRepo | undefined;
+  fleetControlRegistry: FleetControlRegistry;
+  sessionId: string;
+  claimedNodeId: string | null;
+  claimedConnection: FleetControlConnection | undefined;
+  assignSendAttempted: boolean;
+  logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
+}): Promise<void> {
+  const {
+    agentSessions,
+    fleetControlRegistry,
+    sessionId,
+    claimedNodeId,
+    claimedConnection,
+    assignSendAttempted,
+    logger,
+  } = args;
+  if (agentSessions === undefined) return;
+
+  let closeOutcome: Awaited<ReturnType<AgentSessionsRepo['closeWithReasonOutcome']>>;
+  try {
+    closeOutcome = await agentSessions.closeWithReasonOutcome(sessionId, 'dispatch_failed');
+  } catch (closeErr) {
+    logger?.warn(
+      {
+        component: 'fleet-session-dispatch',
+        sessionId,
+        reason: 'dispatch_failed',
+        err: closeErr instanceof Error ? closeErr.message : String(closeErr),
+      },
+      'failed to close dispatch-failed session; orphan reaper will backstop',
+    );
+    return;
+  }
+
+  // Another closer owns terminal cleanup, or this failed before any assignment
+  // send was attempted. In both cases an extra teardown would duplicate effects
+  // or target a browser that was never asked to start.
+  if (
+    closeOutcome.kind !== 'closed' ||
+    !assignSendAttempted ||
+    claimedNodeId === null ||
+    claimedConnection === undefined
+  ) {
+    return;
+  }
+
+  try {
+    claimedConnection.sendSessionEnd(serializeSessionEnd(sessionId));
+  } catch (teardownErr) {
+    fleetControlRegistry.recordPendingTeardown(claimedNodeId, sessionId);
+    logger?.warn(
+      {
+        component: 'fleet-session-dispatch',
+        sessionId,
+        nodeId: claimedNodeId,
+        err: teardownErr instanceof Error ? teardownErr.message : String(teardownErr),
+      },
+      'immediate dispatch-failure teardown failed; queued bounded sessionEnd for reconnect',
+    );
+    return;
+  }
+  logger?.info(
+    { component: 'fleet-session-dispatch', sessionId, nodeId: claimedNodeId },
+    'dispatch-failed ambiguous assign reconciled with immediate sessionEnd',
+  );
 }
 
 /**

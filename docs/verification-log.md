@@ -27803,3 +27803,48 @@ disconnect-reaper, orphan-sweeper, budget and cache-eviction families remain
 green. Strict server source-and-test TypeScript, targeted ESLint/Prettier and
 diff/whitespace checks, the full workspace typecheck, and the configured full
 workspace build are green.
+
+---
+
+## V-663 — Failed session assignment closes and reconciles bounded teardown
+
+**Date:** 2026-07-15
+
+Create-time fleet dispatch had no retry caller, but the outer best-effort catch
+treated most synchronous failures as retryable. A failure before the active
+ownership claim therefore left a never-dispatched row active, while a
+`sendSessionAssign` throw after the claim left an active, node-owned row whose
+frame might already have reached the harness. Both consumed a customer/fleet
+slot until the 12-hour orphan reaper and could leave the GUI waiting for a
+publisher that would never become usable.
+
+Dispatch now records whether the active-only ownership claim committed, the
+exact connection that received the send attempt, and whether that send
+returned. A generic terminal outer failure closes with stable internal reason
+`dispatch_failed`; the existing `UnsafeProxyHostError` path keeps
+`egress_unresolved`. An observability failure after a successful send cannot
+misclassify the live session as dispatch-failed.
+
+For an ambiguous post-claim send throw, `closeWithReasonOutcome` makes the
+terminal boundary authoritative. Only the `closed` winner sends one immediate
+`sessionEnd` on the same connection. If that teardown also throws, the existing
+bounded per-node pending-teardown set retains the session ID and drains it on
+the node's next registration. An `already_closed` loser preserves the first
+closer's reason/timestamps and performs no duplicate teardown. Assignment is
+never replayed, and a close-store failure remains bounded and logged for the
+orphan reaper rather than escaping the create path.
+
+The focused fleet-dispatch file passes 54/54 tests. The expanded connected
+agent-session matrix passes 15 files and 409/409 tests, with all 8/8 PostgreSQL
+cases actually executed. New deterministic cases cover pre-claim secret-decrypt
+failure with a null owner, post-claim ambiguous assign failure plus one
+same-connection teardown, assign-and-teardown failure plus one bounded reconnect
+drain, an authoritative concurrent first closer, a bounded close-store failure,
+and post-send observability failure without a false close. Existing SSRF/proxy,
+no-node, active ownership, terminal-close,
+runtime/budget, disconnect-reaper, orphan-sweeper, cache-eviction, and fleet
+registry families remain green. Strict server source-and-test TypeScript,
+targeted ESLint/Prettier and diff checks, full workspace typecheck, and the
+configured full workspace build are green. The unconfigured public-app build
+continues to fail closed until `PUBLIC_API_BASE_URL` is supplied; the canonical
+configured run passed all packages and apps.

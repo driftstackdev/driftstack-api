@@ -1078,6 +1078,208 @@ describe('dispatchSessionAssignOnCreate', () => {
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
     expect(frame.exit_identity).toBeUndefined();
   });
+
+  it('closes a generic pre-claim dispatch failure as dispatch_failed without assigning a node', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const sessions = new InMemoryAgentSessionsRepo();
+    const created = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const badMac = macWithLivekit();
+    badMac.livekit.apiSecretCiphertextBase64 = 'not-valid-ciphertext';
+
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: created.id,
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(badMac),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions: sessions,
+        logger: logger(),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sent).toHaveLength(0);
+    expect(await sessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'dispatch_failed',
+      nodeId: null,
+    });
+  });
+
+  it('closes a post-claim assign throw and sends one immediate sessionEnd on the same connection', async () => {
+    const frameTypes: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (data) => {
+      const type = (JSON.parse(data) as { type: string }).type;
+      frameTypes.push(type);
+      if (type === 'sessionAssign') throw new Error('socket write failed after ambiguous delivery');
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const created = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: created.id,
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions: sessions,
+        logger: logger(),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(frameTypes).toEqual(['sessionAssign', 'sessionEnd']);
+    expect(registry.pendingTeardownCount(NODE_ID)).toBe(0);
+    expect(await sessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'dispatch_failed',
+      nodeId: NODE_ID,
+    });
+  });
+
+  it('does not close a successfully dispatched session when only post-send observability throws', async () => {
+    const frameTypes: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (data) => {
+      frameTypes.push((JSON.parse(data) as { type: string }).type);
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const created = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const log = {
+      info: vi.fn(() => {
+        throw new Error('logger unavailable');
+      }),
+      warn: vi.fn(),
+    };
+
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: created.id,
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions: sessions,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(frameTypes).toEqual(['sessionAssign']);
+    expect(registry.pendingTeardownCount(NODE_ID)).toBe(0);
+    expect(await sessions.get(created.id)).toMatchObject({
+      status: 'active',
+      closedReason: null,
+      nodeId: NODE_ID,
+    });
+  });
+
+  it('queues one bounded teardown when both the ambiguous assign and immediate sessionEnd throw, then drains it on reconnect', async () => {
+    const firstConnectionTypes: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (data) => {
+      firstConnectionTypes.push((JSON.parse(data) as { type: string }).type);
+      throw new Error('connection unavailable');
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const created = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: created.id,
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      agentSessions: sessions,
+      logger: logger(),
+    });
+
+    expect(firstConnectionTypes).toEqual(['sessionAssign', 'sessionEnd']);
+    expect(registry.pendingTeardownCount(NODE_ID)).toBe(1);
+    expect(await sessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'dispatch_failed',
+      nodeId: NODE_ID,
+    });
+
+    const reconnectTypes: string[] = [];
+    registry.register(NODE_ID, (data) => {
+      reconnectTypes.push((JSON.parse(data) as { type: string }).type);
+    });
+    expect(reconnectTypes).toEqual(['sessionEnd']);
+    expect(registry.pendingTeardownCount(NODE_ID)).toBe(0);
+  });
+
+  it('preserves a concurrent first closer and does not duplicate its teardown effects', async () => {
+    const frameTypes: string[] = [];
+    const registry = new FleetControlRegistry();
+    const sessions = new InMemoryAgentSessionsRepo();
+    const created = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    registry.register(NODE_ID, (data) => {
+      const type = (JSON.parse(data) as { type: string }).type;
+      frameTypes.push(type);
+      if (type === 'sessionAssign') {
+        void sessions.closeWithReason(created.id, 'customer');
+        throw new Error('socket write failed after competing close');
+      }
+    });
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: created.id,
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      agentSessions: sessions,
+      logger: logger(),
+    });
+
+    expect(frameTypes).toEqual(['sessionAssign']);
+    expect(registry.pendingTeardownCount(NODE_ID)).toBe(0);
+    expect(await sessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer',
+      nodeId: NODE_ID,
+    });
+  });
+
+  it('bounds and logs a dispatch-failure close-store error without throwing or replaying assign', async () => {
+    const frameTypes: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (data) => {
+      frameTypes.push((JSON.parse(data) as { type: string }).type);
+      throw new Error('assign send failed');
+    });
+    const closeWithReasonOutcome = vi.fn(() => Promise.reject(new Error('close store down')));
+    const sessions = {
+      setNodeId: () => Promise.resolve({}),
+      closeWithReasonOutcome,
+    } as unknown as InMemoryAgentSessionsRepo;
+    const log = logger();
+
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: 'agt_close_store_down',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions: sessions,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(frameTypes).toEqual(['sessionAssign']);
+    expect(closeWithReasonOutcome).toHaveBeenCalledTimes(1);
+    expect(closeWithReasonOutcome).toHaveBeenCalledWith('agt_close_store_down', 'dispatch_failed');
+    expect(registry.pendingTeardownCount(NODE_ID)).toBe(0);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'agt_close_store_down', reason: 'dispatch_failed' }),
+      'failed to close dispatch-failed session; orphan reaper will backstop',
+    );
+  });
 });
 
 describe('dispatchResumeSession (W393)', () => {
