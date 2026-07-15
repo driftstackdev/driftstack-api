@@ -649,6 +649,117 @@ describe('DELETE /v1/sessions/:id', () => {
   });
 });
 
+describe('POST /v1/profiles/:id/launch request boundary', () => {
+  async function createProfile(fixture: TestAppFixture, name: string): Promise<string> {
+    const res = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth(fixture),
+      payload: { name },
+    });
+    if (res.statusCode !== 200) {
+      throw new Error(`profile create failed ${String(res.statusCode)}: ${res.body}`);
+    }
+    return res.json<{ id: string }>().id;
+  }
+
+  it('accepts a label at the exact 120-character canonical boundary', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfile(fx, 'label-120');
+    const label = 'a'.repeat(120);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: auth(fx),
+      payload: { label },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json<{ label: string }>().label).toBe(label);
+  });
+
+  it('rejects a 121-character label before profile lookup, driver create, or session row', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfile(fx, 'label-121');
+    const profileLookup = vi.spyOn(fx.profilesRepo, 'findById');
+    const driverCreate = vi.spyOn(fx.driver, 'createSession');
+    const sessionInsert = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: auth(fx),
+      payload: { label: 'a'.repeat(121) },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(profileLookup).not.toHaveBeenCalled();
+    expect(driverCreate).not.toHaveBeenCalled();
+    expect(sessionInsert).not.toHaveBeenCalled();
+    expect(await fx.sessionsRepo.listActiveByAccount(fx.accountId)).toHaveLength(0);
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+  });
+
+  it('strictly rejects an unknown launch key before profile lookup or session side effects', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfile(fx, 'strict-body');
+    const profileLookup = vi.spyOn(fx.profilesRepo, 'findById');
+    const driverCreate = vi.spyOn(fx.driver, 'createSession');
+    const sessionInsert = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: auth(fx),
+      payload: { future_transport: 'silently-stripped' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(profileLookup).not.toHaveBeenCalled();
+    expect(driverCreate).not.toHaveBeenCalled();
+    expect(sessionInsert).not.toHaveBeenCalled();
+    expect(await fx.sessionsRepo.listActiveByAccount(fx.accountId)).toHaveLength(0);
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+  });
+
+  it('rejects raw proxy before profile lookup and points to saved-proxy agent sessions', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfile(fx, 'raw-proxy');
+    const profileLookup = vi.spyOn(fx.profilesRepo, 'findById');
+    const driverCreate = vi.spyOn(fx.driver, 'createSession');
+    const sessionInsert = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: auth(fx),
+      payload: { proxy: {} },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/owned saved proxy_id/);
+    expect(profileLookup).not.toHaveBeenCalled();
+    expect(driverCreate).not.toHaveBeenCalled();
+    expect(sessionInsert).not.toHaveBeenCalled();
+    expect(await fx.sessionsRepo.listActiveByAccount(fx.accountId)).toHaveLength(0);
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+  });
+
+  it('required-egress posture disables profile launch even without a raw proxy field', async () => {
+    fx = await buildTestApp({ tier: 'api_builder', sessionProxyRequired: true });
+    const profileId = await createProfile(fx, 'required-egress');
+    const profileLookup = vi.spyOn(fx.profilesRepo, 'findById');
+    const driverCreate = vi.spyOn(fx.driver, 'createSession');
+    const sessionInsert = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: auth(fx),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/Direct session creation is disabled/);
+    expect(profileLookup).not.toHaveBeenCalled();
+    expect(driverCreate).not.toHaveBeenCalled();
+    expect(sessionInsert).not.toHaveBeenCalled();
+    expect(await fx.sessionsRepo.listActiveByAccount(fx.accountId)).toHaveLength(0);
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+  });
+});
+
 // doc-150 item 6 — per-account storage quota is enforced HARD at
 // session-launch when the create is profile-backed. The enforced quota is the
 // SUM of the account's live profiles' size_bytes vs TIER_STORAGE_BYTES_CAP.

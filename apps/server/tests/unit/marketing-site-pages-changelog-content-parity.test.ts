@@ -42,6 +42,16 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     expect(body).not.toMatch(/placeholder|becomes a build-time generator|once .* stabiliz/i);
   });
 
+  it('historical proxy entries distinguish saved-proxy agent sessions from unsupported direct raw proxy data', () => {
+    expect(body).toMatch(/Pass an owned saved proxy_id when creating an agent session/);
+    expect(body).toMatch(
+      /direct \/v1\/sessions and \/v1\/profiles\/:id\/launch verbs do not accept raw proxy data/,
+    );
+    expect(body).toMatch(/SESSION_PROXY_REQUIRED=false keeps proxy-free direct creation available/);
+    expect(body).toMatch(/raw proxy key is rejected, never treated as proof of egress/);
+    expect(body).not.toMatch(/Pass proxy_id when creating a session/);
+  });
+
   it("ChangelogEntry 6-category enum: launch / sdk / docs / security / pricing / self-hosted — pinned so the category taxonomy stays 6-state (drift to dropping any would render an entry with TypeScript's never type; drift to adding new would create an entry the CATEGORY_COLOR map doesn't cover, rendering with no styling)", () => {
     expect(body).toMatch(
       /category: 'launch' \| 'sdk' \| 'docs' \| 'security' \| 'pricing' \| 'self-hosted';/,

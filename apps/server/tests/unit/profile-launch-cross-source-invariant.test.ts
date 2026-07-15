@@ -48,16 +48,27 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     );
   });
 
-  it('server/src/routes/sessions.ts registers POST /v1/profiles/:id/launch with prof_<uuid> validation + egress-safeguard + ownership flow', () => {
+  it('server/src/routes/sessions.ts registers a strict max-120 profile launch with fail-closed direct egress before ownership flow', () => {
     const lib = resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts');
     const body = read(lib);
     expect(body).toMatch(/'\/v1\/profiles\/:id\/launch'/);
     expect(body).toMatch(
       /\/\^prof_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/\s*\.exec\(/,
     );
-    expect(body).toMatch(
-      /A proxy configuration is required to launch a profile on this deployment\./,
+    expect(body).toMatch(/LaunchProfileRequestSchema\.parse\(rawBody\)/);
+    expect(body).toMatch(/assertDirectSessionEgressAvailable\(rawBody, egressProxyRequired\)/);
+    expect(body).toMatch(/label: launchBody\.label/);
+    expect(body).not.toMatch(/A proxy configuration is required to launch a profile/);
+  });
+
+  it('api-types and OpenAPI share the strict canonical launch schema', () => {
+    const apiTypes = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
+    const openapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
+    expect(apiTypes).toMatch(/export const SessionLabelSchema = z\.string\(\)\.max\(120\);/);
+    expect(apiTypes).toMatch(
+      /LaunchProfileRequestSchema = CreateSessionRequestSchema\.pick\(\{ label: true \}\)\.strict\(\)/,
     );
+    expect(openapi).toMatch(/LaunchProfileRequestSchema\.openapi\('LaunchProfileRequest'\)/);
   });
 
   it('TS SDK profiles.ts exposes launch(id, body?) returning Promise<Session>, with NO proxy field (removed — /v1/sessions has no driver-layer proxy plumbing yet; see agentSessions.create({ proxy_id }) for real customer egress)', () => {

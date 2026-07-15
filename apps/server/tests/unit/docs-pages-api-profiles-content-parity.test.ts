@@ -119,6 +119,10 @@ describe('W763 docs /api/profiles content parity', () => {
     expect(p).toMatch(/intentionally have no per-session\s*\n?egress field/);
     expect(p).toContain('`POST /v1/agent-sessions`');
     expect(p).toContain('`proxy_id`');
+    expect(p).toMatch(/same 120-character maximum as direct\s*\n?session creation/);
+    expect(p).toMatch(/body is strict: any other key, including raw `proxy`/);
+    expect(p).toMatch(/direct surface has no typed consumed egress authority/);
+    expect(p).not.toMatch(/request body lacks a `proxy`\s*\n?key entirely/);
     expect(p).not.toMatch(
       /not available on\s*\n?this endpoint|execution backend behind both|real device fleet/i,
     );

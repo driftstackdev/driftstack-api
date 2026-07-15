@@ -19,6 +19,7 @@ import {
   SearchRequestSchema,
   SessionLoginRequestSchema,
   CreateSessionRequestSchema,
+  LaunchProfileRequestSchema,
   InteractRequestSchema,
   NavigateRequestSchema,
   PaginationQuerySchema,
@@ -120,22 +121,34 @@ export interface SessionRoutesOptions {
    */
   profilesService?: ProfilesService;
   /**
-   * EG-API-1.4 — when `true`, POST /v1/sessions refuses any request
-   * whose body lacks a `proxy: ProxyConfig` envelope (per planning 133
-   * §"Egress safeguard enforcement"). The flag is true when AppDeps
-   * has `sessionEgressService` wired (a SOCKS5 / OpenVPN / WireGuard
-   * backend is reachable); it's false otherwise so the pre-launch
-   * posture (no backend wired) doesn't break every session-create.
-   *
-   * The safeguard is one of three defense-in-depth layers (planning
-   * 133 §"Egress safeguard enforcement"):
-   *   1. API layer (this flag) — refuses if no proxy in payload.
-   *   2. Harness layer — refuses to start WebKit if no proxy received.
-   *   3. WebKit fork layer — refuses outbound if no proxy detected.
-   *
-   * Any single layer failure caught by the others.
+   * Fail-closed switch for the direct session-create surface. These routes
+   * have no typed owner-validated egress input and pass no proxy authority to
+   * SessionsService/the driver, so `true` disables creation rather than
+   * accepting a shape-only raw `proxy` field.
    */
   egressProxyRequired?: boolean;
+}
+
+const DIRECT_SESSION_EGRESS_GUIDANCE =
+  'Use POST /v1/agent-sessions with an owned saved proxy_id for customer-controlled egress.';
+
+function assertDirectSessionEgressAvailable(rawBody: unknown, egressProxyRequired: boolean): void {
+  if (egressProxyRequired) {
+    throw new BadRequestError(
+      'Direct session creation is disabled on this deployment because required customer egress ' +
+        `is not available on this API surface. ${DIRECT_SESSION_EGRESS_GUIDANCE}`,
+    );
+  }
+  if (
+    typeof rawBody === 'object' &&
+    rawBody !== null &&
+    Object.prototype.hasOwnProperty.call(rawBody, 'proxy')
+  ) {
+    throw new BadRequestError(
+      'The raw proxy field is not supported for direct session creation and was not applied. ' +
+        DIRECT_SESSION_EGRESS_GUIDANCE,
+    );
+  }
 }
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
@@ -203,24 +216,13 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = requireCtx(request);
-      const body = CreateSessionRequestSchema.parse(request.body ?? {});
-      // EG-API-1.4 — egress safeguard at API layer. When the egress
-      // backend is wired in this deployment, every session-create MUST
-      // carry a proxy envelope. The request body is parsed via
-      // CreateSessionRequestSchema (which does not yet include the
-      // proxy field — that's the EG-API-1.6 sessions-schema extension
-      // slice). For now we inspect the raw body so the safeguard
-      // lands before the SDK contract change.
-      if (egressProxyRequired) {
-        const rawBody = (request.body ?? {}) as Record<string, unknown>;
-        if (rawBody.proxy === undefined || rawBody.proxy === null) {
-          throw new BadRequestError(
-            'A proxy configuration is required to create a session on this deployment. ' +
-              'Supply `proxy` in the create-session body — see the egress section of ' +
-              'https://docs.driftstack.dev/api/sessions/ for the schema.',
-          );
-        }
-      }
+      const rawBody = request.body ?? {};
+      // This route has no typed/consumed proxy transport. Reject an explicit
+      // raw field before Zod can strip it, and disable the whole direct surface
+      // when deployment policy requires egress. Both branches run before any
+      // account/profile/session/driver side effect.
+      assertDirectSessionEgressAvailable(rawBody, egressProxyRequired);
+      const body = CreateSessionRequestSchema.parse(rawBody);
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       // 2026-05-20 — resolve profile_id binding BEFORE create so the
       // archetype default + metadata stamps flow into the session row
@@ -293,7 +295,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   // ── POST /v1/profiles/:id/launch ───────────────────────────────────────
   // 2026-05-20 — antidetect-browser-style: one-shot "launch this profile"
   // verb. Equivalent to POST /v1/sessions with {profile_id: <id>,
-  // archetype: <profile.archetype>, proxy: <optional from body>} but
+  // archetype: <profile.archetype>} but
   // saves the customer one round-trip + a name-lookup. The endpoint
   // path lives under /v1/profiles because semantically it's a profile-
   // verb (the resulting session is a side-effect); the handler lives
@@ -309,6 +311,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     },
     async (request, reply) => {
       const ctx = requireCtx(request);
+      const rawBody = request.body ?? {};
+      // Keep the same fail-closed transport boundary as POST /v1/sessions.
+      // This precedes profile lookup, quota checks, create and touch.
+      assertDirectSessionEgressAvailable(rawBody, egressProxyRequired);
+      const launchBody = LaunchProfileRequestSchema.parse(rawBody);
       const profileIdPrefixed = request.params.id;
       // Strip prof_ prefix to the raw UUID (matches PROFILE_ID_RE in
       // routes/profiles.ts).
@@ -322,18 +329,6 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         );
       }
       const profileId = profileIdMatch[1] as string;
-      // Body shape: optional { proxy?, label? } overrides — everything
-      // else comes from the profile (archetype, name → label default,
-      // metadata stamps).
-      const rawBody = (request.body ?? {}) as Record<string, unknown>;
-      // Egress safeguard applies here too — proxy required when wired.
-      if (egressProxyRequired && (rawBody.proxy === undefined || rawBody.proxy === null)) {
-        throw new BadRequestError(
-          'A proxy configuration is required to launch a profile on this deployment. ' +
-            'Supply `proxy` in the launch body — see the egress section of ' +
-            'https://docs.driftstack.dev/api/sessions/ for the schema.',
-        );
-      }
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       const ownerAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
       // Resolve the OWNER's tier up front (storage-quota gate + concurrent cap
@@ -359,7 +354,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const binding = await resolveProfileBinding(profileId, ownerAccountId, ownerTier);
       const body = {
         archetype: binding.archetype,
-        label: typeof rawBody.label === 'string' ? rawBody.label : undefined,
+        label: launchBody.label,
         metadata: binding.metadata,
         profile_id: profileId,
       } as const;

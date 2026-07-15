@@ -102,13 +102,23 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
-  it('CreateSessionRequest: selectable archetype optional + purpose/label/metadata/profile/persona fields', () => {
+  it('CreateSessionRequest: selectable archetype optional + canonical bounded label + metadata/profile/persona fields', () => {
+    expect(body).toMatch(/export const SessionLabelSchema = z\.string\(\)\.max\(120\);/);
     expect(body).toMatch(
-      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: z\.string\(\)\.max\(120\)\.optional\(\),\s*\n?\s*metadata: SessionMetadataSchema\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: z\.string\(\)\.optional\(\),\s*\n?\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: SessionLabelSchema\.optional\(\),\s*\n?\s*metadata: SessionMetadataSchema\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: z\.string\(\)\.optional\(\),\s*\n?\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\n?\s*\}\);/,
     );
     // 2026-05-20 anti-enumeration framing pinned
     expect(body).toMatch(/cross-account profile_id returns/);
     expect(body).toMatch(/Server validates that the profile/);
+  });
+
+  it('LaunchProfileRequest is a strict label-only projection of the canonical create schema', () => {
+    expect(body).toMatch(
+      /export const LaunchProfileRequestSchema = CreateSessionRequestSchema\.pick\(\{ label: true \}\)\.strict\(\);/,
+    );
+    expect(body).toMatch(
+      /export type LaunchProfileRequest = z\.infer<typeof LaunchProfileRequestSchema>;/,
+    );
   });
 
   it('NavigateRequest: url http/https-only (W487 .refine) + timeout_ms 1000..120000 optional + wait_until enum (load|domcontentloaded|networkidle) default load; NavigateResponse: url + status 100..599 + final_url + duration_ms', () => {

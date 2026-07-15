@@ -126,11 +126,13 @@ export type Session = z.infer<typeof SessionSchema>;
 // Create session
 // ───────────────────────────────────────────────────────────────────────────
 
+export const SessionLabelSchema = z.string().max(120);
+
 export const CreateSessionRequestSchema = z.object({
   archetype: SelectableArchetypeIdSchema.optional(),
   /** V-169 — harness purpose; defaults to `production_customer`. */
   purpose: SessionPurposeSchema.optional(),
-  label: z.string().max(120).optional(),
+  label: SessionLabelSchema.optional(),
   metadata: SessionMetadataSchema.optional(),
   /**
    * 2026-05-20 — profile binding. When supplied, the server records
@@ -154,6 +156,15 @@ export const CreateSessionRequestSchema = z.object({
 });
 
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
+
+/**
+ * One-shot profile launch accepts only the same bounded label override as
+ * create-session. `.strict()` is intentional: silently stripping a future
+ * transport-looking field would make the launch appear to honor behavior the
+ * driver never received.
+ */
+export const LaunchProfileRequestSchema = CreateSessionRequestSchema.pick({ label: true }).strict();
+export type LaunchProfileRequest = z.infer<typeof LaunchProfileRequestSchema>;
 
 export const CreateSessionResponseSchema = SessionSchema;
 export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>;

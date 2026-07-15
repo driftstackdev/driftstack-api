@@ -25,6 +25,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'docs/operations/production-env-schema.md');
+const ENV_VARS = resolve(REPO_ROOT, 'docs/deployment/env-vars.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -32,6 +33,16 @@ function read(p: string): string {
 
 describe('W553.B /docs/operations/production-env-schema.md content parity', () => {
   const body = read(LIB);
+
+  it('deployment env reference pins SESSION_PROXY_REQUIRED as direct-surface closure, never a raw-presence check', () => {
+    const env = read(ENV_VARS);
+    expect(env).toMatch(/`SESSION_PROXY_REQUIRED`/);
+    expect(env).toMatch(/disables both direct create verbs for every body/);
+    expect(env).toMatch(/raw `proxy` key is always rejected and cannot bypass this boundary/);
+    expect(env).toMatch(/owner-validated saved `proxy_id`/);
+    expect(env).toMatch(/Do not enable this flag as a proxy-presence check/);
+    expect(env).not.toMatch(/\*\*Re-engage\*\*/);
+  });
 
   it("Header + ops-cheat-sheet vs full-spec framing pinned: '# Production environment schema (operations summary)' + 'Provisioning-order summary of every env var the production / staging Hetzner VM needs in `/opt/driftstack/.env`. Sourced from `DEPLOY_DOTENV_BASE64` per `.github/workflows/deploy.yml` + `.github/workflows/server-deploy.yml`.' + 'The longer per-variable spec (defaults, allowed values, behaviour-on-absent) lives in `docs/deployment/env-vars.md`.' + 'This doc is the operations cheat sheet — what to set up first, what comes next, what's optional.' — pinned so the /opt/driftstack/.env + DEPLOY_DOTENV_BASE64 + deploy.yml + server-deploy.yml + env-vars.md-full-spec + cheat-sheet-role commitment survives", () => {
     expect(body).toMatch(/^# Production environment schema \(operations summary\)$/m);

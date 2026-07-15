@@ -78,6 +78,19 @@ describe('OpenAPI spec generation', () => {
     ).toEqual(committed);
   });
 
+  it('publishes a strict profile-launch body with the canonical 120-character label maximum', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const schema = spec.components?.schemas?.LaunchProfileRequest as
+      Record<string, unknown> | undefined;
+    expect(schema).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      properties: { label: { type: 'string', maxLength: 120 } },
+    });
+    expect(JSON.stringify(schema)).not.toContain('proxy');
+  });
+
   it('registers every expected path', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

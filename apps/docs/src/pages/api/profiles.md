@@ -155,8 +155,10 @@ old profile after migration.
 { "label": "checkout-run-2026-05-20" }
 ```
 
-`label` is an optional override; everything else flows from the
-profile (archetype + metadata inherited, `last_used_at` bumped
+`label` is an optional override with the same 120-character maximum as direct
+session creation. The body is strict: any other key, including raw `proxy`, is
+rejected before profile lookup or session creation. Everything else flows from
+the profile (archetype + metadata inherited, `last_used_at` bumped
 server-side fire-and-forget). One-shot wrapper around `POST
 /v1/sessions` — equivalent to:
 
@@ -192,12 +194,14 @@ Errors:
 - `409 profile-in-use` if the profile already has a live session —
   a profile can run only one session at a time (the body's
   `active_session_id` names the live one). End it first, then launch.
-- Any error the underlying `POST /v1/sessions` can return — most
-  commonly `429` (concurrent-session cap reached), or `400` on
-  deployments that force the raw-HTTP egress safeguard
-  (`SESSION_PROXY_REQUIRED=true`) if the request body lacks a `proxy`
-  key entirely. Not reachable via the official SDKs, which don't
-  expose a way to send this field (see the egress note above).
+- `400` for an unknown body key, a label longer than 120 characters, or an
+  explicit raw `proxy` field. Raw proxy data is never applied.
+- `400` for every body when deployment policy requires customer egress
+  (`SESSION_PROXY_REQUIRED=true`, or inferred backend presence), because this
+  direct surface has no typed consumed egress authority. Use a saved `proxy_id`
+  with `POST /v1/agent-sessions` instead.
+- Any other error the underlying `POST /v1/sessions` can return, most commonly
+  `429` when the concurrent-session cap is reached.
 
 ## Clone
 

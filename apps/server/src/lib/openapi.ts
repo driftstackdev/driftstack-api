@@ -103,6 +103,7 @@ import {
   CreateApiKeyResponseSchema,
   CreateSessionRequestSchema,
   CreateSessionResponseSchema,
+  LaunchProfileRequestSchema,
   CreateWebhookRequestSchema,
   CreateWebhookResponseSchema,
   DeleteAccountRequestSchema,
@@ -6176,14 +6177,9 @@ function buildRegistry(): OpenAPIRegistry {
   // but saves a round-trip + name-lookup. Optional body override (label);
   // everything else comes from the profile. Returns the created session
   // (201). Requires write:sessions. The handler lives in routes/sessions.ts.
-  // 2026-07-01 — dropped `proxy`: it was never wired through (the SDKs'
-  // launch() had the identical dead field, removed the same day) - per-
-  // session customer-configurable egress isn't available on this resource.
-  const LaunchProfileRequestOpenApi = z
-    .object({
-      label: z.string().optional(),
-    })
-    .openapi('LaunchProfileRequest');
+  // Shared with the executable route: strict and derived from the canonical
+  // create-session label field, including its 120-character maximum.
+  const LaunchProfileRequestOpenApi = LaunchProfileRequestSchema.openapi('LaunchProfileRequest');
   registerRoute(r, {
     method: 'post',
     path: '/v1/profiles/{id}/launch',

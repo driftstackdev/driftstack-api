@@ -45,9 +45,9 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('imports: 9 Zod schemas + AccountTier type from @driftstack/api-types (doc-150 item 6 storage-quota gate uses the owner tier) + SessionRecord/SessionsService + GUIInputRequestSchema + BadRequest/Forbidden errors + AccountAuthRepo + resolveEffectiveAccount', () => {
+  it('imports request schemas including strict profile launch + AccountTier from @driftstack/api-types', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*CaptureRequestSchema,\s*\n?\s*ExtractRequestSchema,\s*\n?\s*SearchRequestSchema,\s*\n?\s*SessionLoginRequestSchema,\s*\n?\s*CreateSessionRequestSchema,\s*\n?\s*InteractRequestSchema,\s*\n?\s*NavigateRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*WaitRequestSchema,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*\n?\s*CaptureRequestSchema,\s*\n?\s*ExtractRequestSchema,\s*\n?\s*SearchRequestSchema,\s*\n?\s*SessionLoginRequestSchema,\s*\n?\s*CreateSessionRequestSchema,\s*\n?\s*LaunchProfileRequestSchema,\s*\n?\s*InteractRequestSchema,\s*\n?\s*NavigateRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*WaitRequestSchema,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import type \{ SessionRecord, SessionsService \} from '\.\.\/services\/sessions\.js';/,
@@ -104,6 +104,23 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(
       /export interface SessionRoutesOptions \{\s*\n?\s*service: SessionsService;[\s\S]*?authRepo: AccountAuthRepo;[\s\S]*?egressProxyRequired\?: boolean;\s*\n?\s*\}/,
     );
+  });
+
+  it('direct-session egress boundary rejects raw proxy and required-egress posture before either request parser or side effects', () => {
+    expect(body).toMatch(/LaunchProfileRequestSchema,/);
+    expect(body).toMatch(/const DIRECT_SESSION_EGRESS_GUIDANCE =/);
+    expect(body).toMatch(/function assertDirectSessionEgressAvailable\(/);
+    expect(body).toMatch(/Object\.prototype\.hasOwnProperty\.call\(rawBody, 'proxy'\)/);
+    expect(body).toMatch(/raw proxy field is not supported/);
+    expect(body).toMatch(/owned saved proxy_id/);
+    expect(body).toMatch(
+      /const rawBody = request\.body \?\? \{\};[\s\S]{0,500}?assertDirectSessionEgressAvailable\(rawBody, egressProxyRequired\);\s*\n?\s*const body = CreateSessionRequestSchema\.parse\(rawBody\);/,
+    );
+    expect(body).toMatch(
+      /assertDirectSessionEgressAvailable\(rawBody, egressProxyRequired\);\s*\n?\s*const launchBody = LaunchProfileRequestSchema\.parse\(rawBody\);[\s\S]{0,1800}?const binding = await resolveProfileBinding/,
+    );
+    expect(body).toMatch(/label: launchBody\.label,/);
+    expect(body).not.toMatch(/rawBody\.proxy/);
   });
 
   it("V-326e1 POST /v1/sessions framing pinned: X-Driftstack-Account → new session on OWNER's account; caller role MUST be admin on that team (Q1 — member is read-only on writes); member role 403; tier-derived concurrent cap uses OWNER tier", () => {

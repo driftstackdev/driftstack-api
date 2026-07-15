@@ -1038,25 +1038,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   }
 
-  // EG-API-1.4 — egress safeguard at API layer. Default: true iff a
-  // session-egress backend is wired (per planning 133 §"Egress
-  // safeguard enforcement"); the prod posture, unchanged. W615 — the
-  // SESSION_PROXY_REQUIRED env (deps.sessionProxyRequired) explicitly
-  // overrides: 'false' for self-hosted/testing where sessions egress
-  // from the operator's own machine (founder verdict 2026-06-11),
-  // 'true' to force-require regardless of backend detection.
+  // Direct /v1/sessions creation has no typed, owner-validated egress
+  // transport. Default/inferred policy still follows backend presence, but a
+  // true value now disables that direct surface instead of accepting a raw
+  // proxy-shaped object that no service/driver consumes. Saved proxy_id egress
+  // remains available through /v1/agent-sessions.
   const egressProxyRequired = deps.sessionProxyRequired ?? deps.sessionEgressService !== undefined;
-  // W635 — make the footgun visible: when a proxy is required on EVERY
-  // session-create, proxyless creates (including the onboarding flow)
-  // 400. That's correct once customer egress (SOCKS5) is GA, but until
-  // then it silently blocks onboarding — so warn at boot if someone
-  // re-engages the safeguard without realising (the W632-class regression).
+  // Make the fail-closed posture explicit at boot: operators must not infer
+  // that supplying an untyped raw proxy field re-enables these routes.
   if (egressProxyRequired) {
     app.log.warn(
       { component: 'egress-safeguard' },
-      'Egress safeguard ACTIVE: a proxy is required on every POST /v1/sessions; ' +
-        'proxyless session-creates (including customer onboarding) will 400. ' +
-        'Set SESSION_PROXY_REQUIRED=false to relax until customer egress (SOCKS5) is GA.',
+      'Direct session creation is DISABLED: this deployment requires customer egress, but ' +
+        'POST /v1/sessions and POST /v1/profiles/:id/launch have no typed consumed egress ' +
+        'authority. Use POST /v1/agent-sessions with an owned saved proxy_id; do not send a ' +
+        'raw proxy field.',
     );
   }
 

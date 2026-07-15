@@ -143,10 +143,25 @@ omitted; set once for the session's lifetime.
 
 Returns the created session (201).
 
+The direct create endpoint does not accept a raw `proxy` field. Supplying one
+returns `400` before a profile is looked up or a browser/session is created; it
+is never silently stripped or treated as an egress safeguard. For
+customer-controlled egress, create an agent session through
+`POST /v1/agent-sessions` with the `proxy_id` of an owned saved
+`/v1/account/me/proxies` configuration.
+
+If deployment policy requires customer egress (`SESSION_PROXY_REQUIRED=true`,
+or the inferred backend-present posture), this direct endpoint and
+`POST /v1/profiles/:id/launch` fail closed for every body because neither has a
+typed, consumed egress authority. Setting the flag to `false` preserves
+proxy-free direct creation; it does not make a raw proxy object supported.
+
 Errors:
 
 - `400 ValidationFailed` — a directly supplied `archetype` is not present in
   the current selectable catalog.
+- `400 Bad Request` — an explicit raw `proxy` field was rejected, or required
+  egress policy has disabled this direct create surface.
 - `429 ConcurrencyLimit` — concurrent-session cap hit.
 - `404 NotFound` — `profile_id` refers to a profile that doesn't
   exist OR belongs to a different account.

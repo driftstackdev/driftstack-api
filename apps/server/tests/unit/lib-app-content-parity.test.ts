@@ -199,9 +199,11 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/app\.get\('\/health', \(\) => \(\{ ok: true \}\)\);/);
     expect(body).toMatch(/app\.get\('\/healthz', \(\) => \(\{ ok: true \}\)\);/);
     expect(body).toMatch(
-      /\/\/ V-195 — public version endpoint for ops tooling\. Reports server\s*\n?\s*\/\/ version \(from package\.json env\), git sha \(from GIT_SHA env at\s*\n?\s*\/\/ deploy time, "unknown" otherwise\), and process start time\./,
+      /\/\/ V-195 — public version endpoint for ops tooling\. Reports server\s*\n?\s*\/\/ version \(from the deploy-owned APP_VERSION or npm in development\),\s*\n?\s*\/\/ git sha \(from GIT_SHA env at deploy time, "unknown" otherwise\), and\s*\n?\s*\/\/ process start time\./,
     );
-    expect(body).toMatch(/const buildVersion = process\.env\.npm_package_version \?\? '0\.0\.0';/);
+    expect(body).toMatch(
+      /const buildVersion = process\.env\.APP_VERSION \?\? process\.env\.npm_package_version \?\? 'unknown';/,
+    );
     expect(body).toMatch(/const gitSha = process\.env\.GIT_SHA \?\? 'unknown';/);
     expect(body).toMatch(
       /app\.get\('\/version', \(\) => \(\{\s*\n?\s*version: buildVersion,\s*\n?\s*git_sha: gitSha,\s*\n?\s*started_at: startedAt,\s*\n?\s*node_version: process\.version,/,
@@ -247,17 +249,15 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     );
   });
 
-  it('W635 egress-safeguard boot-warn: when egressProxyRequired resolves true, app.log.warn flags that proxyless session-creates (incl. onboarding) will 400 + names SESSION_PROXY_REQUIRED=false as the relax knob — pinned so re-engaging the safeguard (the W632-class regression) is loud at boot, not a silent onboarding 400', () => {
+  it('egress-safeguard boot warning truthfully disables direct create and points to saved-proxy agent sessions', () => {
     expect(body).toMatch(
       /const egressProxyRequired = deps\.sessionProxyRequired \?\? deps\.sessionEgressService !== undefined;/,
     );
     expect(body).toMatch(/if \(egressProxyRequired\) \{\s*\n?\s*app\.log\.warn\(/);
-    expect(body).toMatch(
-      /Egress safeguard ACTIVE: a proxy is required on every POST \/v1\/sessions/,
-    );
-    expect(body).toMatch(
-      /Set SESSION_PROXY_REQUIRED=false to relax until customer egress \(SOCKS5\) is GA\./,
-    );
+    expect(body).toMatch(/Direct session creation is DISABLED/);
+    expect(body).toMatch(/POST \/v1\/sessions and POST \/v1\/profiles\/:id\/launch/);
+    expect(body).toMatch(/POST \/v1\/agent-sessions with an owned saved proxy_id/);
+    expect(body).toMatch(/do not send a.*raw proxy field/s);
     // the route registration consumes the shared const (not a re-computed inline)
     expect(body).toMatch(/registerSessionRoutes\(app, \{[\s\S]{0,160}?egressProxyRequired,/);
   });

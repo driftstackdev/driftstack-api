@@ -1,24 +1,18 @@
-// EG-API-1.4 — egress safeguard at API layer (defense-in-depth
-// layer 1 of 3 per planning 133 §"Egress safeguard enforcement").
-//
-// When the sessionEgressService is wired in this deployment (which
-// signals a SOCKS5/OpenVPN/WireGuard backend is reachable), POST
-// /v1/sessions refuses any request body that lacks a `proxy` field.
-// This enforces CLAUDE.md's non-negotiable "sessions cannot egress
-// without proxy" at the API entry point, so the harness + WebKit
-// fork layers don't have to be the only safety net.
-//
-// Posture verified here:
-//   1. Default deployment (no backend wired) → session-create with no
-//      proxy proceeds (current prod posture).
-//   2. Wired deployment (sessionEgressService stub injected) →
-//      session-create without proxy → 400 BadRequest with docs pointer.
+// Direct-session egress safety boundary. These routes have no typed proxy
+// transport, so raw `proxy` is always rejected instead of being stripped and
+// deployments that require egress disable the entire direct-create surface.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 describe('EG-API-1.4 — egress safeguard at API layer', () => {
   let fx: TestAppFixture;
+
+  async function expectNoSessionRows(fixture: TestAppFixture): Promise<void> {
+    const counts = await fixture.sessionsRepo.countAllByStatus();
+    expect(Object.values(counts).reduce((sum, count) => sum + count, 0)).toBe(0);
+    expect(await fixture.sessionsRepo.listActiveByAccount(fixture.accountId)).toHaveLength(0);
+  }
 
   afterEach(async () => {
     if (fx) await fx.cleanup();
@@ -35,8 +29,30 @@ describe('EG-API-1.4 — egress safeguard at API layer', () => {
     expect(res.statusCode).toBe(201);
   });
 
-  it('wired posture: POST /v1/sessions without proxy → 400 BadRequest with planning-133 docs pointer', async () => {
+  it('default posture rejects an explicit raw proxy before creating a row or driver session', async () => {
+    fx = await buildTestApp();
+    const createSpy = vi.spyOn(fx.driver, 'createSession');
+    const insertSpy = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { proxy: {} },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(
+      /raw proxy field is not supported.*owned saved proxy_id/i,
+    );
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(insertSpy).not.toHaveBeenCalled();
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+    await expectNoSessionRows(fx);
+  });
+
+  it('wired posture: POST /v1/sessions without proxy fails the whole direct surface closed', async () => {
     fx = await buildTestApp({ enableEgressSafeguard: true });
+    const createSpy = vi.spyOn(fx.driver, 'createSession');
+    const insertSpy = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/sessions',
@@ -45,15 +61,18 @@ describe('EG-API-1.4 — egress safeguard at API layer', () => {
     });
     expect(res.statusCode).toBe(400);
     const body = res.json<{ detail: string }>();
-    expect(body.detail).toMatch(/proxy configuration is required/);
-    // 2026-05-20 — docs pointer landed on docs.driftstack.dev/api/sessions/
-    // (egress section in the sessions reference) rather than a separate
-    // /sessions/proxy page; matches the routes/sessions.ts source string.
-    expect(body.detail).toMatch(/docs\.driftstack\.dev\/api\/sessions/);
+    expect(body.detail).toMatch(/Direct session creation is disabled/);
+    expect(body.detail).toMatch(/owned saved proxy_id/);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(insertSpy).not.toHaveBeenCalled();
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+    await expectNoSessionRows(fx);
   });
 
-  it('wired posture: POST /v1/sessions WITH proxy → 201 (safeguard passes through to service)', async () => {
+  it('wired posture cannot be bypassed by a valid-looking raw proxy shape', async () => {
     fx = await buildTestApp({ enableEgressSafeguard: true });
+    const createSpy = vi.spyOn(fx.driver, 'createSession');
+    const insertSpy = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/sessions',
@@ -62,7 +81,12 @@ describe('EG-API-1.4 — egress safeguard at API layer', () => {
         proxy: { type: 'socks5', socks5: { host: 'proxy.example.com', port: 1080 } },
       },
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/Direct session creation is disabled/);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(insertSpy).not.toHaveBeenCalled();
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+    await expectNoSessionRows(fx);
   });
 
   // W615 — SESSION_PROXY_REQUIRED explicit override (founder verdict
@@ -82,8 +106,10 @@ describe('EG-API-1.4 — egress safeguard at API layer', () => {
     expect(res.statusCode).toBe(201);
   });
 
-  it('W615 NOT wired + SESSION_PROXY_REQUIRED=true: POST /v1/sessions with no proxy → 400 (force-required posture)', async () => {
+  it('W615 NOT wired + SESSION_PROXY_REQUIRED=true disables direct creation', async () => {
     fx = await buildTestApp({ sessionProxyRequired: true });
+    const createSpy = vi.spyOn(fx.driver, 'createSession');
+    const insertSpy = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/sessions',
@@ -91,6 +117,10 @@ describe('EG-API-1.4 — egress safeguard at API layer', () => {
       payload: {},
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/proxy configuration is required/);
+    expect(res.json<{ detail: string }>().detail).toMatch(/Direct session creation is disabled/);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(insertSpy).not.toHaveBeenCalled();
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+    await expectNoSessionRows(fx);
   });
 });

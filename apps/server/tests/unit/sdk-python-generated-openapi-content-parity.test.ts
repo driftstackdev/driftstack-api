@@ -92,6 +92,7 @@ describe('W622 sdk-python generated + openapi content parity', () => {
     expect(body).toMatch(/from pydantic import \(/);
     expect(body).toMatch(/^\s+AnyUrl,$/m);
     expect(body).toMatch(/^\s+AwareDatetime,$/m);
+    expect(body).toMatch(/^\s+ConfigDict,$/m);
     expect(body).toMatch(/^\s+RootModel,$/m);
     expect(body).toMatch(/^\s+constr,$/m);
     expect(body).toMatch(/^class Account\(BaseModel\):$/m);
@@ -152,6 +153,9 @@ describe('W622 sdk-python generated + openapi content parity', () => {
     expect(body).toMatch(/^class TeamAcceptRequest\(BaseModel\):$/m);
     expect(body).toMatch(/token: constr\(min_length=20\)/);
     expect(body).toMatch(/^class TeamOwner\(BaseModel\):$/m);
+    expect(body).toMatch(
+      /class LaunchProfileRequest\(BaseModel\):\s*\n\s*model_config = ConfigDict\(\s*\n\s*extra="forbid",\s*\n\s*\)\s*\n\s*label: constr\(max_length=120\) \| None = None/,
+    );
     // W140 — the AgentIntent discriminated union exposes scroll + behavioral_pause
     // in the python SDK (AgentIntent5/AgentIntent6 generated from the openapi spec).
     expect(body).toMatch(/^\s+kind: Literal\["scroll"\]$/m);

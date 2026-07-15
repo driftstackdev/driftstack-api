@@ -125,6 +125,17 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
+  it('states the fail-closed direct egress boundary without implying a raw proxy is consumed', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/does not accept a raw `proxy` field/);
+    expect(p).toMatch(/never silently stripped or treated as an egress safeguard/);
+    expect(p).toContain('`POST /v1/agent-sessions`');
+    expect(p).toContain('`proxy_id`');
+    expect(p).toMatch(/fail closed for every body/);
+    expect(p).toMatch(/Setting the flag to `false` preserves\s*\n?proxy-free direct creation/);
+  });
+
   it('2026-05-20 — profile-binding flipped planned→SHIPPED (fa8cb83a). Doc now pins the wired profile_id field on POST /v1/sessions, the metadata-stamp behaviour, cross-account 404 anti-enumeration, and the cross-link to profiles.launch().', () => {
     const p = read(PAGE);
 

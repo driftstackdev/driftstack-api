@@ -3576,9 +3576,11 @@
         "type": "object",
         "properties": {
           "label": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 120
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "parameters": {}

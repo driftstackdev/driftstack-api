@@ -26,7 +26,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-06-16',
     category: 'launch',
     title: 'Route sessions through your own proxies',
-    body: 'You can now register your own SOCKS5 proxies against your account and run a session through one, so websites see your proxy\'s address as where the browsing comes from (your egress IP). Manage them in the desktop app under Proxies (set one as a profile default and launching routes through it automatically) or via the API at /v1/account/me/proxies — list, create, update, delete, and test reachability. Pass proxy_id when creating a session to choose the exit (egress) per run. Proxy passwords are stored encrypted while saved on our servers (encrypted at rest) under your account\'s own key and are never shown back to anyone, and hosts pointed at private or internal addresses are rejected. Documented at docs.driftstack.dev/api/proxies.',
+    body: 'You can now register your own SOCKS5 proxies against your account and run an agent session through one, so websites see your proxy\'s address as where the browsing comes from (your egress IP). Manage them in the desktop app under Proxies or via the API at /v1/account/me/proxies — list, create, update, delete, and test reachability. Pass an owned saved proxy_id when creating an agent session to choose the exit per run. The direct /v1/sessions and /v1/profiles/:id/launch verbs do not accept raw proxy data. Proxy passwords are stored encrypted while saved on our servers (encrypted at rest) under your account\'s own key and are never shown back to anyone, and hosts pointed at private or internal addresses are rejected. Documented at docs.driftstack.dev/api/proxies.',
   },
   {
     date: '2026-06-16',
@@ -50,7 +50,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-06-11',
     category: 'self-hosted',
     title: 'Self-hosted: sessions no longer require a proxy',
-    body: 'On self-hosted deployments, sessions reach the internet from your own machine — so requiring a proxy on every session-create made no sense there. The new SESSION_PROXY_REQUIRED environment variable makes the egress safeguard explicit: leave it unset to keep today\'s automatic behavior (a proxy is required whenever a proxy system — an egress backend — is connected, which is how our cloud runs), set false on self-hosted boxes to create sessions proxy-free, or true to force-require. One env var, no code change.',
+    body: 'On self-hosted deployments, direct sessions can reach the internet from your own machine, so SESSION_PROXY_REQUIRED=false keeps proxy-free direct creation available. Unset follows backend inference; true or inferred true now fails the entire direct /v1/sessions and /v1/profiles/:id/launch surface closed because those verbs have no typed consumed egress authority. A raw proxy key is rejected, never treated as proof of egress. Customer-controlled proxy routing uses an owned saved proxy_id on /v1/agent-sessions.',
   },
   {
     date: '2026-06-11',

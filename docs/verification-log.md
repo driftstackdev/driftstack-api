@@ -28787,3 +28787,41 @@ The direct correlator/connection proof passes 2 files and 53/53 tests. The expan
 Fleet registry, routing, dispatch, request-correlator, profile and bootstrap matrix
 passes 19 files and 336/336 tests. Strict server source and test TypeScript,
 targeted ESLint/Prettier and diff/whitespace checks are green.
+
+---
+
+## V-690 — Direct session egress fails closed until it is actually consumed
+
+**Date:** 2026-07-15
+
+The direct `POST /v1/sessions` and `POST /v1/profiles/:id/launch` routes inspected a
+raw `proxy` property when egress policy was enabled, but neither request schema,
+SessionsService nor driver consumed that value. A caller could therefore supply even
+an empty object, pass the apparent safeguard and receive a session with no proven
+customer egress. Profile launch also manually accepted any string label while the
+sibling create-session contract capped labels at 120 characters.
+
+Both direct verbs now reject an explicitly present raw `proxy` field before profile
+lookup, quota checks, repository insertion or driver allocation. When explicit or
+inferred deployment policy requires customer egress, the entire direct create
+surface fails closed for every request body because it has no typed, owner-validated
+egress authority. Customer-controlled egress remains the saved `proxy_id` flow on
+`POST /v1/agent-sessions`; no environment was changed and no driver/Fleet capability
+was activated. Default-false deployments retain proxy-free direct creation.
+
+`LaunchProfileRequestSchema` is a strict label-only projection of the canonical
+create-session schema, so 120 characters succeeds, 121 and every unknown field fail,
+and the executable route and OpenAPI share one source. The regenerated OpenAPI and
+Pydantic model publish `maxLength=120`, `additionalProperties=false`,
+`constr(max_length=120)` and `extra="forbid"`. Two consecutive canonical Python
+generations, compared with only the generator timestamp removed, produced the same
+SHA-256 `6655ff2ac0f4ede2ce84a02551e14d246605a7b8bca2dc60071af4852fd3e678`,
+proving the broader generated-file formatting is deterministic current-tool output,
+not hand editing or nondeterministic drift.
+
+The direct runtime, OpenAPI, schema, generated-contract and public/operator copy
+matrix passes 12 files and 225/225 tests. Reject-path proof spies the exact atomic
+session insertion method and driver allocation, and independently requires zero
+stored active/status rows and zero events. API-types and strict server source/test
+TypeScript, docs and marketing Astro checks (zero diagnostics), targeted
+ESLint/Prettier and diff/whitespace checks are green.
