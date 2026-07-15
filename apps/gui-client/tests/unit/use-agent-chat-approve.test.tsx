@@ -112,6 +112,41 @@ describe('useAgentChat approve()', () => {
     expect(result.current.pendingConfirmation).toBeNull();
   });
 
+  it('joins rapid duplicate approvals to one approved message dispatch', async () => {
+    let finishApproval: ((response: AgentMessageResponse) => void) | undefined;
+    message.mockResolvedValueOnce(HALT).mockImplementationOnce(
+      () =>
+        new Promise<AgentMessageResponse>((resolve) => {
+          finishApproval = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useAgentChat());
+
+    await act(async () => {
+      await result.current.send('place my order');
+    });
+    let first!: Promise<void>;
+    let duplicate!: Promise<void>;
+    await act(async () => {
+      first = result.current.approve();
+      duplicate = result.current.approve();
+      await Promise.resolve();
+    });
+
+    expect(message).toHaveBeenCalledTimes(2);
+    expect(result.current.sending).toBe(true);
+
+    await act(async () => {
+      finishApproval?.(DONE);
+      await Promise.all([first, duplicate]);
+    });
+
+    expect(message).toHaveBeenCalledTimes(2);
+    expect(result.current.turns.filter((turn) => turn.role === 'user')).toHaveLength(1);
+    expect(result.current.turns.filter((turn) => turn.role === 'agent')).toHaveLength(2);
+    expect(result.current.pendingConfirmation).toBeNull();
+  });
+
   it('accumulates approvals across successive halts (a 2-consequential-action plan must not loop)', async () => {
     // The server re-decomposes on each message and reads approvals ONLY from that
     // message. If approve() sent just the latest approval, a plan that halts on
@@ -253,6 +288,70 @@ describe('useAgentChat approve()', () => {
   });
 });
 
+describe('useAgentChat atomic turn ownership', () => {
+  beforeEach(() => {
+    create.mockReset();
+    message.mockReset();
+    create.mockResolvedValue(SESSION);
+  });
+
+  it('joins rapid identical sends to one session/message and one optimistic turn', async () => {
+    let finishMessage: ((response: AgentMessageResponse) => void) | undefined;
+    message.mockImplementationOnce(
+      () =>
+        new Promise<AgentMessageResponse>((resolve) => {
+          finishMessage = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useAgentChat());
+    let first!: Promise<boolean>;
+    let duplicate!: Promise<boolean>;
+
+    await act(async () => {
+      first = result.current.send('run exactly once');
+      duplicate = result.current.send('run exactly once');
+      await Promise.resolve();
+    });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(message).toHaveBeenCalledTimes(1);
+    expect(result.current.turns.filter((turn) => turn.role === 'user')).toHaveLength(1);
+    expect(result.current.sending).toBe(true);
+
+    let outcomes: boolean[] = [];
+    await act(async () => {
+      finishMessage?.(DONE);
+      outcomes = await Promise.all([first, duplicate]);
+    });
+
+    expect(outcomes).toEqual([true, true]);
+    expect(result.current.turns.filter((turn) => turn.role === 'user')).toHaveLength(1);
+    expect(result.current.turns.filter((turn) => turn.role === 'agent')).toHaveLength(1);
+    expect(result.current.sending).toBe(false);
+  });
+
+  it('refuses a different logical turn while one is owned without mutating its transcript', async () => {
+    message.mockReturnValueOnce(new Promise(() => {}));
+    const { result } = renderHook(() => useAgentChat());
+    let refused = true;
+
+    await act(async () => {
+      void result.current.send('first task');
+      refused = await result.current.send('different task');
+      await Promise.resolve();
+    });
+
+    expect(refused).toBe(false);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(message).toHaveBeenCalledTimes(1);
+    const userTurns = result.current.turns.filter((turn) => turn.role === 'user');
+    expect(userTurns).toHaveLength(1);
+    expect(userTurns[0]?.text).toBe('first task');
+
+    act(() => result.current.cancel());
+  });
+});
+
 // P2 #9 — Stop on a HUNG AI turn (the message call never resolves) must remove the
 // dangling user bubble NOW (the post() rollback only fires on resolve, which never
 // happens for a hung turn), so it isn't left on screen AND isn't persisted to chat
@@ -303,6 +402,27 @@ describe('useAgentChat cancel() on a hung turn', () => {
     expect(userTurns).toHaveLength(1);
     expect(userTurns[0]?.text).toBe('first');
     expect(result.current.turns).toHaveLength(2);
+  });
+
+  it('releases the owner on Stop so a successor can start while the old request stays hung', async () => {
+    message.mockReturnValueOnce(new Promise(() => {})).mockResolvedValueOnce(DONE);
+    const { result } = renderHook(() => useAgentChat());
+
+    await act(async () => {
+      void result.current.send('first hangs');
+      await Promise.resolve();
+    });
+    act(() => result.current.cancel());
+
+    await act(async () => {
+      expect(await result.current.send('successor')).toBe(true);
+    });
+
+    expect(message).toHaveBeenCalledTimes(2);
+    const userTurns = result.current.turns.filter((turn) => turn.role === 'user');
+    expect(userTurns).toHaveLength(1);
+    expect(userTurns[0]?.text).toBe('successor');
+    expect(result.current.turns.filter((turn) => turn.role === 'agent')).toHaveLength(1);
   });
 });
 

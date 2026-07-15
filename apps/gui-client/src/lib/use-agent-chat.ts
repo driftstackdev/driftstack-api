@@ -80,10 +80,7 @@ function friendlyChatError(err: unknown): ChatError {
 }
 
 export type ChatModel =
-  | 'claude-opus-4-8'
-  | 'claude-opus-4-7'
-  | 'claude-sonnet-4-6'
-  | 'claude-haiku-4-5';
+  'claude-opus-4-8' | 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
 
 export interface ChatTurn {
   /** Stable, monotonic id for React keys (turns are append-only). */
@@ -240,6 +237,16 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // session gets a fresh key; a confirmed terminal success clears it. Stop keeps
   // it because Stop is only a local soft-cancel and the server may still finish.
   const pendingTurnReceiptRef = useRef<{ signature: string; key: string } | null>(null);
+  // React's `sending` state is visual feedback, not a synchronous admission
+  // boundary. Keep one authoritative post owner so rapid Send/Approve events
+  // cannot duplicate session creation, device work, optimistic turns or billing.
+  // Identical callers join the same outcome; a different logical turn is
+  // refused until the owner settles or an explicit Stop/reset/restore releases it.
+  const activePostRef = useRef<{
+    token: symbol;
+    signature: string;
+    promise: Promise<boolean>;
+  } | null>(null);
   // Consequential-action approvals ACCUMULATED across successive halts of the SAME
   // logical task. The server re-decomposes on every message and builds its approved
   // set purely from THAT message's approve_consequential_actions (stateless — it does
@@ -257,6 +264,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const cancelGenRef = useRef(0);
   const cancel = useCallback(() => {
     cancelGenRef.current += 1;
+    activePostRef.current = null;
     setSending(false);
     // P2 #9 — finalize the dangling user bubble NOW (don't wait for a possibly-
     // never-resolving post): remove the orphan so it isn't left on screen and isn't
@@ -306,6 +314,26 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         return false;
       }
       const approvals = options?.approvals;
+      const callSignature = JSON.stringify({
+        userMessage,
+        approvals: approvals ?? null,
+        appendUserTurn: options?.appendUserTurn !== false,
+      });
+      const activePost = activePostRef.current;
+      if (activePost !== null) {
+        return activePost.signature === callSignature ? activePost.promise : false;
+      }
+      const ownerToken = Symbol('agent-chat-post');
+      let settleJoined!: (ok: boolean) => void;
+      const joinedPromise = new Promise<boolean>((resolve) => {
+        settleJoined = resolve;
+      });
+      activePostRef.current = {
+        token: ownerToken,
+        signature: callSignature,
+        promise: joinedPromise,
+      };
+      let outcome = false;
       setSending(true);
       setError(null);
       // Capture this send's cancel-generation; if Stop bumps it before we
@@ -420,6 +448,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         // the bubble is no longer "dangling" — clear the in-flight marker.
         inFlightUserTurnIdRef.current = null;
         setTurns((t) => [...t, { id: nextId(), role: 'agent', response }]);
+        outcome = true;
         return true;
       } catch (err) {
         // Roll back the optimistic user bubble whether this was a Stop or a real
@@ -430,7 +459,11 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         setError(friendlyChatError(err));
         return false;
       } finally {
-        if (cancelGenRef.current === gen) setSending(false);
+        settleJoined(outcome);
+        if (activePostRef.current?.token === ownerToken) {
+          activePostRef.current = null;
+          if (cancelGenRef.current === gen) setSending(false);
+        }
       }
     },
     [
@@ -526,6 +559,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     // discards its result on resolve instead of writing the response onto this
     // fresh chat's transcript + session (audit wja3dfl5t P0). Same for restore().
     cancelGenRef.current += 1;
+    activePostRef.current = null;
     // Best-effort close the chat we're leaving so its server session + any
     // dispatched Mac don't leak until the reaper (sweep2). Read via the ref so we
     // close the CURRENT session, not a stale closure capture.
@@ -548,6 +582,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // Invalidate any in-flight post() from the chat we're switching AWAY from, so
       // its late response can't attach to (and persist onto) the restored chat.
       cancelGenRef.current += 1;
+      activePostRef.current = null;
       // Best-effort close the chat we're switching AWAY from (same leak as reset).
       if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
       closeServerSession(sessionIdRef.current);
