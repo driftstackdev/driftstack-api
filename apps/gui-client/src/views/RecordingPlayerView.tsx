@@ -26,6 +26,33 @@ export interface RecordingPlayerViewProps {
 
 const TICK_MS = 100; // playback cursor advances at 10 Hz, frames pick the nearest
 
+// Space is a playback shortcut only when the page itself owns the keystroke.
+// Native/ARIA controls already have Space semantics; handling their bubbled
+// keydown here would toggle playback once and then toggle it again when the
+// browser activates the focused control.
+const INTERACTIVE_SHORTCUT_TARGETS = [
+  'button',
+  'a[href]',
+  'input',
+  'textarea',
+  'select',
+  'summary',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="tab"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="switch"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="slider"]',
+].join(',');
+
+function isInteractiveShortcutTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(INTERACTIVE_SHORTCUT_TARGETS) !== null;
+}
+
 export function RecordingPlayerView({
   recordingId,
   onBack,
@@ -128,23 +155,13 @@ export function RecordingPlayerView({
     return stopTick;
   }, [playing, startTick, stopTick]);
 
-  // Space toggles play/pause — but only when the keystroke isn't meant for a
-  // text field. Without the typing guard, hitting Space while focused in an
-  // input/textarea/contenteditable would both type a space AND hijack
-  // playback, so we bail when an editable element holds focus.
+  // Space toggles play/pause only when the page itself owns the keystroke.
+  // Form fields, native controls and ARIA controls keep their normal Space
+  // behavior; in particular, the frame's own button must not double-toggle.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key !== ' ' && e.code !== 'Space') return;
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      if (
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        target?.isContentEditable === true
-      ) {
-        return;
-      }
+      if (isInteractiveShortcutTarget(e.target)) return;
       e.preventDefault();
       if (cursorMs >= totalMs) {
         // Restart from the beginning if we're at the end (mirrors togglePlay).
@@ -325,7 +342,7 @@ export function RecordingPlayerView({
                 {playing ? '❚❚' : '▶'}
               </span>
               <span className="rounded bg-black/50 px-2 py-0.5 text-2xs text-white">
-                Space to play
+                {playing ? 'Space to pause' : 'Space to play'}
               </span>
             </span>
           </button>

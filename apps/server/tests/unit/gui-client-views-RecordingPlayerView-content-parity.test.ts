@@ -99,6 +99,31 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     expect(body).toContain("{exporting ? 'Exporting…' : 'Export'}");
   });
 
+  it('global Space playback excludes native and ARIA interactive targets to prevent double activation', () => {
+    expect(body).toContain('const INTERACTIVE_SHORTCUT_TARGETS = [');
+    for (const selector of [
+      "'button'",
+      "'a[href]'",
+      "'input'",
+      "'textarea'",
+      "'select'",
+      '\'[contenteditable]:not([contenteditable="false"])\'',
+      '\'[role="button"]\'',
+      '\'[role="link"]\'',
+      '\'[role="tab"]\'',
+      '\'[role="slider"]\'',
+    ]) {
+      expect(body).toContain(selector);
+    }
+    expect(body).toContain('if (isInteractiveShortcutTarget(e.target)) return;');
+
+    const bypassMutation = body.replace(
+      'if (isInteractiveShortcutTarget(e.target)) return;',
+      'if (false) return;',
+    );
+    expect(bypassMutation).not.toContain('if (isInteractiveShortcutTarget(e.target)) return;');
+  });
+
   it('Lazy-hydrate effect humanizes disk errors, clears loading in finally, and retains the recording-not-found branch', () => {
     expect(body).toMatch(/import \{ humanizeError \} from '\.\.\/lib\/humanize-error';/);
     expect(body).toMatch(
@@ -143,8 +168,8 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     expect(body).toMatch(
       /<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{togglePlay\}\s*\n?\s*aria-label=\{playing \? 'Pause playback' : 'Play recording'\}[\s\S]*?<img\s*\n?\s*src=\{currentFrame\.dataUrl\}/,
     );
-    // …with the hover-revealed keyboard hint.
-    expect(body).toMatch(/Space to play/);
+    // …with an honest hover-revealed keyboard hint for each state.
+    expect(body).toContain("{playing ? 'Space to pause' : 'Space to play'}");
   });
 
   it('file exists at canonical path', () => {

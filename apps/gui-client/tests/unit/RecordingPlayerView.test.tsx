@@ -81,7 +81,7 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
     expect(view.getByText('Play')).toBeInTheDocument();
   });
 
-  it('Space is IGNORED while an input/textarea is focused (does not hijack typing)', () => {
+  it('Space is ignored while a form field is focused (does not hijack typing)', () => {
     const { container } = renderPlayer(
       <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
     );
@@ -100,6 +100,46 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
     fireEvent.keyDown(input, { key: ' ', code: 'Space' });
     expect(view.getByText('Play')).toBeInTheDocument();
     input.remove();
+  });
+
+  it("leaves Space on the frame button to native activation so playback doesn't double-toggle", () => {
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
+    const view = within(container);
+    const frameButton = view.getByRole('button', { name: 'Play recording' });
+
+    // Browsers dispatch the keydown first and activate the focused button
+    // afterwards. The global shortcut must ignore the first half.
+    fireEvent.keyDown(frameButton, { key: ' ', code: 'Space' });
+    expect(view.getByText('Play')).toBeInTheDocument();
+
+    fireEvent.click(frameButton);
+    expect(view.getByText('Pause')).toBeInTheDocument();
+    expect(view.getByText('Space to pause')).toBeInTheDocument();
+  });
+
+  it('does not hijack Space from local buttons, links, or ARIA controls', () => {
+    const onBack = vi.fn();
+    const { container } = renderPlayer(<RecordingPlayerView recordingId="rec_1" onBack={onBack} />);
+    const view = within(container);
+
+    fireEvent.keyDown(view.getByRole('button', { name: 'Export' }), {
+      key: ' ',
+      code: 'Space',
+    });
+    fireEvent.keyDown(view.getByRole('button', { name: '← Recordings' }), {
+      key: ' ',
+      code: 'Space',
+    });
+
+    const ariaControl = document.createElement('div');
+    ariaControl.setAttribute('role', 'tab');
+    container.appendChild(ariaControl);
+    fireEvent.keyDown(ariaControl, { key: ' ', code: 'Space' });
+
+    expect(view.getByText('Play')).toBeInTheDocument();
+    expect(onBack).not.toHaveBeenCalled();
   });
 
   it('the scrubber carries an accessible label', () => {
