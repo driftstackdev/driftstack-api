@@ -28331,3 +28331,37 @@ tests; the expanded unit/integration, source contract, R2 fallback, bootstrap
 and status-site matrix passes 9 files and 132/132 tests. Strict server
 source/test TypeScript, targeted ESLint/Prettier and diff/whitespace checks are
 green.
+
+---
+
+## V-677 — Fleet WebSocket bounds its aggregate outbound queue
+
+**Date:** 2026-07-15
+
+The Fleet control WebSocket capped each inbound frame at 96 MiB but handed every
+outbound registry frame directly to `ws.send`. A legitimate 64 MiB file upload
+expands to 89,478,488 base64 bytes before its JSON envelope, so that individual
+frame must remain valid. If the node stopped draining, however, successive
+uploads and control messages for multiple accounts on that node could accumulate
+in the process-local socket queue without an aggregate ceiling.
+
+The route adapter now measures each serialized frame in UTF-8 and compares it
+with the socket's current `bufferedAmount`. A total at or below 96 MiB is
+admitted; a total above it throws a bounded transport error before `send`.
+Existing correlators convert that synchronous refusal to their uniform failure
+outcomes and clear pending timers. The shared socket is deliberately left open,
+so later work proceeds normally after the network queue drains. Authentication,
+the 96 MiB inbound `maxPayload`, supersede handling, ping/pong keepalive,
+registry identity, frame schemas and account limits are unchanged.
+
+Boundary verification constructs the exact maximum-upload JSON overhead plus
+base64 length without allocating the full payload, proves empty-queue and exact
+96 MiB admission, one-byte aggregate refusal, and re-admission after drain. A
+genuine client/server WebSocket test forces only the server socket's reported
+backlog to the ceiling and proves the refused dispatch never reaches the client,
+settles with zero correlator state, leaves the socket registered/open, then
+completes a normal round trip after the reported queue drains. The direct route
+and socket suite passes 15/15 tests; the expanded Fleet auth, activation,
+admission, registry and correlator matrix passes 14 files and 148/148 tests.
+Strict server source/test TypeScript, targeted ESLint/Prettier and
+diff/whitespace checks are green.

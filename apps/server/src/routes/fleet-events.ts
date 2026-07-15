@@ -49,6 +49,8 @@ type AuthedUpgradeRequest = FastifyRequest & { fleetNodeId?: string };
 // which would otherwise leave the handler's `socket` as `any`. A real
 // ws.WebSocket is assignable to this (it has these exact methods).
 interface FleetSocket {
+  /** Bytes ws has accepted but the underlying network has not drained yet. */
+  readonly bufferedAmount: number;
   send(data: string): void;
   ping(): void;
   pong(): void;
@@ -67,6 +69,24 @@ function messageToBuffer(data: WsMessageData): Buffer {
   if (Buffer.isBuffer(data)) return data;
   if (Array.isArray(data)) return Buffer.concat(data);
   return Buffer.from(data);
+}
+
+/** Keep the process-local outbound queue below the same generous ceiling that
+ * admits the largest legitimate inbound frame. A synchronous refusal is
+ * intentional: every registry correlator already converts transport throws to
+ * its bounded error outcome and clears its pending timer. The shared node socket
+ * stays open, so a later request can proceed once the existing queue drains. */
+export const FLEET_WS_MAX_BUFFERED_BYTES = 96 * 1024 * 1024;
+
+export function assertFleetOutboundCapacity(bufferedAmount: number, frameBytes: number): void {
+  if (bufferedAmount + frameBytes > FLEET_WS_MAX_BUFFERED_BYTES) {
+    throw new Error('fleet control socket outbound buffer capacity exceeded');
+  }
+}
+
+function sendFleetFrame(socket: FleetSocket, data: string): void {
+  assertFleetOutboundCapacity(socket.bufferedAmount, Buffer.byteLength(data, 'utf8'));
+  socket.send(data);
 }
 
 export async function registerFleetEventsRoutes(
@@ -132,7 +152,7 @@ export async function registerFleetEventsRoutes(
       // destroy — the box sees a clean WS close + reconnects, not an abrupt RST.
       const conn = deps.registry.register(
         nodeId,
-        (data) => socket.send(data),
+        (data) => sendFleetFrame(socket, data),
         () => {
           try {
             socket.close(1012, 'superseded by a newer control connection');

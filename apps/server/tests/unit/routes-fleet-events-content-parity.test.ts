@@ -7,6 +7,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  FLEET_WS_MAX_BUFFERED_BYTES,
+  assertFleetOutboundCapacity,
+} from '../../src/routes/fleet-events.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -67,12 +71,46 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain('{ auth: deps.auth, logger: req.log },');
   });
 
+  it('admits one maximum upload wire frame from an empty queue, rejects aggregate overflow, and recovers after drain', () => {
+    const uploadFileBytes = 64 * 1024 * 1024;
+    const uploadDataB64Bytes = 4 * Math.ceil(uploadFileBytes / 3);
+    const emptyEnvelopeBytes = Buffer.byteLength(
+      JSON.stringify({
+        type: 'uploadFile',
+        requestId: '00000000-0000-4000-8000-000000000001',
+        sessionId: 'agt_00000000-0000-4000-8000-000000000001',
+        name: 'n'.repeat(255),
+        mime: 'm'.repeat(255),
+        dataB64: '',
+      }),
+      'utf8',
+    );
+    const maximumUploadFrameBytes = emptyEnvelopeBytes + uploadDataB64Bytes;
+    const exactBoundaryBuffer = FLEET_WS_MAX_BUFFERED_BYTES - maximumUploadFrameBytes;
+
+    expect(maximumUploadFrameBytes).toBeLessThan(FLEET_WS_MAX_BUFFERED_BYTES);
+    expect(() => assertFleetOutboundCapacity(0, maximumUploadFrameBytes)).not.toThrow();
+    expect(() =>
+      assertFleetOutboundCapacity(exactBoundaryBuffer, maximumUploadFrameBytes),
+    ).not.toThrow();
+    expect(() =>
+      assertFleetOutboundCapacity(exactBoundaryBuffer + 1, maximumUploadFrameBytes),
+    ).toThrow('fleet control socket outbound buffer capacity exceeded');
+    // Admission has no latch of its own: once ws reports a drained queue, the
+    // same maximum legitimate frame is accepted again.
+    expect(() => assertFleetOutboundCapacity(0, maximumUploadFrameBytes)).not.toThrow();
+
+    expect(body).toContain('readonly bufferedAmount: number;');
+    expect(body).toContain("Buffer.byteLength(data, 'utf8')");
+    expect(body).toContain('(data) => sendFleetFrame(socket, data),');
+  });
+
   it('handler wiring pinned: register node by nodeId; route inbound messages; explicit PONG of inbound pings (+ ws auto-pong) + 30s keepalive ping with NO terminate(); clearInterval + unregister on close + error', () => {
     // register(nodeId, send, terminate) — the 3rd arg lets a later reconnect SUPERSEDE +
     // actively close THIS socket (P0 2026-07-11 zombie-conn fix). toContain fragments —
     // prettier wraps the multi-line call.
     expect(body).toContain('const conn = deps.registry.register(');
-    expect(body).toContain('(data) => socket.send(data),');
+    expect(body).toContain('(data) => sendFleetFrame(socket, data),');
     expect(body).toContain("socket.close(1012, 'superseded by a newer control connection')");
     expect(body).toContain("socket.on('message', (data: WsMessageData) => {");
     expect(body).toContain('conn.handleInboundBytes(messageToBuffer(data))');
@@ -96,7 +134,9 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toMatch(
       /export function registerFleetEventsDisabledRoutes\(app: FastifyInstance\): void \{\s*\n?\s*const detail = 'Fleet events stream is unavailable on this deployment\.';/,
     );
-    const disabled = body.slice(body.indexOf('registerFleetEventsDisabledRoutes'));
+    const disabled = body.slice(
+      body.lastIndexOf('export function registerFleetEventsDisabledRoutes'),
+    );
     expect(disabled).not.toMatch(/fleet_nodes|mTLS|pending|docs\/internal/i);
     expect(body).toMatch(/throw new FeatureUnavailableError\(detail\);/);
   });

@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES } from '../../src/services/fleet-inbound-frame-gate.js';
+import { FLEET_WS_MAX_BUFFERED_BYTES } from '../../src/routes/fleet-events.js';
 
 const subtle = webcrypto.subtle;
 
@@ -185,6 +186,94 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
     expect(result.success).toBe(true);
     expect(result.intentId).toBe('intent-1');
     expect(result.sessionId).toBe('sess-1');
+  });
+
+  it('refuses aggregate outbound backlog without closing the socket, clears correlation, and recovers after drain', async () => {
+    const ws = await connect({
+      authorization: `Bearer ${await freshJwt()}`,
+      [FLEET_NODE_ID_HEADER]: NODE_ID,
+    });
+    const conn = fx.fleetControlRegistry.get(NODE_ID);
+    expect(conn).toBeDefined();
+
+    const bufferedAmountDescriptor = Object.getOwnPropertyDescriptor(
+      WebSocket.prototype,
+      'bufferedAmount',
+    );
+    if (bufferedAmountDescriptor?.get === undefined) {
+      throw new Error('ws bufferedAmount getter is unavailable');
+    }
+    const readClientBufferedAmount = bufferedAmountDescriptor.get.bind(ws);
+    let serverBufferedAmount = FLEET_WS_MAX_BUFFERED_BYTES;
+    Object.defineProperty(WebSocket.prototype, 'bufferedAmount', {
+      ...bufferedAmountDescriptor,
+      get(this: WebSocket): number {
+        const serverSide = (this as unknown as { _isServer: boolean })._isServer;
+        return serverSide ? serverBufferedAmount : (readClientBufferedAmount() as number);
+      },
+    });
+
+    let clientFrames = 0;
+    ws.on('message', (data: WebSocket.RawData) => {
+      clientFrames += 1;
+      const frame = JSON.parse(rawToString(data)) as {
+        type: string;
+        sessionId: string;
+        intentId: string;
+      };
+      if (frame.type !== 'intentDispatch') return;
+      ws.send(
+        JSON.stringify({
+          type: 'intentResult',
+          sessionId: frame.sessionId,
+          intentId: frame.intentId,
+          success: true,
+          durationMs: 2,
+          outputData: base64Json({ recovered: true }),
+        }),
+      );
+    });
+
+    try {
+      const refused = await conn!.correlator.dispatch({
+        type: 'intentDispatch',
+        sessionId: 'sess-buffered',
+        intentId: 'intent-buffered',
+        intentName: 'navigate',
+        inputParams: base64Json({ url: 'https://example.test/full' }),
+      });
+      expect(refused).toMatchObject({
+        success: false,
+        errorCode: 'intent_dispatch_error',
+        intentId: 'intent-buffered',
+      });
+      expect(refused.errorMessage).toContain(
+        'fleet control socket outbound buffer capacity exceeded',
+      );
+      expect(conn!.correlator.inFlight()).toBe(0);
+      expect(clientFrames).toBe(0);
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      expect(fx.fleetControlRegistry.get(NODE_ID)).toBe(conn);
+
+      serverBufferedAmount = 0;
+      const recovered = await conn!.correlator.dispatch({
+        type: 'intentDispatch',
+        sessionId: 'sess-recovered',
+        intentId: 'intent-recovered',
+        intentName: 'navigate',
+        inputParams: base64Json({ url: 'https://example.test/recovered' }),
+      });
+      expect(recovered).toMatchObject({
+        success: true,
+        intentId: 'intent-recovered',
+        sessionId: 'sess-recovered',
+      });
+      expect(clientFrames).toBe(1);
+      expect(conn!.correlator.inFlight()).toBe(0);
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+    } finally {
+      Object.defineProperty(WebSocket.prototype, 'bufferedAmount', bufferedAmountDescriptor);
+    }
   });
 
   it('an inbound frame bigger than the OLD 16 MiB cap (e.g. a large file-download reply) does not close the shared control socket or fail other in-flight correlator state', async () => {
