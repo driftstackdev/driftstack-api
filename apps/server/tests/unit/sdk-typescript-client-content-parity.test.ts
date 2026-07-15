@@ -167,7 +167,8 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(body).toMatch(/this\.http = new HttpClient\(httpConfig\);/);
   });
 
-  it('Resource instantiation — 15 `this.<name> = new <Resource>(this.http);` lines. Each resource gets `this.http` (the SAME HttpClient instance). Drift to dropping any line would let `client.<name>` be undefined at runtime even if the field declaration exists. Drift to passing a different HttpClient (or null) would crash on first verb call.', () => {
+  it('Resource instantiation — every public resource gets the SAME HttpClient instance. Drift to dropping any line would let `client.<name>` be undefined at runtime even if the field declaration exists.', () => {
+    expect(body).toMatch(/this\.archetypes = new ArchetypesResource\(this\.http\);/);
     expect(body).toMatch(/this\.sessions = new SessionsResource\(this\.http\);/);
     expect(body).toMatch(/this\.apiKeys = new ApiKeysResource\(this\.http\);/);
     expect(body).toMatch(/this\.usage = new UsageResource\(this\.http\);/);
@@ -185,18 +186,19 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(body).toMatch(/this\.team = new TeamResource\(this\.http\);/);
   });
 
-  it('18-resource count drift guard — count `readonly <name>:` fields + `new <Resource>(this.http)` instantiations. Both must equal 18 (the canonical resource inventory). Wave 1119: EG-API-1.2/1.3 added `egress` + AI-D added `agentSessions` + AI-B4 Q.5.d added `recipes` (cross-SDK lift — TS + Python + Go all landed in the same commit).', () => {
+  it('19-resource count drift guard — includes public archetype discovery alongside egress, agent sessions and recipes', () => {
     const readonlyFields = (body.match(/^ {2}readonly [a-zA-Z]+: [A-Za-z]+Resource;$/gm) ?? [])
       .length;
-    expect(readonlyFields, 'expected 18 readonly resource fields').toBe(18);
+    expect(readonlyFields, 'expected 19 readonly resource fields').toBe(19);
     const instantiations = (
       body.match(/this\.[a-zA-Z]+ = new [A-Za-z]+Resource\(this\.http\);/g) ?? []
     ).length;
-    expect(instantiations, 'expected 18 resource instantiations').toBe(18);
+    expect(instantiations, 'expected 19 resource instantiations').toBe(19);
   });
 
-  it('Cross-SDK resource-name invariant — 15-resource roster matches the canonical inventory (account/api-keys/audit-log/auth/billing/crypto-orders/email-preferences/legal/mfa/profile-snapshots/profiles/sessions/team/usage/webhooks). Drift to dropping/renaming any would diverge from the cross-SDK wire-contract pinned in W649 cross-sdk-verb-parity.test.ts.', () => {
+  it('Cross-SDK core resource-name invariant includes public archetype discovery and the established customer resources', () => {
     const fieldNames = [
+      'archetypes',
       'sessions',
       'apiKeys',
       'usage',

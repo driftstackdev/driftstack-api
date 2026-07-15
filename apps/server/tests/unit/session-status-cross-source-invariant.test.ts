@@ -12,7 +12,7 @@
 //   - packages/sdk-go/types.go (Go SDK closed-enum consts).
 //   - apps/gui-client/src/components/SessionStatusBadge.tsx
 //     (V-534.N badge label + tone maps).
-//   - apps/customer-dashboard/src/data/mocks.ts (mock-mode union).
+//   - apps/customer-dashboard/src/pages/index.astro (live badge map).
 //
 // Drift would silently break:
 //   * Server persist: pgEnum rejects unknown values.
@@ -98,11 +98,15 @@ describe('W854 SessionStatus cross-source invariant', () => {
     }
   });
 
-  // ─── Customer-dashboard mock-mode mirror ─────────────────────
+  // ─── Customer-dashboard live overview mirror ─────────────────
 
-  it("CRITICAL apps/customer-dashboard/src/data/mocks.ts mock-session declares the EXACT 5-value union — 'creating' | 'ready' | 'busy' | 'destroyed' | 'errored'. Mock-mode dashboard must render all 5 status states.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/data/mocks.ts'));
-    expect(p).toMatch(/status: 'creating' \| 'ready' \| 'busy' \| 'destroyed' \| 'errored';/);
+  it('CRITICAL customer-dashboard live overview declares badge styles for all 5 statuses; the retired mock-data file is not a contract source', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/index.astro'));
+    const map = p.match(/const STATUS_BADGE_CLASS = \{([\s\S]+?)\n\s*\};/);
+    expect(map, 'live STATUS_BADGE_CLASS map must exist').not.toBeNull();
+    for (const s of SESSION_STATUSES) {
+      expect(map![1], `dashboard live badge map missing '${s}'`).toMatch(new RegExp(`\\s${s}: '`));
+    }
   });
 
   // ─── Terminal-status classification ──────────────────────────

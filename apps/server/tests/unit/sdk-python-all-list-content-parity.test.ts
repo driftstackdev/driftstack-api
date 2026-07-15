@@ -67,6 +67,8 @@ const REQUIRED_ALL_ENTRIES = [
   // callers can annotate handlers without deep-importing via
   // driftstack.resources.*).
   'LiveKitInfo',
+  'ListArchetypesResponse',
+  'PublicArchetype',
   'AcceptInviteResponse',
   'ApiKeyList',
   'SessionsListPage',
@@ -97,7 +99,7 @@ describe('W835 Python SDK __all__ list parity', () => {
 
   // ─── Each required entry is in __all__ ────────────────────────
 
-  it('CRITICAL all required __all__ entries are present in Python __init__.py. Drift to dropping any would break customer star-imports + IDE autocomplete + sphinx-autoapi rendering. The roster covers: __version__ + 2 clients (Driftstack + AsyncDriftstack) + 30 error classes + 10 customer-facing pydantic models + 2 helpers (is_retryable + verify_webhook_signature).', () => {
+  it('CRITICAL all required __all__ entries are present in Python __init__.py. Drift to dropping any would break customer star-imports + IDE autocomplete + sphinx-autoapi rendering. The roster covers: __version__ + 2 clients (Driftstack + AsyncDriftstack) + error classes + customer-facing pydantic models (including public archetype discovery) + 2 helpers.', () => {
     const p = read(PY_INIT);
     for (const entry of REQUIRED_ALL_ENTRIES) {
       // __all__ uses double-quoted strings, one per line, with trailing comma.

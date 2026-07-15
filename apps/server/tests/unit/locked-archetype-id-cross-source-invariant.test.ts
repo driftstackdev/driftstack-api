@@ -74,11 +74,16 @@ describe('W847 LOCKED_ARCHETYPE_ID cross-source invariant', () => {
     expect(p).toMatch(new RegExp(`"archetype": "${LOCKED_ARCHETYPE_ID}"`));
   });
 
-  // ─── Customer-dashboard fixtures use the same id ─────────────
+  // ─── Customer dashboard derives labels from the registry ─────
 
-  it('CRITICAL customer-dashboard mocks.ts uses the EXACT same archetype string. Drift would silently let fixture-backed UI show a different archetype than production.', () => {
-    const dashMocks = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/data/mocks.ts'));
-    expect(dashMocks).toMatch(new RegExp(LOCKED_ARCHETYPE_ID));
+  it('CRITICAL customer-dashboard live overview imports ARCHETYPE_REGISTRY + archetypeDisplayLabel instead of duplicating a retired mock identifier', () => {
+    const dashboard = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/index.astro'));
+    expect(dashboard).toMatch(
+      /import \{ ARCHETYPE_REGISTRY, archetypeDisplayLabel \} from '@driftstack\/api-types';/,
+    );
+    expect(dashboard).toMatch(
+      /ARCHETYPE_REGISTRY\.map\(\(a\) => \[a\.id, archetypeDisplayLabel\(a\.id\)\]\)/,
+    );
   });
 
   // ─── Marketing-site index references same ────────────────────

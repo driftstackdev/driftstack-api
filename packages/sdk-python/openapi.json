@@ -2075,7 +2075,8 @@
                 "read:audit"
               ]
             },
-            "minItems": 1
+            "minItems": 1,
+            "maxItems": 19
           },
           "expires_at": {
             "type": "string",
@@ -5600,7 +5601,8 @@
                         "read:audit"
                       ]
                     },
-                    "minItems": 1
+                    "minItems": 1,
+                    "maxItems": 19
                   },
                   "expires_at": {
                     "type": "string",
@@ -27176,7 +27178,8 @@
                         "read:audit"
                       ]
                     },
-                    "minItems": 1
+                    "minItems": 1,
+                    "maxItems": 19
                   }
                 },
                 "required": ["code", "state", "user_code"]
