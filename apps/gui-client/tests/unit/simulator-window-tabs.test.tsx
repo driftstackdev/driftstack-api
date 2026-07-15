@@ -275,7 +275,12 @@ describe('SimulatorWindow — page tab strip', () => {
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
     const tabCId = (lastTabListCall().tabs[2] as { id: string }).id;
 
-    // The current tab's tagged focus is authoritative and opens the keyboard.
+    // A fresh tab transition suppresses inherited DOM focus. The page must first
+    // report blur; only the next real false→true edge may open the keyboard.
+    pushPageState({ tabId: tabCId, state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('false');
+    pushPageState({ tabId: tabCId, state: 'loaded', inputFocused: false });
+    expect(keyboardPressed(container)).toBe('false');
     pushPageState({ tabId: tabCId, state: 'loaded', inputFocused: true });
     expect(keyboardPressed(container)).toBe('true');
 
@@ -290,13 +295,19 @@ describe('SimulatorWindow — page tab strip', () => {
     pushPageState({ state: 'loaded', inputFocused: true });
     expect(keyboardPressed(container)).toBe('false');
 
-    // Only the now-active tab may reopen it; a background blur cannot close it.
+    // The now-active tab's inherited focus is suppressed too. Explicit Show remains
+    // the escape hatch for an already-focused field, and a background blur cannot
+    // close the operator-owned keyboard.
     pushPageState({ tabId: tabAId, state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('false');
+    fireEvent.click(container.querySelector('[data-component="simulator-keyboard-toggle"]')!);
     expect(keyboardPressed(container)).toBe('true');
     pushPageState({ tabId: tabBId, state: 'loaded', inputFocused: false });
     expect(keyboardPressed(container)).toBe('true');
     pushPageState({ tabId: tabAId, state: 'loaded', inputFocused: false });
     expect(keyboardPressed(container)).toBe('false');
+    pushPageState({ tabId: tabAId, state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('true');
   });
 
   // workflow w58dcbhxt #4: opening a new tab (+) supersedes an in-flight switch, so a

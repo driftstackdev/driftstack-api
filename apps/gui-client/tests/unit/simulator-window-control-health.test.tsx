@@ -183,6 +183,11 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
     act(() => {
       dataHandler?.(
         new TextEncoder().encode(
+          JSON.stringify({ state: 'loaded', url: 'https://example.com/', inputFocused: false }),
+        ),
+      );
+      dataHandler?.(
+        new TextEncoder().encode(
           JSON.stringify({ state: 'loaded', url: 'https://example.com/', inputFocused: true }),
         ),
       );

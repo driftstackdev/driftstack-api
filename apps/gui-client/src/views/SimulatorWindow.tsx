@@ -3171,6 +3171,11 @@ export function SimulatorWindow(): JSX.Element {
   // than the flex-1 screen-host losing the keyboard's height to a bottom band (#75).
   const keyboardVisibleRef = useRef(keyboardVisible);
   keyboardVisibleRef.current = keyboardVisible;
+  // A warm renderer keeps DOM focus while it is in the background. Returning to
+  // that tab must not synthesize a new user gesture and reopen the keyboard. Each
+  // active-tab transition suppresses inherited `inputFocused=true` until that target
+  // reports a blur; the next false→true edge is then a fresh focus action.
+  const keyboardFocusSuppressedTabRef = useRef<string | null>(null);
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
   // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
   // doesn't hover over other apps) — the strongest separate-window identity
@@ -3486,6 +3491,9 @@ export function SimulatorWindow(): JSX.Element {
   // a toggle reads a stale overlay flag and re-introduces the shrink for a frame.
   const toggleKeyboard = (): void => {
     const next = !keyboardVisibleRef.current;
+    // Explicit Show owns an already-focused warm tab. Explicit Hide prevents repeated
+    // `true` snapshots from undoing the operator's choice until a real blur/focus edge.
+    keyboardFocusSuppressedTabRef.current = next ? null : activeTabIdRef.current;
     keyboardVisibleRef.current = next;
     keyboardOverlayRef.current = next; // always overlay — never resize the window
     setKeyboardVisible(next);
@@ -3829,6 +3837,7 @@ export function SimulatorWindow(): JSX.Element {
   // reply handling observes the operator's latest choice synchronously.
   const activeTabIdRef = useRef(activeTabId);
   const setActiveTabIdSynchronized = useCallback((tabId: string): void => {
+    if (activeTabIdRef.current !== tabId) keyboardFocusSuppressedTabRef.current = tabId;
     activeTabIdRef.current = tabId;
     setActiveTabId(tabId);
   }, []);
@@ -4403,9 +4412,18 @@ export function SimulatorWindow(): JSX.Element {
             focusTabId === activeTabIdRef.current ||
             (rawFocusTabId === null && !inTablessSwitchGrace);
           if (focusIsAuthoritative) {
-            keyboardVisibleRef.current = msg.inputFocused;
-            keyboardOverlayRef.current = msg.inputFocused;
-            setKeyboardVisible(msg.inputFocused);
+            if (msg.inputFocused === false) {
+              if (keyboardFocusSuppressedTabRef.current === activeTabIdRef.current) {
+                keyboardFocusSuppressedTabRef.current = null;
+              }
+              keyboardVisibleRef.current = false;
+              keyboardOverlayRef.current = false;
+              setKeyboardVisible(false);
+            } else if (keyboardFocusSuppressedTabRef.current !== activeTabIdRef.current) {
+              keyboardVisibleRef.current = true;
+              keyboardOverlayRef.current = true;
+              setKeyboardVisible(true);
+            }
           }
         }
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy

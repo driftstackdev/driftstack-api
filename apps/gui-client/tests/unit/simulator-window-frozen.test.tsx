@@ -838,10 +838,10 @@ describe('SimulatorWindow — AI-mode view-only cues + live pair-state', () => {
   });
 });
 
-// #6 (founder 2026-06-30) — the on-screen keyboard auto-shows/hides from the box's
-// real DOM focus state (page_state.inputFocused), like a real iPhone, and must NOT
-// pop for the AGENT's own typing in AI mode.
-describe('SimulatorWindow — keyboard auto-show from inputFocused (#6)', () => {
+// #6 (founder 2026-06-30) — the on-screen keyboard follows fresh DOM focus edges from
+// the box (page_state.inputFocused), but saved/warm focus must not synthesize a user
+// gesture on restore and agent-owned typing must never raise it.
+describe('SimulatorWindow — keyboard ownership from inputFocused (#6)', () => {
   beforeEach(() => {
     sessionState.current = {
       mode: 'manual',
@@ -866,10 +866,11 @@ describe('SimulatorWindow — keyboard auto-show from inputFocused (#6)', () => 
     return container.querySelector('[data-component="simulator-keyboard-toggle"]');
   }
 
-  it('shows the keyboard the instant a field is focused (manual mode) and hides it on blur', async () => {
+  it('shows on a fresh blur→focus edge in manual mode and hides on blur', async () => {
     const { container } = renderSim();
     await waitFor(() => expect(dataHandler()).not.toBeNull());
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
@@ -879,9 +880,27 @@ describe('SimulatorWindow — keyboard auto-show from inputFocused (#6)', () => 
   it('a frame with no inputFocused field leaves the current visibility untouched', async () => {
     const { container } = renderSim();
     await waitFor(() => expect(dataHandler()).not.toBeNull());
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
     pushPageState({ state: 'loading', url: 'https://example.com/next' });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('manual Hide owns the current focus until the page blurs and focuses again', async () => {
+    const { container } = renderSim();
+    await waitFor(() => expect(dataHandler()).not.toBeNull());
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(keyboardToggle(container)!);
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
+
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -910,6 +929,7 @@ describe('SimulatorWindow — keyboard auto-show from inputFocused (#6)', () => 
       await Promise.resolve();
       await Promise.resolve();
     });
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
 
