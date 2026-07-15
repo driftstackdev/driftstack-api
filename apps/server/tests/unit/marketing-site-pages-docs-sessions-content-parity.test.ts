@@ -66,8 +66,10 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
     );
   });
 
-  it('2026-06-05 — POST /v1/sessions create-body bumped 5→6 optional fields with the addition of behavioral_profile (per-session persona). Existing framing (archetype lowercase slug + purpose default-applied + label ≤120 chars + metadata surfaced-in-webhooks + profile_id binding) preserved; profile_id now has a trailing comma since behavioral_profile is the new last field. Drift to making any of the 6 fields required would create marketing↔CreateSessionRequestSchema divergence.', () => {
-    expect(body).toMatch(/"archetype": "default",\s+← optional, lowercase slug/);
+  it('POST /v1/sessions documents six optional fields and uses a selectable id from the live archetype catalog', () => {
+    expect(body).toMatch(
+      /"archetype": "iphone17_ios18_7_safari26_4",\s+← optional, id from GET \/v1\/archetypes/,
+    );
     expect(body).toMatch(
       /"purpose": "production_customer",\s+← optional, default applied server-side/,
     );

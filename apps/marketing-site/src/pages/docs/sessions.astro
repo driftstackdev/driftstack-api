@@ -53,7 +53,7 @@ Authorization: Bearer ds_live_…
 Content-Type: application/json
 
 {
-  "archetype": "default",                  ← optional, lowercase slug
+  "archetype": "iphone17_ios18_7_safari26_4", ← optional, id from GET /v1/archetypes
   "purpose": "production_customer",        ← optional, default applied server-side
   "label": "ticket-JIRA-1234",             ← optional, ≤120 chars
   "metadata": { "ticket": "JIRA-1234" },   ← optional, surfaced in webhooks
@@ -67,7 +67,7 @@ Content-Type: application/json
   "account_id": "acc_…",
   "api_key_id": "key_…",
   "status": "creating",
-  "archetype": "default",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "purpose": "production_customer",
   "label": "ticket-JIRA-1234",
   "metadata": { "ticket": "JIRA-1234" },
@@ -106,7 +106,7 @@ Authorization: Bearer ds_live_…
   "account_id": "acc_…",
   "api_key_id": "key_…",
   "status": "busy",
-  "archetype": "default",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "purpose": "production_customer",
   "label": "ticket-JIRA-1234",
   "metadata": { "ticket": "JIRA-1234" },
