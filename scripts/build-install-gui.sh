@@ -91,8 +91,11 @@ fi
 cd "$GUI_DIR"
 
 for target in "tauri:build" "tauri:build:simulator"; do
-  echo "==> npm run $target"
-  npm run "$target"
+  echo "==> npm run $target -- --bundles app"
+  # This local installer consumes only the macOS .app bundle below. Keep
+  # distribution targets (DMG/NSIS/AppImage/deb) out of this prompt-free path:
+  # they add unrelated platform tooling and Finder automation failure modes.
+  npm run "$target" -- --bundles app
 done
 
 BUNDLE_DIR="src-tauri/target/release/bundle/macos"

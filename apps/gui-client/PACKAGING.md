@@ -136,5 +136,8 @@ scripts/build-install-gui.sh
 `--preflight` resolves a valid stable identity without compiling. The full command
 builds and signs both bundles with the same certificate anchor, rejects CDHash-only
 requirements, checks each bundle identifier, and proves the installed copy retained
-the exact designated requirement. `APPLE_SIGNING_IDENTITY` overrides local discovery
-for real Developer ID builds and is validated against the login keychain first.
+the exact designated requirement. This local path requests only the macOS `.app`
+target that it installs, so unrelated distribution packaging (DMG, NSIS, AppImage,
+and deb) cannot block a developer update. `APPLE_SIGNING_IDENTITY` overrides local
+discovery for real Developer ID builds and is validated against the login keychain
+first.

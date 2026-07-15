@@ -24,6 +24,14 @@ describe('GUI local signing and install contract', () => {
     expect(body).toContain('if [[ "$SRC_REQUIREMENT" != "$DST_REQUIREMENT" ]]');
   });
 
+  it('builds only the two app bundles consumed by the local installer', () => {
+    const body = read('scripts/build-install-gui.sh');
+
+    expect(body).toContain('for target in "tauri:build" "tauri:build:simulator"');
+    expect(body).toContain('npm run "$target" -- --bundles app');
+    expect(body).not.toContain('npm run "$target"\n');
+  });
+
   it('creates a local-only identity without persisting a keychain password or plaintext secret', () => {
     const body = read('scripts/setup-local-gui-signing.sh');
 
@@ -57,6 +65,7 @@ describe('GUI local signing and install contract', () => {
     expect(body).toContain('grants its private key only to `/usr/bin/codesign`');
     expect(body).toContain('without another password dialog');
     expect(body).toContain('the script never reads or\nstores that password');
+    expect(body).toMatch(/requests only the macOS `\.app`\s+target/);
     expect(body).toContain('cannot replace Developer ID signing/notarisation');
   });
 });
